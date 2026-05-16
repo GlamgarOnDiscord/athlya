@@ -117,7 +117,7 @@ Voir "Mesures techniques" ci-dessus + roadmap audit Sprint 5+ (S2-006 forgot-pas
 
 ## 7. Validation
 
-- DPO : ****\*\*\*\*****\_\_****\*\*\*\***** Date : \***\*\_\_\*\***
+- DPO : \***\*\*\*\*\*\*\***\_\_\***\*\*\*\*\*\*\*** Date : \***\*\_\_\*\***
 - CTO / Resp. Tech : \***\*\_\_\_\_\*\*** Date : \***\*\_\_\*\***
 - Direction : **\*\*\*\***\_\_**\*\*\*\*** Date : \***\*\_\_\*\***
 
