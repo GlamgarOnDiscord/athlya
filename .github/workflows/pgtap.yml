@@ -35,7 +35,7 @@ on:
       - '.github/workflows/pgtap.yml'
   push:
     branches:
-      - main
+      - master
     paths:
       - 'packages/db/migrations/**'
       - 'packages/db/tests/rls/**'
