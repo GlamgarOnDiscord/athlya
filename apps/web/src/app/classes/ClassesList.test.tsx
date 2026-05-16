@@ -18,6 +18,10 @@
 import { cleanup, fireEvent, render, screen, act } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../lib/auth/AuthContext', () => ({
+  useAuth: () => ({ bootResolved: true }),
+}));
+
 import { ApiError } from '../../lib/api/client';
 import { LocaleProvider } from '../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../lib/i18n/t';

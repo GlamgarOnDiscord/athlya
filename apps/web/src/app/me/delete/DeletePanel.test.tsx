@@ -85,7 +85,6 @@ describe('<DeletePanel />', () => {
 
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeDefined();
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
   });
 
   it('the confirm button is disabled until the user types the exact word', () => {

@@ -164,6 +164,7 @@ function mockBindings(): {
  * without scraping log output.
  */
 function mockMessage<B>(id: string, body: B): Message<B> & { ack: ReturnType<typeof vi.fn> } {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
   return {
     id,
     timestamp: new Date(),

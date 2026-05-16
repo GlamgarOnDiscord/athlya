@@ -284,9 +284,9 @@ describe('chain â€” jwtAuth interaction', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.claims).not.toBeNull();
-    expect((body.claims as any).userId).toBe(TEST_USER_ID);
-    expect((body.claims as any).studioId).toBe(TEST_STUDIO_ID);
-    expect((body.claims as any).role).toBe('member');
+    expect((body.claims).userId).toBe(TEST_USER_ID);
+    expect((body.claims).studioId).toBe(TEST_STUDIO_ID);
+    expect((body.claims).role).toBe('member');
   });
 
   it('logger is re-scoped post-auth so subsequent log lines carry userId + studioId', async () => {

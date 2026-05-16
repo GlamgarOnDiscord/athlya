@@ -14,6 +14,10 @@
 import { cleanup, fireEvent, render, screen, act } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../lib/i18n/LocaleContext', () => ({
+  useLocale: () => 'fr',
+}));
+
 import { ApiError } from '../../lib/api/client';
 import { createTranslator } from '../../lib/i18n/t';
 

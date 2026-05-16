@@ -119,6 +119,7 @@ function fakeContext(args: {
  * success and rejection branches.
  */
 function fakeFetch(response: Response): typeof fetch {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
   return vi.fn(() => Promise.resolve(response)) as unknown as typeof fetch;
 }
 
@@ -127,6 +128,7 @@ function fakeFetch(response: Response): typeof fetch {
  * emulates a network / DNS / TLS failure.
  */
 function rejectingFetch(err: unknown): typeof fetch {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
   return vi.fn(() => Promise.reject(err)) as unknown as typeof fetch;
 }
 
@@ -138,6 +140,7 @@ function rejectingFetch(err: unknown): typeof fetch {
  * without relying on wall-clock time.
  */
 function hangingFetch(): typeof fetch {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
   return vi.fn((_input: unknown, init?: RequestInit) => {
     return new Promise<Response>((_resolve, reject) => {
       const signal = init?.signal;

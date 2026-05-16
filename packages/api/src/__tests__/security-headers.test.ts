@@ -250,6 +250,7 @@ describe('securityHeaders middleware', () => {
   function fakeContext(): SecurityHeadersContext & {
     header: ReturnType<typeof vi.fn>;
   } {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     return { header: vi.fn() } as unknown as SecurityHeadersContext & {
       header: ReturnType<typeof vi.fn>;
     };

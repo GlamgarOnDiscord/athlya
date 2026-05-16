@@ -38,9 +38,7 @@ describe('<ClassCard />', () => {
     render(<ClassCard classInfo={BASE_CLASS} t={t} locale="fr" onBook={vi.fn()} />);
 
     expect(screen.getByText('CrossFit')).toBeDefined();
-    // Capacity line.
-    expect(screen.getByText('12')).toBeDefined();
-    // Remaining / capacity line — we assert the exact "4 / 12".
+    // Remaining / capacity line — asserts both remaining and capacity in one hit.
     expect(screen.getByText('4 / 12')).toBeDefined();
     // `<time>` tag carries the raw ISO datetime attribute.
     const time = screen.getByText((_, node) => node?.tagName.toLowerCase() === 'time');
@@ -51,7 +49,7 @@ describe('<ClassCard />', () => {
     const onBook = vi.fn().mockResolvedValue(undefined);
     render(<ClassCard classInfo={BASE_CLASS} t={t} locale="fr" onBook={onBook} />);
 
-    const cta = screen.getByRole('button', { name: t('classes.card.book') });
+    const cta = screen.getByRole('button', { name: `${t('classes.card.book')} — ${BASE_CLASS.title}` });
     await act(async () => {
       fireEvent.click(cta);
       await Promise.resolve();
@@ -61,20 +59,20 @@ describe('<ClassCard />', () => {
     expect(onBook).toHaveBeenCalledWith('class-1');
   });
 
-  it('renders "Complet" and disables the button when remaining is 0', () => {
+  it('renders the join-waitlist button and does not call onBook when remaining is 0', () => {
     const onBook = vi.fn();
     render(
       <ClassCard classInfo={{ ...BASE_CLASS, remaining: 0 }} t={t} locale="fr" onBook={onBook} />,
     );
 
     const cta = screen.getByRole('button', {
-      name: t('classes.card.full'),
+      name: `${t('classes.card.joinWaitlist')} — ${BASE_CLASS.title}`,
     }) as HTMLButtonElement;
-    expect(cta.disabled).toBe(true);
-    expect(cta.textContent).toBe(t('classes.card.full'));
-    // "Complet" buttons must not trigger onBook.
+    expect(cta.disabled).toBe(false);
+    expect(cta.textContent).toBe(t('classes.card.joinWaitlist'));
+    // Clicking while in full state still calls onBook (waitlist behaviour).
     fireEvent.click(cta);
-    expect(onBook).not.toHaveBeenCalled();
+    expect(onBook).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces the error slot via role="alert" when error is provided', () => {

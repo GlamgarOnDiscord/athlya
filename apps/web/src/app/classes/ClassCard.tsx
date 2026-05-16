@@ -122,7 +122,7 @@ export function ClassCard({
         )}
 
         {error !== null ? (
-          <span id={errorSlotId} role="alert" className="text-sm text-destructive">
+          <span id={errorSlotId} role="alert" aria-live="polite" className="text-sm text-destructive">
             {error}
           </span>
         ) : null}

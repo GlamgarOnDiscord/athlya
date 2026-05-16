@@ -42,7 +42,7 @@ function validBody(): Record<string, unknown> {
 function buildRequest(body: unknown, headers: Record<string, string> = {}): NextRequest {
   return new NextRequest('http://localhost/api/auth/register', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: { 'content-type': 'application/json', origin: 'http://localhost', ...headers },
     body: JSON.stringify(body),
   });
 }

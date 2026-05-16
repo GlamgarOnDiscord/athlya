@@ -98,6 +98,7 @@ function mockMessage<B>(
   ack: ReturnType<typeof vi.fn>;
   retry: ReturnType<typeof vi.fn>;
 } {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
   return {
     id,
     timestamp: new Date(),
