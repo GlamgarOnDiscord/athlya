@@ -115,7 +115,7 @@
     "devDependencies": {
         "@athlya/eslint-config": "workspace:*",
         "@athlya/tsconfig": "workspace:*",
-        "@fast-check/vitest": "^0.3.0",
+        "@fast-check/vitest": "^0.4.1",
         "@types/node": "^20.19.9",
         "@vitest/coverage-v8": "^4.1.6",
         "eslint": "^9.39.1",

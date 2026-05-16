@@ -363,9 +363,6 @@ importers:
 
   packages/billing:
     dependencies:
-      '@athlya/shared':
-        specifier: workspace:*
-        version: link:../shared
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -377,8 +374,8 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
       '@fast-check/vitest':
-        specifier: ^0.3.0
-        version: 0.3.0(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0))
+        specifier: ^0.4.1
+        version: 0.4.1(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0))
       '@types/node':
         specifier: ^20.19.9
         version: 20.19.40
@@ -420,8 +417,8 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
       '@fast-check/vitest':
-        specifier: ^0.3.0
-        version: 0.3.0(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0))
+        specifier: ^0.4.1
+        version: 0.4.1(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0))
       '@testcontainers/postgresql':
         specifier: ^11.0.0
         version: 11.14.0
@@ -488,15 +485,9 @@ importers:
 
   packages/members:
     dependencies:
-      '@athlya/db':
-        specifier: workspace:*
-        version: link:../db
       '@athlya/shared':
         specifier: workspace:*
         version: link:../shared
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
       '@athlya/eslint-config':
         specifier: workspace:*
@@ -539,8 +530,8 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
       '@fast-check/vitest':
-        specifier: ^0.3.0
-        version: 0.3.0(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0))
+        specifier: ^0.4.1
+        version: 0.4.1(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0))
       '@types/node':
         specifier: ^20.19.9
         version: 20.19.40
@@ -616,8 +607,8 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
       '@fast-check/vitest':
-        specifier: ^0.3.0
-        version: 0.3.0(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0))
+        specifier: ^0.4.1
+        version: 0.4.1(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0))
       '@testcontainers/postgresql':
         specifier: ^11.0.0
         version: 11.14.0
@@ -659,8 +650,8 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
       '@fast-check/vitest':
-        specifier: ^0.3.0
-        version: 0.3.0(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0))
+        specifier: ^0.4.1
+        version: 0.4.1(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0))
       '@types/node':
         specifier: ^20.19.9
         version: 20.19.40
@@ -1618,10 +1609,10 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@fast-check/vitest@0.3.0':
-    resolution: {integrity: sha512-mXxAu7DJtzwSUeOMecZibq/403b8uX1/dWWXXCBgb+j9ERWuN9Hvr6usId+9ivdQ+tJl8H6o+CMv71BmjaENRQ==}
+  '@fast-check/vitest@0.4.1':
+    resolution: {integrity: sha512-OX6TecB+ZzRfPc49jcPChcV1cf5aDu77CdDU8liecWVam7eD7mPvJNP50b9bBSTxVoGN5wzxrX9PIcCnqgC8bg==}
     peerDependencies:
-      vitest: ^1 || ^2 || ^3 || ^4
+      vitest: ^4.1.0
 
   '@floating-ui/core@1.7.5':
     resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
@@ -7199,7 +7190,7 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@fast-check/vitest@0.3.0(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0))':
+  '@fast-check/vitest@0.4.1(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
       fast-check: 3.23.2
       vitest: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.14.6(@types/node@20.19.40)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.9.0)
@@ -9528,7 +9519,7 @@ snapshots:
       '@next/eslint-plugin-next': 16.2.6
       eslint: 9.39.4(jiti@2.7.0)
       eslint-import-resolver-node: 0.3.10
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.7.0)))(eslint@9.39.4(jiti@2.7.0))
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.4(jiti@2.7.0))
       eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.7.0))
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.39.4(jiti@2.7.0))
       eslint-plugin-react: 7.37.5(eslint@9.39.4(jiti@2.7.0))
@@ -9562,7 +9553,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.7.0)))(eslint@9.39.4(jiti@2.7.0)):
+  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.4(jiti@2.7.0)):
     dependencies:
       '@nolyfill/is-core-module': 1.0.39
       debug: 4.4.3
@@ -9603,13 +9594,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.1(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.7.0)))(eslint@9.39.4(jiti@2.7.0)))(eslint@9.39.4(jiti@2.7.0)):
+  eslint-module-utils@2.12.1(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.7.0)):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
       eslint: 9.39.4(jiti@2.7.0)
       eslint-import-resolver-node: 0.3.10
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.7.0)))(eslint@9.39.4(jiti@2.7.0))
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.4(jiti@2.7.0))
     transitivePeerDependencies:
       - supports-color
 
@@ -9653,7 +9644,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.39.4(jiti@2.7.0)
       eslint-import-resolver-node: 0.3.10
-      eslint-module-utils: 2.12.1(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.7.0)))(eslint@9.39.4(jiti@2.7.0)))(eslint@9.39.4(jiti@2.7.0))
+      eslint-module-utils: 2.12.1(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.7.0))
       hasown: 2.0.3
       is-core-module: 2.16.2
       is-glob: 4.0.3
