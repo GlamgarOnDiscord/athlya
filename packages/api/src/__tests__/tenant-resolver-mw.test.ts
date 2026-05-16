@@ -293,7 +293,7 @@ describe('tenantResolverMiddleware + tenantClaimGuard â€” Slice 1.4', () =>
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.tenantSlug).toBe('acme');
         expect(body.tenantSource).toBe('subdomain');
         expect(body.studioId).toBe(ACME_STUDIO_ID);
@@ -327,7 +327,7 @@ describe('tenantResolverMiddleware + tenantClaimGuard â€” Slice 1.4', () =>
         expect(res.headers.get('content-type')).toBe(
             'application/problem+json',
         );
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.code).toBe('tenant_mismatch');
         expect(body.title).toBe('Not Found');
         expect(body.type).toBe('about:blank');
@@ -356,7 +356,7 @@ describe('tenantResolverMiddleware + tenantClaimGuard â€” Slice 1.4', () =>
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.tenantSlug).toBe('acme');
         expect(body.tenantSource).toBe('path');
         expect(studioBySlug).toHaveBeenCalledWith('acme');
@@ -391,7 +391,7 @@ describe('tenantResolverMiddleware + tenantClaimGuard â€” Slice 1.4', () =>
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.tenantSource).toBe('none');
         expect(body.tenantSlug).toBeNull();
         // Resolver MUST NOT have fired â€” the guard short-circuits on
@@ -427,7 +427,7 @@ describe('tenantResolverMiddleware + tenantClaimGuard â€” Slice 1.4', () =>
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.route).toBe('login');
         expect(studioBySlug).not.toHaveBeenCalled();
     });
@@ -455,7 +455,7 @@ describe('tenantResolverMiddleware + tenantClaimGuard â€” Slice 1.4', () =>
 
         // Fail-open: the request reaches the handler.
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.tenantSlug).toBe('acme');
         expect(body.tenantSource).toBe('subdomain');
         expect(studioBySlug).toHaveBeenCalledTimes(1);
@@ -504,7 +504,7 @@ describe('tenantResolverMiddleware â€” context stamping', () => {
             { method: 'GET' },
             buildMockEnv(),
         );
-        const body = await res.json() as { tenantSlug: string | null; tenantSource: string | null };
+        const body = (await res.json() as any);
         expect(body.tenantSlug).toBe('acme');
         expect(body.tenantSource).toBe('path');
     });
@@ -524,7 +524,7 @@ describe('tenantResolverMiddleware â€” context stamping', () => {
             { method: 'GET' },
             buildMockEnv(),
         );
-        const body = await res.json() as { tenantSlug: string | null; tenantSource: string | null };
+        const body = (await res.json() as any);
         expect(body.tenantSlug).toBe('acme');
         expect(body.tenantSource).toBe('subdomain');
     });
@@ -544,7 +544,7 @@ describe('tenantResolverMiddleware â€” context stamping', () => {
             { method: 'GET' },
             buildMockEnv(),
         );
-        const body = await res.json() as { tenantSlug: string | null; tenantSource: string | null };
+        const body = (await res.json() as any);
         expect(body.tenantSlug).toBeNull();
         expect(body.tenantSource).toBe('none');
     });

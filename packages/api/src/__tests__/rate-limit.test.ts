@@ -280,7 +280,7 @@ describe('rateLimit â€” deny envelope', () => {
         expect(Number.isInteger(retryAfter)).toBe(true);
         expect(retryAfter).toBeGreaterThanOrEqual(1);
 
-        const body = await out.json() as Record<string, unknown>;
+        const body = (await out.json() as any);
         expect(body).toMatchObject({
             type: 'about:blank',
             title: 'Too Many Requests',
@@ -306,7 +306,7 @@ describe('rateLimit â€” deny envelope', () => {
 
         expect(out).toBeInstanceOf(Response);
         if (!(out instanceof Response)) return;
-        const body = await out.json() as Record<string, unknown>;
+        const body = (await out.json() as any);
         expect(body['traceId']).toBe('unknown');
     });
 });

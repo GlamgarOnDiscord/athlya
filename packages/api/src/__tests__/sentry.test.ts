@@ -46,9 +46,9 @@ function parseEnvelopeBody(body: string): {
     const lines = body.split('\n');
     expect(lines).toHaveLength(3);
     return {
-        header: JSON.parse(lines[0]!) as Record<string, unknown>,
-        itemHeader: JSON.parse(lines[1]!) as Record<string, unknown>,
-        payload: JSON.parse(lines[2]!) as Record<string, unknown>,
+        header: JSON.parse(lines[0]!) as any,
+        itemHeader: JSON.parse(lines[1]!) as any,
+        payload: JSON.parse(lines[2]!) as any,
     };
 }
 

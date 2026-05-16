@@ -40,7 +40,7 @@ describe('/v1/checkins', () => {
 
         expect(res.status).toBe(401);
         expect(res.headers.get('content-type')).toBe('application/problem+json');
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.title).toBe('missing_authorization');
         expect(deps.checkins.checkIn).not.toHaveBeenCalled();
     });
@@ -94,7 +94,7 @@ describe('/v1/checkins', () => {
             env(),
         );
 
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.traceId).toBe(res.headers.get('x-trace-id'));
     });
 });

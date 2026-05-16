@@ -43,7 +43,7 @@ describe('/v1/members â€” unauthenticated requests', () => {
 
         expect(res.status).toBe(401);
         expect(res.headers.get('content-type')).toBe('application/problem+json');
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.title).toBe('missing_authorization');
         expect(deps.members.getProfile).not.toHaveBeenCalled();
     });
@@ -126,7 +126,7 @@ describe('/v1/members â€” unauthenticated requests', () => {
             env(),
         );
 
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         const xTraceId = res.headers.get('x-trace-id');
         expect(xTraceId).not.toBeNull();
         expect(body.traceId).toBe(xTraceId);

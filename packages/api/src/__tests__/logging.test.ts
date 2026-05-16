@@ -55,7 +55,7 @@ describe('createLogger', () => {
         expect(call, 'expected spy to have been called').toBeDefined();
         const first: unknown = call![0];
         expect(typeof first).toBe('string');
-        return JSON.parse(first as string) as Record<string, unknown>;
+        return JSON.parse(first as string) as any;
     }
 
     it('routes info to console.log with JSON-parseable output', () => {

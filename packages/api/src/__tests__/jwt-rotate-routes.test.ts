@@ -19,15 +19,13 @@
  */
 
 import { Hono } from 'hono';
-import { describe, expect, it, vi } from 'vitest';
 import { exportPKCS8, exportSPKI, generateKeyPair } from 'jose';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
     buildJwtRotateRouter,
     type JwtRotateAdminEnv,
     type JwtRotateAuditWriter,
-    type RotationPrepareResponse,
-    type JwtStateResponse,
 } from '../admin/jwt-rotate-routes.js';
 
 import type { AthlyaBindings } from '../types.js';
@@ -177,7 +175,7 @@ describe('GET /admin/jwt/state', () => {
         );
 
         expect(res.status).toBe(200);
-        const body = (await res.json()) as JwtStateResponse;
+        const body = ((await res.json() as any));
         expect(body.currentKid).toBe('k1');
         expect(body.jwks.keys).toHaveLength(1);
         expect(body.jwks.keys[0]?.kid).toBe('k1');
@@ -191,7 +189,7 @@ describe('GET /admin/jwt/state', () => {
             buildEnv(),
         );
         expect(res.status).toBe(500);
-        const body = (await res.json()) as { code?: string };
+        const body = ((await res.json() as any));
         expect(body.code).toBe('jwt_state_unavailable');
     });
 
@@ -232,7 +230,7 @@ describe('POST /admin/jwt/rotate-prepare', () => {
             buildEnv(),
         );
         expect(res.status).toBe(500);
-        const body = (await res.json()) as { code?: string };
+        const body = ((await res.json() as any));
         expect(body.code).toBe('jwt_rotation_precondition_failed');
     });
 
@@ -257,7 +255,7 @@ describe('POST /admin/jwt/rotate-prepare', () => {
             );
 
             expect(res.status).toBe(200);
-            const body = (await res.json()) as RotationPrepareResponse;
+            const body = ((await res.json() as any));
 
             // New kid is distinct from the old one.
             expect(body.currentKid).toMatch(/^athlya-/);
@@ -275,7 +273,7 @@ describe('POST /admin/jwt/rotate-prepare', () => {
             // JWKS contains BOTH keys (current + previous) for the
             // grace window.
             expect(body.jwks.keys).toHaveLength(2);
-            const kids = body.jwks.keys.map((k) => k.kid);
+            const kids = body.jwks.keys.map((k: any) => k.kid);
             expect(kids).toContain(body.currentKid);
             expect(kids).toContain('athlya-old');
 
@@ -324,7 +322,7 @@ describe('POST /admin/jwt/rotate-prepare', () => {
 
             // Rotation succeeded — audit failure does not block it.
             expect(res.status).toBe(200);
-            const body = (await res.json()) as RotationPrepareResponse;
+            const body = ((await res.json() as any));
             expect(body.currentKid).not.toBe('athlya-old-2');
         },
     );

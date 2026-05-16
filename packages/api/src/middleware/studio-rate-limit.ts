@@ -180,7 +180,7 @@ export function studioRateLimit(
         // integration tests do not exercise a real Upstash
         // backend; this short-circuit avoids hanging on `.invalid`
         // hostnames.
-        const env = c.env as StudioRateLimitEnv;
+        const env = c.env;
         if (env.ENVIRONMENT === 'dev') {
             await next();
             return undefined;

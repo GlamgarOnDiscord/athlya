@@ -89,7 +89,7 @@ vi.mock('@athlya/db', () => ({
 
 /**
  * Minimal shape of a Problem Details body emitted by the API â€” used
- * to narrow `await res.json()` at every test call site.
+ * to narrow `(await res.json() as any)` at every test call site.
  */
 interface ProblemDetailsBody {
     type: string;
@@ -191,7 +191,7 @@ describe('chain â€” happy path', () => {
 
         expectSecurityHeaders(res);
 
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.traceId).toBe(traceId);
     });
 
@@ -229,7 +229,7 @@ describe('chain â€” jwtAuth interaction', () => {
         // not â€” clients must not conflate "no creds" with "expired".
         expect(res.headers.get('www-authenticate')).toBeNull();
 
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.title).toBe('missing_authorization');
         expect(body.status).toBe(401);
     });
@@ -247,7 +247,7 @@ describe('chain â€” jwtAuth interaction', () => {
 
         expect(res.status).toBe(401);
         expect(res.headers.get('content-type')).toBe('application/problem+json');
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.title).toBe('invalid_token');
         expect(res.headers.get('www-authenticate')).toBeNull();
     });
@@ -281,7 +281,7 @@ describe('chain â€” jwtAuth interaction', () => {
         expect(res.headers.get('www-authenticate')).toBe(
             'Bearer error="token_expired"',
         );
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.title).toBe('token_expired');
     });
 
@@ -303,11 +303,11 @@ describe('chain â€” jwtAuth interaction', () => {
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.claims).not.toBeNull();
-        expect((body.claims as Record<string, unknown>).userId).toBe(TEST_USER_ID);
-        expect((body.claims as Record<string, unknown>).studioId).toBe(TEST_STUDIO_ID);
-        expect((body.claims as Record<string, unknown>).role).toBe('member');
+        expect((body.claims as any).userId).toBe(TEST_USER_ID);
+        expect((body.claims as any).studioId).toBe(TEST_STUDIO_ID);
+        expect((body.claims as any).role).toBe('member');
     });
 
     it('logger is re-scoped post-auth so subsequent log lines carry userId + studioId', async () => {
@@ -382,7 +382,7 @@ describe('chain â€” zValidator + Problem Details', () => {
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.name).toBe('Alice');
     });
 
@@ -401,7 +401,7 @@ describe('chain â€” zValidator + Problem Details', () => {
         expect(res.status).toBe(422);
         expect(res.headers.get('content-type')).toBe('application/problem+json');
 
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.status).toBe(422);
         expect(body.code).toBe('validation_error');
         expect(Array.isArray(body.errors)).toBe(true);
@@ -409,7 +409,7 @@ describe('chain â€” zValidator + Problem Details', () => {
         // The missing `name` field is the sole failure, so the first
         // issue must target it. Encoding is 'name' (empty prefix) â€”
         // see `problem-details.ts` formatZodPath.
-        const names = (body.errors as Record<string, unknown>[]).map((e) => e.path);
+        const names = (body.errors as any[]).map((e) => e.path);
         expect(names).toContain('name');
     });
 
@@ -436,7 +436,7 @@ describe('chain â€” zValidator + Problem Details', () => {
         expect(res.headers.get('content-type')).toBe('application/problem+json');
         expect([400, 422, 500]).toContain(res.status);
 
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(typeof body.type).toBe('string');
         expect(typeof body.title).toBe('string');
         expect(body.status).toBe(res.status);
@@ -465,7 +465,7 @@ describe('chain â€” tenant helpers + Problem Details', () => {
         );
 
         expect(res.status).toBe(401);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         // `missing_authorization` = auth middleware; anything else
         // (e.g. `missing_auth_claims`) = tenant helper, which means
         // the chain ran the tenant helper first â€” chain-order bug.
@@ -491,7 +491,7 @@ describe('chain â€” tenant helpers + Problem Details', () => {
 
         expect(res.status).toBe(404);
         expect(res.headers.get('content-type')).toBe('application/problem+json');
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.status).toBe(404);
         expect(body.code).toBe('not_found');
         expect(body.traceId).toBe(res.headers.get('x-trace-id'));
@@ -548,7 +548,7 @@ describe('chain â€” rate-limit', () => {
         expect(retryAfter).not.toBeNull();
         expect(Number(retryAfter)).toBeGreaterThanOrEqual(1);
 
-        const body = await denied.json() as Record<string, unknown>;
+        const body = (await denied.json() as any);
         expect(body.status).toBe(429);
         expect(body.title).toBe('Too Many Requests');
 

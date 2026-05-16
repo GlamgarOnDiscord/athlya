@@ -74,7 +74,7 @@ describe('POST /v1/auth/register', () => {
 
         expect(res.status).toBe(403);
         expect(res.headers.get('content-type')).toBe('application/problem+json');
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.code).toBe('bot_challenge_failed');
         expect(body.status).toBe(403);
         expect(deps.auth.register).not.toHaveBeenCalled();
@@ -149,7 +149,7 @@ describe('POST /v1/auth/refresh', () => {
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.accessToken).toBe('a.t');
         expect(deps.auth.refresh).toHaveBeenCalledTimes(1);
         expect(deps.auth.refresh).toHaveBeenCalledWith({
@@ -171,7 +171,7 @@ describe('POST /v1/auth/logout', () => {
 
         expect(res.status).toBe(401);
         expect(res.headers.get('content-type')).toBe('application/problem+json');
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.title).toBe('missing_authorization');
         expect(deps.auth.logout).not.toHaveBeenCalled();
     });
@@ -189,7 +189,7 @@ describe('DELETE /v1/auth/me', () => {
         );
 
         expect(res.status).toBe(401);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.title).toBe('missing_authorization');
         expect(deps.auth.deleteMe).not.toHaveBeenCalled();
     });

@@ -132,7 +132,7 @@ describe('isEnabled cache', () => {
 
         let providerCalls = 0;
         const provider = {
-            // eslint-disable-next-line @typescript-eslint/require-await
+             
             async getFlag() {
                 providerCalls += 1;
                 return true;
@@ -159,7 +159,7 @@ describe('isEnabled cache', () => {
 
         let providerCalls = 0;
         const provider = {
-            // eslint-disable-next-line @typescript-eslint/require-await
+             
             async getFlag() {
                 providerCalls += 1;
                 return true;

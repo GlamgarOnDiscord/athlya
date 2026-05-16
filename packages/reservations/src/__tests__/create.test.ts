@@ -279,10 +279,12 @@ describe('createClass happy path (Req 6.1)', () => {
     it('invokes repo.createClass BEFORE counter.reset', async () => {
         const { deps, repoCreate, counterReset } = makeDeps();
         const order: string[] = [];
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises
         repoCreate.mockImplementationOnce((input: CreateClassRepoInput) => {
             order.push('repo');
             return Promise.resolve(rowFor(input));
         });
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises
         counterReset.mockImplementationOnce(() => {
             order.push('counter');
             return Promise.resolve();
@@ -295,6 +297,7 @@ describe('createClass happy path (Req 6.1)', () => {
 
     it('does not seed the counter when the repo insert rejects', async () => {
         const { deps, repoCreate, counterReset } = makeDeps();
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises
         repoCreate.mockImplementationOnce(() => Promise.reject(new Error('db down')));
 
         await expect(createClass(STUDIO_ID, validInput(), deps)).rejects.toThrow('db down');

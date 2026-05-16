@@ -150,7 +150,7 @@ async function expectCrossTenantNotFound(response: Response): Promise<void> {
     expect(response.headers.get('content-type')).toBe(
         'application/problem+json',
     );
-    const body = await response.json() as Record<string, unknown>;
+    const body = (await response.json() as any);
     expect(body.status).toBe(404);
     expect(body.code).toBe('not_found');
     expect(body.traceId).toBe(response.headers.get('x-trace-id'));
@@ -406,14 +406,14 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(Array.isArray(body.items)).toBe(true);
         expect(body.items).toHaveLength(1);
-        expect((body.items as Record<string, unknown>[])[0]!.id).toBe(CLASS_A_ID);
-        expect((body.items as Record<string, unknown>[])[0]!.studioId).toBe(STUDIO_A_ID);
+        expect((body.items as any[])[0]!.id).toBe(CLASS_A_ID);
+        expect((body.items as any[])[0]!.studioId).toBe(STUDIO_A_ID);
         // Critical: no Studio B leakage.
-        expect((body.items as Record<string, unknown>[]).some((c) => c.studioId === STUDIO_B_ID)).toBe(false);
-        expect((body.items as Record<string, unknown>[]).some((c) => c.id === CLASS_B_ID)).toBe(false);
+        expect((body.items as any[]).some((c) => c.studioId === STUDIO_B_ID)).toBe(false);
+        expect((body.items as any[]).some((c) => c.id === CLASS_B_ID)).toBe(false);
     });
 
     /**
@@ -434,13 +434,13 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.items).toHaveLength(1);
-        expect((body.items as Record<string, unknown>[])[0]!.id).toBe(RESERVATION_A_ID);
-        expect((body.items as Record<string, unknown>[])[0]!.userId).toBe(ALICE_ID);
+        expect((body.items as any[])[0]!.id).toBe(RESERVATION_A_ID);
+        expect((body.items as any[])[0]!.userId).toBe(ALICE_ID);
         // Critical: Bob's reservation MUST NOT appear.
-        expect((body.items as Record<string, unknown>[]).some((r) => r.id === RESERVATION_B_ID)).toBe(false);
-        expect((body.items as Record<string, unknown>[]).some((r) => r.userId === BOB_ID)).toBe(false);
+        expect((body.items as any[]).some((r) => r.id === RESERVATION_B_ID)).toBe(false);
+        expect((body.items as any[]).some((r) => r.userId === BOB_ID)).toBe(false);
     });
 
     /**
@@ -463,12 +463,12 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.items).toHaveLength(1);
-        expect((body.items as Record<string, unknown>[])[0]!.id).toBe(RESERVATION_B_ID);
-        expect((body.items as Record<string, unknown>[])[0]!.userId).toBe(BOB_ID);
-        expect((body.items as Record<string, unknown>[]).some((r) => r.id === RESERVATION_A_ID)).toBe(false);
-        expect((body.items as Record<string, unknown>[]).some((r) => r.userId === ALICE_ID)).toBe(false);
+        expect((body.items as any[])[0]!.id).toBe(RESERVATION_B_ID);
+        expect((body.items as any[])[0]!.userId).toBe(BOB_ID);
+        expect((body.items as any[]).some((r) => r.id === RESERVATION_A_ID)).toBe(false);
+        expect((body.items as any[]).some((r) => r.userId === ALICE_ID)).toBe(false);
     });
 
     /**
@@ -561,7 +561,7 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.id).toBe(ALICE_ID);
         expect(body.email).toBe('alice@studio-a.example');
         expect(body.displayName).toBe('Alice');
@@ -601,7 +601,7 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
         expect(res.headers.get('content-type')).toBe(
             'application/problem+json',
         );
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.status).toBe(403);
         expect(body.title).toBe('forbidden');
         expect(body.traceId).toBe(res.headers.get('x-trace-id'));
@@ -626,12 +626,12 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.items).toHaveLength(1);
-        expect((body.items as Record<string, unknown>[])[0]!.id).toBe(CLASS_B_ID);
-        expect((body.items as Record<string, unknown>[])[0]!.studioId).toBe(STUDIO_B_ID);
-        expect((body.items as Record<string, unknown>[]).some((c) => c.studioId === STUDIO_A_ID)).toBe(false);
-        expect((body.items as Record<string, unknown>[]).some((c) => c.id === CLASS_A_ID)).toBe(false);
+        expect((body.items as any[])[0]!.id).toBe(CLASS_B_ID);
+        expect((body.items as any[])[0]!.studioId).toBe(STUDIO_B_ID);
+        expect((body.items as any[]).some((c) => c.studioId === STUDIO_A_ID)).toBe(false);
+        expect((body.items as any[]).some((c) => c.id === CLASS_A_ID)).toBe(false);
     });
 
     /* ============================================================== */
@@ -696,7 +696,7 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
         );
 
         expect(res.status).toBe(404);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.code).toBe('not_found');
         expect(body.detail).toBe('reservation not found');
     });
@@ -722,9 +722,9 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
-        expect((body.items as Record<string, unknown>[]).every((r) => r.userId === ALICE_ID)).toBe(true);
-        expect((body.items as Record<string, unknown>[]).some((r) => r.id === RESERVATION_B_ID)).toBe(false);
+        const body = (await res.json() as any);
+        expect((body.items as any[]).every((r) => r.userId === ALICE_ID)).toBe(true);
+        expect((body.items as any[]).some((r) => r.id === RESERVATION_B_ID)).toBe(false);
     });
 
     /**
@@ -832,7 +832,7 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.id).toBe(STUDIO_A_ID);
         expect(body.slug).toBe('athlya-paris');
         expect(body.brandColor).toBe('#0EA5E9');
@@ -855,7 +855,7 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.id).toBe(STUDIO_B_ID);
         expect(body.slug).toBe('athlya-lyon');
         expect(body.id).not.toBe(STUDIO_A_ID);

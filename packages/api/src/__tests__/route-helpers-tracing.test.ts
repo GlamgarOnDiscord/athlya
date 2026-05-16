@@ -15,6 +15,7 @@ import {
     traceOperation,
 } from '../routes/helpers.js';
 
+import type { HonoEnv } from '../types.js';
 import type { Context } from 'hono';
 
 /* ------------------------------------------------------------------ */
@@ -34,7 +35,7 @@ function makeSpan(): FakeSpan {
 }
 
 /** Build a Hono-compatible context exposing only `c.get(key)`. */
-function makeCtx(span?: FakeSpan): Context {
+function makeCtx(span?: FakeSpan): Context<HonoEnv> {
     const map = new Map<string, unknown>();
     if (span !== undefined) map.set('span', span);
     return {

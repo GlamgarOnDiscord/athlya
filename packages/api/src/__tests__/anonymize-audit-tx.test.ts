@@ -22,7 +22,7 @@ function makeExecutor(returns: { actor: number; subject: number }): {
         return returns.subject;
     });
     const executor: CronSqlExecutor = {
-        execute: executeMock as unknown as CronSqlExecutor['execute'],
+        execute: executeMock,
         selectRows: vi.fn(),
     };
     return { executor, executeMock };
@@ -84,7 +84,7 @@ describe('anonymizeAuditLogViaSql', () => {
     it('rejects malformed userId at validation time', async () => {
         const executeMock = vi.fn();
         const executor: CronSqlExecutor = {
-            execute: executeMock as unknown as CronSqlExecutor['execute'],
+            execute: executeMock,
             selectRows: vi.fn(),
         };
 
@@ -99,7 +99,7 @@ describe('anonymizeAuditLogViaSql', () => {
             new Error('postgres unreachable'),
         );
         const executor: CronSqlExecutor = {
-            execute: executeMock as unknown as CronSqlExecutor['execute'],
+            execute: executeMock,
             selectRows: vi.fn(),
         };
 

@@ -285,7 +285,7 @@ describe('tracing — automatic attributes', () => {
         };
         const attrs = body.resourceSpans[0]!.scopeSpans[0]!.spans[0]!.attributes;
         const attrMap = new Map(
-            attrs.map((a) => [a.key, a.value as Record<string, unknown>]),
+            attrs.map((a) => [a.key, a.value as any]),
         );
         expect(attrMap.get('http.method')).toEqual({ stringValue: 'POST' });
         expect(attrMap.get('http.route')).toEqual({ stringValue: '/v1/reservations' });
@@ -314,7 +314,7 @@ describe('tracing — automatic attributes', () => {
         };
         const attrs = body.resourceSpans[0]!.scopeSpans[0]!.spans[0]!.attributes;
         const attrMap = new Map(
-            attrs.map((a) => [a.key, a.value as Record<string, unknown>]),
+            attrs.map((a) => [a.key, a.value as any]),
         );
         expect(attrMap.get('http.route')).toEqual({
             stringValue: '/some/unknown/path',
@@ -352,7 +352,7 @@ describe('tracing — automatic attributes', () => {
         };
         const attrs = body.resourceSpans[0]!.scopeSpans[0]!.spans[0]!.attributes;
         const attrMap = new Map(
-            attrs.map((a) => [a.key, a.value as Record<string, unknown>]),
+            attrs.map((a) => [a.key, a.value as any]),
         );
         expect(attrMap.get('studio.id')).toEqual({ stringValue: 'studio-7' });
         expect(attrMap.get('user.id')).toEqual({ stringValue: 'user-42' });
@@ -407,7 +407,7 @@ describe('tracing — automatic attributes', () => {
         };
         const attrs = body.resourceSpans[0]!.scopeSpans[0]!.spans[0]!.attributes;
         const attrMap = new Map(
-            attrs.map((a) => [a.key, a.value as Record<string, unknown>]),
+            attrs.map((a) => [a.key, a.value as any]),
         );
         expect(attrMap.get('reservation.id')).toEqual({ stringValue: 'res-1' });
     });

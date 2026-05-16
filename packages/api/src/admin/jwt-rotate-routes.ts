@@ -42,9 +42,6 @@
  * Operator runbook: `docs/runbooks/rotate-jwt.md` (Slice 12.7).
  */
 
-import { Hono } from 'hono';
-import { generateKeyPair, exportPKCS8, exportSPKI } from 'jose';
-
 import {
     DEFAULT_ROTATION_GRACE_SEC,
     rotateKeysAsync,
@@ -53,6 +50,9 @@ import {
     type Jwks,
     type SigningKey,
 } from '@athlya/auth';
+import { Hono } from 'hono';
+import { generateKeyPair, exportPKCS8, exportSPKI } from 'jose';
+
 
 import type { AthlyaBindings, AthlyaVariables } from '../types.js';
 import type { Context } from 'hono';
@@ -123,7 +123,7 @@ function adminProblem(
 ): Response {
     const traceId =
         typeof c.get('traceId') === 'string'
-            ? (c.get('traceId') as string)
+            ? (c.get('traceId'))
             : 'unknown';
     const full: AdminProblemBody = { ...body, traceId };
     return c.body(JSON.stringify(full), body.status as 403 | 500, {
@@ -242,7 +242,7 @@ export function buildJwtRotateRouter(
     /*  GET /admin/jwt/state                                          */
     /* -------------------------------------------------------------- */
 
-    router.get('/admin/jwt/state', async (c) => {
+    router.get('/admin/jwt/state', (c) => {
         const forbidden = enforceAdmin(c);
         if (forbidden !== null) return forbidden;
 

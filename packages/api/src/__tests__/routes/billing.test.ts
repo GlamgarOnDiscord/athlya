@@ -148,7 +148,7 @@ describe('POST /v1/billing/checkout', () => {
         );
 
         expect(res.status).toBe(503);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.code).toBe('billing_not_configured');
         expect(deps.billing.createCheckoutSession).toHaveBeenCalledWith({
             userId: TEST_USER_ID,
@@ -187,7 +187,7 @@ describe('POST /v1/billing/checkout', () => {
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.checkoutUrl).toBe('https://checkout.stripe.com/cs_test_abc');
     });
 
@@ -280,7 +280,7 @@ describe('GET /v1/billing/invoices', () => {
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body).toEqual({ items: [], nextCursor: null });
     });
 });
@@ -309,7 +309,7 @@ describe('POST /v1/billing/webhook', () => {
         );
 
         expect(res.status).toBe(400);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.code).toBe('invalid_signature');
     });
 

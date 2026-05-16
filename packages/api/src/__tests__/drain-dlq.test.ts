@@ -191,7 +191,7 @@ function mockMessage<B>(id: string, body: B): Message<B> & { ack: ReturnType<typ
         attempts: 1,
         ack: vi.fn(),
         retry: vi.fn(),
-    };
+    } as unknown as Message<B> & { ack: ReturnType<typeof vi.fn> };
 }
 
 /** Build a DLQ batch envelope around `msgs`. */

@@ -131,7 +131,7 @@ describe('CORS staging/production requires CORS_ORIGIN', () => {
         expect(res.headers.get('content-type')).toBe(
             'application/problem+json',
         );
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.title).toBe('Configuration Error');
         expect(body.status).toBe(500);
         expect(body.code).toBe('configuration_error');
@@ -151,7 +151,7 @@ describe('CORS staging/production requires CORS_ORIGIN', () => {
         );
 
         expect(res.status).toBe(500);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.code).toBe('configuration_error');
     });
 
@@ -238,7 +238,7 @@ describe('bodyLimit on /v1/*', () => {
         expect(res.headers.get('content-type')).toBe(
             'application/problem+json',
         );
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.status).toBe(413);
         expect(body.code).toBe('payload_too_large');
         expect(body.title).toBe('Payload Too Large');

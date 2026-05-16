@@ -185,7 +185,7 @@ export function concurrencyLimit(
         // not require a real Upstash binding; CI integration tests
         // that point `REDIS_URL` at `.invalid` would otherwise
         // hang on the first INCR.
-        const env = c.env as ConcurrencyEnv;
+        const env = c.env;
         if (env.ENVIRONMENT === 'dev') {
             await next();
             return undefined;

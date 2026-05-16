@@ -105,7 +105,7 @@ function mockMessage<B>(id: string, body: B): Message<B> & {
         attempts: 1,
         ack: vi.fn(),
         retry: vi.fn(),
-    };
+    } as unknown as Message<B> & { ack: ReturnType<typeof vi.fn>; retry: ReturnType<typeof vi.fn> };
 }
 
 function mockBatch(

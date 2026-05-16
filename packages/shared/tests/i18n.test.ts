@@ -26,7 +26,7 @@
  * Related requirements: 28.1.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 import {
     bundles,
@@ -155,7 +155,7 @@ describe('t(key, locale) — English fallback (Req 28.1)', () => {
     const MISSING_PATH = ['common', 'save'] as const;
 
     let restore: () => void = () => undefined;
-    let warnSpy: ReturnType<typeof vi.spyOn>;
+    let warnSpy: MockInstance;
 
     beforeEach(() => {
         restore = deleteLeaf(bundles.fr, MISSING_PATH);
@@ -192,7 +192,7 @@ describe('t(key, locale) — key missing in every bundle', () => {
     // Cast-through-unknown to bypass the compile-time key check — the
     // runtime contract accepts any string and returns it verbatim.
     const BOGUS = 'this.key.does.not.exist' as unknown as TranslationKeys;
-    let warnSpy: ReturnType<typeof vi.spyOn>;
+    let warnSpy: MockInstance;
 
     beforeEach(() => {
         warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);

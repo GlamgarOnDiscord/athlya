@@ -21,7 +21,7 @@
  */
 
 import { SignJWT, generateKeyPair } from 'jose';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 
 /**
  * Decode a compact JWS header segment without verifying the
@@ -131,12 +131,12 @@ beforeAll(async () => {
 // ---------------------------------------------------------------------------
 
 interface MockedRepo extends UserRepo {
-    findUserByEmail: ReturnType<typeof vi.fn>;
-    findUserById: ReturnType<typeof vi.fn>;
-    findStudioBySlug: ReturnType<typeof vi.fn>;
-    createUser: ReturnType<typeof vi.fn>;
-    softDeleteUser: ReturnType<typeof vi.fn>;
-    findOrCreateOAuthUser: ReturnType<typeof vi.fn>;
+    findUserByEmail: MockedFunction<UserRepo['findUserByEmail']>;
+    findUserById: MockedFunction<UserRepo['findUserById']>;
+    findStudioBySlug: MockedFunction<UserRepo['findStudioBySlug']>;
+    createUser: MockedFunction<UserRepo['createUser']>;
+    softDeleteUser: MockedFunction<UserRepo['softDeleteUser']>;
+    findOrCreateOAuthUser: MockedFunction<UserRepo['findOrCreateOAuthUser']>;
 }
 
 function makeRepo(): MockedRepo {
@@ -151,12 +151,12 @@ function makeRepo(): MockedRepo {
 }
 
 interface MockedStore extends SessionStore {
-    create: ReturnType<typeof vi.fn>;
-    rotate: ReturnType<typeof vi.fn>;
-    revoke: ReturnType<typeof vi.fn>;
-    revokeAllForUser: ReturnType<typeof vi.fn>;
-    revokeFamilyByRootSid: ReturnType<typeof vi.fn>;
-    exists: ReturnType<typeof vi.fn>;
+    create: MockedFunction<SessionStore['create']>;
+    rotate: MockedFunction<SessionStore['rotate']>;
+    revoke: MockedFunction<SessionStore['revoke']>;
+    revokeAllForUser: MockedFunction<SessionStore['revokeAllForUser']>;
+    revokeFamilyByRootSid: MockedFunction<SessionStore['revokeFamilyByRootSid']>;
+    exists: MockedFunction<SessionStore['exists']>;
 }
 
 function makeStore(): MockedStore {
@@ -201,7 +201,7 @@ function makeDeps(
         store?: MockedStore;
         uuids?: string[];
         nowSec?: number;
-        publishEvent?: ReturnType<typeof vi.fn>;
+        publishEvent?: MockedFunction<AuthServiceDeps['publishEvent']>;
         hibpBreached?: boolean;
         hibpFail?: boolean;
         oauthVerifier?: OAuthVerifier;
@@ -210,11 +210,11 @@ function makeDeps(
     deps: AuthServiceDeps;
     repo: MockedRepo;
     store: MockedStore;
-    publishEvent: ReturnType<typeof vi.fn>;
+    publishEvent: MockedFunction<AuthServiceDeps['publishEvent']>;
 } {
     const repo = options.repo ?? makeRepo();
     const store = options.store ?? makeStore();
-    const publishEvent = options.publishEvent ?? vi.fn(() => Promise.resolve());
+    const publishEvent = options.publishEvent ?? vi.fn<AuthServiceDeps['publishEvent']>(() => Promise.resolve());
     const uuidQueue = [...(options.uuids ?? [SID_1, EVENT_ID_1, SID_2])];
 
     const hibpFetch: typeof fetch = options.hibpFail
@@ -318,6 +318,7 @@ describe('register', () => {
             slug: 'athlya-studio',
             name: 'Athlya',
         });
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises
         repo.createUser.mockImplementation((input: {
             studioId: string;
             email: string;
@@ -345,7 +346,7 @@ describe('register', () => {
         expect(session.refreshExp).toBe(FIXED_NOW_SEC + 30 * 24 * 60 * 60);
         expect(session.sid).toBe(SID_1);
 
-        const createCall = repo.createUser.mock.calls[0]?.[0] as {
+        const createCall = repo.createUser.mock.calls[0]![0] as {
             consents: { version: string };
         };
         expect(createCall.consents.version).toBe(CURRENT_CGU_VERSION);
@@ -372,6 +373,7 @@ describe('register', () => {
             slug: 'athlya-studio',
             name: 'Athlya',
         });
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises
         repo.createUser.mockImplementation((input: {
             studioId: string;
             email: string;
@@ -704,6 +706,7 @@ describe('loginWithApple / loginWithGoogle', () => {
             }),
         };
         const { deps, repo } = makeDeps({ oauthVerifier: verifier });
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises
         repo.findOrCreateOAuthUser.mockImplementation(() => {
             callLog.push('findOrCreateOAuthUser');
             return Promise.resolve(makeUserRow());

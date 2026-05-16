@@ -80,7 +80,7 @@ export function buildCronSqlExecutor(
             // `sql(query, params)` returns the row array directly
             // for SELECT, and an array-with-rowCount-property for
             // write statements. Narrow defensively.
-            const result = (await sql(query, params)) as unknown as {
+            const result = (await sql(query, params)) as {
                 readonly rowCount?: number;
                 readonly length?: number;
             };
@@ -89,7 +89,7 @@ export function buildCronSqlExecutor(
                 : (result.length ?? 0);
         },
         async selectRows<T>(query: string, params: readonly unknown[]): Promise<T[]> {
-            const result = (await sql(query, params)) as unknown as T[];
+            const result = (await sql(query, params)) as T[];
             return result;
         },
     };

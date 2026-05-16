@@ -55,16 +55,16 @@ import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 
 import { buildCascadeDeps } from './adapters/cascade-deps.js';
+import { buildCronSqlExecutor } from './adapters/cron-sql-executor.js';
 import { buildExportDeps } from './adapters/export-deps.js';
 import { buildStudioSlugResolver } from './adapters/studio-slug-resolver.js';
 import { buildDlqRouter } from './admin/dlq-routes.js';
 import { buildJwtRotateRouter } from './admin/jwt-rotate-routes.js';
 import { handleDlqBatch } from './events/drain-dlq.js';
 import { runScheduledDrain } from './events/drain-scheduled.js';
-import { buildCronSqlExecutor } from './adapters/cron-sql-executor.js';
+import { createLogger } from './logging.js';
 import { anonymizeAuditLogViaSql } from './maintenance/anonymize-audit-tx.js';
 import { runScheduledRgpdMaintenance } from './maintenance/scheduled-runner.js';
-import { createLogger } from './logging.js';
 import { jwtAuth } from './middleware/auth.js';
 import { tracing } from './middleware/otel.js';
 import { registerErrorHandlers } from './middleware/problem-details.js';
@@ -1206,7 +1206,7 @@ export function __buildAppInternal(
     // router is mounted without an audit writer; the rotation
     // succeeds and the operator-side wrangler steps remain the
     // single source of truth for the rotation event.
-    app.route('/', buildJwtRotateRouter() as unknown as Hono<HonoEnv>);
+    app.route('/', buildJwtRotateRouter());
 
     // 404: Problem Details envelope, minimal. Task 8.5 will lift the
     // full RFC 9457 shape (type URI catalogue, `instance`, `detail`)

@@ -98,7 +98,7 @@ describe('/v1/sessions â€” unauthenticated requests', () => {
             env(),
         );
 
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.traceId).toBe(res.headers.get('x-trace-id'));
     });
 });

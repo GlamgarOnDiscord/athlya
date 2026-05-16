@@ -114,13 +114,13 @@ describe('requestReset (Sprint-6 SP6.3 — S2-006)', () => {
 
         expect(result.kind).toBe('sent');
         expect(passwordResetRepo.insertToken).toHaveBeenCalledTimes(1);
-        const tokenCall = passwordResetRepo.insertToken.mock.calls[0]?.[0]!;
+        const tokenCall = passwordResetRepo.insertToken.mock.calls[0]![0]!;
         expect(tokenCall.userId).toBe(USER_ID);
         // Hash is 64 hex chars (SHA-256). The plain token never
         // shows up in the repo call.
         expect(tokenCall.tokenHash).toMatch(/^[0-9a-f]{64}$/);
         expect(emailTransport.sendResetEmail).toHaveBeenCalledTimes(1);
-        const emailCall = emailTransport.sendResetEmail.mock.calls[0]?.[0]!;
+        const emailCall = emailTransport.sendResetEmail.mock.calls[0]![0]!;
         expect(emailCall.to).toBe('alice@example.com');
         expect(emailCall.link).toMatch(
             /^https:\/\/app\.athlya\.test\/reset-password\/[A-Za-z0-9_-]+$/,
@@ -177,7 +177,7 @@ describe('requestReset (Sprint-6 SP6.3 — S2-006)', () => {
             now: () => fixedNowSec,
         });
 
-        const tokenCall = passwordResetRepo.insertToken.mock.calls[0]?.[0]!;
+        const tokenCall = passwordResetRepo.insertToken.mock.calls[0]![0]!;
         expect(tokenCall.expiresAt.getTime()).toBe(
             (fixedNowSec + DEFAULT_RESET_TOKEN_TTL_SEC) * 1000,
         );
@@ -283,7 +283,7 @@ describe('confirmReset (Sprint-6 SP6.3 — S2-006)', () => {
 
         expect(result.userId).toBe(USER_ID);
         expect(passwordResetRepo.consumeAndResetPassword).toHaveBeenCalledTimes(1);
-        const consumeCall = passwordResetRepo.consumeAndResetPassword.mock.calls[0]?.[0]!;
+        const consumeCall = passwordResetRepo.consumeAndResetPassword.mock.calls[0]![0]!;
         // Hash is bcrypt — starts with `$2b$`.
         expect(consumeCall.newPasswordHash.startsWith('$2b$')).toBe(true);
         // Family revoke fired — every active session destroyed.

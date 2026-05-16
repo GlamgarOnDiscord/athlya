@@ -10,13 +10,13 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { FakeRedis } from '../../tests/helpers/fake-redis.js';
 import {
     CONCURRENCY_BUCKET_PREFIX,
     DEFAULT_CONCURRENCY_LIMIT,
     concurrencyLimit,
 } from '../middleware/concurrency-limit.js';
 
-import { FakeRedis } from '../../tests/helpers/fake-redis.js';
 
 import type { Redis } from '@upstash/redis';
 
@@ -201,11 +201,7 @@ describe('concurrencyLimit — over the cap', () => {
         );
         expect((blocked as Response).headers.get('retry-after')).toBe('1');
 
-        const body = (await (blocked as Response).json()) as {
-            status: number;
-            code: string;
-            traceId: string;
-        };
+        const body = (await (blocked as Response).json() as any);
         expect(body.status).toBe(429);
         expect(body.code).toBe('concurrency_limit_exceeded');
         expect(body.traceId).toBe('trace-blocked');

@@ -105,7 +105,7 @@ describe('/v1/studios/me â€” unauthenticated', () => {
 
         expect(res.status).toBe(401);
         expect(res.headers.get('content-type')).toBe('application/problem+json');
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.title).toBe('missing_authorization');
         expect(deps.studios.getStudio).not.toHaveBeenCalled();
     });
@@ -178,7 +178,7 @@ describe('GET /v1/studios/me â€” authenticated', () => {
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body).toEqual(studioRow);
         expect(deps.studios.getStudio).toHaveBeenCalledWith(TEST_STUDIO_ID);
     });
@@ -209,7 +209,7 @@ describe('GET /v1/studios/me â€” authenticated', () => {
         expect(res.headers.get('content-type')).toBe(
             'application/problem+json',
         );
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.code).toBe('not_found');
     });
 });
@@ -238,7 +238,7 @@ describe('PATCH /v1/studios/me â€” admin only', () => {
         );
 
         expect(res.status).toBe(403);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.title).toBe('forbidden');
         expect(deps.studios.updateStudio).not.toHaveBeenCalled();
     });
@@ -358,7 +358,7 @@ describe('PATCH /v1/studios/me â€” admin only', () => {
         );
 
         expect(res.status).toBe(200);
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body).toEqual(studioRow);
         expect(deps.studios.updateStudio).toHaveBeenCalledWith(
             TEST_STUDIO_ID,

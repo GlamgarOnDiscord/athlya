@@ -97,7 +97,7 @@ function buildApp(options: {
                 { 'content-type': resp.contentType },
             );
         }
-        return c.json(resp.body as Record<string, unknown>, resp.status as 200);
+        return c.json(resp.body as any, resp.status as 200);
     };
 
     app.get('/resource', respond);

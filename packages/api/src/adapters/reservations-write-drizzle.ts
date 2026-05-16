@@ -222,7 +222,7 @@ export function createDrizzleCancelRepo(db: AthlyaDb): CancelRepo {
             reservationId,
             userId,
         ): Promise<ReservationRow | null> {
-            const drizzleTx = tx as unknown as AthlyaTx;
+            const drizzleTx = tx as AthlyaTx;
             const rows = await drizzleTx
                 .select()
                 .from(reservations)
@@ -241,7 +241,7 @@ export function createDrizzleCancelRepo(db: AthlyaDb): CancelRepo {
             tx,
             classId,
         ): Promise<ClassForCancel | null> {
-            const drizzleTx = tx as unknown as AthlyaTx;
+            const drizzleTx = tx as AthlyaTx;
             const rows = await drizzleTx
                 .select({ startsAt: classes.startsAt })
                 .from(classes)
@@ -262,7 +262,7 @@ export function createDrizzleCancelRepo(db: AthlyaDb): CancelRepo {
             status,
             stampedAt,
         ): Promise<ReservationRow> {
-            const drizzleTx = tx as unknown as AthlyaTx;
+            const drizzleTx = tx as AthlyaTx;
             const set: Partial<typeof reservations.$inferInsert> = { status };
             if (status === 'cancelled') {
                 set.cancelledAt = stampedAt;
@@ -284,7 +284,7 @@ export function createDrizzleCancelRepo(db: AthlyaDb): CancelRepo {
             tx,
             classId,
         ): Promise<ReservationRow | null> {
-            const drizzleTx = tx as unknown as AthlyaTx;
+            const drizzleTx = tx as AthlyaTx;
             // `SKIP LOCKED` is the critical flag for Algorithm 2 —
             // see cancel.ts for the full invariant.
             const rows = await drizzleTx
@@ -303,7 +303,7 @@ export function createDrizzleCancelRepo(db: AthlyaDb): CancelRepo {
         },
 
         async insertOutbox(tx, event: CancelOutboxEvent): Promise<void> {
-            await insertOutboxRow(tx as unknown as AthlyaTx, {
+            await insertOutboxRow(tx as AthlyaTx, {
                 eventId: event.eventId,
                 eventType: event.eventType,
                 payload: event.payload,

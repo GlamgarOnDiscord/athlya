@@ -258,7 +258,7 @@ describe('gateway integration â€” happy-path user journeys', () => {
             buildMockEnv(),
         );
         expect(registerRes.status).toBe(201);
-        const registerBody = await registerRes.json() as Record<string, unknown>;
+        const registerBody = (await registerRes.json() as any);
         expect(typeof registerBody.accessToken).toBe('string');
         expect(deps.auth.register).toHaveBeenCalledTimes(1);
 
@@ -279,7 +279,7 @@ describe('gateway integration â€” happy-path user journeys', () => {
             buildMockEnv(),
         );
         expect(loginRes.status).toBe(200);
-        const loginBody = await loginRes.json() as Record<string, unknown>;
+        const loginBody = (await loginRes.json() as any);
         const accessToken = loginBody.accessToken;
 
         /* ------------- 3. book ------------- */
@@ -296,7 +296,7 @@ describe('gateway integration â€” happy-path user journeys', () => {
             buildMockEnv(),
         );
         expect(bookRes.status).toBe(201);
-        const bookBody = await bookRes.json() as Record<string, unknown>;
+        const bookBody = (await bookRes.json() as any);
         expect(bookBody.status).toBe('confirmed');
         const reservationId = (bookBody.reservation as { id: string }).id;
 
@@ -371,7 +371,7 @@ describe('gateway integration â€” happy-path user journeys', () => {
             buildMockEnv(),
         );
         expect(aliceReg.status).toBe(201);
-        const aliceAt = (await aliceReg.json() as { accessToken: string }).accessToken;
+        const aliceAt = ((await aliceReg.json() as any)).accessToken;
 
         const aliceBook = await app.request(
             '/v1/reservations',
@@ -386,7 +386,7 @@ describe('gateway integration â€” happy-path user journeys', () => {
             buildMockEnv(),
         );
         expect(aliceBook.status).toBe(201);
-        const aliceReservationId = ((await aliceBook.json() as { reservation: Record<string, unknown> }).reservation).id as string;
+        const aliceReservationId = (((await aliceBook.json() as any)).reservation).id as string;
 
         // ---- Bob: register + waitlist ----
         const bobReg = await app.request(
@@ -408,7 +408,7 @@ describe('gateway integration â€” happy-path user journeys', () => {
             buildMockEnv(),
         );
         expect(bobReg.status).toBe(201);
-        const bobAt = (await bobReg.json() as { accessToken: string }).accessToken;
+        const bobAt = ((await bobReg.json() as any)).accessToken;
 
         const bobBook = await app.request(
             '/v1/reservations',
@@ -423,7 +423,7 @@ describe('gateway integration â€” happy-path user journeys', () => {
             buildMockEnv(),
         );
         expect(bobBook.status).toBe(202);
-        const bobBookBody = await bobBook.json() as Record<string, unknown>;
+        const bobBookBody = (await bobBook.json() as any);
         expect(bobBookBody.status).toBe('waitlist');
         expect(bobBookBody.position).toBe(1);
 
@@ -468,7 +468,7 @@ describe('gateway integration â€” happy-path user journeys', () => {
             },
             buildMockEnv(),
         );
-        const at = (await reg.json() as { accessToken: string }).accessToken;
+        const at = ((await reg.json() as any)).accessToken;
 
         const listRes = await app.request(
             '/v1/reservations/me',
@@ -476,7 +476,7 @@ describe('gateway integration â€” happy-path user journeys', () => {
             buildMockEnv(),
         );
         expect(listRes.status).toBe(200);
-        const listBody = await listRes.json() as Record<string, unknown>;
+        const listBody = (await listRes.json() as any);
         expect(Array.isArray(listBody.items)).toBe(true);
     });
 
@@ -546,7 +546,7 @@ describe('gateway integration â€” happy-path user journeys', () => {
             },
             buildMockEnv(),
         );
-        const at = (await reg.json() as { accessToken: string }).accessToken;
+        const at = ((await reg.json() as any)).accessToken;
 
         const idemKey = 'book-once-only';
         const init = {
@@ -561,11 +561,11 @@ describe('gateway integration â€” happy-path user journeys', () => {
 
         const first = await app.request('/v1/reservations', init, buildMockEnv());
         expect(first.status).toBe(201);
-        const firstBody = await first.json() as Record<string, unknown>;
+        const firstBody = (await first.json() as any);
 
         const second = await app.request('/v1/reservations', init, buildMockEnv());
         expect(second.status).toBe(201);
-        const secondBody = await second.json() as Record<string, unknown>;
+        const secondBody = (await second.json() as any);
 
         // Cache replay means the handler runs exactly once for the
         // two requests â€” deps.reservations.bookClass fires only on
@@ -626,8 +626,8 @@ describe('gateway integration â€” happy-path user journeys', () => {
             buildMockEnv(),
         );
         expect(listRes.status).toBe(200);
-        const listBody = await listRes.json() as Record<string, unknown>;
-        expect((listBody.items as Record<string, unknown>[]).some((c) => c.title === 'Boxing')).toBe(true);
+        const listBody = (await listRes.json() as any);
+        expect((listBody.items as any[]).some((c) => c.title === 'Boxing')).toBe(true);
     });
 });
 
@@ -669,7 +669,7 @@ describe('gateway integration â€” error paths', () => {
         expect(res.headers.get('content-type')).toBe(
             'application/problem+json',
         );
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.status).toBe(401);
         expect(body.title).toBe('token_expired');
         expect(body.traceId).toBe(res.headers.get('x-trace-id'));
@@ -705,7 +705,7 @@ describe('gateway integration â€” error paths', () => {
         expect(res.headers.get('content-type')).toBe(
             'application/problem+json',
         );
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.status).toBe(422);
         expect(body.code).toBe('validation_error');
         expect(Array.isArray(body.errors)).toBe(true);
@@ -770,7 +770,7 @@ describe('gateway integration â€” error paths', () => {
         const retryAfter = denied.headers.get('retry-after');
         expect(retryAfter).not.toBeNull();
         expect(Number(retryAfter)).toBeGreaterThanOrEqual(1);
-        const body = await denied.json() as Record<string, unknown>;
+        const body = (await denied.json() as any);
         expect(body.status).toBe(429);
         expect(body.title).toBe('Too Many Requests');
     }, 30_000);
@@ -820,7 +820,7 @@ describe('gateway integration â€” error paths', () => {
         expect(res.headers.get('content-type')).toBe(
             'application/problem+json',
         );
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.status).toBe(403);
         expect(body.code).toBe('bot_challenge_failed');
         expect(deps.auth.register).not.toHaveBeenCalled();
@@ -874,7 +874,7 @@ describe('gateway integration â€” error paths', () => {
         expect(res.headers.get('content-type')).toBe(
             'application/problem+json',
         );
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(body.status).toBe(404);
         expect(body.code).toBe('not_found');
         expect(body.traceId).toBe(res.headers.get('x-trace-id'));
@@ -899,7 +899,7 @@ describe('gateway integration â€” error paths', () => {
         expect(res.headers.get('content-type')).toBe(
             'application/problem+json',
         );
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(typeof body.type).toBe('string');
         expect(typeof body.title).toBe('string');
         expect(body.status).toBe(401);

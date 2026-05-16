@@ -256,7 +256,7 @@ describe('securityHeaders middleware', () => {
     function fakeContext(): SecurityHeadersContext & {
         header: ReturnType<typeof vi.fn>;
     } {
-        return { header: vi.fn() };
+        return { header: vi.fn() } as unknown as SecurityHeadersContext & { header: ReturnType<typeof vi.fn> };
     }
 
     it('calls c.header once per default header and calls next exactly once', async () => {

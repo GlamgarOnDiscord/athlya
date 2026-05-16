@@ -118,16 +118,16 @@ function fakeContext(args: {
  * Build a `fetch` fake that returns a canned `Response`. Used for the
  * success and rejection branches.
  */
-function fakeFetch(response: Response): ReturnType<typeof vi.fn> {
-    return vi.fn(() => Promise.resolve(response));
+function fakeFetch(response: Response): typeof fetch {
+    return vi.fn(() => Promise.resolve(response)) as unknown as typeof fetch;
 }
 
 /**
  * Build a `fetch` fake that throws synchronously after being awaited â€”
  * emulates a network / DNS / TLS failure.
  */
-function rejectingFetch(err: unknown): ReturnType<typeof vi.fn> {
-    return vi.fn(() => Promise.reject(err));
+function rejectingFetch(err: unknown): typeof fetch {
+    return vi.fn(() => Promise.reject(err)) as unknown as typeof fetch;
 }
 
 /**
@@ -137,7 +137,7 @@ function rejectingFetch(err: unknown): ReturnType<typeof vi.fn> {
  * is observed â€” this mirrors the real `fetch` behaviour on Workers
  * without relying on wall-clock time.
  */
-function hangingFetch(): ReturnType<typeof vi.fn> {
+function hangingFetch(): typeof fetch {
     return vi.fn((_input: unknown, init?: RequestInit) => {
         return new Promise<Response>((_resolve, reject) => {
             const signal = init?.signal;
@@ -157,7 +157,7 @@ function hangingFetch(): ReturnType<typeof vi.fn> {
                 { once: true },
             );
         });
-    });
+    }) as unknown as typeof fetch;
 }
 
 /** Build a success response. */
@@ -187,7 +187,7 @@ async function readProblemBody(
     response: Response,
 ): Promise<{ status: number; body: Record<string, unknown>; contentType: string | null }> {
     const contentType = response.headers.get('content-type');
-    const body = await response.json() as Record<string, unknown>;
+    const body = (await response.json() as any);
     return { status: response.status, body, contentType };
 }
 
@@ -489,7 +489,7 @@ describe('turnstile â€” siteverify request shape', () => {
         await mw(c, next);
 
         expect(fetchSpy).toHaveBeenCalledTimes(1);
-        const call = fetchSpy.mock.calls[0];
+        const call = (fetchSpy as any).mock.calls[0];
         expect(call).toBeDefined();
         const [url, init] = call as [string, RequestInit];
 
@@ -517,7 +517,7 @@ describe('turnstile â€” siteverify request shape', () => {
         const mw = turnstile({ fetch: fetchSpy });
         await mw(c, next);
 
-        const call = fetchSpy.mock.calls[0];
+        const call = (fetchSpy as any).mock.calls[0];
         const [, init] = call as [string, RequestInit];
         const params = new URLSearchParams(init.body as string);
         expect(params.has('remoteip')).toBe(false);

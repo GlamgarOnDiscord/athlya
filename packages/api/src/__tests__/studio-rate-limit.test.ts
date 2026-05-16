@@ -9,13 +9,13 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { FakeRedis } from '../../tests/helpers/fake-redis.js';
 import {
     DEFAULT_STUDIO_LIMIT,
     STUDIO_BUCKET_PREFIX,
     studioRateLimit,
 } from '../middleware/studio-rate-limit.js';
 
-import { FakeRedis } from '../../tests/helpers/fake-redis.js';
 
 import type { Redis } from '@upstash/redis';
 
@@ -159,7 +159,7 @@ describe('studioRateLimit — deny response shape', () => {
         expect(retryAfter).not.toBeNull();
         expect(Number(retryAfter)).toBeGreaterThanOrEqual(1);
 
-        const body = (await res.json()) as Record<string, unknown>;
+        const body = ((await res.json() as any));
         expect(body.status).toBe(429);
         expect(body.code).toBe('studio_rate_limit_exceeded');
         expect(body.title).toBe('Too Many Requests');

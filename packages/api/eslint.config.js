@@ -31,6 +31,7 @@ export default [
             '@typescript-eslint/await-thenable': 'off',
             '@typescript-eslint/prefer-promise-reject-errors': 'off',
             '@typescript-eslint/no-base-to-string': 'off',
+            '@typescript-eslint/no-explicit-any': 'off',
         },
     },
 ];

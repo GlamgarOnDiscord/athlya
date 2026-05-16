@@ -257,7 +257,7 @@ describe('GET /v1/classes â€” ETag + Cache-Control (B5.1)', () => {
         // Strong, quoted, 16 hex chars (64-bit truncation of SHA-256).
         expect(etag).toMatch(/^"[0-9a-f]{16}"$/);
 
-        const body = await res.json() as Record<string, unknown>;
+        const body = (await res.json() as any);
         expect(Array.isArray(body.items)).toBe(true);
         expect((body.items as unknown[]).length).toBeGreaterThan(0);
     });
