@@ -67,8 +67,10 @@ const AUTH_TOKEN = __ENV.K6_AUTH_TOKEN ?? '';
 const STUDIO_ID = __ENV.K6_STUDIO_ID ?? '';
 const CLASS_IDS = (__ENV.K6_CLASS_IDS ?? '').split(',').filter(Boolean);
 
-if (CLASS_IDS.length === 0) {
-  throw new Error('k6/book-class.js: K6_CLASS_IDS must be set to a CSV of class UUIDs');
+export function setup() {
+  if (CLASS_IDS.length === 0) {
+    throw new Error('k6/book-class.js: K6_CLASS_IDS must be set to a CSV of class UUIDs');
+  }
 }
 
 export default function () {

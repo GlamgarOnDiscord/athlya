@@ -97,6 +97,11 @@ jobs:
     name: Socket.dev supply-chain scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Skip the entire job when the secret is absent — GitHub resolves
+    # action references before evaluating step-level `if:` conditions,
+    # so a step guard alone cannot prevent the "action not found" error
+    # on repositories that haven't provisioned the secret.
+    if: ${{ secrets.SOCKET_SECURITY_API_KEY != '' }}
 
     permissions:
       contents: read
