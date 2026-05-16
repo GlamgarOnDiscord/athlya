@@ -34,24 +34,26 @@ VALUES ('10000000-0000-4000-8000-000000000001', 'explain-test-studio', 'Explain 
 ON CONFLICT (id) DO NOTHING;
 
 -- 200 users — UUIDs déterministes pour idempotence du seed.
-INSERT INTO users (id, studio_id, email, display_name, role)
+INSERT INTO users (id, studio_id, email, display_name, consents, role)
 SELECT
     ('10000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid,
     '10000000-0000-4000-8000-000000000001',
     'user-' || gs || '@explain-test.invalid',
     'User ' || gs,
+    '{"marketing":false,"analytics":false,"thirdParty":false,"version":"2026-01","updatedAt":"2026-01-01T00:00:00.000Z"}'::jsonb,
     'member'
 FROM generate_series(1, 200) AS gs
 ON CONFLICT (id) DO NOTHING;
 
 -- Le user "principal" pour la query Q4 (listMyReservations).
 -- ID stable, on s'assure qu'il existe.
-INSERT INTO users (id, studio_id, email, display_name, role)
+INSERT INTO users (id, studio_id, email, display_name, consents, role)
 VALUES (
     '10000000-0000-4000-8000-000000000002',
     '10000000-0000-4000-8000-000000000001',
     'principal@explain-test.invalid',
     'Principal User',
+    '{"marketing":false,"analytics":false,"thirdParty":false,"version":"2026-01","updatedAt":"2026-01-01T00:00:00.000Z"}'::jsonb,
     'member'
 )
 ON CONFLICT (id) DO NOTHING;

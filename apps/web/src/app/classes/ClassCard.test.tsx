@@ -49,7 +49,9 @@ describe('<ClassCard />', () => {
     const onBook = vi.fn().mockResolvedValue(undefined);
     render(<ClassCard classInfo={BASE_CLASS} t={t} locale="fr" onBook={onBook} />);
 
-    const cta = screen.getByRole('button', { name: `${t('classes.card.book')} — ${BASE_CLASS.title}` });
+    const cta = screen.getByRole('button', {
+      name: `${t('classes.card.book')} — ${BASE_CLASS.title}`,
+    });
     await act(async () => {
       fireEvent.click(cta);
       await Promise.resolve();
