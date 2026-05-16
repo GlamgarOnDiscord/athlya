@@ -1,0 +1,112 @@
+name: OWASP ZAP Baseline
+
+# =====================================================================
+# Task 13.2 / Requirement 29.1 — run the OWASP ZAP baseline scan on
+# every pull request and block merge on any HIGH-severity finding.
+#
+# Day-zero behaviour
+# ------------------
+# The apps (Cloudflare Worker API, Next.js web, Expo native) are not
+# scaffolded yet, so there is no staging URL to scan. The workflow is
+# gated on the repository variable `ZAP_TARGET_URL` (Settings →
+# Secrets and variables → Actions → Variables): when it is empty the
+# guard step exits cleanly with a log message. Once staging is live
+# we populate the variable and the scan starts enforcing without any
+# workflow change.
+#
+# Manual runs can override the variable through the
+# `workflow_dispatch` `target_url` input — useful for poking a
+# preview deployment without touching repo settings.
+#
+# Why baseline (passive) and not full (active)
+# --------------------------------------------
+# The baseline scan is passive: it only consumes the site's own
+# traffic + spider crawl and never submits attack payloads, so it is
+# safe to run against shared staging environments. The active /
+# full scan is reserved for scheduled runs against a dedicated
+# scanning environment (a future task).
+#
+# Why `allow_issue_writing: false`
+# --------------------------------
+# The zaproxy action can open GitHub issues for each finding, which
+# quickly becomes noise on a monorepo with a shared staging URL.
+# We rely on `fail_action: true` to block the PR on HIGH findings
+# and on the uploaded HTML/JSON reports for human review.
+# =====================================================================
+
+on:
+  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Optional override for vars.ZAP_TARGET_URL (full https URL)'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zap:
+    name: ZAP baseline scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    outputs:
+      skipped: ${{ steps.guard.outputs.skipped }}
+
+    steps:
+      - name: Checkout
+        # Needed so the baseline action can read `.zap/rules.tsv`.
+        uses: actions/checkout@v4
+
+      - name: Resolve target URL and guard on empty configuration
+        id: guard
+        env:
+          VAR_TARGET: ${{ vars.ZAP_TARGET_URL }}
+          INPUT_TARGET: ${{ github.event.inputs.target_url }}
+        run: |
+          set -euo pipefail
+          # Dispatch input wins over the repo variable so humans can
+          # target ad-hoc preview URLs without editing settings.
+          TARGET="${INPUT_TARGET:-$VAR_TARGET}"
+
+          if [ -z "$TARGET" ]; then
+            echo "::notice title=ZAP baseline skipped::No target configured. Set the repository variable ZAP_TARGET_URL once staging is live (or use the workflow_dispatch target_url input)."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            echo "target=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Resolved ZAP target: $TARGET"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+
+      - name: Run ZAP baseline scan
+        if: steps.guard.outputs.skipped == 'false'
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ steps.guard.outputs.target }}
+          rules_file_name: '.zap/rules.tsv'
+          # `-I` keeps the scan in baseline (passive) mode and treats
+          # optional rules as INFO rather than WARN, so the noise
+          # floor stays low while HIGH findings still fail the job.
+          cmd_options: '-I'
+          # We block the PR via the non-zero exit code from
+          # `fail_action`; GitHub issues would duplicate that signal.
+          allow_issue_writing: false
+          fail_action: true
+
+      - name: Upload ZAP reports
+        if: always() && steps.guard.outputs.skipped == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline-report
+          path: |
+            report_html.html
+            report_json.json
+          retention-days: 30
+          if-no-files-found: warn

@@ -1,0 +1,32 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - link "Aller au contenu principal" [ref=e3] [cursor=pointer]:
+      - /url: "#main-content"
+    - navigation "Navigation principale" [ref=e4]:
+      - link "Athlya" [ref=e5] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e9]:
+        - generic [ref=e10]: Locale
+        - combobox "Locale" [ref=e11]:
+          - option "Français" [selected]
+          - option "English"
+  - main [ref=e12]:
+    - heading "Connexion" [level=1] [ref=e13]
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - generic [ref=e16]: Adresse e-mail
+        - textbox "Adresse e-mail" [ref=e17]
+      - generic [ref=e18]:
+        - generic [ref=e19]: Mot de passe
+        - textbox "Mot de passe" [ref=e20]
+      - button "Se connecter" [disabled]
+      - paragraph [ref=e21]:
+        - link "Mot de passe oublié ?" [ref=e22] [cursor=pointer]:
+          - /url: /forgot-password
+      - paragraph [ref=e23]:
+        - text: Pas encore de compte ?
+        - link "Créer un compte" [ref=e24] [cursor=pointer]:
+          - /url: /register
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e30] [cursor=pointer]:
+    - img [ref=e31]

@@ -1,0 +1,72 @@
+{
+    "name": "@athlya/db",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Drizzle ORM schema, migrations, tenant-aware client and repository helpers for the Athlya PostgreSQL database",
+    "license": "AGPL-3.0-only",
+    "engines": {
+        "node": ">=20"
+    },
+    "sideEffects": false,
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "default": "./src/index.ts"
+        },
+        "./schema": {
+            "types": "./src/schema/index.ts",
+            "default": "./src/schema/index.ts"
+        },
+        "./client": {
+            "types": "./src/client.ts",
+            "default": "./src/client.ts"
+        },
+        "./errors": {
+            "types": "./src/errors.ts",
+            "default": "./src/errors.ts"
+        },
+        "./idempotency": {
+            "types": "./src/idempotency.ts",
+            "default": "./src/idempotency.ts"
+        },
+        "./outbox": {
+            "types": "./src/outbox.ts",
+            "default": "./src/outbox.ts"
+        }
+    },
+    "files": [
+        "src",
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json",
+        "lint": "eslint .",
+        "lint:rls-coverage": "node scripts/lint-rls-coverage.mjs",
+        "migrate": "node scripts/migrate.mjs",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "test:rls": "bash scripts/test-rls.sh",
+        "clean": "rimraf dist .turbo *.tsbuildinfo"
+    },
+    "dependencies": {
+        "@athlya/shared": "workspace:*",
+        "@neondatabase/serverless": "^1.0.0",
+        "drizzle-orm": "^0.45.2",
+        "postgres": "^3.4.5"
+    },
+    "devDependencies": {
+        "@athlya/eslint-config": "workspace:*",
+        "@athlya/tsconfig": "workspace:*",
+        "@fast-check/vitest": "^0.3.0",
+        "@testcontainers/postgresql": "^11.0.0",
+        "@types/node": "^20.19.9",
+        "drizzle-kit": "^0.31.10",
+        "eslint": "^9.39.1",
+        "fast-check": "^3.23.2",
+        "rimraf": "^6.0.1",
+        "testcontainers": "^11.0.0",
+        "typescript": "^5.9.3",
+        "vitest": "^3.2.4"
+    }
+}

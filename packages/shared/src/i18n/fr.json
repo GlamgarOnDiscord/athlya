@@ -1,0 +1,401 @@
+{
+    "common": {
+        "appName": "Athlya",
+        "cancel": "Annuler",
+        "save": "Enregistrer",
+        "loading": "Chargement…",
+        "retry": "Réessayer",
+        "confirm": "Confirmer",
+        "back": "Retour",
+        "skipToContent": "Aller au contenu principal"
+    },
+    "auth": {
+        "login": {
+            "title": "Connexion",
+            "email": "Adresse e-mail",
+            "password": "Mot de passe",
+            "submit": "Se connecter",
+            "forgotPassword": "Mot de passe oublié ?",
+            "noAccountPrompt": "Pas encore de compte ?",
+            "error": "Connexion impossible"
+        },
+        "register": {
+            "title": "Créer un compte",
+            "email": "Adresse e-mail",
+            "password": "Mot de passe",
+            "displayName": "Nom affiché",
+            "studioSlug": "Code salle",
+            "consents": {
+                "legend": "Consentements",
+                "marketing": "J'accepte de recevoir des communications marketing",
+                "analytics": "J'accepte la mesure d'audience anonyme",
+                "thirdParty": "J'accepte le partage avec des partenaires"
+            },
+            "submit": "S'inscrire",
+            "success": "Compte créé avec succès",
+            "hasAccountPrompt": "Déjà un compte ?"
+        },
+        "errors": {
+            "invalidCredentials": "Email ou mot de passe incorrect. Vérifiez vos identifiants.",
+            "networkError": "Connexion indisponible. Vérifiez votre réseau.",
+            "turnstileRequired": "Merci de compléter la vérification anti-bot."
+        },
+        "logout": "Se déconnecter",
+        "biometric": {
+            "prompt": "Déverrouillez avec votre empreinte ou votre visage"
+        },
+        "forgotPassword": {
+            "emailLabel": "Adresse email",
+            "emailPlaceholder": "vous@exemple.fr",
+            "submit": "Envoyer le lien",
+            "submitting": "Envoi en cours…",
+            "sent": "Si votre adresse email correspond à un compte Athlya, vous recevrez un lien de réinitialisation dans quelques instants.",
+            "sentSpam": "Le lien est valide pendant 1 heure. Pensez à vérifier vos spams.",
+            "errors": {
+                "generic": "Une erreur est survenue, veuillez réessayer."
+            }
+        },
+        "resetPassword": {
+            "newPasswordLabel": "Nouveau mot de passe",
+            "confirmLabel": "Confirmer le mot de passe",
+            "hibpHint": "8 à 72 caractères. Mot de passe évalué contre la base HIBP au moment de la confirmation.",
+            "submit": "Enregistrer le nouveau mot de passe",
+            "submitting": "Enregistrement…",
+            "success": "Mot de passe modifié. Redirection vers la connexion…",
+            "errors": {
+                "tokenInvalid": "Le lien de réinitialisation est invalide ou a déjà été utilisé.",
+                "tokenExpired": "Le lien de réinitialisation a expiré. Veuillez en demander un nouveau.",
+                "hibpUnavailable": "Le service de vérification est temporairement indisponible. Veuillez réessayer dans quelques instants.",
+                "passwordLength": "Le mot de passe doit contenir entre 8 et 72 caractères.",
+                "passwordMismatch": "La confirmation ne correspond pas."
+            }
+        }
+    },
+    "profile": {
+        "title": "Mon profil",
+        "email": "Adresse e-mail",
+        "displayName": "Nom affiché",
+        "avatar": "Photo de profil",
+        "avatarHint": "PNG, JPEG ou WebP. Taille max {max} Ko.",
+        "avatarTooLarge": "Fichier trop volumineux (max {max} Ko).",
+        "avatarReadError": "Impossible de lire ce fichier.",
+        "avatarRemove": "Retirer la photo",
+        "save": "Enregistrer les modifications",
+        "updateSuccess": "Profil mis à jour",
+        "updateError": "Erreur lors de la mise à jour du profil",
+        "displayNameCounter": "{count} / 80",
+        "dataExport": "Exporter mes données",
+        "deleteAccount": "Supprimer mon compte",
+        "accountActions": "Actions du compte"
+    },
+    "classes": {
+        "list": {
+            "title": "Cours à venir",
+            "empty": "Aucun cours planifié pour cette période."
+        },
+        "card": {
+            "capacity": "Capacité",
+            "remaining": "Places restantes",
+            "book": "Réserver",
+            "booked": "Réservé",
+            "full": "Complet",
+            "joinWaitlist": "Rejoindre la liste d'attente"
+        }
+    },
+    "reservations": {
+        "confirmed": "Réservation confirmée",
+        "waitlisted": "Ajouté à la liste d'attente",
+        "waitlistPosition": "Position sur la liste d'attente : {position}",
+        "cancel": "Annuler la réservation",
+        "cancelled": "Réservation annulée",
+        "cancelWindowClosed": "L'annulation n'est plus possible moins de 2 heures avant le cours."
+    },
+    "checkin": {
+        "title": "Check-in",
+        "qrExpiresIn": "Le QR code expire dans {seconds} s",
+        "refresh": "Générer un nouveau QR code"
+    },
+    "workouts": {
+        "log": {
+            "title": "Nouvelle séance",
+            "startedAt": "Début",
+            "duration": "Durée (minutes)",
+            "addExercise": "Ajouter un exercice",
+            "addSet": "Ajouter une série",
+            "notes": "Notes",
+            "save": "Enregistrer la séance"
+        }
+    },
+    "consents": {
+        "title": "Mes consentements",
+        "version": "Version",
+        "updatedAt": "Mis à jour le",
+        "marketing": "Communications marketing",
+        "analytics": "Mesure d'audience anonyme",
+        "thirdParty": "Partage avec les partenaires",
+        "save": "Enregistrer mes préférences",
+        "updateSuccess": "Consentements mis à jour"
+    },
+    "errors": {
+        "generic": "Une erreur est survenue. Réessayez dans quelques instants.",
+        "network": "Connexion indisponible. Vérifiez votre réseau.",
+        "unauthorized": "Vous devez être connecté pour effectuer cette action.",
+        "forbidden": "Vous n'avez pas les droits nécessaires.",
+        "notFound": "Ressource introuvable.",
+        "validation": "Certains champs sont invalides.",
+        "rateLimited": "Trop de tentatives. Réessayez dans un instant.",
+        "passwordBreached": "Ce mot de passe est compromis. Choisissez-en un autre.",
+        "bookingFull": "Ce cours est complet.",
+        "cancelWindowClosed": "L'annulation n'est plus possible moins de 2 heures avant le cours.",
+        "invalidTransition": "Transition d'état non autorisée pour cette réservation.",
+        "classInPast": "Ce cours est déjà passé.",
+        "rangeTooLarge": "La plage demandée ne peut pas dépasser 90 jours."
+    },
+    "rgpd": {
+        "export": {
+            "title": "Exporter mes données",
+            "description": "Votre demande sera traitée sous 48 heures. Vous recevrez un lien de téléchargement par e-mail.",
+            "request": "Exporter mes données",
+            "pending": "Export en cours. Vous recevrez un e-mail sous 48 heures.",
+            "ready": "Votre export est prêt. Le lien expire dans 72 heures.",
+            "jobId": "Référence de l'export"
+        },
+        "delete": {
+            "title": "Supprimer mon compte",
+            "modalTitle": "Supprimer mon compte",
+            "confirm": "Supprimer définitivement mon compte",
+            "warning": "Cette action est irréversible. Toutes vos données seront supprimées sous 30 jours.",
+            "confirmWord": "SUPPRIMER",
+            "confirmInstruction": "Tapez {word} pour confirmer",
+            "confirmButton": "Supprimer définitivement"
+        }
+    },
+    "web": {
+        "home": {
+            "title": "Athlya",
+            "tagline": "Plateforme fitness open-source, multi-tenant, RGPD-first.",
+            "register": "Créer un compte",
+            "login": "Se connecter",
+            "classes": "Voir les cours",
+            "me": "Mon compte",
+            "logout": "Se déconnecter"
+        },
+        "notFound": {
+            "title": "Page introuvable",
+            "body": "Cette page n'existe pas ou plus."
+        },
+        "error": {
+            "title": "Une erreur est survenue",
+            "body": "Nous n'avons pas pu afficher cette page. Vous pouvez réessayer ou revenir à l'accueil.",
+            "retry": "Réessayer",
+            "home": "Retour à l'accueil"
+        },
+        "turnstile": {
+            "notConfigured": "Turnstile non configuré"
+        },
+        "cookieBanner": {
+            "title": "Vos préférences",
+            "description": "Nous utilisons uniquement des cookies strictement nécessaires au fonctionnement du service (authentification, langue). Aucun outil de mesure d'audience ni de suivi tiers n'est chargé sans votre accord.",
+            "cookiePolicy": "politique cookies",
+            "acceptAll": "Tout accepter",
+            "refuseAll": "Tout refuser",
+            "customize": "Personnaliser",
+            "save": "Enregistrer mes choix",
+            "categories": {
+                "legend": "Personnaliser les catégories",
+                "analytics": {
+                    "title": "Mesure d'audience anonymisée",
+                    "description": "Statistiques de fréquentation agrégées (pas de cookie tiers, pas de profil utilisateur)."
+                },
+                "errorTracking": {
+                    "title": "Suivi des erreurs",
+                    "description": "Diagnostic des bugs côté client. Inclut votre user-agent et la trace d'exécution technique. Données hébergées en UE."
+                }
+            }
+        }
+    },
+    "studio": {
+        "home": {
+            "title": "Athlya Studio",
+            "tagline": "Console d'administration des studios.",
+            "dashboard": "Ouvrir le tableau de bord"
+        },
+        "login": {
+            "title": "Connexion administrateur",
+            "subtitle": "Réservé aux propriétaires de studio. Les membres se connectent sur l'application principale.",
+            "adminRequired": "Ce compte n'a pas les droits administrateur."
+        },
+        "nav": {
+            "brand": "Athlya Studio",
+            "classes": "Cours",
+            "members": "Membres",
+            "branding": "Identité",
+            "billing": "Facturation"
+        },
+        "dashboard": {
+            "title": "Tableau de bord",
+            "subtitle": "Gérez les cours, les membres, l'identité visuelle et la facturation de votre studio.",
+            "classes": {
+                "title": "Cours",
+                "body": "Créer, mettre à jour et planifier les sessions de votre studio."
+            },
+            "members": {
+                "title": "Membres",
+                "body": "Lister les adhérents et leurs réservations à venir."
+            },
+            "branding": {
+                "title": "Identité visuelle",
+                "body": "Couleur de marque, logo et personnalisation des emails."
+            },
+            "billing": {
+                "title": "Facturation",
+                "body": "Abonnements Stripe, factures et statut de paiement."
+            }
+        },
+        "forbidden": {
+            "title": "Accès refusé",
+            "body": "Cette console est réservée aux administrateurs de studio.",
+            "signOut": "Se déconnecter"
+        },
+        "classes": {
+            "title": "Cours",
+            "subtitle": "Planifier, modifier et gérer la capacité des sessions.",
+            "create": "+ Nouveau cours",
+            "empty": "Aucun cours sur cette plage. Créez-en un pour commencer.",
+            "range": {
+                "from": "Du",
+                "to": "Au"
+            },
+            "row": {
+                "capacity": "{remaining} / {capacity} places",
+                "edit": "Modifier",
+                "delete": "Supprimer"
+            },
+            "deleteConfirm": {
+                "title": "Supprimer ce cours ?",
+                "body": "Cette action est irréversible. Les réservations en cours seront annulées.",
+                "confirm": "Supprimer"
+            },
+            "fields": {
+                "title": "Titre",
+                "startsAt": "Date et heure de début",
+                "durationMin": "Durée (min)",
+                "capacity": "Capacité"
+            },
+            "dialog": {
+                "createTitle": "Nouveau cours",
+                "createSubmit": "Créer",
+                "editTitle": "Modifier le cours",
+                "editSubmit": "Enregistrer"
+            },
+            "errors": {
+                "generic": "Erreur lors de l'enregistrement.",
+                "versionConflict": "Le cours a été modifié entre temps. Liste rafraîchie — réessayez."
+            }
+        },
+        "members": {
+            "title": "Membres",
+            "subtitle": "Annuaire des adhérents de votre studio.",
+            "empty": "Aucun membre pour le moment.",
+            "count": "{n} membre(s) chargé(s)",
+            "loadMore": "Charger plus",
+            "search": "Rechercher un membre…",
+            "role": {
+                "member": "Membre",
+                "coach": "Coach",
+                "admin": "Admin"
+            }
+        },
+        "branding": {
+            "title": "Identité visuelle",
+            "subtitle": "Couleur de marque et personnalisation visuelle.",
+            "edit": "Modifier",
+            "editComingSoon": "L'éditeur arrive dans une prochaine version.",
+            "save": "Enregistrer",
+            "saving": "Enregistrement…",
+            "saveSuccess": "Identité mise à jour.",
+            "saveError": "Mise à jour impossible.",
+            "lowContrastError": "Contraste insuffisant pour respecter WCAG 2.2 AA — choisis une couleur plus tranchée.",
+            "invalidHexError": "Format hexadécimal invalide (#RRGGBB attendu).",
+            "brandColor": {
+                "label": "Couleur principale",
+                "help": "Cette couleur s'applique aux boutons, accents et éléments interactifs de l'app membre.",
+                "contrast": "Texte automatiquement {fg} pour respecter WCAG 2.2 AA",
+                "fgBlack": "noir",
+                "fgWhite": "blanc",
+                "sampleButton": "Bouton d'exemple",
+                "input": "Couleur (hex #RRGGBB)"
+            }
+        },
+        "billing": {
+            "title": "Facturation",
+            "subtitle": "Abonnement et factures de votre studio.",
+            "comingSoon": "L'intégration Stripe arrive bientôt — les boutons sont désactivés en attendant.",
+            "checkout": "Souscrire",
+            "checkoutComingSoon": "Le paiement Stripe arrive dans une prochaine version.",
+            "checkoutLoading": "Redirection…",
+            "checkoutError": "Souscription impossible.",
+            "checkoutNotConfigured": "Stripe n'est pas encore configuré sur cet environnement.",
+            "plans": {
+                "free": {
+                    "title": "Free",
+                    "price": "€0 / mois",
+                    "body": "Jusqu'à 50 membres, fonctionnalités de base."
+                },
+                "pro": {
+                    "title": "Pro",
+                    "price": "€49 / mois",
+                    "body": "Membres illimités, branding personnalisé, exports avancés."
+                }
+            },
+            "invoices": {
+                "title": "Factures",
+                "empty": "Aucune facture pour le moment."
+            }
+        }
+    },
+    "notifications": {
+        "reservationCreated": {
+            "email": {
+                "subject": "Réservation confirmée",
+                "body": "Votre réservation est confirmée. Référence : {reservationId}."
+            },
+            "push": {
+                "title": "Réservation confirmée",
+                "body": "Votre place est réservée."
+            }
+        },
+        "reservationReminder": {
+            "push": {
+                "title": "Rappel de cours",
+                "body": "Votre cours commence dans 1 heure."
+            }
+        },
+        "reservationCancelled": {
+            "email": {
+                "subject": "Réservation annulée",
+                "body": "Votre réservation {reservationId} a été annulée."
+            },
+            "push": {
+                "title": "Réservation annulée",
+                "body": "Votre réservation a bien été annulée."
+            }
+        },
+        "reservationPromoted": {
+            "email": {
+                "subject": "Bonne nouvelle, vous êtes inscrit !",
+                "body": "Une place s'est libérée pour votre cours. Référence : {reservationId}."
+            },
+            "push": {
+                "title": "Vous êtes inscrit !",
+                "body": "Votre place au cours est confirmée."
+            }
+        },
+        "billingSubscriptionFailed": {
+            "email": {
+                "subject": "Échec du paiement",
+                "body": "Le paiement de votre abonnement {subscriptionId} a échoué : {reason}. Merci de mettre à jour vos informations de paiement."
+            }
+        }
+    }
+}

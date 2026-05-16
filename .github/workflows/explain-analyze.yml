@@ -1,0 +1,115 @@
+name: EXPLAIN ANALYZE critical queries
+
+# Sprint 14 / Slice 14.7 (Epic CN.2.5).
+#
+# Lance les EXPLAIN ANALYZE des 5 queries critiques contre une
+# base Postgres seedée à 10k réservations × 500 classes. Le but :
+# détecter les régressions d'index manquants AVANT prod.
+#
+# Trigger : PRs touchant les migrations DB ou les adapters
+# Drizzle. Workflow_dispatch pour lancement manuel ops.
+#
+# Le job utilise `postgres:16-alpine` en service container — pas
+# besoin de Neon ni de testcontainers. Le seed + queries sont
+# pure SQL, parsable sur n'importe quelle Postgres ≥ 14.
+#
+# Critères de fail :
+#   - Toute query avec `Seq Scan on (classes|reservations)` sur
+#     > 100 rows
+#   - p95 d'une query > 200ms (placeholder pour Slice future qui
+#     chiffrera les baselines)
+#
+# Pour le moment le job affiche le plan et n'échoue pas — il sert
+# de baseline visuel. Slice future (CN.2.4) ajoutera l'assertion
+# automatique via parsing du JSON output.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/db/migrations/**'
+      - 'packages/db/src/schema/**'
+      - 'packages/api/src/adapters/**-drizzle*.ts'
+      - 'packages/db/tests/explain/**'
+      - '.github/workflows/explain-analyze.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  explain:
+    name: Run EXPLAIN ANALYZE on critical queries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: athlya
+          POSTGRES_PASSWORD: athlya
+          POSTGRES_DB: athlya_explain
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PGPASSWORD: athlya
+      DATABASE_URL: postgresql://athlya:athlya@localhost:5432/athlya_explain
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Apply migrations
+        run: |
+          for migration in packages/db/migrations/*.sql; do
+            # Skip *.down.sql
+            if [[ "$migration" == *.down.sql ]]; then
+              continue
+            fi
+            echo "→ applying $(basename "$migration")"
+            psql -h localhost -U athlya -d athlya_explain -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Seed fixture data (10k reservations × 500 classes)
+        run: |
+          psql -h localhost -U athlya -d athlya_explain -v ON_ERROR_STOP=1 \
+            -f packages/db/tests/explain/seed-explain-fixtures.sql
+
+      - name: Run EXPLAIN ANALYZE
+        run: |
+          psql -h localhost -U athlya -d athlya_explain -v ON_ERROR_STOP=1 \
+            -f packages/db/tests/explain/explain-critical-queries.sql \
+            | tee explain-output.txt
+
+      - name: Detect Seq Scan regressions
+        run: |
+          # Fail the build si un Seq Scan est détecté sur les
+          # tables critiques avec > 100 rows scannés.
+          if grep -E 'Seq Scan on (classes|reservations)' explain-output.txt; then
+            echo "❌ Seq Scan detected on a critical table — review the migration that introduced it"
+            grep -B 2 -A 4 'Seq Scan on' explain-output.txt
+            # Don't fail yet — Slice 14.7 livrabaseline mode. CI
+            # fail to be enabled in Slice future once baselines
+            # are confirmed clean on main.
+            echo "::warning::Seq Scan detected — please review (will fail build in Slice future)"
+          else
+            echo "✅ No Seq Scan regressions on critical tables"
+          fi
+
+      - name: Upload EXPLAIN output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: explain-output
+          path: explain-output.txt
+          retention-days: 30

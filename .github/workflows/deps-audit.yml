@@ -1,0 +1,141 @@
+name: Daily dependency audit
+
+# =====================================================================
+# Task 13.3 / Requirement 29.2 — run a daily dependency scan against
+# the lockfile and fail the nightly build on any critical vulnerability.
+#
+# Two complementary jobs run in parallel:
+#
+# 1. `pnpm-audit` — vendor-agnostic, works on forks with zero secrets.
+#    Uses pnpm's built-in audit against the lockfile, scoped to
+#    production dependencies only (`--prod`) so that devtool advisories
+#    from Turborepo / Vitest / ESLint — which never ship to users —
+#    don't block the build. Fails on `high` or `critical` advisories.
+#
+# 2. `socket-security` — enhanced supply-chain scan that runs ONLY when
+#    the `SOCKET_SECURITY_API_KEY` secret is configured. On forks
+#    without the secret the job is skipped entirely, so external
+#    contributors never see a spurious red X.
+# =====================================================================
+
+on:
+  schedule:
+    # 06:00 UTC every day — runs before the European workday starts so
+    # any critical advisory is visible on the first coffee.
+    - cron: '0 6 * * *'
+  pull_request:
+    # Re-audit whenever anything that influences the resolved dependency
+    # graph changes. Lockfile is the primary input; workspace manifests
+    # drive resolution; this workflow file itself should be self-linting.
+    paths:
+      - '**/package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deps-audit.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pnpm-audit:
+    name: pnpm audit (lockfile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # No secrets required — this job runs green on forks out of the box.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        # We install (rather than audit the bare lockfile) so pnpm has the
+        # full resolved package set in its store, which produces more
+        # accurate audit output across workspaces.
+        run: pnpm install --frozen-lockfile
+
+      - name: Capture machine-readable audit report
+        # `|| true` so the artifact is always captured, even when the
+        # subsequent failing command stops the job. This report is handy
+        # for triage when the nightly build breaks.
+        run: pnpm audit --prod --json > audit-report.json || true
+
+      - name: Upload audit report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pnpm-audit-report
+          path: audit-report.json
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Fail on high or critical advisories
+        # `--audit-level=high` fails the job on any advisory of severity
+        # `high` or `critical`. `--prod` excludes devDependencies —
+        # Turborepo / Vitest / ESLint advisories don't ship to users, and
+        # gating production releases on them produces noisy false alarms.
+        #
+        # To temporarily tolerate an unpatched low-severity advisory that
+        # only affects devDependencies, see .github/README.md.
+        run: pnpm audit --prod --audit-level=high
+
+  socket-security:
+    name: Socket.dev supply-chain scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    # Hoist the secret into a job-level env var so every step `if:`
+    # can read it unambiguously. The `secrets` context is not available
+    # inside `if:` expressions directly — the documented workaround is
+    # to bridge through `env`. On forks (where secrets are unavailable)
+    # the variable resolves to an empty string and the Socket step
+    # short-circuits cleanly.
+    env:
+      SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Socket Security scan
+        # VERIFY before enabling the SOCKET_SECURITY_API_KEY secret that
+        # this action reference still exists:
+        #   https://github.com/SocketDev/socket-security-action
+        # Pin to an immutable tag rather than `@main` so a compromised
+        # upstream cannot silently introduce a malicious version.
+        # When a newer stable tag is published, bump this pin in a PR
+        # so the change lands through code review.
+        if: ${{ env.SOCKET_SECURITY_API_KEY != '' }}
+        uses: SocketDev/socket-security-action@v0.0.1
+        with:
+          api_key: ${{ secrets.SOCKET_SECURITY_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Note when Socket is not configured
+        # Purely informational: if the secret is not set, the step above
+        # is skipped and we print a short notice so that the job log
+        # explains the absence of a real scan instead of looking empty.
+        if: ${{ env.SOCKET_SECURITY_API_KEY == '' }}
+        run: |
+          echo "SOCKET_SECURITY_API_KEY is not configured on this repository."
+          echo "The pnpm-audit job still ran and is the source of truth today."
+          echo "To enable the enhanced Socket.dev supply-chain scan, add a"
+          echo "repository secret named SOCKET_SECURITY_API_KEY."

@@ -1,0 +1,50 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - link "Skip to main content" [ref=e3] [cursor=pointer]:
+      - /url: "#main-content"
+    - navigation "Navigation principale" [ref=e4]:
+      - link "Athlya" [ref=e5] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e6]:
+        - link "Sign in" [ref=e7] [cursor=pointer]:
+          - /url: /login
+        - link "Create an account" [ref=e8] [cursor=pointer]:
+          - /url: /register
+        - generic [ref=e9]:
+          - generic [ref=e10]: Locale
+          - combobox "Locale" [ref=e11]:
+            - option "Français"
+            - option "English" [selected]
+  - main [ref=e12]:
+    - heading "Sign in" [level=1] [ref=e13]
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - generic [ref=e16]: Email address
+        - textbox "Email address" [ref=e17]
+      - generic [ref=e18]:
+        - generic [ref=e19]: Password
+        - textbox "Password" [ref=e20]
+      - button "Sign in" [disabled]
+      - paragraph [ref=e23]:
+        - link "Mot de passe oublié ?" [ref=e24] [cursor=pointer]:
+          - /url: /forgot-password
+      - paragraph [ref=e25]:
+        - text: No account yet?
+        - link "Create an account" [ref=e26] [cursor=pointer]:
+          - /url: /register
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e32] [cursor=pointer]:
+    - img [ref=e33]
+  - alert [ref=e36]
+  - dialog "Your preferences" [ref=e37]:
+    - generic [ref=e38]:
+      - heading "Your preferences" [level=2] [ref=e39]
+      - paragraph [ref=e40]:
+        - text: We only use cookies strictly necessary for the service to work (authentication, language). No analytics or third-party tracking is loaded without your consent.
+        - link "cookie policy" [ref=e41] [cursor=pointer]:
+          - /url: /cookies
+        - text: .
+      - generic [ref=e42]:
+        - button "Refuse all" [ref=e43]
+        - button "Customize" [ref=e44]
+        - button "Accept all" [ref=e45]

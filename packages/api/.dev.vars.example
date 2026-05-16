@@ -1,0 +1,83 @@
+# -----------------------------------------------------------------------------
+# Athlya API — local development secrets (Wrangler `.dev.vars` format)
+# -----------------------------------------------------------------------------
+# Copy this file to `packages/api/.dev.vars` (git-ignored) and replace
+# every placeholder. The file uses dotenv syntax; no quoting, no export
+# keyword — Wrangler reads it literally.
+#
+# `wrangler dev` loads these into the Worker's `env` bindings; production
+# deploys use `wrangler secret put <name> --env <staging|production>`
+# instead. Each `TODO:` below is a value you must provision.
+# -----------------------------------------------------------------------------
+
+# ---- PostgreSQL --------------------------------------------------------------
+# Neon connection string for the API runtime.
+#
+# Slice B2 (Req H1) splits the runtime role from the migration role:
+#   - DB_URL           → athlya_app  (NOBYPASSRLS, RLS-enforced)
+#   - MIGRATION_DB_URL → neondb_owner (BYPASSRLS, owns DDL)
+#
+# Until the production cutover (runbook: docs/runbooks/db-role-switch.md),
+# both URLs may point to neondb_owner — non-disruptive but skips RLS.
+#
+# Format:
+#   postgresql://<user>:<password>@<host>/<db>?sslmode=require
+DB_URL=TODO:paste-your-neon-connection-string-here
+
+# Privileged connection string used ONLY by the migration runner
+# (packages/db/scripts/migrate.mjs). Optional — the script falls back
+# to DB_URL when absent. NEVER point the API runtime at this URL: the
+# owner role bypasses RLS.
+MIGRATION_DB_URL=
+
+# ---- Upstash Redis -----------------------------------------------------------
+# REST API credentials from https://console.upstash.com/<db>/details
+REDIS_URL=TODO:https://eu1-xxxxx.upstash.io
+REDIS_TOKEN=TODO:your-upstash-rest-token
+
+# ---- JWT / JWKS --------------------------------------------------------------
+# URL that serves the JWKS (public verification keys). For local dev,
+# point it at a file served by a tiny dev server, OR paste the raw JWKS
+# inline by using a data: URL.
+JWT_JWKS_URL=TODO:https://your-domain/.well-known/jwks.json
+
+# The signing private key PEM (PKCS#8). Newlines must be preserved — dev.vars
+# supports multi-line values via the `KEY="..."` quoted form.
+JWT_PRIVATE_KEY_PEM="TODO:-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+JWT_PUBLIC_KEY_PEM="TODO:-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
+JWT_KID=dev-key-1
+
+# ---- Cloudflare Turnstile ----------------------------------------------------
+# Secret key counterpart of NEXT_PUBLIC_TURNSTILE_SITE_KEY in apps/web.
+# Shortcut for local dev (always passes): 1x0000000000000000000000000000000AA
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+
+# ---- CORS (Sprint-1 SP1.3 — Slice 1.2-A) -------------------------------------
+# Strict allow-list for cross-origin browser requests. REQUIRED in
+# staging/production: the worker refuses every request with a 500
+# `configuration_error` Problem Details envelope when this binding is
+# unset in those environments (audit finding S4-014). Format: exactly
+# ONE fully-qualified origin, no trailing slash, no path.
+#
+#   staging:    https://app.staging.athlya.app
+#   production: https://app.athlya.app
+#
+# Local dev hard-codes the whitelist (`http://localhost:{3000,3001}` +
+# the `127.0.0.1` variants) — leave this empty in `.dev.vars`.
+CORS_ORIGIN=
+
+
+# ---- Observability (optional) ------------------------------------------------
+# Sentry DSN. Leave empty to disable remote error capture — errors still
+# surface via `console.error`.
+SENTRY_DSN=
+
+# OpenTelemetry OTLP endpoint (Axiom, Honeycomb, etc.). Leave empty to
+# silence span export — the tracing middleware becomes a no-op.
+OTEL_EXPORTER_OTLP_ENDPOINT=
+OTEL_EXPORTER_OTLP_HEADERS=
+
+# ---- Email (optional, Epic 9 Notifications) ----------------------------------
+# Resend API key. When unset, notification handlers log + skip.
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=noreply@athlya.app

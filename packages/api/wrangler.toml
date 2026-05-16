@@ -1,0 +1,362 @@
+# ----------------------------------------------------------------------------
+# Athlya API — Cloudflare Worker configuration (Wrangler 4.x)
+# ----------------------------------------------------------------------------
+#
+# Environment matrix
+# ------------------
+#   • Top-level section         — shared defaults. Applies to local
+#                                 `wrangler dev` when no `--env` is passed.
+#   • [env.dev]                  — local development. No production route,
+#                                 no smart placement; used by
+#                                 `pnpm --filter @athlya/api dev`.
+#   • [env.staging]              — `staging.api.athlya.app/*`, bound to the
+#                                 `athlya.app` zone. DNS for this hostname
+#                                 MUST be provisioned in Cloudflare before
+#                                 `deploy:staging` will succeed.
+#   • [env.production]           — `api.athlya.app/*`. Production. CI is
+#                                 the only caller; VERSION is replaced at
+#                                 deploy time.
+#
+# Secrets policy
+# --------------
+#   REDIS_TOKEN, DB_URL, JWT_JWKS_URL, SENTRY_DSN and any other credential
+#   are set per-environment via `wrangler secret put` and never land in
+#   this file. The Bindings interface in `src/types.ts` declares them as
+#   required strings, which makes boot fail loudly if a deployment forgot
+#   to set one.
+#
+# EU-only placement
+# -----------------
+#   `[placement] mode = "smart"` opts the Worker into Cloudflare's Smart
+#   Placement. That primarily co-locates the Worker with the backend it
+#   calls most often (Upstash Redis EU, Neon / Hyperdrive in eu-west-1);
+#   it is NOT a hard EU-only region pin. A dedicated EU region constraint
+#   requires a Workers Enterprise contract and a separate
+#   `compatibility_flags = ["region_exclusive_eu"]` entry — that is NOT in
+#   scope of task 8.1. Req 5.5 / 23.3 are satisfied here through the
+#   combination of EU-pinned dependencies (Redis, Postgres) and this
+#   smart-placement hint; the full region pin lands when the Workers plan
+#   upgrade ships.
+#
+# Queues
+# ------
+#   The `[[queues.producers]]` / `[[queues.consumers]]` blocks are
+#   duplicated into each named env. Some older Wrangler 3.x versions do
+#   NOT inherit top-level queue bindings into named environments; the
+#   duplication is defensive.
+# ----------------------------------------------------------------------------
+
+name = "athlya-api"
+main = "src/worker.ts"
+
+# Compatibility date pinned recent-but-stable. Bump in lock-step with the
+# `@cloudflare/workers-types` version upgrade in package.json devDeps.
+compatibility_date = "2026-03-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ----------------------------------------------------------------------------
+# Observability
+# ----------------------------------------------------------------------------
+# `head_sampling_rate = 1.0` keeps 100 % of Tail Worker / Logpush events
+# until sustained traffic arrives. Task 14.x will dial this down per
+# environment once OTel is wired.
+#
+# OTLP export target (hardening task H6)
+# --------------------------------------
+# The OTel middleware (`src/middleware/otel.ts`) POSTs `ResourceSpans`
+# envelopes to `OTEL_EXPORTER_OTLP_ENDPOINT` with the headers parsed out
+# of `OTEL_EXPORTER_OTLP_HEADERS`. Both are set as secrets per env:
+#
+#   # Set via: wrangler secret put OTEL_EXPORTER_OTLP_ENDPOINT --env staging
+#   # Example value: https://api.axiom.co/v1/traces
+#   # Set via: wrangler secret put OTEL_EXPORTER_OTLP_HEADERS --env staging
+#   # Example value: Authorization=Bearer xaat-...,X-Axiom-Dataset=athlya-staging
+#
+# Axiom (axiom.co) is the default target — it accepts OTLP/HTTP JSON
+# and groups by `service.name` / `deployment.environment` the same way
+# the hand-rolled exporter emits them. Any other OTLP/HTTP JSON backend
+# (Honeycomb, Grafana Cloud, self-hosted Tempo, …) is a drop-in
+# replacement; only the endpoint + headers change.
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+
+# ----------------------------------------------------------------------------
+# Shared vars (defaults for local `wrangler dev`)
+# ----------------------------------------------------------------------------
+# Non-secret configuration. Named envs below override these.
+[vars]
+ENVIRONMENT = "dev"
+VERSION = "0.0.0-dev"
+
+# ----------------------------------------------------------------------------
+# Queue producers (shared defaults)
+# ----------------------------------------------------------------------------
+# `EVENTS_QUEUE` is consumed by `packages/api/src/events/publish.ts`
+# (signature `Queue.send(message)`). Every domain service that emits an
+# `AthlyaEvent` publishes through this binding.
+#
+# Queue name `athlya-events` is the single real-time topic for the
+# platform; events are self-describing (discriminated union on
+# `event.type`) so one topic with one DLQ is enough — see design §4
+# (Event Bus).
+
+[[queues.producers]]
+binding = "EVENTS_QUEUE"
+queue = "athlya-events"
+
+# `EVENTS_DLQ` binding (hardening task H2). Producer handle for
+# `athlya-events-dlq`. Unused today — the DLQ drain handler
+# (`src/events/drain-dlq.ts`) tracks observed messages in Redis and
+# never re-publishes to the DLQ. The binding is present so future
+# workflows (e.g. "quarantine an event") have a named port without
+# another `wrangler.toml` edit and so the `DlqBindings` type matches
+# the live env at runtime.
+
+[[queues.producers]]
+binding = "EVENTS_DLQ"
+queue = "athlya-events-dlq"
+
+# ----------------------------------------------------------------------------
+# Queue consumers (shared defaults)
+# ----------------------------------------------------------------------------
+#   • max_retries = 5              — Req 16.5: route to DLQ after 5
+#                                    consecutive consumer failures.
+#   • dead_letter_queue            — `athlya-events-dlq`; monitored by ops
+#                                    (see src/events/dlq.md).
+#   • max_batch_size / timeout     — small batches + short timeout keep
+#                                    p99 side-effect latency (notifications,
+#                                    outbox drain) below the SLO budget.
+
+[[queues.consumers]]
+queue = "athlya-events"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-dlq"
+
+# DLQ consumer is declared so Wrangler provisions the queue on `deploy`.
+# Retries on the DLQ itself are bounded (3) to avoid infinite retry loops
+# if the DLQ drain handler fails — a message that cannot be drained even
+# from the DLQ is a platform-level incident handled by on-call, not by
+# further automatic retries.
+#
+# Consumer wiring (hardening task H2):
+#   The DLQ is now actively drained by the Worker's `queue()` handler in
+#   `src/worker.ts`. `handleDlqBatch` (`src/events/drain-dlq.ts`) reads
+#   each message, upserts a tracker entry in Redis (`dlq:entry:<id>` +
+#   `dlq:pending` sorted set), and acks the Cloudflare message. Admin
+#   endpoints (`/admin/dlq/*`, built by
+#   `src/admin/dlq-routes.ts`) let operators list, replay and discard
+#   tracked entries. See `src/events/dlq.md` for the runbook.
+
+[[queues.consumers]]
+queue = "athlya-events-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+# ----------------------------------------------------------------------------
+# R2 buckets (Slice 1.3 — Sprint 1 — SP1.4)
+# ----------------------------------------------------------------------------
+# Two buckets back the RGPD consumers wired by the Worker `queue()`
+# dispatcher (audit findings S5-001 + S5-002):
+#
+#   • AVATARS_BUCKET   — `avatars/{userId}/...` objects purged by the
+#                        Article 17 cascade (`adapters/avatar-store-r2.ts`).
+#   • EXPORTS_BUCKET   — `exports/members/{jobId}.zip` archives uploaded
+#                        by the Article 15/20 export consumer
+#                        (`adapters/export-deps.ts`).
+#
+# Both bindings are **optional** at the type level (see `AthlyaBindings`
+# in `src/types.ts`). Until the buckets are provisioned, the adapters
+# fall back to a degraded-mode no-op (avatars: log warn) or stable
+# failure (exports: mark job `failed` with `exports_bucket_missing`).
+# This keeps the dispatcher safe to deploy ahead of bucket creation.
+#
+# Provisioning runbook — run once per environment after the deploy:
+#
+#   wrangler r2 bucket create athlya-avatars-dev
+#   wrangler r2 bucket create athlya-exports-dev
+#   wrangler r2 bucket create athlya-avatars-staging        --env staging
+#   wrangler r2 bucket create athlya-exports-staging        --env staging
+#   wrangler r2 bucket create athlya-avatars-production     --env production
+#   wrangler r2 bucket create athlya-exports-production     --env production
+
+[[r2_buckets]]
+binding = "AVATARS_BUCKET"
+bucket_name = "athlya-avatars-dev"
+
+[[r2_buckets]]
+binding = "EXPORTS_BUCKET"
+bucket_name = "athlya-exports-dev"
+
+# ----------------------------------------------------------------------------
+# Scheduled triggers
+# ----------------------------------------------------------------------------
+# Outbox drain (task 9.3). Cloudflare Cron Triggers have a one-minute
+# minimum resolution; the 30 s cadence suggested in the design doc is
+# approximated by a 1-min cron plus a 100-row batch size, which keeps
+# steady-state backlog sub-second at target load.
+[triggers]
+crons = ["* * * * *"]
+
+# ============================================================================
+# Local dev environment
+# ============================================================================
+# Secrets for `wrangler dev` come from `.dev.vars` (git-ignored). This env
+# has no route — local dev binds to 127.0.0.1 and proxies through the
+# Cloudflare dev loop.
+[env.dev]
+name = "athlya-api-dev"
+
+[env.dev.vars]
+ENVIRONMENT = "dev"
+VERSION = "0.0.0-dev"
+
+# Secrets (REDIS_TOKEN, DB_URL, JWT_JWKS_URL, SENTRY_DSN) live in
+# `.dev.vars` for local dev and are never committed.
+
+[[env.dev.queues.producers]]
+binding = "EVENTS_QUEUE"
+queue = "athlya-events"
+
+[[env.dev.queues.producers]]
+binding = "EVENTS_DLQ"
+queue = "athlya-events-dlq"
+
+[[env.dev.queues.consumers]]
+queue = "athlya-events"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-dlq"
+
+[[env.dev.queues.consumers]]
+queue = "athlya-events-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+# R2 buckets — Slice 1.3 SP1.4 (see top-level block for rationale).
+
+[[env.dev.r2_buckets]]
+binding = "AVATARS_BUCKET"
+bucket_name = "athlya-avatars-dev"
+
+[[env.dev.r2_buckets]]
+binding = "EXPORTS_BUCKET"
+bucket_name = "athlya-exports-dev"
+
+# ============================================================================
+# Staging environment
+# ============================================================================
+# Pre-production target. Route requires `staging.api.athlya.app` to be
+# provisioned as a CNAME in the `athlya.app` Cloudflare zone — deploys
+# fail with `code 10043` otherwise.
+#
+# Secrets are set via:
+#   wrangler secret put REDIS_TOKEN    --env staging
+#   wrangler secret put DB_URL         --env staging
+#   wrangler secret put JWT_JWKS_URL   --env staging
+#   wrangler secret put SENTRY_DSN     --env staging   # optional
+# and NEVER land in this file.
+[env.staging]
+name = "athlya-api-staging"
+route = { pattern = "staging.api.athlya.app/*", zone_name = "athlya.app" }
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+VERSION = "0.0.0-staging"
+
+[env.staging.placement]
+# Smart placement co-locates the Worker with EU-resident data stores.
+# See the module header for the caveat about hard EU region pinning.
+mode = "smart"
+
+[[env.staging.queues.producers]]
+binding = "EVENTS_QUEUE"
+queue = "athlya-events-staging"
+
+[[env.staging.queues.producers]]
+binding = "EVENTS_DLQ"
+queue = "athlya-events-staging-dlq"
+
+[[env.staging.queues.consumers]]
+queue = "athlya-events-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-staging-dlq"
+
+[[env.staging.queues.consumers]]
+queue = "athlya-events-staging-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+# R2 buckets — Slice 1.3 SP1.4 (see top-level block for rationale).
+
+[[env.staging.r2_buckets]]
+binding = "AVATARS_BUCKET"
+bucket_name = "athlya-avatars-staging"
+
+[[env.staging.r2_buckets]]
+binding = "EXPORTS_BUCKET"
+bucket_name = "athlya-exports-staging"
+
+# ============================================================================
+# Production environment
+# ============================================================================
+# Real tenants. CI rewrites VERSION at deploy time
+# (`wrangler deploy --env production --var VERSION=...`) so the value
+# below is only a placeholder.
+#
+# Secrets are set via:
+#   wrangler secret put REDIS_TOKEN    --env production
+#   wrangler secret put DB_URL         --env production
+#   wrangler secret put JWT_JWKS_URL   --env production
+#   wrangler secret put SENTRY_DSN     --env production
+# and NEVER land in this file.
+[env.production]
+name = "athlya-api-production"
+route = { pattern = "api.athlya.app/*", zone_name = "athlya.app" }
+
+[env.production.vars]
+ENVIRONMENT = "production"
+VERSION = "0.1.0"
+
+[env.production.placement]
+mode = "smart"
+
+[[env.production.queues.producers]]
+binding = "EVENTS_QUEUE"
+queue = "athlya-events"
+
+[[env.production.queues.producers]]
+binding = "EVENTS_DLQ"
+queue = "athlya-events-dlq"
+
+[[env.production.queues.consumers]]
+queue = "athlya-events"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-dlq"
+
+[[env.production.queues.consumers]]
+queue = "athlya-events-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+# R2 buckets — Slice 1.3 SP1.4 (see top-level block for rationale).
+
+[[env.production.r2_buckets]]
+binding = "AVATARS_BUCKET"
+bucket_name = "athlya-avatars-production"
+
+[[env.production.r2_buckets]]
+binding = "EXPORTS_BUCKET"
+bucket_name = "athlya-exports-production"

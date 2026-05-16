@@ -1,0 +1,82 @@
+name: axe + Lighthouse
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'packages/shared/**'
+      - '.github/workflows/axe.yml'
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  a11y:
+    name: WCAG 2.2 AA axe sweep + Lighthouse accessibility budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for Playwright
+        run: pnpm --filter @athlya/web e2e:install
+
+      - name: Build @athlya/web (prod build for stable axe sweep)
+        run: pnpm --filter @athlya/web build
+
+      - name: Run axe accessibility sweep
+        run: pnpm --filter @athlya/web exec playwright test --config e2e/playwright.config.ts e2e/axe.spec.ts
+
+      - name: Run Lighthouse accessibility budget (>= 95)
+        run: pnpm --filter @athlya/web lighthouse
+
+  e2e-flows:
+    name: Playwright E2E flows (register → book → cancel)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for Playwright
+        run: pnpm --filter @athlya/web e2e:install
+
+      - name: Build @athlya/web (prod build for deterministic routing)
+        run: pnpm --filter @athlya/web build
+
+      - name: Run Playwright member-flow specs
+        run: pnpm --filter @athlya/web exec playwright test --config e2e/playwright.config.ts e2e/flows

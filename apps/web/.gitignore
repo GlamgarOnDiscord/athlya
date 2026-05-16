@@ -1,0 +1,17 @@
+# Next.js
+.next/
+out/
+# next-env.d.ts is intentionally committed so consumers get Next's ambient
+# types without having to run `next build` first.
+
+# Build
+dist/
+.turbo/
+coverage/
+
+# Env
+.env*.local
+.env
+
+# Logs
+*.log

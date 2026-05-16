@@ -1,0 +1,36 @@
+{
+    // Separate "project" for the test tree so the build-time `tsconfig.json`
+    // (which only emits from `src/`) stays focused on shipping code.
+    //
+    // Scope:
+    //   - `src/**/*.ts` is included so test files can import implementation
+    //     modules without a cross-project reference.
+    //   - `tests/*.ts` covers root-level unit tests (task 1.6 — schemas and
+    //     i18n helper).
+    //   - `tests/properties/**/*.ts` and `tests/fixtures/**/*.ts` cover
+    //     task 1.5 (round-trip property tests + their arbitraries).
+    //
+    // Running `tsc -p tsconfig.tests.json` lets us typecheck the test tree
+    // without polluting the build output (`noEmit`).
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "noEmit": true,
+        "rootDir": ".",
+        "types": [
+            "node"
+        ]
+    },
+    "include": [
+        "src/**/*.ts",
+        "tests/*.ts",
+        "tests/properties/**/*.ts",
+        "tests/fixtures/**/*.ts",
+        "vitest.config.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        ".turbo",
+        "coverage"
+    ]
+}

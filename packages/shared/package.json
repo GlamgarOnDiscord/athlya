@@ -1,0 +1,127 @@
+{
+    "name": "@athlya/shared",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Shared design tokens, i18n bundles, branded identifier types and Zod schemas for Athlya",
+    "license": "AGPL-3.0-only",
+    "engines": {
+        "node": ">=20"
+    },
+    "sideEffects": false,
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "import": "./dist/index.js",
+            "default": "./src/index.ts"
+        },
+        "./tokens": {
+            "types": "./src/tokens.ts",
+            "import": "./dist/tokens.js",
+            "default": "./src/tokens.ts"
+        },
+        "./i18n": {
+            "types": "./src/i18n/index.ts",
+            "import": "./dist/i18n/index.js",
+            "default": "./src/i18n/index.ts"
+        },
+        "./ids": {
+            "types": "./src/ids.ts",
+            "import": "./dist/ids.js",
+            "default": "./src/ids.ts"
+        },
+        "./events": {
+            "types": "./src/events.ts",
+            "import": "./dist/events.js",
+            "default": "./src/events.ts"
+        },
+        "./schemas": {
+            "types": "./src/schemas/index.ts",
+            "import": "./dist/schemas/index.js",
+            "default": "./src/schemas/index.ts"
+        },
+        "./schemas/domain": {
+            "types": "./src/schemas/domain.ts",
+            "import": "./dist/schemas/domain.js",
+            "default": "./src/schemas/domain.ts"
+        },
+        "./schemas/api": {
+            "types": "./src/schemas/api.ts",
+            "import": "./dist/schemas/api.js",
+            "default": "./src/schemas/api.ts"
+        },
+        "./schemas/problem": {
+            "types": "./src/schemas/problem.ts",
+            "import": "./dist/schemas/problem.js",
+            "default": "./src/schemas/problem.ts"
+        },
+        "./codec": {
+            "types": "./src/codec/index.ts",
+            "import": "./dist/codec/index.js",
+            "default": "./src/codec/index.ts"
+        },
+        "./codec/studio": {
+            "types": "./src/codec/studio.ts",
+            "import": "./dist/codec/studio.js",
+            "default": "./src/codec/studio.ts"
+        },
+        "./codec/user": {
+            "types": "./src/codec/user.ts",
+            "import": "./dist/codec/user.js",
+            "default": "./src/codec/user.ts"
+        },
+        "./codec/class": {
+            "types": "./src/codec/class.ts",
+            "import": "./dist/codec/class.js",
+            "default": "./src/codec/class.ts"
+        },
+        "./codec/reservation": {
+            "types": "./src/codec/reservation.ts",
+            "import": "./dist/codec/reservation.js",
+            "default": "./src/codec/reservation.ts"
+        },
+        "./codec/workout-session": {
+            "types": "./src/codec/workoutSession.ts",
+            "import": "./dist/codec/workoutSession.js",
+            "default": "./src/codec/workoutSession.ts"
+        },
+        "./codec/audit-log": {
+            "types": "./src/codec/auditLog.ts",
+            "import": "./dist/codec/auditLog.js",
+            "default": "./src/codec/auditLog.ts"
+        },
+        "./theming": {
+            "types": "./src/theming/index.ts",
+            "import": "./dist/theming/index.js",
+            "default": "./src/theming/index.ts"
+        }
+    },
+    "files": [
+        "src",
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "build:tokens-css": "node --experimental-strip-types scripts/generate-tokens-css.ts",
+        "check:tokens-css": "node --experimental-strip-types scripts/generate-tokens-css.ts && git diff --exit-code --name-only -- ../../apps/web/src/styles/tokens.css",
+        "lint": "eslint .",
+        "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json",
+        "test": "vitest run",
+        "clean": "rimraf dist .turbo *.tsbuildinfo"
+    },
+    "dependencies": {
+        "zod": "^4.4.3"
+    },
+    "devDependencies": {
+        "@athlya/eslint-config": "workspace:*",
+        "@athlya/tsconfig": "workspace:*",
+        "@fast-check/vitest": "^0.3.0",
+        "@types/node": "^20.19.9",
+        "@vitest/coverage-v8": "^4.1.6",
+        "eslint": "^9.39.1",
+        "fast-check": "^3.23.2",
+        "rimraf": "^6.0.1",
+        "typescript": "^5.9.3",
+        "vitest": "^3.2.4"
+    }
+}

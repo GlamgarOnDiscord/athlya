@@ -1,0 +1,68 @@
+name: CodeQL
+
+# Sprint 14 / Slice 14.3 (Epic CN.3.1) — SAST gratuit via CodeQL.
+# Détecte injections SQL, secrets hardcodés, eval/Function dynamiques,
+# désérialisations dangereuses, prototype pollution.
+#
+# Cycles :
+#   - Push sur main / PRs vers main : analyse rapide (changed files)
+#   - Schedule weekly : analyse complète (full repo)
+#
+# Les findings remontent dans Security tab > Code scanning sur
+# GitHub. Severity HIGH bloque la PR (configurable via Branch
+# Protection rules).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.js'
+      - '**/*.mjs'
+      - '**/*.cjs'
+      - '.github/workflows/codeql.yml'
+  schedule:
+    # Run weekly on Mondays at 06:00 UTC — full scan for
+    # dependency-injected vulnerabilities that may not surface
+    # via diff analysis.
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - javascript-typescript
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # `security-extended` adds queries for prototype
+          # pollution, ReDoS, regex injection — relevant for an
+          # API-heavy codebase.
+          queries: security-extended
+
+      # CodeQL handles JS/TS without an explicit build step (it
+      # parses sources directly). For a future Rust/Go module
+      # we'd add `autobuild` here.
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'

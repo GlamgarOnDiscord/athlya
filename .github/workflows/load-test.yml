@@ -1,0 +1,123 @@
+name: Load test (k6)
+
+# Sprint 14 / Slice 14.2 (Epic CN.2.3) — déclenchement conditionnel
+# sur les PRs qui touchent les paths critiques (reservations + api),
+# plus un trigger manuel via workflow_dispatch pour les ops.
+#
+# Le workflow tourne k6 contre le staging URL et fail le build si
+# les thresholds définis dans `k6/book-class.js` sont violés (SLO
+# S1 p99 < 500ms + error rate < 0.1%).
+#
+# Secrets requis (à provisionner via GitHub Settings > Secrets) :
+#   - K6_STAGING_BASE_URL : ex `https://staging.api.athlya.app`
+#   - K6_STAGING_AUTH_TOKEN : JWT valide pour un user de test
+#   - K6_STAGING_STUDIO_ID : UUID du studio de test
+#   - K6_STAGING_CLASS_IDS : CSV d'UUIDs de classes (≥10)
+
+on:
+  pull_request:
+    paths:
+      - 'packages/reservations/**'
+      - 'packages/api/**'
+      - 'k6/**'
+      - '.github/workflows/load-test.yml'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target environment (staging | production)'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+
+jobs:
+  k6-book-class:
+    name: book-class load test
+    runs-on: ubuntu-latest
+    # Skip when secrets aren't provisioned (free tier without
+    # staging URL setup). The job still runs in lint mode below.
+    if: ${{ vars.K6_STAGING_BASE_URL != '' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Run book-class load test
+        env:
+          K6_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
+          K6_AUTH_TOKEN: ${{ secrets.K6_STAGING_AUTH_TOKEN }}
+          K6_STUDIO_ID: ${{ secrets.K6_STAGING_STUDIO_ID }}
+          K6_CLASS_IDS: ${{ secrets.K6_STAGING_CLASS_IDS }}
+        run: |
+          k6 run k6/book-class.js \
+            --summary-export=k6-book-class-summary.json
+
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-book-class-summary
+          path: k6-book-class-summary.json
+          retention-days: 30
+
+  k6-list-classes:
+    name: list-classes load test
+    runs-on: ubuntu-latest
+    if: ${{ vars.K6_STAGING_BASE_URL != '' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Run list-classes load test
+        env:
+          K6_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
+          K6_AUTH_TOKEN: ${{ secrets.K6_STAGING_AUTH_TOKEN }}
+        run: k6 run k6/list-classes.js
+
+  k6-syntax-lint:
+    # Syntax/threshold sanity even when staging secrets aren't
+    # set. Catches a malformed k6 script before the next ops
+    # provisioning step ships staging URLs.
+    name: k6 syntax lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: k6 archive (parses without running)
+        env:
+          K6_AUTH_TOKEN: 'lint-token'
+          K6_STUDIO_ID: '00000000-0000-4000-8000-000000000000'
+          K6_CLASS_IDS: '00000000-0000-4000-8000-000000000001'
+        run: |
+          k6 archive k6/book-class.js -O /tmp/book.tar
+          k6 archive k6/list-classes.js -O /tmp/list.tar
+          echo "✅ k6 scripts parse cleanly"

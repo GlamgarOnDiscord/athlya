@@ -1,0 +1,9 @@
+{
+  "kiroAgent.enableCodebaseIndexing": true,
+  "kiroAgent.enableDebugLogs": true,
+  "kiroAgent.enableTabAutocomplete": true,
+  "kiroAgent.notifications.agent.failure": true,
+  "kiroAgent.notifications.agent.success": true,
+  "editor.formatOnSave": true,
+  "typescript.autoClosingTags": false
+}

@@ -1,0 +1,892 @@
+/**
+ * Integration test for the RGPD deletion cascade — Property 4 (task 5.6).
+ *
+ * **Validates: Requirements 5.1, 5.2, 5.3, 5.4**
+ *
+ * What this suite asserts
+ * -----------------------
+ * The production `handleUserDeleted` + `anonymizeAuditLog` exports from
+ * `@athlya/members/cascade` (task 5.4) are exercised VERBATIM against a
+ * real Postgres 17 instance spun up through Testcontainers with
+ * migrations `0000_init.sql`, `0001_rls.sql` and `0002_export_jobs.sql`
+ * applied end-to-end. No re-implementation of the cascade lives in this
+ * file — the ports declared by `cascade.ts` (`DeletionRepo`,
+ * `AvatarStore`, `Scheduler`) are wired to production-shaped adapters
+ * over Drizzle + plain `postgres-js` SQL, so every assertion reflects
+ * the exact code path that will run on the worker at deploy time.
+ *
+ * Property 4 — "RGPD cascade (full deletion)" — reduces to three
+ * invariants:
+ *
+ *   1. (Req 5.2, 5.4) Calling `deleteMe` (modelled here by the
+ *      `auth.user.deleted` consumer) removes every row referencing
+ *      Alice from `reservations`, `workout_sessions` and
+ *      `push_tokens`, stamps `users.deleted_at` and best-effort
+ *      purges the R2 avatar. Other users' data (Bob in a DIFFERENT
+ *      studio) is untouched.
+ *   2. (Req 5.3) A delayed anonymisation job runs 30 days after
+ *      `deleted_at`: on every `audit_log` row with `actor_id =
+ *      alice.id`, `actor_id` becomes NULL and the PII keys
+ *      `email` / `displayName` / `ip` / `userAgent` are stripped from
+ *      the `metadata` JSON while non-PII keys survive untouched.
+ *   3. (Req 5.3, contract JSDoc of `anonymizeAuditLog`) The
+ *      anonymisation is idempotent: a second invocation finds zero
+ *      matching rows and returns `anonymizedRows === 0`.
+ *
+ * Additionally (contract of `handleUserDeleted`), a scheduler failure
+ * rethrows to the caller so the event bus redelivers the cascade —
+ * but the SQL-side deletions have already landed, matching the
+ * idempotent-retry posture documented in `cascade.ts`.
+ *
+ * Docker-skip pattern
+ * -------------------
+ * Testcontainers spins up a real Postgres container. On machines
+ * without a running Docker daemon the `PostgreSqlContainer#start()`
+ * call fails with an opaque ECONNREFUSED 15–60 s later. To keep the
+ * package test suite green on such machines we perform a synchronous
+ * `docker info` probe at module load (identical to the pattern used
+ * by `packages/db/tests/properties/rls.property.test.ts`) and gate
+ * the entire describe block behind `describe.skipIf(!dockerReady)`.
+ * An always-registered "infra probe" describe asserts the test file
+ * itself loads cleanly, so a broken import surfaces in CI even when
+ * Docker is absent.
+ *
+ * audit_log immutability workaround
+ * ---------------------------------
+ * Migration `0000_init.sql` installs `audit_log_immutable()` triggers
+ * on UPDATE and DELETE so the append-only invariant (Req 22.2) is
+ * enforced at the database layer even against superusers. Requirement
+ * 5.3 explicitly carves out ONE exception to that invariant: the
+ * 30-day anonymisation pass is ALLOWED to `UPDATE audit_log` to
+ * scrub PII. To relax the trigger strictly for the cascade path we
+ * wrap `anonymizeAuditRows` in a "disable trigger → UPDATE → re-enable
+ * trigger" sequence, all under a single `sql.begin` transaction on
+ * the superuser client (which has OWNER rights on `audit_log` and can
+ * therefore DISABLE its triggers). This is the narrowest possible
+ * relaxation:
+ *
+ *   - Scope: only `actor_id = $userId` rows are updated — no other
+ *     audit row is even visible to the UPDATE.
+ *   - Duration: the DISABLE TRIGGER spans only the UPDATE statement;
+ *     the very next step re-enables both triggers inside the same
+ *     transaction, so if the UPDATE fails the ROLLBACK restores the
+ *     table to its immutable state.
+ *   - Authority: a dedicated superuser-role connection (`rootClient`)
+ *     is used for this one call; application-role connections never
+ *     see DISABLE TRIGGER privileges, so forgery or accidental
+ *     mutation from a tenant-scoped path is structurally impossible.
+ *
+ * This mirrors the production intent documented in `cascade.ts`: the
+ * anonymisation repo method is invoked by a QStash-triggered worker
+ * that holds a dedicated service connection with BYPASSRLS + table
+ * OWNER rights; it is NOT reachable from any tenant-scoped path.
+ *
+ * RLS posture
+ * -----------
+ * The cascade has no tenant scope: by the time the worker runs, the
+ * user has been soft-deleted and deletion is intentionally
+ * cross-studio at the user-id level. The DeletionRepo adapter
+ * therefore opens its connection under a BYPASSRLS superuser role
+ * rather than going through `withTenant`. This matches the production
+ * contract described in `cascade.ts` ("a service-level connection
+ * that handles multiple tenants during the consumer flow").
+ */
+
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import postgres from 'postgres';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import {
+    anonymizeAuditLog,
+    handleUserDeleted,
+    type AvatarStore,
+    type Clock,
+    type DeletionRepo,
+    type Scheduler,
+} from '../../src/cascade.js';
+
+import type { AuthUserDeletedEvent } from '@athlya/shared/events';
+import type { Sql } from 'postgres';
+
+/* ================================================================= */
+/*  Docker-daemon availability probe                                  */
+/*                                                                    */
+/*  Synchronous at module load so `describe.skipIf` sees the flag      */
+/*  before tests are registered. Same implementation as the one in    */
+/*  `packages/db/tests/properties/rls.property.test.ts`.               */
+/* ================================================================= */
+
+function detectDocker(): boolean {
+    try {
+        const res = spawnSync(
+            'docker',
+            ['info', '--format', '{{.ServerVersion}}'],
+            {
+                stdio: ['ignore', 'pipe', 'pipe'],
+                timeout: 5_000,
+                encoding: 'utf8',
+            },
+        );
+        return (
+            res.status === 0 &&
+            typeof res.stdout === 'string' &&
+            res.stdout.trim().length > 0
+        );
+    } catch {
+        return false;
+    }
+}
+
+const dockerReady = detectDocker();
+
+/* ================================================================= */
+/*  Shared container state                                             */
+/* ================================================================= */
+
+let container: { stop: () => Promise<void> } | null = null;
+
+/** Superuser (BYPASSRLS + table owner) client. Used by the seed   */
+/** helpers and by every DeletionRepo adapter built in this suite. */
+let rootClient: Sql | null = null;
+
+const ROOT_ROLE = 'postgres';
+
+/* ================================================================= */
+/*  Migration plumbing                                                 */
+/*                                                                    */
+/*  `postgres-js` speaks the extended query protocol and refuses       */
+/*  multi-statement strings, so we split the drizzle-kit-emitted       */
+/*  migrations on the `--> statement-breakpoint` marker and send each  */
+/*  fragment separately via `sql.unsafe()`. Copied verbatim from       */
+/*  `packages/db/tests/properties/rls.property.test.ts`.               */
+/* ================================================================= */
+
+async function applyMigration(client: Sql, sqlText: string): Promise<void> {
+    const statements = sqlText
+        .split(/-->\s*statement-breakpoint/g)
+        .map((chunk) => chunk.trim())
+        .filter((chunk) => chunk.length > 0);
+    for (const stmt of statements) {
+        await client.unsafe(stmt);
+    }
+}
+
+function readMigration(name: string): string {
+    const here = fileURLToPath(new URL('.', import.meta.url));
+    // tests/integration -> packages/members/tests/integration; the db
+    // migrations live at ../../../db/migrations relative to this file.
+    const file = resolve(here, '..', '..', '..', 'db', 'migrations', name);
+    return readFileSync(file, 'utf8');
+}
+
+/* ================================================================= */
+/*  Test fixtures                                                      */
+/*                                                                    */
+/*  Fixed UUIDs so the SQL assertions produce legible counter-examples */
+/*  in the rare case one fails. Alice lives in studio "alpha"; Bob     */
+/*  lives in studio "bravo" — the cascade MUST NOT touch any Bob row.  */
+/* ================================================================= */
+
+const STUDIO_ALPHA_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const STUDIO_BRAVO_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+const ALICE_ID = '11111111-1111-4111-8111-111111111111';
+const BOB_ID = '22222222-2222-4222-8222-222222222222';
+
+const CLASS_A1 = 'c1111111-1111-4111-8111-111111111111';
+const CLASS_A2 = 'c2222222-2222-4222-8222-222222222222';
+const CLASS_A3 = 'c3333333-3333-4333-8333-333333333333';
+const CLASS_B1 = 'cbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1';
+
+const EVENT_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+
+/** Frozen wall-clock instant fed to the cascade's clock port. */
+const TIME_0_MS = Date.parse('2026-02-01T10:00:00.000Z');
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+const DEFAULT_CONSENTS = {
+    marketing: false,
+    analytics: false,
+    thirdParty: false,
+    version: 1,
+    updatedAt: '2026-01-01T00:00:00Z',
+};
+
+/** Build the `auth.user.deleted` envelope targeting Alice. */
+function buildEvent(userId: string): AuthUserDeletedEvent {
+    return {
+        id: EVENT_ID,
+        type: 'auth.user.deleted',
+        occurredAt: '2026-02-01T09:59:00.000Z',
+        studioId: STUDIO_ALPHA_ID as AuthUserDeletedEvent['studioId'],
+        payload: {
+            userId: userId as AuthUserDeletedEvent['payload']['userId'],
+        },
+    };
+}
+
+/* ================================================================= */
+/*  Production-shaped ports over `postgres-js` / in-memory fakes       */
+/* ================================================================= */
+
+/**
+ * DeletionRepo wired to a real Postgres client. Every method is a
+ * single SQL statement matching the shape documented in the repo's
+ * JSDoc (see `packages/members/src/cascade.ts`). The audit
+ * anonymisation method uses the trigger-relaxation sequence described
+ * in the suite preamble.
+ */
+function buildRepo(client: Sql): DeletionRepo {
+    return {
+        async deleteReservationsForUser(userId) {
+            const rows = await client<{ id: string }[]>`
+                DELETE FROM reservations
+                 WHERE user_id = ${userId}
+                 RETURNING id
+            `;
+            return rows.length;
+        },
+        async deleteWorkoutSessionsForUser(userId) {
+            const rows = await client<{ id: string }[]>`
+                DELETE FROM workout_sessions
+                 WHERE user_id = ${userId}
+                 RETURNING id
+            `;
+            return rows.length;
+        },
+        async deletePushTokensForUser(userId) {
+            const rows = await client<{ id: string }[]>`
+                DELETE FROM push_tokens
+                 WHERE user_id = ${userId}
+                 RETURNING id
+            `;
+            return rows.length;
+        },
+        async markUserDeleted(userId, deletedAt) {
+            await client`
+                UPDATE users
+                   SET deleted_at = ${deletedAt}
+                 WHERE id = ${userId}
+            `;
+        },
+        async anonymizeAuditRows(userId) {
+            // Trigger-relaxation sequence documented in the suite
+            // preamble. DISABLE TRIGGER + UPDATE + re-enable all
+            // live inside a single `sql.begin` transaction so a
+            // failure in the middle rolls the whole block back and
+            // the table returns to its append-only state.
+            const rows = await client.begin(async (tx) => {
+                await tx.unsafe(
+                    'ALTER TABLE "audit_log" DISABLE TRIGGER audit_log_forbid_update',
+                );
+                const updated = await tx<{ id: string }[]>`
+                    UPDATE audit_log
+                       SET actor_id = NULL,
+                           metadata = metadata
+                               - 'email'
+                               - 'displayName'
+                               - 'ip'
+                               - 'userAgent'
+                     WHERE actor_id = ${userId}
+                     RETURNING id
+                `;
+                await tx.unsafe(
+                    'ALTER TABLE "audit_log" ENABLE TRIGGER audit_log_forbid_update',
+                );
+                return updated;
+            });
+            return rows.length;
+        },
+    };
+}
+
+/** In-memory AvatarStore recording per-user deletions. */
+function buildAvatars(initial: Record<string, Uint8Array> = {}): {
+    avatars: AvatarStore;
+    store: Map<string, Uint8Array>;
+} {
+    const store = new Map<string, Uint8Array>(Object.entries(initial));
+    const avatars: AvatarStore = {
+        deleteAvatar(userId) {
+            store.delete(userId);
+            return Promise.resolve();
+        },
+    };
+    return { avatars, store };
+}
+
+/** In-memory scheduler recording every (userId, dueAt) pair. */
+interface ScheduledJob {
+    readonly userId: string;
+    readonly dueAt: Date;
+}
+
+function buildScheduler(): {
+    scheduler: Scheduler;
+    jobs: ScheduledJob[];
+} {
+    const jobs: ScheduledJob[] = [];
+    const scheduler: Scheduler = {
+        scheduleAnonymization(userId, dueAt) {
+            jobs.push({ userId, dueAt });
+            return Promise.resolve();
+        },
+    };
+    return { scheduler, jobs };
+}
+
+/** Frozen clock. Instances are cheap so each test makes its own. */
+function buildClock(now: number): Clock {
+    return { now: () => now };
+}
+
+/* ================================================================= */
+/*  Seed / truncate helpers                                            */
+/* ================================================================= */
+
+async function truncateAll(client: Sql): Promise<void> {
+    // audit_log triggers forbid DELETE, so we need DISABLE TRIGGER
+    // on it before TRUNCATE ... CASCADE. Using RESTART IDENTITY so
+    // bigserial ids are stable across test runs.
+    await client.unsafe(`
+        ALTER TABLE "audit_log" DISABLE TRIGGER audit_log_forbid_delete;
+        TRUNCATE TABLE
+            "export_jobs",
+            "push_tokens",
+            "idempotency_keys",
+            "outbox",
+            "audit_log",
+            "workout_sessions",
+            "reservations",
+            "classes",
+            "users",
+            "studios"
+        RESTART IDENTITY CASCADE;
+        ALTER TABLE "audit_log" ENABLE TRIGGER audit_log_forbid_delete;
+    `);
+}
+
+/**
+ * Full scenario seed: two studios, Alice + Bob, three alpha classes
+ * + one bravo class, every FK-joined table populated for both users
+ * including 5 audit_log rows each. The seed runs under the superuser
+ * client and therefore bypasses RLS.
+ */
+async function seedScenario(client: Sql): Promise<{
+    aliceAuditIds: string[];
+    bobAuditIds: string[];
+}> {
+    const consents = JSON.stringify(DEFAULT_CONSENTS);
+
+    // Studios
+    await client`
+        INSERT INTO "studios" (id, slug, name, brand_color) VALUES
+            (${STUDIO_ALPHA_ID}, 'alpha', 'Studio Alpha', '#0EA5E9'),
+            (${STUDIO_BRAVO_ID}, 'bravo', 'Studio Bravo', '#F97316')
+    `;
+
+    // Users
+    await client`
+        INSERT INTO "users" (id, studio_id, email, display_name, role, consents) VALUES
+            (${ALICE_ID}, ${STUDIO_ALPHA_ID}, 'alice@athlya.test', 'Alice',  'member', ${consents}::jsonb),
+            (${BOB_ID},   ${STUDIO_BRAVO_ID}, 'bob@athlya.test',   'Bob',    'member', ${consents}::jsonb)
+    `;
+
+    // Alpha classes
+    await client`
+        INSERT INTO "classes"
+            (id, studio_id, title, starts_at, duration_min, capacity, version)
+        VALUES
+            (${CLASS_A1}, ${STUDIO_ALPHA_ID}, 'Yoga Flow',   '2026-03-01T09:00:00Z', 60, 20, 0),
+            (${CLASS_A2}, ${STUDIO_ALPHA_ID}, 'HIIT',        '2026-03-01T18:00:00Z', 45, 15, 0),
+            (${CLASS_A3}, ${STUDIO_ALPHA_ID}, 'Pilates',     '2026-03-02T09:00:00Z', 60, 18, 0),
+            (${CLASS_B1}, ${STUDIO_BRAVO_ID}, 'Muay Thai',   '2026-03-01T19:00:00Z', 60, 12, 0)
+    `;
+
+    // Reservations — Alice has 3 distinct classes covering all the
+    // non-terminal status values a member can hold. Bob has 1.
+    await client`
+        INSERT INTO "reservations" (class_id, user_id, status) VALUES
+            (${CLASS_A1}, ${ALICE_ID}, 'confirmed'),
+            (${CLASS_A2}, ${ALICE_ID}, 'waitlist'),
+            (${CLASS_A3}, ${ALICE_ID}, 'cancelled'),
+            (${CLASS_B1}, ${BOB_ID},   'confirmed')
+    `;
+
+    // Workout sessions
+    const emptyExercises = JSON.stringify([]);
+    await client`
+        INSERT INTO "workout_sessions"
+            (user_id, studio_id, started_at, duration_min, exercises)
+        VALUES
+            (${ALICE_ID}, ${STUDIO_ALPHA_ID}, '2026-01-15T08:00:00Z', 60, ${emptyExercises}::jsonb),
+            (${ALICE_ID}, ${STUDIO_ALPHA_ID}, '2026-01-20T08:00:00Z', 45, ${emptyExercises}::jsonb),
+            (${BOB_ID},   ${STUDIO_BRAVO_ID}, '2026-01-18T08:00:00Z', 60, ${emptyExercises}::jsonb)
+    `;
+
+    // Push tokens — 4 for Alice spanning all platforms + a duplicate
+    // iOS device so the count isn't trivially degenerate. 1 for Bob.
+    await client`
+        INSERT INTO "push_tokens" (user_id, platform, token) VALUES
+            (${ALICE_ID}, 'ios',     'ExpoPushToken[alice-ios-1]'),
+            (${ALICE_ID}, 'ios',     'ExpoPushToken[alice-ios-2]'),
+            (${ALICE_ID}, 'android', 'ExpoPushToken[alice-android-1]'),
+            (${ALICE_ID}, 'web',     'ExpoPushToken[alice-web-1]'),
+            (${BOB_ID},   'ios',     'ExpoPushToken[bob-ios-1]')
+    `;
+
+    // Audit log — 5 rows per user. Each alice row carries PII-shaped
+    // fields (`email`, `displayName`, `ip`, `userAgent`) plus one
+    // non-PII key (`classId`) that MUST survive anonymisation to
+    // demonstrate the jsonb "- key" operator targets only PII.
+    const aliceMeta = [
+        JSON.stringify({
+            email: 'alice@athlya.test',
+            displayName: 'Alice',
+            ip: '203.0.113.7',
+            userAgent: 'AthlyaMobile/1.2 (iPhone 15; iOS 17)',
+            classId: CLASS_A1,
+        }),
+        JSON.stringify({
+            email: 'alice@athlya.test',
+            displayName: 'Alice',
+            ip: '203.0.113.7',
+            userAgent: 'AthlyaMobile/1.2 (iPhone 15; iOS 17)',
+            classId: CLASS_A2,
+        }),
+        JSON.stringify({
+            email: 'alice@athlya.test',
+            displayName: 'Alice',
+            ip: '203.0.113.8',
+            userAgent: 'AthlyaWeb/1.0 (Firefox 120; macOS)',
+            classId: CLASS_A3,
+        }),
+        JSON.stringify({
+            email: 'alice@athlya.test',
+            displayName: 'Alice',
+            ip: '203.0.113.9',
+            userAgent: 'AthlyaWeb/1.0 (Chrome 120; Windows)',
+        }),
+        JSON.stringify({
+            email: 'alice@athlya.test',
+            displayName: 'Alice',
+            ip: '203.0.113.9',
+            userAgent: 'AthlyaWeb/1.0 (Chrome 120; Windows)',
+        }),
+    ];
+    const bobMeta = [
+        JSON.stringify({
+            email: 'bob@athlya.test',
+            displayName: 'Bob',
+            ip: '198.51.100.4',
+            userAgent: 'AthlyaMobile/1.2 (Pixel 8; Android 14)',
+            classId: CLASS_B1,
+        }),
+        JSON.stringify({
+            email: 'bob@athlya.test',
+            displayName: 'Bob',
+            ip: '198.51.100.4',
+            userAgent: 'AthlyaMobile/1.2 (Pixel 8; Android 14)',
+        }),
+        JSON.stringify({
+            email: 'bob@athlya.test',
+            displayName: 'Bob',
+            ip: '198.51.100.5',
+            userAgent: 'AthlyaWeb/1.0 (Safari 17; iPadOS)',
+        }),
+        JSON.stringify({
+            email: 'bob@athlya.test',
+            displayName: 'Bob',
+            ip: '198.51.100.5',
+            userAgent: 'AthlyaWeb/1.0 (Safari 17; iPadOS)',
+        }),
+        JSON.stringify({
+            email: 'bob@athlya.test',
+            displayName: 'Bob',
+            ip: '198.51.100.6',
+            userAgent: 'curl/8.5.0',
+        }),
+    ];
+
+    const aliceAuditRows = await client<{ id: string }[]>`
+        INSERT INTO "audit_log" (actor_id, action, target_type, target_id, metadata) VALUES
+            (${ALICE_ID}, 'user.login',             'user',        ${ALICE_ID}, ${aliceMeta[0]!}::jsonb),
+            (${ALICE_ID}, 'reservation.created',    'reservation', ${CLASS_A1}, ${aliceMeta[1]!}::jsonb),
+            (${ALICE_ID}, 'reservation.cancelled',  'reservation', ${CLASS_A3}, ${aliceMeta[2]!}::jsonb),
+            (${ALICE_ID}, 'user.consents.updated',  'user',        ${ALICE_ID}, ${aliceMeta[3]!}::jsonb),
+            (${ALICE_ID}, 'user.profile.updated',   'user',        ${ALICE_ID}, ${aliceMeta[4]!}::jsonb)
+        RETURNING id::text
+    `;
+    const bobAuditRows = await client<{ id: string }[]>`
+        INSERT INTO "audit_log" (actor_id, action, target_type, target_id, metadata) VALUES
+            (${BOB_ID}, 'user.login',             'user',        ${BOB_ID}, ${bobMeta[0]!}::jsonb),
+            (${BOB_ID}, 'reservation.created',    'reservation', ${CLASS_B1}, ${bobMeta[1]!}::jsonb),
+            (${BOB_ID}, 'user.consents.updated',  'user',        ${BOB_ID}, ${bobMeta[2]!}::jsonb),
+            (${BOB_ID}, 'user.profile.updated',   'user',        ${BOB_ID}, ${bobMeta[3]!}::jsonb),
+            (${BOB_ID}, 'user.login',             'user',        ${BOB_ID}, ${bobMeta[4]!}::jsonb)
+        RETURNING id::text
+    `;
+
+    return {
+        aliceAuditIds: aliceAuditRows.map((r) => r.id),
+        bobAuditIds: bobAuditRows.map((r) => r.id),
+    };
+}
+
+/* ================================================================= */
+/*  Vitest lifecycle                                                   */
+/* ================================================================= */
+
+beforeAll(async () => {
+    if (!dockerReady) {
+        console.warn(
+            '[cascade.integration] Docker daemon unreachable; RGPD cascade ' +
+            'integration suite skipped. Start Docker Desktop / dockerd to exercise it.',
+        );
+        return;
+    }
+
+    // Dynamic import so the `@testcontainers/postgresql` module is
+    // only resolved when Docker is actually available.
+    const { PostgreSqlContainer } = await import('@testcontainers/postgresql');
+
+    const started = await new PostgreSqlContainer('postgres:17-alpine')
+        .withDatabase('athlya_cascade_test')
+        .withUsername(ROOT_ROLE)
+        .withPassword('root_test')
+        .start();
+
+    container = {
+        stop: async () => {
+            await started.stop();
+        },
+    };
+
+    rootClient = postgres(started.getConnectionUri(), {
+        max: 4,
+        prepare: false,
+    });
+
+    // Apply all three production migrations. Order matters: RLS
+    // policies in 0001 reference tables from 0000; export_jobs in
+    // 0002 references users from 0000.
+    await applyMigration(rootClient, readMigration('0000_init.sql'));
+    await applyMigration(rootClient, readMigration('0001_rls.sql'));
+    await applyMigration(rootClient, readMigration('0002_export_jobs.sql'));
+}, 180_000);
+
+afterAll(async () => {
+    try {
+        await rootClient?.end({ timeout: 5 });
+    } finally {
+        await container?.stop();
+    }
+});
+
+/* ================================================================= */
+/*  Property 4 — RGPD cascade (full deletion)                          */
+/* ================================================================= */
+
+describe.skipIf(!dockerReady)(
+    'handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)',
+    () => {
+        it(
+            'cascade-deletes every FK-joined row, schedules the 30-day anonymisation job, ' +
+            'leaves other users untouched, and anonymises audit rows idempotently at J+30',
+            async () => {
+                if (!rootClient) {
+                    throw new Error('rootClient not initialised');
+                }
+                const client = rootClient;
+
+                // Arrange — clean slate + seed Alice & Bob's rows.
+                await truncateAll(client);
+                const { aliceAuditIds, bobAuditIds } =
+                    await seedScenario(client);
+
+                const repo = buildRepo(client);
+                const { avatars, store: avatarStore } = buildAvatars({
+                    [ALICE_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
+                    [BOB_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
+                });
+                const { scheduler, jobs } = buildScheduler();
+
+                // Act — run the cascade at TIME_0.
+                const result = await handleUserDeleted(buildEvent(ALICE_ID), {
+                    repo,
+                    avatars,
+                    scheduler,
+                    clock: buildClock(TIME_0_MS),
+                });
+
+                /* --- Result contract --------------------------------- */
+                expect(result.kind).toBe('ok');
+                expect(result.counts).toEqual({
+                    reservations: 3,
+                    sessions: 2,
+                    pushTokens: 4,
+                    // Anonymisation happens 30 days later — audit rows
+                    // are NOT touched during the cascade step itself.
+                    auditAnonymized: 0,
+                });
+                const expectedDueAt = new Date(
+                    TIME_0_MS + THIRTY_DAYS_MS,
+                ).toISOString();
+                expect(result.scheduledAnonymizationAt).toBe(expectedDueAt);
+
+                /* --- SQL-side: Alice is gone ------------------------- */
+                const aliceReservations = await client<{ id: string }[]>`
+                    SELECT id FROM reservations WHERE user_id = ${ALICE_ID}
+                `;
+                const aliceSessions = await client<{ id: string }[]>`
+                    SELECT id FROM workout_sessions WHERE user_id = ${ALICE_ID}
+                `;
+                const alicePushTokens = await client<{ id: string }[]>`
+                    SELECT id FROM push_tokens WHERE user_id = ${ALICE_ID}
+                `;
+                expect(aliceReservations).toHaveLength(0);
+                expect(aliceSessions).toHaveLength(0);
+                expect(alicePushTokens).toHaveLength(0);
+
+                /* --- users tombstone was stamped --------------------- */
+                const aliceRow = await client<
+                    { deleted_at: Date | null }[]
+                >`
+                    SELECT deleted_at FROM users WHERE id = ${ALICE_ID}
+                `;
+                expect(aliceRow).toHaveLength(1);
+                expect(aliceRow[0]!.deleted_at).toBeInstanceOf(Date);
+                expect(aliceRow[0]!.deleted_at!.toISOString()).toBe(
+                    new Date(TIME_0_MS).toISOString(),
+                );
+
+                /* --- Avatar was purged from the R2 fake -------------- */
+                expect(avatarStore.has(ALICE_ID)).toBe(false);
+                // Bob's avatar is untouched.
+                expect(avatarStore.has(BOB_ID)).toBe(true);
+
+                /* --- Scheduler recorded exactly one job -------------- */
+                expect(jobs).toHaveLength(1);
+                expect(jobs[0]!.userId).toBe(ALICE_ID);
+                expect(jobs[0]!.dueAt.toISOString()).toBe(expectedDueAt);
+
+                /* --- Audit rows still exist, not yet anonymised ------ */
+                const aliceAuditBefore = await client<
+                    { actor_id: string | null; metadata: Record<string, unknown> }[]
+                >`
+                    SELECT actor_id::text, metadata
+                      FROM audit_log
+                     WHERE id::text = ANY(${aliceAuditIds})
+                     ORDER BY id
+                `;
+                expect(aliceAuditBefore).toHaveLength(aliceAuditIds.length);
+                for (const row of aliceAuditBefore) {
+                    expect(row.actor_id).toBe(ALICE_ID);
+                    expect(row.metadata).toHaveProperty('email');
+                }
+
+                /* --- Bob is UNTOUCHED across every table ------------- */
+                const bobReservations = await client<{ id: string }[]>`
+                    SELECT id FROM reservations WHERE user_id = ${BOB_ID}
+                `;
+                const bobSessions = await client<{ id: string }[]>`
+                    SELECT id FROM workout_sessions WHERE user_id = ${BOB_ID}
+                `;
+                const bobPushTokens = await client<{ id: string }[]>`
+                    SELECT id FROM push_tokens WHERE user_id = ${BOB_ID}
+                `;
+                const bobRow = await client<
+                    { deleted_at: Date | null }[]
+                >`
+                    SELECT deleted_at FROM users WHERE id = ${BOB_ID}
+                `;
+                expect(bobReservations).toHaveLength(1);
+                expect(bobSessions).toHaveLength(1);
+                expect(bobPushTokens).toHaveLength(1);
+                expect(bobRow[0]!.deleted_at).toBeNull();
+
+                /* ============================================== */
+                /*  J + 30 days — QStash fires the anonymisation   */
+                /* ============================================== */
+
+                // Simulate the 30-day wait: we don't need to advance
+                // any wall-clock since `anonymizeAuditLog` does not
+                // read the clock — it just runs the SQL UPDATE.
+                const firstAnon = await anonymizeAuditLog(ALICE_ID, {
+                    repo,
+                });
+                expect(firstAnon.kind).toBe('ok');
+                expect(firstAnon.userId).toBe(ALICE_ID);
+                // Should anonymise exactly the 5 audit rows we seeded
+                // for Alice.
+                expect(firstAnon.anonymizedRows).toBe(aliceAuditIds.length);
+
+                const aliceAuditAfter = await client<
+                    { actor_id: string | null; metadata: Record<string, unknown> }[]
+                >`
+                    SELECT actor_id::text, metadata
+                      FROM audit_log
+                     WHERE id::text = ANY(${aliceAuditIds})
+                     ORDER BY id
+                `;
+                expect(aliceAuditAfter).toHaveLength(aliceAuditIds.length);
+                for (const row of aliceAuditAfter) {
+                    // Req 5.3: actor_id scrubbed to NULL.
+                    expect(row.actor_id).toBeNull();
+                    // PII keys stripped…
+                    expect(row.metadata).not.toHaveProperty('email');
+                    expect(row.metadata).not.toHaveProperty('displayName');
+                    expect(row.metadata).not.toHaveProperty('ip');
+                    expect(row.metadata).not.toHaveProperty('userAgent');
+                }
+                // …and non-PII keys survive on the rows that carried
+                // them. aliceAuditAfter is ordered by id, mirroring
+                // the INSERT order, so rows 0,1,2 retain `classId`.
+                expect(aliceAuditAfter[0]!.metadata).toHaveProperty(
+                    'classId',
+                );
+                expect(aliceAuditAfter[1]!.metadata).toHaveProperty(
+                    'classId',
+                );
+                expect(aliceAuditAfter[2]!.metadata).toHaveProperty(
+                    'classId',
+                );
+
+                /* --- Bob's audit rows are STILL intact --------------- */
+                const bobAuditAfter = await client<
+                    { actor_id: string | null; metadata: Record<string, unknown> }[]
+                >`
+                    SELECT actor_id::text, metadata
+                      FROM audit_log
+                     WHERE id::text = ANY(${bobAuditIds})
+                     ORDER BY id
+                `;
+                expect(bobAuditAfter).toHaveLength(bobAuditIds.length);
+                for (const row of bobAuditAfter) {
+                    expect(row.actor_id).toBe(BOB_ID);
+                    expect(row.metadata).toHaveProperty('email');
+                    expect(row.metadata).toHaveProperty('displayName');
+                }
+
+                /* --- Idempotency: 2nd call returns 0 ---------------- */
+                const secondAnon = await anonymizeAuditLog(ALICE_ID, {
+                    repo,
+                });
+                expect(secondAnon.anonymizedRows).toBe(0);
+
+                /* --- Audit trigger is ACTIVE again -----------------
+                 * Sanity check: the immutability invariant (Req 22.2)
+                 * is restored after the anonymisation path returns.
+                 * Attempting a plain UPDATE against audit_log must
+                 * raise "audit_log is append-only".
+                 */
+                const triggerErr = await client`
+                    UPDATE audit_log
+                       SET metadata = metadata || '{"tampered": true}'::jsonb
+                     WHERE id::text = ${bobAuditIds[0]!}
+                `.catch((e: unknown) => e);
+                expect(triggerErr).toBeInstanceOf(Error);
+                expect((triggerErr as Error).message).toMatch(
+                    /append-only/i,
+                );
+            },
+            180_000,
+        );
+
+        it(
+            'scheduler failure rethrows so the event bus redrives — ' +
+            'but the SQL cascade has already completed (idempotent retry)',
+            async () => {
+                if (!rootClient) {
+                    throw new Error('rootClient not initialised');
+                }
+                const client = rootClient;
+
+                await truncateAll(client);
+                await seedScenario(client);
+
+                const repo = buildRepo(client);
+                const { avatars, store: avatarStore } = buildAvatars({
+                    [ALICE_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
+                });
+                // Scheduler ALWAYS fails — this is the failure mode
+                // the `cascade.ts` JSDoc calls out as "rethrows so
+                // the event bus redrives".
+                const scheduler: Scheduler = {
+                    scheduleAnonymization() {
+                        return Promise.reject(
+                            new Error('QStash unreachable'),
+                        );
+                    },
+                };
+
+                const err = await handleUserDeleted(buildEvent(ALICE_ID), {
+                    repo,
+                    avatars,
+                    scheduler,
+                    clock: buildClock(TIME_0_MS),
+                }).catch((e: unknown) => e);
+
+                expect(err).toBeInstanceOf(Error);
+                expect((err as Error).message).toBe('QStash unreachable');
+
+                // SQL cascade completed BEFORE the scheduler call —
+                // this is the invariant the redelivery contract rests
+                // on (re-running the cascade finds 0 rows to delete
+                // and is a no-op for the downstream tables).
+                const aliceReservations = await client<{ id: string }[]>`
+                    SELECT id FROM reservations WHERE user_id = ${ALICE_ID}
+                `;
+                const aliceSessions = await client<{ id: string }[]>`
+                    SELECT id FROM workout_sessions WHERE user_id = ${ALICE_ID}
+                `;
+                const alicePushTokens = await client<{ id: string }[]>`
+                    SELECT id FROM push_tokens WHERE user_id = ${ALICE_ID}
+                `;
+                const aliceRow = await client<
+                    { deleted_at: Date | null }[]
+                >`
+                    SELECT deleted_at FROM users WHERE id = ${ALICE_ID}
+                `;
+                expect(aliceReservations).toHaveLength(0);
+                expect(aliceSessions).toHaveLength(0);
+                expect(alicePushTokens).toHaveLength(0);
+                expect(aliceRow[0]!.deleted_at).toBeInstanceOf(Date);
+
+                // Avatar is purged too — it sits BEFORE the scheduler
+                // call in the documented cascade order.
+                expect(avatarStore.has(ALICE_ID)).toBe(false);
+            },
+            180_000,
+        );
+    },
+);
+
+/* ================================================================= */
+/*  Always-registered infra probe                                      */
+/*                                                                    */
+/*  Ensures the test file itself loads cleanly even on machines        */
+/*  without Docker — a broken import or typo would surface here        */
+/*  rather than silently being hidden behind a skipped describe.       */
+/* ================================================================= */
+
+describe('cascade integration suite registration', () => {
+    it('imports the cascade module and exposes handleUserDeleted / anonymizeAuditLog', () => {
+        expect(typeof handleUserDeleted).toBe('function');
+        expect(typeof anonymizeAuditLog).toBe('function');
+    });
+
+    it.skipIf(dockerReady)(
+        'logs a clear message when Docker is unavailable',
+        () => {
+            // A green record of the skip; CI dashboards that filter
+            // by "skipped" will surface this on machines where the
+            // RGPD cascade integration is not exercised.
+            expect(dockerReady).toBe(false);
+        },
+    );
+});

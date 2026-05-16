@@ -1,0 +1,20 @@
+{
+    "extends": "@athlya/tsconfig/node.json",
+    "compilerOptions": {
+        "rootDir": ".",
+        "outDir": "dist",
+        "types": [
+            "node"
+        ]
+    },
+    "include": [
+        "src",
+        "tests"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        ".turbo",
+        "coverage"
+    ]
+}

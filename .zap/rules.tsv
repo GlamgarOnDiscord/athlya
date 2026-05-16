@@ -1,0 +1,20 @@
+# OWASP ZAP baseline rule overrides for Athlya
+# ---------------------------------------------
+# Format: RULE_ID<TAB>THRESHOLD<TAB>DESCRIPTION
+# THRESHOLD ∈ { IGNORE, INFO, WARN, FAIL }
+#
+# These are starting defaults meant to be TIGHTENED as the API
+# (Hono on Cloudflare Workers) and the web / native apps land. Once
+# those surfaces are in place we expect to:
+#   - promote 10054 and 10055 back to WARN (or drop the override
+#     entirely) so cookie + CSP regressions fail the PR,
+#   - remove the 10035 override once HSTS ships with the 8.8
+#     auth / CSP hardening pass,
+#   - revisit every entry before the first production deploy.
+#
+# Full rule reference:
+#   https://www.zaproxy.org/docs/alerts/
+RULE_ID	THRESHOLD	DESCRIPTION
+10054	IGNORE	Cookie Without Secure Flag — local dev will raise this; production CSP handles it
+10055	IGNORE	CSP Scanner: False Positive during dev
+10035	INFO	Strict-Transport-Security — downgrade until 8.8 ships HSTS

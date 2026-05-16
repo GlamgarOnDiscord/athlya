@@ -1,0 +1,194 @@
+name: pgTAP RLS tests
+
+# =====================================================================
+# Task 13.4 / Requirement 29.3 — run the pgTAP RLS suite on every PR
+# that touches SQL migrations or the pgTAP tests themselves.
+#
+# The job spins up a disposable Postgres 17 container, applies every
+# migration in `packages/db/migrations/*.sql` in filename order,
+# installs the pgTAP extension inside the container, seeds the
+# bootstrap data and runs the per-table assertions via `pg_prove`.
+#
+# Why we copy pgTAP into the container ourselves
+# ----------------------------------------------
+# The `postgres:17-alpine` base image does not ship the pgTAP
+# extension. pgTAP is a pure-SQL extension: two artifacts only
+# (`pgtap.control` + `pgtap--<ver>.sql`). We install it on the runner
+# via `apt-get install -y pgtap` — which places the artifacts under
+# `/usr/share/postgresql/<host-pg-ver>/extension/` — and then
+# `docker cp` them into the running postgres container at
+# `/usr/local/share/postgresql/extension/` (the alpine image's
+# extension directory). After that, `CREATE EXTENSION pgtap` inside
+# `00_bootstrap.sql` succeeds without modification.
+#
+# We deliberately chose apt over `pgxn-client` because pgxn-client
+# needs a working compiler toolchain and postgres headers to build
+# extensions — overkill here, since pgTAP is pure SQL and apt already
+# provides a tested, version-pinned copy.
+# =====================================================================
+
+on:
+  pull_request:
+    paths:
+      - 'packages/db/migrations/**'
+      - 'packages/db/tests/rls/**'
+      - '.github/workflows/pgtap.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/db/migrations/**'
+      - 'packages/db/tests/rls/**'
+      - '.github/workflows/pgtap.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pgtap:
+    name: pgTAP RLS suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: athlya_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d athlya_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: athlya_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pg_prove, psql client, and pgTAP server files on the runner
+        # `pgtap` is the pure-SQL extension shipped by Debian/Ubuntu under
+        # /usr/share/postgresql/<pg-ver>/extension/. `libtap-parser-sourcehandler-pgtap-perl`
+        # provides the TAP::Parser plugin that `pg_prove` uses to parse pgTAP
+        # output. `postgresql-client` gives us `psql` and `pg_isready`.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            postgresql-client \
+            libtap-parser-sourcehandler-pgtap-perl \
+            pgtap
+          command -v pg_prove
+          command -v psql
+
+      - name: Copy pgTAP extension files into the postgres:17-alpine container
+        # pgTAP is version-agnostic (pure SQL), so the .control and .sql files
+        # shipped by the Ubuntu runner's apt install work fine inside pg17.
+        # The alpine postgres image's extension directory is
+        # /usr/local/share/postgresql/extension/ — distinct from Debian's
+        # /usr/share/postgresql/<ver>/extension/ location used by the runner.
+        run: |
+          set -euo pipefail
+          CONTAINER_ID=$(docker ps --filter "ancestor=postgres:17-alpine" --format "{{.ID}}" | head -n1)
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "Could not find the postgres:17-alpine service container" >&2
+            docker ps >&2
+            exit 1
+          fi
+          echo "Postgres service container: $CONTAINER_ID"
+
+          PGTAP_FILES=$(find /usr/share/postgresql -type f \( -name 'pgtap.control' -o -name 'pgtap--*.sql' \))
+          if [ -z "$PGTAP_FILES" ]; then
+            echo "Could not find pgTAP extension files installed by apt" >&2
+            ls -R /usr/share/postgresql || true
+            exit 1
+          fi
+
+          for f in $PGTAP_FILES; do
+            echo "Copying $f into container"
+            docker cp "$f" "${CONTAINER_ID}:/usr/local/share/postgresql/extension/$(basename "$f")"
+          done
+
+          echo "pgTAP files now present in container:"
+          docker exec "$CONTAINER_ID" ls -1 /usr/local/share/postgresql/extension/ | grep -i pgtap
+
+      - name: Wait for Postgres to accept connections
+        # Belt-and-braces on top of the service healthcheck — the first
+        # psql call should otherwise sometimes race the ready signal.
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -p 5432 -U postgres -d athlya_test >/dev/null 2>&1; then
+              echo "Postgres is ready."
+              exit 0
+            fi
+            echo "Waiting for Postgres ($i/30)..."
+            sleep 2
+          done
+          echo "Postgres did not become ready within 60s" >&2
+          exit 1
+
+      - name: Apply Athlya migrations in filename order
+        # Drizzle writes `--> statement-breakpoint` at end-of-line. psql treats
+        # `--` through EOL as a SQL line comment, so the marker is a no-op when
+        # the file is fed through `psql -f`. No preprocessing required.
+        # `-v ON_ERROR_STOP=1` aborts on the first failure.
+        #
+        # We explicitly skip `*.down.sql` rollback scripts — they live next to
+        # their forward counterparts for reviewer ergonomics, but they must
+        # never run as part of the forward-apply path. A byte-wise sort would
+        # otherwise pull `.down.sql` in front of `.sql` (since `d` < `s` in
+        # ASCII) and try to drop roles that do not exist yet.
+        run: |
+          set -euo pipefail
+          for f in $(ls packages/db/migrations/*.sql | grep -v '\.down\.sql$' | sort); do
+            echo "::group::Applying $(basename "$f")"
+            psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d athlya_test -f "$f"
+            echo "::endgroup::"
+          done
+
+      - name: Enable pgTAP extension in the test database
+        run: |
+          psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d athlya_test \
+               -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
+
+      - name: Seed pgTAP bootstrap data and helper functions
+        # `00_bootstrap.sql` is not wrapped in a transaction: it commits the
+        # seed data and helper functions so subsequent per-table test files
+        # (each opened by pg_prove in its own psql connection) can read them.
+        run: |
+          psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d athlya_test \
+               -f packages/db/tests/rls/00_bootstrap.sql
+
+      - name: Run pgTAP RLS test suite via pg_prove
+        # We list files explicitly (rather than globbing the directory) to
+        # exclude `00_bootstrap.sql` — which is a seed script, not a test —
+        # and `run-all.sql` — which is a `\i` dispatcher meant for interactive
+        # use, not for pg_prove's one-file-per-connection model.
+        run: |
+          pg_prove \
+            --host localhost \
+            --port 5432 \
+            --username postgres \
+            --dbname athlya_test \
+            --ext .sql \
+            --verbose \
+            packages/db/tests/rls/studios.sql \
+            packages/db/tests/rls/users.sql \
+            packages/db/tests/rls/classes.sql \
+            packages/db/tests/rls/reservations.sql \
+            packages/db/tests/rls/workout_sessions.sql \
+            packages/db/tests/rls/audit_log.sql \
+            packages/db/tests/rls/audit_anonymization.sql \
+            packages/db/tests/rls/push_tokens.sql \
+            packages/db/tests/rls/idempotency_keys.sql \
+            packages/db/tests/rls/outbox.sql
