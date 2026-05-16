@@ -12,15 +12,15 @@ Date : 2026-05-15
 
 ## Scores par axe
 
-| Axe | Score | Verdict |
-|---|---|---|
-| S1 — SAST | **87 / 100** | excellent (zéro CRITICAL) |
-| S2 — Auth/RBAC | **58 / 100** | crypto solide, **wiring défaillant** |
-| S3 — DAST live | **66 / 100** | RBAC robuste, rate-limit absent |
-| S4 — Network/DDoS | **68 / 100** | TLS+CSP+cookies OK, DDoS appli faible |
-| S5 — RGPD | **62 / 100** | machinerie OK, **consumers non câblés** |
-| S6 — Frontend | **82 / 100** | très bon, durcissements headers manquent |
-| **Moyenne pondérée** | **~70 / 100** | — |
+| Axe                  | Score         | Verdict                                  |
+| -------------------- | ------------- | ---------------------------------------- |
+| S1 — SAST            | **87 / 100**  | excellent (zéro CRITICAL)                |
+| S2 — Auth/RBAC       | **58 / 100**  | crypto solide, **wiring défaillant**     |
+| S3 — DAST live       | **66 / 100**  | RBAC robuste, rate-limit absent          |
+| S4 — Network/DDoS    | **68 / 100**  | TLS+CSP+cookies OK, DDoS appli faible    |
+| S5 — RGPD            | **62 / 100**  | machinerie OK, **consumers non câblés**  |
+| S6 — Frontend        | **82 / 100**  | très bon, durcissements headers manquent |
+| **Moyenne pondérée** | **~70 / 100** | —                                        |
 
 Total findings : **74** (5 CRITICAL, 14 HIGH, 23 MEDIUM, 21 LOW, 11 INFO).
 
@@ -32,16 +32,16 @@ Le constat le plus frappant cross-audits :
 
 C'est-à-dire que la suite de tests passe verte sur 436/436 tests, et que pourtant la posture runtime est dégradée. Liste exhaustive des "primitives orphelines" :
 
-| Primitive | Fichier source | Statut prod |
-|---|---|---|
-| `rateLimit()` middleware (Req 14.3, 14.4) | `packages/api/src/middleware/rate-limit.ts` | jamais `app.use(rateLimit())` |
-| `shouldAllowLogin()` throttle (Req 1.6) | `packages/auth/src/throttle.ts` | jamais appelé dans `auth-deps.ts` |
-| `tenantResolver()` middleware | `packages/api/src/middleware/tenant-resolver.ts` | jamais monté |
-| `handleUserDeleted` cascade RGPD (Art 17) | `packages/members/src/cascade.ts` | jamais routé sur queue |
-| `runExportJob` consumer (Art 15) | `packages/members/src/export.ts` | jamais routé sur queue |
-| `anonymize_user_audit()` cron J+30 | `packages/db/migrations/0003_audit_anonymization.sql` | jamais déclenché |
-| `redactKeys()` log sanitizer | `packages/api/src/logging.ts` | exporté mais 0 call-site |
-| DLQ admin router `/admin/dlq/*` | `packages/api/src/admin/dlq-routes.ts` | jamais monté dans `buildApp` |
+| Primitive                                 | Fichier source                                        | Statut prod                       |
+| ----------------------------------------- | ----------------------------------------------------- | --------------------------------- |
+| `rateLimit()` middleware (Req 14.3, 14.4) | `packages/api/src/middleware/rate-limit.ts`           | jamais `app.use(rateLimit())`     |
+| `shouldAllowLogin()` throttle (Req 1.6)   | `packages/auth/src/throttle.ts`                       | jamais appelé dans `auth-deps.ts` |
+| `tenantResolver()` middleware             | `packages/api/src/middleware/tenant-resolver.ts`      | jamais monté                      |
+| `handleUserDeleted` cascade RGPD (Art 17) | `packages/members/src/cascade.ts`                     | jamais routé sur queue            |
+| `runExportJob` consumer (Art 15)          | `packages/members/src/export.ts`                      | jamais routé sur queue            |
+| `anonymize_user_audit()` cron J+30        | `packages/db/migrations/0003_audit_anonymization.sql` | jamais déclenché                  |
+| `redactKeys()` log sanitizer              | `packages/api/src/logging.ts`                         | exporté mais 0 call-site          |
+| DLQ admin router `/admin/dlq/*`           | `packages/api/src/admin/dlq-routes.ts`                | jamais monté dans `buildApp`      |
 
 → **8 primitives, 8 PROD-RISK ou PROD-BLOCKER**. Le coût total de remédiation est faible (~2-3 jours d'engineering) car aucune logique n'est à écrire — uniquement à câbler.
 
@@ -49,13 +49,13 @@ C'est-à-dire que la suite de tests passe verte sur 436/436 tests, et que pourta
 
 ### CRITICAL — bloquants production
 
-| # | Audit | Finding | Mitigation |
-|---|---|---|---|
-| 1 | S2-001 / S3-001 / S4-001 | Aucun rate-limit ni login throttle en prod | `app.use('/v1/*', rateLimit())` + `shouldAllowLogin()` dans `auth-deps.ts` |
-| 2 | S2-002 | `SessionStore.rotate()` non-atomique → fork de session sur refresh-reuse | Script Lua Upstash avec `GETDEL` |
-| 3 | S5-001 | `runExportJob` jamais exécuté → exports RGPD perpétuellement pending | Router `members.export.requested` dans `worker.queue()` |
-| 4 | S5-002 | `handleUserDeleted` jamais exécuté → `DELETE /v1/auth/me` ne cascade rien | Router `auth.user.deleted` dans `worker.queue()` |
-| 5 | S2-006 | Aucun flow forgot-password / password reset | Implémentation slice dédiée |
+| #   | Audit                    | Finding                                                                   | Mitigation                                                                 |
+| --- | ------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| 1   | S2-001 / S3-001 / S4-001 | Aucun rate-limit ni login throttle en prod                                | `app.use('/v1/*', rateLimit())` + `shouldAllowLogin()` dans `auth-deps.ts` |
+| 2   | S2-002                   | `SessionStore.rotate()` non-atomique → fork de session sur refresh-reuse  | Script Lua Upstash avec `GETDEL`                                           |
+| 3   | S5-001                   | `runExportJob` jamais exécuté → exports RGPD perpétuellement pending      | Router `members.export.requested` dans `worker.queue()`                    |
+| 4   | S5-002                   | `handleUserDeleted` jamais exécuté → `DELETE /v1/auth/me` ne cascade rien | Router `auth.user.deleted` dans `worker.queue()`                           |
+| 5   | S2-006                   | Aucun flow forgot-password / password reset                               | Implémentation slice dédiée                                                |
 
 ### HIGH — à traiter avant prod
 

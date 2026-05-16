@@ -9,18 +9,18 @@ import athlya from '@athlya/eslint-config';
  * ignoring build output.
  */
 export default [
-    {
-        ignores: ['dist/**', '.turbo/**', 'coverage/**', '*.tsbuildinfo'],
+  {
+    ignores: ['dist/**', '.turbo/**', 'coverage/**', '*.tsbuildinfo'],
+  },
+  ...athlya,
+  {
+    files: ['src/**/*.test.ts', 'tests/**/*.ts'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
     },
-    ...athlya,
-    {
-        files: ['src/**/*.test.ts', 'tests/**/*.ts'],
-        rules: {
-            '@typescript-eslint/unbound-method': 'off',
-            '@typescript-eslint/require-await': 'off',
-            '@typescript-eslint/no-unsafe-assignment': 'off',
-            '@typescript-eslint/no-unsafe-member-access': 'off',
-            '@typescript-eslint/no-unsafe-call': 'off',
-        },
-    },
+  },
 ];

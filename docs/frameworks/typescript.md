@@ -1,15 +1,15 @@
 # TypeScript — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Utilisé** | ^5.9.3 |
-| **Dernière stable** | **6.0** (17 mars 2026) |
-| **Beta** | 7.0 (réécriture Go — ne pas utiliser en prod) |
-| **Action** | Planifier migration vers 6.0 |
+|                     | Value                                         |
+| ------------------- | --------------------------------------------- |
+| **Utilisé**         | ^5.9.3                                        |
+| **Dernière stable** | **6.0** (17 mars 2026)                        |
+| **Beta**            | 7.0 (réécriture Go — ne pas utiliser en prod) |
+| **Action**          | Planifier migration vers 6.0                  |
 
 ---
 
@@ -17,30 +17,30 @@
 
 ### Nouveaux défauts — impact sur le projet
 
-| Option | TS 5.x défaut | TS 6.0 défaut | Statut projet |
-|---|---|---|---|
-| `strict` | false | **true** | ✓ déjà activé |
-| `target` | ES3 | **ES2025** | ⚠ projet sur ES2022 → mettre à jour |
-| `module` | commonjs | **ESNext** | ✓ déjà ESNext |
-| `moduleResolution` | node10 | **bundler** | ✓ déjà bundler |
-| `rootDir` | auto | **"."** | ✓ explicite |
-| `types` | auto-load all | **`[]`** (aucun auto-chargement) | ⚠ peut casser les @types implicites |
-| `noUncheckedSideEffectImports` | false | **true** | ⚠ imports side-effect doivent être déclarés |
+| Option                         | TS 5.x défaut | TS 6.0 défaut                    | Statut projet                               |
+| ------------------------------ | ------------- | -------------------------------- | ------------------------------------------- |
+| `strict`                       | false         | **true**                         | ✓ déjà activé                               |
+| `target`                       | ES3           | **ES2025**                       | ⚠ projet sur ES2022 → mettre à jour         |
+| `module`                       | commonjs      | **ESNext**                       | ✓ déjà ESNext                               |
+| `moduleResolution`             | node10        | **bundler**                      | ✓ déjà bundler                              |
+| `rootDir`                      | auto          | **"."**                          | ✓ explicite                                 |
+| `types`                        | auto-load all | **`[]`** (aucun auto-chargement) | ⚠ peut casser les @types implicites         |
+| `noUncheckedSideEffectImports` | false         | **true**                         | ⚠ imports side-effect doivent être déclarés |
 
 ### Suppressions définitives (BREAKING)
 
 Ces options/fonctionnalités **n'existent plus** en TS 6 :
 
-| Supprimé | Statut projet | Action |
-|---|---|---|
-| Target ES3, ES5 | Non utilisé ✓ | — |
-| `--outFile` | Non utilisé ✓ | — |
-| Modules AMD / UMD / SystemJS | Non utilisés ✓ | — |
-| `--moduleResolution classic` | Non utilisé ✓ | — |
-| `--moduleResolution node10` | Non utilisé ✓ | — |
-| `--baseUrl` sans `paths` | Non utilisé ✓ | — |
-| `/// <reference no-default-lib>` | Non utilisé ✓ | — |
-| Import assertions (`assert {}`) | Vérifier → `with {}` | Auditer les imports |
+| Supprimé                         | Statut projet        | Action              |
+| -------------------------------- | -------------------- | ------------------- |
+| Target ES3, ES5                  | Non utilisé ✓        | —                   |
+| `--outFile`                      | Non utilisé ✓        | —                   |
+| Modules AMD / UMD / SystemJS     | Non utilisés ✓       | —                   |
+| `--moduleResolution classic`     | Non utilisé ✓        | —                   |
+| `--moduleResolution node10`      | Non utilisé ✓        | —                   |
+| `--baseUrl` sans `paths`         | Non utilisé ✓        | —                   |
+| `/// <reference no-default-lib>` | Non utilisé ✓        | —                   |
+| Import assertions (`assert {}`)  | Vérifier → `with {}` | Auditer les imports |
 
 ### Import assertions → Import attributes
 
@@ -62,14 +62,14 @@ Auditer le codebase : `grep -r "assert {" --include="*.ts"`.
 
 ```json
 {
-    "strict": true,                        // ✓ identique à TS 6 default
-    "noUncheckedIndexedAccess": true,      // ✓ bonne pratique
-    "exactOptionalPropertyTypes": true,    // ✓ très strict
-    "noImplicitOverride": true,            // ✓
-    "noFallthroughCasesInSwitch": true,    // ✓
-    "noImplicitReturns": true,             // ✓
-    "verbatimModuleSyntax": true,          // ✓
-    "isolatedModules": true                // ✓
+  "strict": true, // ✓ identique à TS 6 default
+  "noUncheckedIndexedAccess": true, // ✓ bonne pratique
+  "exactOptionalPropertyTypes": true, // ✓ très strict
+  "noImplicitOverride": true, // ✓
+  "noFallthroughCasesInSwitch": true, // ✓
+  "noImplicitReturns": true, // ✓
+  "verbatimModuleSyntax": true, // ✓
+  "isolatedModules": true // ✓
 }
 ```
 
@@ -132,6 +132,7 @@ Correct pour le moteur `node >=20 <21`. Pas d'action nécessaire.
 ## TypeScript 7.0 — Ne pas utiliser en production
 
 TypeScript 7.0 est en **beta** (avril 2026). C'est une réécriture complète en Go :
+
 - 10x plus rapide que TS 6
 - Parallélisation multi-thread
 - Même système de types que TS 6 (compatibilité assurée)

@@ -14,9 +14,9 @@
 
 @import '../styles/tokens.css';
 
-@import "tw-animate-css";
+@import 'tw-animate-css';
 
-@import "shadcn/tailwind.css";
+@import 'shadcn/tailwind.css';
 
 /*
  ---break---
@@ -26,28 +26,28 @@
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
 @theme {
-    /* Brand tokens — not covered by shadcn's @theme inline */
-    --color-brand-primary: var(--athlya-brand-primary);
-    --color-brand-on-primary: var(--athlya-brand-on-primary);
-    --color-brand-primary-tint: var(--athlya-brand-primary-tint);
-    --color-brand-primary-shade: var(--athlya-brand-primary-shade);
+  /* Brand tokens — not covered by shadcn's @theme inline */
+  --color-brand-primary: var(--athlya-brand-primary);
+  --color-brand-on-primary: var(--athlya-brand-on-primary);
+  --color-brand-primary-tint: var(--athlya-brand-primary-tint);
+  --color-brand-primary-shade: var(--athlya-brand-primary-shade);
 
-    /* App-specific semantic colors not in shadcn */
-    --color-success: var(--color-success);
-    --color-warning: var(--color-warning);
+  /* App-specific semantic colors not in shadcn */
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
 
-    --font-sans: var(--font-family-sans);
-    --font-mono: var(--font-family-mono);
+  --font-sans: var(--font-family-sans);
+  --font-mono: var(--font-family-mono);
 }
 
 body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-base);
-    line-height: var(--line-height-normal);
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /*
@@ -55,46 +55,46 @@ body {
  */
 
 @theme inline {
-    --font-heading: var(--font-sans);
-    --font-sans: var(--font-sans);
-    --color-sidebar-ring: var(--sidebar-ring);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
-    --color-ring: var(--ring);
-    --color-input: var(--input);
-    --color-border: var(--border);
-    --color-destructive: var(--destructive);
-    --color-accent-foreground: var(--accent-foreground);
-    --color-accent: var(--accent);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-muted: var(--muted);
-    --color-secondary-foreground: var(--secondary-foreground);
-    --color-secondary: var(--secondary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary: var(--primary);
-    --color-popover-foreground: var(--popover-foreground);
-    --color-popover: var(--popover);
-    --color-card-foreground: var(--card-foreground);
-    --color-card: var(--card);
-    --color-foreground: var(--foreground);
-    --color-background: var(--background);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 /*
@@ -105,64 +105,64 @@ body {
    --background points to --color-light-background (not --color-background)
    to avoid circular resolution with @theme inline above. */
 :root {
-    --background:                 var(--color-light-background);
-    --foreground:                 var(--color-light-foreground);
-    --card:                       var(--color-light-background);
-    --card-foreground:            var(--color-light-foreground);
-    --popover:                    var(--color-light-background);
-    --popover-foreground:         var(--color-light-foreground);
-    --primary:                    var(--athlya-brand-primary);
-    --primary-foreground:         var(--athlya-brand-on-primary);
-    --secondary:                  var(--color-light-secondary);
-    --secondary-foreground:       var(--color-light-foreground);
-    --muted:                      var(--color-light-muted);
-    --muted-foreground:           var(--color-light-muted-foreground);
-    --accent:                     var(--color-light-accent);
-    --accent-foreground:          var(--color-light-foreground);
-    --destructive:                var(--color-light-destructive);
-    --border:                     var(--color-light-border);
-    --input:                      var(--color-light-input);
-    --ring:                       var(--color-light-ring);
-    --radius:                     0.5rem;
-    --sidebar:                    var(--color-light-background);
-    --sidebar-foreground:         var(--color-light-foreground);
-    --sidebar-primary:            var(--athlya-brand-primary);
-    --sidebar-primary-foreground: var(--athlya-brand-on-primary);
-    --sidebar-accent:             var(--color-light-accent);
-    --sidebar-accent-foreground:  var(--color-light-foreground);
-    --sidebar-border:             var(--color-light-border);
-    --sidebar-ring:               var(--color-light-ring);
+  --background: var(--color-light-background);
+  --foreground: var(--color-light-foreground);
+  --card: var(--color-light-background);
+  --card-foreground: var(--color-light-foreground);
+  --popover: var(--color-light-background);
+  --popover-foreground: var(--color-light-foreground);
+  --primary: var(--athlya-brand-primary);
+  --primary-foreground: var(--athlya-brand-on-primary);
+  --secondary: var(--color-light-secondary);
+  --secondary-foreground: var(--color-light-foreground);
+  --muted: var(--color-light-muted);
+  --muted-foreground: var(--color-light-muted-foreground);
+  --accent: var(--color-light-accent);
+  --accent-foreground: var(--color-light-foreground);
+  --destructive: var(--color-light-destructive);
+  --border: var(--color-light-border);
+  --input: var(--color-light-input);
+  --ring: var(--color-light-ring);
+  --radius: 0.5rem;
+  --sidebar: var(--color-light-background);
+  --sidebar-foreground: var(--color-light-foreground);
+  --sidebar-primary: var(--athlya-brand-primary);
+  --sidebar-primary-foreground: var(--athlya-brand-on-primary);
+  --sidebar-accent: var(--color-light-accent);
+  --sidebar-accent-foreground: var(--color-light-foreground);
+  --sidebar-border: var(--color-light-border);
+  --sidebar-ring: var(--color-light-ring);
 }
 
 @media (prefers-color-scheme: dark) {
-    :root {
-        --background:                 var(--color-dark-background);
-        --foreground:                 var(--color-dark-foreground);
-        --card:                       var(--color-dark-background);
-        --card-foreground:            var(--color-dark-foreground);
-        --popover:                    var(--color-dark-background);
-        --popover-foreground:         var(--color-dark-foreground);
-        --primary:                    var(--athlya-brand-primary);
-        --primary-foreground:         var(--athlya-brand-on-primary);
-        --secondary:                  var(--color-dark-secondary);
-        --secondary-foreground:       var(--color-dark-foreground);
-        --muted:                      var(--color-dark-muted);
-        --muted-foreground:           var(--color-dark-muted-foreground);
-        --accent:                     var(--color-dark-accent);
-        --accent-foreground:          var(--color-dark-foreground);
-        --destructive:                var(--color-dark-destructive);
-        --border:                     var(--color-dark-border);
-        --input:                      var(--color-dark-input);
-        --ring:                       var(--color-dark-ring);
-        --sidebar:                    var(--color-dark-background);
-        --sidebar-foreground:         var(--color-dark-foreground);
-        --sidebar-primary:            var(--athlya-brand-primary);
-        --sidebar-primary-foreground: var(--athlya-brand-on-primary);
-        --sidebar-accent:             var(--color-dark-accent);
-        --sidebar-accent-foreground:  var(--color-dark-foreground);
-        --sidebar-border:             var(--color-dark-border);
-        --sidebar-ring:               var(--color-dark-ring);
-    }
+  :root {
+    --background: var(--color-dark-background);
+    --foreground: var(--color-dark-foreground);
+    --card: var(--color-dark-background);
+    --card-foreground: var(--color-dark-foreground);
+    --popover: var(--color-dark-background);
+    --popover-foreground: var(--color-dark-foreground);
+    --primary: var(--athlya-brand-primary);
+    --primary-foreground: var(--athlya-brand-on-primary);
+    --secondary: var(--color-dark-secondary);
+    --secondary-foreground: var(--color-dark-foreground);
+    --muted: var(--color-dark-muted);
+    --muted-foreground: var(--color-dark-muted-foreground);
+    --accent: var(--color-dark-accent);
+    --accent-foreground: var(--color-dark-foreground);
+    --destructive: var(--color-dark-destructive);
+    --border: var(--color-dark-border);
+    --input: var(--color-dark-input);
+    --ring: var(--color-dark-ring);
+    --sidebar: var(--color-dark-background);
+    --sidebar-foreground: var(--color-dark-foreground);
+    --sidebar-primary: var(--athlya-brand-primary);
+    --sidebar-primary-foreground: var(--athlya-brand-on-primary);
+    --sidebar-accent: var(--color-dark-accent);
+    --sidebar-accent-foreground: var(--color-dark-foreground);
+    --sidebar-border: var(--color-dark-border);
+    --sidebar-ring: var(--color-dark-ring);
+  }
 }
 
 /*

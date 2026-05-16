@@ -26,8 +26,8 @@
  */
 
 import {
-    UpdateConsentsRequestSchema,
-    UpdateProfileRequestSchema,
+  UpdateConsentsRequestSchema,
+  UpdateProfileRequestSchema,
 } from '@athlya/shared/schemas/api';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -37,21 +37,17 @@ import { studioRateLimit } from '../middleware/studio-rate-limit.js';
 import { zValidator } from '../middleware/validator.js';
 
 import {
-    idempotency,
-    problem403,
-    projectUserIdFromClaims,
-    readValidated,
-    traceOperation,
-    requireRole,
+  idempotency,
+  problem403,
+  projectUserIdFromClaims,
+  readValidated,
+  traceOperation,
+  requireRole,
 } from './helpers.js';
 
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
-import type {
-    UpdateConsentsRequest,
-    UpdateProfileRequest,
-} from '@athlya/shared/schemas/api';
-
+import type { UpdateConsentsRequest, UpdateProfileRequest } from '@athlya/shared/schemas/api';
 
 /* ------------------------------------------------------------------ */
 /*  Local query schemas                                                */
@@ -65,11 +61,11 @@ import type {
  * 20, hard cap 100).
  */
 const ListMembersQuerySchema = z
-    .object({
-        cursor: z.string().min(1).optional(),
-        limit: z.coerce.number().int().min(1).max(100).optional(),
-    })
-    .strict();
+  .object({
+    cursor: z.string().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+  })
+  .strict();
 
 type ListMembersQuery = z.infer<typeof ListMembersQuerySchema>;
 
@@ -85,8 +81,8 @@ type ListMembersQuery = z.infer<typeof ListMembersQuerySchema>;
  * either shape.
  */
 export interface MembersPageView {
-    readonly items: ReadonlyArray<unknown>;
-    readonly nextCursor: string | null;
+  readonly items: ReadonlyArray<unknown>;
+  readonly nextCursor: string | null;
 }
 
 /** Opaque profile view. The gateway forwards whatever the service returns. */
@@ -98,24 +94,18 @@ export type MemberProfileView = unknown;
  * so this module never imports from the members package directly.
  */
 export interface MembersDeps {
-    getProfile(userId: string): Promise<MemberProfileView>;
-    updateProfile(
-        userId: string,
-        patch: UpdateProfileRequest,
-    ): Promise<MemberProfileView>;
-    updateConsents(
-        userId: string,
-        input: UpdateConsentsRequest,
-    ): Promise<unknown>;
-    enqueueExport(userId: string): Promise<{ jobId: string }>;
-    listMembersByStudio(
-        studioId: string,
-        requesterRole: 'admin' | 'coach',
-        opts: ListMembersQuery,
-    ): Promise<MembersPageView>;
+  getProfile(userId: string): Promise<MemberProfileView>;
+  updateProfile(userId: string, patch: UpdateProfileRequest): Promise<MemberProfileView>;
+  updateConsents(userId: string, input: UpdateConsentsRequest): Promise<unknown>;
+  enqueueExport(userId: string): Promise<{ jobId: string }>;
+  listMembersByStudio(
+    studioId: string,
+    requesterRole: 'admin' | 'coach',
+    opts: ListMembersQuery,
+  ): Promise<MembersPageView>;
 
-    /** Dependency bundle forwarded to the idempotency middleware. */
-    readonly idempotency?: IdempotencyMiddlewareDeps;
+  /** Dependency bundle forwarded to the idempotency middleware. */
+  readonly idempotency?: IdempotencyMiddlewareDeps;
 }
 
 /* ------------------------------------------------------------------ */
@@ -124,119 +114,101 @@ export interface MembersDeps {
 
 /** Build the `/v1/members/*` sub-router. */
 export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
-    const router = new Hono<HonoEnv>();
-    const idem = deps.idempotency;
+  const router = new Hono<HonoEnv>();
+  const idem = deps.idempotency;
 
-    // Every /v1/members route requires authentication. Mount once at
-    // the router root so each handler does not repeat the chain.
-    router.use('*', jwtAuth());
+  // Every /v1/members route requires authentication. Mount once at
+  // the router root so each handler does not repeat the chain.
+  router.use('*', jwtAuth());
 
-    // Sprint 12 / Slice 12.14 (Epic B4.4) — per-studio burst cap.
-    router.use(
-        '*',
-        studioRateLimit() as Parameters<typeof router.use>[1],
-    );
+  // Sprint 12 / Slice 12.14 (Epic B4.4) — per-studio burst cap.
+  router.use('*', studioRateLimit() as Parameters<typeof router.use>[1]);
 
-    /* ------------------------------ GET /me ------------------------ */
-    router.get('/me', async (c) => {
-        traceOperation(c, 'members.get-mine');
-        const claims = c.get('authClaims');
-        if (claims === undefined) {
-            throw new Error('authClaims unexpectedly missing after jwtAuth');
-        }
-        const profile = await deps.getProfile(claims.userId);
-        return c.json(profile as Record<string, unknown>, 200);
-    });
+  /* ------------------------------ GET /me ------------------------ */
+  router.get('/me', async (c) => {
+    traceOperation(c, 'members.get-mine');
+    const claims = c.get('authClaims');
+    if (claims === undefined) {
+      throw new Error('authClaims unexpectedly missing after jwtAuth');
+    }
+    const profile = await deps.getProfile(claims.userId);
+    return c.json(profile as Record<string, unknown>, 200);
+  });
 
-    /* ------------------------------ PATCH /me ---------------------- */
-    router.patch(
-        '/me',
-        projectUserIdFromClaims(),
-        zValidator('json', UpdateProfileRequestSchema),
-        ...(idem ? [idempotency(idem)] : []),
-        async (c) => {
-            traceOperation(c, 'members.update-mine');
-            const claims = c.get('authClaims');
-            if (claims === undefined) {
-                throw new Error(
-                    'authClaims unexpectedly missing after jwtAuth',
-                );
-            }
-            const patch = readValidated<UpdateProfileRequest>(c, 'json');
-            const updated = await deps.updateProfile(claims.userId, patch);
-            return c.json(updated as Record<string, unknown>, 200);
-        },
-    );
+  /* ------------------------------ PATCH /me ---------------------- */
+  router.patch(
+    '/me',
+    projectUserIdFromClaims(),
+    zValidator('json', UpdateProfileRequestSchema),
+    ...(idem ? [idempotency(idem)] : []),
+    async (c) => {
+      traceOperation(c, 'members.update-mine');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const patch = readValidated<UpdateProfileRequest>(c, 'json');
+      const updated = await deps.updateProfile(claims.userId, patch);
+      return c.json(updated as Record<string, unknown>, 200);
+    },
+  );
 
-    /* ------------------------------ PATCH /me/consents ------------- */
-    router.patch(
-        '/me/consents',
-        projectUserIdFromClaims(),
-        zValidator('json', UpdateConsentsRequestSchema),
-        ...(idem ? [idempotency(idem)] : []),
-        async (c) => {
-            traceOperation(c, 'members.update-consents');
-            const claims = c.get('authClaims');
-            if (claims === undefined) {
-                throw new Error(
-                    'authClaims unexpectedly missing after jwtAuth',
-                );
-            }
-            const patch = readValidated<UpdateConsentsRequest>(c, 'json');
-            const consents = await deps.updateConsents(claims.userId, patch);
-            return c.json(consents as Record<string, unknown>, 200);
-        },
-    );
+  /* ------------------------------ PATCH /me/consents ------------- */
+  router.patch(
+    '/me/consents',
+    projectUserIdFromClaims(),
+    zValidator('json', UpdateConsentsRequestSchema),
+    ...(idem ? [idempotency(idem)] : []),
+    async (c) => {
+      traceOperation(c, 'members.update-consents');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const patch = readValidated<UpdateConsentsRequest>(c, 'json');
+      const consents = await deps.updateConsents(claims.userId, patch);
+      return c.json(consents as Record<string, unknown>, 200);
+    },
+  );
 
-    /* ------------------------------ POST /me/export ---------------- */
-    router.post(
-        '/me/export',
-        projectUserIdFromClaims(),
-        ...(idem ? [idempotency(idem)] : []),
-        async (c) => {
-            traceOperation(c, 'members.export-mine');
-            const claims = c.get('authClaims');
-            if (claims === undefined) {
-                throw new Error(
-                    'authClaims unexpectedly missing after jwtAuth',
-                );
-            }
-            const { jobId } = await deps.enqueueExport(claims.userId);
-            // 202 Accepted — ZIP assembly runs out-of-band (Req 4.2).
-            return c.json({ jobId }, 202);
-        },
-    );
+  /* ------------------------------ POST /me/export ---------------- */
+  router.post(
+    '/me/export',
+    projectUserIdFromClaims(),
+    ...(idem ? [idempotency(idem)] : []),
+    async (c) => {
+      traceOperation(c, 'members.export-mine');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const { jobId } = await deps.enqueueExport(claims.userId);
+      // 202 Accepted — ZIP assembly runs out-of-band (Req 4.2).
+      return c.json({ jobId }, 202);
+    },
+  );
 
-    /* ------------------------------ GET / (admin / coach) ---------- */
-    router.get(
-        '/',
-        requireRole('admin', 'coach'),
-        zValidator('query', ListMembersQuerySchema),
-        async (c) => {
-            traceOperation(c, 'members.list-by-studio');
-            const claims = c.get('authClaims');
-            if (claims === undefined) {
-                throw new Error(
-                    'authClaims unexpectedly missing after jwtAuth',
-                );
-            }
-            if (claims.role !== 'admin' && claims.role !== 'coach') {
-                // requireRole already returned 403; this is defense in
-                // depth in case the middleware is rearranged.
-                return problem403(
-                    c,
-                    'listing studio members requires admin or coach role',
-                );
-            }
-            const query = readValidated<ListMembersQuery>(c, 'query');
-            const page = await deps.listMembersByStudio(
-                claims.studioId,
-                claims.role,
-                query,
-            );
-            return c.json(page as unknown as Record<string, unknown>, 200);
-        },
-    );
+  /* ------------------------------ GET / (admin / coach) ---------- */
+  router.get(
+    '/',
+    requireRole('admin', 'coach'),
+    zValidator('query', ListMembersQuerySchema),
+    async (c) => {
+      traceOperation(c, 'members.list-by-studio');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      if (claims.role !== 'admin' && claims.role !== 'coach') {
+        // requireRole already returned 403; this is defense in
+        // depth in case the middleware is rearranged.
+        return problem403(c, 'listing studio members requires admin or coach role');
+      }
+      const query = readValidated<ListMembersQuery>(c, 'query');
+      const page = await deps.listMembersByStudio(claims.studioId, claims.role, query);
+      return c.json(page as unknown as Record<string, unknown>, 200);
+    },
+  );
 
-    return router;
+  return router;
 }

@@ -64,46 +64,42 @@ const PROBLEM_JSON = 'application/problem+json';
 
 /** Options accepted by {@link concurrencyLimit}. */
 export interface ConcurrencyLimitOptions {
-    /** Maximum simultaneous in-flight requests per user. Default 10. */
-    readonly limit?: number;
-    /** Counter TTL in seconds. Default 30. */
-    readonly ttlSec?: number;
-    /**
-     * Upstash Redis client.
-     *
-     * Optional: when omitted, the middleware reads
-     * `REDIS_URL`/`REDIS_TOKEN` from `c.env` at first invocation and
-     * lazily builds the client via the Upstash SDK. The same client
-     * instance is then reused for the lifetime of the Worker
-     * isolate (Cloudflare runtime caches the closure).
-     *
-     * Tests should always inject a fake here so they do not pull in
-     * `@upstash/redis` indirectly.
-     */
-    readonly redis?: Redis;
+  /** Maximum simultaneous in-flight requests per user. Default 10. */
+  readonly limit?: number;
+  /** Counter TTL in seconds. Default 30. */
+  readonly ttlSec?: number;
+  /**
+   * Upstash Redis client.
+   *
+   * Optional: when omitted, the middleware reads
+   * `REDIS_URL`/`REDIS_TOKEN` from `c.env` at first invocation and
+   * lazily builds the client via the Upstash SDK. The same client
+   * instance is then reused for the lifetime of the Worker
+   * isolate (Cloudflare runtime caches the closure).
+   *
+   * Tests should always inject a fake here so they do not pull in
+   * `@upstash/redis` indirectly.
+   */
+  readonly redis?: Redis;
 }
 
 /** Minimal env shape this middleware reads when `redis` is not injected. */
 interface ConcurrencyEnv {
-    readonly REDIS_URL?: string;
-    readonly REDIS_TOKEN?: string;
-    /**
-     * Sprint 12 / Slice 12.14 — read by the dev bypass below. The
-     * middleware skips Redis I/O entirely when `ENVIRONMENT === 'dev'`
-     * to mirror the rate-limit and turnstile middlewares.
-     */
-    readonly ENVIRONMENT?: string;
+  readonly REDIS_URL?: string;
+  readonly REDIS_TOKEN?: string;
+  /**
+   * Sprint 12 / Slice 12.14 — read by the dev bypass below. The
+   * middleware skips Redis I/O entirely when `ENVIRONMENT === 'dev'`
+   * to mirror the rate-limit and turnstile middlewares.
+   */
+  readonly ENVIRONMENT?: string;
 }
 
 /** Minimal context shape this middleware reads. */
 interface ConcurrencyContext {
-    readonly env: ConcurrencyEnv;
-    get(key: string): unknown;
-    body(
-        data: string,
-        status: number,
-        headers: Record<string, string>,
-    ): Response;
+  readonly env: ConcurrencyEnv;
+  get(key: string): unknown;
+  body(data: string, status: number, headers: Record<string, string>): Response;
 }
 
 /** Next handler — Hono's `Promise<void>` shape. */
@@ -111,8 +107,8 @@ type ConcurrencyNext = () => Promise<void>;
 
 /** The middleware function signature. */
 export type ConcurrencyLimitMiddleware = (
-    c: ConcurrencyContext,
-    next: ConcurrencyNext,
+  c: ConcurrencyContext,
+  next: ConcurrencyNext,
 ) => Promise<Response | undefined>;
 
 /* ------------------------------------------------------------------ */
@@ -130,31 +126,24 @@ export type ConcurrencyLimitMiddleware = (
 const redisCache = new Map<string, Redis>();
 
 async function getCachedRedis(env: ConcurrencyEnv): Promise<Redis> {
-    const url = env.REDIS_URL;
-    const token = env.REDIS_TOKEN;
-    if (
-        url === undefined ||
-        url === '' ||
-        token === undefined ||
-        token === ''
-    ) {
-        throw new Error(
-            'concurrencyLimit: REDIS_URL/REDIS_TOKEN missing on env',
-        );
-    }
-    const key = `${url}|${token}`;
-    let client = redisCache.get(key);
-    if (client === undefined) {
-        const { Redis: UpstashRedis } = await import('@upstash/redis');
-        client = new UpstashRedis({ url, token });
-        redisCache.set(key, client);
-    }
-    return client;
+  const url = env.REDIS_URL;
+  const token = env.REDIS_TOKEN;
+  if (url === undefined || url === '' || token === undefined || token === '') {
+    throw new Error('concurrencyLimit: REDIS_URL/REDIS_TOKEN missing on env');
+  }
+  const key = `${url}|${token}`;
+  let client = redisCache.get(key);
+  if (client === undefined) {
+    const { Redis: UpstashRedis } = await import('@upstash/redis');
+    client = new UpstashRedis({ url, token });
+    redisCache.set(key, client);
+  }
+  return client;
 }
 
 /** Test seam — flush the per-isolate Redis cache. */
 export function __resetConcurrencyLimitRedisCache(): void {
-    redisCache.clear();
+  redisCache.clear();
 }
 
 /**
@@ -171,113 +160,109 @@ export function __resetConcurrencyLimitRedisCache(): void {
  * Mount AFTER `jwtAuth()` so `authClaims.userId` is set. Anonymous
  * requests skip this middleware (they have no userId to key on).
  */
-export function concurrencyLimit(
-    opts: ConcurrencyLimitOptions = {},
-): ConcurrencyLimitMiddleware {
-    const limit = opts.limit ?? DEFAULT_CONCURRENCY_LIMIT;
-    const ttlSec = opts.ttlSec ?? DEFAULT_TTL_SEC;
-    const injectedRedis = opts.redis;
+export function concurrencyLimit(opts: ConcurrencyLimitOptions = {}): ConcurrencyLimitMiddleware {
+  const limit = opts.limit ?? DEFAULT_CONCURRENCY_LIMIT;
+  const ttlSec = opts.ttlSec ?? DEFAULT_TTL_SEC;
+  const injectedRedis = opts.redis;
 
-    return async (c, next) => {
-        // Sprint 12 / Slice 12.14 — dev bypass, mirrors the
-        // pattern from `worker.ts#guardLimiter` and
-        // `middleware/turnstile.ts`. Local dev iterations should
-        // not require a real Upstash binding; CI integration tests
-        // that point `REDIS_URL` at `.invalid` would otherwise
-        // hang on the first INCR.
-        const env = c.env;
-        if (env.ENVIRONMENT === 'dev') {
-            await next();
-            return undefined;
-        }
+  return async (c, next) => {
+    // Sprint 12 / Slice 12.14 — dev bypass, mirrors the
+    // pattern from `worker.ts#guardLimiter` and
+    // `middleware/turnstile.ts`. Local dev iterations should
+    // not require a real Upstash binding; CI integration tests
+    // that point `REDIS_URL` at `.invalid` would otherwise
+    // hang on the first INCR.
+    const env = c.env;
+    if (env.ENVIRONMENT === 'dev') {
+      await next();
+      return undefined;
+    }
 
-        const claims = c.get('authClaims');
-        const userId =
-            typeof claims === 'object' &&
-                claims !== null &&
-                typeof (claims as { userId?: unknown }).userId === 'string'
-                ? ((claims as { userId: string }).userId)
-                : undefined;
+    const claims = c.get('authClaims');
+    const userId =
+      typeof claims === 'object' &&
+      claims !== null &&
+      typeof (claims as { userId?: unknown }).userId === 'string'
+        ? (claims as { userId: string }).userId
+        : undefined;
 
-        // Anonymous requests skip the per-user cap — they have no
-        // identity to key on. The IP-based rate-limit handles them.
-        if (userId === undefined) {
-            await next();
-            return undefined;
-        }
+    // Anonymous requests skip the per-user cap — they have no
+    // identity to key on. The IP-based rate-limit handles them.
+    if (userId === undefined) {
+      await next();
+      return undefined;
+    }
 
-        let redis: Redis;
-        try {
-            redis = injectedRedis ?? (await getCachedRedis(c.env));
-        } catch {
-            // Misconfiguration (REDIS_URL missing). Fail-open —
-            // the sliding-window limiter is the primary defence.
-            await next();
-            return undefined;
-        }
+    let redis: Redis;
+    try {
+      redis = injectedRedis ?? (await getCachedRedis(c.env));
+    } catch {
+      // Misconfiguration (REDIS_URL missing). Fail-open —
+      // the sliding-window limiter is the primary defence.
+      await next();
+      return undefined;
+    }
 
-        const key = `${CONCURRENCY_BUCKET_PREFIX}:${userId}`;
-        let count: number;
-        try {
-            // Atomic increment. The post-increment value tells us
-            // immediately whether we are over the cap.
-            count = await redis.incr(key);
-        } catch {
-            // Upstash unreachable — fail-open. The sliding-window
-            // limiter (with its own fail-open) is the primary
-            // defence; the concurrency cap is defence in depth.
-            await next();
-            return undefined;
-        }
+    const key = `${CONCURRENCY_BUCKET_PREFIX}:${userId}`;
+    let count: number;
+    try {
+      // Atomic increment. The post-increment value tells us
+      // immediately whether we are over the cap.
+      count = await redis.incr(key);
+    } catch {
+      // Upstash unreachable — fail-open. The sliding-window
+      // limiter (with its own fail-open) is the primary
+      // defence; the concurrency cap is defence in depth.
+      await next();
+      return undefined;
+    }
 
-        // Best-effort expire so an orphaned counter eventually self
-        // heals. We do not await this — a transient EXPIRE failure
-        // is not a request-level concern, and it would inflate
-        // p99 latency on every request.
-        if (count === 1) {
-            // Only set the TTL the first time we see the key in
-            // this window. Subsequent INCR calls preserve the
-            // existing TTL because Redis's INCR does not reset it.
-            redis.expire(key, ttlSec).catch(() => {
-                // Swallowed — see comment above.
-            });
-        }
+    // Best-effort expire so an orphaned counter eventually self
+    // heals. We do not await this — a transient EXPIRE failure
+    // is not a request-level concern, and it would inflate
+    // p99 latency on every request.
+    if (count === 1) {
+      // Only set the TTL the first time we see the key in
+      // this window. Subsequent INCR calls preserve the
+      // existing TTL because Redis's INCR does not reset it.
+      redis.expire(key, ttlSec).catch(() => {
+        // Swallowed — see comment above.
+      });
+    }
 
-        if (count > limit) {
-            // Over the cap. Decrement back so we do not "consume" a
-            // slot for a request we are about to refuse, and emit
-            // 429 Problem Details. Decrement is best-effort — if
-            // it fails the counter will self-heal via the TTL.
-            redis.decr(key).catch(() => undefined);
+    if (count > limit) {
+      // Over the cap. Decrement back so we do not "consume" a
+      // slot for a request we are about to refuse, and emit
+      // 429 Problem Details. Decrement is best-effort — if
+      // it fails the counter will self-heal via the TTL.
+      redis.decr(key).catch(() => undefined);
 
-            const traceId =
-                typeof c.get('traceId') === 'string'
-                    ? (c.get('traceId') as string)
-                    : 'unknown';
+      const traceId =
+        typeof c.get('traceId') === 'string' ? (c.get('traceId') as string) : 'unknown';
 
-            const body = JSON.stringify({
-                type: 'about:blank',
-                title: 'Too Many Requests',
-                status: 429,
-                code: 'concurrency_limit_exceeded',
-                detail: `concurrent request budget (${String(limit)}) exhausted; retry after current request completes`,
-                traceId,
-            });
+      const body = JSON.stringify({
+        type: 'about:blank',
+        title: 'Too Many Requests',
+        status: 429,
+        code: 'concurrency_limit_exceeded',
+        detail: `concurrent request budget (${String(limit)}) exhausted; retry after current request completes`,
+        traceId,
+      });
 
-            return c.body(body, 429, {
-                'content-type': PROBLEM_JSON,
-                'retry-after': '1',
-            });
-        }
+      return c.body(body, 429, {
+        'content-type': PROBLEM_JSON,
+        'retry-after': '1',
+      });
+    }
 
-        // Within budget. Run the request and ALWAYS decrement on
-        // the way out so the counter reflects in-flight reality.
-        try {
-            await next();
-        } finally {
-            redis.decr(key).catch(() => undefined);
-        }
+    // Within budget. Run the request and ALWAYS decrement on
+    // the way out so the counter reflects in-flight reality.
+    try {
+      await next();
+    } finally {
+      redis.decr(key).catch(() => undefined);
+    }
 
-        return undefined;
-    };
+    return undefined;
+  };
 }

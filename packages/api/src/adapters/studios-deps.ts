@@ -13,11 +13,7 @@
  */
 
 import { getOrCreateDbHttp } from './deps-cache.js';
-import {
-    createDrizzleStudioRepo,
-    type StudioRepo,
-} from './studios-repo-drizzle.js';
-
+import { createDrizzleStudioRepo, type StudioRepo } from './studios-repo-drizzle.js';
 
 import type { StudiosDeps } from '../routes/studios.js';
 import type { AthlyaBindings } from '../types.js';
@@ -29,17 +25,17 @@ import type { AthlyaBindings } from '../types.js';
  * lightweight repo wrapper fresh per call.
  */
 export function buildStudiosDeps(env: AthlyaBindings): StudiosDeps {
-    return {
-        async getStudio(studioId) {
-            const db = getOrCreateDbHttp(env.DB_URL);
-            const repo: StudioRepo = createDrizzleStudioRepo(db);
-            return repo.getById(studioId);
-        },
+  return {
+    async getStudio(studioId) {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const repo: StudioRepo = createDrizzleStudioRepo(db);
+      return repo.getById(studioId);
+    },
 
-        async updateStudio(studioId, patch) {
-            const db = getOrCreateDbHttp(env.DB_URL);
-            const repo: StudioRepo = createDrizzleStudioRepo(db);
-            return repo.updateById(studioId, patch);
-        },
-    };
+    async updateStudio(studioId, patch) {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const repo: StudioRepo = createDrizzleStudioRepo(db);
+      return repo.updateById(studioId, patch);
+    },
+  };
 }

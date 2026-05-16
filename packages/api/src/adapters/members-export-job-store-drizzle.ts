@@ -30,127 +30,95 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { withConnectionRetry } from './db-retry.js';
 
 import type { AthlyaDbAny } from '@athlya/db/client';
-import type {
-    ExportJobRecord,
-    ExportJobStore,
-} from '@athlya/members';
+import type { ExportJobRecord, ExportJobStore } from '@athlya/members';
 
 /**
  * Factory — produces an `ExportJobStore` bound to the supplied
  * Drizzle instance.
  */
 export function createDrizzleExportJobStore(db: AthlyaDbAny): ExportJobStore {
-    return {
-        async create(jobId, userId, requestedAt) {
-            await withConnectionRetry(async () => {
-                await db.insert(exportJobs).values({
-                    id: jobId,
-                    userId,
-                    status: 'pending',
-                    requestedAt,
-                });
-            });
-        },
+  return {
+    async create(jobId, userId, requestedAt) {
+      await withConnectionRetry(async () => {
+        await db.insert(exportJobs).values({
+          id: jobId,
+          userId,
+          status: 'pending',
+          requestedAt,
+        });
+      });
+    },
 
-        async markRunning(jobId, startedAt) {
-            await withConnectionRetry(async () => {
-                await db
-                    .update(exportJobs)
-                    .set({ status: 'running', startedAt })
-                    .where(
-                        and(
-                            eq(exportJobs.id, jobId),
-                            eq(exportJobs.status, 'pending'),
-                        ),
-                    );
-            });
-        },
+    async markRunning(jobId, startedAt) {
+      await withConnectionRetry(async () => {
+        await db
+          .update(exportJobs)
+          .set({ status: 'running', startedAt })
+          .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'pending')));
+      });
+    },
 
-        async markCompleted(
-            jobId,
+    async markCompleted(jobId, completedAt, downloadUrl, downloadExpiresAt) {
+      await withConnectionRetry(async () => {
+        await db
+          .update(exportJobs)
+          .set({
+            status: 'completed',
             completedAt,
             downloadUrl,
             downloadExpiresAt,
-        ) {
-            await withConnectionRetry(async () => {
-                await db
-                    .update(exportJobs)
-                    .set({
-                        status: 'completed',
-                        completedAt,
-                        downloadUrl,
-                        downloadExpiresAt,
-                    })
-                    .where(
-                        and(
-                            eq(exportJobs.id, jobId),
-                            eq(exportJobs.status, 'running'),
-                        ),
-                    );
-            });
-        },
+          })
+          .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'running')));
+      });
+    },
 
-        async markFailed(jobId, error) {
-            await withConnectionRetry(async () => {
-                await db
-                    .update(exportJobs)
-                    .set({ status: 'failed', error })
-                    .where(
-                        and(
-                            eq(exportJobs.id, jobId),
-                            inArray(exportJobs.status, ['pending', 'running']),
-                        ),
-                    );
-            });
-        },
+    async markFailed(jobId, error) {
+      await withConnectionRetry(async () => {
+        await db
+          .update(exportJobs)
+          .set({ status: 'failed', error })
+          .where(and(eq(exportJobs.id, jobId), inArray(exportJobs.status, ['pending', 'running'])));
+      });
+    },
 
-        async get(jobId) {
-            const rows = await withConnectionRetry(() =>
-                db
-                    .select()
-                    .from(exportJobs)
-                    .where(eq(exportJobs.id, jobId))
-                    .limit(1),
-            );
-            const row = rows[0];
-            return row === undefined ? null : toExportJobRecord(row);
-        },
+    async get(jobId) {
+      const rows = await withConnectionRetry(() =>
+        db.select().from(exportJobs).where(eq(exportJobs.id, jobId)).limit(1),
+      );
+      const row = rows[0];
+      return row === undefined ? null : toExportJobRecord(row);
+    },
 
-        async findActiveByUser(userId) {
-            const rows = await withConnectionRetry(() =>
-                db
-                    .select({ id: exportJobs.id })
-                    .from(exportJobs)
-                    .where(
-                        and(
-                            eq(exportJobs.userId, userId),
-                            inArray(exportJobs.status, ['pending', 'running']),
-                        ),
-                    )
-                    .orderBy(desc(exportJobs.requestedAt))
-                    .limit(1),
-            );
-            return rows[0]?.id ?? null;
-        },
-    };
+    async findActiveByUser(userId) {
+      const rows = await withConnectionRetry(() =>
+        db
+          .select({ id: exportJobs.id })
+          .from(exportJobs)
+          .where(
+            and(eq(exportJobs.userId, userId), inArray(exportJobs.status, ['pending', 'running'])),
+          )
+          .orderBy(desc(exportJobs.requestedAt))
+          .limit(1),
+      );
+      return rows[0]?.id ?? null;
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function toExportJobRecord(
-    row: typeof exportJobs.$inferSelect,
-): ExportJobRecord {
-    return {
-        id: row.id,
-        userId: row.userId,
-        status: row.status,
-        requestedAt: row.requestedAt.toISOString(),
-        startedAt: row.startedAt?.toISOString() ?? null,
-        completedAt: row.completedAt?.toISOString() ?? null,
-        error: row.error,
-        downloadUrl: row.downloadUrl,
-        downloadExpiresAt: row.downloadExpiresAt?.toISOString() ?? null,
-    };
+function toExportJobRecord(row: typeof exportJobs.$inferSelect): ExportJobRecord {
+  return {
+    id: row.id,
+    userId: row.userId,
+    status: row.status,
+    requestedAt: row.requestedAt.toISOString(),
+    startedAt: row.startedAt?.toISOString() ?? null,
+    completedAt: row.completedAt?.toISOString() ?? null,
+    error: row.error,
+    downloadUrl: row.downloadUrl,
+    downloadExpiresAt: row.downloadExpiresAt?.toISOString() ?? null,
+  };
 }

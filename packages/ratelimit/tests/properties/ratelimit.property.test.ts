@@ -76,15 +76,15 @@ const RUN_OPTS = { numRuns: 200, seed: 0x4a1b2c3d } as const;
  * failing run shrinks in seconds.
  */
 const monotonicTimestampsArb = fc
-    .array(fc.integer({ min: 0, max: 10_000 }), { minLength: 1, maxLength: 40 })
-    .map((arr) => [...arr].sort((a, b) => a - b));
+  .array(fc.integer({ min: 0, max: 10_000 }), { minLength: 1, maxLength: 40 })
+  .map((arr) => [...arr].sort((a, b) => a - b));
 
 /** Record of a single decision — kept in replay order so we can slice
  *  by timestamp when checking the sliding-window invariant. */
 type Record = {
-    ts: number;
-    kind: 'allow' | 'deny';
-    retryAfterSec: number | null;
+  ts: number;
+  kind: 'allow' | 'deny';
+  retryAfterSec: number | null;
 };
 
 /**
@@ -94,64 +94,60 @@ type Record = {
  * fast-check run independent and the seed reproducible.
  */
 async function replay(timestamps: readonly number[]): Promise<Record[]> {
-    const fake = new FakeRedis();
-    const deps = makeRateLimiterDeps(fake);
-    const log: Record[] = [];
+  const fake = new FakeRedis();
+  const deps = makeRateLimiterDeps(fake);
+  const log: Record[] = [];
 
-    for (const ts of timestamps) {
-        fake.nowMs = ts;
-        const decision = await rateLimitSlidingWindow(deps, KEY, LIMIT, WINDOW_SEC);
-        log.push({
-            ts,
-            kind: decision.kind,
-            retryAfterSec: decision.kind === 'deny' ? decision.retryAfterSec : null,
-        });
-    }
+  for (const ts of timestamps) {
+    fake.nowMs = ts;
+    const decision = await rateLimitSlidingWindow(deps, KEY, LIMIT, WINDOW_SEC);
+    log.push({
+      ts,
+      kind: decision.kind,
+      retryAfterSec: decision.kind === 'deny' ? decision.retryAfterSec : null,
+    });
+  }
 
-    return log;
+  return log;
 }
 
 describe('rateLimitSlidingWindow — Property 8 (Sliding-Window Exactness)', () => {
-    it('never allows more than LIMIT requests in any window of size WINDOW_SEC', async () => {
-        await fc.assert(
-            fc.asyncProperty(monotonicTimestampsArb, async (timestamps) => {
-                const log = await replay(timestamps);
-                const allowTimestamps = log.filter((r) => r.kind === 'allow').map((r) => r.ts);
+  it('never allows more than LIMIT requests in any window of size WINDOW_SEC', async () => {
+    await fc.assert(
+      fc.asyncProperty(monotonicTimestampsArb, async (timestamps) => {
+        const log = await replay(timestamps);
+        const allowTimestamps = log.filter((r) => r.kind === 'allow').map((r) => r.ts);
 
-                // For every query time t_i in the replayed sequence,
-                // count allow timestamps that fall in (t_i - windowMs, t_i].
-                // The semi-open left bound matches Req 15.1 exactly.
-                for (const t of timestamps) {
-                    const windowStart = t - WINDOW_MS;
-                    const inWindow = allowTimestamps.filter(
-                        (a) => a > windowStart && a <= t,
-                    ).length;
+        // For every query time t_i in the replayed sequence,
+        // count allow timestamps that fall in (t_i - windowMs, t_i].
+        // The semi-open left bound matches Req 15.1 exactly.
+        for (const t of timestamps) {
+          const windowStart = t - WINDOW_MS;
+          const inWindow = allowTimestamps.filter((a) => a > windowStart && a <= t).length;
 
-                    if (inWindow > LIMIT) {
-                        // Fail with enough context to debug the seed.
-                        return false;
-                    }
-                }
-                return true;
-            }),
-            RUN_OPTS,
+          if (inWindow > LIMIT) {
+            // Fail with enough context to debug the seed.
+            return false;
+          }
+        }
+        return true;
+      }),
+      RUN_OPTS,
+    );
+  });
+
+  it('always reports retryAfterSec in [1, WINDOW_SEC] when denying', async () => {
+    await fc.assert(
+      fc.asyncProperty(monotonicTimestampsArb, async (timestamps) => {
+        const log = await replay(timestamps);
+        const deniesOutOfRange = log.filter(
+          (r) =>
+            r.kind === 'deny' &&
+            (r.retryAfterSec === null || r.retryAfterSec < 1 || r.retryAfterSec > WINDOW_SEC),
         );
-    });
-
-    it('always reports retryAfterSec in [1, WINDOW_SEC] when denying', async () => {
-        await fc.assert(
-            fc.asyncProperty(monotonicTimestampsArb, async (timestamps) => {
-                const log = await replay(timestamps);
-                const deniesOutOfRange = log.filter(
-                    (r) =>
-                        r.kind === 'deny' &&
-                        (r.retryAfterSec === null ||
-                            r.retryAfterSec < 1 ||
-                            r.retryAfterSec > WINDOW_SEC),
-                );
-                return deniesOutOfRange.length === 0;
-            }),
-            RUN_OPTS,
-        );
-    });
+        return deniesOutOfRange.length === 0;
+      }),
+      RUN_OPTS,
+    );
+  });
 });

@@ -85,20 +85,20 @@ import type { AthlyaDb, AthlyaTx, TenantClaims } from '@athlya/db';
  * dedicated `type` URI with tenant-specific guidance).
  */
 export class MissingAuthClaimsError extends Error {
-    /**
-     * Stable machine-readable identifier. Mirrors the `code` pattern
-     * used across `@athlya/db` errors so the Problem Details mapper in
-     * task 8.5 can reuse one lookup table for every error class in the
-     * stack.
-     */
-    public readonly code = 'missing_auth_claims';
+  /**
+   * Stable machine-readable identifier. Mirrors the `code` pattern
+   * used across `@athlya/db` errors so the Problem Details mapper in
+   * task 8.5 can reuse one lookup table for every error class in the
+   * stack.
+   */
+  public readonly code = 'missing_auth_claims';
 
-    public constructor(
-        message = 'authClaims not present on context — ensure the auth middleware runs first',
-    ) {
-        super(message);
-        this.name = 'MissingAuthClaimsError';
-    }
+  public constructor(
+    message = 'authClaims not present on context — ensure the auth middleware runs first',
+  ) {
+    super(message);
+    this.name = 'MissingAuthClaimsError';
+  }
 }
 
 /**
@@ -118,12 +118,12 @@ export class MissingAuthClaimsError extends Error {
  * without forcing the whole stack to agree on a single class.
  */
 export class TenantResourceNotFoundError extends Error {
-    public readonly code = 'not_found';
+  public readonly code = 'not_found';
 
-    public constructor(message = 'resource not found') {
-        super(message);
-        this.name = 'TenantResourceNotFoundError';
-    }
+  public constructor(message = 'resource not found') {
+    super(message);
+    this.name = 'TenantResourceNotFoundError';
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -141,7 +141,7 @@ export class TenantResourceNotFoundError extends Error {
  * workers that don't have a Redis binding, etc.
  */
 export interface TenantMiddlewareEnv {
-    readonly DB_URL: string;
+  readonly DB_URL: string;
 }
 
 /**
@@ -162,10 +162,10 @@ export interface TenantMiddlewareEnv {
  * tenant-scoped helper anyway.
  */
 export interface TenantMiddlewareContext {
-    /** Reads a variable set by upstream middleware. */
-    get(key: string): unknown;
-    /** Cloudflare Worker `env` bindings narrowed to what we need. */
-    readonly env: TenantMiddlewareEnv;
+  /** Reads a variable set by upstream middleware. */
+  get(key: string): unknown;
+  /** Cloudflare Worker `env` bindings narrowed to what we need. */
+  readonly env: TenantMiddlewareEnv;
 }
 
 /* ------------------------------------------------------------------ */
@@ -201,14 +201,14 @@ const dbPoolCache = new Map<string, AthlyaDb>();
  * every request.
  */
 function getCachedDb(env: TenantMiddlewareEnv): AthlyaDb {
-    const url = env.DB_URL;
-    const cached = dbPoolCache.get(url);
-    if (cached !== undefined) {
-        return cached;
-    }
-    const db = createDb(url);
-    dbPoolCache.set(url, db);
-    return db;
+  const url = env.DB_URL;
+  const cached = dbPoolCache.get(url);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const db = createDb(url);
+  dbPoolCache.set(url, db);
+  return db;
 }
 
 /**
@@ -219,7 +219,7 @@ function getCachedDb(env: TenantMiddlewareEnv): AthlyaDb {
  * calling it; production code never needs to drop the pool.
  */
 export function __resetTenantDbCache(): void {
-    dbPoolCache.clear();
+  dbPoolCache.clear();
 }
 
 /* ------------------------------------------------------------------ */
@@ -251,21 +251,21 @@ export function __resetTenantDbCache(): void {
  *   driver failure, business error thrown by `fn`).
  */
 export async function withTenantTx<T>(
-    c: TenantMiddlewareContext,
-    fn: (tx: AthlyaTx) => Promise<T>,
+  c: TenantMiddlewareContext,
+  fn: (tx: AthlyaTx) => Promise<T>,
 ): Promise<T> {
-    const rawClaims = c.get('authClaims');
-    if (rawClaims === undefined || rawClaims === null) {
-        throw new MissingAuthClaimsError();
-    }
+  const rawClaims = c.get('authClaims');
+  if (rawClaims === undefined || rawClaims === null) {
+    throw new MissingAuthClaimsError();
+  }
 
-    const db = getCachedDb(c.env);
+  const db = getCachedDb(c.env);
 
-    // The cast mirrors the contract between this module and task 8.2:
-    // the auth middleware is the sole writer of `authClaims` and only
-    // ever stores a validated `TenantClaims`. `withTenant` revalidates
-    // the shape anyway (defense in depth), so we do not re-check here.
-    return withTenant(db, rawClaims as TenantClaims, fn);
+  // The cast mirrors the contract between this module and task 8.2:
+  // the auth middleware is the sole writer of `authClaims` and only
+  // ever stores a validated `TenantClaims`. `withTenant` revalidates
+  // the shape anyway (defense in depth), so we do not re-check here.
+  return withTenant(db, rawClaims as TenantClaims, fn);
 }
 
 /* ------------------------------------------------------------------ */
@@ -294,12 +294,12 @@ export async function withTenantTx<T>(
  * @throws {@link TenantResourceNotFoundError} when `rows.length === 0`.
  */
 export function notFoundOnEmpty<T>(rows: readonly T[], detail?: string): T {
-    if (rows.length === 0) {
-        throw new TenantResourceNotFoundError(detail ?? 'resource not found');
-    }
-    // Safe: length > 0 implies rows[0] is defined. The `as T` cast is
-    // required under `noUncheckedIndexedAccess` — see `tsconfig/base.json`.
-    return rows[0] as T;
+  if (rows.length === 0) {
+    throw new TenantResourceNotFoundError(detail ?? 'resource not found');
+  }
+  // Safe: length > 0 implies rows[0] is defined. The `as T` cast is
+  // required under `noUncheckedIndexedAccess` — see `tsconfig/base.json`.
+  return rows[0] as T;
 }
 
 /* ------------------------------------------------------------------ */
@@ -316,16 +316,16 @@ export function notFoundOnEmpty<T>(rows: readonly T[], detail?: string): T {
  * will merge these fields into the final response.
  */
 export interface TenantProblemBody {
-    /** RFC 7807 `type` URI. Defaults to `about:blank` per spec. */
-    readonly type: string;
-    /** Short human-readable title — the HTTP status phrase. */
-    readonly title: string;
-    /** Numeric HTTP status code, duplicated in the body per RFC 7807. */
-    readonly status: number;
-    /** Optional human-readable detail. */
-    readonly detail?: string;
-    /** Athlya-specific machine-readable identifier. */
-    readonly code?: string;
+  /** RFC 7807 `type` URI. Defaults to `about:blank` per spec. */
+  readonly type: string;
+  /** Short human-readable title — the HTTP status phrase. */
+  readonly title: string;
+  /** Numeric HTTP status code, duplicated in the body per RFC 7807. */
+  readonly status: number;
+  /** Optional human-readable detail. */
+  readonly detail?: string;
+  /** Athlya-specific machine-readable identifier. */
+  readonly code?: string;
 }
 
 /**
@@ -336,8 +336,8 @@ export interface TenantProblemBody {
  * `c.json(body, status)` without de-structuring twice.
  */
 export interface TenantProblemResponse {
-    readonly status: number;
-    readonly body: TenantProblemBody;
+  readonly status: number;
+  readonly body: TenantProblemBody;
 }
 
 /**
@@ -359,17 +359,17 @@ export interface TenantProblemResponse {
  * any `unknown` without side effects.
  */
 export function tenantErrorToProblem(err: unknown): TenantProblemResponse | null {
-    if (err instanceof TenantResourceNotFoundError) {
-        return {
-            status: 404,
-            body: {
-                type: 'about:blank',
-                title: 'Not Found',
-                status: 404,
-                detail: err.message,
-                code: err.code,
-            },
-        };
-    }
-    return null;
+  if (err instanceof TenantResourceNotFoundError) {
+    return {
+      status: 404,
+      body: {
+        type: 'about:blank',
+        title: 'Not Found',
+        status: 404,
+        detail: err.message,
+        code: err.code,
+      },
+    };
+  }
+  return null;
 }

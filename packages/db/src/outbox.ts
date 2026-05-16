@@ -54,18 +54,17 @@ const MAX_CLAIM_LIMIT = 1000;
 const DEFAULT_CLAIM_LIMIT = 50;
 
 /** RFC 4122 UUID v1–8 with variant bits. Used for `id` validation in `markPublished`/`markFailed`. */
-const UUID_REGEX =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * Thrown when one of the helper inputs fails basic shape validation.
  * Surfaces as {@link DbError} at the API boundary.
  */
 export class InvalidOutboxInputError extends DbError {
-    public constructor(field: string, reason: string) {
-        super('invalid_outbox_input', `invalid outbox input "${field}": ${reason}`);
-        this.name = 'InvalidOutboxInputError';
-    }
+  public constructor(field: string, reason: string) {
+    super('invalid_outbox_input', `invalid outbox input "${field}": ${reason}`);
+    this.name = 'InvalidOutboxInputError';
+  }
 }
 
 /**
@@ -75,24 +74,24 @@ export class InvalidOutboxInputError extends DbError {
  * canonical types without creating an import cycle.
  */
 export interface OutboxEvent {
-    /** Domain-level event identifier (UUID v4/v7). Unique across the cluster. */
-    readonly eventId: string;
-    /** Dotted event name, e.g. `"reservation.created"`. */
-    readonly eventType: string;
-    /** Fully-serialised event payload. */
-    readonly payload: Record<string, unknown>;
-    /** Domain timestamp of the underlying state change. */
-    readonly occurredAt: Date;
+  /** Domain-level event identifier (UUID v4/v7). Unique across the cluster. */
+  readonly eventId: string;
+  /** Dotted event name, e.g. `"reservation.created"`. */
+  readonly eventType: string;
+  /** Fully-serialised event payload. */
+  readonly payload: Record<string, unknown>;
+  /** Domain timestamp of the underlying state change. */
+  readonly occurredAt: Date;
 }
 
 /** Claimed row returned by {@link claimBatch}. Shape mirrors the wire columns. */
 export interface ClaimedOutboxRow {
-    readonly id: string;
-    readonly eventId: string;
-    readonly eventType: string;
-    readonly payload: Record<string, unknown>;
-    readonly occurredAt: Date;
-    readonly attempts: number;
+  readonly id: string;
+  readonly eventId: string;
+  readonly eventType: string;
+  readonly payload: Record<string, unknown>;
+  readonly occurredAt: Date;
+  readonly attempts: number;
 }
 
 /**
@@ -107,13 +106,13 @@ export interface ClaimedOutboxRow {
  * quirks.
  */
 interface ClaimedOutboxRowRaw {
-    id: string;
-    event_id: string;
-    event_type: string;
-    payload: Record<string, unknown>;
-    occurred_at: Date;
-    attempts: number;
-    [key: string]: unknown;
+  id: string;
+  event_id: string;
+  event_type: string;
+  payload: Record<string, unknown>;
+  occurred_at: Date;
+  attempts: number;
+  [key: string]: unknown;
 }
 
 /**
@@ -132,11 +131,11 @@ interface ClaimedOutboxRowRaw {
  * would break that invariant.
  */
 export async function insertOutbox(tx: AthlyaTx, event: OutboxEvent): Promise<void> {
-    validateEvent(event);
+  validateEvent(event);
 
-    const serialisedPayload = JSON.stringify(event.payload);
+  const serialisedPayload = JSON.stringify(event.payload);
 
-    await tx.execute(sql`
+  await tx.execute(sql`
         INSERT INTO outbox (event_id, event_type, payload, occurred_at, published_at, attempts)
         VALUES (
             ${event.eventId},
@@ -168,16 +167,16 @@ export async function insertOutbox(tx: AthlyaTx, event: OutboxEvent): Promise<vo
  * policy consumes).
  */
 export async function claimBatch(
-    tx: AthlyaTx,
-    limit: number = DEFAULT_CLAIM_LIMIT,
+  tx: AthlyaTx,
+  limit: number = DEFAULT_CLAIM_LIMIT,
 ): Promise<ClaimedOutboxRow[]> {
-    validateLimit(limit);
+  validateLimit(limit);
 
-    // The inner SELECT holds a row-level lock on each returned row
-    // (FOR UPDATE). SKIP LOCKED asks Postgres to skip rows that another
-    // transaction already locked, which is exactly the cooperative
-    // behaviour the drain worker needs.
-    const result = await tx.execute<ClaimedOutboxRowRaw>(sql`
+  // The inner SELECT holds a row-level lock on each returned row
+  // (FOR UPDATE). SKIP LOCKED asks Postgres to skip rows that another
+  // transaction already locked, which is exactly the cooperative
+  // behaviour the drain worker needs.
+  const result = await tx.execute<ClaimedOutboxRowRaw>(sql`
         WITH claimed AS (
             SELECT id
               FROM outbox
@@ -198,15 +197,15 @@ export async function claimBatch(
                   outbox.attempts
     `);
 
-    const rows = result as unknown as readonly ClaimedOutboxRowRaw[];
-    return rows.map((row) => ({
-        id: row.id,
-        eventId: row.event_id,
-        eventType: row.event_type,
-        payload: row.payload,
-        occurredAt: row.occurred_at,
-        attempts: row.attempts,
-    }));
+  const rows = result as unknown as readonly ClaimedOutboxRowRaw[];
+  return rows.map((row) => ({
+    id: row.id,
+    eventId: row.event_id,
+    eventType: row.event_type,
+    payload: row.payload,
+    occurredAt: row.occurred_at,
+    attempts: row.attempts,
+  }));
 }
 
 /**
@@ -219,9 +218,9 @@ export async function claimBatch(
  * transaction at this point.
  */
 export async function markPublished(tx: AthlyaTx | AthlyaDb, id: string): Promise<void> {
-    validateId(id);
+  validateId(id);
 
-    await tx.execute(sql`
+  await tx.execute(sql`
         UPDATE outbox
            SET published_at = now()
          WHERE id = ${id}
@@ -257,50 +256,50 @@ export async function markPublished(tx: AthlyaTx | AthlyaDb, id: string): Promis
 // that satisfies `@typescript-eslint/require-await`; a synthetic yield
 // to the microtask queue is acceptable on the failure path.
 export async function markFailed(tx: AthlyaTx, id: string): Promise<void> {
-    validateId(id);
-    // Reference `tx` so the linter does not flag the parameter as
-    // unused; this keeps the signature stable for future growth.
-    void tx;
-    await Promise.resolve();
+  validateId(id);
+  // Reference `tx` so the linter does not flag the parameter as
+  // unused; this keeps the signature stable for future growth.
+  void tx;
+  await Promise.resolve();
 }
 
 function validateEvent(event: OutboxEvent): void {
-    if (event === null || typeof event !== 'object') {
-        throw new InvalidOutboxInputError('event', 'must be an object');
-    }
-    if (typeof event.eventId !== 'string' || event.eventId.length === 0) {
-        throw new InvalidOutboxInputError('event.eventId', 'must be a non-empty string');
-    }
-    if (typeof event.eventType !== 'string' || event.eventType.length === 0) {
-        throw new InvalidOutboxInputError('event.eventType', 'must be a non-empty string');
-    }
-    if (event.payload === null || typeof event.payload !== 'object') {
-        throw new InvalidOutboxInputError('event.payload', 'must be a plain object');
-    }
-    if (!(event.occurredAt instanceof Date) || Number.isNaN(event.occurredAt.getTime())) {
-        throw new InvalidOutboxInputError('event.occurredAt', 'must be a valid Date');
-    }
+  if (event === null || typeof event !== 'object') {
+    throw new InvalidOutboxInputError('event', 'must be an object');
+  }
+  if (typeof event.eventId !== 'string' || event.eventId.length === 0) {
+    throw new InvalidOutboxInputError('event.eventId', 'must be a non-empty string');
+  }
+  if (typeof event.eventType !== 'string' || event.eventType.length === 0) {
+    throw new InvalidOutboxInputError('event.eventType', 'must be a non-empty string');
+  }
+  if (event.payload === null || typeof event.payload !== 'object') {
+    throw new InvalidOutboxInputError('event.payload', 'must be a plain object');
+  }
+  if (!(event.occurredAt instanceof Date) || Number.isNaN(event.occurredAt.getTime())) {
+    throw new InvalidOutboxInputError('event.occurredAt', 'must be a valid Date');
+  }
 }
 
 function validateLimit(limit: number): void {
-    if (
-        typeof limit !== 'number' ||
-        !Number.isFinite(limit) ||
-        !Number.isInteger(limit) ||
-        limit <= 0
-    ) {
-        throw new InvalidOutboxInputError('limit', `must be a positive integer, got ${String(limit)}`);
-    }
-    if (limit > MAX_CLAIM_LIMIT) {
-        throw new InvalidOutboxInputError(
-            'limit',
-            `must be ≤ ${String(MAX_CLAIM_LIMIT)}, got ${String(limit)}`,
-        );
-    }
+  if (
+    typeof limit !== 'number' ||
+    !Number.isFinite(limit) ||
+    !Number.isInteger(limit) ||
+    limit <= 0
+  ) {
+    throw new InvalidOutboxInputError('limit', `must be a positive integer, got ${String(limit)}`);
+  }
+  if (limit > MAX_CLAIM_LIMIT) {
+    throw new InvalidOutboxInputError(
+      'limit',
+      `must be ≤ ${String(MAX_CLAIM_LIMIT)}, got ${String(limit)}`,
+    );
+  }
 }
 
 function validateId(id: string): void {
-    if (typeof id !== 'string' || !UUID_REGEX.test(id)) {
-        throw new InvalidOutboxInputError('id', 'must be a UUID');
-    }
+  if (typeof id !== 'string' || !UUID_REGEX.test(id)) {
+    throw new InvalidOutboxInputError('id', 'must be a UUID');
+  }
 }

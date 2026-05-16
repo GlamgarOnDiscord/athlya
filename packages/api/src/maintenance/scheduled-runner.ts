@@ -32,73 +32,67 @@
  * @see packages/api/src/maintenance/audit-anonymize.ts
  */
 
-import {
-    type AnonymizeOneFn,
-    runAuditAnonymisationCycle,
-} from './audit-anonymize.js';
-import {
-    type SqlExecutor,
-    runRgpdMaintenanceCycle,
-} from './rgpd-purge.js';
+import { type AnonymizeOneFn, runAuditAnonymisationCycle } from './audit-anonymize.js';
+import { type SqlExecutor, runRgpdMaintenanceCycle } from './rgpd-purge.js';
 
 /* ------------------------------------------------------------------ */
 /*  Contract                                                           */
 /* ------------------------------------------------------------------ */
 
 interface MaintenanceLogger {
-    info(msg: string, ctx?: Record<string, unknown>): void;
-    error(msg: string, ctx?: Record<string, unknown>): void;
+  info(msg: string, ctx?: Record<string, unknown>): void;
+  error(msg: string, ctx?: Record<string, unknown>): void;
 }
 
 const consoleLogger: MaintenanceLogger = {
-    info: (msg, ctx) => {
-        console.log(msg, ctx);
-    },
-    error: (msg, ctx) => {
-        console.error(msg, ctx);
-    },
+  info: (msg, ctx) => {
+    console.log(msg, ctx);
+  },
+  error: (msg, ctx) => {
+    console.error(msg, ctx);
+  },
 };
 
 export interface ScheduledRgpdDeps {
-    /**
-     * SQL executor implementing the same contract used by the
-     * underlying primitives. `execute` is consumed by
-     * `runRgpdMaintenanceCycle`; `selectRows` is consumed by
-     * `runAuditAnonymisationCycle`. A single Drizzle adapter
-     * implements both surfaces — see `worker.ts` wiring.
-     */
-    readonly executeSql: SqlExecutor & {
-        selectRows<T>(query: string, params: readonly unknown[]): Promise<T[]>;
-    };
-    /**
-     * Per-user audit anonymisation function — typically wraps
-     * `anonymizeAuditLog` from `@athlya/members` with a
-     * `DeletionRepo.anonymizeAuditRows` adapter. Optional — when
-     * absent, the audit anonymisation pass is skipped (no-op).
-     */
-    readonly anonymizeOne?: AnonymizeOneFn;
-    readonly logger?: MaintenanceLogger;
+  /**
+   * SQL executor implementing the same contract used by the
+   * underlying primitives. `execute` is consumed by
+   * `runRgpdMaintenanceCycle`; `selectRows` is consumed by
+   * `runAuditAnonymisationCycle`. A single Drizzle adapter
+   * implements both surfaces — see `worker.ts` wiring.
+   */
+  readonly executeSql: SqlExecutor & {
+    selectRows<T>(query: string, params: readonly unknown[]): Promise<T[]>;
+  };
+  /**
+   * Per-user audit anonymisation function — typically wraps
+   * `anonymizeAuditLog` from `@athlya/members` with a
+   * `DeletionRepo.anonymizeAuditRows` adapter. Optional — when
+   * absent, the audit anonymisation pass is skipped (no-op).
+   */
+  readonly anonymizeOne?: AnonymizeOneFn;
+  readonly logger?: MaintenanceLogger;
 }
 
 export interface ScheduledRgpdResult {
-    readonly purge: {
-        readonly anonymizedUsers: number;
-        readonly purgedOutbox: number;
-        readonly purgedExportJobs: number;
-        readonly error?: string;
-    };
-    readonly auditAnonymise:
+  readonly purge: {
+    readonly anonymizedUsers: number;
+    readonly purgedOutbox: number;
+    readonly purgedExportJobs: number;
+    readonly error?: string;
+  };
+  readonly auditAnonymise:
     | {
         readonly skipped: true;
         readonly reason: string;
-    }
+      }
     | {
         readonly skipped: false;
         readonly processed: number;
         readonly succeeded: number;
         readonly anonymizedRowsTotal: number;
         readonly errorCount: number;
-    };
+      };
 }
 
 /* ------------------------------------------------------------------ */
@@ -118,69 +112,69 @@ export interface ScheduledRgpdResult {
  * cron-trigger budget.
  */
 export async function runScheduledRgpdMaintenance(
-    deps: ScheduledRgpdDeps,
+  deps: ScheduledRgpdDeps,
 ): Promise<ScheduledRgpdResult> {
-    const logger = deps.logger ?? consoleLogger;
+  const logger = deps.logger ?? consoleLogger;
 
-    let purge: ScheduledRgpdResult['purge'] = {
-        anonymizedUsers: 0,
-        purgedOutbox: 0,
-        purgedExportJobs: 0,
+  let purge: ScheduledRgpdResult['purge'] = {
+    anonymizedUsers: 0,
+    purgedOutbox: 0,
+    purgedExportJobs: 0,
+  };
+  try {
+    const r = await runRgpdMaintenanceCycle(deps.executeSql);
+    purge = {
+      anonymizedUsers: r.anonymizedUsers,
+      purgedOutbox: r.purgedOutbox,
+      purgedExportJobs: r.purgedExportJobs,
     };
-    try {
-        const r = await runRgpdMaintenanceCycle(deps.executeSql);
-        purge = {
-            anonymizedUsers: r.anonymizedUsers,
-            purgedOutbox: r.purgedOutbox,
-            purgedExportJobs: r.purgedExportJobs,
-        };
-        logger.info('rgpd maintenance: purge cycle complete', purge);
-    } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        purge = { ...purge, error: message };
-        logger.error('rgpd maintenance: purge cycle failed', { error: message });
-    }
+    logger.info('rgpd maintenance: purge cycle complete', purge);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    purge = { ...purge, error: message };
+    logger.error('rgpd maintenance: purge cycle failed', { error: message });
+  }
 
-    if (deps.anonymizeOne === undefined) {
-        return {
-            purge,
-            auditAnonymise: {
-                skipped: true,
-                reason: 'anonymizeOne not wired — production needs the @athlya/members adapter',
-            },
-        };
-    }
+  if (deps.anonymizeOne === undefined) {
+    return {
+      purge,
+      auditAnonymise: {
+        skipped: true,
+        reason: 'anonymizeOne not wired — production needs the @athlya/members adapter',
+      },
+    };
+  }
 
-    try {
-        const r = await runAuditAnonymisationCycle({
-            executeSql: deps.executeSql,
-            anonymizeOne: deps.anonymizeOne,
-        });
-        const summary = {
-            processed: r.processed,
-            succeeded: r.succeeded,
-            anonymizedRowsTotal: r.anonymizedRowsTotal,
-            errorCount: r.errors.length,
-        };
-        logger.info('rgpd maintenance: audit anonymise cycle complete', summary);
-        return {
-            purge,
-            auditAnonymise: {
-                skipped: false,
-                ...summary,
-            },
-        };
-    } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error('rgpd maintenance: audit anonymise cycle failed', {
-            error: message,
-        });
-        return {
-            purge,
-            auditAnonymise: {
-                skipped: true,
-                reason: `audit cycle threw: ${message}`,
-            },
-        };
-    }
+  try {
+    const r = await runAuditAnonymisationCycle({
+      executeSql: deps.executeSql,
+      anonymizeOne: deps.anonymizeOne,
+    });
+    const summary = {
+      processed: r.processed,
+      succeeded: r.succeeded,
+      anonymizedRowsTotal: r.anonymizedRowsTotal,
+      errorCount: r.errors.length,
+    };
+    logger.info('rgpd maintenance: audit anonymise cycle complete', summary);
+    return {
+      purge,
+      auditAnonymise: {
+        skipped: false,
+        ...summary,
+      },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('rgpd maintenance: audit anonymise cycle failed', {
+      error: message,
+    });
+    return {
+      purge,
+      auditAnonymise: {
+        skipped: true,
+        reason: `audit cycle threw: ${message}`,
+      },
+    };
+  }
 }

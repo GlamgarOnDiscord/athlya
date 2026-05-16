@@ -27,36 +27,34 @@ const BASE_URL = process.env.LIGHTHOUSE_BASE_URL ?? 'http://localhost:3000';
 const MIN_ACCESSIBILITY = 95;
 
 async function check() {
-    const chrome = await launch({ chromeFlags: ['--headless'] });
-    try {
-        const scores = await Promise.all(
-            PAGES.map(async (path) => {
-                const url = `${BASE_URL}${path}`;
-                const result = await lighthouse(url, {
-                    port: chrome.port,
-                    onlyCategories: ['accessibility'],
-                    output: 'json',
-                });
-                const score = (result.lhr.categories.accessibility?.score ?? 0) * 100;
-                console.log(`${path} accessibility score: ${score}`);
-                return { path, score };
-            }),
-        );
-        for (const { path, score } of scores) {
-            if (score < MIN_ACCESSIBILITY) {
-                console.error(
-                    `FAIL: ${path} scored ${score}, expected >= ${MIN_ACCESSIBILITY}`,
-                );
-                process.exit(1);
-            }
-        }
-        console.log('OK: all pages >= 95 accessibility.');
-    } finally {
-        await chrome.kill();
+  const chrome = await launch({ chromeFlags: ['--headless'] });
+  try {
+    const scores = await Promise.all(
+      PAGES.map(async (path) => {
+        const url = `${BASE_URL}${path}`;
+        const result = await lighthouse(url, {
+          port: chrome.port,
+          onlyCategories: ['accessibility'],
+          output: 'json',
+        });
+        const score = (result.lhr.categories.accessibility?.score ?? 0) * 100;
+        console.log(`${path} accessibility score: ${score}`);
+        return { path, score };
+      }),
+    );
+    for (const { path, score } of scores) {
+      if (score < MIN_ACCESSIBILITY) {
+        console.error(`FAIL: ${path} scored ${score}, expected >= ${MIN_ACCESSIBILITY}`);
+        process.exit(1);
+      }
     }
+    console.log('OK: all pages >= 95 accessibility.');
+  } finally {
+    await chrome.kill();
+  }
 }
 
 void check().catch((err) => {
-    console.error(err);
-    process.exit(1);
+  console.error(err);
+  process.exit(1);
 });

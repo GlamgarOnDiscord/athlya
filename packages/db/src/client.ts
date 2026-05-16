@@ -55,9 +55,9 @@ export type TenantRole = 'member' | 'coach' | 'admin';
  * {@link validateClaims} to keep the validator and the type in lock-step.
  */
 export interface TenantClaims {
-    readonly userId: string;
-    readonly studioId: string;
-    readonly role: TenantRole;
+  readonly userId: string;
+  readonly studioId: string;
+  readonly role: TenantRole;
 }
 
 /**
@@ -68,8 +68,8 @@ export interface TenantClaims {
 export type AthlyaSchema = typeof schema;
 export type AthlyaDb = PostgresJsDatabase<AthlyaSchema>;
 export type AthlyaTx = PostgresJsTransaction<
-    AthlyaSchema,
-    ExtractTablesWithRelations<AthlyaSchema>
+  AthlyaSchema,
+  ExtractTablesWithRelations<AthlyaSchema>
 >;
 
 /**
@@ -110,20 +110,20 @@ export type AthlyaDbAny = AthlyaDb | AthlyaDbHttp;
  * client supplied via {@link createDbFromClient}.
  */
 export interface CreateDbOptions {
-    /**
-     * Pool size. Neon connections are serverless so the sensible
-     * default is small; larger values are still honored when running
-     * against a regional Postgres.
-     */
-    readonly maxConnections?: number;
-    /**
-     * Idle timeout in seconds. `0` disables the timer.
-     */
-    readonly idleTimeoutSec?: number;
-    /**
-     * Extra `postgres` driver options. Merged on top of the defaults.
-     */
-    readonly driver?: Options<Record<string, PostgresType>>;
+  /**
+   * Pool size. Neon connections are serverless so the sensible
+   * default is small; larger values are still honored when running
+   * against a regional Postgres.
+   */
+  readonly maxConnections?: number;
+  /**
+   * Idle timeout in seconds. `0` disables the timer.
+   */
+  readonly idleTimeoutSec?: number;
+  /**
+   * Extra `postgres` driver options. Merged on top of the defaults.
+   */
+  readonly driver?: Options<Record<string, PostgresType>>;
 }
 
 /**
@@ -133,10 +133,10 @@ export interface CreateDbOptions {
  * a distinct class and never translated to a 4xx response.
  */
 export class InvalidClaimsError extends DbError {
-    public constructor(field: keyof TenantClaims, reason: string) {
-        super('invalid_tenant_claims', `invalid tenant claim "${field}": ${reason}`);
-        this.name = 'InvalidClaimsError';
-    }
+  public constructor(field: keyof TenantClaims, reason: string) {
+    super('invalid_tenant_claims', `invalid tenant claim "${field}": ${reason}`);
+    this.name = 'InvalidClaimsError';
+  }
 }
 
 /**
@@ -144,8 +144,7 @@ export class InvalidClaimsError extends DbError {
  * imported from `@athlya/shared` to keep the db package's validation
  * dependency-free and independently auditable.
  */
-const UUID_REGEX =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const VALID_ROLES: ReadonlySet<TenantRole> = new Set(['member', 'coach', 'admin']);
 
@@ -157,19 +156,16 @@ const VALID_ROLES: ReadonlySet<TenantRole> = new Set(['member', 'coach', 'admin'
  * any session-variable typo into a hard-to-diagnose RLS miss.
  */
 function validateClaims(claims: TenantClaims): TenantClaims {
-    if (typeof claims.userId !== 'string' || !UUID_REGEX.test(claims.userId)) {
-        throw new InvalidClaimsError('userId', 'must be a UUID v1–8');
-    }
-    if (typeof claims.studioId !== 'string' || !UUID_REGEX.test(claims.studioId)) {
-        throw new InvalidClaimsError('studioId', 'must be a UUID v1–8');
-    }
-    if (!VALID_ROLES.has(claims.role)) {
-        throw new InvalidClaimsError(
-            'role',
-            `must be one of 'member' | 'coach' | 'admin'`,
-        );
-    }
-    return claims;
+  if (typeof claims.userId !== 'string' || !UUID_REGEX.test(claims.userId)) {
+    throw new InvalidClaimsError('userId', 'must be a UUID v1–8');
+  }
+  if (typeof claims.studioId !== 'string' || !UUID_REGEX.test(claims.studioId)) {
+    throw new InvalidClaimsError('studioId', 'must be a UUID v1–8');
+  }
+  if (!VALID_ROLES.has(claims.role)) {
+    throw new InvalidClaimsError('role', `must be one of 'member' | 'coach' | 'admin'`);
+  }
+  return claims;
 }
 
 /**
@@ -184,14 +180,14 @@ function validateClaims(claims: TenantClaims): TenantClaims {
  *   connection string is malformed.
  */
 export function createDb(connectionString: string, options: CreateDbOptions = {}): AthlyaDb {
-    const driverOptions: Options<Record<string, PostgresType>> = {
-        max: options.maxConnections ?? 10,
-        idle_timeout: options.idleTimeoutSec ?? 30,
-        prepare: false,
-        ...options.driver,
-    };
-    const client = postgres(connectionString, driverOptions);
-    return drizzle(client, { schema });
+  const driverOptions: Options<Record<string, PostgresType>> = {
+    max: options.maxConnections ?? 10,
+    idle_timeout: options.idleTimeoutSec ?? 30,
+    prepare: false,
+    ...options.driver,
+  };
+  const client = postgres(connectionString, driverOptions);
+  return drizzle(client, { schema });
 }
 
 /**
@@ -200,7 +196,7 @@ export function createDb(connectionString: string, options: CreateDbOptions = {}
  * to reuse a client across multiple Drizzle instances.
  */
 export function createDbFromClient(client: Sql): AthlyaDb {
-    return drizzle(client, { schema });
+  return drizzle(client, { schema });
 }
 
 /**
@@ -229,8 +225,8 @@ export function createDbFromClient(client: Sql): AthlyaDb {
  * flows stay on {@link createDb}.
  */
 export function createDbHttp(connectionString: string): AthlyaDbHttp {
-    const client = neon(connectionString);
-    return drizzleHttp({ client, schema });
+  const client = neon(connectionString);
+  return drizzleHttp({ client, schema });
 }
 
 /**
@@ -273,22 +269,22 @@ export function createDbHttp(connectionString: string): AthlyaDbHttp {
  *   are expected to map those to {@link DbError} at the boundary.
  */
 export async function withTenant<T>(
-    db: AthlyaDb,
-    claims: TenantClaims,
-    fn: (tx: AthlyaTx) => Promise<T>,
+  db: AthlyaDb,
+  claims: TenantClaims,
+  fn: (tx: AthlyaTx) => Promise<T>,
 ): Promise<T> {
-    const safe = validateClaims(claims);
-    return db.transaction(async (tx) => {
-        // Every SET LOCAL uses parameter binding.
-        // `set_config(name, value, is_local=true)` is the function
-        // equivalent of `SET LOCAL name = value`; it accepts a bound
-        // string parameter directly, which `SET LOCAL` syntactically
-        // does not.
-        await tx.execute(sql`select set_config('app.user_id', ${safe.userId}, true)`);
-        await tx.execute(sql`select set_config('app.studio_id', ${safe.studioId}, true)`);
-        await tx.execute(sql`select set_config('app.role', ${safe.role}, true)`);
-        return fn(tx);
-    });
+  const safe = validateClaims(claims);
+  return db.transaction(async (tx) => {
+    // Every SET LOCAL uses parameter binding.
+    // `set_config(name, value, is_local=true)` is the function
+    // equivalent of `SET LOCAL name = value`; it accepts a bound
+    // string parameter directly, which `SET LOCAL` syntactically
+    // does not.
+    await tx.execute(sql`select set_config('app.user_id', ${safe.userId}, true)`);
+    await tx.execute(sql`select set_config('app.studio_id', ${safe.studioId}, true)`);
+    await tx.execute(sql`select set_config('app.role', ${safe.role}, true)`);
+    return fn(tx);
+  });
 }
 
 /**
@@ -308,15 +304,12 @@ export async function withTenant<T>(
  * lifecycle. The probe is intentionally orthogonal to the request
  * pipeline.
  */
-export async function pingDbHttp(
-    connectionString: string,
-): Promise<number> {
-    const started = Date.now();
-    const sqlClient = neon(connectionString);
-    await sqlClient`select 1`;
-    return Date.now() - started;
+export async function pingDbHttp(connectionString: string): Promise<number> {
+  const started = Date.now();
+  const sqlClient = neon(connectionString);
+  await sqlClient`select 1`;
+  return Date.now() - started;
 }
-
 
 /**
  * Build a raw Neon HTTP SQL caller — bypass Drizzle entirely.
@@ -334,15 +327,15 @@ export async function pingDbHttp(
  * module).
  */
 export function createNeonHttpSql(
-    connectionString: string,
+  connectionString: string,
 ): (query: string, params: readonly unknown[]) => Promise<unknown> {
-    const client = neon(connectionString);
-    // The runtime supports `client(query, params)` as a fallback
-    // shape; the type definition only exposes the template-literal
-    // form. Cast through `unknown` to surface the positional API.
-    const positional = client as unknown as (
-        query: string,
-        params: readonly unknown[],
-    ) => Promise<unknown>;
-    return async (query, params) => positional(query, params);
+  const client = neon(connectionString);
+  // The runtime supports `client(query, params)` as a fallback
+  // shape; the type definition only exposes the template-literal
+  // form. Cast through `unknown` to surface the positional API.
+  const positional = client as unknown as (
+    query: string,
+    params: readonly unknown[],
+  ) => Promise<unknown>;
+  return async (query, params) => positional(query, params);
 }

@@ -10,43 +10,43 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
-    __resetTokenStore,
-    getAccessToken,
-    setAccessToken,
-    subscribeToAccessToken,
+  __resetTokenStore,
+  getAccessToken,
+  setAccessToken,
+  subscribeToAccessToken,
 } from './token-store';
 
 describe('token-store', () => {
-    afterEach(() => {
-        __resetTokenStore();
-    });
+  afterEach(() => {
+    __resetTokenStore();
+  });
 
-    it('returns null by default before any token is set', () => {
-        expect(getAccessToken()).toBeNull();
-    });
+  it('returns null by default before any token is set', () => {
+    expect(getAccessToken()).toBeNull();
+  });
 
-    it('round-trips the token value via set / get', () => {
-        setAccessToken('jwt.token.value');
-        expect(getAccessToken()).toBe('jwt.token.value');
-    });
+  it('round-trips the token value via set / get', () => {
+    setAccessToken('jwt.token.value');
+    expect(getAccessToken()).toBe('jwt.token.value');
+  });
 
-    it('notifies every subscribed listener on set', () => {
-        const listener = vi.fn();
-        subscribeToAccessToken(listener);
-        setAccessToken('abc');
-        setAccessToken(null);
-        expect(listener).toHaveBeenCalledTimes(2);
-        expect(listener).toHaveBeenNthCalledWith(1, 'abc');
-        expect(listener).toHaveBeenNthCalledWith(2, null);
-    });
+  it('notifies every subscribed listener on set', () => {
+    const listener = vi.fn();
+    subscribeToAccessToken(listener);
+    setAccessToken('abc');
+    setAccessToken(null);
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenNthCalledWith(1, 'abc');
+    expect(listener).toHaveBeenNthCalledWith(2, null);
+  });
 
-    it('stops notifying a listener once its unsubscribe fn is called', () => {
-        const listener = vi.fn();
-        const unsubscribe = subscribeToAccessToken(listener);
-        setAccessToken('first');
-        unsubscribe();
-        setAccessToken('second');
-        expect(listener).toHaveBeenCalledTimes(1);
-        expect(listener).toHaveBeenCalledWith('first');
-    });
+  it('stops notifying a listener once its unsubscribe fn is called', () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeToAccessToken(listener);
+    setAccessToken('first');
+    unsubscribe();
+    setAccessToken('second');
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith('first');
+  });
 });

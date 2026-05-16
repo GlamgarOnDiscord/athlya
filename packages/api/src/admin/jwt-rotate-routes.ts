@@ -43,24 +43,23 @@
  */
 
 import {
-    DEFAULT_ROTATION_GRACE_SEC,
-    rotateKeysAsync,
-    loadKeyPairFromPem,
-    publicJwkOf,
-    type Jwks,
-    type SigningKey,
+  DEFAULT_ROTATION_GRACE_SEC,
+  rotateKeysAsync,
+  loadKeyPairFromPem,
+  publicJwkOf,
+  type Jwks,
+  type SigningKey,
 } from '@athlya/auth';
 import { Hono } from 'hono';
 import { generateKeyPair, exportPKCS8, exportSPKI } from 'jose';
-
 
 import type { AthlyaBindings, AthlyaVariables } from '../types.js';
 import type { Context } from 'hono';
 
 /** Environment shape this router is generic over. */
 export interface JwtRotateAdminEnv {
-    Bindings: AthlyaBindings;
-    Variables: AthlyaVariables;
+  Bindings: AthlyaBindings;
+  Variables: AthlyaVariables;
 }
 
 /** Problem Details content-type. */
@@ -73,12 +72,12 @@ const FORBIDDEN_TYPE = `${ATHLYA_PROBLEM_NAMESPACE}forbidden`;
 
 /** Shape of the Problem Details body this router emits on failures. */
 interface AdminProblemBody {
-    readonly type: string;
-    readonly title: string;
-    readonly status: number;
-    readonly detail?: string;
-    readonly code?: string;
-    readonly traceId: string;
+  readonly type: string;
+  readonly title: string;
+  readonly status: number;
+  readonly detail?: string;
+  readonly code?: string;
+  readonly traceId: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -91,44 +90,39 @@ interface AdminProblemBody {
  * deliberately re-implement here rather than depending on
  * `dlq-routes.ts` to keep this router self-contained.
  */
-function enforceAdmin(
-    c: Context<JwtRotateAdminEnv>,
-): Response | null {
-    const claims = c.get('authClaims');
-    if (claims === undefined || claims === null) {
-        return adminProblem(c, {
-            type: FORBIDDEN_TYPE,
-            title: 'Forbidden',
-            status: 403,
-            code: 'admin_required',
-            detail: 'admin claim missing',
-        });
-    }
-    const role = (claims as { role?: unknown }).role;
-    if (role !== 'admin') {
-        return adminProblem(c, {
-            type: FORBIDDEN_TYPE,
-            title: 'Forbidden',
-            status: 403,
-            code: 'admin_required',
-            detail: 'admin role required',
-        });
-    }
-    return null;
+function enforceAdmin(c: Context<JwtRotateAdminEnv>): Response | null {
+  const claims = c.get('authClaims');
+  if (claims === undefined || claims === null) {
+    return adminProblem(c, {
+      type: FORBIDDEN_TYPE,
+      title: 'Forbidden',
+      status: 403,
+      code: 'admin_required',
+      detail: 'admin claim missing',
+    });
+  }
+  const role = (claims as { role?: unknown }).role;
+  if (role !== 'admin') {
+    return adminProblem(c, {
+      type: FORBIDDEN_TYPE,
+      title: 'Forbidden',
+      status: 403,
+      code: 'admin_required',
+      detail: 'admin role required',
+    });
+  }
+  return null;
 }
 
 function adminProblem(
-    c: Context<JwtRotateAdminEnv>,
-    body: Omit<AdminProblemBody, 'traceId'>,
+  c: Context<JwtRotateAdminEnv>,
+  body: Omit<AdminProblemBody, 'traceId'>,
 ): Response {
-    const traceId =
-        typeof c.get('traceId') === 'string'
-            ? (c.get('traceId'))
-            : 'unknown';
-    const full: AdminProblemBody = { ...body, traceId };
-    return c.body(JSON.stringify(full), body.status as 403 | 500, {
-        'content-type': PROBLEM_JSON,
-    });
+  const traceId = typeof c.get('traceId') === 'string' ? c.get('traceId') : 'unknown';
+  const full: AdminProblemBody = { ...body, traceId };
+  return c.body(JSON.stringify(full), body.status as 403 | 500, {
+    'content-type': PROBLEM_JSON,
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -144,12 +138,12 @@ function adminProblem(
  * and `graceSec`. No IP, no UA, no email.
  */
 export interface JwtRotateAuditWriter {
-    appendRotationPrep(input: {
-        actorId: string;
-        kidOld: string;
-        kidNew: string;
-        graceSec: number;
-    }): Promise<void>;
+  appendRotationPrep(input: {
+    actorId: string;
+    kidOld: string;
+    kidNew: string;
+    graceSec: number;
+  }): Promise<void>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -179,28 +173,28 @@ export interface JwtRotateAuditWriter {
  * secrets via `wrangler secret delete`.
  */
 export interface RotationPrepareResponse {
-    /** New `kid` for the freshly generated key. */
-    readonly currentKid: string;
-    /** PEM-encoded PKCS#8 private key for the new current. */
-    readonly currentPrivatePem: string;
-    /** PEM-encoded SPKI public key for the new current. */
-    readonly currentPublicPem: string;
-    /** Demoted previous `kid` (no change to its key material). */
-    readonly previousKid: string;
-    /** The grace window expiry as ISO 8601. */
-    readonly previousNotAfter: string;
-    /** Effective grace duration in seconds. */
-    readonly graceSec: number;
-    /** New JWKS to push into `JWKS_JSON` — contains both keys. */
-    readonly jwks: Jwks;
+  /** New `kid` for the freshly generated key. */
+  readonly currentKid: string;
+  /** PEM-encoded PKCS#8 private key for the new current. */
+  readonly currentPrivatePem: string;
+  /** PEM-encoded SPKI public key for the new current. */
+  readonly currentPublicPem: string;
+  /** Demoted previous `kid` (no change to its key material). */
+  readonly previousKid: string;
+  /** The grace window expiry as ISO 8601. */
+  readonly previousNotAfter: string;
+  /** Effective grace duration in seconds. */
+  readonly graceSec: number;
+  /** New JWKS to push into `JWKS_JSON` — contains both keys. */
+  readonly jwks: Jwks;
 }
 
 /** Response body for `GET /admin/jwt/state`. */
 export interface JwtStateResponse {
-    /** Current `kid` (the one tokens are signed with). */
-    readonly currentKid: string;
-    /** The JWKS currently being served. */
-    readonly jwks: Jwks;
+  /** Current `kid` (the one tokens are signed with). */
+  readonly currentKid: string;
+  /** The JWKS currently being served. */
+  readonly jwks: Jwks;
 }
 
 /* ------------------------------------------------------------------ */
@@ -209,20 +203,20 @@ export interface JwtStateResponse {
 
 /** Dependencies the router accepts. Tests inject fakes here. */
 export interface JwtRotateRouterDeps {
-    /**
-     * Pure key-pair factory. Defaults to `jose.generateKeyPair`.
-     * Tests inject a deterministic stub so the response is
-     * reproducible.
-     */
-    readonly generateKeyPair?: typeof generateKeyPair;
-    /** Audit writer. Optional — when absent, the rotation logs only. */
-    readonly auditWriter?: JwtRotateAuditWriter;
-    /** Default grace window. Optional override — defaults to 24h. */
-    readonly defaultGraceSec?: number;
-    /**
-     * Clock injection — useful for tests. Defaults to `() => new Date()`.
-     */
-    readonly now?: () => Date;
+  /**
+   * Pure key-pair factory. Defaults to `jose.generateKeyPair`.
+   * Tests inject a deterministic stub so the response is
+   * reproducible.
+   */
+  readonly generateKeyPair?: typeof generateKeyPair;
+  /** Audit writer. Optional — when absent, the rotation logs only. */
+  readonly auditWriter?: JwtRotateAuditWriter;
+  /** Default grace window. Optional override — defaults to 24h. */
+  readonly defaultGraceSec?: number;
+  /**
+   * Clock injection — useful for tests. Defaults to `() => new Date()`.
+   */
+  readonly now?: () => Date;
 }
 
 /**
@@ -230,183 +224,168 @@ export interface JwtRotateRouterDeps {
  * main gateway behind a JWT auth middleware that populates
  * `c.get('authClaims')`.
  */
-export function buildJwtRotateRouter(
-    deps: JwtRotateRouterDeps = {},
-): Hono<JwtRotateAdminEnv> {
-    const router = new Hono<JwtRotateAdminEnv>();
-    const genKp = deps.generateKeyPair ?? generateKeyPair;
-    const graceDefault = deps.defaultGraceSec ?? DEFAULT_ROTATION_GRACE_SEC;
-    const clock = deps.now ?? (() => new Date());
+export function buildJwtRotateRouter(deps: JwtRotateRouterDeps = {}): Hono<JwtRotateAdminEnv> {
+  const router = new Hono<JwtRotateAdminEnv>();
+  const genKp = deps.generateKeyPair ?? generateKeyPair;
+  const graceDefault = deps.defaultGraceSec ?? DEFAULT_ROTATION_GRACE_SEC;
+  const clock = deps.now ?? (() => new Date());
 
-    /* -------------------------------------------------------------- */
-    /*  GET /admin/jwt/state                                          */
-    /* -------------------------------------------------------------- */
+  /* -------------------------------------------------------------- */
+  /*  GET /admin/jwt/state                                          */
+  /* -------------------------------------------------------------- */
 
-    router.get('/admin/jwt/state', (c) => {
-        const forbidden = enforceAdmin(c);
-        if (forbidden !== null) return forbidden;
+  router.get('/admin/jwt/state', (c) => {
+    const forbidden = enforceAdmin(c);
+    if (forbidden !== null) return forbidden;
 
-        const env = c.env as AthlyaBindings & {
-            JWT_KID?: string;
-            JWKS_JSON?: string;
-        };
+    const env = c.env as AthlyaBindings & {
+      JWT_KID?: string;
+      JWKS_JSON?: string;
+    };
 
-        const currentKid = env.JWT_KID ?? '';
-        if (currentKid === '') {
-            return adminProblem(c, {
-                type: FORBIDDEN_TYPE,
-                title: 'Configuration Error',
-                status: 500,
-                code: 'jwt_state_unavailable',
-                detail: 'JWT_KID binding missing on env',
-            });
-        }
+    const currentKid = env.JWT_KID ?? '';
+    if (currentKid === '') {
+      return adminProblem(c, {
+        type: FORBIDDEN_TYPE,
+        title: 'Configuration Error',
+        status: 500,
+        code: 'jwt_state_unavailable',
+        detail: 'JWT_KID binding missing on env',
+      });
+    }
 
-        let jwks: Jwks;
-        try {
-            jwks = JSON.parse(env.JWKS_JSON ?? '{"keys":[]}') as Jwks;
-        } catch {
-            return adminProblem(c, {
-                type: FORBIDDEN_TYPE,
-                title: 'Configuration Error',
-                status: 500,
-                code: 'jwt_state_unavailable',
-                detail: 'JWKS_JSON binding malformed',
-            });
-        }
+    let jwks: Jwks;
+    try {
+      jwks = JSON.parse(env.JWKS_JSON ?? '{"keys":[]}') as Jwks;
+    } catch {
+      return adminProblem(c, {
+        type: FORBIDDEN_TYPE,
+        title: 'Configuration Error',
+        status: 500,
+        code: 'jwt_state_unavailable',
+        detail: 'JWKS_JSON binding malformed',
+      });
+    }
 
-        const body: JwtStateResponse = { currentKid, jwks };
-        return c.json(body);
+    const body: JwtStateResponse = { currentKid, jwks };
+    return c.json(body);
+  });
+
+  /* -------------------------------------------------------------- */
+  /*  POST /admin/jwt/rotate-prepare                                 */
+  /* -------------------------------------------------------------- */
+
+  router.post('/admin/jwt/rotate-prepare', async (c) => {
+    const forbidden = enforceAdmin(c);
+    if (forbidden !== null) return forbidden;
+
+    const env = c.env as AthlyaBindings & {
+      JWT_KID?: string;
+      JWT_PRIVATE_KEY_PEM?: string;
+      JWT_PUBLIC_KEY_PEM?: string;
+    };
+
+    // Precondition: the worker must currently know its previous
+    // signing material so we can compute the rotation result.
+    if (
+      env.JWT_KID === undefined ||
+      env.JWT_KID === '' ||
+      env.JWT_PRIVATE_KEY_PEM === undefined ||
+      env.JWT_PRIVATE_KEY_PEM === '' ||
+      env.JWT_PUBLIC_KEY_PEM === undefined ||
+      env.JWT_PUBLIC_KEY_PEM === ''
+    ) {
+      return adminProblem(c, {
+        type: FORBIDDEN_TYPE,
+        title: 'Configuration Error',
+        status: 500,
+        code: 'jwt_rotation_precondition_failed',
+        detail: 'JWT_KID / JWT_PRIVATE_KEY_PEM / JWT_PUBLIC_KEY_PEM bindings required for rotation',
+      });
+    }
+
+    // Step 1 — load the currently-deployed key (becomes "previous").
+    let previous: SigningKey;
+    try {
+      previous = await loadKeyPairFromPem(
+        env.JWT_PRIVATE_KEY_PEM,
+        env.JWT_PUBLIC_KEY_PEM,
+        env.JWT_KID,
+      );
+    } catch (err) {
+      return adminProblem(c, {
+        type: FORBIDDEN_TYPE,
+        title: 'Configuration Error',
+        status: 500,
+        code: 'jwt_rotation_precondition_failed',
+        detail: `failed to load current keypair: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+
+    // Step 2 — generate the new keypair (becomes "current"). Use
+    // a fresh kid derived from a UUID-like timestamp + entropy
+    // so it is distinct from the previous one and human-readable
+    // in JWKS responses.
+    const newKid = `athlya-${Date.now().toString(36)}-${randomHex(4)}`;
+    const { privateKey, publicKey } = await genKp('RS256', {
+      modulusLength: 2048,
+      extractable: true,
     });
+    const next: SigningKey = {
+      kid: newKid,
+      privateKey,
+      publicKey,
+    };
 
-    /* -------------------------------------------------------------- */
-    /*  POST /admin/jwt/rotate-prepare                                 */
-    /* -------------------------------------------------------------- */
+    // Step 3 — compute the rotation: notBefore on `current`,
+    // notAfter on `previous`, JWKS containing both.
+    const result = await rotateKeysAsync(previous, next, graceDefault, clock());
 
-    router.post('/admin/jwt/rotate-prepare', async (c) => {
-        const forbidden = enforceAdmin(c);
-        if (forbidden !== null) return forbidden;
+    // Step 4 — export the new key material as PEM so the
+    // operator can pipe it directly into `wrangler secret put`.
+    const [currentPrivatePem, currentPublicPem] = await Promise.all([
+      exportPKCS8(privateKey),
+      exportSPKI(publicKey),
+    ]);
 
-        const env = c.env as AthlyaBindings & {
-            JWT_KID?: string;
-            JWT_PRIVATE_KEY_PEM?: string;
-            JWT_PUBLIC_KEY_PEM?: string;
-        };
-
-        // Precondition: the worker must currently know its previous
-        // signing material so we can compute the rotation result.
-        if (
-            env.JWT_KID === undefined ||
-            env.JWT_KID === '' ||
-            env.JWT_PRIVATE_KEY_PEM === undefined ||
-            env.JWT_PRIVATE_KEY_PEM === '' ||
-            env.JWT_PUBLIC_KEY_PEM === undefined ||
-            env.JWT_PUBLIC_KEY_PEM === ''
-        ) {
-            return adminProblem(c, {
-                type: FORBIDDEN_TYPE,
-                title: 'Configuration Error',
-                status: 500,
-                code: 'jwt_rotation_precondition_failed',
-                detail:
-                    'JWT_KID / JWT_PRIVATE_KEY_PEM / JWT_PUBLIC_KEY_PEM bindings required for rotation',
-            });
-        }
-
-        // Step 1 — load the currently-deployed key (becomes "previous").
-        let previous: SigningKey;
-        try {
-            previous = await loadKeyPairFromPem(
-                env.JWT_PRIVATE_KEY_PEM,
-                env.JWT_PUBLIC_KEY_PEM,
-                env.JWT_KID,
-            );
-        } catch (err) {
-            return adminProblem(c, {
-                type: FORBIDDEN_TYPE,
-                title: 'Configuration Error',
-                status: 500,
-                code: 'jwt_rotation_precondition_failed',
-                detail: `failed to load current keypair: ${err instanceof Error ? err.message : String(err)}`,
-            });
-        }
-
-        // Step 2 — generate the new keypair (becomes "current"). Use
-        // a fresh kid derived from a UUID-like timestamp + entropy
-        // so it is distinct from the previous one and human-readable
-        // in JWKS responses.
-        const newKid = `athlya-${Date.now().toString(36)}-${randomHex(4)}`;
-        const { privateKey, publicKey } = await genKp('RS256', {
-            modulusLength: 2048,
-            extractable: true,
+    // Step 5 — append audit row (PII-safe). Best-effort: if the
+    // audit store is unreachable, log a warning but keep the
+    // response — the operator still gets the artefacts and the
+    // rotation can proceed. The audit row will be reconciled
+    // manually if needed.
+    if (deps.auditWriter !== undefined) {
+      const claims = c.get('authClaims') as { userId?: unknown };
+      const actorId = typeof claims.userId === 'string' ? claims.userId : 'unknown';
+      try {
+        await deps.auditWriter.appendRotationPrep({
+          actorId,
+          kidOld: previous.kid,
+          kidNew: next.kid,
+          graceSec: graceDefault,
         });
-        const next: SigningKey = {
-            kid: newKid,
-            privateKey,
-            publicKey,
-        };
-
-        // Step 3 — compute the rotation: notBefore on `current`,
-        // notAfter on `previous`, JWKS containing both.
-        const result = await rotateKeysAsync(previous, next, graceDefault, clock());
-
-        // Step 4 — export the new key material as PEM so the
-        // operator can pipe it directly into `wrangler secret put`.
-        const [currentPrivatePem, currentPublicPem] = await Promise.all([
-            exportPKCS8(privateKey),
-            exportSPKI(publicKey),
-        ]);
-
-        // Step 5 — append audit row (PII-safe). Best-effort: if the
-        // audit store is unreachable, log a warning but keep the
-        // response — the operator still gets the artefacts and the
-        // rotation can proceed. The audit row will be reconciled
-        // manually if needed.
-        if (deps.auditWriter !== undefined) {
-            const claims = c.get('authClaims') as { userId?: unknown };
-            const actorId =
-                typeof claims.userId === 'string'
-                    ? claims.userId
-                    : 'unknown';
-            try {
-                await deps.auditWriter.appendRotationPrep({
-                    actorId,
-                    kidOld: previous.kid,
-                    kidNew: next.kid,
-                    graceSec: graceDefault,
-                });
-            } catch (err) {
-                const logger = c.get('logger') as
-                    | { warn: (m: string, ctx?: unknown) => void }
-                    | undefined;
-                if (logger !== undefined) {
-                    logger.warn(
-                        'jwt rotation prep: audit append failed; continuing',
-                        {
-                            error:
-                                err instanceof Error
-                                    ? err.message
-                                    : String(err),
-                        },
-                    );
-                }
-            }
+      } catch (err) {
+        const logger = c.get('logger') as { warn: (m: string, ctx?: unknown) => void } | undefined;
+        if (logger !== undefined) {
+          logger.warn('jwt rotation prep: audit append failed; continuing', {
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
+      }
+    }
 
-        const response: RotationPrepareResponse = {
-            currentKid: result.current.kid,
-            currentPrivatePem,
-            currentPublicPem,
-            previousKid: result.previous.kid,
-            previousNotAfter:
-                result.previous.notAfter?.toISOString() ?? '',
-            graceSec: graceDefault,
-            jwks: result.jwks,
-        };
-        return c.json(response);
-    });
+    const response: RotationPrepareResponse = {
+      currentKid: result.current.kid,
+      currentPrivatePem,
+      currentPublicPem,
+      previousKid: result.previous.kid,
+      previousNotAfter: result.previous.notAfter?.toISOString() ?? '',
+      graceSec: graceDefault,
+      jwks: result.jwks,
+    };
+    return c.json(response);
+  });
 
-    return router;
+  return router;
 }
 
 /* ------------------------------------------------------------------ */
@@ -414,11 +393,11 @@ export function buildJwtRotateRouter(
 /* ------------------------------------------------------------------ */
 
 function randomHex(byteCount: number): string {
-    const buf = new Uint8Array(byteCount);
-    globalThis.crypto.getRandomValues(buf);
-    return Array.from(buf)
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
+  const buf = new Uint8Array(byteCount);
+  globalThis.crypto.getRandomValues(buf);
+  return Array.from(buf)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 // Re-export `publicJwkOf` so consumers (mostly the test suite for

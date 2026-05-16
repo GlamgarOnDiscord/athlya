@@ -16,20 +16,20 @@ slice future.
 - Store backé par Postgres via `@athlya/db/idempotency` :
   - Table `idempotency_keys (key, user_id, response, status_code, expires_at)`
   - PK composite `(key, user_id)` → first-writer-wins via `INSERT … ON
-    CONFLICT DO NOTHING`.
+CONFLICT DO NOTHING`.
 - Lookup → store dans la même request lifecycle.
 
 ### Caractéristiques
 
-| Aspect | État | Conformité Stripe |
-|---|---|---|
-| TTL Redis/Postgres | 24h (`DEFAULT_IDEMPOTENCY_TTL_SEC`) | ✅ identique |
-| Clé scope | `(key, user_id)` | ✅ identique |
-| Statuts cachés | 2xx + 409 (Stripe inclut 4xx aussi) | ⚠️ diff intentionnel |
-| Hash body | Non | ❌ écart |
-| Set-Cookie dans le replay | Non écrit (body JSON only) | ✅ OK |
-| Locking concurrent | First-writer-wins via ON CONFLICT | ✅ OK |
-| Failure mode | Lookup fail → continue (degrade) | ⚠️ risque double-exec |
+| Aspect                    | État                                | Conformité Stripe     |
+| ------------------------- | ----------------------------------- | --------------------- |
+| TTL Redis/Postgres        | 24h (`DEFAULT_IDEMPOTENCY_TTL_SEC`) | ✅ identique          |
+| Clé scope                 | `(key, user_id)`                    | ✅ identique          |
+| Statuts cachés            | 2xx + 409 (Stripe inclut 4xx aussi) | ⚠️ diff intentionnel  |
+| Hash body                 | Non                                 | ❌ écart              |
+| Set-Cookie dans le replay | Non écrit (body JSON only)          | ✅ OK                 |
+| Locking concurrent        | First-writer-wins via ON CONFLICT   | ✅ OK                 |
+| Failure mode              | Lookup fail → continue (degrade)    | ⚠️ risque double-exec |
 
 ## Findings
 

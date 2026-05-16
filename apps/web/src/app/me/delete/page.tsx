@@ -25,19 +25,22 @@ import type { ReactElement } from 'react';
 export const metadata: Metadata = { title: 'Supprimer mon compte — Athlya' };
 
 export default async function MeDeletePage(): Promise<ReactElement> {
-    const locale = await getLocale();
-    const t = createTranslator(locale);
+  const locale = await getLocale();
+  const t = createTranslator(locale);
 
-    return (
-        <main id="main-content" className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-6 py-12">
-            <Link href="/me" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-                <ChevronLeft className="size-4" aria-hidden="true" />
-                {t('common.back')}
-            </Link>
-            <h1 className="text-3xl font-semibold">{t('rgpd.delete.title')}</h1>
-            <RequireAuth>
-                <DeletePanel />
-            </RequireAuth>
-        </main>
-    );
+  return (
+    <main id="main-content" className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-6 py-12">
+      <Link
+        href="/me"
+        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ChevronLeft className="size-4" aria-hidden="true" />
+        {t('common.back')}
+      </Link>
+      <h1 className="text-3xl font-semibold">{t('rgpd.delete.title')}</h1>
+      <RequireAuth>
+        <DeletePanel />
+      </RequireAuth>
+    </main>
+  );
 }

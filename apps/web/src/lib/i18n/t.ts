@@ -35,8 +35,8 @@ import type { Locale, TranslationKeys } from '@athlya/shared/i18n';
  * purely an ergonomics choice.
  */
 export type Translator = (
-    key: TranslationKeys,
-    params?: Readonly<Record<string, string | number>>,
+  key: TranslationKeys,
+  params?: Readonly<Record<string, string | number>>,
 ) => string;
 
 /**
@@ -53,5 +53,5 @@ export type Translator = (
  *                                               // → "Position sur la liste d'attente : 3"
  */
 export function createTranslator(locale: Locale): Translator {
-    return (key, params) => translate(key, locale, params);
+  return (key, params) => translate(key, locale, params);
 }

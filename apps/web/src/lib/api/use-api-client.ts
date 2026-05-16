@@ -13,14 +13,14 @@ import { createApiClient, type ApiClient } from './client';
  * unit tests; omit it in production and the real client is built once.
  */
 export function useApiClient(clientProp?: ApiClient): ApiClient {
-    return useMemo<ApiClient>(
-        () =>
-            clientProp ??
-            createApiClient({
-                baseUrl: getPublicApiUrl(),
-                getToken: getAccessToken,
-                onRefresh: refreshAccessToken,
-            }),
-        [clientProp],
-    );
+  return useMemo<ApiClient>(
+    () =>
+      clientProp ??
+      createApiClient({
+        baseUrl: getPublicApiUrl(),
+        getToken: getAccessToken,
+        onRefresh: refreshAccessToken,
+      }),
+    [clientProp],
+  );
 }

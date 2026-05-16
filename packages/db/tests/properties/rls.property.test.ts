@@ -64,21 +64,21 @@ import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
-    createDbFromClient,
-    withTenant,
-    classes,
-    reservations,
-    users,
-    type AthlyaDb,
-    type TenantClaims,
-    type TenantRole,
+  createDbFromClient,
+  withTenant,
+  classes,
+  reservations,
+  users,
+  type AthlyaDb,
+  type TenantClaims,
+  type TenantRole,
 } from '../../src/index.js';
 
 import {
-    DEFAULT_CONSENTS_JSON,
-    isolationScenarioArb,
-    scenarioIdsAllDistinct,
-    type IsolationScenario,
+  DEFAULT_CONSENTS_JSON,
+  isolationScenarioArb,
+  scenarioIdsAllDistinct,
+  type IsolationScenario,
 } from './fixtures.js';
 
 import type { Sql } from 'postgres';
@@ -96,16 +96,16 @@ import type { Sql } from 'postgres';
 // ---------------------------------------------------------------------
 
 function detectDocker(): boolean {
-    try {
-        const res = spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'], {
-            stdio: ['ignore', 'pipe', 'pipe'],
-            timeout: 5_000,
-            encoding: 'utf8',
-        });
-        return res.status === 0 && typeof res.stdout === 'string' && res.stdout.trim().length > 0;
-    } catch {
-        return false;
-    }
+  try {
+    const res = spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 5_000,
+      encoding: 'utf8',
+    });
+    return res.status === 0 && typeof res.stdout === 'string' && res.stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
 }
 
 const dockerReady = detectDocker();
@@ -146,13 +146,13 @@ const TENANT_PASSWORD = 'tenant_test';
 // ---------------------------------------------------------------------
 
 async function applyMigration(client: Sql, sqlText: string): Promise<void> {
-    const statements = sqlText
-        .split(/-->\s*statement-breakpoint/g)
-        .map((chunk) => chunk.trim())
-        .filter((chunk) => chunk.length > 0);
-    for (const stmt of statements) {
-        await client.unsafe(stmt);
-    }
+  const statements = sqlText
+    .split(/-->\s*statement-breakpoint/g)
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.length > 0);
+  for (const stmt of statements) {
+    await client.unsafe(stmt);
+  }
 }
 
 /**
@@ -161,9 +161,9 @@ async function applyMigration(client: Sql, sqlText: string): Promise<void> {
  * monorepo root.
  */
 function readMigration(name: string): string {
-    const here = fileURLToPath(new URL('.', import.meta.url));
-    const file = resolve(here, '..', '..', 'migrations', name);
-    return readFileSync(file, 'utf8');
+  const here = fileURLToPath(new URL('.', import.meta.url));
+  const file = resolve(here, '..', '..', 'migrations', name);
+  return readFileSync(file, 'utf8');
 }
 
 // ---------------------------------------------------------------------
@@ -179,7 +179,7 @@ function readMigration(name: string): string {
 // ---------------------------------------------------------------------
 
 async function bootstrapTenantRole(client: Sql): Promise<void> {
-    await client.unsafe(`
+  await client.unsafe(`
         DO $$
         BEGIN
             IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${TENANT_ROLE}') THEN
@@ -199,7 +199,7 @@ async function bootstrapTenantRole(client: Sql): Promise<void> {
 // ---------------------------------------------------------------------
 
 async function truncateAll(client: Sql): Promise<void> {
-    await client.unsafe(`
+  await client.unsafe(`
         TRUNCATE TABLE
             "push_tokens",
             "idempotency_keys",
@@ -215,18 +215,18 @@ async function truncateAll(client: Sql): Promise<void> {
 }
 
 async function seedScenario(client: Sql, s: IsolationScenario): Promise<void> {
-    const consents = JSON.stringify(DEFAULT_CONSENTS_JSON);
+  const consents = JSON.stringify(DEFAULT_CONSENTS_JSON);
 
-    // Studios
-    await client`
+  // Studios
+  await client`
         INSERT INTO "studios" (id, slug, name, brand_color)
         VALUES
             (${s.studioA.id}, ${s.studioA.slug}, ${s.studioA.name}, '#0EA5E9'),
             (${s.studioB.id}, ${s.studioB.slug}, ${s.studioB.name}, '#F97316')
     `;
 
-    // Users — email is citext so the INSERT tolerates arbitrary case.
-    await client`
+  // Users — email is citext so the INSERT tolerates arbitrary case.
+  await client`
         INSERT INTO "users" (id, studio_id, email, display_name, role, consents)
         VALUES
             (
@@ -247,8 +247,8 @@ async function seedScenario(client: Sql, s: IsolationScenario): Promise<void> {
             )
     `;
 
-    // Classes
-    await client`
+  // Classes
+  await client`
         INSERT INTO "classes" (id, studio_id, title, starts_at, duration_min, capacity, version)
         VALUES
             (
@@ -271,10 +271,10 @@ async function seedScenario(client: Sql, s: IsolationScenario): Promise<void> {
             )
     `;
 
-    // Reservations — each reservation belongs to the matching studio's
-    // user and class, so the anti-double-booking UNIQUE(class_id,
-    // user_id) index is satisfied by construction.
-    await client`
+  // Reservations — each reservation belongs to the matching studio's
+  // user and class, so the anti-double-booking UNIQUE(class_id,
+  // user_id) index is satisfied by construction.
+  await client`
         INSERT INTO "reservations" (id, class_id, user_id, status)
         VALUES
             (${s.reservationA.id}, ${s.reservationA.classId}, ${s.reservationA.userId}, 'confirmed'),
@@ -287,57 +287,54 @@ async function seedScenario(client: Sql, s: IsolationScenario): Promise<void> {
 // ---------------------------------------------------------------------
 
 interface IsolationResult {
-    readonly userBVisible: boolean;
-    readonly classBVisible: boolean;
-    readonly reservationBVisible: boolean;
-    readonly userASelfVisible: boolean;
+  readonly userBVisible: boolean;
+  readonly classBVisible: boolean;
+  readonly reservationBVisible: boolean;
+  readonly userASelfVisible: boolean;
 }
 
 async function queryIsolation(
-    db: AthlyaDb,
-    s: IsolationScenario,
-    role: TenantRole,
+  db: AthlyaDb,
+  s: IsolationScenario,
+  role: TenantRole,
 ): Promise<IsolationResult> {
-    const claims: TenantClaims = {
-        userId: s.userA.id,
-        studioId: s.studioA.id,
-        role,
+  const claims: TenantClaims = {
+    userId: s.userA.id,
+    studioId: s.studioA.id,
+    role,
+  };
+
+  return withTenant(db, claims, async (tx) => {
+    // 1. Query user B by id — expected to return [] across every
+    //    role because userB.studio_id ≠ studioA.
+    const userBRows = await tx.select().from(users).where(eq(users.id, s.userB.id));
+
+    // 2. Query class B by id — studio_id on the row differs from
+    //    app.studio_id, so `classes_read_same_studio` filters it.
+    const classBRows = await tx.select().from(classes).where(eq(classes.id, s.classB.id));
+
+    // 3. Query reservation B by id — reservations_read_own rejects
+    //    (user_id ≠ app.user_id) and reservations_read_admin_same_studio
+    //    rejects because the reservation's class belongs to B.
+    const reservationBRows = await tx
+      .select()
+      .from(reservations)
+      .where(eq(reservations.id, s.reservationB.id));
+
+    // 4. Sanity check — user A must still see their OWN row.
+    //    Without this the property could be trivially satisfied
+    //    by a policy that denies every read. Getting a positive
+    //    signal on the owner's side confirms RLS is active AND
+    //    correctly scoped.
+    const userASelfRows = await tx.select().from(users).where(eq(users.id, s.userA.id));
+
+    return {
+      userBVisible: userBRows.length > 0,
+      classBVisible: classBRows.length > 0,
+      reservationBVisible: reservationBRows.length > 0,
+      userASelfVisible: userASelfRows.length > 0,
     };
-
-    return withTenant(db, claims, async (tx) => {
-        // 1. Query user B by id — expected to return [] across every
-        //    role because userB.studio_id ≠ studioA.
-        const userBRows = await tx.select().from(users).where(eq(users.id, s.userB.id));
-
-        // 2. Query class B by id — studio_id on the row differs from
-        //    app.studio_id, so `classes_read_same_studio` filters it.
-        const classBRows = await tx
-            .select()
-            .from(classes)
-            .where(eq(classes.id, s.classB.id));
-
-        // 3. Query reservation B by id — reservations_read_own rejects
-        //    (user_id ≠ app.user_id) and reservations_read_admin_same_studio
-        //    rejects because the reservation's class belongs to B.
-        const reservationBRows = await tx
-            .select()
-            .from(reservations)
-            .where(eq(reservations.id, s.reservationB.id));
-
-        // 4. Sanity check — user A must still see their OWN row.
-        //    Without this the property could be trivially satisfied
-        //    by a policy that denies every read. Getting a positive
-        //    signal on the owner's side confirms RLS is active AND
-        //    correctly scoped.
-        const userASelfRows = await tx.select().from(users).where(eq(users.id, s.userA.id));
-
-        return {
-            userBVisible: userBRows.length > 0,
-            classBVisible: classBRows.length > 0,
-            reservationBVisible: reservationBRows.length > 0,
-            userASelfVisible: userASelfRows.length > 0,
-        };
-    });
+  });
 }
 
 // ---------------------------------------------------------------------
@@ -345,72 +342,72 @@ async function queryIsolation(
 // ---------------------------------------------------------------------
 
 beforeAll(async () => {
-    if (!dockerReady) {
-        console.warn(
-            '[rls.property] Docker daemon unreachable; tenant-isolation property skipped. ' +
-            'Start Docker Desktop / the dockerd service to exercise this suite.',
-        );
-        return;
-    }
+  if (!dockerReady) {
+    console.warn(
+      '[rls.property] Docker daemon unreachable; tenant-isolation property skipped. ' +
+        'Start Docker Desktop / the dockerd service to exercise this suite.',
+    );
+    return;
+  }
 
-    // Dynamic import so the module is only resolved when we actually
-    // need it. Keeps `pnpm test` on no-docker machines from failing on
-    // an unresolved `@testcontainers/postgresql` import if the dep is
-    // absent (e.g. fresh clone before `pnpm install`).
-    const { PostgreSqlContainer } = await import('@testcontainers/postgresql');
+  // Dynamic import so the module is only resolved when we actually
+  // need it. Keeps `pnpm test` on no-docker machines from failing on
+  // an unresolved `@testcontainers/postgresql` import if the dep is
+  // absent (e.g. fresh clone before `pnpm install`).
+  const { PostgreSqlContainer } = await import('@testcontainers/postgresql');
 
-    // The default image is `postgres:15-alpine`; the Athlya spec pins
-    // Postgres 17, so we override explicitly. The init-db user stays
-    // `postgres` (superuser) because we need it to run the migrations.
-    const started = await new PostgreSqlContainer('postgres:17-alpine')
-        .withDatabase('athlya_test')
-        .withUsername(ROOT_ROLE)
-        .withPassword('root_test')
-        .start();
+  // The default image is `postgres:15-alpine`; the Athlya spec pins
+  // Postgres 17, so we override explicitly. The init-db user stays
+  // `postgres` (superuser) because we need it to run the migrations.
+  const started = await new PostgreSqlContainer('postgres:17-alpine')
+    .withDatabase('athlya_test')
+    .withUsername(ROOT_ROLE)
+    .withPassword('root_test')
+    .start();
 
-    container = {
-        stop: async () => {
-            await started.stop();
-        },
-    };
-    const rootConnString = started.getConnectionUri();
+  container = {
+    stop: async () => {
+      await started.stop();
+    },
+  };
+  const rootConnString = started.getConnectionUri();
 
-    rootClient = postgres(rootConnString, { max: 2, prepare: false });
+  rootClient = postgres(rootConnString, { max: 2, prepare: false });
 
-    // Apply schema + RLS.
-    await applyMigration(rootClient, readMigration('0000_init.sql'));
-    await applyMigration(rootClient, readMigration('0001_rls.sql'));
+  // Apply schema + RLS.
+  await applyMigration(rootClient, readMigration('0000_init.sql'));
+  await applyMigration(rootClient, readMigration('0001_rls.sql'));
 
-    // Create the NOBYPASSRLS tenant role + grants.
-    await bootstrapTenantRole(rootClient);
+  // Create the NOBYPASSRLS tenant role + grants.
+  await bootstrapTenantRole(rootClient);
 
-    // Open a second client bound to that role. The connection URI
-    // exposed by Testcontainers already points at the mapped host
-    // port; we just swap the user and password.
-    const tenantUri = buildTenantUri(started.getHost(), started.getMappedPort(5432));
-    tenantClient = postgres(tenantUri, { max: 4, prepare: false });
-    tenantDb = createDbFromClient(tenantClient);
+  // Open a second client bound to that role. The connection URI
+  // exposed by Testcontainers already points at the mapped host
+  // port; we just swap the user and password.
+  const tenantUri = buildTenantUri(started.getHost(), started.getMappedPort(5432));
+  tenantClient = postgres(tenantUri, { max: 4, prepare: false });
+  tenantDb = createDbFromClient(tenantClient);
 }, 180_000);
 
 afterAll(async () => {
-    try {
-        await tenantClient?.end({ timeout: 5 });
-        await rootClient?.end({ timeout: 5 });
-    } finally {
-        await container?.stop();
-    }
+  try {
+    await tenantClient?.end({ timeout: 5 });
+    await rootClient?.end({ timeout: 5 });
+  } finally {
+    await container?.stop();
+  }
 });
 
 function buildTenantUri(host: string, port: number): string {
-    // `postgres-js` accepts the standard libpq URL format. Using a
-    // URL constructor guarantees correct encoding of the password.
-    const u = new URL('postgres://placeholder');
-    u.hostname = host;
-    u.port = String(port);
-    u.username = TENANT_ROLE;
-    u.password = TENANT_PASSWORD;
-    u.pathname = '/athlya_test';
-    return u.toString();
+  // `postgres-js` accepts the standard libpq URL format. Using a
+  // URL constructor guarantees correct encoding of the password.
+  const u = new URL('postgres://placeholder');
+  u.hostname = host;
+  u.port = String(port);
+  u.username = TENANT_ROLE;
+  u.password = TENANT_PASSWORD;
+  u.pathname = '/athlya_test';
+  return u.toString();
 }
 
 // ---------------------------------------------------------------------
@@ -420,137 +417,133 @@ function buildTenantUri(host: string, port: number): string {
 // ---------------------------------------------------------------------
 
 describe.skipIf(!dockerReady)('withTenant — Property 7 (tenant isolation)', () => {
-    const ROLES: readonly TenantRole[] = ['member', 'coach', 'admin'];
+  const ROLES: readonly TenantRole[] = ['member', 'coach', 'admin'];
 
-    for (const role of ROLES) {
-        it(
-            `cross-tenant reads return [] for role=${role} across users/classes/reservations`,
-            async () => {
-                // Guard: beforeAll bails out early when docker isn't
-                // ready, but vitest still registers the test body.
-                // The describe.skipIf above filters those runs out, so
-                // in practice tenantDb is non-null here.
-                if (!rootClient || !tenantDb) {
-                    throw new Error('test infrastructure not initialised');
-                }
-                const db = tenantDb;
-                const root = rootClient;
+  for (const role of ROLES) {
+    it(`cross-tenant reads return [] for role=${role} across users/classes/reservations`, async () => {
+      // Guard: beforeAll bails out early when docker isn't
+      // ready, but vitest still registers the test body.
+      // The describe.skipIf above filters those runs out, so
+      // in practice tenantDb is non-null here.
+      if (!rootClient || !tenantDb) {
+        throw new Error('test infrastructure not initialised');
+      }
+      const db = tenantDb;
+      const root = rootClient;
 
-                await fc.assert(
-                    fc.asyncProperty(isolationScenarioArb, async (scenario) => {
-                        // Collision rejection — see fixtures.ts.
-                        fc.pre(scenarioIdsAllDistinct(scenario));
+      await fc.assert(
+        fc.asyncProperty(isolationScenarioArb, async (scenario) => {
+          // Collision rejection — see fixtures.ts.
+          fc.pre(scenarioIdsAllDistinct(scenario));
 
-                        // Each run gets a clean slate. Truncate runs
-                        // under the superuser client so RLS does not
-                        // interfere.
-                        await truncateAll(root);
-                        await seedScenario(root, scenario);
+          // Each run gets a clean slate. Truncate runs
+          // under the superuser client so RLS does not
+          // interfere.
+          await truncateAll(root);
+          await seedScenario(root, scenario);
 
-                        const result = await queryIsolation(db, scenario, role);
+          const result = await queryIsolation(db, scenario, role);
 
-                        return (
-                            result.userBVisible === false &&
-                            result.classBVisible === false &&
-                            result.reservationBVisible === false &&
-                            // Regression anchor: user A MUST still see
-                            // its own row. If this flips to false, the
-                            // cross-tenant "empty" result is vacuous.
-                            result.userASelfVisible === true
-                        );
-                    }),
-                    { numRuns: 25, seed: 0x7e4a1d3b },
-                );
-            },
-            180_000,
-        );
-    }
+          return (
+            result.userBVisible === false &&
+            result.classBVisible === false &&
+            result.reservationBVisible === false &&
+            // Regression anchor: user A MUST still see
+            // its own row. If this flips to false, the
+            // cross-tenant "empty" result is vacuous.
+            result.userASelfVisible === true
+          );
+        }),
+        { numRuns: 25, seed: 0x7e4a1d3b },
+      );
+    }, 180_000);
+  }
 
-    // Non-property smoke test covering the happy path. Keeps the file
-    // self-contained so a maintainer can eyeball a single legible
-    // scenario before reading the property block above.
-    it('admin of studio A cannot see any row owned by studio B', async () => {
-        if (!rootClient || !tenantDb) throw new Error('infra not initialised');
-        const scenario: IsolationScenario = {
-            studioA: {
-                id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-                slug: 'alpha',
-                name: 'Alpha',
-            },
-            studioB: {
-                id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-                slug: 'bravo',
-                name: 'Bravo',
-            },
-            userA: {
-                id: '11111111-1111-4111-8111-111111111111',
-                studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-                email: 'a@athlya.test',
-                displayName: 'User A',
-                role: 'admin',
-            },
-            userB: {
-                id: '22222222-2222-4222-8222-222222222222',
-                studioId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-                email: 'b@athlya.test',
-                displayName: 'User B',
-                role: 'member',
-            },
-            classA: {
-                id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc01',
-                studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-                title: 'Class A',
-                startsAt: '2030-01-01T09:00:00Z',
-                durationMin: 60,
-                capacity: 20,
-            },
-            classB: {
-                id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc02',
-                studioId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-                title: 'Class B',
-                startsAt: '2030-01-01T19:00:00Z',
-                durationMin: 45,
-                capacity: 15,
-            },
-            reservationA: {
-                id: 'dddddddd-dddd-4ddd-8ddd-dddddddddd01',
-                classId: 'cccccccc-cccc-4ccc-8ccc-cccccccccc01',
-                userId: '11111111-1111-4111-8111-111111111111',
-            },
-            reservationB: {
-                id: 'dddddddd-dddd-4ddd-8ddd-dddddddddd02',
-                classId: 'cccccccc-cccc-4ccc-8ccc-cccccccccc02',
-                userId: '22222222-2222-4222-8222-222222222222',
-            },
-        };
+  // Non-property smoke test covering the happy path. Keeps the file
+  // self-contained so a maintainer can eyeball a single legible
+  // scenario before reading the property block above.
+  it('admin of studio A cannot see any row owned by studio B', async () => {
+    if (!rootClient || !tenantDb) throw new Error('infra not initialised');
+    const scenario: IsolationScenario = {
+      studioA: {
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        slug: 'alpha',
+        name: 'Alpha',
+      },
+      studioB: {
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        slug: 'bravo',
+        name: 'Bravo',
+      },
+      userA: {
+        id: '11111111-1111-4111-8111-111111111111',
+        studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        email: 'a@athlya.test',
+        displayName: 'User A',
+        role: 'admin',
+      },
+      userB: {
+        id: '22222222-2222-4222-8222-222222222222',
+        studioId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        email: 'b@athlya.test',
+        displayName: 'User B',
+        role: 'member',
+      },
+      classA: {
+        id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc01',
+        studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        title: 'Class A',
+        startsAt: '2030-01-01T09:00:00Z',
+        durationMin: 60,
+        capacity: 20,
+      },
+      classB: {
+        id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc02',
+        studioId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        title: 'Class B',
+        startsAt: '2030-01-01T19:00:00Z',
+        durationMin: 45,
+        capacity: 15,
+      },
+      reservationA: {
+        id: 'dddddddd-dddd-4ddd-8ddd-dddddddddd01',
+        classId: 'cccccccc-cccc-4ccc-8ccc-cccccccccc01',
+        userId: '11111111-1111-4111-8111-111111111111',
+      },
+      reservationB: {
+        id: 'dddddddd-dddd-4ddd-8ddd-dddddddddd02',
+        classId: 'cccccccc-cccc-4ccc-8ccc-cccccccccc02',
+        userId: '22222222-2222-4222-8222-222222222222',
+      },
+    };
 
-        await truncateAll(rootClient);
-        await seedScenario(rootClient, scenario);
+    await truncateAll(rootClient);
+    await seedScenario(rootClient, scenario);
 
-        const result = await queryIsolation(tenantDb, scenario, 'admin');
+    const result = await queryIsolation(tenantDb, scenario, 'admin');
 
-        expect(result.userBVisible).toBe(false);
-        expect(result.classBVisible).toBe(false);
-        expect(result.reservationBVisible).toBe(false);
-        expect(result.userASelfVisible).toBe(true);
-    });
+    expect(result.userBVisible).toBe(false);
+    expect(result.classBVisible).toBe(false);
+    expect(result.reservationBVisible).toBe(false);
+    expect(result.userASelfVisible).toBe(true);
+  });
 });
 
 // Always-registered anchor so the test file reports *something* in
 // environments without Docker. Otherwise `vitest run --reporter=verbose`
 // would show an empty file and CI could miss a broken import.
 describe('rls property suite registration', () => {
-    it('imports the tenant-isolation fixtures without error', () => {
-        // Touching the arbitrary forces fast-check and the fixtures
-        // module to load — a broken import would surface here rather
-        // than only inside the docker-gated suite.
-        expect(typeof isolationScenarioArb).toBe('object');
-    });
+  it('imports the tenant-isolation fixtures without error', () => {
+    // Touching the arbitrary forces fast-check and the fixtures
+    // module to load — a broken import would surface here rather
+    // than only inside the docker-gated suite.
+    expect(typeof isolationScenarioArb).toBe('object');
+  });
 
-    it.skipIf(dockerReady)('logs a clear message when Docker is unavailable', () => {
-        // A green record of the skip; CI dashboards that filter by
-        // "skipped" will surface this on machines where RLS is not
-        // exercised.
-        expect(dockerReady).toBe(false);
-    });
+  it.skipIf(dockerReady)('logs a clear message when Docker is unavailable', () => {
+    // A green record of the skip; CI dashboards that filter by
+    // "skipped" will surface this on machines where RLS is not
+    // exercised.
+    expect(dockerReady).toBe(false);
+  });
 });

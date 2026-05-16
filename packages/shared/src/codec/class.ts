@@ -17,24 +17,24 @@ import { ClassSchema, type Class } from '../schemas/domain.js';
 import type { ClassWire } from './types.js';
 
 function toJSON(value: Class): ClassWire {
-    return {
-        id: value.id,
-        studioId: value.studioId,
-        coachId: value.coachId,
-        title: value.title,
-        startsAt: value.startsAt,
-        durationMin: value.durationMin,
-        capacity: value.capacity,
-        version: value.version,
-        createdAt: value.createdAt,
-    };
+  return {
+    id: value.id,
+    studioId: value.studioId,
+    coachId: value.coachId,
+    title: value.title,
+    startsAt: value.startsAt,
+    durationMin: value.durationMin,
+    capacity: value.capacity,
+    version: value.version,
+    createdAt: value.createdAt,
+  };
 }
 
 function fromJSON(raw: unknown): Class {
-    return ClassSchema.parse(raw);
+  return ClassSchema.parse(raw);
 }
 
 export const ClassCodec = {
-    toJSON,
-    fromJSON,
+  toJSON,
+  fromJSON,
 } as const;

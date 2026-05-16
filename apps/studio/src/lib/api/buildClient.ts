@@ -39,37 +39,37 @@ import { createApiClient, type ApiClient } from './client';
  * inside a stable auth state share the same instance.
  */
 export function useApiClient(getToken: () => string | null): ApiClient {
-    return useMemo(() => {
-        const baseUrl = getPublicApiUrl();
-        return createApiClient({
-            baseUrl,
-            getToken,
-            onRefresh: async () => {
-                try {
-                    const response = await fetch('/api/auth/refresh', {
-                        method: 'POST',
-                        credentials: 'include',
-                        headers: {
-                            'content-type': 'application/json',
-                        },
-                    });
-                    if (!response.ok) {
-                        // Refresh failed — clear the in-memory token
-                        // so the auth context flips to "signed out"
-                        // immediately and the gate redirects to /login.
-                        setAccessToken(null);
-                        return null;
-                    }
-                    const payload = (await response.json()) as {
-                        readonly accessToken: string;
-                    };
-                    setAccessToken(payload.accessToken);
-                    return payload.accessToken;
-                } catch {
-                    setAccessToken(null);
-                    return null;
-                }
+  return useMemo(() => {
+    const baseUrl = getPublicApiUrl();
+    return createApiClient({
+      baseUrl,
+      getToken,
+      onRefresh: async () => {
+        try {
+          const response = await fetch('/api/auth/refresh', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'content-type': 'application/json',
             },
-        });
-    }, [getToken]);
+          });
+          if (!response.ok) {
+            // Refresh failed — clear the in-memory token
+            // so the auth context flips to "signed out"
+            // immediately and the gate redirects to /login.
+            setAccessToken(null);
+            return null;
+          }
+          const payload = (await response.json()) as {
+            readonly accessToken: string;
+          };
+          setAccessToken(payload.accessToken);
+          return payload.accessToken;
+        } catch {
+          setAccessToken(null);
+          return null;
+        }
+      },
+    });
+  }, [getToken]);
 }

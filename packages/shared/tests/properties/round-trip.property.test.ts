@@ -36,22 +36,22 @@ import { describe, expect } from 'vitest';
 import { ZodError } from 'zod';
 
 import {
-    AuditLogCodec,
-    ClassCodec,
-    ConsentsCodec,
-    ReservationCodec,
-    StudioCodec,
-    UserCodec,
-    WorkoutSessionCodec,
+  AuditLogCodec,
+  ClassCodec,
+  ConsentsCodec,
+  ReservationCodec,
+  StudioCodec,
+  UserCodec,
+  WorkoutSessionCodec,
 } from '../../src/codec/index.js';
 import {
-    auditLogArb,
-    classArb,
-    consentsArb,
-    reservationArb,
-    studioArb,
-    userArb,
-    workoutSessionArb,
+  auditLogArb,
+  classArb,
+  consentsArb,
+  reservationArb,
+  studioArb,
+  userArb,
+  workoutSessionArb,
 } from '../fixtures/arbitraries.js';
 
 /**
@@ -61,16 +61,16 @@ import {
  * wire type.
  */
 function assertRoundTrip<T>(
-    codec: { toJSON: (v: T) => unknown; fromJSON: (raw: unknown) => T },
-    value: T,
+  codec: { toJSON: (v: T) => unknown; fromJSON: (raw: unknown) => T },
+  value: T,
 ): void {
-    const wire = codec.toJSON(value);
-    // `toJSON` must be pure: the produced wire value must survive a
-    // trip through real JSON (Schema drift catches `undefined` values
-    // hidden in optional fields — they would disappear here).
-    const serialised = JSON.parse(JSON.stringify(wire)) as unknown;
-    const revived = codec.fromJSON(serialised);
-    expect(revived).toEqual(value);
+  const wire = codec.toJSON(value);
+  // `toJSON` must be pure: the produced wire value must survive a
+  // trip through real JSON (Schema drift catches `undefined` values
+  // hidden in optional fields — they would disappear here).
+  const serialised = JSON.parse(JSON.stringify(wire)) as unknown;
+  const revived = codec.fromJSON(serialised);
+  expect(revived).toEqual(value);
 }
 
 const RUN_OPTS = { numRuns: 200 } as const;
@@ -80,51 +80,42 @@ const RUN_OPTS = { numRuns: 200 } as const;
 /* ------------------------------------------------------------------ */
 
 describe('codec round-trip (Requirement 21.3)', () => {
-    it.prop([studioArb], RUN_OPTS)('Studio round-trip is structural identity', (value) => {
-        assertRoundTrip(StudioCodec, value);
-    });
+  it.prop([studioArb], RUN_OPTS)('Studio round-trip is structural identity', (value) => {
+    assertRoundTrip(StudioCodec, value);
+  });
 
-    it.prop([consentsArb], RUN_OPTS)(
-        'Consents round-trip is structural identity',
-        (value) => {
-            assertRoundTrip(ConsentsCodec, value);
-        },
-    );
+  it.prop([consentsArb], RUN_OPTS)('Consents round-trip is structural identity', (value) => {
+    assertRoundTrip(ConsentsCodec, value);
+  });
 
-    it.prop([userArb], RUN_OPTS)(
-        // Transitively exercises `ConsentsCodec` through `User.consents`.
-        'User round-trip is structural identity',
-        (value) => {
-            assertRoundTrip(UserCodec, value);
-        },
-    );
+  it.prop([userArb], RUN_OPTS)(
+    // Transitively exercises `ConsentsCodec` through `User.consents`.
+    'User round-trip is structural identity',
+    (value) => {
+      assertRoundTrip(UserCodec, value);
+    },
+  );
 
-    it.prop([classArb], RUN_OPTS)('Class round-trip is structural identity', (value) => {
-        assertRoundTrip(ClassCodec, value);
-    });
+  it.prop([classArb], RUN_OPTS)('Class round-trip is structural identity', (value) => {
+    assertRoundTrip(ClassCodec, value);
+  });
 
-    it.prop([reservationArb], RUN_OPTS)(
-        'Reservation round-trip is structural identity',
-        (value) => {
-            assertRoundTrip(ReservationCodec, value);
-        },
-    );
+  it.prop([reservationArb], RUN_OPTS)('Reservation round-trip is structural identity', (value) => {
+    assertRoundTrip(ReservationCodec, value);
+  });
 
-    it.prop([workoutSessionArb], RUN_OPTS)(
-        // Transitively exercises `ExerciseCodec` and `SetCodec`, including
-        // the presence-vs-absence distinction on optional `Set` fields.
-        'WorkoutSession round-trip is structural identity',
-        (value) => {
-            assertRoundTrip(WorkoutSessionCodec, value);
-        },
-    );
+  it.prop([workoutSessionArb], RUN_OPTS)(
+    // Transitively exercises `ExerciseCodec` and `SetCodec`, including
+    // the presence-vs-absence distinction on optional `Set` fields.
+    'WorkoutSession round-trip is structural identity',
+    (value) => {
+      assertRoundTrip(WorkoutSessionCodec, value);
+    },
+  );
 
-    it.prop([auditLogArb], RUN_OPTS)(
-        'AuditLog round-trip is structural identity',
-        (value) => {
-            assertRoundTrip(AuditLogCodec, value);
-        },
-    );
+  it.prop([auditLogArb], RUN_OPTS)('AuditLog round-trip is structural identity', (value) => {
+    assertRoundTrip(AuditLogCodec, value);
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -143,34 +134,34 @@ describe('codec round-trip (Requirement 21.3)', () => {
  * the edge of the valid-value set.
  */
 const invalidStudioInputArb = fc.oneof(
-    fc.string(),
-    fc.integer(),
-    fc.array(fc.anything()),
-    fc.constantFrom(null, undefined),
-    // A record missing `brandColor` entirely.
-    fc.record({
-        id: fc.uuid(),
-        slug: fc.constantFrom('ok', 'also-ok'),
-        name: fc.string({ minLength: 1, maxLength: 10 }),
-        createdAt: fc.constant('2024-01-01T00:00:00.000Z'),
-        deletedAt: fc.constant(null),
-    }),
-    // A record whose `brandColor` is not a hex color.
-    fc.record({
-        id: fc.uuid(),
-        slug: fc.constant('valid-slug'),
-        name: fc.string({ minLength: 1, maxLength: 10 }),
-        brandColor: fc.constantFrom('red', '#fff', 'not-a-color'),
-        createdAt: fc.constant('2024-01-01T00:00:00.000Z'),
-        deletedAt: fc.constant(null),
-    }),
+  fc.string(),
+  fc.integer(),
+  fc.array(fc.anything()),
+  fc.constantFrom(null, undefined),
+  // A record missing `brandColor` entirely.
+  fc.record({
+    id: fc.uuid(),
+    slug: fc.constantFrom('ok', 'also-ok'),
+    name: fc.string({ minLength: 1, maxLength: 10 }),
+    createdAt: fc.constant('2024-01-01T00:00:00.000Z'),
+    deletedAt: fc.constant(null),
+  }),
+  // A record whose `brandColor` is not a hex color.
+  fc.record({
+    id: fc.uuid(),
+    slug: fc.constant('valid-slug'),
+    name: fc.string({ minLength: 1, maxLength: 10 }),
+    brandColor: fc.constantFrom('red', '#fff', 'not-a-color'),
+    createdAt: fc.constant('2024-01-01T00:00:00.000Z'),
+    deletedAt: fc.constant(null),
+  }),
 );
 
 describe('codec rejection (Requirement 21.2)', () => {
-    it.prop([invalidStudioInputArb], { numRuns: 100 })(
-        'StudioCodec.fromJSON rejects malformed inputs with a ZodError',
-        (raw) => {
-            expect(() => StudioCodec.fromJSON(raw)).toThrow(ZodError);
-        },
-    );
+  it.prop([invalidStudioInputArb], { numRuns: 100 })(
+    'StudioCodec.fromJSON rejects malformed inputs with a ZodError',
+    (raw) => {
+      expect(() => StudioCodec.fromJSON(raw)).toThrow(ZodError);
+    },
+  );
 });

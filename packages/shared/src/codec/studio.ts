@@ -34,14 +34,14 @@ import type { StudioWire } from './types.js';
  * here instead of silently losing a field at runtime.
  */
 function toJSON(value: Studio): StudioWire {
-    return {
-        id: value.id,
-        slug: value.slug,
-        name: value.name,
-        brandColor: value.brandColor,
-        createdAt: value.createdAt,
-        deletedAt: value.deletedAt,
-    };
+  return {
+    id: value.id,
+    slug: value.slug,
+    name: value.name,
+    brandColor: value.brandColor,
+    createdAt: value.createdAt,
+    deletedAt: value.deletedAt,
+  };
 }
 
 /**
@@ -49,10 +49,10 @@ function toJSON(value: Studio): StudioWire {
  * `ZodError` on invalid input.
  */
 function fromJSON(raw: unknown): Studio {
-    return StudioSchema.parse(raw);
+  return StudioSchema.parse(raw);
 }
 
 export const StudioCodec = {
-    toJSON,
-    fromJSON,
+  toJSON,
+  fromJSON,
 } as const;

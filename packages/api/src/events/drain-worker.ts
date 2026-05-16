@@ -64,18 +64,18 @@
  * that bridges the two.
  */
 export interface ClaimedRow {
-    /** Primary-key UUID of the `outbox` row. Used by `markPublished`. */
-    readonly id: string;
-    /** Domain-level event id (UUID). Becomes the dedup key downstream. */
-    readonly eventId: string;
-    /** Dotted event type, e.g. `"reservation.created"`. */
-    readonly eventType: string;
-    /** Fully-serialised event payload, as it was inserted. */
-    readonly payload: Record<string, unknown>;
-    /** Domain timestamp of the underlying state change. */
-    readonly occurredAt: Date;
-    /** Monotonically increasing attempt counter bumped by the store. */
-    readonly attempts: number;
+  /** Primary-key UUID of the `outbox` row. Used by `markPublished`. */
+  readonly id: string;
+  /** Domain-level event id (UUID). Becomes the dedup key downstream. */
+  readonly eventId: string;
+  /** Dotted event type, e.g. `"reservation.created"`. */
+  readonly eventType: string;
+  /** Fully-serialised event payload, as it was inserted. */
+  readonly payload: Record<string, unknown>;
+  /** Domain timestamp of the underlying state change. */
+  readonly occurredAt: Date;
+  /** Monotonically increasing attempt counter bumped by the store. */
+  readonly attempts: number;
 }
 
 /**
@@ -90,8 +90,8 @@ export interface ClaimedRow {
  * backed by Postgres, an in-memory map (tests) or anything else.
  */
 export interface OutboxStore {
-    claimBatch(size: number): Promise<readonly ClaimedRow[]>;
-    markPublished(id: string): Promise<void>;
+  claimBatch(size: number): Promise<readonly ClaimedRow[]>;
+  markPublished(id: string): Promise<void>;
 }
 
 /**
@@ -105,7 +105,7 @@ export interface OutboxStore {
  * signals queue acknowledgment.
  */
 export interface QueueProducer {
-    send(message: unknown): Promise<void>;
+  send(message: unknown): Promise<void>;
 }
 
 /**
@@ -114,9 +114,9 @@ export interface QueueProducer {
  * hard dependency on a tracing library.
  */
 export interface Logger {
-    info(msg: string, meta?: Record<string, unknown>): void;
-    warn(msg: string, meta?: Record<string, unknown>): void;
-    error(msg: string, meta?: Record<string, unknown>): void;
+  info(msg: string, meta?: Record<string, unknown>): void;
+  warn(msg: string, meta?: Record<string, unknown>): void;
+  error(msg: string, meta?: Record<string, unknown>): void;
 }
 
 /**
@@ -126,24 +126,24 @@ export interface Logger {
  * `Date.now` globally.
  */
 export interface Clock {
-    now(): Date;
+  now(): Date;
 }
 
 /** Options bag accepted by {@link drainOutbox}. */
 export interface DrainOutboxOptions {
-    readonly store: OutboxStore;
-    readonly queue: QueueProducer;
-    /** Defaults to {@link DEFAULT_BATCH_SIZE}. Must be a positive integer. */
-    readonly batchSize?: number;
-    readonly logger?: Logger;
-    readonly clock?: Clock;
+  readonly store: OutboxStore;
+  readonly queue: QueueProducer;
+  /** Defaults to {@link DEFAULT_BATCH_SIZE}. Must be a positive integer. */
+  readonly batchSize?: number;
+  readonly logger?: Logger;
+  readonly clock?: Clock;
 }
 
 /** Tally returned by {@link drainOutbox}. See module docstring. */
 export interface DrainResult {
-    readonly processed: number;
-    readonly succeeded: number;
-    readonly failed: number;
+  readonly processed: number;
+  readonly succeeded: number;
+  readonly failed: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -159,19 +159,19 @@ export interface DrainResult {
 export const DEFAULT_BATCH_SIZE = 100;
 
 const defaultLogger: Logger = {
-    info: (msg, meta) => {
-        console.log(`[drain] ${msg}`, meta ?? {});
-    },
-    warn: (msg, meta) => {
-        console.warn(`[drain] ${msg}`, meta ?? {});
-    },
-    error: (msg, meta) => {
-        console.error(`[drain] ${msg}`, meta ?? {});
-    },
+  info: (msg, meta) => {
+    console.log(`[drain] ${msg}`, meta ?? {});
+  },
+  warn: (msg, meta) => {
+    console.warn(`[drain] ${msg}`, meta ?? {});
+  },
+  error: (msg, meta) => {
+    console.error(`[drain] ${msg}`, meta ?? {});
+  },
 };
 
 const defaultClock: Clock = {
-    now: () => new Date(),
+  now: () => new Date(),
 };
 
 /* ------------------------------------------------------------------ */
@@ -202,52 +202,52 @@ const defaultClock: Clock = {
  *   3. Return `{ processed, succeeded, failed }`.
  */
 export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainResult> {
-    const { store, queue } = options;
-    const logger = options.logger ?? defaultLogger;
-    const clock = options.clock ?? defaultClock;
-    const batchSize = normaliseBatchSize(options.batchSize);
+  const { store, queue } = options;
+  const logger = options.logger ?? defaultLogger;
+  const clock = options.clock ?? defaultClock;
+  const batchSize = normaliseBatchSize(options.batchSize);
 
-    const startedAt = clock.now();
+  const startedAt = clock.now();
 
-    const rows = await store.claimBatch(batchSize);
+  const rows = await store.claimBatch(batchSize);
 
-    if (rows.length === 0) {
-        logger.info('outbox drain: empty batch', { batchSize });
-        return { processed: 0, succeeded: 0, failed: 0 };
+  if (rows.length === 0) {
+    logger.info('outbox drain: empty batch', { batchSize });
+    return { processed: 0, succeeded: 0, failed: 0 };
+  }
+
+  logger.info('outbox drain: claimed rows', {
+    count: rows.length,
+    batchSize,
+  });
+
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const row of rows) {
+    const sendOk = await trySend(queue, row, logger);
+    if (!sendOk) {
+      failed += 1;
+      continue;
     }
 
-    logger.info('outbox drain: claimed rows', {
-        count: rows.length,
-        batchSize,
-    });
-
-    let succeeded = 0;
-    let failed = 0;
-
-    for (const row of rows) {
-        const sendOk = await trySend(queue, row, logger);
-        if (!sendOk) {
-            failed += 1;
-            continue;
-        }
-
-        const markOk = await tryMarkPublished(store, row, logger);
-        if (markOk) {
-            succeeded += 1;
-        } else {
-            failed += 1;
-        }
+    const markOk = await tryMarkPublished(store, row, logger);
+    if (markOk) {
+      succeeded += 1;
+    } else {
+      failed += 1;
     }
+  }
 
-    const durationMs = clock.now().getTime() - startedAt.getTime();
-    logger.info('outbox drain: batch complete', {
-        processed: rows.length,
-        succeeded,
-        failed,
-        durationMs,
-    });
+  const durationMs = clock.now().getTime() - startedAt.getTime();
+  logger.info('outbox drain: batch complete', {
+    processed: rows.length,
+    succeeded,
+    failed,
+    durationMs,
+  });
 
-    return { processed: rows.length, succeeded, failed };
+  return { processed: rows.length, succeeded, failed };
 }
 
 /* ------------------------------------------------------------------ */
@@ -267,12 +267,12 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
  * need the tenant scope read it from `payload.*Id` fields.
  */
 function reconstructEnvelope(row: ClaimedRow): Record<string, unknown> {
-    return {
-        id: row.eventId,
-        type: row.eventType,
-        occurredAt: row.occurredAt.toISOString(),
-        payload: row.payload,
-    };
+  return {
+    id: row.eventId,
+    type: row.eventType,
+    occurredAt: row.occurredAt.toISOString(),
+    payload: row.payload,
+  };
 }
 
 /**
@@ -281,24 +281,20 @@ function reconstructEnvelope(row: ClaimedRow): Record<string, unknown> {
  * returning. Never re-throws: the whole point of per-row isolation is
  * that one bad row must not abort the rest of the batch.
  */
-async function trySend(
-    queue: QueueProducer,
-    row: ClaimedRow,
-    logger: Logger,
-): Promise<boolean> {
-    try {
-        await queue.send(reconstructEnvelope(row));
-        return true;
-    } catch (err) {
-        logger.warn('outbox drain: queue send failed; leaving row for next drain', {
-            outboxId: row.id,
-            eventId: row.eventId,
-            eventType: row.eventType,
-            attempts: row.attempts,
-            error: errToDetail(err),
-        });
-        return false;
-    }
+async function trySend(queue: QueueProducer, row: ClaimedRow, logger: Logger): Promise<boolean> {
+  try {
+    await queue.send(reconstructEnvelope(row));
+    return true;
+  } catch (err) {
+    logger.warn('outbox drain: queue send failed; leaving row for next drain', {
+      outboxId: row.id,
+      eventId: row.eventId,
+      eventType: row.eventType,
+      attempts: row.attempts,
+      error: errToDetail(err),
+    });
+    return false;
+  }
 }
 
 /**
@@ -310,22 +306,22 @@ async function trySend(
  * consumer dedup absorbs the correctness impact.
  */
 async function tryMarkPublished(
-    store: OutboxStore,
-    row: ClaimedRow,
-    logger: Logger,
+  store: OutboxStore,
+  row: ClaimedRow,
+  logger: Logger,
 ): Promise<boolean> {
-    try {
-        await store.markPublished(row.id);
-        return true;
-    } catch (err) {
-        logger.error('outbox drain: markPublished failed after successful queue send', {
-            outboxId: row.id,
-            eventId: row.eventId,
-            eventType: row.eventType,
-            error: errToDetail(err),
-        });
-        return false;
-    }
+  try {
+    await store.markPublished(row.id);
+    return true;
+  } catch (err) {
+    logger.error('outbox drain: markPublished failed after successful queue send', {
+      outboxId: row.id,
+      eventId: row.eventId,
+      eventType: row.eventType,
+      error: errToDetail(err),
+    });
+    return false;
+  }
 }
 
 /**
@@ -335,18 +331,11 @@ async function tryMarkPublished(
  * catches obvious mis-wiring before a DB round-trip.
  */
 function normaliseBatchSize(raw: number | undefined): number {
-    if (raw === undefined) return DEFAULT_BATCH_SIZE;
-    if (
-        typeof raw !== 'number' ||
-        !Number.isFinite(raw) ||
-        !Number.isInteger(raw) ||
-        raw < 1
-    ) {
-        throw new RangeError(
-            `drainOutbox: batchSize must be a positive integer, got ${String(raw)}`,
-        );
-    }
-    return raw;
+  if (raw === undefined) return DEFAULT_BATCH_SIZE;
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || !Number.isInteger(raw) || raw < 1) {
+    throw new RangeError(`drainOutbox: batchSize must be a positive integer, got ${String(raw)}`);
+  }
+  return raw;
 }
 
 /**
@@ -357,8 +346,8 @@ function normaliseBatchSize(raw: number | undefined): number {
  * shapes across the publish / drain paths.
  */
 function errToDetail(err: unknown): { name?: string; message: string } {
-    if (err instanceof Error) {
-        return { name: err.name, message: err.message };
-    }
-    return { message: String(err) };
+  if (err instanceof Error) {
+    return { name: err.name, message: err.message };
+  }
+  return { message: String(err) };
 }

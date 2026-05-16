@@ -7,13 +7,13 @@ Wrangler : 4.90.0 — Compatibility date `2025-10-30`
 
 ## Setup
 
-| Élément | Statut |
-|---|---|
-| API démarrée (`pnpm --filter @athlya/api dev`) | ✅ Ready en ~9 s sur `127.0.0.1:8787` |
-| `GET /health` | ✅ 200 OK avec `traceId`, `version`, `environment=dev` |
-| Bindings (DB, Redis, JWT, Turnstile) | ✅ tous chargés depuis `.dev.vars` |
-| Cle JWT RSA-2048 dev | ✅ `dev-mp07ggd0` — utilisée pour forger des jetons valides |
-| Turnstile secret | ⚠️ `0x4AAAAAADMvm-…` (clé live, pas la clé bypass dev `1x0000…AA`). Conséquence : toute requête `/v1/auth/register` ou `/v1/auth/login` est bloquée en 403 `bot_challenge_failed` lorsqu'on n'a pas de jeton Turnstile issu d'un vrai navigateur. Les attaques de payload sur ces deux routes ont donc été redirigées vers `/v1/auth/refresh` (qui est protégé par `zValidator` mais pas par Turnstile). |
+| Élément                                        | Statut                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API démarrée (`pnpm --filter @athlya/api dev`) | ✅ Ready en ~9 s sur `127.0.0.1:8787`                                                                                                                                                                                                                                                                                                                                                                    |
+| `GET /health`                                  | ✅ 200 OK avec `traceId`, `version`, `environment=dev`                                                                                                                                                                                                                                                                                                                                                   |
+| Bindings (DB, Redis, JWT, Turnstile)           | ✅ tous chargés depuis `.dev.vars`                                                                                                                                                                                                                                                                                                                                                                       |
+| Cle JWT RSA-2048 dev                           | ✅ `dev-mp07ggd0` — utilisée pour forger des jetons valides                                                                                                                                                                                                                                                                                                                                              |
+| Turnstile secret                               | ⚠️ `0x4AAAAAADMvm-…` (clé live, pas la clé bypass dev `1x0000…AA`). Conséquence : toute requête `/v1/auth/register` ou `/v1/auth/login` est bloquée en 403 `bot_challenge_failed` lorsqu'on n'a pas de jeton Turnstile issu d'un vrai navigateur. Les attaques de payload sur ces deux routes ont donc été redirigées vers `/v1/auth/refresh` (qui est protégé par `zValidator` mais pas par Turnstile). |
 
 Variables d'env : toutes présentes dans `packages/api/.dev.vars`. Aucun secret manquant. Le Worker boote complètement.
 
@@ -26,25 +26,27 @@ Outillage : scripts Node.js (`fetch`) sous `scripts/dast/*.mjs`. Le slowloris ut
 ### A. Bypass auth / RBAC — `POST /v1/classes`
 
 Les tokens de la suite forgée ont été générés avec :
+
 - **A2** RSA paire générée à la volée + claims expirés (`exp` − 1h)
 - **A3** `alg: none` (header non signé, payload contrôlé)
 - **A4 / A5** RSA paire attaquante + claims `admin` ou `member` mais `kid` du dev (`dev-mp07ggd0`)
 
-| # | Attaque | Status reçu | Headers clés | Verdict |
-|---|---|---|---|---|
-| A1 | Aucun token | 401 `missing_authorization` | `application/problem+json`, pas de `WWW-Authenticate` | ✅ bloqué |
-| A2 | Token expiré (clé attaquante) | 401 `invalid_token` | `application/problem+json` | ✅ bloqué (la clé est rejetée avant l'évaluation `exp`) |
-| A3 | `alg: none` | 401 `invalid_token` | `application/problem+json` | ✅ bloqué (algorithmes pinned `RS256`) |
-| A4 | RSA forgé `role=admin` | 401 `invalid_token` | `application/problem+json` | ✅ bloqué (signature ne correspond pas au JWKS) |
-| A5 | RSA forgé `role=member` | 401 `invalid_token` | `application/problem+json` | ✅ bloqué |
-| A6 | `Bearer not.a.jwt` | 401 `invalid_token` | — | ✅ bloqué |
-| A7 | `Bearer ` (vide) | 401 `invalid_token` | — | ✅ bloqué (regex `BEARER_RE` rejette le vide) |
-| A8 | `Authorization: Basic …` | 401 `invalid_token` | — | ✅ bloqué |
-| **A.5b** | Token RS256 valide signé avec la **vraie** clé dev, `role=member`, POST /v1/classes | **403 forbidden** `this endpoint requires one of: admin` | `application/problem+json` | ✅ RBAC strict, claims `role=member` rejetés |
-| **A.5c (contrôle)** | Même token mais `role=admin` | 500 (échec adapter Reservations downstream — non lié au RBAC) | — | ✅ Le check RBAC est bien passé, le 500 vient du repository non-implémenté en dev. Aucune fuite de message d'erreur dans le body. |
-| **Bonus** | Token RS256 valide expiré (clé dev, `exp − 1h`) | 401 `token_expired` | `WWW-Authenticate: Bearer error="token_expired"` ✅ Req 2.5 | ✅ conforme |
+| #                   | Attaque                                                                             | Status reçu                                                   | Headers clés                                                | Verdict                                                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| A1                  | Aucun token                                                                         | 401 `missing_authorization`                                   | `application/problem+json`, pas de `WWW-Authenticate`       | ✅ bloqué                                                                                                                         |
+| A2                  | Token expiré (clé attaquante)                                                       | 401 `invalid_token`                                           | `application/problem+json`                                  | ✅ bloqué (la clé est rejetée avant l'évaluation `exp`)                                                                           |
+| A3                  | `alg: none`                                                                         | 401 `invalid_token`                                           | `application/problem+json`                                  | ✅ bloqué (algorithmes pinned `RS256`)                                                                                            |
+| A4                  | RSA forgé `role=admin`                                                              | 401 `invalid_token`                                           | `application/problem+json`                                  | ✅ bloqué (signature ne correspond pas au JWKS)                                                                                   |
+| A5                  | RSA forgé `role=member`                                                             | 401 `invalid_token`                                           | `application/problem+json`                                  | ✅ bloqué                                                                                                                         |
+| A6                  | `Bearer not.a.jwt`                                                                  | 401 `invalid_token`                                           | —                                                           | ✅ bloqué                                                                                                                         |
+| A7                  | `Bearer ` (vide)                                                                    | 401 `invalid_token`                                           | —                                                           | ✅ bloqué (regex `BEARER_RE` rejette le vide)                                                                                     |
+| A8                  | `Authorization: Basic …`                                                            | 401 `invalid_token`                                           | —                                                           | ✅ bloqué                                                                                                                         |
+| **A.5b**            | Token RS256 valide signé avec la **vraie** clé dev, `role=member`, POST /v1/classes | **403 forbidden** `this endpoint requires one of: admin`      | `application/problem+json`                                  | ✅ RBAC strict, claims `role=member` rejetés                                                                                      |
+| **A.5c (contrôle)** | Même token mais `role=admin`                                                        | 500 (échec adapter Reservations downstream — non lié au RBAC) | —                                                           | ✅ Le check RBAC est bien passé, le 500 vient du repository non-implémenté en dev. Aucune fuite de message d'erreur dans le body. |
+| **Bonus**           | Token RS256 valide expiré (clé dev, `exp − 1h`)                                     | 401 `token_expired`                                           | `WWW-Authenticate: Bearer error="token_expired"` ✅ Req 2.5 | ✅ conforme                                                                                                                       |
 
 **Reproduction (extrait — A.5b RBAC bypass tentative)** :
+
 ```
 curl -X POST http://127.0.0.1:8787/v1/classes \
   -H "Content-Type: application/json" \
@@ -62,15 +64,16 @@ Verdict catégorie A : **🟢 chaîne JWT + RBAC robuste**. Aucun bypass trouvé
 
 Tests menés directement contre l'API locale. La couche Cloudflare (qui en prod fournit le `CF-Connecting-IP` et un anti-DDoS supplémentaire) **n'est pas présente** ici — c'est attendu en dev mais c'est aussi la couche qui en prod justifierait l'absence d'un rate-limit applicatif (Req 14.3 / 14.4).
 
-| # | Attaque | Résultat | Verdict |
-|---|---|---|---|
-| B1 | 100× `POST /v1/auth/login` même IP (bad password) | 100×403 `bot_challenge_failed`. Aucun 429. La couche **Turnstile bloque avant** que le throttle login (`shouldAllowLogin`, défini dans `@athlya/auth/throttle.ts`) puisse même s'exécuter. | ⚠️ partiellement bloqué |
-| B2 | 100× `POST /v1/auth/login` avec rotation de `X-Forwarded-For` (10.0.0.0 → 10.0.0.99) | 100×403 (Turnstile). Identique à B1, le Turnstile bloque. **Mais** : si Turnstile passait, **`shouldAllowLogin` n'est pas wiré** — voir S3-001. | ⚠️ partiellement bloqué |
-| B3 | 100× rotation `User-Agent` | 100×403 (Turnstile) | ⚠️ identique |
-| B4 | 200× `GET /v1/classes` sans token (chacun → 401) | 200×401, **0×429**. Aucun rate-limit global sur les 401 répétés. | ❌ vulnérable |
-| B5 | 200× `GET /health` | 200×200, **0×429**. Aucun rate-limit global. | ❌ vulnérable au burst |
+| #   | Attaque                                                                              | Résultat                                                                                                                                                                                   | Verdict                 |
+| --- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| B1  | 100× `POST /v1/auth/login` même IP (bad password)                                    | 100×403 `bot_challenge_failed`. Aucun 429. La couche **Turnstile bloque avant** que le throttle login (`shouldAllowLogin`, défini dans `@athlya/auth/throttle.ts`) puisse même s'exécuter. | ⚠️ partiellement bloqué |
+| B2  | 100× `POST /v1/auth/login` avec rotation de `X-Forwarded-For` (10.0.0.0 → 10.0.0.99) | 100×403 (Turnstile). Identique à B1, le Turnstile bloque. **Mais** : si Turnstile passait, **`shouldAllowLogin` n'est pas wiré** — voir S3-001.                                            | ⚠️ partiellement bloqué |
+| B3  | 100× rotation `User-Agent`                                                           | 100×403 (Turnstile)                                                                                                                                                                        | ⚠️ identique            |
+| B4  | 200× `GET /v1/classes` sans token (chacun → 401)                                     | 200×401, **0×429**. Aucun rate-limit global sur les 401 répétés.                                                                                                                           | ❌ vulnérable           |
+| B5  | 200× `GET /health`                                                                   | 200×200, **0×429**. Aucun rate-limit global.                                                                                                                                               | ❌ vulnérable au burst  |
 
 **Reproduction B4 (DoS via 401)** :
+
 ```
 for i in 1..200: curl -s -o /dev/null -w "%{http_code}\n" \
   http://127.0.0.1:8787/v1/classes?from=2026-01-01T00:00:00Z\&to=2026-01-02T00:00:00Z
@@ -78,6 +81,7 @@ for i in 1..200: curl -s -o /dev/null -w "%{http_code}\n" \
 ```
 
 **Cause** identifiée à la lecture du code :
+
 - `packages/api/src/middleware/rate-limit.ts` est complet et testé (suite `__tests__/rate-limit.test.ts`).
 - **Mais** `packages/api/src/worker.ts` ne mounte **jamais** `app.use('*', rateLimit(...))`. La middleware est exportée comme bibliothèque, pas appliquée.
 - De même, `packages/auth/src/throttle.ts` exporte `shouldAllowLogin`, mais `packages/api/src/adapters/auth-deps.ts` ne l'invoque jamais avant `svcLogin(...)`. La protection 5/15 min de la Req 1.6 n'est donc pas active sur `/v1/auth/login`.
@@ -90,24 +94,26 @@ Verdict catégorie B : **🔴 rate-limit non-effectif**. Voir S3-001 (PROD-RISK)
 
 Les tests `/v1/auth/register` et `/v1/auth/login` sont tous bloqués par Turnstile en 403 avant tout parsing du body — donc dans la pratique, un attaquant non-Turnstile-authentifié ne peut pas faire saturer ces deux routes par body. Les tests sur `/v1/auth/refresh` (sans Turnstile, `zValidator(json)` direct) :
 
-| # | Attaque | Status | Durée serveur | Verdict |
-|---|---|---|---|---|
-| C1 | JSON imbriqué 1000 niveaux (`[[[[…null…]]]]`) | 422 `validation_error` | 92 ms | ✅ rejeté proprement |
-| C2 | Body 10 MB (`refreshToken: "A".repeat(10MB)`) | **401 `token_invalid`** | 180 ms | ❌ **accepté ; aucune limite de taille**. Le body est entièrement parsé puis validé par Zod (qui passe : c'est juste une string), puis le service auth tente de vérifier le token. Aucun 413. |
-| C3 | Body raw 10 MB (`"AAAAA…"` au top-level, pas un objet) | 422 | 204 ms | ⚠️ rejeté **après** ingestion totale du body |
-| C4 | `__proto__: { polluted: true }` + `constructor: { prototype: { polluted: true } }` | 422 `unrecognized_keys` (Zod `.strict()`) | 6 ms | ✅ rejeté proprement, **pas de prototype pollution** |
-| C5 | JSON tronqué (`{`) | **500 Internal Server Error** | 42 ms | ❌ devrait être 400 `Bad Request` |
-| C6 | JSON non-JSON (`not-even-json`) | **500 Internal Server Error** | 7 ms | ❌ devrait être 400 |
-| C7 | Tableau imbriqué 5000 niveaux | 422 | 9 ms | ✅ |
-| C-bonus | Body 50 MB | 401 (parsing complet) | ~1.4 s | ❌ aucune limite |
+| #       | Attaque                                                                            | Status                                    | Durée serveur | Verdict                                                                                                                                                                                       |
+| ------- | ---------------------------------------------------------------------------------- | ----------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1      | JSON imbriqué 1000 niveaux (`[[[[…null…]]]]`)                                      | 422 `validation_error`                    | 92 ms         | ✅ rejeté proprement                                                                                                                                                                          |
+| C2      | Body 10 MB (`refreshToken: "A".repeat(10MB)`)                                      | **401 `token_invalid`**                   | 180 ms        | ❌ **accepté ; aucune limite de taille**. Le body est entièrement parsé puis validé par Zod (qui passe : c'est juste une string), puis le service auth tente de vérifier le token. Aucun 413. |
+| C3      | Body raw 10 MB (`"AAAAA…"` au top-level, pas un objet)                             | 422                                       | 204 ms        | ⚠️ rejeté **après** ingestion totale du body                                                                                                                                                  |
+| C4      | `__proto__: { polluted: true }` + `constructor: { prototype: { polluted: true } }` | 422 `unrecognized_keys` (Zod `.strict()`) | 6 ms          | ✅ rejeté proprement, **pas de prototype pollution**                                                                                                                                          |
+| C5      | JSON tronqué (`{`)                                                                 | **500 Internal Server Error**             | 42 ms         | ❌ devrait être 400 `Bad Request`                                                                                                                                                             |
+| C6      | JSON non-JSON (`not-even-json`)                                                    | **500 Internal Server Error**             | 7 ms          | ❌ devrait être 400                                                                                                                                                                           |
+| C7      | Tableau imbriqué 5000 niveaux                                                      | 422                                       | 9 ms          | ✅                                                                                                                                                                                            |
+| C-bonus | Body 50 MB                                                                         | 401 (parsing complet)                     | ~1.4 s        | ❌ aucune limite                                                                                                                                                                              |
 
 **Reproduction C2 (50MB sans 413)** :
+
 ```
 node -e 'const huge = JSON.stringify({refreshToken:"A".repeat(50*1024*1024)}); fetch("http://127.0.0.1:8787/v1/auth/refresh",{method:"POST",headers:{"content-type":"application/json"},body:huge}).then(r=>console.log(r.status))'
 # -> 401 (jamais 413)
 ```
 
 **Reproduction C5 (500 sur JSON malformé)** :
+
 ```
 curl -X POST http://127.0.0.1:8787/v1/auth/refresh \
   -H "Content-Type: application/json" --data-raw '{'
@@ -123,10 +129,10 @@ Verdict catégorie C : **🟡 prototype pollution OK (Zod `.strict()`), mais auc
 
 ### D. ReDoS via crafted inputs
 
-| # | Attaque | Status | Durée | Verdict |
-|---|---|---|---|---|
-| D1 | Email pathologique 100 KB (`"a"×50k + "@" + "b"×50k + ".com"`) sur `/v1/auth/login` | 403 (Turnstile) | 33 ms | ✅ pas d'amplification (Turnstile coupe) |
-| D2 | Email `"a"×30 + "!@example.com"` (motif ReDoS classique) | 403 (Turnstile) | 31 ms | ✅ |
+| #   | Attaque                                                                             | Status          | Durée | Verdict                                  |
+| --- | ----------------------------------------------------------------------------------- | --------------- | ----- | ---------------------------------------- |
+| D1  | Email pathologique 100 KB (`"a"×50k + "@" + "b"×50k + ".com"`) sur `/v1/auth/login` | 403 (Turnstile) | 33 ms | ✅ pas d'amplification (Turnstile coupe) |
+| D2  | Email `"a"×30 + "!@example.com"` (motif ReDoS classique)                            | 403 (Turnstile) | 31 ms | ✅                                       |
 
 Note : Zod v4 utilise une regex email **non-vulnérable au backtracking catastrophique** (test pratiqué). Aucun spike de latence détecté. Les schemas Zod du projet (`@athlya/shared/schemas/*`) n'utilisent pas de regex custom autres que `z.email()` et `z.uuid()`, dont la complexité est linéaire.
 
@@ -136,13 +142,13 @@ Verdict catégorie D : **🟢 pas de ReDoS détecté**.
 
 ### E. Path traversal / injection in path params
 
-| # | Attaque | Status | Verdict |
-|---|---|---|---|
-| E1 | `GET /v1/classes/../../../etc/passwd` | 404 Not Found (Hono normalise le path → ne match aucune route) | ✅ |
-| E2 | `GET /v1/reservations/' OR '1'='1` | 401 `missing_authorization` (auth en premier, avant le param-validator) | ✅ |
-| E3 | `GET /v1/classes/%2e%2e%2f%2e%2e%2fetc%2fpasswd` | 401 `missing_authorization` | ✅ |
-| E4 | `GET /v1/classes/<script>alert(1)</script>` | 401 `missing_authorization` | ✅ |
-| E5 | `GET /v1/classes/abc%00.json` (NULL byte) | 401 `missing_authorization` | ✅ |
+| #   | Attaque                                          | Status                                                                  | Verdict |
+| --- | ------------------------------------------------ | ----------------------------------------------------------------------- | ------- |
+| E1  | `GET /v1/classes/../../../etc/passwd`            | 404 Not Found (Hono normalise le path → ne match aucune route)          | ✅      |
+| E2  | `GET /v1/reservations/' OR '1'='1`               | 401 `missing_authorization` (auth en premier, avant le param-validator) | ✅      |
+| E3  | `GET /v1/classes/%2e%2e%2f%2e%2e%2fetc%2fpasswd` | 401 `missing_authorization`                                             | ✅      |
+| E4  | `GET /v1/classes/<script>alert(1)</script>`      | 401 `missing_authorization`                                             | ✅      |
+| E5  | `GET /v1/classes/abc%00.json` (NULL byte)        | 401 `missing_authorization`                                             | ✅      |
 
 Pour les routes auth-protégées on s'arrête en 401 avant le `zValidator('param', ClassIdParamSchema)`. Avec un token valide, le param `:id` est validé contre `z.string().uuid()` qui rejette tout ce qui n'est pas un UUID v4 → 422.
 
@@ -152,10 +158,10 @@ Verdict catégorie E : **🟢 pas de path-traversal exploitable**, le routing Ho
 
 ### F. Header injection
 
-| # | Attaque | Résultat |
-|---|---|---|
-| F1 | `Authorization: Bearer\r\nX-Injected: malicious` | Le runtime Node.js (undici/fetch) **rejette le header** côté client avec `TypeError`. Impossible d'injecter un CRLF via `fetch` standard. |
-| F2 | Header custom `X-Test: val\r\nX-Sneaky: yes` | Idem, runtime rejette avant émission. |
+| #   | Attaque                                          | Résultat                                                                                                                                  |
+| --- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| F1  | `Authorization: Bearer\r\nX-Injected: malicious` | Le runtime Node.js (undici/fetch) **rejette le header** côté client avec `TypeError`. Impossible d'injecter un CRLF via `fetch` standard. |
+| F2  | Header custom `X-Test: val\r\nX-Sneaky: yes`     | Idem, runtime rejette avant émission.                                                                                                     |
 
 **Verdict** : ✅ blocage **côté client** (undici sanitize les CRLF). Ce blocage n'est pas dû au Worker — il est dû à la stack HTTP du runtime de l'attaquant. Cloudflare en prod ferme également les CRLF dans les headers (HTTP/2 + parser HTTP/1.1 conforme).
 
@@ -167,15 +173,16 @@ Verdict catégorie F : **🟢 pas d'injection de header reproductible**.
 
 ### G. CORS / Origin
 
-| # | Attaque | `Access-Control-Allow-Origin` reçu | Statut HTTP | Verdict |
-|---|---|---|---|---|
-| G1 | `OPTIONS /v1/auth/login` Origin: `https://evil.com` | **`https://evil.com`** | 204 | ❌ **vulnérable** |
-| G2 | `GET /health` Origin: `https://evil.com` | **`https://evil.com`** | 200 | ❌ **vulnérable** |
-| G3 | `OPTIONS /v1/auth/login` Origin: `http://localhost:3000` | `http://localhost:3000` | 204 | ✅ origine légitime |
-| G4 | `OPTIONS /v1/auth/login` Origin: `null` | **`null`** | 204 | ❌ **vulnérable** (file://, sandboxed iframe) |
-| G5 | `OPTIONS /v1/classes` Origin: `https://evil.com` | **`https://evil.com`** | 204 | ❌ **vulnérable** sur endpoint sensible |
+| #   | Attaque                                                  | `Access-Control-Allow-Origin` reçu | Statut HTTP | Verdict                                       |
+| --- | -------------------------------------------------------- | ---------------------------------- | ----------- | --------------------------------------------- |
+| G1  | `OPTIONS /v1/auth/login` Origin: `https://evil.com`      | **`https://evil.com`**             | 204         | ❌ **vulnérable**                             |
+| G2  | `GET /health` Origin: `https://evil.com`                 | **`https://evil.com`**             | 200         | ❌ **vulnérable**                             |
+| G3  | `OPTIONS /v1/auth/login` Origin: `http://localhost:3000` | `http://localhost:3000`            | 204         | ✅ origine légitime                           |
+| G4  | `OPTIONS /v1/auth/login` Origin: `null`                  | **`null`**                         | 204         | ❌ **vulnérable** (file://, sandboxed iframe) |
+| G5  | `OPTIONS /v1/classes` Origin: `https://evil.com`         | **`https://evil.com`**             | 204         | ❌ **vulnérable** sur endpoint sensible       |
 
 **Reproduction G1 (CORS reflection en dev)** :
+
 ```
 curl -X OPTIONS http://127.0.0.1:8787/v1/auth/login \
   -H "Origin: https://evil.com" \
@@ -187,6 +194,7 @@ curl -X OPTIONS http://127.0.0.1:8787/v1/auth/login \
 ```
 
 **Cause** : le middleware CORS dans `worker.ts` ligne 137-152 :
+
 ```ts
 origin: (origin, c) => {
     const env = c.env.ENVIRONMENT;
@@ -198,6 +206,7 @@ origin: (origin, c) => {
 ```
 
 Comportement attendu en **prod** (`ENVIRONMENT === 'production'`) : seule l'origine exacte de `CORS_ORIGIN` est autorisée — c'est une politique correcte. **Mais** :
+
 - En `dev` (donc en local-dev ET en preview-deploy via wrangler), **n'importe quel attaquant peut faire des XHR `credentials:include`** depuis un navigateur visitant son site malveillant. Sur la machine du dev, ça permet de voler les cookies de session liés à `127.0.0.1:8787` ou de poster sur `/v1/auth/login` avec son cookie de session.
 - Le risque en dev reste limité aux machines de devs. **Mais** si jamais `ENVIRONMENT=dev` était poussé en staging ou en preview de PR exposée publiquement, la fuite devient critique.
 
@@ -207,14 +216,14 @@ Verdict catégorie G : **🔴 dev échappe à toute restriction CORS** (S3-005 �
 
 ### H. HTTP method enumeration
 
-| # | Attaque | Statut | Verdict |
-|---|---|---|---|
-| H1 | `TRACE /v1/auth/login` | runtime fetch refuse `TRACE`, on ne peut pas l'envoyer côté client. Test via socket TCP brut : la Worker répond **`501 ERROR: Unrecognized request method.`** sur méthodes non-supportées. | ✅ |
-| H2 | `OPTIONS *` | runtime refuse également. Via socket : **501**. | ✅ |
-| H3 | `PROPFIND /v1/auth/login` | 404 Not Found (Hono ne route pas) | ✅ |
-| H4 | `PWNED /v1/auth/login` | **501** `text/plain` (Workerd rejette directement, c'est-à-dire avant Hono) | ✅ |
-| H5 | `HEAD /health` | 200 (Hono émule HEAD à partir du GET) | ✅ |
-| H6 | `DELETE /health` | 404 Not Found (méthode non routée) | ✅ |
+| #   | Attaque                   | Statut                                                                                                                                                                                     | Verdict |
+| --- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| H1  | `TRACE /v1/auth/login`    | runtime fetch refuse `TRACE`, on ne peut pas l'envoyer côté client. Test via socket TCP brut : la Worker répond **`501 ERROR: Unrecognized request method.`** sur méthodes non-supportées. | ✅      |
+| H2  | `OPTIONS *`               | runtime refuse également. Via socket : **501**.                                                                                                                                            | ✅      |
+| H3  | `PROPFIND /v1/auth/login` | 404 Not Found (Hono ne route pas)                                                                                                                                                          | ✅      |
+| H4  | `PWNED /v1/auth/login`    | **501** `text/plain` (Workerd rejette directement, c'est-à-dire avant Hono)                                                                                                                | ✅      |
+| H5  | `HEAD /health`            | 200 (Hono émule HEAD à partir du GET)                                                                                                                                                      | ✅      |
+| H6  | `DELETE /health`          | 404 Not Found (méthode non routée)                                                                                                                                                         | ✅      |
 
 Verdict catégorie H : **🟢 le runtime Cloudflare Workerd verrouille les méthodes HTTP**. Pas de TRACE, pas de WebDAV, pas d'arbitraires.
 
@@ -239,6 +248,7 @@ Avg /health latency over 10 calls (with slow conns open): 8.5ms
 ```
 
 Verdict :
+
 - ✅ les connexions slow **ne bloquent pas le reste du Worker** (l'event loop reste libre, Workerd serve d'autres requêtes en parallèle).
 - ⚠️ **mais le serveur ne ferme pas la connexion lente** au bout de 5-10 secondes ; il accepte de garder la socket ouverte pendant ≥ 25 secondes. Sur une vraie déploie Cloudflare, c'est Cloudflare qui aurait coupé la connexion avant (ils ont leurs propres timeouts L7). Sur Workerd local, le timeout est plus laxe.
 
@@ -248,17 +258,17 @@ Verdict catégorie I : **🟡 résilience OK** (pas de starvation), **mais pas d
 
 ## Tableau récapitulatif des verdicts
 
-| Catégorie | Score | Notes |
-|---|---|---|
-| A. Bypass auth / RBAC | ✅ 10/10 | JWT RS256 pinned, JWKS vérifié, `kid` vérifié, RBAC strict, `WWW-Authenticate` correct |
-| B. Rate-limit | ❌ 2/10 | Middleware `rateLimit` jamais mountée ; `shouldAllowLogin` jamais invoqué dans `auth-deps.ts` |
-| C. Body DoS | ⚠️ 5/10 | Pas de limite de taille (50MB accepté) ; 500 sur JSON invalide ; `__proto__` OK ; deeply-nested OK |
-| D. ReDoS | ✅ 9/10 | Aucune regex custom vulnérable détectée |
-| E. Path traversal / injection | ✅ 10/10 | Routing + auth + UUID validator empilés |
-| F. Header injection | ✅ 9/10 | Workerd parser robuste ; runtime client refuse aussi |
-| G. CORS | ❌ 4/10 | Reflection totale en `dev` (`Origin: https://evil.com` accepté) |
-| H. HTTP methods | ✅ 10/10 | Workerd refuse les méthodes non-RFC |
-| I. Slowloris | 🟡 7/10 | Pas de starvation ; pas de drop côté Workerd local mais Cloudflare edge en prod mitige |
+| Catégorie                     | Score    | Notes                                                                                              |
+| ----------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| A. Bypass auth / RBAC         | ✅ 10/10 | JWT RS256 pinned, JWKS vérifié, `kid` vérifié, RBAC strict, `WWW-Authenticate` correct             |
+| B. Rate-limit                 | ❌ 2/10  | Middleware `rateLimit` jamais mountée ; `shouldAllowLogin` jamais invoqué dans `auth-deps.ts`      |
+| C. Body DoS                   | ⚠️ 5/10  | Pas de limite de taille (50MB accepté) ; 500 sur JSON invalide ; `__proto__` OK ; deeply-nested OK |
+| D. ReDoS                      | ✅ 9/10  | Aucune regex custom vulnérable détectée                                                            |
+| E. Path traversal / injection | ✅ 10/10 | Routing + auth + UUID validator empilés                                                            |
+| F. Header injection           | ✅ 9/10  | Workerd parser robuste ; runtime client refuse aussi                                               |
+| G. CORS                       | ❌ 4/10  | Reflection totale en `dev` (`Origin: https://evil.com` accepté)                                    |
+| H. HTTP methods               | ✅ 10/10 | Workerd refuse les méthodes non-RFC                                                                |
+| I. Slowloris                  | 🟡 7/10  | Pas de starvation ; pas de drop côté Workerd local mais Cloudflare edge en prod mitige             |
 
 ---
 
@@ -383,17 +393,17 @@ Verdict catégorie I : **🟡 résilience OK** (pas de starvation), **mais pas d
 
 **66 / 100**
 
-| Critère | Score / 10 | Pondération |
-|---|---|---|
-| A. Auth/RBAC | 10 | × 2 |
-| B. Rate-limit | 2 | × 2 |
-| C. Body DoS | 5 | × 1.5 |
-| D. ReDoS | 9 | × 1 |
-| E. Path traversal | 10 | × 1 |
-| F. Header injection | 9 | × 1 |
-| G. CORS | 4 | × 1.5 |
-| H. HTTP methods | 10 | × 0.5 |
-| I. Slowloris | 7 | × 0.5 |
+| Critère             | Score / 10 | Pondération |
+| ------------------- | ---------- | ----------- |
+| A. Auth/RBAC        | 10         | × 2         |
+| B. Rate-limit       | 2          | × 2         |
+| C. Body DoS         | 5          | × 1.5       |
+| D. ReDoS            | 9          | × 1         |
+| E. Path traversal   | 10         | × 1         |
+| F. Header injection | 9          | × 1         |
+| G. CORS             | 4          | × 1.5       |
+| H. HTTP methods     | 10         | × 0.5       |
+| I. Slowloris        | 7          | × 0.5       |
 
 = (10·2 + 2·2 + 5·1.5 + 9 + 10 + 9 + 4·1.5 + 10·0.5 + 7·0.5) / (12) ≈ **66**
 
@@ -413,5 +423,6 @@ Le score est tiré vers le bas par **B (rate-limit absent)** qui pèse double, *
    Remplacer `if (env === 'dev') return origin ?? '';` par une whitelist `['http://localhost:3000', 'http://127.0.0.1:3000']` même en dev. Ajouter un test e2e qui assert `Access-Control-Allow-Origin: ''` sur `Origin: https://evil.com`. Bénéfice : élimine un risque latent de leak credential-bearing si jamais un dev push une env `dev` sur staging par erreur.
 
 Bonus (à intégrer au plan H7) :
+
 - Convertir le 500-sur-JSON-invalide en 422 (S3-004) — 5 lignes dans `validator.ts`.
 - Exclure `/health` du middleware CORS (S3-006).

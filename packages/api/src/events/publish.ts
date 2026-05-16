@@ -76,7 +76,7 @@ import type { AthlyaTx } from '@athlya/db/client';
  * signals that the bus acknowledged the message.
  */
 export interface Queue {
-    send(message: unknown): Promise<void>;
+  send(message: unknown): Promise<void>;
 }
 
 /**
@@ -84,8 +84,8 @@ export interface Queue {
  * can inject an Axiom/OTel-aware logger without forcing a dependency.
  */
 export interface PublishLogger {
-    warn: (msg: string, extra?: Record<string, unknown>) => void;
-    error: (msg: string, extra?: Record<string, unknown>) => void;
+  warn: (msg: string, extra?: Record<string, unknown>) => void;
+  error: (msg: string, extra?: Record<string, unknown>) => void;
 }
 
 /**
@@ -108,10 +108,10 @@ export interface PublishLogger {
  *   • `logger`          Swappable logger. Defaults to `console`.
  */
 export interface PublishDeps {
-    readonly queue?: Queue;
-    readonly maxQueueRetries?: number;
-    readonly retryBackoffMs?: (attempt: number) => number;
-    readonly logger?: PublishLogger;
+  readonly queue?: Queue;
+  readonly maxQueueRetries?: number;
+  readonly retryBackoffMs?: (attempt: number) => number;
+  readonly logger?: PublishLogger;
 }
 
 /**
@@ -133,7 +133,7 @@ export type PublishDelivery = 'queue' | 'outbox' | 'both';
 
 /** Structured result returned by {@link publish}. */
 export interface PublishResult {
-    readonly delivery: PublishDelivery;
+  readonly delivery: PublishDelivery;
 }
 
 /**
@@ -146,21 +146,21 @@ export interface PublishResult {
  * `cause` carries the last underlying error for observability.
  */
 export class PublishError extends Error {
-    public override readonly name = 'PublishError';
-    /** Stable discriminator. Always `'publish_failed'` for now. */
-    public readonly code = 'publish_failed' as const;
-    /** The error thrown by the final {@link Queue.send} attempt, if any. */
-    public override readonly cause: unknown;
-    /** Total number of queue attempts made when the error was raised. */
-    public readonly attempts: number;
+  public override readonly name = 'PublishError';
+  /** Stable discriminator. Always `'publish_failed'` for now. */
+  public readonly code = 'publish_failed' as const;
+  /** The error thrown by the final {@link Queue.send} attempt, if any. */
+  public override readonly cause: unknown;
+  /** Total number of queue attempts made when the error was raised. */
+  public readonly attempts: number;
 
-    public constructor(attempts: number, cause?: unknown) {
-        super(
-            `publish_failed: queue send exhausted after ${String(attempts)} attempt(s): ${describeCause(cause)}`,
-        );
-        this.cause = cause;
-        this.attempts = attempts;
-    }
+  public constructor(attempts: number, cause?: unknown) {
+    super(
+      `publish_failed: queue send exhausted after ${String(attempts)} attempt(s): ${describeCause(cause)}`,
+    );
+    this.cause = cause;
+    this.attempts = attempts;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -185,21 +185,21 @@ export const DEFAULT_MAX_QUEUE_RETRIES = 3;
  * publisher.
  */
 export const DEFAULT_RETRY_BACKOFF = (attempt: number): number =>
-    Math.min(2 ** attempt * 100, 5000);
+  Math.min(2 ** attempt * 100, 5000);
 
 /** Default async sleeper — simple `setTimeout` wrapper. */
 const defaultSleep = (ms: number): Promise<void> =>
-    new Promise((resolve) => {
-        setTimeout(resolve, ms);
-    });
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 const defaultLogger: PublishLogger = {
-    warn: (msg, extra) => {
-        console.warn(`[publish] ${msg}`, extra ?? {});
-    },
-    error: (msg, extra) => {
-        console.error(`[publish] ${msg}`, extra ?? {});
-    },
+  warn: (msg, extra) => {
+    console.warn(`[publish] ${msg}`, extra ?? {});
+  },
+  error: (msg, extra) => {
+    console.error(`[publish] ${msg}`, extra ?? {});
+  },
 };
 
 /* ------------------------------------------------------------------ */
@@ -249,18 +249,18 @@ const defaultLogger: PublishLogger = {
  *   outbox insert fails — propagated so the caller's transaction rolls back.
  */
 export async function publish(
-    event: AthlyaEvent,
-    tx?: AthlyaTx,
-    deps: PublishDeps = {},
+  event: AthlyaEvent,
+  tx?: AthlyaTx,
+  deps: PublishDeps = {},
 ): Promise<PublishResult> {
-    const validated = validate(event);
-    const logger = deps.logger ?? defaultLogger;
+  const validated = validate(event);
+  const logger = deps.logger ?? defaultLogger;
 
-    if (tx !== undefined) {
-        return publishTransactional(validated, tx, deps, logger);
-    }
+  if (tx !== undefined) {
+    return publishTransactional(validated, tx, deps, logger);
+  }
 
-    return publishBestEffort(validated, deps, logger);
+  return publishBestEffort(validated, deps, logger);
 }
 
 /* ------------------------------------------------------------------ */
@@ -275,9 +275,9 @@ export async function publish(
  * hands us a live transaction handle.
  */
 function validate(event: AthlyaEvent): AthlyaEvent {
-    // `parseEvent` already throws `InvalidEventError` on failure. No
-    // try/catch needed — just forward it.
-    return parseEvent(event);
+  // `parseEvent` already throws `InvalidEventError` on failure. No
+  // try/catch needed — just forward it.
+  return parseEvent(event);
 }
 
 /**
@@ -285,33 +285,33 @@ function validate(event: AthlyaEvent): AthlyaEvent {
  * retries. Req 16.2 + 16.3.
  */
 async function publishTransactional(
-    event: AthlyaEvent,
-    tx: AthlyaTx,
-    deps: PublishDeps,
-    logger: PublishLogger,
+  event: AthlyaEvent,
+  tx: AthlyaTx,
+  deps: PublishDeps,
+  logger: PublishLogger,
 ): Promise<PublishResult> {
-    // Step 1: durable record. A failure MUST propagate so the caller's
-    // transaction rolls back (Req 16.3). Do not wrap in try/catch.
-    await insertOutbox(tx, toOutboxEvent(event));
+  // Step 1: durable record. A failure MUST propagate so the caller's
+  // transaction rolls back (Req 16.3). Do not wrap in try/catch.
+  await insertOutbox(tx, toOutboxEvent(event));
 
-    // Step 2: optionally try the queue. The outbox row is now part of
-    // the caller's transaction, so a queue failure here only costs us
-    // a drain-worker delivery delay.
-    if (deps.queue === undefined) {
-        return { delivery: 'outbox' };
-    }
+  // Step 2: optionally try the queue. The outbox row is now part of
+  // the caller's transaction, so a queue failure here only costs us
+  // a drain-worker delivery delay.
+  if (deps.queue === undefined) {
+    return { delivery: 'outbox' };
+  }
 
-    try {
-        await sendWithRetries(deps.queue, event, deps, logger);
-        return { delivery: 'both' };
-    } catch (err) {
-        logger.warn('queue send exhausted on transactional path; relying on outbox drain', {
-            eventId: event.id,
-            eventType: event.type,
-            error: errToDetail(err),
-        });
-        return { delivery: 'outbox' };
-    }
+  try {
+    await sendWithRetries(deps.queue, event, deps, logger);
+    return { delivery: 'both' };
+  } catch (err) {
+    logger.warn('queue send exhausted on transactional path; relying on outbox drain', {
+      eventId: event.id,
+      eventType: event.type,
+      error: errToDetail(err),
+    });
+    return { delivery: 'outbox' };
+  }
 }
 
 /**
@@ -320,34 +320,34 @@ async function publishTransactional(
  * or when no queue was supplied.
  */
 async function publishBestEffort(
-    event: AthlyaEvent,
-    deps: PublishDeps,
-    logger: PublishLogger,
+  event: AthlyaEvent,
+  deps: PublishDeps,
+  logger: PublishLogger,
 ): Promise<PublishResult> {
-    const budget = normaliseBudget(deps.maxQueueRetries);
+  const budget = normaliseBudget(deps.maxQueueRetries);
 
-    if (deps.queue === undefined) {
-        // Neither `tx` nor `queue`: the caller has no durability
-        // option. Fail loud rather than silently succeed.
-        logger.error('publish called without tx and without queue', {
-            eventId: event.id,
-            eventType: event.type,
-        });
-        throw new PublishError(0, new Error('no queue configured and no tx provided'));
-    }
+  if (deps.queue === undefined) {
+    // Neither `tx` nor `queue`: the caller has no durability
+    // option. Fail loud rather than silently succeed.
+    logger.error('publish called without tx and without queue', {
+      eventId: event.id,
+      eventType: event.type,
+    });
+    throw new PublishError(0, new Error('no queue configured and no tx provided'));
+  }
 
-    try {
-        await sendWithRetries(deps.queue, event, deps, logger);
-        return { delivery: 'queue' };
-    } catch (err) {
-        logger.error('queue send exhausted retry budget', {
-            eventId: event.id,
-            eventType: event.type,
-            attempts: budget,
-            error: errToDetail(err),
-        });
-        throw new PublishError(budget, err);
-    }
+  try {
+    await sendWithRetries(deps.queue, event, deps, logger);
+    return { delivery: 'queue' };
+  } catch (err) {
+    logger.error('queue send exhausted retry budget', {
+      eventId: event.id,
+      eventType: event.type,
+      attempts: budget,
+      error: errToDetail(err),
+    });
+    throw new PublishError(budget, err);
+  }
 }
 
 /**
@@ -360,35 +360,35 @@ async function publishBestEffort(
  * — `setTimeout(..., 0)` still resolves on the next macrotask tick.
  */
 async function sendWithRetries(
-    queue: Queue,
-    event: AthlyaEvent,
-    deps: PublishDeps,
-    logger: PublishLogger,
+  queue: Queue,
+  event: AthlyaEvent,
+  deps: PublishDeps,
+  logger: PublishLogger,
 ): Promise<void> {
-    const budget = normaliseBudget(deps.maxQueueRetries);
-    const backoff = deps.retryBackoffMs ?? DEFAULT_RETRY_BACKOFF;
+  const budget = normaliseBudget(deps.maxQueueRetries);
+  const backoff = deps.retryBackoffMs ?? DEFAULT_RETRY_BACKOFF;
 
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= budget; attempt++) {
-        try {
-            await queue.send(event);
-            return;
-        } catch (err) {
-            lastError = err;
-            logger.warn('queue send attempt failed', {
-                eventId: event.id,
-                eventType: event.type,
-                attempt,
-                budget,
-                error: errToDetail(err),
-            });
-            if (attempt < budget) {
-                const delay = normaliseDelay(backoff(attempt));
-                await defaultSleep(delay);
-            }
-        }
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= budget; attempt++) {
+    try {
+      await queue.send(event);
+      return;
+    } catch (err) {
+      lastError = err;
+      logger.warn('queue send attempt failed', {
+        eventId: event.id,
+        eventType: event.type,
+        attempt,
+        budget,
+        error: errToDetail(err),
+      });
+      if (attempt < budget) {
+        const delay = normaliseDelay(backoff(attempt));
+        await defaultSleep(delay);
+      }
     }
-    throw lastError;
+  }
+  throw lastError;
 }
 
 /**
@@ -399,30 +399,28 @@ async function sendWithRetries(
  * reassembles an equivalent envelope on republish.
  */
 function toOutboxEvent(event: AthlyaEvent): OutboxEvent {
-    return {
-        eventId: event.id,
-        eventType: event.type,
-        // `payload` is a plain object on every arm of the discriminated
-        // union — spread it to avoid aliasing the schema-validated
-        // reference.
-        payload: { ...event.payload },
-        // `occurredAt` is declared as `IsoDateTimeSchema` (ISO-8601 UTC
-        // string) in `@athlya/shared/events`. The outbox helper wants a
-        // Date; a single `new Date(...)` is enough because the schema
-        // has already validated the format.
-        occurredAt: new Date(event.occurredAt),
-    };
+  return {
+    eventId: event.id,
+    eventType: event.type,
+    // `payload` is a plain object on every arm of the discriminated
+    // union — spread it to avoid aliasing the schema-validated
+    // reference.
+    payload: { ...event.payload },
+    // `occurredAt` is declared as `IsoDateTimeSchema` (ISO-8601 UTC
+    // string) in `@athlya/shared/events`. The outbox helper wants a
+    // Date; a single `new Date(...)` is enough because the schema
+    // has already validated the format.
+    occurredAt: new Date(event.occurredAt),
+  };
 }
 
 /** Normalise / bound the retry budget. Always ≥ 1. */
 function normaliseBudget(raw: number | undefined): number {
-    if (raw === undefined) return DEFAULT_MAX_QUEUE_RETRIES;
-    if (!Number.isFinite(raw) || !Number.isInteger(raw) || raw < 1) {
-        throw new RangeError(
-            `publish: maxQueueRetries must be a positive integer, got ${String(raw)}`,
-        );
-    }
-    return raw;
+  if (raw === undefined) return DEFAULT_MAX_QUEUE_RETRIES;
+  if (!Number.isFinite(raw) || !Number.isInteger(raw) || raw < 1) {
+    throw new RangeError(`publish: maxQueueRetries must be a positive integer, got ${String(raw)}`);
+  }
+  return raw;
 }
 
 /**
@@ -431,12 +429,10 @@ function normaliseBudget(raw: number | undefined): number {
  * `NaN` would hang the loop on `setTimeout`.
  */
 function normaliseDelay(raw: number): number {
-    if (!Number.isFinite(raw)) {
-        throw new RangeError(
-            `publish: retryBackoffMs returned a non-finite value: ${String(raw)}`,
-        );
-    }
-    return raw < 0 ? 0 : raw;
+  if (!Number.isFinite(raw)) {
+    throw new RangeError(`publish: retryBackoffMs returned a non-finite value: ${String(raw)}`);
+  }
+  return raw < 0 ? 0 : raw;
 }
 
 /**
@@ -445,37 +441,37 @@ function normaliseDelay(raw: number): number {
  * anything else to its `String()` representation.
  */
 function errToDetail(err: unknown): { name?: string; message: string } {
-    if (err instanceof Error) {
-        return { name: err.name, message: err.message };
-    }
-    return { message: String(err) };
+  if (err instanceof Error) {
+    return { name: err.name, message: err.message };
+  }
+  return { message: String(err) };
 }
 
 /** Human-readable stringification for {@link PublishError.message}. */
 function describeCause(cause: unknown): string {
-    if (cause === undefined) return '<unknown>';
-    if (cause === null) return 'null';
-    if (cause instanceof Error) {
-        return `${cause.name}: ${cause.message}`;
-    }
-    switch (typeof cause) {
-        case 'string':
-            return cause;
-        case 'number':
-        case 'boolean':
-        case 'bigint':
-            return cause.toString();
-        case 'symbol':
-            return cause.toString();
-        case 'function':
-            return '<function>';
-        default:
-            // Plain object. `String(cause)` would yield "[object Object]",
-            // so fall back to JSON. The try/catch covers circular refs.
-            try {
-                return JSON.stringify(cause) ?? '<unknown>';
-            } catch {
-                return '<unserialisable>';
-            }
-    }
+  if (cause === undefined) return '<unknown>';
+  if (cause === null) return 'null';
+  if (cause instanceof Error) {
+    return `${cause.name}: ${cause.message}`;
+  }
+  switch (typeof cause) {
+    case 'string':
+      return cause;
+    case 'number':
+    case 'boolean':
+    case 'bigint':
+      return cause.toString();
+    case 'symbol':
+      return cause.toString();
+    case 'function':
+      return '<function>';
+    default:
+      // Plain object. `String(cause)` would yield "[object Object]",
+      // so fall back to JSON. The try/catch covers circular refs.
+      try {
+        return JSON.stringify(cause) ?? '<unknown>';
+      } catch {
+        return '<unserialisable>';
+      }
+  }
 }

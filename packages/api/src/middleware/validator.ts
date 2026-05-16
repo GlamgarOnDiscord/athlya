@@ -108,7 +108,7 @@ export type ValidationTarget = 'json' | 'query' | 'param' | 'header';
  * back independently.
  */
 export function validatedContextKey(target: ValidationTarget): string {
-    return `validated:${target}`;
+  return `validated:${target}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -135,22 +135,22 @@ export function validatedContextKey(target: ValidationTarget): string {
  * `instanceof` check to route the error to the 422 branch.
  */
 export class ValidationError extends Error {
-    public override readonly name = 'ValidationError';
+  public override readonly name = 'ValidationError';
 
-    /** Stable machine-readable identifier. */
-    public readonly code = 'validation_error' as const;
+  /** Stable machine-readable identifier. */
+  public readonly code = 'validation_error' as const;
 
-    /** Which input source failed validation. */
-    public readonly target: ValidationTarget;
+  /** Which input source failed validation. */
+  public readonly target: ValidationTarget;
 
-    /** Verbatim Zod issues from the failed parse. */
-    public readonly issues: readonly ZodIssue[];
+  /** Verbatim Zod issues from the failed parse. */
+  public readonly issues: readonly ZodIssue[];
 
-    public constructor(target: ValidationTarget, issues: readonly ZodIssue[]) {
-        super(`validation failed for ${target}`);
-        this.target = target;
-        this.issues = issues;
-    }
+  public constructor(target: ValidationTarget, issues: readonly ZodIssue[]) {
+    super(`validation failed for ${target}`);
+    this.target = target;
+    this.issues = issues;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -168,14 +168,14 @@ export class ValidationError extends Error {
  * stays framework-free.
  */
 export interface ValidatorRequest {
-    /** Parse the JSON body. Called only when `target === 'json'`. */
-    json(): Promise<unknown>;
-    /** Flat query-string dictionary. Called when `target === 'query'`. */
-    query(): Record<string, string | string[]>;
-    /** Path-parameter dictionary. Called when `target === 'param'`. */
-    param(): Record<string, string>;
-    /** Full-header dictionary (no argument). Called when `target === 'header'`. */
-    header(): Record<string, string>;
+  /** Parse the JSON body. Called only when `target === 'json'`. */
+  json(): Promise<unknown>;
+  /** Flat query-string dictionary. Called when `target === 'query'`. */
+  query(): Record<string, string | string[]>;
+  /** Path-parameter dictionary. Called when `target === 'param'`. */
+  param(): Record<string, string>;
+  /** Full-header dictionary (no argument). Called when `target === 'header'`. */
+  header(): Record<string, string>;
 }
 
 /**
@@ -187,8 +187,8 @@ export interface ValidatorRequest {
  * Hono-specific.
  */
 export interface ValidatorContext {
-    readonly req: ValidatorRequest;
-    set(key: string, value: unknown): void;
+  readonly req: ValidatorRequest;
+  set(key: string, value: unknown): void;
 }
 
 /** Hono-compatible `next` signature. */
@@ -200,8 +200,8 @@ export type ValidatorNext = () => Promise<void>;
  * control to the global `onError` which renders the 422.
  */
 export type ValidatorMiddleware<Out> = (
-    c: ValidatorContext,
-    next: ValidatorNext,
+  c: ValidatorContext,
+  next: ValidatorNext,
 ) => Promise<Out | void>;
 
 /* ------------------------------------------------------------------ */
@@ -215,20 +215,17 @@ export type ValidatorMiddleware<Out> = (
  * {@link ValidationTarget} union — TypeScript helps us keep the
  * switch total even if we add new targets later.
  */
-async function readInput(
-    target: ValidationTarget,
-    req: ValidatorRequest,
-): Promise<unknown> {
-    switch (target) {
-        case 'json':
-            return req.json();
-        case 'query':
-            return req.query();
-        case 'param':
-            return req.param();
-        case 'header':
-            return req.header();
-    }
+async function readInput(target: ValidationTarget, req: ValidatorRequest): Promise<unknown> {
+  switch (target) {
+    case 'json':
+      return req.json();
+    case 'query':
+      return req.query();
+    case 'param':
+      return req.param();
+    case 'header':
+      return req.header();
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -257,19 +254,19 @@ async function readInput(
  * benefit from strong typing at the call site without a manual cast.
  */
 export function zValidator<T>(
-    target: ValidationTarget,
-    schema: ZodSchema<T>,
+  target: ValidationTarget,
+  schema: ZodSchema<T>,
 ): ValidatorMiddleware<void> {
-    return async (c, next) => {
-        const raw = await readInput(target, c.req);
-        const parsed = schema.safeParse(raw);
-        if (!parsed.success) {
-            // `parsed.error.issues` is the verbatim `ZodIssue[]` —
-            // the Problem Details mapper flattens `.path` into a
-            // dotted string and forwards `.code` / `.message`.
-            throw new ValidationError(target, parsed.error.issues);
-        }
-        c.set(validatedContextKey(target), parsed.data);
-        await next();
-    };
+  return async (c, next) => {
+    const raw = await readInput(target, c.req);
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      // `parsed.error.issues` is the verbatim `ZodIssue[]` —
+      // the Problem Details mapper flattens `.path` into a
+      // dotted string and forwards `.code` / `.message`.
+      throw new ValidationError(target, parsed.error.issues);
+    }
+    c.set(validatedContextKey(target), parsed.data);
+    await next();
+  };
 }

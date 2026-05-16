@@ -23,8 +23,8 @@ import { IsoDateTimeSchema } from './primitives.js';
  * monthly revisions sort lexicographically and compare as plain strings.
  */
 export const ConsentsVersionSchema = z
-    .string()
-    .regex(/^\d{4}-\d{2}$/, 'must be a YYYY-MM CGU version identifier');
+  .string()
+  .regex(/^\d{4}-\d{2}$/, 'must be a YYYY-MM CGU version identifier');
 
 /**
  * Full consents record as persisted on `users.consents` and returned by
@@ -32,14 +32,14 @@ export const ConsentsVersionSchema = z
  * silently roll back recently-added consent categories.
  */
 export const ConsentsSchema = z
-    .object({
-        marketing: z.boolean(),
-        analytics: z.boolean(),
-        thirdParty: z.boolean(),
-        version: ConsentsVersionSchema,
-        updatedAt: IsoDateTimeSchema,
-    })
-    .strict();
+  .object({
+    marketing: z.boolean(),
+    analytics: z.boolean(),
+    thirdParty: z.boolean(),
+    version: ConsentsVersionSchema,
+    updatedAt: IsoDateTimeSchema,
+  })
+  .strict();
 
 export type Consents = z.infer<typeof ConsentsSchema>;
 export type ConsentsVersion = z.infer<typeof ConsentsVersionSchema>;

@@ -48,10 +48,10 @@ export type ReservationStatus = 'confirmed' | 'waitlist' | 'cancelled' | 'no_sho
  * `cancelled → confirmed`, which would silently break Requirement 10.4).
  */
 export const LEGAL_TRANSITIONS: ReadonlyArray<readonly [ReservationStatus, ReservationStatus]> = [
-    ['confirmed', 'cancelled'],
-    ['confirmed', 'no_show'],
-    ['waitlist', 'confirmed'],
-    ['waitlist', 'cancelled'],
+  ['confirmed', 'cancelled'],
+  ['confirmed', 'no_show'],
+  ['waitlist', 'confirmed'],
+  ['waitlist', 'cancelled'],
 ] as const;
 
 /**
@@ -71,11 +71,11 @@ export const LEGAL_TRANSITIONS: ReadonlyArray<readonly [ReservationStatus, Reser
  * enforces Requirement 10.4.
  */
 export function canTransition(from: ReservationStatus, to: ReservationStatus): boolean {
-    if (from === to) return true;
-    for (const [a, b] of LEGAL_TRANSITIONS) {
-        if (a === from && b === to) return true;
-    }
-    return false;
+  if (from === to) return true;
+  for (const [a, b] of LEGAL_TRANSITIONS) {
+    if (a === from && b === to) return true;
+  }
+  return false;
 }
 
 /**
@@ -89,21 +89,21 @@ export function canTransition(from: ReservationStatus, to: ReservationStatus): b
  * debugging.
  */
 export class InvalidTransitionError extends Error {
-    /**
-     * Stable machine-readable code. Matches the error code defined by
-     * Requirement 10.3 and used by the API Gateway to build the
-     * Problem Details envelope.
-     */
-    public readonly code: 'invalid_transition' = 'invalid_transition' as const;
-    public readonly from: ReservationStatus;
-    public readonly to: ReservationStatus;
+  /**
+   * Stable machine-readable code. Matches the error code defined by
+   * Requirement 10.3 and used by the API Gateway to build the
+   * Problem Details envelope.
+   */
+  public readonly code: 'invalid_transition' = 'invalid_transition' as const;
+  public readonly from: ReservationStatus;
+  public readonly to: ReservationStatus;
 
-    public constructor(from: ReservationStatus, to: ReservationStatus) {
-        super(`Illegal reservation transition: ${from} → ${to}`);
-        this.name = 'InvalidTransitionError';
-        this.from = from;
-        this.to = to;
-    }
+  public constructor(from: ReservationStatus, to: ReservationStatus) {
+    super(`Illegal reservation transition: ${from} → ${to}`);
+    this.name = 'InvalidTransitionError';
+    this.from = from;
+    this.to = to;
+  }
 }
 
 /**
@@ -118,7 +118,7 @@ export class InvalidTransitionError extends Error {
  * ```
  */
 export function assertCanTransition(from: ReservationStatus, to: ReservationStatus): void {
-    if (!canTransition(from, to)) {
-        throw new InvalidTransitionError(from, to);
-    }
+  if (!canTransition(from, to)) {
+    throw new InvalidTransitionError(from, to);
+  }
 }

@@ -20,10 +20,10 @@ export * from './checkin.js';
 export * from './cancel.js';
 export * from './book.js';
 export type {
-    CreateClassInput,
-    CreateClassErrorCode,
-    CreateClassRepoInput,
-    RemainingCounterWriter,
-    CreateClassDeps,
+  CreateClassInput,
+  CreateClassErrorCode,
+  CreateClassRepoInput,
+  RemainingCounterWriter,
+  CreateClassDeps,
 } from './create.js';
 export { CreateClassError, createClass } from './create.js';

@@ -1,162 +1,162 @@
 {
-    "name": "@athlya/api",
-    "version": "0.0.0",
-    "private": true,
-    "type": "module",
-    "description": "Athlya API gateway primitives: rate limiter, idempotency middleware, Hono wiring and shared HTTP helpers",
-    "license": "AGPL-3.0-only",
-    "engines": {
-        "node": ">=20"
+  "name": "@athlya/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Athlya API gateway primitives: rate limiter, idempotency middleware, Hono wiring and shared HTTP helpers",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     },
-    "sideEffects": false,
-    "exports": {
-        ".": {
-            "types": "./src/index.ts",
-            "default": "./src/index.ts"
-        },
-        "./circuit-breaker": {
-            "types": "./src/circuit-breaker.ts",
-            "default": "./src/circuit-breaker.ts"
-        },
-        "./sentry": {
-            "types": "./src/sentry.ts",
-            "default": "./src/sentry.ts"
-        },
-        "./middleware/idempotency": {
-            "types": "./src/middleware/idempotency.ts",
-            "default": "./src/middleware/idempotency.ts"
-        },
-        "./middleware/auth": {
-            "types": "./src/middleware/auth.ts",
-            "default": "./src/middleware/auth.ts"
-        },
-        "./middleware/problem-details": {
-            "types": "./src/middleware/problem-details.ts",
-            "default": "./src/middleware/problem-details.ts"
-        },
-        "./middleware/security-headers": {
-            "types": "./src/middleware/security-headers.ts",
-            "default": "./src/middleware/security-headers.ts"
-        },
-        "./middleware/tenant-resolver": {
-            "types": "./src/middleware/tenant-resolver.ts",
-            "default": "./src/middleware/tenant-resolver.ts"
-        },
-        "./middleware/rate-limit": {
-            "types": "./src/middleware/rate-limit.ts",
-            "default": "./src/middleware/rate-limit.ts"
-        },
-        "./middleware/tenant": {
-            "types": "./src/middleware/tenant.ts",
-            "default": "./src/middleware/tenant.ts"
-        },
-        "./middleware/turnstile": {
-            "types": "./src/middleware/turnstile.ts",
-            "default": "./src/middleware/turnstile.ts"
-        },
-        "./middleware/validator": {
-            "types": "./src/middleware/validator.ts",
-            "default": "./src/middleware/validator.ts"
-        },
-        "./middleware/otel": {
-            "types": "./src/middleware/otel.ts",
-            "default": "./src/middleware/otel.ts"
-        },
-        "./events/publish": {
-            "types": "./src/events/publish.ts",
-            "default": "./src/events/publish.ts"
-        },
-        "./events/drain-worker": {
-            "types": "./src/events/drain-worker.ts",
-            "default": "./src/events/drain-worker.ts"
-        },
-        "./events/drain-scheduled": {
-            "types": "./src/events/drain-scheduled.ts",
-            "default": "./src/events/drain-scheduled.ts"
-        },
-        "./events/drain-dlq": {
-            "types": "./src/events/drain-dlq.ts",
-            "default": "./src/events/drain-dlq.ts"
-        },
-        "./admin/dlq-routes": {
-            "types": "./src/admin/dlq-routes.ts",
-            "default": "./src/admin/dlq-routes.ts"
-        },
-        "./logging": {
-            "types": "./src/logging.ts",
-            "default": "./src/logging.ts"
-        },
-        "./audit": {
-            "types": "./src/audit.ts",
-            "default": "./src/audit.ts"
-        },
-        "./i18n/negotiate": {
-            "types": "./src/i18n/negotiate.ts",
-            "default": "./src/i18n/negotiate.ts"
-        },
-        "./tracing/ids": {
-            "types": "./src/tracing/ids.ts",
-            "default": "./src/tracing/ids.ts"
-        },
-        "./types": {
-            "types": "./src/types.ts",
-            "default": "./src/types.ts"
-        },
-        "./worker": {
-            "types": "./src/worker.ts",
-            "default": "./src/worker.ts"
-        },
-        "./routes": {
-            "types": "./src/routes/index.ts",
-            "default": "./src/routes/index.ts"
-        }
+    "./circuit-breaker": {
+      "types": "./src/circuit-breaker.ts",
+      "default": "./src/circuit-breaker.ts"
     },
-    "files": [
-        "src",
-        "dist"
-    ],
-    "scripts": {
-        "build": "tsc -p tsconfig.build.json",
-        "lint": "eslint .",
-        "typecheck": "tsc --noEmit -p tsconfig.json",
-        "test": "vitest run",
-        "clean": "rimraf dist .turbo *.tsbuildinfo",
-        "dev": "wrangler dev",
-        "deploy:staging": "wrangler deploy --env staging",
-        "deploy:production": "wrangler deploy --env production"
+    "./sentry": {
+      "types": "./src/sentry.ts",
+      "default": "./src/sentry.ts"
     },
-    "dependencies": {
-        "@athlya/auth": "workspace:*",
-        "@athlya/billing": "workspace:*",
-        "@athlya/db": "workspace:*",
-        "@athlya/members": "workspace:*",
-        "@athlya/ratelimit": "workspace:*",
-        "@athlya/reservations": "workspace:*",
-        "@athlya/shared": "workspace:*",
-        "@upstash/redis": "^1.35.6",
-        "drizzle-orm": "^0.45.2",
-        "jose": "^5.9.6",
-        "zod": "^4.4.3"
+    "./middleware/idempotency": {
+      "types": "./src/middleware/idempotency.ts",
+      "default": "./src/middleware/idempotency.ts"
     },
-    "peerDependencies": {
-        "hono": "^4.0.0"
+    "./middleware/auth": {
+      "types": "./src/middleware/auth.ts",
+      "default": "./src/middleware/auth.ts"
     },
-    "peerDependenciesMeta": {
-        "hono": {
-            "optional": true
-        }
+    "./middleware/problem-details": {
+      "types": "./src/middleware/problem-details.ts",
+      "default": "./src/middleware/problem-details.ts"
     },
-    "devDependencies": {
-        "@athlya/eslint-config": "workspace:*",
-        "@athlya/tsconfig": "workspace:*",
-        "@cloudflare/workers-types": "^4.20241218.0",
-        "@types/node": "^20.19.9",
-        "eslint": "^9.39.1",
-        "fast-check": "^3.23.2",
-        "hono": "^4.12.19",
-        "rimraf": "^6.0.1",
-        "typescript": "^5.9.3",
-        "vitest": "^4.1.6",
-        "wrangler": "^4.0.0"
+    "./middleware/security-headers": {
+      "types": "./src/middleware/security-headers.ts",
+      "default": "./src/middleware/security-headers.ts"
+    },
+    "./middleware/tenant-resolver": {
+      "types": "./src/middleware/tenant-resolver.ts",
+      "default": "./src/middleware/tenant-resolver.ts"
+    },
+    "./middleware/rate-limit": {
+      "types": "./src/middleware/rate-limit.ts",
+      "default": "./src/middleware/rate-limit.ts"
+    },
+    "./middleware/tenant": {
+      "types": "./src/middleware/tenant.ts",
+      "default": "./src/middleware/tenant.ts"
+    },
+    "./middleware/turnstile": {
+      "types": "./src/middleware/turnstile.ts",
+      "default": "./src/middleware/turnstile.ts"
+    },
+    "./middleware/validator": {
+      "types": "./src/middleware/validator.ts",
+      "default": "./src/middleware/validator.ts"
+    },
+    "./middleware/otel": {
+      "types": "./src/middleware/otel.ts",
+      "default": "./src/middleware/otel.ts"
+    },
+    "./events/publish": {
+      "types": "./src/events/publish.ts",
+      "default": "./src/events/publish.ts"
+    },
+    "./events/drain-worker": {
+      "types": "./src/events/drain-worker.ts",
+      "default": "./src/events/drain-worker.ts"
+    },
+    "./events/drain-scheduled": {
+      "types": "./src/events/drain-scheduled.ts",
+      "default": "./src/events/drain-scheduled.ts"
+    },
+    "./events/drain-dlq": {
+      "types": "./src/events/drain-dlq.ts",
+      "default": "./src/events/drain-dlq.ts"
+    },
+    "./admin/dlq-routes": {
+      "types": "./src/admin/dlq-routes.ts",
+      "default": "./src/admin/dlq-routes.ts"
+    },
+    "./logging": {
+      "types": "./src/logging.ts",
+      "default": "./src/logging.ts"
+    },
+    "./audit": {
+      "types": "./src/audit.ts",
+      "default": "./src/audit.ts"
+    },
+    "./i18n/negotiate": {
+      "types": "./src/i18n/negotiate.ts",
+      "default": "./src/i18n/negotiate.ts"
+    },
+    "./tracing/ids": {
+      "types": "./src/tracing/ids.ts",
+      "default": "./src/tracing/ids.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "default": "./src/types.ts"
+    },
+    "./worker": {
+      "types": "./src/worker.ts",
+      "default": "./src/worker.ts"
+    },
+    "./routes": {
+      "types": "./src/routes/index.ts",
+      "default": "./src/routes/index.ts"
     }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "clean": "rimraf dist .turbo *.tsbuildinfo",
+    "dev": "wrangler dev",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production"
+  },
+  "dependencies": {
+    "@athlya/auth": "workspace:*",
+    "@athlya/billing": "workspace:*",
+    "@athlya/db": "workspace:*",
+    "@athlya/members": "workspace:*",
+    "@athlya/ratelimit": "workspace:*",
+    "@athlya/reservations": "workspace:*",
+    "@athlya/shared": "workspace:*",
+    "@upstash/redis": "^1.35.6",
+    "drizzle-orm": "^0.45.2",
+    "jose": "^5.9.6",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "hono": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@athlya/eslint-config": "workspace:*",
+    "@athlya/tsconfig": "workspace:*",
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "@types/node": "^20.19.9",
+    "eslint": "^9.39.1",
+    "fast-check": "^3.23.2",
+    "hono": "^4.12.19",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6",
+    "wrangler": "^4.0.0"
+  }
 }

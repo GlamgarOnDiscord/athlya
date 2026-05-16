@@ -25,12 +25,12 @@
  */
 
 import {
-    ExerciseSchema,
-    SetSchema,
-    WorkoutSessionSchema,
-    type Exercise,
-    type Set,
-    type WorkoutSession,
+  ExerciseSchema,
+  SetSchema,
+  WorkoutSessionSchema,
+  type Exercise,
+  type Set,
+  type WorkoutSession,
 } from '../schemas/domain.js';
 
 import type { ExerciseWire, SetWire, WorkoutSessionWire } from './types.js';
@@ -40,27 +40,27 @@ import type { ExerciseWire, SetWire, WorkoutSessionWire } from './types.js';
 /* ------------------------------------------------------------------ */
 
 function setToJSON(value: Set): SetWire {
-    // Build the object without forcing `undefined` on optional keys — that
-    // preserves presence/absence semantics under `exactOptionalPropertyTypes`.
-    const wire: { reps: number; weightKg?: number; durationSec?: number } = {
-        reps: value.reps,
-    };
-    if (value.weightKg !== undefined) {
-        wire.weightKg = value.weightKg;
-    }
-    if (value.durationSec !== undefined) {
-        wire.durationSec = value.durationSec;
-    }
-    return wire;
+  // Build the object without forcing `undefined` on optional keys — that
+  // preserves presence/absence semantics under `exactOptionalPropertyTypes`.
+  const wire: { reps: number; weightKg?: number; durationSec?: number } = {
+    reps: value.reps,
+  };
+  if (value.weightKg !== undefined) {
+    wire.weightKg = value.weightKg;
+  }
+  if (value.durationSec !== undefined) {
+    wire.durationSec = value.durationSec;
+  }
+  return wire;
 }
 
 function setFromJSON(raw: unknown): Set {
-    return SetSchema.parse(raw);
+  return SetSchema.parse(raw);
 }
 
 export const SetCodec = {
-    toJSON: setToJSON,
-    fromJSON: setFromJSON,
+  toJSON: setToJSON,
+  fromJSON: setFromJSON,
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -68,19 +68,19 @@ export const SetCodec = {
 /* ------------------------------------------------------------------ */
 
 function exerciseToJSON(value: Exercise): ExerciseWire {
-    return {
-        name: value.name,
-        sets: value.sets.map(setToJSON),
-    };
+  return {
+    name: value.name,
+    sets: value.sets.map(setToJSON),
+  };
 }
 
 function exerciseFromJSON(raw: unknown): Exercise {
-    return ExerciseSchema.parse(raw);
+  return ExerciseSchema.parse(raw);
 }
 
 export const ExerciseCodec = {
-    toJSON: exerciseToJSON,
-    fromJSON: exerciseFromJSON,
+  toJSON: exerciseToJSON,
+  fromJSON: exerciseFromJSON,
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -88,23 +88,23 @@ export const ExerciseCodec = {
 /* ------------------------------------------------------------------ */
 
 function toJSON(value: WorkoutSession): WorkoutSessionWire {
-    return {
-        id: value.id,
-        userId: value.userId,
-        studioId: value.studioId,
-        startedAt: value.startedAt,
-        durationMin: value.durationMin,
-        exercises: value.exercises.map(exerciseToJSON),
-        notes: value.notes,
-        createdAt: value.createdAt,
-    };
+  return {
+    id: value.id,
+    userId: value.userId,
+    studioId: value.studioId,
+    startedAt: value.startedAt,
+    durationMin: value.durationMin,
+    exercises: value.exercises.map(exerciseToJSON),
+    notes: value.notes,
+    createdAt: value.createdAt,
+  };
 }
 
 function fromJSON(raw: unknown): WorkoutSession {
-    return WorkoutSessionSchema.parse(raw);
+  return WorkoutSessionSchema.parse(raw);
 }
 
 export const WorkoutSessionCodec = {
-    toJSON,
-    fromJSON,
+  toJSON,
+  fromJSON,
 } as const;

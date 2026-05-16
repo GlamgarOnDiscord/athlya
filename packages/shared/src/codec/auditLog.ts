@@ -52,7 +52,7 @@ import type { AuditLogWire } from './types.js';
  * beyond `Number.MAX_SAFE_INTEGER`.
  */
 export function bigintToId(n: bigint): string {
-    return String(n);
+  return String(n);
 }
 
 /**
@@ -67,11 +67,11 @@ export function bigintToId(n: bigint): string {
  * Problem Details response.
  */
 export function idToBigint(id: string): bigint {
-    try {
-        return BigInt(id);
-    } catch {
-        throw new SyntaxError('invalid AuditLog.id (not a bigint)');
-    }
+  try {
+    return BigInt(id);
+  } catch {
+    throw new SyntaxError('invalid AuditLog.id (not a bigint)');
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -79,23 +79,23 @@ export function idToBigint(id: string): bigint {
 /* ------------------------------------------------------------------ */
 
 function toJSON(value: AuditLog): AuditLogWire {
-    return {
-        id: value.id,
-        actorId: value.actorId,
-        action: value.action,
-        targetType: value.targetType,
-        targetId: value.targetId,
-        // Pass metadata through unchanged — see the module-level JSDoc.
-        metadata: value.metadata,
-        createdAt: value.createdAt,
-    };
+  return {
+    id: value.id,
+    actorId: value.actorId,
+    action: value.action,
+    targetType: value.targetType,
+    targetId: value.targetId,
+    // Pass metadata through unchanged — see the module-level JSDoc.
+    metadata: value.metadata,
+    createdAt: value.createdAt,
+  };
 }
 
 function fromJSON(raw: unknown): AuditLog {
-    return AuditLogSchema.parse(raw);
+  return AuditLogSchema.parse(raw);
 }
 
 export const AuditLogCodec = {
-    toJSON,
-    fromJSON,
+  toJSON,
+  fromJSON,
 } as const;

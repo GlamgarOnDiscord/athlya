@@ -27,7 +27,6 @@
  */
 import { NextResponse } from 'next/server';
 
-
 import { buildReportToHeader, generateCsp } from './lib/csp';
 import { getCspReportUri, getPublicApiUrl } from './lib/env';
 import { negotiateLocale } from './lib/i18n/negotiate';
@@ -52,7 +51,7 @@ const DEFAULT_LOCALE: SupportedLocale = 'fr';
 const LOCALE_COOKIE = 'athlya.locale';
 
 function isSupported(raw: string | undefined): raw is SupportedLocale {
-    return raw === 'fr' || raw === 'en';
+  return raw === 'fr' || raw === 'en';
 }
 
 /**
@@ -63,56 +62,52 @@ function isSupported(raw: string | undefined): raw is SupportedLocale {
  *     set, falling back to the product default.
  */
 function resolveLocale(request: NextRequest): SupportedLocale {
-    const cookieValue = request.cookies.get(LOCALE_COOKIE)?.value;
-    if (isSupported(cookieValue)) return cookieValue;
-    return negotiateLocale(
-        request.headers.get('accept-language'),
-        SUPPORTED_LOCALES,
-        DEFAULT_LOCALE,
-    );
+  const cookieValue = request.cookies.get(LOCALE_COOKIE)?.value;
+  if (isSupported(cookieValue)) return cookieValue;
+  return negotiateLocale(request.headers.get('accept-language'), SUPPORTED_LOCALES, DEFAULT_LOCALE);
 }
 
 export function proxy(request: NextRequest): NextResponse {
-    const nonce = generateNonce();
-    const reportUri = getCspReportUri();
-    const isDev = process.env.NODE_ENV !== 'production';
-    const csp = generateCsp({
-        nonce,
-        apiUrl: getPublicApiUrl(),
-        ...(reportUri !== undefined ? { reportUri } : {}),
-        // React / Next.js inject `eval()` calls in development mode
-        // for source-map stitching. The relaxation is scoped to
-        // `next dev` only — production builds keep the strict
-        // policy (Req 25.3).
-        dev: isDev,
-        // In development, Next.js dev tools inject inline styles.
-        isDev,
-    });
-    const locale = resolveLocale(request);
+  const nonce = generateNonce();
+  const reportUri = getCspReportUri();
+  const isDev = process.env.NODE_ENV !== 'production';
+  const csp = generateCsp({
+    nonce,
+    apiUrl: getPublicApiUrl(),
+    ...(reportUri !== undefined ? { reportUri } : {}),
+    // React / Next.js inject `eval()` calls in development mode
+    // for source-map stitching. The relaxation is scoped to
+    // `next dev` only — production builds keep the strict
+    // policy (Req 25.3).
+    dev: isDev,
+    // In development, Next.js dev tools inject inline styles.
+    isDev,
+  });
+  const locale = resolveLocale(request);
 
-    // Propagate the nonce + locale to server components through
-    // request headers. `x-locale` is read by `getLocale()` in
-    // `src/lib/i18n/getLocale.ts`.
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set('x-nonce', nonce);
-    requestHeaders.set('content-security-policy', csp);
-    requestHeaders.set('x-locale', locale);
+  // Propagate the nonce + locale to server components through
+  // request headers. `x-locale` is read by `getLocale()` in
+  // `src/lib/i18n/getLocale.ts`.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('content-security-policy', csp);
+  requestHeaders.set('x-locale', locale);
 
-    const response = NextResponse.next({
-        request: {
-            headers: requestHeaders,
-        },
-    });
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 
-    response.headers.set('content-security-policy', csp);
-    // Pair the CSP `report-to` directive with its `Report-To` header so
-    // browsers know where to POST violation reports. Unset when no
-    // endpoint is configured.
-    const reportToHeader = buildReportToHeader(reportUri);
-    if (reportToHeader !== undefined) {
-        response.headers.set('report-to', reportToHeader);
-    }
-    return response;
+  response.headers.set('content-security-policy', csp);
+  // Pair the CSP `report-to` directive with its `Report-To` header so
+  // browsers know where to POST violation reports. Unset when no
+  // endpoint is configured.
+  const reportToHeader = buildReportToHeader(reportUri);
+  if (reportToHeader !== undefined) {
+    response.headers.set('report-to', reportToHeader);
+  }
+  return response;
 }
 
 /**
@@ -120,13 +115,13 @@ export function proxy(request: NextRequest): NextResponse {
  * HTML responses.
  */
 export const config = {
-    matcher: [
-        /*
-         * Match all request paths except:
-         * - `/_next/static` (static files)
-         * - `/_next/image` (image optimisation files)
-         * - `/favicon.ico` / common static files
-         */
-        '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf)$).*)',
-    ],
+  matcher: [
+    /*
+     * Match all request paths except:
+     * - `/_next/static` (static files)
+     * - `/_next/image` (image optimisation files)
+     * - `/favicon.ico` / common static files
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf)$).*)',
+  ],
 };

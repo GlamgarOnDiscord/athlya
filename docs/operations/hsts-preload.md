@@ -47,17 +47,17 @@ prod" — il faut un track record stable AVANT submission.
 
 À cocher après 6 mois de prod stable :
 
-| Check | Tool | OK ? |
-|---|---|---|
-| Certif HTTPS sur `athlya.app` valide | `curl -I https://athlya.app` | ⏳ |
-| Redirect HTTP → HTTPS | `curl -I http://athlya.app` | ⏳ |
-| HSTS header présent sur racine | `curl -sI https://athlya.app | grep -i strict` | ⏳ |
-| `max-age >= 31536000` | manual check | ⏳ |
-| `includeSubDomains` flag | manual check | ⏳ |
-| `preload` flag | manual check | ⏳ |
-| Tous les sous-domaines en HTTPS (test : `app.athlya.app`, `staging.api.athlya.app`, `api.athlya.app`) | curl chacun | ⏳ |
-| Aucun service interne HTTP-only sur `*.athlya.app` (intranet, monitoring, etc.) | review DNS records | ⏳ |
-| 6 mois prod stable sans rollback HSTS | git log | ⏳ |
+| Check                                                                                                 | Tool                         | OK ?            |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------- | --------------- | --- |
+| Certif HTTPS sur `athlya.app` valide                                                                  | `curl -I https://athlya.app` | ⏳              |
+| Redirect HTTP → HTTPS                                                                                 | `curl -I http://athlya.app`  | ⏳              |
+| HSTS header présent sur racine                                                                        | `curl -sI https://athlya.app | grep -i strict` | ⏳  |
+| `max-age >= 31536000`                                                                                 | manual check                 | ⏳              |
+| `includeSubDomains` flag                                                                              | manual check                 | ⏳              |
+| `preload` flag                                                                                        | manual check                 | ⏳              |
+| Tous les sous-domaines en HTTPS (test : `app.athlya.app`, `staging.api.athlya.app`, `api.athlya.app`) | curl chacun                  | ⏳              |
+| Aucun service interne HTTP-only sur `*.athlya.app` (intranet, monitoring, etc.)                       | review DNS records           | ⏳              |
+| 6 mois prod stable sans rollback HSTS                                                                 | git log                      | ⏳              |
 
 ## Submission step
 
@@ -105,21 +105,21 @@ Si jamais on doit retirer `athlya.app` de la preload list :
 
 ## Provisioning checklist (post-6-mois)
 
-| Item | Status | Owner |
-|---|---|---|
-| Audit pré-flight 9 checks | ⏳ J+180 prod | DevOps |
-| Submission hstspreload.org | ⏳ après audit OK | DevOps |
-| Email confirmation reçu | ⏳ J+1 submission | DevOps |
-| Inclusion Chrome stable confirmée | ⏳ J+90 submission | DevOps |
-| Tag dans `incident_log` "HSTS preload effective" | ⏳ J+90 | DevOps |
+| Item                                             | Status             | Owner  |
+| ------------------------------------------------ | ------------------ | ------ |
+| Audit pré-flight 9 checks                        | ⏳ J+180 prod      | DevOps |
+| Submission hstspreload.org                       | ⏳ après audit OK  | DevOps |
+| Email confirmation reçu                          | ⏳ J+1 submission  | DevOps |
+| Inclusion Chrome stable confirmée                | ⏳ J+90 submission | DevOps |
+| Tag dans `incident_log` "HSTS preload effective" | ⏳ J+90            | DevOps |
 
 ## Risques
 
-| Risque | Mitigation |
-|---|---|
-| Sous-domaine HTTP-only oublié (ex: status.athlya.app) | Audit DNS exhaustif avant submission |
-| Cert HTTPS expire pendant la fenêtre 6 mois | Auto-renewal Cloudflare + monitoring expiry |
-| Rollback HSTS impossible | 18+ mois pour désinscription — accepté comme tradeoff sécurité |
+| Risque                                                | Mitigation                                                     |
+| ----------------------------------------------------- | -------------------------------------------------------------- |
+| Sous-domaine HTTP-only oublié (ex: status.athlya.app) | Audit DNS exhaustif avant submission                           |
+| Cert HTTPS expire pendant la fenêtre 6 mois           | Auto-renewal Cloudflare + monitoring expiry                    |
+| Rollback HSTS impossible                              | 18+ mois pour désinscription — accepté comme tradeoff sécurité |
 
 ## Références
 

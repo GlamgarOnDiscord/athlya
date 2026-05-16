@@ -153,16 +153,16 @@
  *   breaker — there is no per-breaker clock state to synchronise.
  */
 export interface CircuitBreakerOptions {
-    /** Human-readable identifier (e.g. `'redis'`, `'postgres'`). */
-    readonly name: string;
-    /** Failures within `windowMs` that flip closed → open. Default 5. */
-    readonly failureThreshold?: number;
-    /** Rolling window size in milliseconds. Default 30 000. */
-    readonly windowMs?: number;
-    /** Open → half-open cool-down in milliseconds. Default 60 000. */
-    readonly resetTimeoutMs?: number;
-    /** Monotonic clock. Default `Date.now`. Injected by tests. */
-    readonly clock?: () => number;
+  /** Human-readable identifier (e.g. `'redis'`, `'postgres'`). */
+  readonly name: string;
+  /** Failures within `windowMs` that flip closed → open. Default 5. */
+  readonly failureThreshold?: number;
+  /** Rolling window size in milliseconds. Default 30 000. */
+  readonly windowMs?: number;
+  /** Open → half-open cool-down in milliseconds. Default 60 000. */
+  readonly resetTimeoutMs?: number;
+  /** Monotonic clock. Default `Date.now`. Injected by tests. */
+  readonly clock?: () => number;
 }
 
 /** Public state label. Narrower strings keep caller `switch`es exhaustive. */
@@ -180,14 +180,14 @@ export type CircuitState = 'closed' | 'open' | 'half_open';
  * readable code that survives localisation.
  */
 export class CircuitOpenError extends Error {
-    readonly circuitName: string;
-    readonly code = 'circuit_open' as const;
+  readonly circuitName: string;
+  readonly code = 'circuit_open' as const;
 
-    constructor(circuitName: string) {
-        super(`circuit breaker "${circuitName}" is open`);
-        this.name = 'CircuitOpenError';
-        this.circuitName = circuitName;
-    }
+  constructor(circuitName: string) {
+    super(`circuit breaker "${circuitName}" is open`);
+    this.name = 'CircuitOpenError';
+    this.circuitName = circuitName;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -218,198 +218,192 @@ const DEFAULT_RESET_TIMEOUT_MS = 60_000;
  * arrivals within the same microtask queue see the flag set.
  */
 export class CircuitBreaker {
-    private readonly _name: string;
-    private readonly failureThreshold: number;
-    private readonly windowMs: number;
-    private readonly resetTimeoutMs: number;
-    private readonly clock: () => number;
+  private readonly _name: string;
+  private readonly failureThreshold: number;
+  private readonly windowMs: number;
+  private readonly resetTimeoutMs: number;
+  private readonly clock: () => number;
 
-    /** Current state label. See {@link CircuitState}. */
-    private _state: CircuitState = 'closed';
+  /** Current state label. See {@link CircuitState}. */
+  private _state: CircuitState = 'closed';
 
-    /** Failure timestamps, oldest first. Filtered lazily on each touch. */
-    private failures: number[] = [];
+  /** Failure timestamps, oldest first. Filtered lazily on each touch. */
+  private failures: number[] = [];
 
-    /** Timestamp the breaker last flipped to `open`. Only valid while open. */
-    private openedAt = 0;
+  /** Timestamp the breaker last flipped to `open`. Only valid while open. */
+  private openedAt = 0;
 
-    /** True while a half-open probe is pending. Blocks concurrent probes. */
-    private probeInFlight = false;
+  /** True while a half-open probe is pending. Blocks concurrent probes. */
+  private probeInFlight = false;
 
-    constructor(opts: CircuitBreakerOptions) {
-        this._name = opts.name;
-        this.failureThreshold = opts.failureThreshold ?? DEFAULT_FAILURE_THRESHOLD;
-        this.windowMs = opts.windowMs ?? DEFAULT_WINDOW_MS;
-        this.resetTimeoutMs = opts.resetTimeoutMs ?? DEFAULT_RESET_TIMEOUT_MS;
-        this.clock = opts.clock ?? Date.now;
+  constructor(opts: CircuitBreakerOptions) {
+    this._name = opts.name;
+    this.failureThreshold = opts.failureThreshold ?? DEFAULT_FAILURE_THRESHOLD;
+    this.windowMs = opts.windowMs ?? DEFAULT_WINDOW_MS;
+    this.resetTimeoutMs = opts.resetTimeoutMs ?? DEFAULT_RESET_TIMEOUT_MS;
+    this.clock = opts.clock ?? Date.now;
 
-        if (this.failureThreshold < 1) {
-            throw new RangeError(
-                `failureThreshold must be >= 1 (got ${String(this.failureThreshold)})`,
-            );
-        }
-        if (this.windowMs < 1) {
-            throw new RangeError(
-                `windowMs must be >= 1 (got ${String(this.windowMs)})`,
-            );
-        }
-        if (this.resetTimeoutMs < 1) {
-            throw new RangeError(
-                `resetTimeoutMs must be >= 1 (got ${String(this.resetTimeoutMs)})`,
-            );
-        }
+    if (this.failureThreshold < 1) {
+      throw new RangeError(`failureThreshold must be >= 1 (got ${String(this.failureThreshold)})`);
+    }
+    if (this.windowMs < 1) {
+      throw new RangeError(`windowMs must be >= 1 (got ${String(this.windowMs)})`);
+    }
+    if (this.resetTimeoutMs < 1) {
+      throw new RangeError(`resetTimeoutMs must be >= 1 (got ${String(this.resetTimeoutMs)})`);
+    }
+  }
+
+  /** Human-readable identifier — matches {@link CircuitBreakerOptions.name}. */
+  get name(): string {
+    return this._name;
+  }
+
+  /**
+   * Current state. Calling this may flip `open → half_open` when
+   * the reset timer has elapsed — the breaker advances its state
+   * lazily on inspection / execution, without an internal timer.
+   * That keeps the module timer-free (no `setTimeout` to clean up
+   * at isolate eviction).
+   */
+  state(): CircuitState {
+    this.maybeTransitionFromOpen();
+    return this._state;
+  }
+
+  /**
+   * Execute `fn` while enforcing the breaker policy.
+   *
+   *   - `closed`    → run `fn`; success resets the failure buffer,
+   *                   failure records a new failure (possibly
+   *                   tripping to `open`).
+   *   - `open`      → immediately throw {@link CircuitOpenError}.
+   *                   `fn` is NOT invoked. When the reset timer
+   *                   has elapsed, the call is retried as a
+   *                   half-open probe.
+   *   - `half_open` → the first caller to arrive becomes the probe
+   *                   (success → closed, failure → open). Any
+   *                   concurrent call while the probe is in flight
+   *                   is rejected with {@link CircuitOpenError}.
+   */
+  async exec<T>(fn: () => Promise<T>): Promise<T> {
+    this.maybeTransitionFromOpen();
+
+    if (this._state === 'open') {
+      throw new CircuitOpenError(this._name);
     }
 
-    /** Human-readable identifier — matches {@link CircuitBreakerOptions.name}. */
-    get name(): string {
-        return this._name;
+    if (this._state === 'half_open') {
+      if (this.probeInFlight) {
+        throw new CircuitOpenError(this._name);
+      }
+      this.probeInFlight = true;
+      try {
+        const result = await fn();
+        this.onProbeSuccess();
+        return result;
+      } catch (err) {
+        this.onProbeFailure();
+        throw err;
+      }
     }
 
-    /**
-     * Current state. Calling this may flip `open → half_open` when
-     * the reset timer has elapsed — the breaker advances its state
-     * lazily on inspection / execution, without an internal timer.
-     * That keeps the module timer-free (no `setTimeout` to clean up
-     * at isolate eviction).
-     */
-    state(): CircuitState {
-        this.maybeTransitionFromOpen();
-        return this._state;
+    // Closed path.
+    try {
+      const result = await fn();
+      this.recordSuccess();
+      return result;
+    } catch (err) {
+      this.recordFailure();
+      throw err;
     }
+  }
 
-    /**
-     * Execute `fn` while enforcing the breaker policy.
-     *
-     *   - `closed`    → run `fn`; success resets the failure buffer,
-     *                   failure records a new failure (possibly
-     *                   tripping to `open`).
-     *   - `open`      → immediately throw {@link CircuitOpenError}.
-     *                   `fn` is NOT invoked. When the reset timer
-     *                   has elapsed, the call is retried as a
-     *                   half-open probe.
-     *   - `half_open` → the first caller to arrive becomes the probe
-     *                   (success → closed, failure → open). Any
-     *                   concurrent call while the probe is in flight
-     *                   is rejected with {@link CircuitOpenError}.
-     */
-    async exec<T>(fn: () => Promise<T>): Promise<T> {
-        this.maybeTransitionFromOpen();
-
-        if (this._state === 'open') {
-            throw new CircuitOpenError(this._name);
-        }
-
-        if (this._state === 'half_open') {
-            if (this.probeInFlight) {
-                throw new CircuitOpenError(this._name);
-            }
-            this.probeInFlight = true;
-            try {
-                const result = await fn();
-                this.onProbeSuccess();
-                return result;
-            } catch (err) {
-                this.onProbeFailure();
-                throw err;
-            }
-        }
-
-        // Closed path.
-        try {
-            const result = await fn();
-            this.recordSuccess();
-            return result;
-        } catch (err) {
-            this.recordFailure();
-            throw err;
-        }
+  /**
+   * Manually record a successful call. Exposed for callers that
+   * wrap `fn` with their own error handling (e.g. distinguishing
+   * expected vs. unexpected errors) and want the breaker to track
+   * only the latter.
+   *
+   * In `closed` state this clears the failure buffer — Req 24.2
+   * talks about "consecutive" failures, so a single success resets
+   * the counter. In `half_open` this promotes the probe. Noop in
+   * `open` (callers can't call `exec` to trigger a manual success
+   * because `exec` will short-circuit; calling `recordSuccess`
+   * directly while open is a caller bug but we do not throw).
+   */
+  recordSuccess(): void {
+    this.maybeTransitionFromOpen();
+    if (this._state === 'closed') {
+      this.failures = [];
+      return;
     }
-
-    /**
-     * Manually record a successful call. Exposed for callers that
-     * wrap `fn` with their own error handling (e.g. distinguishing
-     * expected vs. unexpected errors) and want the breaker to track
-     * only the latter.
-     *
-     * In `closed` state this clears the failure buffer — Req 24.2
-     * talks about "consecutive" failures, so a single success resets
-     * the counter. In `half_open` this promotes the probe. Noop in
-     * `open` (callers can't call `exec` to trigger a manual success
-     * because `exec` will short-circuit; calling `recordSuccess`
-     * directly while open is a caller bug but we do not throw).
-     */
-    recordSuccess(): void {
-        this.maybeTransitionFromOpen();
-        if (this._state === 'closed') {
-            this.failures = [];
-            return;
-        }
-        if (this._state === 'half_open') {
-            this.onProbeSuccess();
-        }
+    if (this._state === 'half_open') {
+      this.onProbeSuccess();
     }
+  }
 
-    /**
-     * Manually record a failure. Symmetric with {@link recordSuccess}.
-     * Advances the state machine just like a thrown `fn`.
-     */
-    recordFailure(): void {
-        this.maybeTransitionFromOpen();
-        if (this._state === 'half_open') {
-            this.onProbeFailure();
-            return;
-        }
-        if (this._state === 'closed') {
-            const now = this.clock();
-            this.pruneFailures(now);
-            this.failures.push(now);
-            if (this.failures.length >= this.failureThreshold) {
-                this.tripOpen(now);
-            }
-        }
-        // In `open` the failure is already reflected by the state;
-        // no need to record anything.
+  /**
+   * Manually record a failure. Symmetric with {@link recordSuccess}.
+   * Advances the state machine just like a thrown `fn`.
+   */
+  recordFailure(): void {
+    this.maybeTransitionFromOpen();
+    if (this._state === 'half_open') {
+      this.onProbeFailure();
+      return;
     }
-
-    /* ----------- internal transitions ----------- */
-
-    /** Drop failure timestamps that fell out of the sliding window. */
-    private pruneFailures(now: number): void {
-        const cutoff = now - this.windowMs;
-        // Most of the time we drop a short prefix; a while-loop beats
-        // `filter` on the hot path and preserves array identity.
-        while (this.failures.length > 0 && this.failures[0]! <= cutoff) {
-            this.failures.shift();
-        }
+    if (this._state === 'closed') {
+      const now = this.clock();
+      this.pruneFailures(now);
+      this.failures.push(now);
+      if (this.failures.length >= this.failureThreshold) {
+        this.tripOpen(now);
+      }
     }
+    // In `open` the failure is already reflected by the state;
+    // no need to record anything.
+  }
 
-    /** Check the 60 s reset window and promote `open` → `half_open`. */
-    private maybeTransitionFromOpen(): void {
-        if (this._state !== 'open') return;
-        const now = this.clock();
-        if (now - this.openedAt >= this.resetTimeoutMs) {
-            this._state = 'half_open';
-            this.probeInFlight = false;
-        }
-    }
+  /* ----------- internal transitions ----------- */
 
-    /** Trip `closed` → `open`. */
-    private tripOpen(now: number): void {
-        this._state = 'open';
-        this.openedAt = now;
-        this.failures = [];
-        this.probeInFlight = false;
+  /** Drop failure timestamps that fell out of the sliding window. */
+  private pruneFailures(now: number): void {
+    const cutoff = now - this.windowMs;
+    // Most of the time we drop a short prefix; a while-loop beats
+    // `filter` on the hot path and preserves array identity.
+    while (this.failures.length > 0 && this.failures[0]! <= cutoff) {
+      this.failures.shift();
     }
+  }
 
-    /** Promote `half_open` → `closed` after a successful probe. */
-    private onProbeSuccess(): void {
-        this._state = 'closed';
-        this.failures = [];
-        this.probeInFlight = false;
+  /** Check the 60 s reset window and promote `open` → `half_open`. */
+  private maybeTransitionFromOpen(): void {
+    if (this._state !== 'open') return;
+    const now = this.clock();
+    if (now - this.openedAt >= this.resetTimeoutMs) {
+      this._state = 'half_open';
+      this.probeInFlight = false;
     }
+  }
 
-    /** Demote `half_open` → `open` after a failed probe. */
-    private onProbeFailure(): void {
-        this.tripOpen(this.clock());
-    }
+  /** Trip `closed` → `open`. */
+  private tripOpen(now: number): void {
+    this._state = 'open';
+    this.openedAt = now;
+    this.failures = [];
+    this.probeInFlight = false;
+  }
+
+  /** Promote `half_open` → `closed` after a successful probe. */
+  private onProbeSuccess(): void {
+    this._state = 'closed';
+    this.failures = [];
+    this.probeInFlight = false;
+  }
+
+  /** Demote `half_open` → `open` after a failed probe. */
+  private onProbeFailure(): void {
+    this.tripOpen(this.clock());
+  }
 }

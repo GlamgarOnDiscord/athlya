@@ -27,7 +27,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, type ReactElement } from 'react';
 
-import { Button , buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useAuth } from '../lib/auth/AuthContext';
@@ -35,49 +35,54 @@ import { useLocale } from '../lib/i18n/LocaleContext';
 import { createTranslator } from '../lib/i18n/t';
 
 export function HomeActions(): ReactElement {
-    const locale = useLocale();
-    const t = useMemo(() => createTranslator(locale), [locale]);
-    const { refresh } = useRouter();
-    const { isAuthenticated, bootResolved, logout } = useAuth();
+  const locale = useLocale();
+  const t = useMemo(() => createTranslator(locale), [locale]);
+  const { refresh } = useRouter();
+  const { isAuthenticated, bootResolved, logout } = useAuth();
 
-    const onLogout = useCallback(async () => {
-        await logout();
-        refresh();
-    }, [logout, refresh]);
+  const onLogout = useCallback(async () => {
+    await logout();
+    refresh();
+  }, [logout, refresh]);
 
-    if (!bootResolved) {
-        return (
-            <div className="flex flex-wrap justify-center gap-4">
-                <Skeleton className="h-10 w-36" />
-                <Skeleton className="h-10 w-32" />
-            </div>
-        );
-    }
-
-    if (!isAuthenticated) {
-        return (
-            <div className="flex flex-wrap justify-center gap-4">
-                <Link className={buttonVariants()} href="/register">
-                    {t('web.home.register')}
-                </Link>
-                <Link className={buttonVariants({ variant: 'outline' })} href="/login">
-                    {t('web.home.login')}
-                </Link>
-            </div>
-        );
-    }
-
+  if (!bootResolved) {
     return (
-        <div className="flex flex-wrap justify-center gap-4">
-            <Link className={buttonVariants()} href="/classes">
-                {t('web.home.classes')}
-            </Link>
-            <Link className={buttonVariants({ variant: 'outline' })} href="/me">
-                {t('web.home.me')}
-            </Link>
-            <Button variant="ghost" onClick={() => { void onLogout(); }}>
-                {t('web.home.logout')}
-            </Button>
-        </div>
+      <div className="flex flex-wrap justify-center gap-4">
+        <Skeleton className="h-10 w-36" />
+        <Skeleton className="h-10 w-32" />
+      </div>
     );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex flex-wrap justify-center gap-4">
+        <Link className={buttonVariants()} href="/register">
+          {t('web.home.register')}
+        </Link>
+        <Link className={buttonVariants({ variant: 'outline' })} href="/login">
+          {t('web.home.login')}
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap justify-center gap-4">
+      <Link className={buttonVariants()} href="/classes">
+        {t('web.home.classes')}
+      </Link>
+      <Link className={buttonVariants({ variant: 'outline' })} href="/me">
+        {t('web.home.me')}
+      </Link>
+      <Button
+        variant="ghost"
+        onClick={() => {
+          void onLogout();
+        }}
+      >
+        {t('web.home.logout')}
+      </Button>
+    </div>
+  );
 }

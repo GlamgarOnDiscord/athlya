@@ -9,13 +9,13 @@ Auditeur: Kiro (sub-agent S6 frontend security audit).
 
 ## Résumé exécutif
 
-| Sévérité | Nombre |
-|---|---|
-| CRITICAL | 0 |
-| HIGH | 1 |
-| MEDIUM | 3 |
-| LOW | 4 |
-| INFO | 3 |
+| Sévérité           | Nombre |
+| ------------------ | ------ |
+| CRITICAL           | 0      |
+| HIGH               | 1      |
+| MEDIUM             | 3      |
+| LOW                | 4      |
+| INFO               | 3      |
 | **Total findings** | **11** |
 
 **Score global frontend: 82 / 100.**
@@ -38,56 +38,56 @@ Tests effectués via `curl -sI http://localhost:3000/` et `…:3001/` après `pn
 
 ### apps/web (port 3000)
 
-| Header | Valeur (dev) | Verdict |
-|---|---|---|
-| `X-Frame-Options` | `DENY` | ✅ |
-| `Referrer-Policy` | `strict-origin` | ✅ |
-| `X-Content-Type-Options` | `nosniff` | ✅ |
-| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | ✅ (preloaded ⇒ il faut être sûr de tous les sous-domaines avant prod) |
-| `Content-Security-Policy` | nonce + `strict-dynamic`, `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `upgrade-insecure-requests` | ✅ shape; ⚠️ voir S6-001 pour `style-src` prod |
-| `Permissions-Policy` | absent | ❌ |
-| `Cross-Origin-Opener-Policy` | absent | ❌ |
-| `Cross-Origin-Resource-Policy` | absent | ❌ |
-| `Cross-Origin-Embedder-Policy` | absent | ❌ (acceptable: COEP=require-corp casse beaucoup d'embeds) |
-| `Cache-Control` (HTML) | `no-cache, must-revalidate` | ✅ |
-| `X-Powered-By` | `Next.js` | ⚠️ leak mineur (info banner) |
-| `Set-Cookie` (refresh, prod) | `HttpOnly; SameSite=Lax; Secure; Path=/; Max-Age=…` | ✅ |
-| `Report-To` | non émis (`NEXT_PUBLIC_CSP_REPORT_URI` vide en local) | ℹ️ attendu en local; à activer en prod |
+| Header                         | Valeur (dev)                                                                                                                                  | Verdict                                                                |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `X-Frame-Options`              | `DENY`                                                                                                                                        | ✅                                                                     |
+| `Referrer-Policy`              | `strict-origin`                                                                                                                               | ✅                                                                     |
+| `X-Content-Type-Options`       | `nosniff`                                                                                                                                     | ✅                                                                     |
+| `Strict-Transport-Security`    | `max-age=63072000; includeSubDomains; preload`                                                                                                | ✅ (preloaded ⇒ il faut être sûr de tous les sous-domaines avant prod) |
+| `Content-Security-Policy`      | nonce + `strict-dynamic`, `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `upgrade-insecure-requests` | ✅ shape; ⚠️ voir S6-001 pour `style-src` prod                         |
+| `Permissions-Policy`           | absent                                                                                                                                        | ❌                                                                     |
+| `Cross-Origin-Opener-Policy`   | absent                                                                                                                                        | ❌                                                                     |
+| `Cross-Origin-Resource-Policy` | absent                                                                                                                                        | ❌                                                                     |
+| `Cross-Origin-Embedder-Policy` | absent                                                                                                                                        | ❌ (acceptable: COEP=require-corp casse beaucoup d'embeds)             |
+| `Cache-Control` (HTML)         | `no-cache, must-revalidate`                                                                                                                   | ✅                                                                     |
+| `X-Powered-By`                 | `Next.js`                                                                                                                                     | ⚠️ leak mineur (info banner)                                           |
+| `Set-Cookie` (refresh, prod)   | `HttpOnly; SameSite=Lax; Secure; Path=/; Max-Age=…`                                                                                           | ✅                                                                     |
+| `Report-To`                    | non émis (`NEXT_PUBLIC_CSP_REPORT_URI` vide en local)                                                                                         | ℹ️ attendu en local; à activer en prod                                 |
 
 ### apps/studio (port 3001)
 
-| Header | Valeur (dev) | Verdict |
-|---|---|---|
-| `X-Frame-Options` | `DENY` | ✅ |
-| `Referrer-Policy` | `strict-origin` | ✅ |
-| `X-Content-Type-Options` | `nosniff` | ✅ |
-| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | ✅ |
-| `Content-Security-Policy` | identique à `apps/web` | ✅ shape; ⚠️ S6-001 |
-| `Permissions-Policy` | absent | ❌ |
-| `Cross-Origin-Opener-Policy` | absent | ❌ (≥ MEDIUM ici, c'est le panneau admin) |
-| `Cross-Origin-Resource-Policy` | absent | ❌ |
-| `Set-Cookie` (refresh, prod) | `HttpOnly; SameSite=Lax; Secure; Path=/`; cookie name = `athlya.refresh.studio` | ✅ |
-| `X-Powered-By` | `Next.js` | ⚠️ |
+| Header                         | Valeur (dev)                                                                    | Verdict                                   |
+| ------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------------- |
+| `X-Frame-Options`              | `DENY`                                                                          | ✅                                        |
+| `Referrer-Policy`              | `strict-origin`                                                                 | ✅                                        |
+| `X-Content-Type-Options`       | `nosniff`                                                                       | ✅                                        |
+| `Strict-Transport-Security`    | `max-age=63072000; includeSubDomains; preload`                                  | ✅                                        |
+| `Content-Security-Policy`      | identique à `apps/web`                                                          | ✅ shape; ⚠️ S6-001                       |
+| `Permissions-Policy`           | absent                                                                          | ❌                                        |
+| `Cross-Origin-Opener-Policy`   | absent                                                                          | ❌ (≥ MEDIUM ici, c'est le panneau admin) |
+| `Cross-Origin-Resource-Policy` | absent                                                                          | ❌                                        |
+| `Set-Cookie` (refresh, prod)   | `HttpOnly; SameSite=Lax; Secure; Path=/`; cookie name = `athlya.refresh.studio` | ✅                                        |
+| `X-Powered-By`                 | `Next.js`                                                                       | ⚠️                                        |
 
 ---
 
 ## Couverture par classe d'attaque
 
-| Catégorie | Statut |
-|---|---|
-| **A. Reflected/Stored/DOM XSS** | ✅ Géré par React JSX escape; aucun `dangerouslySetInnerHTML`, `innerHTML =`, `eval`, `new Function`, `setTimeout(string)` ou `location.hash` dans le code applicatif (`apps/{web,studio}/src/**`). Les seules occurrences trouvées sont dans le runtime Next.js / React-DOM compilé (`.next/dev/...`), c'est-à-dire le framework lui-même — non audité. |
-| **B. CSRF** | ✅ Refresh & logout utilisent un cookie `SameSite=Lax` httpOnly. Login/register sont publics; pas de cookie d'auth requis donc CSRF non applicable. La protection repose entièrement sur SameSite=Lax — voir S6-005 pour le durcissement Origin/Referer. |
-| **C. Storage misuse** | ✅ Access token uniquement en mémoire (`token-store.ts`, module-scoped, pas exposé sur `window`). Refresh token uniquement en cookie httpOnly. Aucun `localStorage.setItem`, `sessionStorage.setItem`, `indexedDB.open` dans le code applicatif. |
-| **D. CSP enforcement** | ✅ Header (pas meta) avec nonce 128-bit par requête, `strict-dynamic`, `frame-ancestors 'none'`, reporting optionnel. ⚠️ Trou prod sur les inline `style=""` attributs — voir S6-001. |
-| **E. Clickjacking** | ✅ `X-Frame-Options: DENY` + `frame-ancestors 'none'`. Defense in depth correcte. |
-| **F. Open redirects** | ✅ Aucun consommateur de `?next=` / `?redirect=` / `?return_to=`. Toutes les redirections post-login utilisent des paths statiques (`/`, `/dashboard`, `/login`, `/forbidden`). `useSearchParams` n'est utilisé nulle part dans `apps/{web,studio}/src/**`. |
-| **G. SRI** | ❌ Le script Turnstile (`challenges.cloudflare.com/turnstile/v0/api.js`) est injecté sans `integrity=` ni `crossorigin=`. Cloudflare ne publie pas de hash stable pour ce script (rotation interne) → mitigation impossible sans renoncer aux mises à jour. À documenter comme accepted risk. Voir S6-007. |
-| **H. Auth state leaks** | ✅ Token store module-scoped, jamais publié sur `window`. Pas de log du token dans la console. ⚠️ Voir S6-009 sur les Server Actions / route handlers qui propagent l'access token via header `Authorization`. |
-| **I. Form security** | ✅ Tous les forms `/login`, `/register`, `/me` ont des `autocomplete` corrects (`email`, `current-password`, `new-password`, `off` sur le confirm-text destructif). |
-| **J. Source maps prod** | ✅ `productionBrowserSourceMaps` non défini → défaut Next.js = `false` → aucune source map publiée en prod. À auditer côté CDN une fois le déploiement Cloudflare actif (Sentry uploadera les maps en build, pas servies). |
-| **K. Service worker / manifest** | ℹ️ Aucun service worker, aucun `manifest.webmanifest` présent dans `apps/web/public/` ni `apps/studio/public/`. Ni risque ni couverture PWA. |
-| **L. File upload (avatar)** | ⚠️ `ProfileForm.tsx` accepte image/png, image/jpeg, image/webp via `accept` (client-only), cap 256 KiB, jamais SVG (donc pas de XSS via SVG `<script>`). Pas de check magic-byte côté client — server-side responsabilité (hors périmètre frontend). Voir S6-010. |
-| **M. Tests headers HTTP** | Effectués (cf. tableaux ci-dessus). Servers stoppés. |
+| Catégorie                        | Statut                                                                                                                                                                                                                                                                                                                                                   |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A. Reflected/Stored/DOM XSS**  | ✅ Géré par React JSX escape; aucun `dangerouslySetInnerHTML`, `innerHTML =`, `eval`, `new Function`, `setTimeout(string)` ou `location.hash` dans le code applicatif (`apps/{web,studio}/src/**`). Les seules occurrences trouvées sont dans le runtime Next.js / React-DOM compilé (`.next/dev/...`), c'est-à-dire le framework lui-même — non audité. |
+| **B. CSRF**                      | ✅ Refresh & logout utilisent un cookie `SameSite=Lax` httpOnly. Login/register sont publics; pas de cookie d'auth requis donc CSRF non applicable. La protection repose entièrement sur SameSite=Lax — voir S6-005 pour le durcissement Origin/Referer.                                                                                                 |
+| **C. Storage misuse**            | ✅ Access token uniquement en mémoire (`token-store.ts`, module-scoped, pas exposé sur `window`). Refresh token uniquement en cookie httpOnly. Aucun `localStorage.setItem`, `sessionStorage.setItem`, `indexedDB.open` dans le code applicatif.                                                                                                         |
+| **D. CSP enforcement**           | ✅ Header (pas meta) avec nonce 128-bit par requête, `strict-dynamic`, `frame-ancestors 'none'`, reporting optionnel. ⚠️ Trou prod sur les inline `style=""` attributs — voir S6-001.                                                                                                                                                                    |
+| **E. Clickjacking**              | ✅ `X-Frame-Options: DENY` + `frame-ancestors 'none'`. Defense in depth correcte.                                                                                                                                                                                                                                                                        |
+| **F. Open redirects**            | ✅ Aucun consommateur de `?next=` / `?redirect=` / `?return_to=`. Toutes les redirections post-login utilisent des paths statiques (`/`, `/dashboard`, `/login`, `/forbidden`). `useSearchParams` n'est utilisé nulle part dans `apps/{web,studio}/src/**`.                                                                                              |
+| **G. SRI**                       | ❌ Le script Turnstile (`challenges.cloudflare.com/turnstile/v0/api.js`) est injecté sans `integrity=` ni `crossorigin=`. Cloudflare ne publie pas de hash stable pour ce script (rotation interne) → mitigation impossible sans renoncer aux mises à jour. À documenter comme accepted risk. Voir S6-007.                                               |
+| **H. Auth state leaks**          | ✅ Token store module-scoped, jamais publié sur `window`. Pas de log du token dans la console. ⚠️ Voir S6-009 sur les Server Actions / route handlers qui propagent l'access token via header `Authorization`.                                                                                                                                           |
+| **I. Form security**             | ✅ Tous les forms `/login`, `/register`, `/me` ont des `autocomplete` corrects (`email`, `current-password`, `new-password`, `off` sur le confirm-text destructif).                                                                                                                                                                                      |
+| **J. Source maps prod**          | ✅ `productionBrowserSourceMaps` non défini → défaut Next.js = `false` → aucune source map publiée en prod. À auditer côté CDN une fois le déploiement Cloudflare actif (Sentry uploadera les maps en build, pas servies).                                                                                                                               |
+| **K. Service worker / manifest** | ℹ️ Aucun service worker, aucun `manifest.webmanifest` présent dans `apps/web/public/` ni `apps/studio/public/`. Ni risque ni couverture PWA.                                                                                                                                                                                                             |
+| **L. File upload (avatar)**      | ⚠️ `ProfileForm.tsx` accepte image/png, image/jpeg, image/webp via `accept` (client-only), cap 256 KiB, jamais SVG (donc pas de XSS via SVG `<script>`). Pas de check magic-byte côté client — server-side responsabilité (hors périmètre frontend). Voir S6-010.                                                                                        |
+| **M. Tests headers HTTP**        | Effectués (cf. tableaux ci-dessus). Servers stoppés.                                                                                                                                                                                                                                                                                                     |
 
 ---
 
@@ -221,7 +221,7 @@ Tests effectués via `curl -sI http://localhost:3000/` et `…:3001/` après `pn
 - **App**: les deux
 - **Localisation**: `apps/web/src/app/classes/ClassCard.tsx:66`, `apps/studio/src/app/dashboard/classes/ClassesAdminList.tsx:215`, `apps/web/src/app/me/ProfileForm.tsx`, `apps/web/src/app/me/ProfileSection.tsx`
 - **Description**: tous les champs user-suppliés (`class.title`, `class.coachName`, `displayName`, `email`, `studio.name`, `studio.brandLogo`) sont rendus via `{value}` dans JSX → React échappe automatiquement HTML entities. Aucun usage de `dangerouslySetInnerHTML` dans le code applicatif.
-  - `brandColor` de `BrandingPreview` est doublement validé: client `^#[0-9A-Fa-f]{6}$/u` (`BrandingPreview.tsx:79`) ET server-side WCAG AA contrast check. Injection CSS via `style={{ backgroundColor }}` reste possible *en théorie* avec un payload comme `red; }/* … */` mais la regex le rejette.
+  - `brandColor` de `BrandingPreview` est doublement validé: client `^#[0-9A-Fa-f]{6}$/u` (`BrandingPreview.tsx:79`) ET server-side WCAG AA contrast check. Injection CSS via `style={{ backgroundColor }}` reste possible _en théorie_ avec un payload comme `red; }/* … */` mais la regex le rejette.
   - `studio.brandLogo` est un URL string qui pourrait théoriquement être une `javascript:` URL si rendu via `<a href={brandLogo}>` — mais aucune ref dans le code aujourd'hui (le champ semble préparé pour une future feature).
 - **Mitigation**: aucune action immédiate. Quand `brandLogo` sera consommé, valider explicitement `https://...` dans le schéma Zod (`UrlSchema.refine(u => u.startsWith('https://'))`) — surface offset pour l'audit S5 ou la slice qui ajoutera le rendu.
 - **Effort**: 0 aujourd'hui; 15 min lors du wiring brandLogo.
@@ -241,38 +241,38 @@ curl.exe -sI http://localhost:3001/
 
 ### B. Recherches effectuées (ripgrep) — récapitulatif
 
-| Pattern | Hits applicatifs | Note |
-|---|---|---|
-| `dangerouslySetInnerHTML` | 0 dans `apps/{web,studio}/src/**` | matches dans `.next/dev/**` = framework |
-| `innerHTML\s*=` | 0 dans `apps/{web,studio}/src/**` | idem |
-| `eval\(` | 0 dans `apps/{web,studio}/src/**` (sauf commentaires `csp.ts`) | idem |
-| `new Function\(` | 0 dans `apps/{web,studio}/src/**` | idem |
-| `setTimeout\('…'` | 0 | — |
-| `location\.hash` | 0 | — |
-| `localStorage` / `sessionStorage` / `indexedDB` | 0 setItem/open dans le code | seules occurrences = commentaires de `token-store.ts` qui *interdisent* l'usage |
-| `useSearchParams` / `searchParams.get` | 0 | aucun open redirect possible |
-| `next/script` | 0 | tous les scripts sont injectés à la main avec nonce (`TurnstileWidget`) |
-| `Permissions-Policy` | 0 | confirmé absent |
-| `productionBrowserSourceMaps` | 0 | défaut Next = false ⇒ pas de maps en prod |
-| `<script>` / `<style>` JSX inline | 0 | aucun bloc inline applicatif |
-| `style={{` JSX inline | 2 (BrandingPreview) | voir S6-001 |
+| Pattern                                         | Hits applicatifs                                               | Note                                                                            |
+| ----------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `dangerouslySetInnerHTML`                       | 0 dans `apps/{web,studio}/src/**`                              | matches dans `.next/dev/**` = framework                                         |
+| `innerHTML\s*=`                                 | 0 dans `apps/{web,studio}/src/**`                              | idem                                                                            |
+| `eval\(`                                        | 0 dans `apps/{web,studio}/src/**` (sauf commentaires `csp.ts`) | idem                                                                            |
+| `new Function\(`                                | 0 dans `apps/{web,studio}/src/**`                              | idem                                                                            |
+| `setTimeout\('…'`                               | 0                                                              | —                                                                               |
+| `location\.hash`                                | 0                                                              | —                                                                               |
+| `localStorage` / `sessionStorage` / `indexedDB` | 0 setItem/open dans le code                                    | seules occurrences = commentaires de `token-store.ts` qui _interdisent_ l'usage |
+| `useSearchParams` / `searchParams.get`          | 0                                                              | aucun open redirect possible                                                    |
+| `next/script`                                   | 0                                                              | tous les scripts sont injectés à la main avec nonce (`TurnstileWidget`)         |
+| `Permissions-Policy`                            | 0                                                              | confirmé absent                                                                 |
+| `productionBrowserSourceMaps`                   | 0                                                              | défaut Next = false ⇒ pas de maps en prod                                       |
+| `<script>` / `<style>` JSX inline               | 0                                                              | aucun bloc inline applicatif                                                    |
+| `style={{` JSX inline                           | 2 (BrandingPreview)                                            | voir S6-001                                                                     |
 
 ### C. Score détaillé (sur 100)
 
-| Axe | Pondération | Score |
-|---|---|---|
-| XSS (R/S/DOM) | 20 | 20 |
-| CSP nonce-strict | 15 | 12 (–3 S6-001) |
-| Auth storage (token in mem + httpOnly cookie) | 15 | 15 |
-| CSRF (SameSite=Lax + httpOnly) | 10 | 9 (–1 S6-005) |
-| Headers HTTP statiques | 10 | 6 (–2 S6-002 –1 S6-003 –1 S6-004) |
-| Open redirect / form action | 5 | 5 |
-| File upload safety | 5 | 4 (–1 S6-010 informational) |
-| Form security (autocomplete, password type) | 5 | 5 |
-| Source map / build hardening | 5 | 5 |
-| Reporting / observability CSP | 5 | 3 (–2 S6-006) |
-| SRI / supply chain | 5 | 3 (–2 S6-007 acceptable mais visible) |
-| **Total** | **100** | **82** |
+| Axe                                           | Pondération | Score                                 |
+| --------------------------------------------- | ----------- | ------------------------------------- |
+| XSS (R/S/DOM)                                 | 20          | 20                                    |
+| CSP nonce-strict                              | 15          | 12 (–3 S6-001)                        |
+| Auth storage (token in mem + httpOnly cookie) | 15          | 15                                    |
+| CSRF (SameSite=Lax + httpOnly)                | 10          | 9 (–1 S6-005)                         |
+| Headers HTTP statiques                        | 10          | 6 (–2 S6-002 –1 S6-003 –1 S6-004)     |
+| Open redirect / form action                   | 5           | 5                                     |
+| File upload safety                            | 5           | 4 (–1 S6-010 informational)           |
+| Form security (autocomplete, password type)   | 5           | 5                                     |
+| Source map / build hardening                  | 5           | 5                                     |
+| Reporting / observability CSP                 | 5           | 3 (–2 S6-006)                         |
+| SRI / supply chain                            | 5           | 3 (–2 S6-007 acceptable mais visible) |
+| **Total**                                     | **100**     | **82**                                |
 
 ### D. Pour aller plus loin (post-S6, hors périmètre)
 

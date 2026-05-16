@@ -69,9 +69,9 @@ import type { AthlyaEnvironment } from './types.js';
  *   for a tag.
  */
 export interface CaptureExceptionOptions {
-    readonly traceId?: string;
-    readonly tags?: Record<string, string>;
-    readonly extra?: Record<string, unknown>;
+  readonly traceId?: string;
+  readonly tags?: Record<string, string>;
+  readonly extra?: Record<string, unknown>;
 }
 
 /**
@@ -82,10 +82,7 @@ export interface CaptureExceptionOptions {
  * `await` the return value observe completion, never failure.
  */
 export interface SentryClient {
-    captureException(
-        err: unknown,
-        opts?: CaptureExceptionOptions,
-    ): Promise<void>;
+  captureException(err: unknown, opts?: CaptureExceptionOptions): Promise<void>;
 }
 
 /**
@@ -94,10 +91,10 @@ export interface SentryClient {
  * client uses the Workers `fetch` global.
  */
 export interface CreateSentryClientOptions {
-    readonly dsn?: string;
-    readonly environment: AthlyaEnvironment;
-    readonly release?: string;
-    readonly fetch?: typeof fetch;
+  readonly dsn?: string;
+  readonly environment: AthlyaEnvironment;
+  readonly release?: string;
+  readonly fetch?: typeof fetch;
 }
 
 /* ------------------------------------------------------------------ */
@@ -117,9 +114,9 @@ export interface CreateSentryClientOptions {
  * preserved in `ingestBaseUrl`.
  */
 interface ResolvedDsn {
-    readonly publicKey: string;
-    readonly projectId: string;
-    readonly ingestBaseUrl: string;
+  readonly publicKey: string;
+  readonly projectId: string;
+  readonly ingestBaseUrl: string;
 }
 
 /**
@@ -132,31 +129,31 @@ interface ResolvedDsn {
  * is emitted by the factory when parsing fails.
  */
 function parseDsn(dsn: string | undefined): ResolvedDsn | null {
-    if (dsn === undefined || dsn.length === 0) return null;
+  if (dsn === undefined || dsn.length === 0) return null;
 
-    let url: URL;
-    try {
-        url = new URL(dsn);
-    } catch {
-        return null;
-    }
+  let url: URL;
+  try {
+    url = new URL(dsn);
+  } catch {
+    return null;
+  }
 
-    const publicKey = url.username;
-    // The project id is the last non-empty path segment. Sentry
-    // self-hosted installations sometimes sit under a sub-path
-    // (`/sentry/api/`), so we keep everything but the last segment
-    // as the base path.
-    const rawSegments = url.pathname.split('/').filter((s) => s.length > 0);
-    if (publicKey.length === 0 || rawSegments.length === 0) return null;
+  const publicKey = url.username;
+  // The project id is the last non-empty path segment. Sentry
+  // self-hosted installations sometimes sit under a sub-path
+  // (`/sentry/api/`), so we keep everything but the last segment
+  // as the base path.
+  const rawSegments = url.pathname.split('/').filter((s) => s.length > 0);
+  if (publicKey.length === 0 || rawSegments.length === 0) return null;
 
-    const projectId = rawSegments.at(-1) as string;
-    const basePath = rawSegments.slice(0, -1).join('/');
-    const ingestBaseUrl =
-        basePath.length === 0
-            ? `${url.protocol}//${url.host}`
-            : `${url.protocol}//${url.host}/${basePath}`;
+  const projectId = rawSegments.at(-1) as string;
+  const basePath = rawSegments.slice(0, -1).join('/');
+  const ingestBaseUrl =
+    basePath.length === 0
+      ? `${url.protocol}//${url.host}`
+      : `${url.protocol}//${url.host}/${basePath}`;
 
-    return { publicKey, projectId, ingestBaseUrl };
+  return { publicKey, projectId, ingestBaseUrl };
 }
 
 /* ------------------------------------------------------------------ */
@@ -186,35 +183,31 @@ function parseDsn(dsn: string | undefined): ResolvedDsn | null {
  *     a clear log without breaking incident response).
  */
 const SENTRY_EU_HOST_SUFFIXES: readonly string[] = [
-    '.de.sentry.io',
-    '.eu.sentry.io',
-    // Sentry self-hosted EU instances run under customer-controlled
-    // domains; teams can extend this list via configuration if
-    // needed. The current deployment uses the SaaS EU dataset only.
+  '.de.sentry.io',
+  '.eu.sentry.io',
+  // Sentry self-hosted EU instances run under customer-controlled
+  // domains; teams can extend this list via configuration if
+  // needed. The current deployment uses the SaaS EU dataset only.
 ];
 
-export function assertSentryDsnIsEu(
-    dsn: string | undefined,
-): string | null {
-    if (dsn === undefined || dsn.length === 0) return null;
-    const parsed = parseDsn(dsn);
-    if (parsed === null) {
-        // Malformed DSN — let `createSentryClient` log its own
-        // dedicated warning. We do not flag region issues on a DSN
-        // we cannot parse.
-        return null;
-    }
-    let host: string;
-    try {
-        host = new URL(parsed.ingestBaseUrl).host.toLowerCase();
-    } catch {
-        return null;
-    }
-    const isEu = SENTRY_EU_HOST_SUFFIXES.some((suffix) =>
-        host.endsWith(suffix),
-    );
-    if (isEu) return null;
-    return `Sentry DSN host '${host}' does not match the EU residency suffix list (${SENTRY_EU_HOST_SUFFIXES.join(', ')}); RGPD Art 44 transfer safeguards may be missing`;
+export function assertSentryDsnIsEu(dsn: string | undefined): string | null {
+  if (dsn === undefined || dsn.length === 0) return null;
+  const parsed = parseDsn(dsn);
+  if (parsed === null) {
+    // Malformed DSN — let `createSentryClient` log its own
+    // dedicated warning. We do not flag region issues on a DSN
+    // we cannot parse.
+    return null;
+  }
+  let host: string;
+  try {
+    host = new URL(parsed.ingestBaseUrl).host.toLowerCase();
+  } catch {
+    return null;
+  }
+  const isEu = SENTRY_EU_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+  if (isEu) return null;
+  return `Sentry DSN host '${host}' does not match the EU residency suffix list (${SENTRY_EU_HOST_SUFFIXES.join(', ')}); RGPD Art 44 transfer safeguards may be missing`;
 }
 
 /**
@@ -222,7 +215,7 @@ export function assertSentryDsnIsEu(
  * only — production code never needs the string outside the client.
  */
 export function buildIngestUrl(dsn: ResolvedDsn): string {
-    return `${dsn.ingestBaseUrl}/api/${dsn.projectId}/envelope/`;
+  return `${dsn.ingestBaseUrl}/api/${dsn.projectId}/envelope/`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -242,11 +235,11 @@ const SENTRY_PROTOCOL_VERSION = '7';
  * logs stay consistent.
  */
 function buildAuthHeader(publicKey: string): string {
-    return [
-        `Sentry sentry_version=${SENTRY_PROTOCOL_VERSION}`,
-        `sentry_client=${SDK_NAME}/${SDK_VERSION}`,
-        `sentry_key=${publicKey}`,
-    ].join(', ');
+  return [
+    `Sentry sentry_version=${SENTRY_PROTOCOL_VERSION}`,
+    `sentry_client=${SDK_NAME}/${SDK_VERSION}`,
+    `sentry_key=${publicKey}`,
+  ].join(', ');
 }
 
 /**
@@ -255,22 +248,22 @@ function buildAuthHeader(publicKey: string): string {
  * we never send an empty event.
  */
 function toExceptionPayload(err: unknown): {
-    type: string;
-    value: string;
-    stacktrace?: { frames: never[] };
+  type: string;
+  value: string;
+  stacktrace?: { frames: never[] };
 } {
-    if (err instanceof Error) {
-        return {
-            type: err.name.length > 0 ? err.name : 'Error',
-            value: err.message.length > 0 ? err.message : '(no message)',
-        };
-    }
-    // Everything else is coerced to a string. A richer parser is not
-    // worth the bytes for a fallback path.
+  if (err instanceof Error) {
     return {
-        type: 'NonErrorThrow',
-        value: typeof err === 'string' ? err : safeStringify(err),
+      type: err.name.length > 0 ? err.name : 'Error',
+      value: err.message.length > 0 ? err.message : '(no message)',
     };
+  }
+  // Everything else is coerced to a string. A richer parser is not
+  // worth the bytes for a fallback path.
+  return {
+    type: 'NonErrorThrow',
+    value: typeof err === 'string' ? err : safeStringify(err),
+  };
 }
 
 /**
@@ -278,11 +271,11 @@ function toExceptionPayload(err: unknown): {
  * serialisation failure because captureException must never throw.
  */
 function safeStringify(value: unknown): string {
-    try {
-        return JSON.stringify(value) ?? '(unserialisable)';
-    } catch {
-        return '(unserialisable)';
-    }
+  try {
+    return JSON.stringify(value) ?? '(unserialisable)';
+  } catch {
+    return '(unserialisable)';
+  }
 }
 
 /**
@@ -292,18 +285,15 @@ function safeStringify(value: unknown): string {
  * without it (old Node, some test sandboxes).
  */
 function makeEventId(): string {
-    if (
-        typeof crypto !== 'undefined' &&
-        typeof crypto.randomUUID === 'function'
-    ) {
-        return crypto.randomUUID().replace(/-/g, '');
-    }
-    let out = '';
-    for (let i = 0; i < 32; i += 1) {
-        const n = Math.floor(Math.random() * 16);
-        out += n.toString(16);
-    }
-    return out;
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().replace(/-/g, '');
+  }
+  let out = '';
+  for (let i = 0; i < 32; i += 1) {
+    const n = Math.floor(Math.random() * 16);
+    out += n.toString(16);
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -316,7 +306,7 @@ function makeEventId(): string {
  * the method signature compatible with the live client.
  */
 const NO_OP_CLIENT: SentryClient = {
-    captureException: () => Promise.resolve(),
+  captureException: () => Promise.resolve(),
 };
 
 /**
@@ -330,96 +320,89 @@ let warnedAboutMissingDsn = false;
  * Build a {@link SentryClient}. See module doc for the full
  * behaviour contract.
  */
-export function createSentryClient(
-    opts: CreateSentryClientOptions,
-): SentryClient {
-    const resolved = parseDsn(opts.dsn);
-    if (resolved === null) {
-        if (!warnedAboutMissingDsn) {
-            warnedAboutMissingDsn = true;
-            // Single warn at factory construction time. Using
-            // `console.warn` directly rather than `createLogger`
-            // because `sentry.ts` must not pull the logger into its
-            // import graph (the logger calls it from its own error
-            // path, which would be a cycle waiting to happen).
-            const reason =
-                opts.dsn === undefined || opts.dsn.length === 0
-                    ? 'missing'
-                    : 'unparseable';
-            console.warn(
-                `[sentry] DSN ${reason}; error capture disabled for env=${opts.environment}`,
-            );
-        }
-        return NO_OP_CLIENT;
+export function createSentryClient(opts: CreateSentryClientOptions): SentryClient {
+  const resolved = parseDsn(opts.dsn);
+  if (resolved === null) {
+    if (!warnedAboutMissingDsn) {
+      warnedAboutMissingDsn = true;
+      // Single warn at factory construction time. Using
+      // `console.warn` directly rather than `createLogger`
+      // because `sentry.ts` must not pull the logger into its
+      // import graph (the logger calls it from its own error
+      // path, which would be a cycle waiting to happen).
+      const reason = opts.dsn === undefined || opts.dsn.length === 0 ? 'missing' : 'unparseable';
+      console.warn(`[sentry] DSN ${reason}; error capture disabled for env=${opts.environment}`);
     }
+    return NO_OP_CLIENT;
+  }
 
-    const ingestUrl = buildIngestUrl(resolved);
-    const authHeader = buildAuthHeader(resolved.publicKey);
-    const fetchImpl = opts.fetch ?? fetch;
+  const ingestUrl = buildIngestUrl(resolved);
+  const authHeader = buildAuthHeader(resolved.publicKey);
+  const fetchImpl = opts.fetch ?? fetch;
 
-    return {
-        async captureException(err, captureOpts) {
-            try {
-                const eventId = makeEventId();
-                const sentAt = new Date().toISOString();
+  return {
+    async captureException(err, captureOpts) {
+      try {
+        const eventId = makeEventId();
+        const sentAt = new Date().toISOString();
 
-                const tags: Record<string, string> = {
-                    env: opts.environment,
-                    ...(captureOpts?.tags ?? {}),
-                };
-                if (captureOpts?.traceId !== undefined) {
-                    tags['trace_id'] = captureOpts.traceId;
-                }
+        const tags: Record<string, string> = {
+          env: opts.environment,
+          ...(captureOpts?.tags ?? {}),
+        };
+        if (captureOpts?.traceId !== undefined) {
+          tags['trace_id'] = captureOpts.traceId;
+        }
 
-                const event: Record<string, unknown> = {
-                    event_id: eventId,
-                    timestamp: Date.now() / 1000,
-                    platform: 'javascript',
-                    level: 'error',
-                    environment: opts.environment,
-                    sdk: { name: SDK_NAME, version: SDK_VERSION },
-                    tags,
-                    exception: { values: [toExceptionPayload(err)] },
-                };
-                if (opts.release !== undefined) {
-                    event['release'] = opts.release;
-                }
-                if (captureOpts?.extra !== undefined) {
-                    event['extra'] = captureOpts.extra;
-                }
+        const event: Record<string, unknown> = {
+          event_id: eventId,
+          timestamp: Date.now() / 1000,
+          platform: 'javascript',
+          level: 'error',
+          environment: opts.environment,
+          sdk: { name: SDK_NAME, version: SDK_VERSION },
+          tags,
+          exception: { values: [toExceptionPayload(err)] },
+        };
+        if (opts.release !== undefined) {
+          event['release'] = opts.release;
+        }
+        if (captureOpts?.extra !== undefined) {
+          event['extra'] = captureOpts.extra;
+        }
 
-                const header = JSON.stringify({
-                    event_id: eventId,
-                    sent_at: sentAt,
-                    dsn: opts.dsn,
-                });
-                const itemHeader = JSON.stringify({ type: 'event' });
-                const itemPayload = JSON.stringify(event);
-                const body = `${header}\n${itemHeader}\n${itemPayload}`;
+        const header = JSON.stringify({
+          event_id: eventId,
+          sent_at: sentAt,
+          dsn: opts.dsn,
+        });
+        const itemHeader = JSON.stringify({ type: 'event' });
+        const itemPayload = JSON.stringify(event);
+        const body = `${header}\n${itemHeader}\n${itemPayload}`;
 
-                // Fire-and-forget POST. We still `await` the call so
-                // the returned Promise resolves only after the
-                // transport has settled — the caller can rely on
-                // ordering (capture before sending the HTTP response)
-                // when they choose to await.
-                await fetchImpl(ingestUrl, {
-                    method: 'POST',
-                    headers: {
-                        'content-type': 'application/x-sentry-envelope',
-                        'x-sentry-auth': authHeader,
-                    },
-                    body,
-                });
-            } catch {
-                // Per Req 30.3: Sentry failures must never disrupt
-                // the primary response path. We intentionally swallow
-                // the error with no rethrow. A logger call here would
-                // risk re-entering the `onError` path and looping, so
-                // we stay silent — the resulting missed event is a
-                // known, accepted degradation.
-            }
-        },
-    };
+        // Fire-and-forget POST. We still `await` the call so
+        // the returned Promise resolves only after the
+        // transport has settled — the caller can rely on
+        // ordering (capture before sending the HTTP response)
+        // when they choose to await.
+        await fetchImpl(ingestUrl, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/x-sentry-envelope',
+            'x-sentry-auth': authHeader,
+          },
+          body,
+        });
+      } catch {
+        // Per Req 30.3: Sentry failures must never disrupt
+        // the primary response path. We intentionally swallow
+        // the error with no rethrow. A logger call here would
+        // risk re-entering the `onError` path and looping, so
+        // we stay silent — the resulting missed event is a
+        // known, accepted degradation.
+      }
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -432,16 +415,16 @@ export function createSentryClient(
  * `hono` so the module remains framework-free.
  */
 export interface CaptureUnhandledContext {
-    readonly env: {
-        readonly ENVIRONMENT: AthlyaEnvironment;
-        readonly SENTRY_DSN?: string;
-        readonly VERSION?: string;
-    };
-    readonly req: {
-        readonly path?: string;
-        readonly method?: string;
-    };
-    get(key: 'traceId'): string;
+  readonly env: {
+    readonly ENVIRONMENT: AthlyaEnvironment;
+    readonly SENTRY_DSN?: string;
+    readonly VERSION?: string;
+  };
+  readonly req: {
+    readonly path?: string;
+    readonly method?: string;
+  };
+  get(key: 'traceId'): string;
 }
 
 /**
@@ -459,11 +442,11 @@ const clientCache = new Map<string, SentryClient>();
 /** Build a cache key from `(environment, dsn, release)` so a change
  *  to any of them produces a fresh client. */
 function cacheKey(opts: {
-    environment: AthlyaEnvironment;
-    dsn: string | undefined;
-    release: string | undefined;
+  environment: AthlyaEnvironment;
+  dsn: string | undefined;
+  release: string | undefined;
 }): string {
-    return `${opts.environment}|${opts.dsn ?? ''}|${opts.release ?? ''}`;
+  return `${opts.environment}|${opts.dsn ?? ''}|${opts.release ?? ''}`;
 }
 
 /**
@@ -479,42 +462,42 @@ function cacheKey(opts: {
  *   - `trace_id` — W3C trace id flowing through the gateway
  */
 export async function captureUnhandled(
-    err: unknown,
-    c: CaptureUnhandledContext,
-    extraTags?: Record<string, string>,
+  err: unknown,
+  c: CaptureUnhandledContext,
+  extraTags?: Record<string, string>,
 ): Promise<void> {
-    const key = cacheKey({
-        environment: c.env.ENVIRONMENT,
-        dsn: c.env.SENTRY_DSN,
-        release: c.env.VERSION,
-    });
-    let client = clientCache.get(key);
-    if (client === undefined) {
-        // `exactOptionalPropertyTypes` forbids passing an
-        // `undefined`-valued property to an optional field; build the
-        // options object conditionally so the factory sees either a
-        // string or no `dsn` property at all.
-        const factoryOpts: CreateSentryClientOptions = {
-            environment: c.env.ENVIRONMENT,
-            ...(c.env.SENTRY_DSN !== undefined ? { dsn: c.env.SENTRY_DSN } : {}),
-            ...(c.env.VERSION !== undefined ? { release: c.env.VERSION } : {}),
-        };
-        client = createSentryClient(factoryOpts);
-        clientCache.set(key, client);
-    }
+  const key = cacheKey({
+    environment: c.env.ENVIRONMENT,
+    dsn: c.env.SENTRY_DSN,
+    release: c.env.VERSION,
+  });
+  let client = clientCache.get(key);
+  if (client === undefined) {
+    // `exactOptionalPropertyTypes` forbids passing an
+    // `undefined`-valued property to an optional field; build the
+    // options object conditionally so the factory sees either a
+    // string or no `dsn` property at all.
+    const factoryOpts: CreateSentryClientOptions = {
+      environment: c.env.ENVIRONMENT,
+      ...(c.env.SENTRY_DSN !== undefined ? { dsn: c.env.SENTRY_DSN } : {}),
+      ...(c.env.VERSION !== undefined ? { release: c.env.VERSION } : {}),
+    };
+    client = createSentryClient(factoryOpts);
+    clientCache.set(key, client);
+  }
 
-    const tags: Record<string, string> = { ...(extraTags ?? {}) };
-    if (c.req.path !== undefined) tags['path'] = c.req.path;
-    if (c.req.method !== undefined) tags['method'] = c.req.method;
+  const tags: Record<string, string> = { ...(extraTags ?? {}) };
+  if (c.req.path !== undefined) tags['path'] = c.req.path;
+  if (c.req.method !== undefined) tags['method'] = c.req.method;
 
-    await client.captureException(err, {
-        traceId: c.get('traceId'),
-        tags,
-    });
+  await client.captureException(err, {
+    traceId: c.get('traceId'),
+    tags,
+  });
 }
 
 /** Test-only helper — clear the module-scope client cache. */
 export function __resetSentryCacheForTests(): void {
-    clientCache.clear();
-    warnedAboutMissingDsn = false;
+  clientCache.clear();
+  warnedAboutMissingDsn = false;
 }

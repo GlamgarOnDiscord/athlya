@@ -22,29 +22,28 @@ import { describe, expect, it } from 'vitest';
 import { computeListEtag } from '../../routes/helpers.js';
 
 describe('computeListEtag', () => {
-    it('is deterministic for the same fingerprint', async () => {
-        const fingerprint =
-            'a:1:5:2099-04-01T09:00:00Z|b:2:0:2099-04-02T10:00:00Z';
-        const a = await computeListEtag(fingerprint);
-        const b = await computeListEtag(fingerprint);
-        expect(a).toBe(b);
-    });
+  it('is deterministic for the same fingerprint', async () => {
+    const fingerprint = 'a:1:5:2099-04-01T09:00:00Z|b:2:0:2099-04-02T10:00:00Z';
+    const a = await computeListEtag(fingerprint);
+    const b = await computeListEtag(fingerprint);
+    expect(a).toBe(b);
+  });
 
-    it('returns a strong, quoted ETag of 16 hex chars', async () => {
-        const etag = await computeListEtag('hello-world');
-        expect(etag).toMatch(/^"[0-9a-f]{16}"$/);
-        // Strong ETag — no `W/` weak prefix.
-        expect(etag.startsWith('W/')).toBe(false);
-    });
+  it('returns a strong, quoted ETag of 16 hex chars', async () => {
+    const etag = await computeListEtag('hello-world');
+    expect(etag).toMatch(/^"[0-9a-f]{16}"$/);
+    // Strong ETag — no `W/` weak prefix.
+    expect(etag.startsWith('W/')).toBe(false);
+  });
 
-    it('changes when the fingerprint changes by one character', async () => {
-        const a = await computeListEtag('a:1:5:2099-04-01');
-        const b = await computeListEtag('a:1:6:2099-04-01');
-        expect(a).not.toBe(b);
-    });
+  it('changes when the fingerprint changes by one character', async () => {
+    const a = await computeListEtag('a:1:5:2099-04-01');
+    const b = await computeListEtag('a:1:6:2099-04-01');
+    expect(a).not.toBe(b);
+  });
 
-    it('handles the empty fingerprint without throwing', async () => {
-        const etag = await computeListEtag('');
-        expect(etag).toMatch(/^"[0-9a-f]{16}"$/);
-    });
+  it('handles the empty fingerprint without throwing', async () => {
+    const etag = await computeListEtag('');
+    expect(etag).toMatch(/^"[0-9a-f]{16}"$/);
+  });
 });

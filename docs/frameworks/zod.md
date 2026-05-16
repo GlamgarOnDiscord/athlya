@@ -1,13 +1,13 @@
 # Zod 4 — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^4.4.3 |
-| **Latest** | 4.4.3 (current) |
+|               | Value                                              |
+| ------------- | -------------------------------------------------- |
+| **Used**      | ^4.4.3                                             |
+| **Latest**    | 4.4.3 (current)                                    |
 | **Zod 3 EOL** | No EOL announced, but v4 is stable and recommended |
 
 ---
@@ -20,22 +20,22 @@ Zod 4 promotes common string validators to top-level schemas. **Do not use the Z
 
 ```ts
 // OBSOLETE (Zod 3 style — still works but deprecated in v4)
-z.string().email()
-z.string().url()
-z.string().uuid()
-z.string().cuid()
+z.string().email();
+z.string().url();
+z.string().uuid();
+z.string().cuid();
 
 // ZOD 4 — preferred top-level approach
-z.email()
-z.url()
-z.uuid()
-z.guid()
-z.base64()
-z.base64url()
-z.jwt()
-z.cidr()
-z.ipv4()
-z.ipv6()
+z.email();
+z.url();
+z.uuid();
+z.guid();
+z.base64();
+z.base64url();
+z.jwt();
+z.cidr();
+z.ipv4();
+z.ipv6();
 ```
 
 The chained versions still work for backwards compatibility but the top-level forms are more performant (no extra string schema layer) and are the documented canonical approach in Zod 4.
@@ -44,13 +44,13 @@ The chained versions still work for backwards compatibility but the top-level fo
 
 ```ts
 // Zod 3 — separate params per method
-z.string().min(1, { message: "Required" }).max(100, { message: "Too long" })
+z.string().min(1, { message: 'Required' }).max(100, { message: 'Too long' });
 
 // Zod 4 — unified `error` param
-z.string().min(1, "Required").max(100, "Too long")
+z.string().min(1, 'Required').max(100, 'Too long');
 
 // Or with error map:
-z.string({ error: (ctx) => ctx.input === undefined ? "Required" : "Invalid" })
+z.string({ error: (ctx) => (ctx.input === undefined ? 'Required' : 'Invalid') });
 ```
 
 ### `z.interface()` — New in Zod 4
@@ -71,13 +71,13 @@ Use `z.object()` when you want strict mode by default. Use `z.interface()` for D
 
 ```ts
 // Before (.refine — still valid)
-z.string().refine(val => val.startsWith('#'), 'Must start with #')
+z.string().refine((val) => val.startsWith('#'), 'Must start with #');
 
 // Zod 4 (.check — composable, reusable)
 const hexColor = z.check(z.string(), (ctx) => {
-    if (!/^#[0-9A-Fa-f]{6}$/.test(ctx.value)) {
-        ctx.addIssue({ message: 'Invalid hex color' });
-    }
+  if (!/^#[0-9A-Fa-f]{6}$/.test(ctx.value)) {
+    ctx.addIssue({ message: 'Invalid hex color' });
+  }
 });
 ```
 
@@ -104,12 +104,12 @@ Correct Zod 4 usage. The `envelopeShape()` factory with `z.literal()` discrimina
 
 ```ts
 // Current (Zod 3 style)
-z.string().email().max(254)
-z.string().uuid()
+z.string().email().max(254);
+z.string().uuid();
 
 // Preferred (Zod 4)
-z.email().max(254)
-z.uuid()
+z.email().max(254);
+z.uuid();
 ```
 
 Not a breaking change — just prefer the top-level forms for new code.
@@ -118,11 +118,13 @@ Not a breaking change — just prefer the top-level forms for new code.
 
 ```ts
 const result = AthlyaEventSchema.safeParse(raw);
-if (result.success) { return result.data; }
+if (result.success) {
+  return result.data;
+}
 const issues = result.error.issues.map((issue) => ({
-    path: issue.path.map(String).join('.'),
-    code: issue.code,
-    message: issue.message,
+  path: issue.path.map(String).join('.'),
+  code: issue.code,
+  message: issue.message,
 }));
 ```
 
@@ -136,13 +138,13 @@ Uses Zod for Stripe webhook shape validation without Stripe SDK dependency. Corr
 
 ## Deprecated Patterns
 
-| Zod 3 Pattern | Zod 4 Replacement | Status |
-|---|---|---|
-| `z.string().email()` | `z.email()` | Use top-level for new code |
-| `z.string().url()` | `z.url()` | Use top-level for new code |
-| `z.string().uuid()` | `z.uuid()` | Use top-level for new code |
-| `.refine()` for complex validation | `.check()` for composability | Both valid |
-| `z.ZodError` direct class | `result.error` via `safeParse` | Already using correct pattern |
+| Zod 3 Pattern                      | Zod 4 Replacement              | Status                        |
+| ---------------------------------- | ------------------------------ | ----------------------------- |
+| `z.string().email()`               | `z.email()`                    | Use top-level for new code    |
+| `z.string().url()`                 | `z.url()`                      | Use top-level for new code    |
+| `z.string().uuid()`                | `z.uuid()`                     | Use top-level for new code    |
+| `.refine()` for complex validation | `.check()` for composability   | Both valid                    |
+| `z.ZodError` direct class          | `result.error` via `safeParse` | Already using correct pattern |
 
 ---
 

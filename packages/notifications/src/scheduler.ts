@@ -83,12 +83,12 @@ export const REMINDER_LEAD_MS = 60 * 60 * 1000;
  *     past is legal — QStash will fire immediately.
  */
 export interface ReminderScheduleCommand {
-    readonly reservationId: string;
-    readonly classId: string;
-    readonly userId: string;
-    readonly studioId: string;
-    readonly startsAt: string;
-    readonly fireAt: string;
+  readonly reservationId: string;
+  readonly classId: string;
+  readonly userId: string;
+  readonly studioId: string;
+  readonly startsAt: string;
+  readonly fireAt: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -110,7 +110,7 @@ export interface ReminderScheduleCommand {
  * acknowledged the job.
  */
 export interface ReminderScheduler {
-    scheduleReminder(command: ReminderScheduleCommand): Promise<void>;
+  scheduleReminder(command: ReminderScheduleCommand): Promise<void>;
 }
 
 /**
@@ -128,7 +128,7 @@ export interface ReminderScheduler {
  * `{ kind: 'skipped_class_not_found' }`.
  */
 export interface ReservationLookupRepo {
-    getClassStartsAt(classId: string): Promise<string | null>;
+  getClassStartsAt(classId: string): Promise<string | null>;
 }
 
 /**
@@ -151,11 +151,11 @@ export type Clock = () => number;
  * plain literal.
  */
 export interface ReservationReminderInput {
-    readonly reservationId: string;
-    readonly classId: string;
-    readonly userId: string;
-    /** Class start time as ISO-8601 UTC datetime. */
-    readonly startsAt: string;
+  readonly reservationId: string;
+  readonly classId: string;
+  readonly userId: string;
+  /** Class start time as ISO-8601 UTC datetime. */
+  readonly startsAt: string;
 }
 
 /**
@@ -175,9 +175,9 @@ export interface ReservationReminderInput {
  *     `startsAt` as input.
  */
 export type ScheduleResult =
-    | { readonly kind: 'scheduled'; readonly fireAt: string }
-    | { readonly kind: 'skipped_too_soon'; readonly fireAt: string }
-    | { readonly kind: 'skipped_class_not_found' };
+  | { readonly kind: 'scheduled'; readonly fireAt: string }
+  | { readonly kind: 'skipped_too_soon'; readonly fireAt: string }
+  | { readonly kind: 'skipped_class_not_found' };
 
 /* ------------------------------------------------------------------ */
 /*  scheduleReservationReminder                                        */
@@ -189,14 +189,14 @@ export type ScheduleResult =
  * the two-or-three-call cadence the consumer needs.
  */
 export interface ScheduleReservationReminderArgs {
-    /** Reservation projection — just enough to build the command. */
-    readonly reservation: ReservationReminderInput;
-    /** Tenant owning the reservation. Echoed into the command. */
-    readonly studioId: string;
-    /** Scheduler port (QStash in prod, `vi.fn()` in tests). */
-    readonly scheduler: ReminderScheduler;
-    /** Clock override. Defaults to `Date.now`. */
-    readonly clock?: Clock;
+  /** Reservation projection — just enough to build the command. */
+  readonly reservation: ReservationReminderInput;
+  /** Tenant owning the reservation. Echoed into the command. */
+  readonly studioId: string;
+  /** Scheduler port (QStash in prod, `vi.fn()` in tests). */
+  readonly scheduler: ReminderScheduler;
+  /** Clock override. Defaults to `Date.now`. */
+  readonly clock?: Clock;
 }
 
 /**
@@ -225,39 +225,37 @@ export interface ScheduleReservationReminderArgs {
  * the surrounding Cloudflare Queues retry budget can replay.
  */
 export async function scheduleReservationReminder(
-    args: ScheduleReservationReminderArgs,
+  args: ScheduleReservationReminderArgs,
 ): Promise<ScheduleResult> {
-    const { reservation, studioId, scheduler } = args;
-    const now = (args.clock ?? Date.now)();
+  const { reservation, studioId, scheduler } = args;
+  const now = (args.clock ?? Date.now)();
 
-    const startsAtMs = Date.parse(reservation.startsAt);
-    if (Number.isNaN(startsAtMs)) {
-        // Defense-in-depth: `parseEvent` on the upstream envelope
-        // rejects non-ISO strings, but this helper is also called
-        // directly from unit seams. Fail loud rather than silently
-        // scheduling a job with `fireAt = "Invalid Date"`.
-        throw new RangeError(
-            `scheduleReservationReminder: invalid startsAt ${reservation.startsAt}`,
-        );
-    }
+  const startsAtMs = Date.parse(reservation.startsAt);
+  if (Number.isNaN(startsAtMs)) {
+    // Defense-in-depth: `parseEvent` on the upstream envelope
+    // rejects non-ISO strings, but this helper is also called
+    // directly from unit seams. Fail loud rather than silently
+    // scheduling a job with `fireAt = "Invalid Date"`.
+    throw new RangeError(`scheduleReservationReminder: invalid startsAt ${reservation.startsAt}`);
+  }
 
-    const fireAtMs = startsAtMs - REMINDER_LEAD_MS;
-    const fireAtIso = new Date(fireAtMs).toISOString();
+  const fireAtMs = startsAtMs - REMINDER_LEAD_MS;
+  const fireAtIso = new Date(fireAtMs).toISOString();
 
-    if (fireAtMs < now) {
-        return { kind: 'skipped_too_soon', fireAt: fireAtIso };
-    }
+  if (fireAtMs < now) {
+    return { kind: 'skipped_too_soon', fireAt: fireAtIso };
+  }
 
-    await scheduler.scheduleReminder({
-        reservationId: reservation.reservationId,
-        classId: reservation.classId,
-        userId: reservation.userId,
-        studioId,
-        startsAt: reservation.startsAt,
-        fireAt: fireAtIso,
-    });
+  await scheduler.scheduleReminder({
+    reservationId: reservation.reservationId,
+    classId: reservation.classId,
+    userId: reservation.userId,
+    studioId,
+    startsAt: reservation.startsAt,
+    fireAt: fireAtIso,
+  });
 
-    return { kind: 'scheduled', fireAt: fireAtIso };
+  return { kind: 'scheduled', fireAt: fireAtIso };
 }
 
 /* ------------------------------------------------------------------ */
@@ -274,9 +272,9 @@ export async function scheduleReservationReminder(
  * env.
  */
 export interface OnReservationCreatedDeps {
-    readonly scheduler: ReminderScheduler;
-    readonly repo: ReservationLookupRepo;
-    readonly clock?: Clock;
+  readonly scheduler: ReminderScheduler;
+  readonly repo: ReservationLookupRepo;
+  readonly clock?: Clock;
 }
 
 /**
@@ -308,40 +306,38 @@ export interface OnReservationCreatedDeps {
  * {@link scheduleReservationReminder}.
  */
 export async function onReservationCreated(
-    event: ReservationCreatedEvent,
-    deps: OnReservationCreatedDeps,
+  event: ReservationCreatedEvent,
+  deps: OnReservationCreatedDeps,
 ): Promise<ScheduleResult> {
-    const { scheduler, repo } = deps;
+  const { scheduler, repo } = deps;
 
-    const startsAt = await repo.getClassStartsAt(event.payload.classId);
-    if (startsAt === null) {
-        return { kind: 'skipped_class_not_found' };
-    }
+  const startsAt = await repo.getClassStartsAt(event.payload.classId);
+  if (startsAt === null) {
+    return { kind: 'skipped_class_not_found' };
+  }
 
-    if (event.studioId === undefined) {
-        // `reservation.created` always carries a studio id in
-        // practice; surface the protocol violation as a thrown error
-        // so the Cloudflare Queues DLQ picks it up (Req 16.5).
-        throw new Error(
-            `onReservationCreated: reservation.created event ${event.id} missing studioId`,
-        );
-    }
+  if (event.studioId === undefined) {
+    // `reservation.created` always carries a studio id in
+    // practice; surface the protocol violation as a thrown error
+    // so the Cloudflare Queues DLQ picks it up (Req 16.5).
+    throw new Error(`onReservationCreated: reservation.created event ${event.id} missing studioId`);
+  }
 
-    const clock = deps.clock;
+  const clock = deps.clock;
 
-    return scheduleReservationReminder({
-        reservation: {
-            reservationId: event.payload.reservationId,
-            classId: event.payload.classId,
-            userId: event.payload.userId,
-            startsAt,
-        },
-        studioId: event.studioId,
-        scheduler,
-        // Spread pattern keeps `exactOptionalPropertyTypes` happy —
-        // the inner helper declares `clock?: Clock`, and assigning
-        // `clock: undefined` would violate the strict optional
-        // semantics.
-        ...(clock !== undefined ? { clock } : {}),
-    });
+  return scheduleReservationReminder({
+    reservation: {
+      reservationId: event.payload.reservationId,
+      classId: event.payload.classId,
+      userId: event.payload.userId,
+      startsAt,
+    },
+    studioId: event.studioId,
+    scheduler,
+    // Spread pattern keeps `exactOptionalPropertyTypes` happy —
+    // the inner helper declares `clock?: Clock`, and assigning
+    // `clock: undefined` would violate the strict optional
+    // semantics.
+    ...(clock !== undefined ? { clock } : {}),
+  });
 }

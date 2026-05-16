@@ -46,6 +46,7 @@ Avant d'activer sur les PRs, valider le scan tourne :
 3. Run
 
 Le workflow doit :
+
 - Spider le staging
 - Émettre un rapport HTML + JSON
 - Fail si findings HIGH (les MEDIUM/LOW sont warning only)
@@ -54,14 +55,15 @@ Le workflow doit :
 
 Premier run typiquement remonte 5-15 findings :
 
-| Type | Action standard |
-|---|---|
-| HSTS missing | Provisionner via `wrangler secret put` (déjà câblé en code, manque le binding) |
-| CSP issues | Vérifier `packages/api/src/middleware/security-headers.ts` — si false positive, suppress dans `.zap/rules.tsv` |
-| X-Content-Type-Options missing | Vérifier headers, suppress si false positive |
-| Cookie without secure flag | Vérifier sur dev/staging → ne devrait JAMAIS arriver en prod |
+| Type                           | Action standard                                                                                                |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| HSTS missing                   | Provisionner via `wrangler secret put` (déjà câblé en code, manque le binding)                                 |
+| CSP issues                     | Vérifier `packages/api/src/middleware/security-headers.ts` — si false positive, suppress dans `.zap/rules.tsv` |
+| X-Content-Type-Options missing | Vérifier headers, suppress si false positive                                                                   |
+| Cookie without secure flag     | Vérifier sur dev/staging → ne devrait JAMAIS arriver en prod                                                   |
 
 Pour chaque finding :
+
 1. **Code-fixable** → ouvrir une PR, le scan re-tournera dessus
 2. **False positive** → ajouter une ligne dans `.zap/rules.tsv` :
    ```
@@ -76,6 +78,7 @@ findings adressés), aucune action additionnelle n'est requise.
 Le workflow tourne automatiquement sur **chaque PR**.
 
 Si on veut désactiver temporairement (ex: maintenance staging) :
+
 - Vider la variable `ZAP_TARGET_URL` (ne pas la supprimer — le
   guard step skip cleanly avec un message)
 - Le workflow continue à tourner mais skip immédiatement.
@@ -105,7 +108,7 @@ toutes les semaines :
 # .github/workflows/zap-full-scan.yml
 on:
   schedule:
-    - cron: '0 4 * * 1'  # Monday 04:00 UTC
+    - cron: '0 4 * * 1' # Monday 04:00 UTC
 ```
 
 Out of scope Sprint 14.
@@ -118,13 +121,13 @@ détecté en main.
 
 ## Provisioning checklist
 
-| Item | Status | Owner |
-|---|---|---|
-| Staging URL stable | ⏳ | DevOps |
-| Variable `ZAP_TARGET_URL` provisionnée | ⏳ | DevOps |
-| Premier run validé manually | ⏳ | DevOps + Eng |
-| Slack alert configuré | ⏳ | DevOps |
-| Rules `.zap/rules.tsv` revues | ✅ scaffolded | Eng |
+| Item                                   | Status        | Owner        |
+| -------------------------------------- | ------------- | ------------ |
+| Staging URL stable                     | ⏳            | DevOps       |
+| Variable `ZAP_TARGET_URL` provisionnée | ⏳            | DevOps       |
+| Premier run validé manually            | ⏳            | DevOps + Eng |
+| Slack alert configuré                  | ⏳            | DevOps       |
+| Rules `.zap/rules.tsv` revues          | ✅ scaffolded | Eng          |
 
 ## Références
 

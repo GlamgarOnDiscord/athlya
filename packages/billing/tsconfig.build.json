@@ -1,23 +1,21 @@
 {
-    // Emit-only project used by `pnpm build`. Extends the editor
-    // project and pins `rootDir` to `src`, plus excludes the test
-    // tree so nothing in `dist/` leaks test helpers or __tests__
-    // folders.
-    "extends": "./tsconfig.json",
-    "compilerOptions": {
-        "rootDir": "src",
-        "noEmit": false
-    },
-    "include": [
-        "src"
-    ],
-    "exclude": [
-        "node_modules",
-        "dist",
-        ".turbo",
-        "coverage",
-        "src/**/*.test.ts",
-        "src/**/__tests__/**",
-        "vitest.config.ts"
-    ]
+  // Emit-only project used by `pnpm build`. Extends the editor
+  // project and pins `rootDir` to `src`, plus excludes the test
+  // tree so nothing in `dist/` leaks test helpers or __tests__
+  // folders.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "noEmit": false
+  },
+  "include": ["src"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".turbo",
+    "coverage",
+    "src/**/*.test.ts",
+    "src/**/__tests__/**",
+    "vitest.config.ts"
+  ]
 }

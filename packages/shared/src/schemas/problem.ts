@@ -22,11 +22,11 @@ import { z } from 'zod';
  * Zod (e.g. `exercises.2.sets.0.reps`).
  */
 export const ProblemFieldErrorSchema = z
-    .object({
-        path: z.string(),
-        message: z.string(),
-    })
-    .strict();
+  .object({
+    path: z.string(),
+    message: z.string(),
+  })
+  .strict();
 
 export type ProblemFieldError = z.infer<typeof ProblemFieldErrorSchema>;
 
@@ -38,16 +38,16 @@ export type ProblemFieldError = z.infer<typeof ProblemFieldErrorSchema>;
  * it without parsing `detail`.
  */
 export const ProblemDetailsSchema = z
-    .object({
-        type: z.url().default('about:blank'),
-        title: z.string(),
-        status: z.number().int().min(100).max(599),
-        detail: z.string().optional(),
-        instance: z.string().optional(),
-        traceId: z.string().optional(),
-        code: z.string().optional(),
-        errors: z.array(ProblemFieldErrorSchema).optional(),
-    })
-    .strict();
+  .object({
+    type: z.url().default('about:blank'),
+    title: z.string(),
+    status: z.number().int().min(100).max(599),
+    detail: z.string().optional(),
+    instance: z.string().optional(),
+    traceId: z.string().optional(),
+    code: z.string().optional(),
+    errors: z.array(ProblemFieldErrorSchema).optional(),
+  })
+  .strict();
 
 export type ProblemDetails = z.infer<typeof ProblemDetailsSchema>;

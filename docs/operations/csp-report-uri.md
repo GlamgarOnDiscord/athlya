@@ -53,15 +53,15 @@ on peut héberger l'endpoint dans un Worker dédié :
 ```ts
 // packages/csp-collector/src/worker.ts
 export default {
-    async fetch(request: Request, env: { CSP_REPORTS: KVNamespace }) {
-        if (request.method !== 'POST') return new Response('', { status: 405 });
+  async fetch(request: Request, env: { CSP_REPORTS: KVNamespace }) {
+    if (request.method !== 'POST') return new Response('', { status: 405 });
 
-        const body = await request.json();
-        const key = `csp-${Date.now()}-${crypto.randomUUID()}`;
-        await env.CSP_REPORTS.put(key, JSON.stringify(body), { expirationTtl: 7 * 86400 });
+    const body = await request.json();
+    const key = `csp-${Date.now()}-${crypto.randomUUID()}`;
+    await env.CSP_REPORTS.put(key, JSON.stringify(body), { expirationTtl: 7 * 86400 });
 
-        return new Response('', { status: 204 });
-    },
+    return new Response('', { status: 204 });
+  },
 };
 ```
 
@@ -99,8 +99,8 @@ l'inclut dans la directive CSP quand elle est définie :
 ```ts
 const reportUri = env.NEXT_PUBLIC_CSP_REPORT_URI;
 if (reportUri) {
-    cspDirectives.push(`report-uri ${reportUri}`);
-    cspDirectives.push(`report-to csp-endpoint`);
+  cspDirectives.push(`report-uri ${reportUri}`);
+  cspDirectives.push(`report-to csp-endpoint`);
 }
 ```
 
@@ -114,7 +114,9 @@ dans une page test :
 
 ```html
 <!-- staging only, à retirer après test -->
-<script>console.log('csp-test')</script>
+<script>
+  console.log('csp-test');
+</script>
 ```
 
 Le browser DevTools → Console doit montrer "Refused to execute
@@ -124,6 +126,7 @@ minute.
 ### Step 4 — Configurer alerting Sentry
 
 Créer une alert rule dans Sentry :
+
 - Fires when : CSP violation rate > 10/min
 - Action : Slack #ops-athlya-alerts
 
@@ -134,14 +137,14 @@ injectent du CSS).
 
 ## Provisioning checklist
 
-| Item | Status | Owner |
-|---|---|---|
-| Sentry project provisionné (Option A) | ⏳ | DevOps |
-| Endpoint URL récupéré | ⏳ | DevOps |
-| `NEXT_PUBLIC_CSP_REPORT_URI` staging | ⏳ | DevOps |
-| `NEXT_PUBLIC_CSP_REPORT_URI` production | ⏳ | DevOps |
-| Test manuel violation CSP | ⏳ | DevOps + Eng |
-| Sentry alert rule créée | ⏳ | DevOps |
+| Item                                    | Status | Owner        |
+| --------------------------------------- | ------ | ------------ |
+| Sentry project provisionné (Option A)   | ⏳     | DevOps       |
+| Endpoint URL récupéré                   | ⏳     | DevOps       |
+| `NEXT_PUBLIC_CSP_REPORT_URI` staging    | ⏳     | DevOps       |
+| `NEXT_PUBLIC_CSP_REPORT_URI` production | ⏳     | DevOps       |
+| Test manuel violation CSP               | ⏳     | DevOps + Eng |
+| Sentry alert rule créée                 | ⏳     | DevOps       |
 
 ## Références
 

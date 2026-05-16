@@ -4,5 +4,5 @@
  */
 
 export function newIdempotencyKey(): string {
-    return crypto.randomUUID();
+  return crypto.randomUUID();
 }

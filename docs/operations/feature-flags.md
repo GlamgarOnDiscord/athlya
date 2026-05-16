@@ -45,8 +45,8 @@ Cloudflare ops.
 {
   "your-flag": {
     "rollout": 0,
-    "allowList": ["user-id-tom", "user-id-eng-team-1", "user-id-eng-team-2"]
-  }
+    "allowList": ["user-id-tom", "user-id-eng-team-1", "user-id-eng-team-2"],
+  },
 }
 ```
 
@@ -62,8 +62,8 @@ Cloudflare ops.
 {
   "your-flag": {
     "rollout": 1,
-    "allowList": ["user-id-tom", "user-id-eng-team-1", "user-id-eng-team-2"]
-  }
+    "allowList": ["user-id-tom", "user-id-eng-team-1", "user-id-eng-team-2"],
+  },
 }
 ```
 
@@ -85,8 +85,8 @@ Cloudflare ops.
 - 10% des utilisateurs
 - **Surveiller pendant 48-72h** :
   - Mêmes métriques que Phase 1
-  - + Sentry / Slack pour les anomalies utilisateur (support tickets
-    référencent souvent la feature implicitement)
+  - - Sentry / Slack pour les anomalies utilisateur (support tickets
+      référencent souvent la feature implicitement)
 - Critère Phase 3 : pas de régression UX + pas de spike DB/Redis
 
 ### Phase 3 — 50% (jour 5-7)
@@ -133,11 +133,11 @@ prédictibilité du delta de propagation est plus précieuse que les
 
 ## Catalogue de flags pilotes (Sprint 14)
 
-| Flag | Default | Phase actuelle | Usage |
-|---|---|---|---|
-| `coach-ai-enabled` | `false` | Phase 0 (internal) | Gate Epic 14 (AI coach service avec Mistral). Active la route `POST /v1/coach/ask`. |
+| Flag                         | Default | Phase actuelle     | Usage                                                                                                                    |
+| ---------------------------- | ------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `coach-ai-enabled`           | `false` | Phase 0 (internal) | Gate Epic 14 (AI coach service avec Mistral). Active la route `POST /v1/coach/ask`.                                      |
 | `waitlist-auto-promotion-v2` | `false` | Phase 0 (internal) | Algorithme alternatif pour `cancelReservation` qui promote la waitlist en FIFO + priority badge (vs FIFO simple actuel). |
-| `new-billing-flow` | `false` | Phase 0 (internal) | Stripe PaymentIntent au lieu de Subscription Checkout. À activer quand on supportera les paiements one-shot. |
+| `new-billing-flow`           | `false` | Phase 0 (internal) | Stripe PaymentIntent au lieu de Subscription Checkout. À activer quand on supportera les paiements one-shot.             |
 
 ## Provisioning
 
@@ -175,5 +175,5 @@ migre vers GrowthBook :
 ## Références
 
 - `packages/api/src/feature-flags.ts` — implémentation
-- Stripe Engineering Blog — *Feature flags at Stripe*
-- LaunchDarkly Cookbook — *Progressive delivery patterns*
+- Stripe Engineering Blog — _Feature flags at Stripe_
+- LaunchDarkly Cookbook — _Progressive delivery patterns_

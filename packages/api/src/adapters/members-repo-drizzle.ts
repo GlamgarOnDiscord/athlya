@@ -39,11 +39,7 @@ import { and, eq, isNull, lt, or, desc, sql } from 'drizzle-orm';
 import { withConnectionRetry } from './db-retry.js';
 
 import type { AthlyaDbAny } from '@athlya/db/client';
-import type {
-    MemberProfile,
-    MemberRepo,
-    MembersPage,
-} from '@athlya/members';
+import type { MemberProfile, MemberRepo, MembersPage } from '@athlya/members';
 import type { UpdateProfileRequest } from '@athlya/shared/schemas/api';
 
 /**
@@ -53,93 +49,83 @@ import type { UpdateProfileRequest } from '@athlya/shared/schemas/api';
  * over `db`.
  */
 export function createDrizzleMemberRepo(db: AthlyaDbAny): MemberRepo {
-    return {
-        async findProfile(userId) {
-            const rows = await withConnectionRetry(() =>
-                db
-                    .select()
-                    .from(users)
-                    .where(and(eq(users.id, userId), isNull(users.deletedAt)))
-                    .limit(1),
-            );
-            const row = rows[0];
-            return row === undefined ? null : toMemberProfile(row);
-        },
+  return {
+    async findProfile(userId) {
+      const rows = await withConnectionRetry(() =>
+        db
+          .select()
+          .from(users)
+          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+          .limit(1),
+      );
+      const row = rows[0];
+      return row === undefined ? null : toMemberProfile(row);
+    },
 
-        async updateProfile(userId, patch) {
-            const patchColumns = buildUpdatePatch(patch);
-            const [row] = await withConnectionRetry(() =>
-                db
-                    .update(users)
-                    .set(patchColumns)
-                    .where(and(eq(users.id, userId), isNull(users.deletedAt)))
-                    .returning(),
-            );
-            if (row === undefined) {
-                // The row existed at read time but went away before
-                // the update fired — treat as "not found" upstream.
-                // We reuse the same error class the service throws
-                // from `getProfile` for shape consistency.
-                throw new Error(
-                    `updateProfile: user ${userId} not found or soft-deleted`,
-                );
-            }
-            return toMemberProfile(row);
-        },
+    async updateProfile(userId, patch) {
+      const patchColumns = buildUpdatePatch(patch);
+      const [row] = await withConnectionRetry(() =>
+        db
+          .update(users)
+          .set(patchColumns)
+          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+          .returning(),
+      );
+      if (row === undefined) {
+        // The row existed at read time but went away before
+        // the update fired — treat as "not found" upstream.
+        // We reuse the same error class the service throws
+        // from `getProfile` for shape consistency.
+        throw new Error(`updateProfile: user ${userId} not found or soft-deleted`);
+      }
+      return toMemberProfile(row);
+    },
 
-        async listByStudio(studioId, opts) {
-            const cursor = decodeCursor(opts.cursor);
+    async listByStudio(studioId, opts) {
+      const cursor = decodeCursor(opts.cursor);
 
-            // Compose the WHERE clause: active member of the studio,
-            // optionally paginated past the last-seen (createdAt, id)
-            // tuple. `(createdAt, id) < (cursor.createdAt, cursor.id)`
-            // is expressed manually because Drizzle doesn't have a
-            // tuple comparator builder — the equivalent SQL is
-            //    created_at < $1 OR (created_at = $1 AND id < $2)
-            // which the planner matches against the compound index.
-            const conditions = [
-                eq(users.studioId, studioId),
-                isNull(users.deletedAt),
-            ];
-            if (cursor !== null) {
-                conditions.push(
-                    or(
-                        lt(users.createdAt, cursor.createdAt),
-                        and(
-                            eq(users.createdAt, cursor.createdAt),
-                            lt(users.id, cursor.id),
-                        ),
-                    ) as ReturnType<typeof lt>,
-                );
-            }
+      // Compose the WHERE clause: active member of the studio,
+      // optionally paginated past the last-seen (createdAt, id)
+      // tuple. `(createdAt, id) < (cursor.createdAt, cursor.id)`
+      // is expressed manually because Drizzle doesn't have a
+      // tuple comparator builder — the equivalent SQL is
+      //    created_at < $1 OR (created_at = $1 AND id < $2)
+      // which the planner matches against the compound index.
+      const conditions = [eq(users.studioId, studioId), isNull(users.deletedAt)];
+      if (cursor !== null) {
+        conditions.push(
+          or(
+            lt(users.createdAt, cursor.createdAt),
+            and(eq(users.createdAt, cursor.createdAt), lt(users.id, cursor.id)),
+          ) as ReturnType<typeof lt>,
+        );
+      }
 
-            // Always fetch `limit + 1` so we can detect the end-of-page
-            // without a COUNT. The extra row is dropped before the
-            // caller sees it; its `{ createdAt, id }` tuple becomes
-            // the next cursor.
-            const rows = await withConnectionRetry(() =>
-                db
-                    .select()
-                    .from(users)
-                    .where(and(...conditions))
-                    .orderBy(desc(users.createdAt), desc(users.id))
-                    .limit(opts.limit + 1),
-            );
+      // Always fetch `limit + 1` so we can detect the end-of-page
+      // without a COUNT. The extra row is dropped before the
+      // caller sees it; its `{ createdAt, id }` tuple becomes
+      // the next cursor.
+      const rows = await withConnectionRetry(() =>
+        db
+          .select()
+          .from(users)
+          .where(and(...conditions))
+          .orderBy(desc(users.createdAt), desc(users.id))
+          .limit(opts.limit + 1),
+      );
 
-            const hasMore = rows.length > opts.limit;
-            const items = rows
-                .slice(0, opts.limit)
-                .map((r) => toMemberProfile(r));
-            const nextCursor = hasMore
-                ? encodeCursor({
-                    createdAt: rows[opts.limit - 1]!.createdAt,
-                    id: rows[opts.limit - 1]!.id,
-                })
-                : null;
+      const hasMore = rows.length > opts.limit;
+      const items = rows.slice(0, opts.limit).map((r) => toMemberProfile(r));
+      const nextCursor = hasMore
+        ? encodeCursor({
+            createdAt: rows[opts.limit - 1]!.createdAt,
+            id: rows[opts.limit - 1]!.id,
+          })
+        : null;
 
-            return { items, nextCursor } satisfies MembersPage;
-        },
-    };
+      return { items, nextCursor } satisfies MembersPage;
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -153,16 +139,16 @@ export function createDrizzleMemberRepo(db: AthlyaDbAny): MemberRepo {
  * it) must never see them.
  */
 function toMemberProfile(row: typeof users.$inferSelect): MemberProfile {
-    return {
-        id: row.id,
-        studioId: row.studioId,
-        email: row.email,
-        displayName: row.displayName,
-        avatarUrl: row.avatarUrl,
-        role: row.role,
-        consents: row.consents,
-        createdAt: row.createdAt.toISOString(),
-    };
+  return {
+    id: row.id,
+    studioId: row.studioId,
+    email: row.email,
+    displayName: row.displayName,
+    avatarUrl: row.avatarUrl,
+    role: row.role,
+    consents: row.consents,
+    createdAt: row.createdAt.toISOString(),
+  };
 }
 
 /**
@@ -172,19 +158,17 @@ function toMemberProfile(row: typeof users.$inferSelect): MemberProfile {
  * added to `UpdateProfileRequestSchema` without being handled here,
  * the type error points at the exact line that needs updating.
  */
-function buildUpdatePatch(
-    patch: UpdateProfileRequest,
-): Partial<typeof users.$inferInsert> {
-    const out: Partial<typeof users.$inferInsert> = {};
-    if (patch.displayName !== undefined) {
-        out.displayName = patch.displayName;
-    }
-    if (patch.avatarUrl !== undefined) {
-        // Zod's schema allows `null` to clear the avatar; forward
-        // the null straight into the update so the column is reset.
-        out.avatarUrl = patch.avatarUrl;
-    }
-    return out;
+function buildUpdatePatch(patch: UpdateProfileRequest): Partial<typeof users.$inferInsert> {
+  const out: Partial<typeof users.$inferInsert> = {};
+  if (patch.displayName !== undefined) {
+    out.displayName = patch.displayName;
+  }
+  if (patch.avatarUrl !== undefined) {
+    // Zod's schema allows `null` to clear the avatar; forward
+    // the null straight into the update so the column is reset.
+    out.avatarUrl = patch.avatarUrl;
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -197,39 +181,34 @@ function buildUpdatePatch(
  * through a URL without percent-encoding.
  */
 interface Cursor {
-    readonly createdAt: Date;
-    readonly id: string;
+  readonly createdAt: Date;
+  readonly id: string;
 }
 
 function encodeCursor(c: Cursor): string {
-    const raw = `${c.createdAt.getTime()}:${c.id}`;
-    // `Buffer` is not available in the Workers runtime; use the
-    // globally-available `btoa` + a URL-safe alphabet.
-    return btoa(raw)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
+  const raw = `${c.createdAt.getTime()}:${c.id}`;
+  // `Buffer` is not available in the Workers runtime; use the
+  // globally-available `btoa` + a URL-safe alphabet.
+  return btoa(raw).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function decodeCursor(raw: string | undefined): Cursor | null {
-    if (raw === undefined || raw === '') return null;
-    try {
-        const padded = raw.replace(/-/g, '+').replace(/_/g, '/');
-        const decoded = atob(
-            padded + '==='.slice((padded.length + 3) % 4),
-        );
-        const idx = decoded.indexOf(':');
-        if (idx <= 0) return null;
-        const ms = Number(decoded.slice(0, idx));
-        const id = decoded.slice(idx + 1);
-        if (!Number.isFinite(ms) || id === '') return null;
-        return { createdAt: new Date(ms), id };
-    } catch {
-        // Silently fall back to "first page" on a malformed cursor.
-        // Attackers tampering with the query string get identical
-        // behaviour to users who simply pasted an expired link.
-        return null;
-    }
+  if (raw === undefined || raw === '') return null;
+  try {
+    const padded = raw.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = atob(padded + '==='.slice((padded.length + 3) % 4));
+    const idx = decoded.indexOf(':');
+    if (idx <= 0) return null;
+    const ms = Number(decoded.slice(0, idx));
+    const id = decoded.slice(idx + 1);
+    if (!Number.isFinite(ms) || id === '') return null;
+    return { createdAt: new Date(ms), id };
+  } catch {
+    // Silently fall back to "first page" on a malformed cursor.
+    // Attackers tampering with the query string get identical
+    // behaviour to users who simply pasted an expired link.
+    return null;
+  }
 }
 
 // `sql` is imported so Drizzle's ESM barrel keeps the import graph

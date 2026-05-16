@@ -35,44 +35,38 @@ import type { ConsentsRepo } from '@athlya/members';
  * isolation) so no long-lived state.
  */
 export function createDrizzleConsentsRepo(db: AthlyaDbAny): ConsentsRepo {
-    return {
-        async findConsents(userId) {
-            const rows = await withConnectionRetry(() =>
-                db
-                    .select({ consents: users.consents })
-                    .from(users)
-                    .where(
-                        and(eq(users.id, userId), isNull(users.deletedAt)),
-                    )
-                    .limit(1),
-            );
-            const row = rows[0];
-            return row === undefined ? null : (row.consents);
-        },
+  return {
+    async findConsents(userId) {
+      const rows = await withConnectionRetry(() =>
+        db
+          .select({ consents: users.consents })
+          .from(users)
+          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+          .limit(1),
+      );
+      const row = rows[0];
+      return row === undefined ? null : row.consents;
+    },
 
-        async updateConsents(userId, consents) {
-            const [row] = await withConnectionRetry(() =>
-                db
-                    .update(users)
-                    .set({ consents })
-                    .where(
-                        and(eq(users.id, userId), isNull(users.deletedAt)),
-                    )
-                    .returning(),
-            );
-            if (row === undefined) {
-                // Row disappeared between the service's check and our
-                // write — surface as a plain error so the gateway's
-                // fallback 500 branch handles it. The consents service
-                // does not have a `not_found` error code for writes
-                // (only reads), and an aborted soft-delete race is a
-                // genuinely exceptional condition, not a user-facing
-                // 4xx.
-                throw new Error(
-                    `updateConsents: user ${userId} not found or soft-deleted`,
-                );
-            }
-            return row.consents;
-        },
-    };
+    async updateConsents(userId, consents) {
+      const [row] = await withConnectionRetry(() =>
+        db
+          .update(users)
+          .set({ consents })
+          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+          .returning(),
+      );
+      if (row === undefined) {
+        // Row disappeared between the service's check and our
+        // write — surface as a plain error so the gateway's
+        // fallback 500 branch handles it. The consents service
+        // does not have a `not_found` error code for writes
+        // (only reads), and an aborted soft-delete race is a
+        // genuinely exceptional condition, not a user-facing
+        // 4xx.
+        throw new Error(`updateConsents: user ${userId} not found or soft-deleted`);
+      }
+      return row.consents;
+    },
+  };
 }

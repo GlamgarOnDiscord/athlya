@@ -16,31 +16,27 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-    test: {
-        // Covers both co-located unit tests (`src/**/__tests__`) and the
-        // property-based suite that lives outside `src/` to keep the
-        // build output tree clean.
-        include: [
-            'src/**/*.test.ts',
-            'tests/**/*.test.ts',
-            'tests/**/*.property.test.ts',
-        ],
+  test: {
+    // Covers both co-located unit tests (`src/**/__tests__`) and the
+    // property-based suite that lives outside `src/` to keep the
+    // build output tree clean.
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'tests/**/*.property.test.ts'],
 
-        exclude: ['**/node_modules/**', '**/dist/**'],
+    exclude: ['**/node_modules/**', '**/dist/**'],
 
-        // Explicit imports from `vitest`; no globals. Matches the style
-        // used across the other packages in the monorepo.
-        globals: false,
+    // Explicit imports from `vitest`; no globals. Matches the style
+    // used across the other packages in the monorepo.
+    globals: false,
 
-        // No DOM needed: the limiter and its fakes are pure Node.
-        environment: 'node',
+    // No DOM needed: the limiter and its fakes are pure Node.
+    environment: 'node',
 
-        // Threads keep fast-check's RNG seeding deterministic across
-        // runs; the worker pool does not interfere with seeded runs.
-        pool: 'threads',
+    // Threads keep fast-check's RNG seeding deterministic across
+    // runs; the worker pool does not interfere with seeded runs.
+    pool: 'threads',
 
-        // Property tests can need a few seconds when shrinking large
-        // counter-examples, so give them real headroom.
-        testTimeout: 30_000,
-    },
+    // Property tests can need a few seconds when shrinking large
+    // counter-examples, so give them real headroom.
+    testTimeout: 30_000,
+  },
 });

@@ -86,12 +86,12 @@ const TARGET_ID_MAX_LENGTH = 128;
  * {@link AuditAction} union below in the same commit.
  */
 export const AUDIT_ACTIONS = [
-    'user.registered',
-    'user.deleted',
-    'reservation.cancelled_by_admin',
-    'rls.violation',
-    'billing.stripe.signature_failed',
-    'user.consents.updated',
+  'user.registered',
+  'user.deleted',
+  'reservation.cancelled_by_admin',
+  'rls.violation',
+  'billing.stripe.signature_failed',
+  'user.consents.updated',
 ] as const;
 
 /**
@@ -106,9 +106,7 @@ export const AUDIT_ACTIONS = [
  *   from the string literals, so IDE completions still surface them
  *   while custom slugs remain assignable.
  */
-export type AuditAction =
-    | (typeof AUDIT_ACTIONS)[number]
-    | (string & {});
+export type AuditAction = (typeof AUDIT_ACTIONS)[number] | (string & {});
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -136,11 +134,11 @@ export type AuditAction =
  *                   it knows about.
  */
 export interface AuditEntry {
-    readonly actorId: string | null;
-    readonly action: AuditAction;
-    readonly targetType?: string;
-    readonly targetId?: string;
-    readonly metadata?: Record<string, unknown>;
+  readonly actorId: string | null;
+  readonly action: AuditAction;
+  readonly targetType?: string;
+  readonly targetId?: string;
+  readonly metadata?: Record<string, unknown>;
 }
 
 /**
@@ -154,16 +152,16 @@ export interface AuditEntry {
  * to `AthlyaTx` in a single adapter file.
  */
 export interface AuditLogStore {
-    /**
-     * Append `entry` to the audit log within the caller's transaction.
-     *
-     * MUST be a pure INSERT — UPDATE and DELETE are blocked by DB
-     * triggers, so a misbehaving adapter will fail loud.
-     * MUST NOT catch or transform validation errors; the writer has
-     * already validated the entry.
-     * MUST propagate I/O errors so the caller's transaction rolls back.
-     */
-    append(tx: unknown, entry: AuditEntry): Promise<void>;
+  /**
+   * Append `entry` to the audit log within the caller's transaction.
+   *
+   * MUST be a pure INSERT — UPDATE and DELETE are blocked by DB
+   * triggers, so a misbehaving adapter will fail loud.
+   * MUST NOT catch or transform validation errors; the writer has
+   * already validated the entry.
+   * MUST propagate I/O errors so the caller's transaction rolls back.
+   */
+  append(tx: unknown, entry: AuditEntry): Promise<void>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -189,32 +187,26 @@ export interface AuditLogStore {
  * `err.name === 'ZodError'`.
  */
 const AuditEntrySchema = z
-    .object({
-        actorId: z.string().nullable(),
-        action: z
-            .string()
-            .min(1, 'action must be a non-empty string')
-            .max(
-                ACTION_MAX_LENGTH,
-                `action must be ≤ ${String(ACTION_MAX_LENGTH)} characters`,
-            ),
-        targetType: z
-            .string()
-            .max(
-                TARGET_TYPE_MAX_LENGTH,
-                `targetType must be ≤ ${String(TARGET_TYPE_MAX_LENGTH)} characters`,
-            )
-            .optional(),
-        targetId: z
-            .string()
-            .max(
-                TARGET_ID_MAX_LENGTH,
-                `targetId must be ≤ ${String(TARGET_ID_MAX_LENGTH)} characters`,
-            )
-            .optional(),
-        metadata: z.record(z.string(), z.unknown()).default({}),
-    })
-    .strict();
+  .object({
+    actorId: z.string().nullable(),
+    action: z
+      .string()
+      .min(1, 'action must be a non-empty string')
+      .max(ACTION_MAX_LENGTH, `action must be ≤ ${String(ACTION_MAX_LENGTH)} characters`),
+    targetType: z
+      .string()
+      .max(
+        TARGET_TYPE_MAX_LENGTH,
+        `targetType must be ≤ ${String(TARGET_TYPE_MAX_LENGTH)} characters`,
+      )
+      .optional(),
+    targetId: z
+      .string()
+      .max(TARGET_ID_MAX_LENGTH, `targetId must be ≤ ${String(TARGET_ID_MAX_LENGTH)} characters`)
+      .optional(),
+    metadata: z.record(z.string(), z.unknown()).default({}),
+  })
+  .strict();
 
 /* ------------------------------------------------------------------ */
 /*  Writer                                                              */
@@ -242,14 +234,14 @@ const AuditEntrySchema = z
  * @throws whatever `store.append` rejects with, untouched.
  */
 export async function appendAudit(
-    tx: unknown,
-    entry: AuditEntry,
-    store: AuditLogStore,
+  tx: unknown,
+  entry: AuditEntry,
+  store: AuditLogStore,
 ): Promise<void> {
-    // `parse` throws on failure; the caller decides what to do with
-    // the error. We deliberately pass `entry` through the schema so
-    // optional fields are preserved (not widened to `undefined`) and
-    // the `metadata` default is applied.
-    const normalised = AuditEntrySchema.parse(entry) as AuditEntry;
-    await store.append(tx, normalised);
+  // `parse` throws on failure; the caller decides what to do with
+  // the error. We deliberately pass `entry` through the schema so
+  // optional fields are preserved (not widened to `undefined`) and
+  // the `metadata` default is applied.
+  const normalised = AuditEntrySchema.parse(entry) as AuditEntry;
+  await store.append(tx, normalised);
 }

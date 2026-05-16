@@ -1,14 +1,14 @@
 # Vitest — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^3.2.4 |
-| **Latest stable** | **4.1.0** (March 2026) |
-| **Gap** | Major version behind — plan upgrade |
+|                        | Value                                     |
+| ---------------------- | ----------------------------------------- |
+| **Used**               | ^3.2.4                                    |
+| **Latest stable**      | **4.1.0** (March 2026)                    |
+| **Gap**                | Major version behind — plan upgrade       |
 | **@fast-check/vitest** | ^0.3.0 → verify 4.x compat before upgrade |
 
 ---
@@ -17,14 +17,14 @@
 
 ### Breaking Changes 3.x → 4.x
 
-| Change | Impact |
-|---|---|
-| `pool: 'forks'` is now the default (was `threads`) | Isolates better, slightly slower cold start |
-| `browser.provider` API changed | Not applicable (project uses jsdom) |
-| `vi.mock()` hoisting is now stricter | Mocks must be defined before imports in the file |
-| `globals: false` required explicitly | Already correct in project |
-| Inline snapshots format changed | Re-generate with `vitest -u` |
-| `coverage.reporter` default changed to `['text', 'html']` | Adjust CI config if needed |
+| Change                                                    | Impact                                           |
+| --------------------------------------------------------- | ------------------------------------------------ |
+| `pool: 'forks'` is now the default (was `threads`)        | Isolates better, slightly slower cold start      |
+| `browser.provider` API changed                            | Not applicable (project uses jsdom)              |
+| `vi.mock()` hoisting is now stricter                      | Mocks must be defined before imports in the file |
+| `globals: false` required explicitly                      | Already correct in project                       |
+| Inline snapshots format changed                           | Re-generate with `vitest -u`                     |
+| `coverage.reporter` default changed to `['text', 'html']` | Adjust CI config if needed                       |
 
 ### New in Vitest 4.x
 
@@ -33,10 +33,10 @@
 - **`test.for()` (Table-driven tests)**: Cleaner parameterized tests
   ```ts
   test.for([
-      [1, 2, 3],
-      [3, 4, 7],
+    [1, 2, 3],
+    [3, 4, 7],
   ])('adds %s + %s = %s', ([a, b, expected]) => {
-      expect(a + b).toBe(expected);
+    expect(a + b).toBe(expected);
   });
   ```
 - **`--reporter=junit` improved**: CI-grade output with timestamps
@@ -61,12 +61,12 @@ pnpm vitest --update
 
 ```ts
 export default defineConfig({
-    esbuild: { jsx: 'automatic' },
-    test: {
-        environment: 'jsdom',
-        globals: false,
-        include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    },
+  esbuild: { jsx: 'automatic' },
+  test: {
+    environment: 'jsdom',
+    globals: false,
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+  },
 });
 ```
 
@@ -105,6 +105,7 @@ Real database tests for RLS policies and migration correctness. Best practice.
 ### Component Tests
 
 Using `@testing-library/react` + `jsdom`:
+
 - `LocaleSwitcher.test.tsx` — UI behavior tests
 - `cookies.test.ts` — auth cookie handling
 
@@ -120,10 +121,7 @@ A workspace-level file consolidates settings:
 // vitest.workspace.ts (root)
 import { defineWorkspace } from 'vitest/config';
 
-export default defineWorkspace([
-    'apps/*/vitest.config.ts',
-    'packages/*/vitest.config.ts',
-]);
+export default defineWorkspace(['apps/*/vitest.config.ts', 'packages/*/vitest.config.ts']);
 ```
 
 ### 2. Coverage Thresholds (CI)
@@ -150,11 +148,11 @@ pnpm add -D @cloudflare/vitest-pool-workers -w
 // packages/api/vitest.config.ts
 import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
 export default defineWorkersConfig({
-    test: {
-        poolOptions: {
-            workers: { wrangler: { configPath: './wrangler.toml' } },
-        },
+  test: {
+    poolOptions: {
+      workers: { wrangler: { configPath: './wrangler.toml' } },
     },
+  },
 });
 ```
 

@@ -20,115 +20,99 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildStubDeps, buildTestApp, env } from './route-test-helpers.js';
 
 beforeEach(() => {
-    vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    vi.spyOn(console, 'debug').mockImplementation(() => undefined);
+  vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.spyOn(console, 'debug').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
-    vi.restoreAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe('/v1/members â€” unauthenticated requests', () => {
-    it('GET /me â†’ 401 missing_authorization', async () => {
-        const deps = buildStubDeps();
-        const app = buildTestApp(deps);
+  it('GET /me â†’ 401 missing_authorization', async () => {
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
 
-        const res = await app.request(
-            '/v1/members/me',
-            { method: 'GET' },
-            env(),
-        );
+    const res = await app.request('/v1/members/me', { method: 'GET' }, env());
 
-        expect(res.status).toBe(401);
-        expect(res.headers.get('content-type')).toBe('application/problem+json');
-        const body = (await res.json() as any);
-        expect(body.title).toBe('missing_authorization');
-        expect(deps.members.getProfile).not.toHaveBeenCalled();
-    });
+    expect(res.status).toBe(401);
+    expect(res.headers.get('content-type')).toBe('application/problem+json');
+    const body = (await res.json()) as any;
+    expect(body.title).toBe('missing_authorization');
+    expect(deps.members.getProfile).not.toHaveBeenCalled();
+  });
 
-    it('PATCH /me â†’ 401 (auth runs before validator)', async () => {
-        const deps = buildStubDeps();
-        const app = buildTestApp(deps);
+  it('PATCH /me â†’ 401 (auth runs before validator)', async () => {
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
 
-        const res = await app.request(
-            '/v1/members/me',
-            {
-                method: 'PATCH',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ displayName: 'Ada' }),
-            },
-            env(),
-        );
+    const res = await app.request(
+      '/v1/members/me',
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ displayName: 'Ada' }),
+      },
+      env(),
+    );
 
-        expect(res.status).toBe(401);
-        expect(deps.members.updateProfile).not.toHaveBeenCalled();
-    });
+    expect(res.status).toBe(401);
+    expect(deps.members.updateProfile).not.toHaveBeenCalled();
+  });
 
-    it('POST /me/export â†’ 401 (jwtAuth fronts the RGPD enqueue)', async () => {
-        const deps = buildStubDeps();
-        const app = buildTestApp(deps);
+  it('POST /me/export â†’ 401 (jwtAuth fronts the RGPD enqueue)', async () => {
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
 
-        const res = await app.request(
-            '/v1/members/me/export',
-            { method: 'POST' },
-            env(),
-        );
+    const res = await app.request('/v1/members/me/export', { method: 'POST' }, env());
 
-        expect(res.status).toBe(401);
-        expect(deps.members.enqueueExport).not.toHaveBeenCalled();
-    });
+    expect(res.status).toBe(401);
+    expect(deps.members.enqueueExport).not.toHaveBeenCalled();
+  });
 
-    it('GET / (admin listing) â†’ 401 without Authorization', async () => {
-        const deps = buildStubDeps();
-        const app = buildTestApp(deps);
+  it('GET / (admin listing) â†’ 401 without Authorization', async () => {
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
 
-        const res = await app.request(
-            '/v1/members/',
-            { method: 'GET' },
-            env(),
-        );
+    const res = await app.request('/v1/members/', { method: 'GET' }, env());
 
-        expect(res.status).toBe(401);
-        expect(deps.members.listMembersByStudio).not.toHaveBeenCalled();
-    });
+    expect(res.status).toBe(401);
+    expect(deps.members.listMembersByStudio).not.toHaveBeenCalled();
+  });
 
-    it('PATCH /me/consents â†’ 401 without Authorization', async () => {
-        const deps = buildStubDeps();
-        const app = buildTestApp(deps);
+  it('PATCH /me/consents â†’ 401 without Authorization', async () => {
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
 
-        const res = await app.request(
-            '/v1/members/me/consents',
-            {
-                method: 'PATCH',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({
-                    marketing: true,
-                    analytics: false,
-                    thirdParty: false,
-                }),
-            },
-            env(),
-        );
+    const res = await app.request(
+      '/v1/members/me/consents',
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          marketing: true,
+          analytics: false,
+          thirdParty: false,
+        }),
+      },
+      env(),
+    );
 
-        expect(res.status).toBe(401);
-        expect(deps.members.updateConsents).not.toHaveBeenCalled();
-    });
+    expect(res.status).toBe(401);
+    expect(deps.members.updateConsents).not.toHaveBeenCalled();
+  });
 
-    it('Problem Details envelope on every 401 carries a traceId matching x-trace-id', async () => {
-        const deps = buildStubDeps();
-        const app = buildTestApp(deps);
+  it('Problem Details envelope on every 401 carries a traceId matching x-trace-id', async () => {
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
 
-        const res = await app.request(
-            '/v1/members/me',
-            { method: 'GET' },
-            env(),
-        );
+    const res = await app.request('/v1/members/me', { method: 'GET' }, env());
 
-        const body = (await res.json() as any);
-        const xTraceId = res.headers.get('x-trace-id');
-        expect(xTraceId).not.toBeNull();
-        expect(body.traceId).toBe(xTraceId);
-    });
+    const body = (await res.json()) as any;
+    const xTraceId = res.headers.get('x-trace-id');
+    expect(xTraceId).not.toBeNull();
+    expect(body.traceId).toBe(xTraceId);
+  });
 });

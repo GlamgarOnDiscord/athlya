@@ -80,7 +80,7 @@ export const CANCELLATION_WINDOW_MS = 2 * 60 * 60 * 1000;
  * `ClassRow` structurally satisfies this shape.
  */
 export interface ClassForCancel {
-    readonly startsAt: Date;
+  readonly startsAt: Date;
 }
 
 /* ------------------------------------------------------------------ */
@@ -98,9 +98,9 @@ export interface ClassForCancel {
  * envelope against the schema before handing it to the queue.
  */
 export interface CancelLifecyclePayload {
-    readonly reservationId: string;
-    readonly classId: string;
-    readonly userId: string;
+  readonly reservationId: string;
+  readonly classId: string;
+  readonly userId: string;
 }
 
 /**
@@ -114,10 +114,10 @@ export interface CancelLifecyclePayload {
  * through its own helper and does not flow through this port.
  */
 export interface CancelOutboxEvent {
-    readonly eventId: string;
-    readonly eventType: 'reservation.cancelled' | 'reservation.promoted';
-    readonly payload: CancelLifecyclePayload;
-    readonly occurredAt: Date;
+  readonly eventId: string;
+  readonly eventType: 'reservation.cancelled' | 'reservation.promoted';
+  readonly payload: CancelLifecyclePayload;
+  readonly occurredAt: Date;
 }
 
 /* ------------------------------------------------------------------ */
@@ -175,32 +175,26 @@ export interface CancelOutboxEvent {
  *     the surrounding transaction rolls back (Req 16.3).
  */
 export interface CancelRepo {
-    withTransaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T>;
+  withTransaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T>;
 
-    findReservationForUpdate(
-        tx: unknown,
-        reservationId: string,
-        userId: string,
-    ): Promise<ReservationRow | null>;
+  findReservationForUpdate(
+    tx: unknown,
+    reservationId: string,
+    userId: string,
+  ): Promise<ReservationRow | null>;
 
-    findClassForUpdate(
-        tx: unknown,
-        classId: string,
-    ): Promise<ClassForCancel | null>;
+  findClassForUpdate(tx: unknown, classId: string): Promise<ClassForCancel | null>;
 
-    updateReservationStatus(
-        tx: unknown,
-        reservationId: string,
-        status: ReservationStatus,
-        stampedAt: Date,
-    ): Promise<ReservationRow>;
+  updateReservationStatus(
+    tx: unknown,
+    reservationId: string,
+    status: ReservationStatus,
+    stampedAt: Date,
+  ): Promise<ReservationRow>;
 
-    findOldestWaitlistForClass(
-        tx: unknown,
-        classId: string,
-    ): Promise<ReservationRow | null>;
+  findOldestWaitlistForClass(tx: unknown, classId: string): Promise<ReservationRow | null>;
 
-    insertOutbox(tx: unknown, event: CancelOutboxEvent): Promise<void>;
+  insertOutbox(tx: unknown, event: CancelOutboxEvent): Promise<void>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -232,12 +226,12 @@ export interface CancelRepo {
  * ```
  */
 export interface CancelCounter {
-    /**
-     * Atomically increment `class:{classId}:remaining` by 1. The
-     * service does not read the returned value — a successful
-     * resolution is enough.
-     */
-    incrRemaining(classId: string): Promise<void>;
+  /**
+   * Atomically increment `class:{classId}:remaining` by 1. The
+   * service does not read the returned value — a successful
+   * resolution is enough.
+   */
+  incrRemaining(classId: string): Promise<void>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -256,18 +250,18 @@ export type NewEventId = () => string;
  * style for ergonomics at the call site.
  */
 export interface CancelReservationInput {
-    readonly reservationId: string;
-    readonly userId: string;
-    readonly repo: CancelRepo;
-    readonly counter: CancelCounter;
-    /**
-     * Injectable clock. Unix-ms to match `Date.now()` and stay
-     * aligned with the rest of the `@athlya/reservations` services
-     * (see `./checkin.ts`). Defaults to `Date.now`. Tests pin it.
-     */
-    readonly clock?: () => number;
-    /** Defaults to `crypto.randomUUID`. Tests pin it. */
-    readonly newEventId?: NewEventId;
+  readonly reservationId: string;
+  readonly userId: string;
+  readonly repo: CancelRepo;
+  readonly counter: CancelCounter;
+  /**
+   * Injectable clock. Unix-ms to match `Date.now()` and stay
+   * aligned with the rest of the `@athlya/reservations` services
+   * (see `./checkin.ts`). Defaults to `Date.now`. Tests pin it.
+   */
+  readonly clock?: () => number;
+  /** Defaults to `crypto.randomUUID`. Tests pin it. */
+  readonly newEventId?: NewEventId;
 }
 
 /**
@@ -286,9 +280,9 @@ export interface CancelReservationInput {
  *          (Requirement 9.4).
  */
 export interface CancelReservationOk {
-    readonly code: 'ok';
-    readonly cancelled: ReservationRow;
-    readonly promoted: ReservationRow | null;
+  readonly code: 'ok';
+  readonly cancelled: ReservationRow;
+  readonly promoted: ReservationRow | null;
 }
 
 /**
@@ -304,17 +298,15 @@ export interface CancelReservationOk {
  *   - `cancellation_window_closed`   → 422 (now > startsAt − 2h).
  */
 export type CancelReservationFailure =
-    | { readonly code: 'not_found' }
-    | { readonly code: 'invalid_transition' }
-    | { readonly code: 'cancellation_window_closed' };
+  | { readonly code: 'not_found' }
+  | { readonly code: 'invalid_transition' }
+  | { readonly code: 'cancellation_window_closed' };
 
 /**
  * Discriminated union returned by {@link cancelReservation}. Use the
  * `code` property to narrow.
  */
-export type CancelReservationResult =
-    | CancelReservationOk
-    | CancelReservationFailure;
+export type CancelReservationResult = CancelReservationOk | CancelReservationFailure;
 
 /* ------------------------------------------------------------------ */
 /*  Internal transaction outcome                                       */
@@ -327,14 +319,14 @@ export type CancelReservationResult =
  * internal — the public result type strips these fields out.
  */
 type TxOutcome =
-    | {
-        readonly code: 'ok';
-        readonly cancelled: ReservationRow;
-        readonly promoted: ReservationRow | null;
-        readonly wasConfirmed: boolean;
-        readonly classId: string;
+  | {
+      readonly code: 'ok';
+      readonly cancelled: ReservationRow;
+      readonly promoted: ReservationRow | null;
+      readonly wasConfirmed: boolean;
+      readonly classId: string;
     }
-    | CancelReservationFailure;
+  | CancelReservationFailure;
 
 /* ------------------------------------------------------------------ */
 /*  Default event-id factory                                           */
@@ -349,21 +341,21 @@ type TxOutcome =
  * clause at the database level.
  */
 function defaultNewEventId(): string {
-    const maybeCrypto = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-    if (maybeCrypto?.randomUUID !== undefined) {
-        return maybeCrypto.randomUUID();
-    }
-    // RFC 4122 v4 fallback — good enough under the outbox's idempotent
-    // insert; never used on Node ≥ 19 or on Cloudflare Workers.
-    const bytes = new Array<number>(16);
-    for (let i = 0; i < 16; i++) {
-        bytes[i] = Math.floor(Math.random() * 256);
-    }
-    // Bytes per RFC 4122 §4.4.
-    bytes[6] = ((bytes[6] as number) & 0x0f) | 0x40; // version 4
-    bytes[8] = ((bytes[8] as number) & 0x3f) | 0x80; // variant 10
-    const hex = bytes.map((b) => (b).toString(16).padStart(2, '0')).join('');
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+  const maybeCrypto = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (maybeCrypto?.randomUUID !== undefined) {
+    return maybeCrypto.randomUUID();
+  }
+  // RFC 4122 v4 fallback — good enough under the outbox's idempotent
+  // insert; never used on Node ≥ 19 or on Cloudflare Workers.
+  const bytes = new Array<number>(16);
+  for (let i = 0; i < 16; i++) {
+    bytes[i] = Math.floor(Math.random() * 256);
+  }
+  // Bytes per RFC 4122 §4.4.
+  bytes[6] = ((bytes[6] as number) & 0x0f) | 0x40; // version 4
+  bytes[8] = ((bytes[8] as number) & 0x3f) | 0x80; // variant 10
+  const hex = bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -414,142 +406,122 @@ function defaultNewEventId(): string {
  *      confirmed.
  */
 export async function cancelReservation(
-    input: CancelReservationInput,
+  input: CancelReservationInput,
 ): Promise<CancelReservationResult> {
-    const { reservationId, userId, repo, counter } = input;
-    const nowMs = (input.clock ?? Date.now)();
-    const now = new Date(nowMs);
-    const newEventId = input.newEventId ?? defaultNewEventId;
+  const { reservationId, userId, repo, counter } = input;
+  const nowMs = (input.clock ?? Date.now)();
+  const now = new Date(nowMs);
+  const newEventId = input.newEventId ?? defaultNewEventId;
 
-    const outcome: TxOutcome = await repo.withTransaction(async (tx) => {
-        // Step 2 — locate and lock the reservation. `null` for either
-        // "missing" or "wrong owner" is intentional: collapsing both
-        // into `not_found` denies an attacker a cross-tenant probe.
-        const reservation = await repo.findReservationForUpdate(
-            tx,
-            reservationId,
-            userId,
-        );
-        if (reservation === null) {
-            return { code: 'not_found' };
-        }
+  const outcome: TxOutcome = await repo.withTransaction(async (tx) => {
+    // Step 2 — locate and lock the reservation. `null` for either
+    // "missing" or "wrong owner" is intentional: collapsing both
+    // into `not_found` denies an attacker a cross-tenant probe.
+    const reservation = await repo.findReservationForUpdate(tx, reservationId, userId);
+    if (reservation === null) {
+      return { code: 'not_found' };
+    }
 
-        // Step 3 — locate and lock the class to read `startsAt`. A
-        // missing class row with a dangling reservation is a
-        // degenerate state (FK cascade or soft-delete race); treat
-        // it the same as "no reservation to cancel".
-        const classRow = await repo.findClassForUpdate(tx, reservation.classId);
-        if (classRow === null) {
-            return { code: 'not_found' };
-        }
+    // Step 3 — locate and lock the class to read `startsAt`. A
+    // missing class row with a dangling reservation is a
+    // degenerate state (FK cascade or soft-delete race); treat
+    // it the same as "no reservation to cancel".
+    const classRow = await repo.findClassForUpdate(tx, reservation.classId);
+    if (classRow === null) {
+      return { code: 'not_found' };
+    }
 
-        // Step 4 — 2-hour cancellation window. Strict `>`: cancelling
-        // at exactly `startsAt - 2h` is legal per Requirement 9.1
-        // ("at least 2 hours after now()" — the boundary is closed
-        // on the user's side).
-        const cutoffMs = classRow.startsAt.getTime() - CANCELLATION_WINDOW_MS;
-        if (nowMs > cutoffMs) {
-            return { code: 'cancellation_window_closed' };
-        }
+    // Step 4 — 2-hour cancellation window. Strict `>`: cancelling
+    // at exactly `startsAt - 2h` is legal per Requirement 9.1
+    // ("at least 2 hours after now()" — the boundary is closed
+    // on the user's side).
+    const cutoffMs = classRow.startsAt.getTime() - CANCELLATION_WINDOW_MS;
+    if (nowMs > cutoffMs) {
+      return { code: 'cancellation_window_closed' };
+    }
 
-        // Step 5 — state-machine guard. The explicit membership test
-        // is the authoritative gate (`cancelled → cancelled` would
-        // pass `canTransition` on same-state no-op, which is *not*
-        // what we want here); the `canTransition` call is kept as
-        // defense-in-depth so any future addition to the legal
-        // transition graph cannot accidentally unlock a new path
-        // into cancellation from this service.
-        if (
-            reservation.status !== 'confirmed' &&
-            reservation.status !== 'waitlist'
-        ) {
-            return { code: 'invalid_transition' };
-        }
-        if (!canTransition(reservation.status, 'cancelled')) {
-            return { code: 'invalid_transition' };
-        }
+    // Step 5 — state-machine guard. The explicit membership test
+    // is the authoritative gate (`cancelled → cancelled` would
+    // pass `canTransition` on same-state no-op, which is *not*
+    // what we want here); the `canTransition` call is kept as
+    // defense-in-depth so any future addition to the legal
+    // transition graph cannot accidentally unlock a new path
+    // into cancellation from this service.
+    if (reservation.status !== 'confirmed' && reservation.status !== 'waitlist') {
+      return { code: 'invalid_transition' };
+    }
+    if (!canTransition(reservation.status, 'cancelled')) {
+      return { code: 'invalid_transition' };
+    }
 
-        const wasConfirmed = reservation.status === 'confirmed';
+    const wasConfirmed = reservation.status === 'confirmed';
 
-        // Step 6 — stamp the cancellation.
-        const cancelled = await repo.updateReservationStatus(
-            tx,
-            reservation.id,
-            'cancelled',
-            now,
-        );
+    // Step 6 — stamp the cancellation.
+    const cancelled = await repo.updateReservationStatus(tx, reservation.id, 'cancelled', now);
 
-        // Step 7 — waitlist promotion. Runs only when the cancelled
-        // reservation was the one actually occupying a seat; a
-        // waitlist-originated cancellation never triggers a promotion
-        // (Req 9.3 speaks of "a confirmed reservation [that] is
-        // successfully cancelled").
-        let promoted: ReservationRow | null = null;
-        if (wasConfirmed) {
-            const nextWaiter = await repo.findOldestWaitlistForClass(
-                tx,
-                reservation.classId,
-            );
-            if (nextWaiter !== null) {
-                promoted = await repo.updateReservationStatus(
-                    tx,
-                    nextWaiter.id,
-                    'confirmed',
-                    now,
-                );
-                await repo.insertOutbox(tx, {
-                    eventId: newEventId(),
-                    eventType: 'reservation.promoted',
-                    payload: {
-                        reservationId: promoted.id,
-                        classId: promoted.classId,
-                        userId: promoted.userId,
-                    },
-                    occurredAt: now,
-                });
-            }
-        }
-
-        // Step 9 — exactly one `reservation.cancelled` outbox row per
-        // successful cancellation (Req 9.5). Emitted from within the
-        // transaction so the event + state change are durable
-        // together (Req 16.3).
+    // Step 7 — waitlist promotion. Runs only when the cancelled
+    // reservation was the one actually occupying a seat; a
+    // waitlist-originated cancellation never triggers a promotion
+    // (Req 9.3 speaks of "a confirmed reservation [that] is
+    // successfully cancelled").
+    let promoted: ReservationRow | null = null;
+    if (wasConfirmed) {
+      const nextWaiter = await repo.findOldestWaitlistForClass(tx, reservation.classId);
+      if (nextWaiter !== null) {
+        promoted = await repo.updateReservationStatus(tx, nextWaiter.id, 'confirmed', now);
         await repo.insertOutbox(tx, {
-            eventId: newEventId(),
-            eventType: 'reservation.cancelled',
-            payload: {
-                reservationId: cancelled.id,
-                classId: cancelled.classId,
-                userId: cancelled.userId,
-            },
-            occurredAt: now,
+          eventId: newEventId(),
+          eventType: 'reservation.promoted',
+          payload: {
+            reservationId: promoted.id,
+            classId: promoted.classId,
+            userId: promoted.userId,
+          },
+          occurredAt: now,
         });
+      }
+    }
 
-        return {
-            code: 'ok',
-            cancelled,
-            promoted,
-            wasConfirmed,
-            classId: reservation.classId,
-        };
+    // Step 9 — exactly one `reservation.cancelled` outbox row per
+    // successful cancellation (Req 9.5). Emitted from within the
+    // transaction so the event + state change are durable
+    // together (Req 16.3).
+    await repo.insertOutbox(tx, {
+      eventId: newEventId(),
+      eventType: 'reservation.cancelled',
+      payload: {
+        reservationId: cancelled.id,
+        classId: cancelled.classId,
+        userId: cancelled.userId,
+      },
+      occurredAt: now,
     });
 
-    // Non-ok branches propagate straight through.
-    if (outcome.code !== 'ok') {
-        return outcome;
-    }
-
-    // Step 10 — post-commit counter bump. Only bumps on the
-    // "confirmed without waitlist" branch; a promotion immediately
-    // re-consumed the seat (counter unchanged), and a waitlist-origin
-    // cancellation never occupied a seat (counter unchanged).
-    if (outcome.wasConfirmed && outcome.promoted === null) {
-        await counter.incrRemaining(outcome.classId);
-    }
-
     return {
-        code: 'ok',
-        cancelled: outcome.cancelled,
-        promoted: outcome.promoted,
+      code: 'ok',
+      cancelled,
+      promoted,
+      wasConfirmed,
+      classId: reservation.classId,
     };
+  });
+
+  // Non-ok branches propagate straight through.
+  if (outcome.code !== 'ok') {
+    return outcome;
+  }
+
+  // Step 10 — post-commit counter bump. Only bumps on the
+  // "confirmed without waitlist" branch; a promotion immediately
+  // re-consumed the seat (counter unchanged), and a waitlist-origin
+  // cancellation never occupied a seat (counter unchanged).
+  if (outcome.wasConfirmed && outcome.promoted === null) {
+    await counter.incrRemaining(outcome.classId);
+  }
+
+  return {
+    code: 'ok',
+    cancelled: outcome.cancelled,
+    promoted: outcome.promoted,
+  };
 }

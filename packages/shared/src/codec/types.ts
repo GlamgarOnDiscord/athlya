@@ -32,84 +32,84 @@
  */
 
 export type ConsentsWire = Readonly<{
-    marketing: boolean;
-    analytics: boolean;
-    thirdParty: boolean;
-    version: string;
-    updatedAt: string;
+  marketing: boolean;
+  analytics: boolean;
+  thirdParty: boolean;
+  version: string;
+  updatedAt: string;
 }>;
 
 export type StudioWire = Readonly<{
-    id: string;
-    slug: string;
-    name: string;
-    brandColor: string;
-    createdAt: string;
-    deletedAt: string | null;
+  id: string;
+  slug: string;
+  name: string;
+  brandColor: string;
+  createdAt: string;
+  deletedAt: string | null;
 }>;
 
 export type UserWire = Readonly<{
-    id: string;
-    studioId: string;
-    email: string;
-    displayName: string;
-    avatarUrl: string | null;
-    role: 'member' | 'coach' | 'admin';
-    consents: ConsentsWire;
-    createdAt: string;
-    deletedAt: string | null;
+  id: string;
+  studioId: string;
+  email: string;
+  displayName: string;
+  avatarUrl: string | null;
+  role: 'member' | 'coach' | 'admin';
+  consents: ConsentsWire;
+  createdAt: string;
+  deletedAt: string | null;
 }>;
 
 export type ClassWire = Readonly<{
-    id: string;
-    studioId: string;
-    coachId: string | null;
-    title: string;
-    startsAt: string;
-    durationMin: number;
-    capacity: number;
-    version: number;
-    createdAt: string;
+  id: string;
+  studioId: string;
+  coachId: string | null;
+  title: string;
+  startsAt: string;
+  durationMin: number;
+  capacity: number;
+  version: number;
+  createdAt: string;
 }>;
 
 export type ReservationWire = Readonly<{
-    id: string;
-    classId: string;
-    userId: string;
-    status: 'confirmed' | 'waitlist' | 'cancelled' | 'no_show';
-    createdAt: string;
-    cancelledAt: string | null;
-    checkedInAt: string | null;
+  id: string;
+  classId: string;
+  userId: string;
+  status: 'confirmed' | 'waitlist' | 'cancelled' | 'no_show';
+  createdAt: string;
+  cancelledAt: string | null;
+  checkedInAt: string | null;
 }>;
 
 export type SetWire = Readonly<{
-    reps: number;
-    weightKg?: number | undefined;
-    durationSec?: number | undefined;
+  reps: number;
+  weightKg?: number | undefined;
+  durationSec?: number | undefined;
 }>;
 
 export type ExerciseWire = Readonly<{
-    name: string;
-    sets: ReadonlyArray<SetWire>;
+  name: string;
+  sets: ReadonlyArray<SetWire>;
 }>;
 
 export type WorkoutSessionWire = Readonly<{
-    id: string;
-    userId: string;
-    studioId: string | null;
-    startedAt: string;
-    durationMin: number | null;
-    exercises: ReadonlyArray<ExerciseWire>;
-    notes: string | null;
-    createdAt: string;
+  id: string;
+  userId: string;
+  studioId: string | null;
+  startedAt: string;
+  durationMin: number | null;
+  exercises: ReadonlyArray<ExerciseWire>;
+  notes: string | null;
+  createdAt: string;
 }>;
 
 export type AuditLogWire = Readonly<{
-    id: string;
-    actorId: string | null;
-    action: string;
-    targetType: string | null;
-    targetId: string | null;
-    metadata: Readonly<Record<string, unknown>>;
-    createdAt: string;
+  id: string;
+  actorId: string | null;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  metadata: Readonly<Record<string, unknown>>;
+  createdAt: string;
 }>;

@@ -2,15 +2,16 @@
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^3.8.3 |
+|                    | Value                               |
+| ------------------ | ----------------------------------- |
+| **Used**           | ^3.8.3                              |
 | **Config package** | @athlya/prettier-config (workspace) |
-| **Integration** | eslint-config-prettier ^10.1.8 |
+| **Integration**    | eslint-config-prettier ^10.1.8      |
 
 ## Configuration
 
 Root `package.json`:
+
 ```json
 "prettier": "@athlya/prettier-config"
 ```

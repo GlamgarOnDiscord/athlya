@@ -234,7 +234,6 @@ done
 - Slice 12.10 (B7.2) — breadcrumbs
 - Slice 12.11 (B7.4) — queries
 
-
 ## Burn rate alerts (Sprint 14 / Slice 14.6 — CN.1.2)
 
 Pattern Google SRE Workbook : alerter sur le rythme de
@@ -251,6 +250,7 @@ Query dans `docs/operations/axiom-queries.md#s1-burn-rate-booking-p99`.
 **Message** : `🚨 Booking p99 burning {{burn_rate}}x faster than budget allows. {{bad}} slow requests of {{total}} in 1h.`
 
 **Action** : check Axiom dashboard, identify if regression is :
+
 - Code-related (recent deploy) → rollback via `wrangler rollback`
 - Dependency-related (Neon / Upstash slow) → check Cloudflare
   status + Neon status

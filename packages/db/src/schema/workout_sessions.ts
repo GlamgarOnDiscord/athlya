@@ -30,36 +30,36 @@ import { users } from './users.js';
 import type { Exercise } from '@athlya/shared/schemas/domain';
 
 export const workoutSessions = pgTable(
-    'workout_sessions',
-    {
-        id: uuidPrimaryKey(),
-        userId: uuid('user_id')
-            .notNull()
-            .references(() => users.id, { onDelete: 'cascade' }),
-        /** Nullable: home / outdoor sessions have no owning studio. */
-        studioId: uuid('studio_id').references(() => studios.id, { onDelete: 'set null' }),
-        startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }).notNull(),
-        durationMin: integer('duration_min'),
-        /**
-         * Typed JSON column. The shape matches `ExerciseSchema[]` from
-         * `@athlya/shared`; a strict Zod parse at the API boundary
-         * guarantees no invalid payload reaches this column.
-         */
-        exercises: jsonb('exercises').$type<Exercise[]>().notNull(),
-        notes: text('notes'),
-        createdAt: createdAt(),
-    },
-    (table) => [
-        /**
-         * Requirement 12.4: history endpoint returns sessions ordered by
-         * `started_at DESC`. The index stores the descending order
-         * natively so the planner can skip an in-memory sort.
-         */
-        index('workout_sessions_user_started_at_desc_idx').on(
-            table.userId,
-            sql`${table.startedAt} DESC`,
-        ),
-    ],
+  'workout_sessions',
+  {
+    id: uuidPrimaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Nullable: home / outdoor sessions have no owning studio. */
+    studioId: uuid('studio_id').references(() => studios.id, { onDelete: 'set null' }),
+    startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }).notNull(),
+    durationMin: integer('duration_min'),
+    /**
+     * Typed JSON column. The shape matches `ExerciseSchema[]` from
+     * `@athlya/shared`; a strict Zod parse at the API boundary
+     * guarantees no invalid payload reaches this column.
+     */
+    exercises: jsonb('exercises').$type<Exercise[]>().notNull(),
+    notes: text('notes'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    /**
+     * Requirement 12.4: history endpoint returns sessions ordered by
+     * `started_at DESC`. The index stores the descending order
+     * natively so the planner can skip an in-memory sort.
+     */
+    index('workout_sessions_user_started_at_desc_idx').on(
+      table.userId,
+      sql`${table.startedAt} DESC`,
+    ),
+  ],
 );
 
 export type WorkoutSessionRow = typeof workoutSessions.$inferSelect;

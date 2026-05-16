@@ -28,37 +28,35 @@ import { useEffect, type ReactElement, type ReactNode } from 'react';
 import { useAuth } from '../lib/auth/AuthContext';
 
 export interface RequireAdminProps {
-    readonly children: ReactNode;
+  readonly children: ReactNode;
 }
 
-export function RequireAdmin({
-    children,
-}: RequireAdminProps): ReactElement | null {
-    const { push } = useRouter();
-    const { isAuthenticated, isAdmin, user, bootResolved } = useAuth();
+export function RequireAdmin({ children }: RequireAdminProps): ReactElement | null {
+  const { push } = useRouter();
+  const { isAuthenticated, isAdmin, user, bootResolved } = useAuth();
 
-    useEffect(() => {
-        // Wait for the boot silent-refresh to resolve before
-        // deciding to redirect — otherwise a hard refresh of
-        // /dashboard always bounces to /login during the ~200-500 ms
-        // the refresh fetch takes, even when the cookie is valid.
-        if (!bootResolved) return;
-        if (!isAuthenticated) {
-            push('/login');
-            return;
-        }
-        // `user` is null for a brief tick on the very first render
-        // after `setAccessToken(...)` lands but before `setUser(...)`
-        // — guard against premature redirect to `/forbidden` during
-        // that tick.
-        if (user !== null && !isAdmin) {
-            push('/forbidden');
-        }
-    }, [bootResolved, isAuthenticated, isAdmin, user, push]);
+  useEffect(() => {
+    // Wait for the boot silent-refresh to resolve before
+    // deciding to redirect — otherwise a hard refresh of
+    // /dashboard always bounces to /login during the ~200-500 ms
+    // the refresh fetch takes, even when the cookie is valid.
+    if (!bootResolved) return;
+    if (!isAuthenticated) {
+      push('/login');
+      return;
+    }
+    // `user` is null for a brief tick on the very first render
+    // after `setAccessToken(...)` lands but before `setUser(...)`
+    // — guard against premature redirect to `/forbidden` during
+    // that tick.
+    if (user !== null && !isAdmin) {
+      push('/forbidden');
+    }
+  }, [bootResolved, isAuthenticated, isAdmin, user, push]);
 
-    if (!bootResolved) return null;
-    if (!isAuthenticated) return null;
-    if (user !== null && !isAdmin) return null;
+  if (!bootResolved) return null;
+  if (!isAuthenticated) return null;
+  if (user !== null && !isAdmin) return null;
 
-    return <>{children}</>;
+  return <>{children}</>;
 }

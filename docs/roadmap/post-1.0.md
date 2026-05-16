@@ -122,4 +122,4 @@ Sans déclencheur explicite, ces items restent ici. Le backend v1.0.0 est suffis
 
 ---
 
-*Roadmap post-1.0 — sortie initiale en parallèle de v1.0.0. Re-lire à chaque revue trimestrielle pour décider des promotions vers le backlog actif.*
+_Roadmap post-1.0 — sortie initiale en parallèle de v1.0.0. Re-lire à chaque revue trimestrielle pour décider des promotions vers le backlog actif._

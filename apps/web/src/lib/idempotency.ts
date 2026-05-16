@@ -19,5 +19,5 @@
  * header. Returns a 36-character string matching `8-4-4-4-12`.
  */
 export function newIdempotencyKey(): string {
-    return crypto.randomUUID();
+  return crypto.randomUUID();
 }

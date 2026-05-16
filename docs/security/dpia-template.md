@@ -12,15 +12,15 @@ Plateforme SaaS de gestion d'adhérents de salles de sport et de coachs : inscri
 
 ### 1.2 Catégories de données collectées
 
-| Catégorie | Champ | Sensibilité | Base légale |
-|---|---|---|---|
-| Identification | email, displayName, avatar (optionnel) | Standard | Contrat (Art 6.1.b) |
-| Authentification | password_hash (bcrypt cost 12) | Sensible (cred) | Contrat |
-| Préférences | locale, consents (marketing/analytics/thirdParty + version) | Standard | Consentement (Art 6.1.a) pour optionnels |
-| Activité métier | reservations, workout_sessions, check-ins | Standard | Contrat |
-| Sécurité | audit_log (actor_id, action, metadata, IP-derived rate-limit hash) | Sensible | Intérêt légitime (Art 6.1.f) — sécurité |
-| Logs techniques | traceId, http.path, http.status_code, duration | Pseudonymisé | Intérêt légitime — observabilité |
-| Paiement | clientReference (Stripe customer id) | Standard | Contrat — données paiement gérées par Stripe |
+| Catégorie        | Champ                                                              | Sensibilité     | Base légale                                  |
+| ---------------- | ------------------------------------------------------------------ | --------------- | -------------------------------------------- |
+| Identification   | email, displayName, avatar (optionnel)                             | Standard        | Contrat (Art 6.1.b)                          |
+| Authentification | password_hash (bcrypt cost 12)                                     | Sensible (cred) | Contrat                                      |
+| Préférences      | locale, consents (marketing/analytics/thirdParty + version)        | Standard        | Consentement (Art 6.1.a) pour optionnels     |
+| Activité métier  | reservations, workout_sessions, check-ins                          | Standard        | Contrat                                      |
+| Sécurité         | audit_log (actor_id, action, metadata, IP-derived rate-limit hash) | Sensible        | Intérêt légitime (Art 6.1.f) — sécurité      |
+| Logs techniques  | traceId, http.path, http.status_code, duration                     | Pseudonymisé    | Intérêt légitime — observabilité             |
+| Paiement         | clientReference (Stripe customer id)                               | Standard        | Contrat — données paiement gérées par Stripe |
 
 **Pas de données de santé** (Art 9§2.h n'est pas mobilisé). **Pas de géolocalisation précise**.
 
@@ -32,26 +32,26 @@ Plateforme SaaS de gestion d'adhérents de salles de sport et de coachs : inscri
 
 ### 1.4 Durées de conservation
 
-| Catégorie | Durée active | Post-suppression |
-|---|---|---|
-| Compte | Durée de l'abonnement | Anonymisation in-place J+30 (S5-004) |
-| audit_log | 12 mois | Anonymisation actor_id J+30 (S5-003) |
-| outbox | 7 jours après publication (S5-005) | — |
-| export_jobs | 90 jours après completion (S5-006) | — |
-| Logs Sentry / Tail | 30 jours (Cloudflare default) | — |
-| Factures Stripe | 10 ans (Art L123-22 Code commerce) | — |
+| Catégorie          | Durée active                       | Post-suppression                     |
+| ------------------ | ---------------------------------- | ------------------------------------ |
+| Compte             | Durée de l'abonnement              | Anonymisation in-place J+30 (S5-004) |
+| audit_log          | 12 mois                            | Anonymisation actor_id J+30 (S5-003) |
+| outbox             | 7 jours après publication (S5-005) | —                                    |
+| export_jobs        | 90 jours après completion (S5-006) | —                                    |
+| Logs Sentry / Tail | 30 jours (Cloudflare default)      | —                                    |
+| Factures Stripe    | 10 ans (Art L123-22 Code commerce) | —                                    |
 
 ## 2. Sous-traitants (Art 28 RGPD)
 
-| Sous-traitant | Service | Localisation | Contrat |
-|---|---|---|---|
-| Cloudflare Inc. | Workers, R2, KV, Queues, Tail Workers | EU (Smart Placement) | DPA Cloudflare Standard |
-| Neon Inc. | Postgres managé | aws-eu-central-1 | DPA Neon |
-| Upstash Inc. | Redis managé | eu-west-1 | DPA Upstash |
-| Stripe Inc. | Paiements + webhooks | EU (Stripe Atlas EU si activé — voir S5-012) | DPA Stripe |
-| Resend Inc. | Emails transactionnels | EU si activé | DPA Resend |
-| Expo Inc. | Push notifications mobile | US (Expo Push) | **Note S5-012** : transfert hors UE — clauses contractuelles types requises ou alternative EU |
-| Sentry | Error tracking (DSN EU `*.de.sentry.io` — vérifié au boot Vague 33 / SP5.1) | EU (sentry.io DE) | DPA Sentry |
+| Sous-traitant   | Service                                                                     | Localisation                                 | Contrat                                                                                       |
+| --------------- | --------------------------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Cloudflare Inc. | Workers, R2, KV, Queues, Tail Workers                                       | EU (Smart Placement)                         | DPA Cloudflare Standard                                                                       |
+| Neon Inc.       | Postgres managé                                                             | aws-eu-central-1                             | DPA Neon                                                                                      |
+| Upstash Inc.    | Redis managé                                                                | eu-west-1                                    | DPA Upstash                                                                                   |
+| Stripe Inc.     | Paiements + webhooks                                                        | EU (Stripe Atlas EU si activé — voir S5-012) | DPA Stripe                                                                                    |
+| Resend Inc.     | Emails transactionnels                                                      | EU si activé                                 | DPA Resend                                                                                    |
+| Expo Inc.       | Push notifications mobile                                                   | US (Expo Push)                               | **Note S5-012** : transfert hors UE — clauses contractuelles types requises ou alternative EU |
+| Sentry          | Error tracking (DSN EU `*.de.sentry.io` — vérifié au boot Vague 33 / SP5.1) | EU (sentry.io DE)                            | DPA Sentry                                                                                    |
 
 **Action S5-012** : valider que la résidence EU est explicitement contractuelle pour Stripe (Stripe Atlas EU activé) et Resend, et documenter Expo Push comme transfert hors UE avec safeguards (SCC).
 
@@ -101,15 +101,15 @@ Plateforme SaaS de gestion d'adhérents de salles de sport et de coachs : inscri
 
 ## 5. Risques pour les droits et libertés
 
-| Risque | Probabilité | Gravité | Mitigation principale |
-|---|---|---|---|
-| Vol de cookies (XSS) | Faible | Modérée | CSP nonce-strict + HttpOnly + SameSite + COOP + family-tree revoke |
-| Vol refresh token + replay | Faible | Élevée | Family-tree revoke + atomic rotate (Sprint 2 SP2.1) |
-| Cross-tenant data leak | Très faible | Élevée | RLS forcée + tenantClaimGuard (Sprint 1 SP1.5) |
-| Brute force login | Faible | Modérée | Sliding-window 5 tentatives / 15 min hashé |
-| Fuite Redis | Faible | Faible | Clés pseudonymisées + TTL court + auto-redact logger |
-| Data subject request non honoré | Faible | Modérée | Cascade automatique J+30 + helper export RGPD |
-| Transfert hors UE non sécurisé | Faible (Expo Push uniquement) | Modérée | SCC + monitoring Sentry EU au boot |
+| Risque                          | Probabilité                   | Gravité | Mitigation principale                                              |
+| ------------------------------- | ----------------------------- | ------- | ------------------------------------------------------------------ |
+| Vol de cookies (XSS)            | Faible                        | Modérée | CSP nonce-strict + HttpOnly + SameSite + COOP + family-tree revoke |
+| Vol refresh token + replay      | Faible                        | Élevée  | Family-tree revoke + atomic rotate (Sprint 2 SP2.1)                |
+| Cross-tenant data leak          | Très faible                   | Élevée  | RLS forcée + tenantClaimGuard (Sprint 1 SP1.5)                     |
+| Brute force login               | Faible                        | Modérée | Sliding-window 5 tentatives / 15 min hashé                         |
+| Fuite Redis                     | Faible                        | Faible  | Clés pseudonymisées + TTL court + auto-redact logger               |
+| Data subject request non honoré | Faible                        | Modérée | Cascade automatique J+30 + helper export RGPD                      |
+| Transfert hors UE non sécurisé  | Faible (Expo Push uniquement) | Modérée | SCC + monitoring Sentry EU au boot                                 |
 
 ## 6. Mesures envisagées pour faire face aux risques
 
@@ -117,10 +117,10 @@ Voir "Mesures techniques" ci-dessus + roadmap audit Sprint 5+ (S2-006 forgot-pas
 
 ## 7. Validation
 
-- DPO : __________________________ Date : __________
-- CTO / Resp. Tech : ____________ Date : __________
-- Direction : __________________ Date : __________
+- DPO : ************\_\_************ Date : ****\_\_****
+- CTO / Resp. Tech : ****\_\_\_\_**** Date : ****\_\_****
+- Direction : ********\_\_******** Date : ****\_\_****
 
 ---
 
-*Vague 33 — Sprint-5 SP5.3 (audit findings S5-011 + S5-012). Template à compléter et valider avant prod. Mise à jour à chaque évolution majeure du traitement (Art 35§11).*
+_Vague 33 — Sprint-5 SP5.3 (audit findings S5-011 + S5-012). Template à compléter et valider avant prod. Mise à jour à chaque évolution majeure du traitement (Art 35§11)._

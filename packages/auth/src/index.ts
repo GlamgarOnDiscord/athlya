@@ -33,10 +33,10 @@
  */
 
 export {
-    BCRYPT_COST,
-    EmptyPasswordError,
-    hash as hashPassword,
-    verify as verifyPassword,
+  BCRYPT_COST,
+  EmptyPasswordError,
+  hash as hashPassword,
+  verify as verifyPassword,
 } from './password.js';
 export * from './hibp.js';
 export * from './jwt.js';

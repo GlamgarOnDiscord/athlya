@@ -33,8 +33,8 @@ export type SortedSetEntry = { score: number; member: string };
 
 /** Meta-record backing the fake's TTL emulation. */
 interface ExpireMeta {
-    seconds: number;
-    setAtMs: number;
+  seconds: number;
+  setAtMs: number;
 }
 
 /**
@@ -42,159 +42,156 @@ interface ExpireMeta {
  * limiter. See module comment for the full list of supported commands.
  */
 export class FakeRedis {
-    /**
-     * Sorted sets keyed by Redis key. Exposed for tests that need to
-     * inspect recorded timestamps (e.g. property-based assertions on
-     * which requests the limiter counted as `allow`).
-     */
-    readonly sets = new Map<string, SortedSetEntry[]>();
+  /**
+   * Sorted sets keyed by Redis key. Exposed for tests that need to
+   * inspect recorded timestamps (e.g. property-based assertions on
+   * which requests the limiter counted as `allow`).
+   */
+  readonly sets = new Map<string, SortedSetEntry[]>();
 
-    /** Per-key TTL metadata set by `expire`. */
-    readonly expirations = new Map<string, ExpireMeta>();
+  /** Per-key TTL metadata set by `expire`. */
+  readonly expirations = new Map<string, ExpireMeta>();
 
-    /** Clock the fake uses to honour `expire` TTLs (ms since epoch). */
-    nowMs = 0;
+  /** Clock the fake uses to honour `expire` TTLs (ms since epoch). */
+  nowMs = 0;
 
-    private list(key: string): SortedSetEntry[] {
-        this.evictIfExpired(key);
-        let list = this.sets.get(key);
-        if (!list) {
-            list = [];
-            this.sets.set(key, list);
+  private list(key: string): SortedSetEntry[] {
+    this.evictIfExpired(key);
+    let list = this.sets.get(key);
+    if (!list) {
+      list = [];
+      this.sets.set(key, list);
+    }
+    return list;
+  }
+
+  private evictIfExpired(key: string): void {
+    const meta = this.expirations.get(key);
+    if (!meta) return;
+    if (this.nowMs >= meta.setAtMs + meta.seconds * 1000) {
+      this.sets.delete(key);
+      this.expirations.delete(key);
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async zremrangebyscore(key: string, min: number, max: number): Promise<number> {
+    const list = this.list(key);
+    const before = list.length;
+    const kept = list.filter((e) => e.score < min || e.score > max);
+    this.sets.set(key, kept);
+    return before - kept.length;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async zadd(key: string, entry: { score: number; member: string }): Promise<number> {
+    const list = this.list(key);
+    const existing = list.findIndex((e) => e.member === entry.member);
+    if (existing >= 0) {
+      list[existing] = entry;
+      return 0;
+    }
+    list.push(entry);
+    list.sort((a, b) => a.score - b.score);
+    return 1;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async zcard(key: string): Promise<number> {
+    return this.list(key).length;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async expire(key: string, seconds: number): Promise<number> {
+    if (!this.sets.has(key)) return 0;
+    this.expirations.set(key, { seconds, setAtMs: this.nowMs });
+    return 1;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  String/counter commands (Sprint 12 / Slice 12.4 — concurrency)     */
+  /* ------------------------------------------------------------------ */
+
+  /** Per-key string store backing `incr`/`decr`. Numeric only. */
+  readonly counters = new Map<string, number>();
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async incr(key: string): Promise<number> {
+    const current = this.counters.get(key) ?? 0;
+    const next = current + 1;
+    this.counters.set(key, next);
+    // Mirror Redis: INCR creates the key if it didn't exist,
+    // and the key participates in the same expiration map as
+    // the sorted-set surface above.
+    if (!this.sets.has(key)) {
+      this.sets.set(key, []);
+    }
+    return next;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async decr(key: string): Promise<number> {
+    const current = this.counters.get(key) ?? 0;
+    const next = current - 1;
+    this.counters.set(key, next);
+    return next;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async zrange(
+    key: string,
+    start: number,
+    stop: number,
+    opts?: { withScores?: boolean },
+  ): Promise<Array<string | number>> {
+    const list = [...this.list(key)].sort((a, b) => a.score - b.score);
+    const end = stop === -1 ? list.length - 1 : stop;
+    const slice = list.slice(start, end + 1);
+    if (opts?.withScores) {
+      return slice.flatMap((e) => [e.member, e.score]);
+    }
+    return slice.map((e) => e.member);
+  }
+
+  /**
+   * Pipeline emulation. The Upstash pipeline collects commands and
+   * flushes them with `exec()`; here we do exactly that, executing
+   * sequentially so the result indices match what the caller expects.
+   */
+  pipeline(): {
+    zremrangebyscore: (k: string, min: number, max: number) => void;
+    zadd: (k: string, entry: { score: number; member: string }) => void;
+    zcard: (k: string) => void;
+    expire: (k: string, seconds: number) => void;
+    exec: <T extends unknown[]>() => Promise<T>;
+  } {
+    const ops: Array<() => Promise<unknown>> = [];
+    const zremrangebyscore = this.zremrangebyscore.bind(this);
+    const zadd = this.zadd.bind(this);
+    const zcard = this.zcard.bind(this);
+    const expire = this.expire.bind(this);
+    return {
+      zremrangebyscore(k, min, max) {
+        ops.push(() => zremrangebyscore(k, min, max));
+      },
+      zadd(k, entry) {
+        ops.push(() => zadd(k, entry));
+      },
+      zcard(k) {
+        ops.push(() => zcard(k));
+      },
+      expire(k, seconds) {
+        ops.push(() => expire(k, seconds));
+      },
+      async exec<T extends unknown[]>(): Promise<T> {
+        const out: unknown[] = [];
+        for (const op of ops) {
+          out.push(await op());
         }
-        return list;
-    }
-
-    private evictIfExpired(key: string): void {
-        const meta = this.expirations.get(key);
-        if (!meta) return;
-        if (this.nowMs >= meta.setAtMs + meta.seconds * 1000) {
-            this.sets.delete(key);
-            this.expirations.delete(key);
-        }
-    }
-
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async zremrangebyscore(key: string, min: number, max: number): Promise<number> {
-        const list = this.list(key);
-        const before = list.length;
-        const kept = list.filter((e) => e.score < min || e.score > max);
-        this.sets.set(key, kept);
-        return before - kept.length;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async zadd(
-        key: string,
-        entry: { score: number; member: string },
-    ): Promise<number> {
-        const list = this.list(key);
-        const existing = list.findIndex((e) => e.member === entry.member);
-        if (existing >= 0) {
-            list[existing] = entry;
-            return 0;
-        }
-        list.push(entry);
-        list.sort((a, b) => a.score - b.score);
-        return 1;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async zcard(key: string): Promise<number> {
-        return this.list(key).length;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async expire(key: string, seconds: number): Promise<number> {
-        if (!this.sets.has(key)) return 0;
-        this.expirations.set(key, { seconds, setAtMs: this.nowMs });
-        return 1;
-    }
-
-    /* ------------------------------------------------------------------ */
-    /*  String/counter commands (Sprint 12 / Slice 12.4 — concurrency)     */
-    /* ------------------------------------------------------------------ */
-
-    /** Per-key string store backing `incr`/`decr`. Numeric only. */
-    readonly counters = new Map<string, number>();
-
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async incr(key: string): Promise<number> {
-        const current = this.counters.get(key) ?? 0;
-        const next = current + 1;
-        this.counters.set(key, next);
-        // Mirror Redis: INCR creates the key if it didn't exist,
-        // and the key participates in the same expiration map as
-        // the sorted-set surface above.
-        if (!this.sets.has(key)) {
-            this.sets.set(key, []);
-        }
-        return next;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async decr(key: string): Promise<number> {
-        const current = this.counters.get(key) ?? 0;
-        const next = current - 1;
-        this.counters.set(key, next);
-        return next;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async zrange(
-        key: string,
-        start: number,
-        stop: number,
-        opts?: { withScores?: boolean },
-    ): Promise<Array<string | number>> {
-        const list = [...this.list(key)].sort((a, b) => a.score - b.score);
-        const end = stop === -1 ? list.length - 1 : stop;
-        const slice = list.slice(start, end + 1);
-        if (opts?.withScores) {
-            return slice.flatMap((e) => [e.member, e.score]);
-        }
-        return slice.map((e) => e.member);
-    }
-
-    /**
-     * Pipeline emulation. The Upstash pipeline collects commands and
-     * flushes them with `exec()`; here we do exactly that, executing
-     * sequentially so the result indices match what the caller expects.
-     */
-    pipeline(): {
-        zremrangebyscore: (k: string, min: number, max: number) => void;
-        zadd: (k: string, entry: { score: number; member: string }) => void;
-        zcard: (k: string) => void;
-        expire: (k: string, seconds: number) => void;
-        exec: <T extends unknown[]>() => Promise<T>;
-    } {
-        const ops: Array<() => Promise<unknown>> = [];
-        const zremrangebyscore = this.zremrangebyscore.bind(this);
-        const zadd = this.zadd.bind(this);
-        const zcard = this.zcard.bind(this);
-        const expire = this.expire.bind(this);
-        return {
-            zremrangebyscore(k, min, max) {
-                ops.push(() => zremrangebyscore(k, min, max));
-            },
-            zadd(k, entry) {
-                ops.push(() => zadd(k, entry));
-            },
-            zcard(k) {
-                ops.push(() => zcard(k));
-            },
-            expire(k, seconds) {
-                ops.push(() => expire(k, seconds));
-            },
-            async exec<T extends unknown[]>(): Promise<T> {
-                const out: unknown[] = [];
-                for (const op of ops) {
-                    out.push(await op());
-                }
-                return out as T;
-            },
-        };
-    }
+        return out as T;
+      },
+    };
+  }
 }
 
 /**
@@ -204,8 +201,8 @@ export class FakeRedis {
  * without pulling in the full `@upstash/redis` type surface.
  */
 export function makeRateLimiterDeps(fake: FakeRedis): RateLimiterDeps {
-    return {
-        redis: fake as unknown as RateLimiterDeps['redis'],
-        now: () => fake.nowMs,
-    };
+  return {
+    redis: fake as unknown as RateLimiterDeps['redis'],
+    now: () => fake.nowMs,
+  };
 }

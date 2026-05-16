@@ -35,48 +35,45 @@
 
 /** Context evaluated against rollout rules. */
 export interface FeatureFlagContext {
-    readonly userId?: string;
-    readonly studioId?: string;
-    readonly role?: string;
-    /**
-     * Hash bucket for rollout percentage. Computed from `userId`
-     * by default; falls back to a uniform-random bucket per
-     * isolate when no userId is available.
-     */
-    readonly bucket?: number;
+  readonly userId?: string;
+  readonly studioId?: string;
+  readonly role?: string;
+  /**
+   * Hash bucket for rollout percentage. Computed from `userId`
+   * by default; falls back to a uniform-random bucket per
+   * isolate when no userId is available.
+   */
+  readonly bucket?: number;
 }
 
 /** Single flag definition. */
 export type FlagDefinition =
-    | boolean
-    | {
-        /** % of traffic to enable. 0–100. */
-        readonly rollout: number;
-        /**
-         * Allow-list of user IDs that always see the flag ON,
-         * regardless of `rollout`. Used to ship to internal
-         * users first.
-         */
-        readonly allowList?: readonly string[];
-        /**
-         * Allow-list of studio IDs. Same semantic — flag ON
-         * for any user in the listed studios.
-         */
-        readonly studioAllowList?: readonly string[];
+  | boolean
+  | {
+      /** % of traffic to enable. 0–100. */
+      readonly rollout: number;
+      /**
+       * Allow-list of user IDs that always see the flag ON,
+       * regardless of `rollout`. Used to ship to internal
+       * users first.
+       */
+      readonly allowList?: readonly string[];
+      /**
+       * Allow-list of studio IDs. Same semantic — flag ON
+       * for any user in the listed studios.
+       */
+      readonly studioAllowList?: readonly string[];
     };
 
 /** Provider interface — `getFlag(name, ctx)` returns the resolved value. */
 export interface FeatureFlagProvider {
-    getFlag(
-        name: string,
-        ctx: FeatureFlagContext,
-    ): Promise<boolean>;
+  getFlag(name: string, ctx: FeatureFlagContext): Promise<boolean>;
 }
 
 /** Cache entry for the per-isolate evaluator cache. */
 interface CacheEntry {
-    readonly value: boolean;
-    readonly expiresAtMs: number;
+  readonly value: boolean;
+  readonly expiresAtMs: number;
 }
 
 /** Default cache TTL — 60 seconds per the slice doc. */
@@ -104,54 +101,48 @@ export const FLAG_CACHE_TTL_MS = 60 * 1000;
  *     }
  */
 export function buildStaticFeatureFlagProvider(
-    catalogueJson: string | undefined,
+  catalogueJson: string | undefined,
 ): FeatureFlagProvider {
-    let catalogue: Record<string, FlagDefinition> = {};
-    if (typeof catalogueJson === 'string' && catalogueJson.length > 0) {
-        try {
-            catalogue = JSON.parse(catalogueJson) as Record<
-                string,
-                FlagDefinition
-            >;
-        } catch {
-            console.warn(
-                'feature-flags: FEATURE_FLAGS_JSON malformed, defaulting to {}',
-            );
-        }
+  let catalogue: Record<string, FlagDefinition> = {};
+  if (typeof catalogueJson === 'string' && catalogueJson.length > 0) {
+    try {
+      catalogue = JSON.parse(catalogueJson) as Record<string, FlagDefinition>;
+    } catch {
+      console.warn('feature-flags: FEATURE_FLAGS_JSON malformed, defaulting to {}');
     }
+  }
 
-    return {
-        // eslint-disable-next-line @typescript-eslint/require-await
-        async getFlag(name, ctx) {
-            const def = catalogue[name];
-            if (def === undefined) return false;
-            if (typeof def === 'boolean') return def;
+  return {
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async getFlag(name, ctx) {
+      const def = catalogue[name];
+      if (def === undefined) return false;
+      if (typeof def === 'boolean') return def;
 
-            // Allow-lists override the rollout percentage.
-            if (
-                def.allowList !== undefined &&
-                ctx.userId !== undefined &&
-                def.allowList.includes(ctx.userId)
-            ) {
-                return true;
-            }
-            if (
-                def.studioAllowList !== undefined &&
-                ctx.studioId !== undefined &&
-                def.studioAllowList.includes(ctx.studioId)
-            ) {
-                return true;
-            }
+      // Allow-lists override the rollout percentage.
+      if (
+        def.allowList !== undefined &&
+        ctx.userId !== undefined &&
+        def.allowList.includes(ctx.userId)
+      ) {
+        return true;
+      }
+      if (
+        def.studioAllowList !== undefined &&
+        ctx.studioId !== undefined &&
+        def.studioAllowList.includes(ctx.studioId)
+      ) {
+        return true;
+      }
 
-            // Rollout: deterministic bucket from userId (or
-            // random fallback). Pure-function so the same user
-            // always lands in the same bucket — critical for
-            // rollout consistency.
-            const bucket =
-                ctx.bucket ?? hashToBucket(ctx.userId ?? `random-${Math.random()}`);
-            return bucket < def.rollout;
-        },
-    };
+      // Rollout: deterministic bucket from userId (or
+      // random fallback). Pure-function so the same user
+      // always lands in the same bucket — critical for
+      // rollout consistency.
+      const bucket = ctx.bucket ?? hashToBucket(ctx.userId ?? `random-${Math.random()}`);
+      return bucket < def.rollout;
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -167,28 +158,28 @@ const cache = new Map<string, CacheEntry>();
  * the flag on every request).
  */
 export async function isEnabled(
-    name: string,
-    ctx: FeatureFlagContext,
-    provider: FeatureFlagProvider,
-    nowMs: () => number = Date.now,
+  name: string,
+  ctx: FeatureFlagContext,
+  provider: FeatureFlagProvider,
+  nowMs: () => number = Date.now,
 ): Promise<boolean> {
-    const key = `${name}|${ctx.userId ?? ''}|${ctx.studioId ?? ''}`;
-    const cached = cache.get(key);
-    const now = nowMs();
-    if (cached !== undefined && cached.expiresAtMs > now) {
-        return cached.value;
-    }
-    const value = await provider.getFlag(name, ctx);
-    cache.set(key, {
-        value,
-        expiresAtMs: now + FLAG_CACHE_TTL_MS,
-    });
-    return value;
+  const key = `${name}|${ctx.userId ?? ''}|${ctx.studioId ?? ''}`;
+  const cached = cache.get(key);
+  const now = nowMs();
+  if (cached !== undefined && cached.expiresAtMs > now) {
+    return cached.value;
+  }
+  const value = await provider.getFlag(name, ctx);
+  cache.set(key, {
+    value,
+    expiresAtMs: now + FLAG_CACHE_TTL_MS,
+  });
+  return value;
 }
 
 /** Test seam — flush the cache between tests. */
 export function __resetFeatureFlagCache(): void {
-    cache.clear();
+  cache.clear();
 }
 
 /* ------------------------------------------------------------------ */
@@ -204,9 +195,9 @@ export function __resetFeatureFlagCache(): void {
  * cryptographically secure (sufficient for rollout bucketing).
  */
 function hashToBucket(input: string): number {
-    let h = 5381;
-    for (let i = 0; i < input.length; i += 1) {
-        h = (h * 33) ^ input.charCodeAt(i);
-    }
-    return Math.abs(h) % 100;
+  let h = 5381;
+  for (let i = 0; i < input.length; i += 1) {
+    h = (h * 33) ^ input.charCodeAt(i);
+  }
+  return Math.abs(h) % 100;
 }

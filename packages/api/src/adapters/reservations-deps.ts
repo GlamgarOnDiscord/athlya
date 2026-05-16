@@ -59,57 +59,46 @@
  *      7.3, 7.4, 8.1–8.6, 9.1–9.5, 10.1–10.5.
  */
 
+import { createDb, type AthlyaDb, type AthlyaDbHttp } from '@athlya/db/client';
 import {
-    createDb,
-    type AthlyaDb,
-    type AthlyaDbHttp,
-} from '@athlya/db/client';
-import {
-    listClasses as svcListClasses,
-    createClass as svcCreateClass,
-    bookClass as svcBookClass,
-    createRedisRemainingCounter,
+  listClasses as svcListClasses,
+  createClass as svcCreateClass,
+  bookClass as svcBookClass,
+  createRedisRemainingCounter,
 } from '@athlya/reservations';
 import { cancelReservation as svcCancelReservation } from '@athlya/reservations/cancel';
 import { updateClass as svcUpdateClass } from '@athlya/reservations/update';
 
 import {
-    createDrizzleCreateClassRepo,
-    createDrizzleDeleteClassRepo,
-    createDrizzleListClassesRepo,
-    createDrizzleUpdateClassRepo,
+  createDrizzleCreateClassRepo,
+  createDrizzleDeleteClassRepo,
+  createDrizzleListClassesRepo,
+  createDrizzleUpdateClassRepo,
 } from './classes-repo-drizzle.js';
 import {
-    getOrCreateDbHttp,
-    getOrCreateRedis,
-    primeDbHttpForTests,
-    resetAllDepsCachesForTests,
+  getOrCreateDbHttp,
+  getOrCreateRedis,
+  primeDbHttpForTests,
+  resetAllDepsCachesForTests,
 } from './deps-cache.js';
+import { listMyReservations as queryListMyReservations } from './reservations-list-drizzle.js';
 import {
-    listMyReservations as queryListMyReservations,
-} from './reservations-list-drizzle.js';
-import {
-    createBookingEventPublisher,
-    createDrizzleBookingRepo,
-    createDrizzleCancelRepo,
+  createBookingEventPublisher,
+  createDrizzleBookingRepo,
+  createDrizzleCancelRepo,
 } from './reservations-write-drizzle.js';
 
-import type {
-    ClassesDeps,
-    DeleteClassOutcome,
-    UpdateClassOutcome,
-} from '../routes/classes.js';
+import type { ClassesDeps, DeleteClassOutcome, UpdateClassOutcome } from '../routes/classes.js';
 import type { ReservationsDeps } from '../routes/reservations.js';
 import type { AthlyaBindings } from '../types.js';
 import type { ClassRow } from '@athlya/db/schema';
 import type { ClassListing } from '@athlya/reservations';
 import type { StudioId } from '@athlya/shared/ids';
 import type {
-    CreateClassRequest,
-    ListClassesQuery,
-    UpdateClassRequest,
+  CreateClassRequest,
+  ListClassesQuery,
+  UpdateClassRequest,
 } from '@athlya/shared/schemas/api';
-
 
 /* ------------------------------------------------------------------ */
 /*  Per-isolate caches (HTTP DB + Redis) — shared via deps-cache       */
@@ -131,10 +120,10 @@ import type {
  *     calls inside one isolate.
  */
 function makeWriteDb(connectionString: string): AthlyaDb {
-    return createDb(connectionString, {
-        maxConnections: 1,
-        idleTimeoutSec: 5,
-    });
+  return createDb(connectionString, {
+    maxConnections: 1,
+    idleTimeoutSec: 5,
+  });
 }
 
 /**
@@ -147,7 +136,7 @@ function makeWriteDb(connectionString: string): AthlyaDb {
  * clear.
  */
 export function __resetReservationsDepsCachesForTests(): void {
-    resetAllDepsCachesForTests();
+  resetAllDepsCachesForTests();
 }
 
 /**
@@ -161,10 +150,10 @@ export function __resetReservationsDepsCachesForTests(): void {
  * (`primeReservationsDb`) keep working.
  */
 export function __primeDbHttpForTests(url: string): {
-    readonly size: number;
-    readonly handle: AthlyaDbHttp;
+  readonly size: number;
+  readonly handle: AthlyaDbHttp;
 } {
-    return primeDbHttpForTests(url);
+  return primeDbHttpForTests(url);
 }
 
 /* ------------------------------------------------------------------ */
@@ -177,78 +166,67 @@ export function __primeDbHttpForTests(url: string): {
  * thin adapter wrapper.
  */
 export function buildClassesDeps(env: AthlyaBindings): ClassesDeps {
-    return {
-        async listClasses(
-            studioId: string,
-            range: ListClassesQuery,
-        ): Promise<{ items: ClassListing[] }> {
-            const db = getOrCreateDbHttp(env.DB_URL);
-            const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
-            const classRepo = createDrizzleListClassesRepo(db);
-            const counter = createRedisRemainingCounter(redis);
-            const items = await svcListClasses(studioId, range, {
-                classRepo,
-                counter,
-            });
-            return { items };
-        },
+  return {
+    async listClasses(
+      studioId: string,
+      range: ListClassesQuery,
+    ): Promise<{ items: ClassListing[] }> {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const classRepo = createDrizzleListClassesRepo(db);
+      const counter = createRedisRemainingCounter(redis);
+      const items = await svcListClasses(studioId, range, {
+        classRepo,
+        counter,
+      });
+      return { items };
+    },
 
-        async createClass(
-            studioId: string,
-            input: CreateClassRequest,
-        ): Promise<ClassRow> {
-            const db = getOrCreateDbHttp(env.DB_URL);
-            const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
-            const classRepo = createDrizzleCreateClassRepo(db);
-            const counter = createRedisRemainingCounter(redis);
-            return svcCreateClass(studioId as StudioId, input, {
-                classRepo,
-                counter,
-            });
-        },
+    async createClass(studioId: string, input: CreateClassRequest): Promise<ClassRow> {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const classRepo = createDrizzleCreateClassRepo(db);
+      const counter = createRedisRemainingCounter(redis);
+      return svcCreateClass(studioId as StudioId, input, {
+        classRepo,
+        counter,
+      });
+    },
 
-        async deleteClass(
-            studioId: string,
-            classId: string,
-        ): Promise<DeleteClassOutcome> {
-            const db = getOrCreateDbHttp(env.DB_URL);
-            const repo = createDrizzleDeleteClassRepo(db);
-            const found = await repo.deleteClass(studioId, classId);
-            return found ? { kind: 'deleted' } : { kind: 'not_found' };
-        },
+    async deleteClass(studioId: string, classId: string): Promise<DeleteClassOutcome> {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const repo = createDrizzleDeleteClassRepo(db);
+      const found = await repo.deleteClass(studioId, classId);
+      return found ? { kind: 'deleted' } : { kind: 'not_found' };
+    },
 
-        async updateClass(
-            _studioId: string,
-            classId: string,
-            patch: UpdateClassRequest,
-        ): Promise<UpdateClassOutcome> {
-            const db = getOrCreateDbHttp(env.DB_URL);
-            const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
-            const classRepo = createDrizzleUpdateClassRepo(db);
-            const counter = createRedisRemainingCounter(redis);
+    async updateClass(
+      _studioId: string,
+      classId: string,
+      patch: UpdateClassRequest,
+    ): Promise<UpdateClassOutcome> {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const classRepo = createDrizzleUpdateClassRepo(db);
+      const counter = createRedisRemainingCounter(redis);
 
-            try {
-                const row = await svcUpdateClass(
-                    classId,
-                    patch,
-                    'admin',
-                    {
-                        classRepo,
-                        counter,
-                    },
-                );
-                return { kind: 'updated', class: row };
-            } catch (err) {
-                // Translate the typed `UpdateClassError` into the
-                // discriminated outcome the router expects.
-                // Duck-typed to avoid pulling the runtime class in.
-                const code = extractUpdateErrorCode(err);
-                if (code === 'not_found') return { kind: 'not_found' };
-                if (code === 'conflict') return { kind: 'conflict' };
-                throw err;
-            }
-        },
-    };
+      try {
+        const row = await svcUpdateClass(classId, patch, 'admin', {
+          classRepo,
+          counter,
+        });
+        return { kind: 'updated', class: row };
+      } catch (err) {
+        // Translate the typed `UpdateClassError` into the
+        // discriminated outcome the router expects.
+        // Duck-typed to avoid pulling the runtime class in.
+        const code = extractUpdateErrorCode(err);
+        if (code === 'not_found') return { kind: 'not_found' };
+        if (code === 'conflict') return { kind: 'conflict' };
+        throw err;
+      }
+    },
+  };
 }
 
 /**
@@ -258,10 +236,10 @@ export function buildClassesDeps(env: AthlyaBindings): ClassesDeps {
  * `@athlya/reservations/update`'s class object.
  */
 function extractUpdateErrorCode(err: unknown): string | null {
-    if (typeof err !== 'object' || err === null) return null;
-    const probe = err as { name?: unknown; code?: unknown };
-    if (probe.name !== 'UpdateClassError') return null;
-    return typeof probe.code === 'string' ? probe.code : null;
+  if (typeof err !== 'object' || err === null) return null;
+  const probe = err as { name?: unknown; code?: unknown };
+  if (probe.name !== 'UpdateClassError') return null;
+  return typeof probe.code === 'string' ? probe.code : null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -285,121 +263,117 @@ function extractUpdateErrorCode(err: unknown): string | null {
  *                           reservation + class rows, FIFO `SKIP
  *                           LOCKED` waitlist promotion).
  */
-export function buildReservationsDeps(
-    env: AthlyaBindings,
-): ReservationsDeps {
-    return {
-        async listMyReservations(userId: string, query) {
-            const db = getOrCreateDbHttp(env.DB_URL);
-            return queryListMyReservations(userId, query, { db });
+export function buildReservationsDeps(env: AthlyaBindings): ReservationsDeps {
+  return {
+    async listMyReservations(userId: string, query) {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      return queryListMyReservations(userId, query, { db });
+    },
+
+    async bookClass(userId, input) {
+      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+
+      // Per-request postgres-js client — `bookClass` opens an
+      // interactive `withTransaction(async tx => …)` block
+      // (Algorithm 1) which the HTTP driver does not support.
+      // The same handle services the `findClass` pre-flight
+      // (one extra SELECT) so we don't open two connections
+      // per booking attempt.
+      const dbWrite = makeWriteDb(env.DB_URL);
+      const repo = createDrizzleBookingRepo(dbWrite);
+      const counter = createRedisRemainingCounter(redis);
+      const publisher = createBookingEventPublisher();
+
+      // The class's `studio_id` is resolved via `repo.findClass`
+      // inside the service flow; the event envelopes however
+      // need the studio id up-front. We fetch the class once
+      // here to enrich the `studioId` field the service forwards
+      // to the publisher. `bookClass` does its own null check
+      // so a missing class simply falls through to the domain
+      // `class_not_found` branch.
+      const cls = await repo.findClass(input.classId);
+      const studioId = cls?.studioId ?? '';
+
+      const result = await svcBookClass({
+        classId: input.classId,
+        userId,
+        studioId,
+        repo,
+        // Adapt `RemainingCounter` (`decr`/`incr`) → the
+        // narrower `BookingCounter` shape the service
+        // expects (`decrRemaining`/`incrRemaining`). The
+        // names diverge so the booking flow's intent stays
+        // visible at the call site without leaking the
+        // concrete Redis primitive names.
+        counter: {
+          decrRemaining: (classId: string) => counter.decr(classId),
+          incrRemaining: (classId: string) => counter.incr(classId),
         },
+        publisher,
+      });
 
-        async bookClass(userId, input) {
-            const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      switch (result.code) {
+        case 'ok':
+          return {
+            kind: 'confirmed',
+            reservation: result.reservation,
+          };
+        case 'waitlisted':
+          return {
+            kind: 'waitlist',
+            reservation: result.reservation,
+            position: result.position,
+          };
+        case 'already_booked':
+          return {
+            kind: 'conflict',
+            reservation: result.reservation,
+          };
+        case 'class_in_past':
+          return { kind: 'class_in_past' };
+        case 'class_not_found':
+          return { kind: 'not_found' };
+      }
+    },
 
-            // Per-request postgres-js client — `bookClass` opens an
-            // interactive `withTransaction(async tx => …)` block
-            // (Algorithm 1) which the HTTP driver does not support.
-            // The same handle services the `findClass` pre-flight
-            // (one extra SELECT) so we don't open two connections
-            // per booking attempt.
-            const dbWrite = makeWriteDb(env.DB_URL);
-            const repo = createDrizzleBookingRepo(dbWrite);
-            const counter = createRedisRemainingCounter(redis);
-            const publisher = createBookingEventPublisher();
+    async cancelReservation(userId, params) {
+      // Per-request postgres-js client — Algorithm 2 needs an
+      // interactive transaction with `SELECT FOR UPDATE` and
+      // conditional waitlist promotion between statements.
+      const dbWrite = makeWriteDb(env.DB_URL);
+      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const repo = createDrizzleCancelRepo(dbWrite);
+      const counter = createRedisRemainingCounter(redis);
 
-            // The class's `studio_id` is resolved via `repo.findClass`
-            // inside the service flow; the event envelopes however
-            // need the studio id up-front. We fetch the class once
-            // here to enrich the `studioId` field the service forwards
-            // to the publisher. `bookClass` does its own null check
-            // so a missing class simply falls through to the domain
-            // `class_not_found` branch.
-            const cls = await repo.findClass(input.classId);
-            const studioId = cls?.studioId ?? '';
-
-            const result = await svcBookClass({
-                classId: input.classId,
-                userId,
-                studioId,
-                repo,
-                // Adapt `RemainingCounter` (`decr`/`incr`) → the
-                // narrower `BookingCounter` shape the service
-                // expects (`decrRemaining`/`incrRemaining`). The
-                // names diverge so the booking flow's intent stays
-                // visible at the call site without leaking the
-                // concrete Redis primitive names.
-                counter: {
-                    decrRemaining: (classId: string) =>
-                        counter.decr(classId),
-                    incrRemaining: (classId: string) =>
-                        counter.incr(classId),
-                },
-                publisher,
-            });
-
-            switch (result.code) {
-                case 'ok':
-                    return {
-                        kind: 'confirmed',
-                        reservation: result.reservation,
-                    };
-                case 'waitlisted':
-                    return {
-                        kind: 'waitlist',
-                        reservation: result.reservation,
-                        position: result.position,
-                    };
-                case 'already_booked':
-                    return {
-                        kind: 'conflict',
-                        reservation: result.reservation,
-                    };
-                case 'class_in_past':
-                    return { kind: 'class_in_past' };
-                case 'class_not_found':
-                    return { kind: 'not_found' };
-            }
+      const result = await svcCancelReservation({
+        reservationId: params.reservationId,
+        userId,
+        repo,
+        counter: {
+          incrRemaining: async (classId: string) => {
+            await counter.incr(classId);
+          },
         },
+      });
 
-        async cancelReservation(userId, params) {
-            // Per-request postgres-js client — Algorithm 2 needs an
-            // interactive transaction with `SELECT FOR UPDATE` and
-            // conditional waitlist promotion between statements.
-            const dbWrite = makeWriteDb(env.DB_URL);
-            const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
-            const repo = createDrizzleCancelRepo(dbWrite);
-            const counter = createRedisRemainingCounter(redis);
-
-            const result = await svcCancelReservation({
-                reservationId: params.reservationId,
-                userId,
-                repo,
-                counter: {
-                    incrRemaining: async (classId: string) => {
-                        await counter.incr(classId);
-                    },
-                },
-            });
-
-            switch (result.code) {
-                case 'ok':
-                    return result.promoted !== null
-                        ? {
-                            kind: 'promoted',
-                            reservation: result.cancelled,
-                        }
-                        : {
-                            kind: 'cancelled',
-                            reservation: result.cancelled,
-                        };
-                case 'not_found':
-                    return { kind: 'not_found' };
-                case 'invalid_transition':
-                    return { kind: 'invalid_transition' };
-                case 'cancellation_window_closed':
-                    return { kind: 'window_closed' };
-            }
-        },
-    };
+      switch (result.code) {
+        case 'ok':
+          return result.promoted !== null
+            ? {
+                kind: 'promoted',
+                reservation: result.cancelled,
+              }
+            : {
+                kind: 'cancelled',
+                reservation: result.cancelled,
+              };
+        case 'not_found':
+          return { kind: 'not_found' };
+        case 'invalid_transition':
+          return { kind: 'invalid_transition' };
+        case 'cancellation_window_closed':
+          return { kind: 'window_closed' };
+      }
+    },
+  };
 }

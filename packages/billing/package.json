@@ -1,51 +1,51 @@
 {
-    "name": "@athlya/billing",
-    "version": "0.0.0",
-    "private": true,
-    "type": "module",
-    "description": "Billing service for Athlya — Stripe Connect checkout, subscription creation and webhook handling scoped per studio Stripe account",
-    "license": "AGPL-3.0-only",
-    "engines": {
-        "node": ">=20"
+  "name": "@athlya/billing",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Billing service for Athlya — Stripe Connect checkout, subscription creation and webhook handling scoped per studio Stripe account",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     },
-    "sideEffects": false,
-    "exports": {
-        ".": {
-            "types": "./src/index.ts",
-            "default": "./src/index.ts"
-        },
-        "./service": {
-            "types": "./src/service.ts",
-            "default": "./src/service.ts"
-        },
-        "./webhook": {
-            "types": "./src/webhook.ts",
-            "default": "./src/webhook.ts"
-        }
+    "./service": {
+      "types": "./src/service.ts",
+      "default": "./src/service.ts"
     },
-    "files": [
-        "src",
-        "dist"
-    ],
-    "scripts": {
-        "build": "tsc -p tsconfig.build.json",
-        "lint": "eslint .",
-        "typecheck": "tsc --noEmit -p tsconfig.json",
-        "test": "vitest run",
-        "clean": "rimraf dist .turbo *.tsbuildinfo"
-    },
-    "dependencies": {
-        "zod": "^4.4.3"
-    },
-    "devDependencies": {
-        "@athlya/eslint-config": "workspace:*",
-        "@athlya/tsconfig": "workspace:*",
-        "@fast-check/vitest": "^0.4.1",
-        "@types/node": "^20.19.9",
-        "eslint": "^9.39.1",
-        "fast-check": "^3.23.2",
-        "rimraf": "^6.0.1",
-        "typescript": "^5.9.3",
-        "vitest": "^4.1.6"
+    "./webhook": {
+      "types": "./src/webhook.ts",
+      "default": "./src/webhook.ts"
     }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "clean": "rimraf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@athlya/eslint-config": "workspace:*",
+    "@athlya/tsconfig": "workspace:*",
+    "@fast-check/vitest": "^0.4.1",
+    "@types/node": "^20.19.9",
+    "eslint": "^9.39.1",
+    "fast-check": "^3.23.2",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6"
+  }
 }

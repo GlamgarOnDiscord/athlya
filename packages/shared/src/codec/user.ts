@@ -31,23 +31,23 @@ import type { ConsentsWire, UserWire } from './types.js';
 /* ------------------------------------------------------------------ */
 
 function consentsToJSON(value: Consents): ConsentsWire {
-    return {
-        marketing: value.marketing,
-        analytics: value.analytics,
-        thirdParty: value.thirdParty,
-        // Preserve `version` byte-for-byte. See the module-level JSDoc.
-        version: value.version,
-        updatedAt: value.updatedAt,
-    };
+  return {
+    marketing: value.marketing,
+    analytics: value.analytics,
+    thirdParty: value.thirdParty,
+    // Preserve `version` byte-for-byte. See the module-level JSDoc.
+    version: value.version,
+    updatedAt: value.updatedAt,
+  };
 }
 
 function consentsFromJSON(raw: unknown): Consents {
-    return ConsentsSchema.parse(raw);
+  return ConsentsSchema.parse(raw);
 }
 
 export const ConsentsCodec = {
-    toJSON: consentsToJSON,
-    fromJSON: consentsFromJSON,
+  toJSON: consentsToJSON,
+  fromJSON: consentsFromJSON,
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -55,24 +55,24 @@ export const ConsentsCodec = {
 /* ------------------------------------------------------------------ */
 
 function toJSON(value: User): UserWire {
-    return {
-        id: value.id,
-        studioId: value.studioId,
-        email: value.email,
-        displayName: value.displayName,
-        avatarUrl: value.avatarUrl,
-        role: value.role,
-        consents: consentsToJSON(value.consents),
-        createdAt: value.createdAt,
-        deletedAt: value.deletedAt,
-    };
+  return {
+    id: value.id,
+    studioId: value.studioId,
+    email: value.email,
+    displayName: value.displayName,
+    avatarUrl: value.avatarUrl,
+    role: value.role,
+    consents: consentsToJSON(value.consents),
+    createdAt: value.createdAt,
+    deletedAt: value.deletedAt,
+  };
 }
 
 function fromJSON(raw: unknown): User {
-    return UserSchema.parse(raw);
+  return UserSchema.parse(raw);
 }
 
 export const UserCodec = {
-    toJSON,
-    fromJSON,
+  toJSON,
+  fromJSON,
 } as const;

@@ -28,20 +28,20 @@ import { createdAt } from './_shared.js';
 import { users } from './users.js';
 
 export const auditLog = pgTable('audit_log', {
-    id: bigserial('id', { mode: 'bigint' }).primaryKey(),
-    /** Nullable for RGPD anonymisation (Requirement 5.3). */
-    actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
-    action: text('action').notNull(),
-    targetType: text('target_type'),
-    targetId: text('target_id'),
-    /**
-     * Open-ended JSON: the shape varies per `action`. Callers should
-     * redact PII at write time when the value references a user — the
-     * 30-day anonymisation job cannot recover from a leak of
-     * irreversible data like hashed credit-card fingerprints.
-     */
-    metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
-    createdAt: createdAt(),
+  id: bigserial('id', { mode: 'bigint' }).primaryKey(),
+  /** Nullable for RGPD anonymisation (Requirement 5.3). */
+  actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+  action: text('action').notNull(),
+  targetType: text('target_type'),
+  targetId: text('target_id'),
+  /**
+   * Open-ended JSON: the shape varies per `action`. Callers should
+   * redact PII at write time when the value references a user — the
+   * 30-day anonymisation job cannot recover from a leak of
+   * irreversible data like hashed credit-card fingerprints.
+   */
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: createdAt(),
 });
 
 export type AuditLogRow = typeof auditLog.$inferSelect;

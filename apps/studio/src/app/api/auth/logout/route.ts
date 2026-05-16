@@ -15,31 +15,31 @@ import { getPublicApiUrl } from '../../../../lib/env';
 import type { NextRequest } from 'next/server';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-    const denied = assertSameOrigin(request);
-    if (denied !== null) return denied;
+  const denied = assertSameOrigin(request);
+  if (denied !== null) return denied;
 
-    const isProduction = process.env['NODE_ENV'] === 'production';
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== null && authHeader !== '') {
-        const apiUrl = getPublicApiUrl();
-        const target = `${apiUrl}/v1/auth/logout`;
-        try {
-            await fetch(target, {
-                method: 'POST',
-                headers: {
-                    authorization: authHeader,
-                    'content-type': 'application/json',
-                },
-            });
-        } catch {
-            // Best-effort upstream logout — local session always clears.
-        }
-    }
-
-    return new NextResponse(null, {
-        status: 204,
+  const isProduction = process.env['NODE_ENV'] === 'production';
+  const authHeader = request.headers.get('authorization');
+  if (authHeader !== null && authHeader !== '') {
+    const apiUrl = getPublicApiUrl();
+    const target = `${apiUrl}/v1/auth/logout`;
+    try {
+      await fetch(target, {
+        method: 'POST',
         headers: {
-            'set-cookie': buildClearRefreshCookie(isProduction),
+          authorization: authHeader,
+          'content-type': 'application/json',
         },
-    });
+      });
+    } catch {
+      // Best-effort upstream logout — local session always clears.
+    }
+  }
+
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'set-cookie': buildClearRefreshCookie(isProduction),
+    },
+  });
 }

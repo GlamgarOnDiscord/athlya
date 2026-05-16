@@ -100,10 +100,10 @@ const TINT_SHADE_AMOUNT = 0.15;
  *   input is not a valid 6-digit hex color.
  */
 export function parseBrandColor(raw: string): string | null {
-    if (!HEX_COLOR_RE.test(raw)) {
-        return null;
-    }
-    return raw.toLowerCase();
+  if (!HEX_COLOR_RE.test(raw)) {
+    return null;
+  }
+  return raw.toLowerCase();
 }
 
 /**
@@ -113,25 +113,25 @@ export function parseBrandColor(raw: string): string | null {
  * overrides) can consume them directly.
  */
 export interface BrandColorVariables {
-    /** The raw brand color in normalised `#rrggbb` form. */
-    readonly brandPrimary: string;
-    /**
-     * `"r, g, b"` (note the space after each comma). Designed to be
-     * dropped into `rgba(var(--athlya-brand-primary-rgb), 0.4)` for
-     * opacity-adjusted surfaces.
-     */
-    readonly brandPrimaryRgb: string;
-    /**
-     * Contrast text color for surfaces painted with `brandPrimary` —
-     * `#000000` for a light brand, `#ffffff` for a dark brand. Decided
-     * with WCAG 2.2 relative luminance, so pairs respect the 4.5:1
-     * contrast minimum against both endpoints.
-     */
-    readonly brandOnPrimary: string;
-    /** `brandPrimary` interpolated 15% toward white. */
-    readonly brandPrimaryTint: string;
-    /** `brandPrimary` interpolated 15% toward black. */
-    readonly brandPrimaryShade: string;
+  /** The raw brand color in normalised `#rrggbb` form. */
+  readonly brandPrimary: string;
+  /**
+   * `"r, g, b"` (note the space after each comma). Designed to be
+   * dropped into `rgba(var(--athlya-brand-primary-rgb), 0.4)` for
+   * opacity-adjusted surfaces.
+   */
+  readonly brandPrimaryRgb: string;
+  /**
+   * Contrast text color for surfaces painted with `brandPrimary` —
+   * `#000000` for a light brand, `#ffffff` for a dark brand. Decided
+   * with WCAG 2.2 relative luminance, so pairs respect the 4.5:1
+   * contrast minimum against both endpoints.
+   */
+  readonly brandOnPrimary: string;
+  /** `brandPrimary` interpolated 15% toward white. */
+  readonly brandPrimaryTint: string;
+  /** `brandPrimary` interpolated 15% toward black. */
+  readonly brandPrimaryShade: string;
 }
 
 /**
@@ -142,27 +142,27 @@ export interface BrandColorVariables {
  *   {@link parseBrandColor} first.
  */
 export function deriveBrandColorVariables(brand: string): BrandColorVariables {
-    const normalised = parseBrandColor(brand);
-    if (normalised === null) {
-        throw new TypeError(
-            `deriveBrandColorVariables expected a #RRGGBB hex color, received ${JSON.stringify(brand)}`,
-        );
-    }
+  const normalised = parseBrandColor(brand);
+  if (normalised === null) {
+    throw new TypeError(
+      `deriveBrandColorVariables expected a #RRGGBB hex color, received ${JSON.stringify(brand)}`,
+    );
+  }
 
-    const [r, g, b] = parseHexChannels(normalised);
-    const luminance = relativeLuminance(r, g, b);
-    const onPrimary = luminance > LUMINANCE_CROSSOVER ? '#000000' : '#ffffff';
+  const [r, g, b] = parseHexChannels(normalised);
+  const luminance = relativeLuminance(r, g, b);
+  const onPrimary = luminance > LUMINANCE_CROSSOVER ? '#000000' : '#ffffff';
 
-    const tint = mixToward(r, g, b, 255, 255, 255, TINT_SHADE_AMOUNT);
-    const shade = mixToward(r, g, b, 0, 0, 0, TINT_SHADE_AMOUNT);
+  const tint = mixToward(r, g, b, 255, 255, 255, TINT_SHADE_AMOUNT);
+  const shade = mixToward(r, g, b, 0, 0, 0, TINT_SHADE_AMOUNT);
 
-    return {
-        brandPrimary: normalised,
-        brandPrimaryRgb: `${r.toString()}, ${g.toString()}, ${b.toString()}`,
-        brandOnPrimary: onPrimary,
-        brandPrimaryTint: tint,
-        brandPrimaryShade: shade,
-    };
+  return {
+    brandPrimary: normalised,
+    brandPrimaryRgb: `${r.toString()}, ${g.toString()}, ${b.toString()}`,
+    brandOnPrimary: onPrimary,
+    brandPrimaryTint: tint,
+    brandPrimaryShade: shade,
+  };
 }
 
 /**
@@ -181,16 +181,16 @@ export function deriveBrandColorVariables(brand: string): BrandColorVariables {
  * @throws {TypeError} If `brand` is not a valid `#RRGGBB` hex string.
  */
 export function buildBrandColorCss(brand: string, selector: string = ':root'): string {
-    const vars = deriveBrandColorVariables(brand);
-    return [
-        `${selector} {`,
-        `  --athlya-brand-primary: ${vars.brandPrimary};`,
-        `  --athlya-brand-primary-rgb: ${vars.brandPrimaryRgb};`,
-        `  --athlya-brand-on-primary: ${vars.brandOnPrimary};`,
-        `  --athlya-brand-primary-tint: ${vars.brandPrimaryTint};`,
-        `  --athlya-brand-primary-shade: ${vars.brandPrimaryShade};`,
-        `}`,
-    ].join('\n');
+  const vars = deriveBrandColorVariables(brand);
+  return [
+    `${selector} {`,
+    `  --athlya-brand-primary: ${vars.brandPrimary};`,
+    `  --athlya-brand-primary-rgb: ${vars.brandPrimaryRgb};`,
+    `  --athlya-brand-on-primary: ${vars.brandOnPrimary};`,
+    `  --athlya-brand-primary-tint: ${vars.brandPrimaryTint};`,
+    `  --athlya-brand-primary-shade: ${vars.brandPrimaryShade};`,
+    `}`,
+  ].join('\n');
 }
 
 /**
@@ -200,12 +200,12 @@ export function buildBrandColorCss(brand: string, selector: string = ':root'): s
  * server or during static evaluation.
  */
 export interface RNBrandTheme {
-    readonly brand: {
-        readonly primary: string;
-        readonly onPrimary: string;
-        readonly tint: string;
-        readonly shade: string;
-    };
+  readonly brand: {
+    readonly primary: string;
+    readonly onPrimary: string;
+    readonly tint: string;
+    readonly shade: string;
+  };
 }
 
 /**
@@ -215,15 +215,15 @@ export interface RNBrandTheme {
  * @throws {TypeError} If `brand` is not a valid `#RRGGBB` hex string.
  */
 export function buildRNBrandTheme(brand: string): RNBrandTheme {
-    const vars = deriveBrandColorVariables(brand);
-    return {
-        brand: {
-            primary: vars.brandPrimary,
-            onPrimary: vars.brandOnPrimary,
-            tint: vars.brandPrimaryTint,
-            shade: vars.brandPrimaryShade,
-        },
-    };
+  const vars = deriveBrandColorVariables(brand);
+  return {
+    brand: {
+      primary: vars.brandPrimary,
+      onPrimary: vars.brandOnPrimary,
+      tint: vars.brandPrimaryTint,
+      shade: vars.brandPrimaryShade,
+    },
+  };
 }
 
 /**
@@ -247,20 +247,20 @@ export const WCAG_AA_NORMAL_TEXT_RATIO = 4.5;
  *   hex color.
  */
 export function contrastRatio(a: string, b: string): number {
-    const parsedA = parseBrandColor(a);
-    const parsedB = parseBrandColor(b);
-    if (parsedA === null || parsedB === null) {
-        throw new TypeError(
-            `contrastRatio expected two #RRGGBB hex colors, received ${JSON.stringify(a)} and ${JSON.stringify(b)}`,
-        );
-    }
-    const [ra, ga, ba] = parseHexChannels(parsedA);
-    const [rb, gb, bb] = parseHexChannels(parsedB);
-    const la = relativeLuminance(ra, ga, ba);
-    const lb = relativeLuminance(rb, gb, bb);
-    const lighter = Math.max(la, lb);
-    const darker = Math.min(la, lb);
-    return (lighter + 0.05) / (darker + 0.05);
+  const parsedA = parseBrandColor(a);
+  const parsedB = parseBrandColor(b);
+  if (parsedA === null || parsedB === null) {
+    throw new TypeError(
+      `contrastRatio expected two #RRGGBB hex colors, received ${JSON.stringify(a)} and ${JSON.stringify(b)}`,
+    );
+  }
+  const [ra, ga, ba] = parseHexChannels(parsedA);
+  const [rb, gb, bb] = parseHexChannels(parsedB);
+  const la = relativeLuminance(ra, ga, ba);
+  const lb = relativeLuminance(rb, gb, bb);
+  const lighter = Math.max(la, lb);
+  const darker = Math.min(la, lb);
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 /**
@@ -270,12 +270,12 @@ export function contrastRatio(a: string, b: string): number {
  * ({@link WCAG_AA_NORMAL_TEXT_RATIO}).
  */
 export interface BrandContrastResult {
-    /** Pairing chosen by {@link deriveBrandColorVariables}. */
-    readonly onPrimary: string;
-    /** Achieved contrast ratio against `onPrimary`. */
-    readonly ratio: number;
-    /** `true` iff `ratio ≥ {@link WCAG_AA_NORMAL_TEXT_RATIO}`. */
-    readonly meetsAa: boolean;
+  /** Pairing chosen by {@link deriveBrandColorVariables}. */
+  readonly onPrimary: string;
+  /** Achieved contrast ratio against `onPrimary`. */
+  readonly ratio: number;
+  /** `true` iff `ratio ≥ {@link WCAG_AA_NORMAL_TEXT_RATIO}`. */
+  readonly meetsAa: boolean;
 }
 
 /**
@@ -290,13 +290,13 @@ export interface BrandContrastResult {
  * @throws {TypeError} If `brand` is not a valid `#RRGGBB` hex string.
  */
 export function evaluateBrandContrast(brand: string): BrandContrastResult {
-    const vars = deriveBrandColorVariables(brand);
-    const ratio = contrastRatio(vars.brandPrimary, vars.brandOnPrimary);
-    return {
-        onPrimary: vars.brandOnPrimary,
-        ratio,
-        meetsAa: ratio >= WCAG_AA_NORMAL_TEXT_RATIO,
-    };
+  const vars = deriveBrandColorVariables(brand);
+  const ratio = contrastRatio(vars.brandPrimary, vars.brandOnPrimary);
+  return {
+    onPrimary: vars.brandOnPrimary,
+    ratio,
+    meetsAa: ratio >= WCAG_AA_NORMAL_TEXT_RATIO,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -310,26 +310,26 @@ export function evaluateBrandContrast(brand: string): BrandContrastResult {
  * not by trusting the indexer.
  */
 function parseHexChannels(normalised: string): readonly [number, number, number] {
-    // `normalised` is guaranteed to match `#rrggbb` at this point.
-    const r = Number.parseInt(normalised.slice(1, 3), 16);
-    const g = Number.parseInt(normalised.slice(3, 5), 16);
-    const b = Number.parseInt(normalised.slice(5, 7), 16);
-    return [r, g, b] as const;
+  // `normalised` is guaranteed to match `#rrggbb` at this point.
+  const r = Number.parseInt(normalised.slice(1, 3), 16);
+  const g = Number.parseInt(normalised.slice(3, 5), 16);
+  const b = Number.parseInt(normalised.slice(5, 7), 16);
+  return [r, g, b] as const;
 }
 
 /** Convert an sRGB channel in `[0, 255]` to its linear-light value. */
 function srgbChannelToLinear(channel: number): number {
-    const c = channel / 255;
-    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  const c = channel / 255;
+  return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 }
 
 /** WCAG 2.2 relative luminance on sRGB bytes. */
 function relativeLuminance(r: number, g: number, b: number): number {
-    return (
-        0.2126 * srgbChannelToLinear(r) +
-        0.7152 * srgbChannelToLinear(g) +
-        0.0722 * srgbChannelToLinear(b)
-    );
+  return (
+    0.2126 * srgbChannelToLinear(r) +
+    0.7152 * srgbChannelToLinear(g) +
+    0.0722 * srgbChannelToLinear(b)
+  );
 }
 
 /**
@@ -338,21 +338,20 @@ function relativeLuminance(r: number, g: number, b: number): number {
  * `#rrggbb` string.
  */
 function mixToward(
-    r: number,
-    g: number,
-    b: number,
-    tr: number,
-    tg: number,
-    tb: number,
-    amount: number,
+  r: number,
+  g: number,
+  b: number,
+  tr: number,
+  tg: number,
+  tb: number,
+  amount: number,
 ): string {
-    const mix = (a: number, t: number): number =>
-        Math.round(a + (t - a) * amount);
-    return `#${toHexByte(mix(r, tr))}${toHexByte(mix(g, tg))}${toHexByte(mix(b, tb))}`;
+  const mix = (a: number, t: number): number => Math.round(a + (t - a) * amount);
+  return `#${toHexByte(mix(r, tr))}${toHexByte(mix(g, tg))}${toHexByte(mix(b, tb))}`;
 }
 
 /** Clamp to `[0, 255]` and emit a two-digit lowercase hex byte. */
 function toHexByte(n: number): string {
-    const clamped = Math.max(0, Math.min(255, n));
-    return clamped.toString(16).padStart(2, '0');
+  const clamped = Math.max(0, Math.min(255, n));
+  return clamped.toString(16).padStart(2, '0');
 }

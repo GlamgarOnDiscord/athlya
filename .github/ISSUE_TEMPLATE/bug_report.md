@@ -57,6 +57,7 @@ assignees: ''
 <!-- Coller la ligne JSON structurée correspondante si disponible. -->
 
 ```json
+
 ```
 
 ### Sentry event (si 5xx)
@@ -69,6 +70,7 @@ assignees: ''
 - **Body** (si Problem Details) :
 
 ```json
+
 ```
 
 ## Impact

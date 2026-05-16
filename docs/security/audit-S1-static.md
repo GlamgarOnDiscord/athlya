@@ -7,16 +7,16 @@ Périmètre : `packages/**/src/**` + `apps/{web,studio}/src/**` + `pnpm audit`
 ## Résumé exécutif
 
 | Sévérité | Findings |
-|---|---|
-| CRITICAL | 0 |
-| HIGH | 2 |
-| MEDIUM | 5 |
-| LOW | 3 |
-| INFO | 4 |
+| -------- | -------- |
+| CRITICAL | 0        |
+| HIGH     | 2        |
+| MEDIUM   | 5        |
+| LOW      | 3        |
+| INFO     | 4        |
 
 Total : 14 findings.
 
-Posture globale : la codebase montre une **hygiène SAST très au-dessus de la moyenne** (validation Zod systématique aux frontières, paramétrage complet des requêtes SQL via `drizzle-orm`/`sql\`\``, JWT pinné RS256 + `algorithms: [JWT_ALG]`, k-anonymity HIBP correctement appliquée, comparaison HMAC Stripe via `crypto.subtle.verify`, CSP avec nonce 128 bits + `strict-dynamic`, refresh-token rotation via session ledger, secret-leak guard sur les erreurs 5xx). Les findings HIGH proviennent **exclusivement de transitive deps test-only** (`undici@5.29.0` via `testcontainers`). Les findings PROD-RISK identifiés sont mineurs (CSP `unsafe-eval` côté `next dev` correctement scopé, `postcss` Next.js 16 transitive). Aucun secret hardcodé en production, aucun `eval`/`Function()` runtime, aucun usage de `child_process` hors tests.
+Posture globale : la codebase montre une **hygiène SAST très au-dessus de la moyenne** (validation Zod systématique aux frontières, paramétrage complet des requêtes SQL via `drizzle-orm`/`sql\`\``, JWT pinné RS256 + `algorithms: [JWT_ALG]`, k-anonymity HIBP correctement appliquée, comparaison HMAC Stripe via `crypto.subtle.verify`, CSP avec nonce 128 bits + `strict-dynamic`, refresh-token rotation via session ledger, secret-leak guard sur les erreurs 5xx). Les findings HIGH proviennent **exclusivement de transitive deps test-only** (`undici@5.29.0`via`testcontainers`). Les findings PROD-RISK identifiés sont mineurs (CSP `unsafe-eval`côté`next dev`correctement scopé,`postcss`Next.js 16 transitive). Aucun secret hardcodé en production, aucun`eval`/`Function()`runtime, aucun usage de`child_process` hors tests.
 
 ## Périmètre exclu (et raisons)
 
@@ -29,6 +29,7 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 ## Findings
 
 ### S1-001 [HIGH] [DEV-ONLY] CVE-2026-1526 / CVE-2026-2229 — `undici@5.29.0` transitive via Testcontainers
+
 - **Localisation** : `packages/{db,members,reservations}` → `testcontainers@10.28.0` → `undici@5.29.0`
 - **Description** : Deux CVE HIGH :
   - **GHSA-vrm6-8vpv-qv8q** (CVE-2026-1526, CVSS 7.5) — déni de service via décompression `permessage-deflate` sans borne (decompression bomb).
@@ -38,11 +39,12 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Mitigation recommandée** : `pnpm up testcontainers@latest` (la 11.x embarque `undici>=6.24.0`). Ou ajouter une override dans `pnpm-workspace.yaml` :
   ```yaml
   overrides:
-    undici: ">=6.24.0"
+    undici: '>=6.24.0'
   ```
 - **Effort** : trivial.
 
 ### S1-002 [MEDIUM] [DEV-ONLY] CVE-2026-22036 / CVE-2026-1525 / CVE-2026-1527 — `undici@5.29.0` (suite)
+
 - **Localisation** : idem S1-001
 - **Description** : Trois CVE MEDIUM supplémentaires sur la même version d'`undici` :
   - **GHSA-g9mf-h72j-4rw9** (CVE-2026-22036) — `Content-Encoding` chain unbounded → CPU/mémoire.
@@ -54,6 +56,7 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Effort** : trivial.
 
 ### S1-003 [MEDIUM] [PROD-RISK] CVE-2026-41305 — `postcss@8.4.31` via Next.js 16
+
 - **Localisation** : `apps/{studio,web}` → `next@16.2.6` → `postcss@8.4.31`
 - **Description** : XSS via `</style>` non échappé dans la sortie de stringification CSS (GHSA-qx2v-qp2m-jg93, CVSS 6.1).
 - **Scénario d'attaque** : un attaquant qui contrôle du CSS injecté côté serveur (theming brand-color) peut casser la balise `<style>` et exécuter du JS. **Mitigé partiellement** par : (1) le CSP strict `script-src 'nonce-…' 'strict-dynamic'` qui bloquerait tout `<script>` injecté sans nonce, (2) le serveur n'accepte pas de CSS arbitraire — seul `brandColor: HexColorSchema` (`/^#[0-9A-Fa-f]{6}$/`) est passé au CSS-in-JS via `evaluateBrandContrast` (validation Zod stricte).
@@ -61,11 +64,12 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Mitigation recommandée** : attendre la mise à jour transitive de Next 16 (Next.js doit bumper `postcss` ≥ 8.5.10). En attendant, ajouter une override pnpm :
   ```yaml
   overrides:
-    postcss: ">=8.5.10"
+    postcss: '>=8.5.10'
   ```
 - **Effort** : trivial.
 
 ### S1-004 [MEDIUM] [DEV-ONLY] CVE GHSA-67mh-4wv8-2f99 — `esbuild@0.18.20` via `drizzle-kit`
+
 - **Localisation** : `packages/db` → `drizzle-kit@0.31.10` → `@esbuild-kit/esm-loader@2.6.5` → `esbuild@0.18.20`
 - **Description** : Le serveur de dev `esbuild` accepte CORS `*` sur tous les endpoints — n'importe quel site web peut lire le bundle source servi en local.
 - **Scénario d'attaque** : un dev qui visite un site malveillant pendant qu'il run `drizzle-kit studio` peut voir son bundle exfiltré.
@@ -74,6 +78,7 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Effort** : trivial.
 
 ### S1-005 [MEDIUM] [PROD-RISK] CSP autorise `'unsafe-eval'` — vérifier rigueur du gating
+
 - **Localisation** : `apps/web/src/lib/csp.ts:88`, `apps/studio/src/lib/csp.ts:39`, `apps/web/src/proxy.ts:78`, `apps/studio/src/proxy.ts:42`
 - **Description** : Le CSP ajoute `'unsafe-eval'` à `script-src` quand `dev=true`. Le toggle est calculé via `process.env.NODE_ENV !== 'production'` — un build prod déployé avec `NODE_ENV` mal défini retomberait sur la version laxiste.
 - **Scénario d'attaque** : un attaquant XSS exploitant un sink R/W (impossible sans S1-003 d'abord) peut déclencher `eval(malicious)`. Le risque concret est conditionné à la défaillance d'au moins deux contrôles (mauvais NODE_ENV + sink XSS).
@@ -82,6 +87,7 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Effort** : small.
 
 ### S1-006 [MEDIUM] [PROD-RISK] CSP `style-src` retombe sur `'unsafe-inline'` quand `isDev=true`
+
 - **Localisation** : `apps/web/src/lib/csp.ts:101-103`, `apps/studio/src/lib/csp.ts:41-44`
 - **Description** : Quand `isDev=true`, `style-src` est `'self' 'unsafe-inline'` — les nonces sont délibérément retirés (CSP L2 ignore `'unsafe-inline'` si un nonce est présent). Mêmes risques que S1-005 : un mauvais positionnement de `NODE_ENV` dégrade la posture en prod.
 - **Scénario d'attaque** : XSS injectant un `<style>` malicieux (ex. exfil via background-image: url) passerait en dev. Combiné à S1-003 ce serait critique. En prod, idem que S1-005.
@@ -90,6 +96,7 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Effort** : small.
 
 ### S1-007 [LOW] [PROD-RISK] `withTenant` — JSON.parse(JWKS_JSON) sur input env sans validation forte
+
 - **Localisation** : `packages/api/src/adapters/auth-deps.ts:107`
 - **Description** : `JSON.parse(wider.JWKS_JSON) as Jwks` casse le typage Zod sur le JWKS chargé depuis `env.JWKS_JSON`. Si la string est corrompue ou si un opérateur push un JWKS avec `kty: 'oct'` (HMAC), `jose` pourrait l'accepter et émettre un cas dégradé. Mitigé par `algorithms: ['RS256']` côté `jwt.ts:317` et `auth.ts:359` qui rejette toute clé symétrique.
 - **Scénario d'attaque** : un opérateur (insider) pousse un JWKS sans `kid` ou avec `alg` autre que RS256 ; le service échoue silencieusement à vérifier les tokens (faux positifs côté `invalid_token`). Pas un vecteur attaquant externe.
@@ -98,10 +105,11 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Effort** : small.
 
 ### S1-008 [LOW] [PROD-RISK] `sql.raw` sur noms de colonnes (pas d'input user, mais pattern à éviter)
+
 - **Localisation** : `packages/db/src/schema/_shared.ts:80,87`
   ```ts
   export function sqlIsNull(column: string): SQL {
-      return sql.raw(`"${column}" IS NULL`);
+    return sql.raw(`"${column}" IS NULL`);
   }
   ```
 - **Description** : `sql.raw` interpole `column` directement dans la string SQL **sans paramétrage**. Les call-sites actuels passent uniquement des littéraux compilés (`'deleted_at'`, `'cancelled_at'`) — aucun input utilisateur n'atteint cette fonction. Mais le pattern est dangereux si un futur appelant passe une string non-littérale.
@@ -111,6 +119,7 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Effort** : trivial à small.
 
 ### S1-009 [LOW] [PROD-RISK] HIBP — User-Agent permet fingerprinting
+
 - **Localisation** : `packages/auth/src/hibp.ts:130`
 - **Description** : `'User-Agent': 'athlya-auth/1 (+https://athlya.app)'` — exposition gratuite du nom du service à HIBP. Pas un risque de sécurité ; un risque de privacy/posture.
 - **Scénario d'attaque** : néant. Ne fuite pas de mot de passe ni de hash (k-anonymity respectée).
@@ -119,6 +128,7 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Effort** : trivial.
 
 ### S1-010 [INFO] [PROD-RISK] Plusieurs `as unknown as` — masquage potentiel de typing
+
 - **Localisation** :
   - `packages/auth/src/service.ts:494,513` (cast `AthlyaEvent`)
   - `packages/db/src/idempotency.ts:145`, `packages/db/src/outbox.ts:201` (drizzle row narrowing — justifié par limitations runtime)
@@ -131,6 +141,7 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Effort** : medium.
 
 ### S1-011 [INFO] [PROD-RISK] `process.env` directement lu hors helpers typés
+
 - **Localisation** : `apps/web/src/proxy.ts:78`, `apps/studio/src/proxy.ts:42`, `apps/{web,studio}/src/app/api/auth/*/route.ts` (NODE_ENV uniquement)
 - **Description** : Les helpers typés (`apps/{web,studio}/src/lib/env.ts`) couvrent `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `NEXT_PUBLIC_CSP_REPORT_URI`. Le seul accès direct hors helper est `process.env['NODE_ENV']` (et `process.env.NODE_ENV` dans i18n) — variable Next.js standard, pas un secret.
 - **Impact** : informatif. Conformité au pattern attendu.
@@ -138,6 +149,7 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Effort** : trivial.
 
 ### S1-012 [INFO] [DEV-ONLY] `eval()` mention dans CSP dev — documenté
+
 - **Localisation** : `apps/web/src/lib/csp.ts:42-46`, `apps/web/src/proxy.ts:84`
 - **Description** : `'unsafe-eval'` est conditionné à `dev` runtime flag pour permettre les source-maps stack-traces React dev. **Aucun appel `eval()` runtime dans le code source du projet** (vérifié via grep — seuls les commentaires et les arbitraires fast-check `nonEmpty…` matchent). Bien documenté.
 - **Impact** : informatif (déjà couvert par S1-005).
@@ -145,6 +157,7 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Effort** : voir S1-005.
 
 ### S1-013 [INFO] [PROD-RISK] `Math.random` fallback dans tracing/ids et reservations/cancel
+
 - **Localisation** : `packages/api/src/tracing/ids.ts:208`, `packages/reservations/src/cancel.ts:360`
 - **Description** : Fallback `Math.random` quand `crypto.getRandomValues` indisponible. Sur Cloudflare Workers et Node 20 le fallback n'est jamais pris (`crypto` toujours présent). Les deux call-sites le documentent explicitement.
 - **Scénario d'attaque** : néant en production. Théoriquement, sur une plateforme exotique sans Web Crypto, des trace-ids et UUIDs prédictibles. Ne touche pas les claims JWT, les nonces CSP ni les `jti` QR (ceux-ci passent par `crypto.randomUUID()` avec assertion non-empty).
@@ -153,6 +166,7 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Effort** : trivial.
 
 ### S1-014 [INFO] [PROD-RISK] `bcrypt.compare` n'est pas explicitement timing-safe documenté
+
 - **Localisation** : `packages/auth/src/password.ts:80`
 - **Description** : `bcryptjs.compare` est implémentée pour être timing-safe sur la string complète (constant-time ASCII comparison interne). Le service auth (`packages/auth/src/service.ts:loginPath`) compense même la branche "user not found / OAuth-only" via un hash fictif (`DUMMY_HASH`) pour uniformiser les latences. Bien fait.
 - **Impact** : informatif.
@@ -169,7 +183,7 @@ Les pratiques suivantes ont été vérifiées et sont **conformes ou supérieure
 4. **`kid` validation** — chaque JWT mint stamp un `kid` (`jwt.ts:236,272`, `qr.ts:234`); le verify charge le JWKS local et `jose` matche par `kid`.
 5. **JWT key rotation** — `rotateKeys` + `currentJwks` impose `previous.kid !== next.kid`, demote l'ancienne clé avec `notAfter = now + 24h` (Req 25.5).
 6. **`withTenant` (db/client.ts)** — claims validées par `validateClaims` (regex UUID v1-8, role enum) AVANT toute requête SQL. Trois `set_config()` sont en plus paramétrés via `${safe.userId}` etc., pas concaténés. Defense-in-depth.
-7. **Toutes les requêtes SQL paramétrées** — chaque `tx.execute(sql\`...\`)` audité (idempotency.ts, outbox.ts, client.ts) utilise des placeholders `${value}`. `sql.raw` est confiné à `_shared.ts` sur des noms de colonnes littéraux compilés (voir S1-008).
+7. **Toutes les requêtes SQL paramétrées** — chaque `tx.execute(sql\`...\`)`audité (idempotency.ts, outbox.ts, client.ts) utilise des placeholders`${value}`. `sql.raw`est confiné à`\_shared.ts` sur des noms de colonnes littéraux compilés (voir S1-008).
 8. **HIBP k-anonymity** — `hibp.ts:113-127` envoie SEULEMENT le préfixe SHA-1 des 5 premiers caractères. Le full hash et le password ne quittent jamais le worker. Suffix scan sur la réponse, comparison case-insensitive, support `Add-Padding: true`.
 9. **CSP nonces 128 bits** — `nonce.ts:7-12` appelle `crypto.getRandomValues(new Uint8Array(16))` (= 128 bits) puis encode base64url. Conforme Req 25.3. Identique entre `apps/web` et `apps/studio`.
 10. **HMAC Stripe constant-time** — `webhook.ts:426` utilise `crypto.subtle.verify` (specified constant-time). Itération ne short-circuite pas (commentaire ligne 433-435 explicite).
@@ -179,10 +193,12 @@ Les pratiques suivantes ont été vérifiées et sont **conformes ou supérieure
 14. **Cookies refresh** `HttpOnly; Secure (prod); SameSite=Lax; Path=/` — JS lock-out total. Refresh tokens jamais accessibles depuis le navigateur.
 15. **Validation Zod systématique** — chaque route `/v1/*` a `zValidator(target, Schema)` ; toutes les schemas sont `.strict()` (rejet des champs inconnus). `c.req.json()` n'est jamais appelé sans validation préalable (vérifié par grep).
 16. **Tailles bornées sur strings sensibles** :
-   - `password`: min 8, max 72 (RegisterRequest) / min 1, max 72 (LoginRequest) — conforme bcrypt 72-byte limit.
-   - `email`: max 254 (RFC 5321).
-   - `displayName`: trim, min 1, max 80.
-   - `Idempotency-Key`: trim + max 255 chars (vérifié à la fois dans le middleware et dans le helper DB).
+
+- `password`: min 8, max 72 (RegisterRequest) / min 1, max 72 (LoginRequest) — conforme bcrypt 72-byte limit.
+- `email`: max 254 (RFC 5321).
+- `displayName`: trim, min 1, max 80.
+- `Idempotency-Key`: trim + max 255 chars (vérifié à la fois dans le middleware et dans le helper DB).
+
 17. **Login throttle** — `auth/throttle.ts` : sliding-window 5 attempts / 15 min keyé sur `(IP, normalized email)`. Email lower-cased + trimmed pour empêcher le bypass casse.
 18. **Refresh token rotation single-use** — `SessionStore.rotate(oldSid, newSid)` atomique ; `rotated === false` → `token_invalid` immédiat.
 19. **JWT verify clockTolerance 0** — `auth.ts:355`, `qr.ts:286` : pas de skew toléré (gateway/serveurs NTP-synced).
@@ -208,6 +224,7 @@ Les pratiques suivantes ont été vérifiées et sont **conformes ou supérieure
 **87 / 100**
 
 Calcul indicatif :
+
 - Base : 100
 - −2 × HIGH (mais DEV-ONLY) : −4
 - −5 × MEDIUM (3 PROD-RISK, 2 DEV-ONLY) : −7
@@ -223,6 +240,7 @@ Posture générale : **excellente**. Les bugs typiques d'un audit SAST (SQL inje
 3. **Mettre à jour `testcontainers` (et donc `undici`)** pour fermer les 5 CVE transitives, même DEV-ONLY. Permet aussi de rester dans une fenêtre `pnpm audit` propre côté pipeline `deps-audit.yml`. Effort trivial.
 
 Pistes complémentaires (post-priorités) :
+
 - Remplacer `_shared.ts:sqlIsNull/sqlIsNotNull` par les helpers natifs de drizzle pour éliminer l'usage de `sql.raw`.
 - Valider `JWKS_JSON` au boot avec un Zod schema (S1-007).
 - Résoudre le `FIXME(B8.3)` sur le cast Queue Cloudflare.

@@ -26,44 +26,44 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 import './globals.css';
-import { Geist } from "next/font/google";
+import { Geist } from 'next/font/google';
 
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 
 export const metadata: Metadata = {
+  title: 'Athlya Studio',
+  description: "Console d'administration des studios Athlya.",
+  openGraph: {
     title: 'Athlya Studio',
     description: "Console d'administration des studios Athlya.",
-    openGraph: {
-        title: 'Athlya Studio',
-        description: "Console d'administration des studios Athlya.",
-        type: 'website',
-    },
+    type: 'website',
+  },
 };
 
 export default async function RootLayout({
-    children,
+  children,
 }: {
-    readonly children: ReactNode;
+  readonly children: ReactNode;
 }): Promise<ReactNode> {
-    const locale = await getLocale();
+  const locale = await getLocale();
 
-    return (
-        <html lang={locale} suppressHydrationWarning className={cn("font-sans", geist.variable)}>
-            <body>
-                <LocaleProvider locale={locale}>
-                    <AuthProvider>
-                        {children}
-                        <Toaster richColors position="top-right" />
-                        <footer className="mx-auto flex max-w-5xl items-center justify-end px-6 py-4 text-xs text-muted-foreground">
-                            <LocaleSwitcher />
-                        </footer>
-                    </AuthProvider>
-                </LocaleProvider>
-            </body>
-        </html>
-    );
+  return (
+    <html lang={locale} suppressHydrationWarning className={cn('font-sans', geist.variable)}>
+      <body>
+        <LocaleProvider locale={locale}>
+          <AuthProvider>
+            {children}
+            <Toaster richColors position="top-right" />
+            <footer className="mx-auto flex max-w-5xl items-center justify-end px-6 py-4 text-xs text-muted-foreground">
+              <LocaleSwitcher />
+            </footer>
+          </AuthProvider>
+        </LocaleProvider>
+      </body>
+    </html>
+  );
 }
 
 export type { Locale } from '@athlya/shared/i18n';

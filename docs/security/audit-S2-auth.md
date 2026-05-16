@@ -8,13 +8,13 @@ Méthode : revue statique du code, lecture des tests d'intégration, traçage du
 
 ## Résumé exécutif
 
-| Sévérité | Findings | Marqueur |
-|---|---|---|
-| CRITICAL | 3 | tous PROD-RISK |
-| HIGH | 5 | tous PROD-RISK |
-| MEDIUM | 5 | 4 PROD-RISK / 1 DEV-ONLY |
-| LOW | 4 | 2 PROD-RISK / 2 DEV-ONLY |
-| INFO | 3 | DEV-ONLY |
+| Sévérité | Findings | Marqueur                 |
+| -------- | -------- | ------------------------ |
+| CRITICAL | 3        | tous PROD-RISK           |
+| HIGH     | 5        | tous PROD-RISK           |
+| MEDIUM   | 5        | 4 PROD-RISK / 1 DEV-ONLY |
+| LOW      | 4        | 2 PROD-RISK / 2 DEV-ONLY |
+| INFO     | 3        | DEV-ONLY                 |
 
 **Verdict** : la cryptographie sous-jacente (`jose` + RS256 + JWKS local) est correctement utilisée et les primitives (HIBP fail-closed, throttle sliding-window, password timing-uniforme) sont bien isolées et testées. **Le problème principal n'est pas la qualité des primitives mais leur câblage** : plusieurs garde-fous sécuritaires existent dans `@athlya/auth` mais ne sont jamais branchés dans `worker.ts` ou dans `auth-deps.ts`. Une attaque brute-force sur `/v1/auth/login` ne rencontre actuellement aucun rempart côté gateway.
 
@@ -54,6 +54,7 @@ Méthode : revue statique du code, lecture des tests d'intégration, traçage du
   5. `SREM auth:user:<userId>:sids oldSid`
 
   Entre les étapes 1 et 4, un attaquant qui possède le même refresh token (vol/rejeu) peut frapper l'endpoint `/v1/auth/refresh` en parallèle d'une rotation légitime. Les deux requêtes passent toutes les deux le `GET` (étape 1) avec la même valeur, créent toutes les deux un nouveau sid (étape 2 différent grâce à `crypto.randomUUID()`), puis chacune supprime le même `oldSid` (étape 4 — idempotent). **Résultat : deux chaînes de refresh divergentes vivent en parallèle**, chacune liée au même userId. Le contrat `rotate()` censé renvoyer `false` pour la deuxième rotation est violé.
+
 - **Scénario d'attaque** : attaquant intercepte un refresh token (XSS, log fuite, malware sur device). Au moment où la victime fait `refresh`, l'attaquant envoie aussi son `refresh` exactement en parallèle. Les deux gagnent ; l'attaquant possède désormais une chaîne de refresh persistante indépendante de celle de la victime.
 - **Impact** : compromission persistante invisible côté victime (sa chaîne fonctionne toujours), aucun signal d'alerte. Couplé à S2-004 (pas de family-tree revoke), il n'y a **aucune détection** possible a posteriori.
 - **Mitigation recommandée** :
@@ -345,19 +346,19 @@ Méthode : revue statique du code, lecture des tests d'intégration, traçage du
 
 ## Score sécurité : 58 / 100
 
-| Critère | Pondération | Score | Pondéré |
-|---|---|---|---|
-| Cryptographie & JWT (algo, kid, JWKS) | 15 | 12 / 15 | 12 |
-| Brute-force & rate-limiting (login, refresh, global) | 20 | 5 / 20 | 5 |
-| Refresh rotation atomicity & detection | 15 | 5 / 15 | 5 |
-| RBAC (closed enum, requireRole coverage) | 10 | 9 / 10 | 9 |
-| Multi-tenant isolation (404 not 403, RLS) | 10 | 8 / 10 | 8 |
-| Password lifecycle (HIBP, bcrypt, reset) | 10 | 5 / 10 | 5 |
-| Turnstile & anti-bot | 5 | 4 / 5 | 4 |
-| Session security (cookies, logout) | 5 | 4 / 5 | 4 |
-| Audit & observability (logs, traceId, Sentry) | 5 | 3 / 5 | 3 |
-| Tests & defense-in-depth | 5 | 3 / 5 | 3 |
-| **Total** | **100** | | **58** |
+| Critère                                              | Pondération | Score   | Pondéré |
+| ---------------------------------------------------- | ----------- | ------- | ------- |
+| Cryptographie & JWT (algo, kid, JWKS)                | 15          | 12 / 15 | 12      |
+| Brute-force & rate-limiting (login, refresh, global) | 20          | 5 / 20  | 5       |
+| Refresh rotation atomicity & detection               | 15          | 5 / 15  | 5       |
+| RBAC (closed enum, requireRole coverage)             | 10          | 9 / 10  | 9       |
+| Multi-tenant isolation (404 not 403, RLS)            | 10          | 8 / 10  | 8       |
+| Password lifecycle (HIBP, bcrypt, reset)             | 10          | 5 / 10  | 5       |
+| Turnstile & anti-bot                                 | 5           | 4 / 5   | 4       |
+| Session security (cookies, logout)                   | 5           | 4 / 5   | 4       |
+| Audit & observability (logs, traceId, Sentry)        | 5           | 3 / 5   | 3       |
+| Tests & defense-in-depth                             | 5           | 3 / 5   | 3       |
+| **Total**                                            | **100**     |         | **58**  |
 
 Le score est tiré vers le bas par 3 défauts de **wiring** plutôt que par des défauts de **conception**. Les primitives sont bonnes ; les ponts entre elles manquent.
 
@@ -366,6 +367,7 @@ Le score est tiré vers le bas par 3 défauts de **wiring** plutôt que par des 
 ## 3 priorités absolues
 
 ### Priorité 1 — Brancher les remparts brute-force (CRITICAL)
+
 - **Combine** : S2-001 + S2-003 + S2-008.
 - **Action** :
   1. `app.use('/v1/*', rateLimit())` dans `worker.ts`.
@@ -375,6 +377,7 @@ Le score est tiré vers le bas par 3 défauts de **wiring** plutôt que par des 
 - **Bénéfice** : ferme le gros trou d'attaque le plus exploitable.
 
 ### Priorité 2 — Rendre la rotation refresh atomique + family-tree revoke (CRITICAL + HIGH)
+
 - **Combine** : S2-002 + S2-004 + S2-020.
 - **Action** :
   1. Réécrire `SessionStore.rotate` en script Lua (`EVAL`) qui fait `GETDEL` du oldSid + `SET NX` du newSid + mises à jour SET.
@@ -384,6 +387,7 @@ Le score est tiré vers le bas par 3 défauts de **wiring** plutôt que par des 
 - **Bénéfice** : élimine la fenêtre de fork de session et donne un signal d'alerte sur token volé.
 
 ### Priorité 3 — Implémenter le password reset flow (HIGH)
+
 - **Action** : S2-006 in extenso (forgot + reset + audit + throttle + email).
 - **Effort** : 3-5 jours.
 - **Bénéfice** : pré-requis bloquant avant ouverture publique. Empêche le scénario « utilisateur HIBP-leaked, plus aucun moyen de récupérer son compte ».
@@ -408,4 +412,4 @@ Le score est tiré vers le bas par 3 défauts de **wiring** plutôt que par des 
 
 ---
 
-*Audit produit le 2026-05-15 — revue de code statique uniquement, aucune modification appliquée. Document destiné à `docs/security/audit-S2-auth.md`.*
+_Audit produit le 2026-05-15 — revue de code statique uniquement, aucune modification appliquée. Document destiné à `docs/security/audit-S2-auth.md`._

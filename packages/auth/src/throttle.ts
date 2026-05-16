@@ -77,13 +77,13 @@ export const LOGIN_BUCKET_PREFIX = 'auth:login';
  * it everywhere.
  */
 export interface LoginThrottleDeps {
-    /** Upstash Redis client, typically `Redis.fromEnv()` on the edge. */
-    readonly redis: Redis;
-    /**
-     * Injectable clock returning milliseconds since epoch. Defaults to
-     * the process clock inside the rate limiter. Exposed for tests.
-     */
-    readonly now?: () => number;
+  /** Upstash Redis client, typically `Redis.fromEnv()` on the edge. */
+  readonly redis: Redis;
+  /**
+   * Injectable clock returning milliseconds since epoch. Defaults to
+   * the process clock inside the rate limiter. Exposed for tests.
+   */
+  readonly now?: () => number;
 }
 
 /**
@@ -104,9 +104,9 @@ export interface LoginThrottleDeps {
  * to branch on `allow`.
  */
 export interface LoginThrottleDecision {
-    readonly allow: boolean;
-    readonly retryAfterSec?: number;
-    readonly remaining?: number;
+  readonly allow: boolean;
+  readonly retryAfterSec?: number;
+  readonly remaining?: number;
 }
 
 /**
@@ -131,10 +131,10 @@ export interface LoginThrottleDecision {
  * upstream in the Zod schema.
  */
 export function normalizeLoginEmail(email: string): string {
-    if (typeof email !== 'string') {
-        throw new TypeError('shouldAllowLogin: email must be a string');
-    }
-    return email.trim().toLowerCase();
+  if (typeof email !== 'string') {
+    throw new TypeError('shouldAllowLogin: email must be a string');
+  }
+  return email.trim().toLowerCase();
 }
 
 /**
@@ -168,21 +168,21 @@ export function normalizeLoginEmail(email: string): string {
  * consumers.
  */
 export async function loginBucketKey(ip: string, email: string): Promise<string> {
-    assertNonEmpty(ip, 'ip');
-    assertNonEmpty(email, 'email');
-    const normalized = `${ip}:${normalizeLoginEmail(email)}`;
-    const data = new TextEncoder().encode(normalized);
-    // `globalThis.crypto.subtle` is provided by the Cloudflare
-    // Workers runtime AND by Node 20 LTS (matching the .nvmrc
-    // engine pin). We do not import `node:crypto` here so the
-    // module stays Workers-runtime-pure.
-    const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
-    const hex = Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-    // 24 hex chars = 96 bits — comfortable margin over collision
-    // birthday bound for the throttle's window-bound population.
-    return `${LOGIN_BUCKET_PREFIX}:${hex.slice(0, 24)}`;
+  assertNonEmpty(ip, 'ip');
+  assertNonEmpty(email, 'email');
+  const normalized = `${ip}:${normalizeLoginEmail(email)}`;
+  const data = new TextEncoder().encode(normalized);
+  // `globalThis.crypto.subtle` is provided by the Cloudflare
+  // Workers runtime AND by Node 20 LTS (matching the .nvmrc
+  // engine pin). We do not import `node:crypto` here so the
+  // module stays Workers-runtime-pure.
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
+  const hex = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  // 24 hex chars = 96 bits — comfortable margin over collision
+  // birthday bound for the throttle's window-bound population.
+  return `${LOGIN_BUCKET_PREFIX}:${hex.slice(0, 24)}`;
 }
 
 /**
@@ -219,23 +219,23 @@ export async function loginBucketKey(ip: string, email: string): Promise<string>
  * the behavior we want.
  */
 export async function shouldAllowLogin(
-    ip: string,
-    email: string,
-    deps: LoginThrottleDeps,
+  ip: string,
+  email: string,
+  deps: LoginThrottleDeps,
 ): Promise<LoginThrottleDecision> {
-    const key = await loginBucketKey(ip, email);
+  const key = await loginBucketKey(ip, email);
 
-    const decision = await rateLimitSlidingWindow(
-        deps.now !== undefined ? { redis: deps.redis, now: deps.now } : { redis: deps.redis },
-        key,
-        LOGIN_ATTEMPT_LIMIT,
-        LOGIN_WINDOW_SEC,
-    );
+  const decision = await rateLimitSlidingWindow(
+    deps.now !== undefined ? { redis: deps.redis, now: deps.now } : { redis: deps.redis },
+    key,
+    LOGIN_ATTEMPT_LIMIT,
+    LOGIN_WINDOW_SEC,
+  );
 
-    if (decision.kind === 'allow') {
-        return { allow: true, remaining: decision.remaining };
-    }
-    return { allow: false, retryAfterSec: decision.retryAfterSec };
+  if (decision.kind === 'allow') {
+    return { allow: true, remaining: decision.remaining };
+  }
+  return { allow: false, retryAfterSec: decision.retryAfterSec };
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +243,7 @@ export async function shouldAllowLogin(
 // ---------------------------------------------------------------------------
 
 function assertNonEmpty(value: string, label: string): void {
-    if (typeof value !== 'string' || value.length === 0) {
-        throw new TypeError(`${label} must be a non-empty string`);
-    }
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new TypeError(`${label} must be a non-empty string`);
+  }
 }

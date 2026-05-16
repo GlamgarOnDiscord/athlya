@@ -40,16 +40,16 @@ import type { Redis } from '@upstash/redis';
  * accidental mutation through type-checking alone.
  */
 export interface RemainingCounterReader {
-    /**
-     * Return the current remaining seat count for `classId`, or `null`
-     * when the key is missing in Redis (not yet seeded, or evicted).
-     *
-     * Callers fall back to `class.capacity` on `null` — that's the
-     * safe upper bound when the counter has not been initialised yet,
-     * which can happen for a freshly-created class whose seed write
-     * (task 6.2) has not yet landed or for a pilot-data import.
-     */
-    getRemaining(classId: string): Promise<number | null>;
+  /**
+   * Return the current remaining seat count for `classId`, or `null`
+   * when the key is missing in Redis (not yet seeded, or evicted).
+   *
+   * Callers fall back to `class.capacity` on `null` — that's the
+   * safe upper bound when the counter has not been initialised yet,
+   * which can happen for a freshly-created class whose seed write
+   * (task 6.2) has not yet landed or for a pilot-data import.
+   */
+  getRemaining(classId: string): Promise<number | null>;
 }
 
 /**
@@ -58,36 +58,36 @@ export interface RemainingCounterReader {
  * `RemainingCounterReader` dependency.
  */
 export interface RemainingCounter extends RemainingCounterReader {
-    /**
-     * Atomically decrement the counter and return the new value.
-     *
-     * A negative return value is **legal** and signals "capacity
-     * exhausted" to the booking flow; Algorithm 1 then issues a
-     * compensating {@link RemainingCounter.incr} and inserts a
-     * waitlist row instead.
-     */
-    decr(classId: string): Promise<number>;
+  /**
+   * Atomically decrement the counter and return the new value.
+   *
+   * A negative return value is **legal** and signals "capacity
+   * exhausted" to the booking flow; Algorithm 1 then issues a
+   * compensating {@link RemainingCounter.incr} and inserts a
+   * waitlist row instead.
+   */
+  decr(classId: string): Promise<number>;
 
-    /**
-     * Atomically increment the counter and return the new value. Used
-     * both as the compensating action of a failed {@link decr} and as
-     * the happy-path cancellation bump (Requirement 9.4).
-     */
-    incr(classId: string): Promise<number>;
+  /**
+   * Atomically increment the counter and return the new value. Used
+   * both as the compensating action of a failed {@link decr} and as
+   * the happy-path cancellation bump (Requirement 9.4).
+   */
+  incr(classId: string): Promise<number>;
 
-    /**
-     * Overwrite the counter with `capacity`. Called on class creation
-     * (seed) and whenever an admin updates capacity (re-seed). Always
-     * resolves once the write has been acknowledged by Redis.
-     */
-    reset(classId: string, capacity: number): Promise<void>;
+  /**
+   * Overwrite the counter with `capacity`. Called on class creation
+   * (seed) and whenever an admin updates capacity (re-seed). Always
+   * resolves once the write has been acknowledged by Redis.
+   */
+  reset(classId: string, capacity: number): Promise<void>;
 
-    /**
-     * Expose the computed Redis key. Useful for logging, debugging,
-     * and for tests that want to inspect the underlying store without
-     * re-implementing the prefix convention.
-     */
-    key(classId: string): string;
+  /**
+   * Expose the computed Redis key. Useful for logging, debugging,
+   * and for tests that want to inspect the underlying store without
+   * re-implementing the prefix convention.
+   */
+  key(classId: string): string;
 }
 
 /**
@@ -105,10 +105,10 @@ export const DEFAULT_COUNTER_PREFIX = 'class';
  * in the factory below.
  */
 export interface RedisLike {
-    get(key: string): Promise<unknown>;
-    set(key: string, value: string | number): Promise<unknown>;
-    incr(key: string): Promise<number>;
-    decr(key: string): Promise<number>;
+  get(key: string): Promise<unknown>;
+  set(key: string, value: string | number): Promise<unknown>;
+  incr(key: string): Promise<number>;
+  decr(key: string): Promise<number>;
 }
 
 /**
@@ -118,16 +118,16 @@ export interface RedisLike {
  * as a `number` already — we accept both paths and reject the rest.
  */
 function parseRemaining(raw: unknown): number | null {
-    if (raw === null || raw === undefined) return null;
-    if (typeof raw === 'number') {
-        return Number.isInteger(raw) ? raw : null;
-    }
-    if (typeof raw === 'string') {
-        if (raw.length === 0) return null;
-        const n = Number(raw);
-        return Number.isInteger(n) ? n : null;
-    }
-    return null;
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number') {
+    return Number.isInteger(raw) ? raw : null;
+  }
+  if (typeof raw === 'string') {
+    if (raw.length === 0) return null;
+    const n = Number(raw);
+    return Number.isInteger(n) ? n : null;
+  }
+  return null;
 }
 
 /**
@@ -146,42 +146,42 @@ function parseRemaining(raw: unknown): number | null {
  * instance which trivially satisfies that shape.
  */
 export function createRedisRemainingCounter(
-    redis: RedisLike | Redis,
-    prefix: string = DEFAULT_COUNTER_PREFIX,
+  redis: RedisLike | Redis,
+  prefix: string = DEFAULT_COUNTER_PREFIX,
 ): RemainingCounter {
-    // `Redis` from `@upstash/redis` structurally satisfies
-    // `RedisLike` for the four commands we use (`GET`, `SET`,
-    // `INCR`, `DECR`), so the union collapses to `RedisLike` for
-    // the purposes of this closure.
-    const client: RedisLike = redis;
+  // `Redis` from `@upstash/redis` structurally satisfies
+  // `RedisLike` for the four commands we use (`GET`, `SET`,
+  // `INCR`, `DECR`), so the union collapses to `RedisLike` for
+  // the purposes of this closure.
+  const client: RedisLike = redis;
 
-    const key = (classId: string): string => `${prefix}:${classId}:remaining`;
+  const key = (classId: string): string => `${prefix}:${classId}:remaining`;
 
-    return {
-        key,
+  return {
+    key,
 
-        async getRemaining(classId: string): Promise<number | null> {
-            const raw = await client.get(key(classId));
-            return parseRemaining(raw);
-        },
+    async getRemaining(classId: string): Promise<number | null> {
+      const raw = await client.get(key(classId));
+      return parseRemaining(raw);
+    },
 
-        async decr(classId: string): Promise<number> {
-            return client.decr(key(classId));
-        },
+    async decr(classId: string): Promise<number> {
+      return client.decr(key(classId));
+    },
 
-        async incr(classId: string): Promise<number> {
-            return client.incr(key(classId));
-        },
+    async incr(classId: string): Promise<number> {
+      return client.incr(key(classId));
+    },
 
-        async reset(classId: string, capacity: number): Promise<void> {
-            if (!Number.isInteger(capacity) || capacity < 0) {
-                throw new RangeError(
-                    `createRedisRemainingCounter.reset: capacity must be a non-negative integer, got ${String(
-                        capacity,
-                    )}`,
-                );
-            }
-            await client.set(key(classId), capacity);
-        },
-    };
+    async reset(classId: string, capacity: number): Promise<void> {
+      if (!Number.isInteger(capacity) || capacity < 0) {
+        throw new RangeError(
+          `createRedisRemainingCounter.reset: capacity must be a non-negative integer, got ${String(
+            capacity,
+          )}`,
+        );
+      }
+      await client.set(key(classId), capacity);
+    },
+  };
 }

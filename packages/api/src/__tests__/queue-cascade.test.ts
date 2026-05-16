@@ -50,26 +50,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 /* ------------------------------------------------------------------ */
 
 const memberMocks = vi.hoisted(() => ({
-    handleUserDeleted: vi.fn(),
-    runExportJob: vi.fn(),
+  handleUserDeleted: vi.fn(),
+  runExportJob: vi.fn(),
 }));
 
 vi.mock('@athlya/members', () => ({
-    handleUserDeleted: memberMocks.handleUserDeleted,
-    runExportJob: memberMocks.runExportJob,
+  handleUserDeleted: memberMocks.handleUserDeleted,
+  runExportJob: memberMocks.runExportJob,
 }));
 
 const adapterMocks = vi.hoisted(() => ({
-    buildCascadeDeps: vi.fn(),
-    buildExportDeps: vi.fn(),
+  buildCascadeDeps: vi.fn(),
+  buildExportDeps: vi.fn(),
 }));
 
 vi.mock('../adapters/cascade-deps.js', () => ({
-    buildCascadeDeps: adapterMocks.buildCascadeDeps,
+  buildCascadeDeps: adapterMocks.buildCascadeDeps,
 }));
 
 vi.mock('../adapters/export-deps.js', () => ({
-    buildExportDeps: adapterMocks.buildExportDeps,
+  buildExportDeps: adapterMocks.buildExportDeps,
 }));
 
 /* ------------------------------------------------------------------ */
@@ -79,10 +79,7 @@ vi.mock('../adapters/export-deps.js', () => ({
 import { handleEventsBatch } from '../worker.js';
 
 import type { AthlyaBindings } from '../types.js';
-import type {
-    Message,
-    MessageBatch,
-} from '@cloudflare/workers-types';
+import type { Message, MessageBatch } from '@cloudflare/workers-types';
 
 /* ------------------------------------------------------------------ */
 /*  Fixtures                                                           */
@@ -94,56 +91,62 @@ import type {
  * factory (which is mocked), so the values are never dereferenced.
  */
 function mockEnv(overrides: Partial<AthlyaBindings> = {}): AthlyaBindings {
-    const base: AthlyaBindings = {
-        ENVIRONMENT: 'dev',
-        EVENTS_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_QUEUE'],
-        EVENTS_DLQ: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_DLQ'],
-        DB_URL: 'postgres://cascade-test.invalid/athlya',
-        REDIS_URL: 'https://cascade-test.upstash.io',
-        REDIS_TOKEN: 'cascade-test-token',
-        JWT_JWKS_URL: 'https://cascade-test.invalid/jwks.json',
-        VERSION: 'cascade-test',
-    };
-    return { ...base, ...overrides };
+  const base: AthlyaBindings = {
+    ENVIRONMENT: 'dev',
+    EVENTS_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_QUEUE'],
+    EVENTS_DLQ: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_DLQ'],
+    DB_URL: 'postgres://cascade-test.invalid/athlya',
+    REDIS_URL: 'https://cascade-test.upstash.io',
+    REDIS_TOKEN: 'cascade-test-token',
+    JWT_JWKS_URL: 'https://cascade-test.invalid/jwks.json',
+    VERSION: 'cascade-test',
+  };
+  return { ...base, ...overrides };
 }
 
 /** Build a Cloudflare-style message with `ack`/`retry` spies. */
-function mockMessage<B>(id: string, body: B): Message<B> & {
-    ack: ReturnType<typeof vi.fn>;
-    retry: ReturnType<typeof vi.fn>;
+function mockMessage<B>(
+  id: string,
+  body: B,
+): Message<B> & {
+  ack: ReturnType<typeof vi.fn>;
+  retry: ReturnType<typeof vi.fn>;
 } {
-    return {
-        id,
-        timestamp: new Date(),
-        body,
-        attempts: 1,
-        ack: vi.fn(),
-        retry: vi.fn(),
-    } as unknown as Message<B> & { ack: ReturnType<typeof vi.fn>; retry: ReturnType<typeof vi.fn> };
+  return {
+    id,
+    timestamp: new Date(),
+    body,
+    attempts: 1,
+    ack: vi.fn(),
+    retry: vi.fn(),
+  } as unknown as Message<B> & { ack: ReturnType<typeof vi.fn>; retry: ReturnType<typeof vi.fn> };
 }
 
 /** Wrap a list of messages in a non-DLQ `MessageBatch`. */
 function mockBatch(
-    queue: string,
-    msgs: readonly (Message<unknown> & { ack: ReturnType<typeof vi.fn>; retry: ReturnType<typeof vi.fn> })[],
+  queue: string,
+  msgs: readonly (Message<unknown> & {
+    ack: ReturnType<typeof vi.fn>;
+    retry: ReturnType<typeof vi.fn>;
+  })[],
 ): MessageBatch<unknown> {
-    return {
-        messages: msgs,
-        queue,
-        metadata: { metrics: null },
-        retryAll: vi.fn(),
-        ackAll: vi.fn(),
-    } as unknown as MessageBatch<unknown>;
+  return {
+    messages: msgs,
+    queue,
+    metadata: { metrics: null },
+    retryAll: vi.fn(),
+    ackAll: vi.fn(),
+  } as unknown as MessageBatch<unknown>;
 }
 
 /** Canonical `auth.user.deleted` envelope as the producer publishes it. */
 function deletedEvent(userId: string, eventId = 'evt-cascade-1') {
-    return {
-        id: eventId,
-        type: 'auth.user.deleted' as const,
-        occurredAt: '2026-05-15T10:00:00.000Z',
-        payload: { userId },
-    };
+  return {
+    id: eventId,
+    type: 'auth.user.deleted' as const,
+    occurredAt: '2026-05-15T10:00:00.000Z',
+    payload: { userId },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -151,23 +154,32 @@ function deletedEvent(userId: string, eventId = 'evt-cascade-1') {
 /* ------------------------------------------------------------------ */
 
 beforeEach(() => {
-    vi.clearAllMocks();
-    // Silence the structured `console.{warn,error}` lines emitted by
-    // the dispatcher on the failure paths.
-    vi.spyOn(console, 'log').mockImplementation(() => { });
-    vi.spyOn(console, 'warn').mockImplementation(() => { });
-    vi.spyOn(console, 'error').mockImplementation(() => { });
+  vi.clearAllMocks();
+  // Silence the structured `console.{warn,error}` lines emitted by
+  // the dispatcher on the failure paths.
+  vi.spyOn(console, 'log').mockImplementation(() => {});
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    // Default sentinel deps bundles so every test sees a
-    // distinguishable object reference reach the consumer.
-    adapterMocks.buildCascadeDeps.mockReturnValue({ __brand: 'cascade-deps-sentinel' });
-    adapterMocks.buildExportDeps.mockReturnValue({ __brand: 'export-deps-sentinel' });
-    memberMocks.handleUserDeleted.mockResolvedValue({ kind: 'ok', counts: { reservations: 0, sessions: 0, pushTokens: 0, auditAnonymized: 0 }, scheduledAnonymizationAt: '2026-06-14T10:00:00.000Z' });
-    memberMocks.runExportJob.mockResolvedValue({ kind: 'completed', downloadUrl: 'https://r2.invalid/x.zip', expiresAt: '2026-05-18T10:00:00.000Z', sizeBytes: 0 });
+  // Default sentinel deps bundles so every test sees a
+  // distinguishable object reference reach the consumer.
+  adapterMocks.buildCascadeDeps.mockReturnValue({ __brand: 'cascade-deps-sentinel' });
+  adapterMocks.buildExportDeps.mockReturnValue({ __brand: 'export-deps-sentinel' });
+  memberMocks.handleUserDeleted.mockResolvedValue({
+    kind: 'ok',
+    counts: { reservations: 0, sessions: 0, pushTokens: 0, auditAnonymized: 0 },
+    scheduledAnonymizationAt: '2026-06-14T10:00:00.000Z',
+  });
+  memberMocks.runExportJob.mockResolvedValue({
+    kind: 'completed',
+    downloadUrl: 'https://r2.invalid/x.zip',
+    expiresAt: '2026-05-18T10:00:00.000Z',
+    sizeBytes: 0,
+  });
 });
 
 afterEach(() => {
-    vi.restoreAllMocks();
+  vi.restoreAllMocks();
 });
 
 /* ------------------------------------------------------------------ */
@@ -175,88 +187,92 @@ afterEach(() => {
 /* ------------------------------------------------------------------ */
 
 describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () => {
-    it('routes the event to handleUserDeleted with the cascade deps and acks the message', async () => {
-        const env = mockEnv();
-        const event = deletedEvent('00000000-0000-4000-a000-000000000001');
-        const msg = mockMessage('msg-cascade-1', event);
+  it('routes the event to handleUserDeleted with the cascade deps and acks the message', async () => {
+    const env = mockEnv();
+    const event = deletedEvent('00000000-0000-4000-a000-000000000001');
+    const msg = mockMessage('msg-cascade-1', event);
 
-        await handleEventsBatch(mockBatch('athlya-events', [msg]), env);
+    await handleEventsBatch(mockBatch('athlya-events', [msg]), env);
 
-        expect(adapterMocks.buildCascadeDeps).toHaveBeenCalledTimes(1);
-        expect(adapterMocks.buildCascadeDeps).toHaveBeenCalledWith(env);
+    expect(adapterMocks.buildCascadeDeps).toHaveBeenCalledTimes(1);
+    expect(adapterMocks.buildCascadeDeps).toHaveBeenCalledWith(env);
 
-        expect(memberMocks.handleUserDeleted).toHaveBeenCalledTimes(1);
-        const [forwardedEvent, forwardedDeps] = memberMocks.handleUserDeleted.mock.calls[0]!;
-        expect(forwardedEvent).toBe(event);
-        expect(forwardedDeps).toEqual({ __brand: 'cascade-deps-sentinel' });
+    expect(memberMocks.handleUserDeleted).toHaveBeenCalledTimes(1);
+    const [forwardedEvent, forwardedDeps] = memberMocks.handleUserDeleted.mock.calls[0]!;
+    expect(forwardedEvent).toBe(event);
+    expect(forwardedDeps).toEqual({ __brand: 'cascade-deps-sentinel' });
 
-        expect(msg.ack).toHaveBeenCalledTimes(1);
-        expect(msg.retry).not.toHaveBeenCalled();
-        // Export branch must NOT fire on a cascade event.
-        expect(memberMocks.runExportJob).not.toHaveBeenCalled();
-    });
+    expect(msg.ack).toHaveBeenCalledTimes(1);
+    expect(msg.retry).not.toHaveBeenCalled();
+    // Export branch must NOT fire on a cascade event.
+    expect(memberMocks.runExportJob).not.toHaveBeenCalled();
+  });
 
-    it('mode dégradé R2 — acks even when AVATARS_BUCKET binding is undefined', async () => {
-        // Production-like path before bucket provisioning: the env
-        // is missing `AVATARS_BUCKET`. The deps factory builds a
-        // degraded-mode AvatarStore that logs and resolves; the
-        // cascade therefore returns `ok` and the dispatcher acks.
-        const env = mockEnv();
-        // Confirm the binding really is undefined on the env we feed
-        // the dispatcher — the cascade-deps factory is what handles
-        // the fallback, but the test guards against accidental future
-        // pollution of the mock env.
-        expect((env as { AVATARS_BUCKET?: unknown }).AVATARS_BUCKET).toBeUndefined();
+  it('mode dégradé R2 — acks even when AVATARS_BUCKET binding is undefined', async () => {
+    // Production-like path before bucket provisioning: the env
+    // is missing `AVATARS_BUCKET`. The deps factory builds a
+    // degraded-mode AvatarStore that logs and resolves; the
+    // cascade therefore returns `ok` and the dispatcher acks.
+    const env = mockEnv();
+    // Confirm the binding really is undefined on the env we feed
+    // the dispatcher — the cascade-deps factory is what handles
+    // the fallback, but the test guards against accidental future
+    // pollution of the mock env.
+    expect((env as { AVATARS_BUCKET?: unknown }).AVATARS_BUCKET).toBeUndefined();
 
-        const msg = mockMessage('msg-cascade-degraded', deletedEvent('00000000-0000-4000-a000-000000000002'));
-        await handleEventsBatch(mockBatch('athlya-events', [msg]), env);
+    const msg = mockMessage(
+      'msg-cascade-degraded',
+      deletedEvent('00000000-0000-4000-a000-000000000002'),
+    );
+    await handleEventsBatch(mockBatch('athlya-events', [msg]), env);
 
-        expect(memberMocks.handleUserDeleted).toHaveBeenCalledTimes(1);
-        expect(msg.ack).toHaveBeenCalledTimes(1);
-        expect(msg.retry).not.toHaveBeenCalled();
-    });
+    expect(memberMocks.handleUserDeleted).toHaveBeenCalledTimes(1);
+    expect(msg.ack).toHaveBeenCalledTimes(1);
+    expect(msg.retry).not.toHaveBeenCalled();
+  });
 
-    it('retries the message when the cascade throws', async () => {
-        memberMocks.handleUserDeleted.mockRejectedValueOnce(
-            new Error('transient SQL failure'),
-        );
+  it('retries the message when the cascade throws', async () => {
+    memberMocks.handleUserDeleted.mockRejectedValueOnce(new Error('transient SQL failure'));
 
-        const msg = mockMessage('msg-cascade-fail', deletedEvent('00000000-0000-4000-a000-000000000003'));
-        await handleEventsBatch(mockBatch('athlya-events', [msg]), mockEnv());
+    const msg = mockMessage(
+      'msg-cascade-fail',
+      deletedEvent('00000000-0000-4000-a000-000000000003'),
+    );
+    await handleEventsBatch(mockBatch('athlya-events', [msg]), mockEnv());
 
-        expect(memberMocks.handleUserDeleted).toHaveBeenCalledTimes(1);
-        expect(msg.retry).toHaveBeenCalledTimes(1);
-        expect(msg.ack).not.toHaveBeenCalled();
-    });
+    expect(memberMocks.handleUserDeleted).toHaveBeenCalledTimes(1);
+    expect(msg.retry).toHaveBeenCalledTimes(1);
+    expect(msg.ack).not.toHaveBeenCalled();
+  });
 
-    it('acks unrelated event types without invoking either consumer', async () => {
-        const stranger = {
-            id: 'evt-other-1',
-            type: 'reservation.created',
-            occurredAt: '2026-05-15T10:00:00.000Z',
-            payload: { reservationId: 'r-1' },
-        };
-        const msg = mockMessage('msg-other', stranger);
+  it('acks unrelated event types without invoking either consumer', async () => {
+    const stranger = {
+      id: 'evt-other-1',
+      type: 'reservation.created',
+      occurredAt: '2026-05-15T10:00:00.000Z',
+      payload: { reservationId: 'r-1' },
+    };
+    const msg = mockMessage('msg-other', stranger);
 
-        await handleEventsBatch(mockBatch('athlya-events', [msg]), mockEnv());
+    await handleEventsBatch(mockBatch('athlya-events', [msg]), mockEnv());
 
-        expect(memberMocks.handleUserDeleted).not.toHaveBeenCalled();
-        expect(memberMocks.runExportJob).not.toHaveBeenCalled();
-        expect(msg.ack).toHaveBeenCalledTimes(1);
-        expect(msg.retry).not.toHaveBeenCalled();
-    });
+    expect(memberMocks.handleUserDeleted).not.toHaveBeenCalled();
+    expect(memberMocks.runExportJob).not.toHaveBeenCalled();
+    expect(msg.ack).toHaveBeenCalledTimes(1);
+    expect(msg.retry).not.toHaveBeenCalled();
+  });
 
-    it('acks malformed envelopes without throwing', async () => {
-        // Producer-side bug — body is not a parsable event. The
-        // dispatcher must not retry forever, otherwise the message
-        // burns Cloudflare's redelivery budget on a permanently
-        // poisoned payload.
-        const msg = mockMessage('msg-malformed', 'not-an-object' as unknown as object);
+  it('acks malformed envelopes without throwing', async () => {
+    // Producer-side bug — body is not a parsable event. The
+    // dispatcher must not retry forever, otherwise the message
+    // burns Cloudflare's redelivery budget on a permanently
+    // poisoned payload.
+    const msg = mockMessage('msg-malformed', 'not-an-object' as unknown as object);
 
-        await handleEventsBatch(mockBatch('athlya-events', [msg]), mockEnv());
+    await handleEventsBatch(mockBatch('athlya-events', [msg]), mockEnv());
 
-        expect(memberMocks.handleUserDeleted).not.toHaveBeenCalled();
-        expect(msg.ack).toHaveBeenCalledTimes(1);
-        expect(msg.retry).not.toHaveBeenCalled();
-    });
+    expect(memberMocks.handleUserDeleted).not.toHaveBeenCalled();
+    expect(msg.ack).toHaveBeenCalledTimes(1);
+    expect(msg.retry).not.toHaveBeenCalled();
+  });
 });

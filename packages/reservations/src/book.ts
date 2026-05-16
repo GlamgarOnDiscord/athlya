@@ -86,11 +86,11 @@ export type BookingTx = { readonly __brand: 'BookingTx' };
  * reason to pay for wider columns in the hot path.
  */
 export interface BookingClassRow {
-    readonly id: string;
-    readonly studioId: string;
-    readonly capacity: number;
-    readonly startsAt: Date;
-    readonly version: number;
+  readonly id: string;
+  readonly studioId: string;
+  readonly capacity: number;
+  readonly startsAt: Date;
+  readonly version: number;
 }
 
 /**
@@ -101,10 +101,10 @@ export interface BookingClassRow {
  * structurally compatible at compile time.
  */
 export interface BookingOutboxEvent {
-    readonly eventId: string;
-    readonly eventType: 'reservation.created' | 'reservation.waitlisted';
-    readonly payload: Record<string, unknown>;
-    readonly occurredAt: Date;
+  readonly eventId: string;
+  readonly eventType: 'reservation.created' | 'reservation.waitlisted';
+  readonly payload: Record<string, unknown>;
+  readonly occurredAt: Date;
 }
 
 /**
@@ -117,16 +117,16 @@ export interface BookingOutboxEvent {
  * accepts both paths.
  */
 export class UniqueViolationError extends Error {
-    public override readonly name = 'UniqueViolationError';
-    /**
-     * Stable machine-readable discriminator. Mirrors the string we
-     * check on generic errors that come from the repo adapter.
-     */
-    public readonly code: 'UNIQUE_VIOLATION' = 'UNIQUE_VIOLATION' as const;
+  public override readonly name = 'UniqueViolationError';
+  /**
+   * Stable machine-readable discriminator. Mirrors the string we
+   * check on generic errors that come from the repo adapter.
+   */
+  public readonly code: 'UNIQUE_VIOLATION' = 'UNIQUE_VIOLATION' as const;
 
-    public constructor(message = 'unique constraint violated') {
-        super(message);
-    }
+  public constructor(message = 'unique constraint violated') {
+    super(message);
+  }
 }
 
 /**
@@ -140,9 +140,9 @@ export class UniqueViolationError extends Error {
  * forcing this module's `UniqueViolationError` class on every caller.
  */
 function isUniqueViolation(err: unknown): boolean {
-    if (err instanceof UniqueViolationError) return true;
-    if (typeof err !== 'object' || err === null) return false;
-    return (err as { code?: unknown }).code === 'UNIQUE_VIOLATION';
+  if (err instanceof UniqueViolationError) return true;
+  if (typeof err !== 'object' || err === null) return false;
+  return (err as { code?: unknown }).code === 'UNIQUE_VIOLATION';
 }
 
 /**
@@ -165,91 +165,87 @@ export type BookingReservationRow = ReservationRow;
  * / `SET LOCAL app.studio_id` and the Postgres RLS filter.
  */
 export interface BookingRepo {
-    /**
-     * Return the class row for `classId`, or `null` when the row is
-     * missing, soft-deleted, or invisible under the active RLS
-     * policy (e.g. wrong tenant — Req 13.5).
-     *
-     * The happy-path `Algorithm 1` description skips this step for
-     * the hot path, but we need it to (a) enforce `startsAt > now()`
-     * BEFORE touching Redis — no compensating round-trips on a
-     * malformed request — and (b) return a stable `class_not_found`
-     * error instead of leaking a downstream failure.
-     */
-    findClass(classId: string): Promise<BookingClassRow | null>;
+  /**
+   * Return the class row for `classId`, or `null` when the row is
+   * missing, soft-deleted, or invisible under the active RLS
+   * policy (e.g. wrong tenant — Req 13.5).
+   *
+   * The happy-path `Algorithm 1` description skips this step for
+   * the hot path, but we need it to (a) enforce `startsAt > now()`
+   * BEFORE touching Redis — no compensating round-trips on a
+   * malformed request — and (b) return a stable `class_not_found`
+   * error instead of leaking a downstream failure.
+   */
+  findClass(classId: string): Promise<BookingClassRow | null>;
 
-    /**
-     * Run `fn` inside a Postgres transaction. The adapter is
-     * responsible for BEGIN/COMMIT/ROLLBACK lifecycle and for
-     * applying `SET LOCAL` session variables (Req 13.1). Throwing
-     * from `fn` triggers a ROLLBACK.
-     */
-    withTransaction<T>(fn: (tx: BookingTx) => Promise<T>): Promise<T>;
+  /**
+   * Run `fn` inside a Postgres transaction. The adapter is
+   * responsible for BEGIN/COMMIT/ROLLBACK lifecycle and for
+   * applying `SET LOCAL` session variables (Req 13.1). Throwing
+   * from `fn` triggers a ROLLBACK.
+   */
+  withTransaction<T>(fn: (tx: BookingTx) => Promise<T>): Promise<T>;
 
-    /**
-     * Look up the existing reservation for `(classId, userId)` —
-     * typically called after a {@link UniqueViolationError} to
-     * retrieve the row the user already holds. Returns `null` only
-     * if the row vanished between the failed INSERT and this SELECT
-     * (e.g. a concurrent admin DELETE), in which case the book flow
-     * surfaces it as a generic internal error — the invariant "a
-     * unique-violation means a pre-existing row" is trusted.
-     *
-     * Implementations SHOULD accept rows in any status; the booking
-     * flow treats a `cancelled` row as "user re-booked after
-     * cancellation" which is a legitimate success and returns the
-     * existing row unchanged.
-     */
-    findExistingConfirmedOrWaitlistReservation(
-        tx: BookingTx,
-        classId: string,
-        userId: string,
-    ): Promise<BookingReservationRow | null>;
+  /**
+   * Look up the existing reservation for `(classId, userId)` —
+   * typically called after a {@link UniqueViolationError} to
+   * retrieve the row the user already holds. Returns `null` only
+   * if the row vanished between the failed INSERT and this SELECT
+   * (e.g. a concurrent admin DELETE), in which case the book flow
+   * surfaces it as a generic internal error — the invariant "a
+   * unique-violation means a pre-existing row" is trusted.
+   *
+   * Implementations SHOULD accept rows in any status; the booking
+   * flow treats a `cancelled` row as "user re-booked after
+   * cancellation" which is a legitimate success and returns the
+   * existing row unchanged.
+   */
+  findExistingConfirmedOrWaitlistReservation(
+    tx: BookingTx,
+    classId: string,
+    userId: string,
+  ): Promise<BookingReservationRow | null>;
 
-    /**
-     * Insert a new reservation row for `(classId, userId)` with the
-     * given `status`. Throws {@link UniqueViolationError} (or any
-     * error with `.code === 'UNIQUE_VIOLATION'`) on the
-     * `UNIQUE(class_id, user_id)` collision.
-     *
-     * Any OTHER error (deadlock, DB outage, RLS rejection, …) is
-     * propagated to the book flow which compensates the Redis DECR
-     * and rethrows.
-     */
-    insertReservation(
-        tx: BookingTx,
-        input: {
-            readonly classId: string;
-            readonly userId: string;
-            readonly status: 'confirmed' | 'waitlist';
-        },
-    ): Promise<BookingReservationRow>;
+  /**
+   * Insert a new reservation row for `(classId, userId)` with the
+   * given `status`. Throws {@link UniqueViolationError} (or any
+   * error with `.code === 'UNIQUE_VIOLATION'`) on the
+   * `UNIQUE(class_id, user_id)` collision.
+   *
+   * Any OTHER error (deadlock, DB outage, RLS rejection, …) is
+   * propagated to the book flow which compensates the Redis DECR
+   * and rethrows.
+   */
+  insertReservation(
+    tx: BookingTx,
+    input: {
+      readonly classId: string;
+      readonly userId: string;
+      readonly status: 'confirmed' | 'waitlist';
+    },
+  ): Promise<BookingReservationRow>;
 
-    /**
-     * Insert the outbox event row within the active transaction so
-     * the event either commits together with the reservation row or
-     * is rolled back together with it (Req 16.3). Implementations
-     * typically delegate to `insertOutbox` from `@athlya/db/outbox`.
-     */
-    insertOutbox(tx: BookingTx, event: BookingOutboxEvent): Promise<void>;
+  /**
+   * Insert the outbox event row within the active transaction so
+   * the event either commits together with the reservation row or
+   * is rolled back together with it (Req 16.3). Implementations
+   * typically delegate to `insertOutbox` from `@athlya/db/outbox`.
+   */
+  insertOutbox(tx: BookingTx, event: BookingOutboxEvent): Promise<void>;
 
-    /**
-     * Count waitlisted rows whose `created_at` is strictly earlier
-     * than `reservationCreatedAt` for the given class. Used to
-     * compute the 1-based position returned with the `waitlisted`
-     * result: `position = countWaitlistAhead(...) + 1`.
-     *
-     * SHOULD match the SQL
-     * `SELECT COUNT(*) FROM reservations
-     *    WHERE class_id = $1
-     *      AND status = 'waitlist'
-     *      AND created_at < $2`.
-     */
-    countWaitlistAhead(
-        tx: BookingTx,
-        classId: string,
-        reservationCreatedAt: Date,
-    ): Promise<number>;
+  /**
+   * Count waitlisted rows whose `created_at` is strictly earlier
+   * than `reservationCreatedAt` for the given class. Used to
+   * compute the 1-based position returned with the `waitlisted`
+   * result: `position = countWaitlistAhead(...) + 1`.
+   *
+   * SHOULD match the SQL
+   * `SELECT COUNT(*) FROM reservations
+   *    WHERE class_id = $1
+   *      AND status = 'waitlist'
+   *      AND created_at < $2`.
+   */
+  countWaitlistAhead(tx: BookingTx, classId: string, reservationCreatedAt: Date): Promise<number>;
 }
 
 /**
@@ -260,10 +256,10 @@ export interface BookingRepo {
  * pulling the full interface.
  */
 export interface BookingCounter {
-    /** Atomically decrement `class:{classId}:remaining`; return the new value (may be negative). */
-    decrRemaining(classId: string): Promise<number>;
-    /** Atomically increment `class:{classId}:remaining`; return the new value. */
-    incrRemaining(classId: string): Promise<number>;
+  /** Atomically decrement `class:{classId}:remaining`; return the new value (may be negative). */
+  decrRemaining(classId: string): Promise<number>;
+  /** Atomically increment `class:{classId}:remaining`; return the new value. */
+  incrRemaining(classId: string): Promise<number>;
 }
 
 /**
@@ -282,29 +278,29 @@ export interface BookingCounter {
  * dedup on `eventId` per Req 17.4.
  */
 export interface BookingEventPublisher {
-    /**
-     * Build the `reservation.created` outbox envelope emitted on a
-     * successful confirmed booking (Req 8.1).
-     */
-    buildReservationCreated(input: {
-        readonly reservationId: string;
-        readonly classId: string;
-        readonly userId: string;
-        readonly studioId: string;
-    }): BookingOutboxEvent;
+  /**
+   * Build the `reservation.created` outbox envelope emitted on a
+   * successful confirmed booking (Req 8.1).
+   */
+  buildReservationCreated(input: {
+    readonly reservationId: string;
+    readonly classId: string;
+    readonly userId: string;
+    readonly studioId: string;
+  }): BookingOutboxEvent;
 
-    /**
-     * Build the `reservation.waitlisted` outbox envelope emitted
-     * when capacity was full and the user joined the waitlist (Req
-     * 8.2). `position` is 1-based to match the event payload schema.
-     */
-    buildReservationWaitlisted(input: {
-        readonly reservationId: string;
-        readonly classId: string;
-        readonly userId: string;
-        readonly studioId: string;
-        readonly position: number;
-    }): BookingOutboxEvent;
+  /**
+   * Build the `reservation.waitlisted` outbox envelope emitted
+   * when capacity was full and the user joined the waitlist (Req
+   * 8.2). `position` is 1-based to match the event payload schema.
+   */
+  buildReservationWaitlisted(input: {
+    readonly reservationId: string;
+    readonly classId: string;
+    readonly userId: string;
+    readonly studioId: string;
+    readonly position: number;
+  }): BookingOutboxEvent;
 }
 
 /* ------------------------------------------------------------------ */
@@ -319,9 +315,9 @@ export interface BookingEventPublisher {
  * can use it directly without re-reading Redis.
  */
 export interface BookConfirmed {
-    readonly code: 'ok';
-    readonly reservation: BookingReservationRow;
-    readonly remaining: number;
+  readonly code: 'ok';
+  readonly reservation: BookingReservationRow;
+  readonly remaining: number;
 }
 
 /**
@@ -330,9 +326,9 @@ export interface BookConfirmed {
  * `reservation.waitlisted` event payload.
  */
 export interface BookWaitlisted {
-    readonly code: 'waitlisted';
-    readonly reservation: BookingReservationRow;
-    readonly position: number;
+  readonly code: 'waitlisted';
+  readonly reservation: BookingReservationRow;
+  readonly position: number;
 }
 
 /**
@@ -342,8 +338,8 @@ export interface BookWaitlisted {
  * row is the existing one; no second event is published.
  */
 export interface BookAlreadyBooked {
-    readonly code: 'already_booked';
-    readonly reservation: BookingReservationRow;
+  readonly code: 'already_booked';
+  readonly reservation: BookingReservationRow;
 }
 
 /**
@@ -354,10 +350,10 @@ export interface BookAlreadyBooked {
  *   - `class_not_found` → 404 (RLS: other studio or missing row)
  */
 export interface BookClassInPast {
-    readonly code: 'class_in_past';
+  readonly code: 'class_in_past';
 }
 export interface BookClassNotFound {
-    readonly code: 'class_not_found';
+  readonly code: 'class_not_found';
 }
 
 /**
@@ -370,11 +366,11 @@ export interface BookClassNotFound {
  * Details envelopes.
  */
 export type BookResult =
-    | BookConfirmed
-    | BookWaitlisted
-    | BookAlreadyBooked
-    | BookClassInPast
-    | BookClassNotFound;
+  | BookConfirmed
+  | BookWaitlisted
+  | BookAlreadyBooked
+  | BookClassInPast
+  | BookClassNotFound;
 
 /* ------------------------------------------------------------------ */
 /*  Input                                                              */
@@ -391,23 +387,23 @@ export type BookClock = () => number;
  * function body so call sites read as named parameters.
  */
 export interface BookClassInput {
-    readonly classId: string;
-    readonly userId: string;
-    readonly studioId: string;
-    /**
-     * Optional idempotency key from the `Idempotency-Key` header. Not
-     * used directly by this function — the API gateway's middleware
-     * is responsible for the header-level dedup layer (Req 20.1).
-     * The key is accepted here so future adapters can attach it to
-     * observability spans and to audit-log entries without changing
-     * the signature.
-     */
-    readonly idempotencyKey?: string;
-    readonly repo: BookingRepo;
-    readonly counter: BookingCounter;
-    readonly publisher: BookingEventPublisher;
-    /** Defaults to `Date.now`. Supplied explicitly in tests. */
-    readonly clock?: BookClock;
+  readonly classId: string;
+  readonly userId: string;
+  readonly studioId: string;
+  /**
+   * Optional idempotency key from the `Idempotency-Key` header. Not
+   * used directly by this function — the API gateway's middleware
+   * is responsible for the header-level dedup layer (Req 20.1).
+   * The key is accepted here so future adapters can attach it to
+   * observability spans and to audit-log entries without changing
+   * the signature.
+   */
+  readonly idempotencyKey?: string;
+  readonly repo: BookingRepo;
+  readonly counter: BookingCounter;
+  readonly publisher: BookingEventPublisher;
+  /** Defaults to `Date.now`. Supplied explicitly in tests. */
+  readonly clock?: BookClock;
 }
 
 /* ------------------------------------------------------------------ */
@@ -467,126 +463,120 @@ export interface BookClassInput {
  * aggressive retries.
  */
 export async function bookClass(input: BookClassInput): Promise<BookResult> {
-    const { classId, userId, studioId, repo, counter, publisher } = input;
-    const now = (input.clock ?? Date.now)();
+  const { classId, userId, studioId, repo, counter, publisher } = input;
+  const now = (input.clock ?? Date.now)();
 
-    // ---- Step 0: pre-flight (cheap, idempotent, no side-effects) ------
+  // ---- Step 0: pre-flight (cheap, idempotent, no side-effects) ------
+  //
+  // We look up the class BEFORE touching Redis so:
+  //   - a `null` row (unknown id / wrong tenant under RLS) surfaces
+  //     as `class_not_found` with zero compensating work;
+  //   - a class whose `startsAt ≤ now()` surfaces as `class_in_past`
+  //     (Req 8.6) without perturbing the counter.
+  // Both short-circuits preserve the global capacity invariant.
+  const classRow = await repo.findClass(classId);
+  if (classRow === null) {
+    return { code: 'class_not_found' };
+  }
+  if (classRow.startsAt.getTime() <= now) {
+    return { code: 'class_in_past' };
+  }
+
+  // ---- Step 1: atomic "claim a seat" primitive (Req 8.3) -----------
+  //
+  // Redis DECR returns the new value. A non-negative value means we
+  // have a provisional claim; we still need the SQL transaction to
+  // turn it into a durable reservation. A negative value means the
+  // counter was already exhausted — fall through to the waitlist
+  // branch.
+  const remaining = await counter.decrRemaining(classId);
+
+  if (remaining >= 0) {
+    // ---- Step 2: confirmed-booking transaction --------------------
     //
-    // We look up the class BEFORE touching Redis so:
-    //   - a `null` row (unknown id / wrong tenant under RLS) surfaces
-    //     as `class_not_found` with zero compensating work;
-    //   - a class whose `startsAt ≤ now()` surfaces as `class_in_past`
-    //     (Req 8.6) without perturbing the counter.
-    // Both short-circuits preserve the global capacity invariant.
-    const classRow = await repo.findClass(classId);
-    if (classRow === null) {
-        return { code: 'class_not_found' };
-    }
-    if (classRow.startsAt.getTime() <= now) {
-        return { code: 'class_in_past' };
-    }
+    // We cannot `return await` straight from inside the try block
+    // without shadowing the catch below, so we stash the result in
+    // a local and dispatch on it after the catch.
+    try {
+      const confirmed = await repo.withTransaction(async (tx) => {
+        const reservation = await repo.insertReservation(tx, {
+          classId,
+          userId,
+          status: 'confirmed',
+        });
+        const event = publisher.buildReservationCreated({
+          reservationId: reservation.id,
+          classId,
+          userId,
+          studioId,
+        });
+        await repo.insertOutbox(tx, event);
+        return reservation;
+      });
 
-    // ---- Step 1: atomic "claim a seat" primitive (Req 8.3) -----------
-    //
-    // Redis DECR returns the new value. A non-negative value means we
-    // have a provisional claim; we still need the SQL transaction to
-    // turn it into a durable reservation. A negative value means the
-    // counter was already exhausted — fall through to the waitlist
-    // branch.
-    const remaining = await counter.decrRemaining(classId);
-
-    if (remaining >= 0) {
-        // ---- Step 2: confirmed-booking transaction --------------------
+      return { code: 'ok', reservation: confirmed, remaining };
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        // ---- Step 3: idempotent replay ------------------------
         //
-        // We cannot `return await` straight from inside the try block
-        // without shadowing the catch below, so we stash the result in
-        // a local and dispatch on it after the catch.
-        try {
-            const confirmed = await repo.withTransaction(async (tx) => {
-                const reservation = await repo.insertReservation(tx, {
-                    classId,
-                    userId,
-                    status: 'confirmed',
-                });
-                const event = publisher.buildReservationCreated({
-                    reservationId: reservation.id,
-                    classId,
-                    userId,
-                    studioId,
-                });
-                await repo.insertOutbox(tx, event);
-                return reservation;
-            });
-
-            return { code: 'ok', reservation: confirmed, remaining };
-        } catch (err) {
-            if (isUniqueViolation(err)) {
-                // ---- Step 3: idempotent replay ------------------------
-                //
-                // The user already holds a row for this class. Undo our
-                // DECR (we optimistically claimed a seat we don't need)
-                // and return the existing reservation. No second event.
-                await counter.incrRemaining(classId);
-                const existing = await repo.withTransaction((tx) =>
-                    repo.findExistingConfirmedOrWaitlistReservation(
-                        tx,
-                        classId,
-                        userId,
-                    ),
-                );
-                if (existing === null) {
-                    // Invariant broken: a unique-violation means there
-                    // MUST be a pre-existing row. If the lookup comes
-                    // back empty something external deleted it between
-                    // the INSERT attempt and this SELECT — rethrow as
-                    // a generic error so the gateway returns 5xx.
-                    throw new Error(
-                        `bookClass: unique-violation on (${classId}, ${userId}) but no existing reservation found`,
-                    );
-                }
-                return { code: 'already_booked', reservation: existing };
-            }
-
-            // ---- Step 4: transient / unexpected error ------------------
-            //
-            // Any OTHER failure (DB outage, RLS rejection on insert,
-            // deadlock, etc.) leaves us holding a phantom DECR. Restore
-            // the counter and rethrow so the API gateway can map this
-            // to a 5xx Problem Details envelope.
-            await counter.incrRemaining(classId);
-            throw err;
+        // The user already holds a row for this class. Undo our
+        // DECR (we optimistically claimed a seat we don't need)
+        // and return the existing reservation. No second event.
+        await counter.incrRemaining(classId);
+        const existing = await repo.withTransaction((tx) =>
+          repo.findExistingConfirmedOrWaitlistReservation(tx, classId, userId),
+        );
+        if (existing === null) {
+          // Invariant broken: a unique-violation means there
+          // MUST be a pre-existing row. If the lookup comes
+          // back empty something external deleted it between
+          // the INSERT attempt and this SELECT — rethrow as
+          // a generic error so the gateway returns 5xx.
+          throw new Error(
+            `bookClass: unique-violation on (${classId}, ${userId}) but no existing reservation found`,
+          );
         }
+        return { code: 'already_booked', reservation: existing };
+      }
+
+      // ---- Step 4: transient / unexpected error ------------------
+      //
+      // Any OTHER failure (DB outage, RLS rejection on insert,
+      // deadlock, etc.) leaves us holding a phantom DECR. Restore
+      // the counter and rethrow so the API gateway can map this
+      // to a 5xx Problem Details envelope.
+      await counter.incrRemaining(classId);
+      throw err;
     }
+  }
 
-    // ---- Step 5: waitlist branch (DECR < 0, class is full) ----------
-    //
-    // The counter was already at 0 or lower when we came in. The DECR
-    // drove it further negative; we compensate with an INCR so the
-    // counter reflects reality again (the counter is only meaningful
-    // as long as it is ≥ 0; the service's own reads clamp it via
-    // Math.max(0, …)).
-    await counter.incrRemaining(classId);
+  // ---- Step 5: waitlist branch (DECR < 0, class is full) ----------
+  //
+  // The counter was already at 0 or lower when we came in. The DECR
+  // drove it further negative; we compensate with an INCR so the
+  // counter reflects reality again (the counter is only meaningful
+  // as long as it is ≥ 0; the service's own reads clamp it via
+  // Math.max(0, …)).
+  await counter.incrRemaining(classId);
 
-    const { reservation: waitlisted, position } = await repo.withTransaction(
-        async (tx) => {
-            const row = await repo.insertReservation(tx, {
-                classId,
-                userId,
-                status: 'waitlist',
-            });
-            const ahead = await repo.countWaitlistAhead(tx, classId, row.createdAt);
-            const pos = ahead + 1;
-            const event = publisher.buildReservationWaitlisted({
-                reservationId: row.id,
-                classId,
-                userId,
-                studioId,
-                position: pos,
-            });
-            await repo.insertOutbox(tx, event);
-            return { reservation: row, position: pos };
-        },
-    );
+  const { reservation: waitlisted, position } = await repo.withTransaction(async (tx) => {
+    const row = await repo.insertReservation(tx, {
+      classId,
+      userId,
+      status: 'waitlist',
+    });
+    const ahead = await repo.countWaitlistAhead(tx, classId, row.createdAt);
+    const pos = ahead + 1;
+    const event = publisher.buildReservationWaitlisted({
+      reservationId: row.id,
+      classId,
+      userId,
+      studioId,
+      position: pos,
+    });
+    await repo.insertOutbox(tx, event);
+    return { reservation: row, position: pos };
+  });
 
-    return { code: 'waitlisted', reservation: waitlisted, position };
+  return { code: 'waitlisted', reservation: waitlisted, position };
 }
