@@ -58,7 +58,7 @@
     "devDependencies": {
         "@athlya/eslint-config": "workspace:*",
         "@athlya/tsconfig": "workspace:*",
-        "@fast-check/vitest": "^0.3.0",
+        "@fast-check/vitest": "^0.4.1",
         "@testcontainers/postgresql": "^11.0.0",
         "@types/node": "^20.19.9",
         "drizzle-kit": "^0.31.10",
