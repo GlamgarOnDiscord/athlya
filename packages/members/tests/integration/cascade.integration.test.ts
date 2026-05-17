@@ -273,17 +273,14 @@ function buildRepo(client: Sql): DeletionRepo {
       // the table returns to its append-only state.
       const rows = await client.begin(async (tx) => {
         await tx.unsafe('ALTER TABLE "audit_log" DISABLE TRIGGER audit_log_forbid_update');
-        const updated = await tx<{ id: string }[]>`
-                    UPDATE audit_log
-                       SET actor_id = NULL,
-                           metadata = CASE
-                               WHEN jsonb_typeof(metadata) = 'object'
-                               THEN metadata - 'email' - 'displayName' - 'ip' - 'userAgent'
-                               ELSE metadata
-                           END
-                     WHERE actor_id = ${userId}
-                     RETURNING id
-                `;
+        const updated = await tx.unsafe<{ id: string }[]>(
+          `UPDATE audit_log
+              SET actor_id = NULL,
+                  metadata = metadata - 'email' - 'displayName' - 'ip' - 'userAgent'
+            WHERE actor_id = $1
+            RETURNING id`,
+          [userId],
+        );
         await tx.unsafe('ALTER TABLE "audit_log" ENABLE TRIGGER audit_log_forbid_update');
         return updated;
       });
