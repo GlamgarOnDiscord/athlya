@@ -63,28 +63,28 @@ ON CONFLICT (id) DO NOTHING;
 -- ---------------------------------------------------------------------
 -- Distribution : ~16 cours par jour pendant 30 jours.
 
-INSERT INTO classes (id, studio_id, title, capacity, starts_at, ends_at, version)
+INSERT INTO classes (id, studio_id, title, capacity, starts_at, duration_min, version)
 SELECT
     ('10000000-0000-4000-8000-' || lpad((gs + 1000)::text, 12, '0'))::uuid,
     '10000000-0000-4000-8000-000000000001',
     'Explain test class #' || gs,
     20,
     NOW() + (gs || ' minutes')::interval * 90,  -- ~1 cours / 90 min
-    NOW() + (gs || ' minutes')::interval * 90 + INTERVAL '60 minutes',
+    60,
     1
 FROM generate_series(1, 500) AS gs
 ON CONFLICT (id) DO NOTHING;
 
 -- Class "principale" pour Q1+Q5 — avec 50 waitlist pour exercer
 -- la query waitlist FIFO.
-INSERT INTO classes (id, studio_id, title, capacity, starts_at, ends_at, version)
+INSERT INTO classes (id, studio_id, title, capacity, starts_at, duration_min, version)
 VALUES (
     '10000000-0000-4000-8000-000000000003',
     '10000000-0000-4000-8000-000000000001',
     'Principal explain test class',
     20,
     NOW() + INTERVAL '2 hours',
-    NOW() + INTERVAL '3 hours',
+    60,
     1
 )
 ON CONFLICT (id) DO NOTHING;
