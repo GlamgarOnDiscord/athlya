@@ -721,17 +721,23 @@ describe.skipIf(!dockerReady)(
           // Req 5.3: actor_id scrubbed to NULL.
           expect(row.actor_id).toBeNull();
           // PII keys stripped…
-          expect(row.metadata).not.toHaveProperty('email');
-          expect(row.metadata).not.toHaveProperty('displayName');
-          expect(row.metadata).not.toHaveProperty('ip');
-          expect(row.metadata).not.toHaveProperty('userAgent');
+          const metaAfter =
+            typeof row.metadata === 'string'
+              ? (JSON.parse(row.metadata) as Record<string, unknown>)
+              : row.metadata;
+          expect(metaAfter).not.toHaveProperty('email');
+          expect(metaAfter).not.toHaveProperty('displayName');
+          expect(metaAfter).not.toHaveProperty('ip');
+          expect(metaAfter).not.toHaveProperty('userAgent');
         }
         // …and non-PII keys survive on the rows that carried
         // them. aliceAuditAfter is ordered by id, mirroring
         // the INSERT order, so rows 0,1,2 retain `classId`.
-        expect(aliceAuditAfter[0]!.metadata).toHaveProperty('classId');
-        expect(aliceAuditAfter[1]!.metadata).toHaveProperty('classId');
-        expect(aliceAuditAfter[2]!.metadata).toHaveProperty('classId');
+        const parseMeta = (v: Record<string, unknown>): Record<string, unknown> =>
+          typeof v === 'string' ? (JSON.parse(v) as Record<string, unknown>) : v;
+        expect(parseMeta(aliceAuditAfter[0]!.metadata)).toHaveProperty('classId');
+        expect(parseMeta(aliceAuditAfter[1]!.metadata)).toHaveProperty('classId');
+        expect(parseMeta(aliceAuditAfter[2]!.metadata)).toHaveProperty('classId');
 
         /* --- Bob's audit rows are STILL intact --------------- */
         const bobAuditAfter = await client<
@@ -745,8 +751,12 @@ describe.skipIf(!dockerReady)(
         expect(bobAuditAfter).toHaveLength(bobAuditIds.length);
         for (const row of bobAuditAfter) {
           expect(row.actor_id).toBe(BOB_ID);
-          expect(row.metadata).toHaveProperty('email');
-          expect(row.metadata).toHaveProperty('displayName');
+          const metaBob =
+            typeof row.metadata === 'string'
+              ? (JSON.parse(row.metadata) as Record<string, unknown>)
+              : row.metadata;
+          expect(metaBob).toHaveProperty('email');
+          expect(metaBob).toHaveProperty('displayName');
         }
 
         /* --- Idempotency: 2nd call returns 0 ---------------- */

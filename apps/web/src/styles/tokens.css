@@ -107,7 +107,7 @@
        buildBrandColorCss (Epic 15.2). Default = Athlya primary. */
   --athlya-brand-primary: #0ea5e9;
   --athlya-brand-primary-rgb: 14, 165, 233;
-  --athlya-brand-on-primary: #ffffff;
+  --athlya-brand-on-primary: #0f172a;
   --athlya-brand-primary-tint: #27aceb;
   --athlya-brand-primary-shade: #0c8cc6;
 }
