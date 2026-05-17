@@ -104,7 +104,7 @@ SELECT
         WHEN gs % 100 < 80 THEN 'confirmed'
         WHEN gs % 100 < 95 THEN 'waitlist'
         ELSE 'cancelled'
-    END,
+    END::reservation_status,
     NOW() - (gs || ' minutes')::interval * 5
 FROM generate_series(1, 10000) AS gs
 ON CONFLICT (id) DO NOTHING;
@@ -115,7 +115,7 @@ SELECT
     ('30000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid,
     '10000000-0000-4000-8000-000000000003',
     ('10000000-0000-4000-8000-' || lpad(((gs % 200) + 1)::text, 12, '0'))::uuid,
-    'waitlist',
+    'waitlist'::reservation_status,
     NOW() - (gs || ' minutes')::interval * 2
 FROM generate_series(1, 50) AS gs
 ON CONFLICT (id) DO NOTHING;
@@ -126,7 +126,7 @@ SELECT
     ('40000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid,
     ('10000000-0000-4000-8000-' || lpad(((gs % 500) + 1001)::text, 12, '0'))::uuid,
     '10000000-0000-4000-8000-000000000002',
-    'confirmed',
+    'confirmed'::reservation_status,
     NOW() - (gs || ' hours')::interval * 1
 FROM generate_series(1, 100) AS gs
 ON CONFLICT (id) DO NOTHING;
