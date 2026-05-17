@@ -10,12 +10,13 @@
  * automating a full auth flow inside Lighthouse for a CI guardrail
  * would be disproportionate.
  *
- * This script assumes a Next.js dev or prod server is reachable at
+ * This script assumes a Next.js prod server is reachable at
  * `LIGHTHOUSE_BASE_URL` (default `http://localhost:3000`). The
- * GitHub Actions workflow in `.github/workflows/axe.yml` runs
- * `pnpm --filter @athlya/web e2e` first, which leaves a dev server
- * running on :3000 via Playwright's `webServer` block, then runs
- * this script against the same server.
+ * GitHub Actions workflow in `.github/workflows/axe.yml` starts
+ * a long-lived `next start` in the background (a separate step
+ * from the Playwright axe sweep, because Playwright tears its
+ * own `webServer` down at the end of the run) and tears it
+ * down after this script exits.
  *
  * @see Requirements 27.1, 27.2.
  */
@@ -29,19 +30,23 @@ const MIN_ACCESSIBILITY = 95;
 async function check() {
   const chrome = await launch({ chromeFlags: ['--headless'] });
   try {
-    const scores = await Promise.all(
-      PAGES.map(async (path) => {
-        const url = `${BASE_URL}${path}`;
-        const result = await lighthouse(url, {
-          port: chrome.port,
-          onlyCategories: ['accessibility'],
-          output: 'json',
-        });
-        const score = (result.lhr.categories.accessibility?.score ?? 0) * 100;
-        console.log(`${path} accessibility score: ${score}`);
-        return { path, score };
-      }),
-    );
+    // Sequential — running lighthouse in parallel against the
+    // same Chrome instance trips a `start lh:driver:navigate`
+    // performance-mark race in lighthouse 12 + Node 20 (see
+    // https://github.com/GoogleChrome/lighthouse/issues/16401).
+    // The serial loop costs a few extra seconds but never flakes.
+    const scores = [];
+    for (const path of PAGES) {
+      const url = `${BASE_URL}${path}`;
+      const result = await lighthouse(url, {
+        port: chrome.port,
+        onlyCategories: ['accessibility'],
+        output: 'json',
+      });
+      const score = (result.lhr.categories.accessibility?.score ?? 0) * 100;
+      console.log(`${path} accessibility score: ${score}`);
+      scores.push({ path, score });
+    }
     for (const { path, score } of scores) {
       if (score < MIN_ACCESSIBILITY) {
         console.error(`FAIL: ${path} scored ${score}, expected >= ${MIN_ACCESSIBILITY}`);

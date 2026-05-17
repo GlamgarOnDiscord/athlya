@@ -49,8 +49,34 @@ jobs:
       - name: Run axe accessibility sweep
         run: pnpm --filter @athlya/web exec playwright test --config e2e/playwright.config.ts e2e/axe.spec.ts
 
+      # Playwright kills its `webServer` after the axe step, so we
+      # spin up a fresh long-lived `next start` here for the
+      # lighthouse step. We use `next start` (prod) rather than
+      # `next dev` so the bundle the score reflects is the same one
+      # that ships to staging. `--port 3000` matches the
+      # `LIGHTHOUSE_BASE_URL` default.
+      - name: Start Next.js prod server (background)
+        run: |
+          pnpm --filter @athlya/web exec next start --port 3000 &
+          echo "NEXT_PID=$!" >> $GITHUB_ENV
+          # Wait for /healthz-style availability check; Next.js
+          # signals readiness when the port accepts a connection.
+          for i in {1..60}; do
+            if curl -sf -o /dev/null http://localhost:3000/; then
+              echo "next start is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "next start failed to come up within 60s"
+          exit 1
+
       - name: Run Lighthouse accessibility budget (>= 95)
         run: pnpm --filter @athlya/web lighthouse
+
+      - name: Stop Next.js prod server
+        if: always() && env.NEXT_PID != ''
+        run: kill "$NEXT_PID" || true
 
   e2e-flows:
     name: Playwright E2E flows (register → book → cancel)
