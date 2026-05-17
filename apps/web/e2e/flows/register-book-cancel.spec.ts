@@ -177,7 +177,8 @@ test('register → book → cancel (happy path, stubbed network)', async ({ page
   await page.goto('/classes');
 
   // The seeded card renders title + 5/12 remaining counter.
-  await expect(page.getByRole('heading', { name: 'CrossFit WOD' })).toBeVisible();
+  // CardTitle renders as a <div data-slot="card-title">, not a heading element.
+  await expect(page.locator('[data-slot="card-title"]', { hasText: 'CrossFit WOD' })).toBeVisible();
   await expect(page.getByText('5 / 12')).toBeVisible();
 
   const bookCta = page.getByRole('button', { name: /^réserver|^book$/i });
