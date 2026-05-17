@@ -30,10 +30,10 @@ export const userRoleEnum = pgEnum('user_role', ['member', 'coach', 'admin']);
  * Matches `ReservationStatusSchema` in `@athlya/shared/schemas/primitives`.
  */
 export const reservationStatusEnum = pgEnum('reservation_status', [
-    'confirmed',
-    'waitlist',
-    'cancelled',
-    'no_show',
+  'confirmed',
+  'waitlist',
+  'cancelled',
+  'no_show',
 ]);
 
 /**
@@ -65,10 +65,10 @@ export const pushPlatformEnum = pgEnum('push_platform', ['ios', 'android', 'web'
  * export at a time" implicit).
  */
 export const exportJobStatusEnum = pgEnum('export_job_status', [
-    'pending',
-    'running',
-    'completed',
-    'failed',
+  'pending',
+  'running',
+  'completed',
+  'failed',
 ]);
 
 /* ------------------------------------------------------------------ */
@@ -81,19 +81,19 @@ export const exportJobStatusEnum = pgEnum('export_job_status', [
  * have zero runtime cost.
  */
 type _RoleAligned = User['role'] extends 'member' | 'coach' | 'admin'
-    ? 'member' | 'coach' | 'admin' extends User['role']
+  ? 'member' | 'coach' | 'admin' extends User['role']
     ? true
     : false
-    : false;
+  : false;
 type _StatusAligned = Reservation['status'] extends
-    | 'confirmed'
-    | 'waitlist'
-    | 'cancelled'
-    | 'no_show'
-    ? 'confirmed' | 'waitlist' | 'cancelled' | 'no_show' extends Reservation['status']
+  | 'confirmed'
+  | 'waitlist'
+  | 'cancelled'
+  | 'no_show'
+  ? 'confirmed' | 'waitlist' | 'cancelled' | 'no_show' extends Reservation['status']
     ? true
     : false
-    : false;
+  : false;
 
 const _roleOk: _RoleAligned = true;
 const _statusOk: _StatusAligned = true;

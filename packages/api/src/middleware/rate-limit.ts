@@ -140,18 +140,18 @@ const UNKNOWN_IP_BUCKET = 'unknown';
  * is absent.
  */
 export interface RateLimitOptions {
-    /** Override limit per authenticated user. Default 500. */
-    readonly userLimit?: number;
-    /** Override limit per IP. Default 100. */
-    readonly ipLimit?: number;
-    /** Window in seconds. Default 1. */
-    readonly windowSec?: number;
-    /**
-     * Inject a Redis client (used by tests). Production wiring leaves
-     * this `undefined` so the factory lazily builds one from
-     * `c.env.REDIS_URL` / `c.env.REDIS_TOKEN` on first use.
-     */
-    readonly redis?: Redis;
+  /** Override limit per authenticated user. Default 500. */
+  readonly userLimit?: number;
+  /** Override limit per IP. Default 100. */
+  readonly ipLimit?: number;
+  /** Window in seconds. Default 1. */
+  readonly windowSec?: number;
+  /**
+   * Inject a Redis client (used by tests). Production wiring leaves
+   * this `undefined` so the factory lazily builds one from
+   * `c.env.REDIS_URL` / `c.env.REDIS_TOKEN` on first use.
+   */
+  readonly redis?: Redis;
 }
 
 /* ------------------------------------------------------------------ */
@@ -168,7 +168,7 @@ export interface RateLimitOptions {
  * `undefined` and we will fall through to the IP branch.
  */
 interface LimiterAuthClaims {
-    readonly userId?: string;
+  readonly userId?: string;
 }
 
 /**
@@ -177,7 +177,7 @@ interface LimiterAuthClaims {
  * headers are distinguishable from empty ones.
  */
 interface RateLimitRequest {
-    header(name: string): string | undefined;
+  header(name: string): string | undefined;
 }
 
 /**
@@ -186,8 +186,8 @@ interface RateLimitRequest {
  * only reads the Upstash URL / token pair.
  */
 interface RateLimitEnv {
-    readonly REDIS_URL: string;
-    readonly REDIS_TOKEN: string;
+  readonly REDIS_URL: string;
+  readonly REDIS_TOKEN: string;
 }
 
 /**
@@ -203,12 +203,12 @@ interface RateLimitEnv {
  * handles the same key.
  */
 export interface RateLimitContext {
-    /** Cloudflare Worker `env` narrowed to the fields we read. */
-    readonly env: RateLimitEnv;
-    /** Request metadata — we only need the header reader. */
-    readonly req: RateLimitRequest;
-    /** Reads a variable set by upstream middleware (`authClaims`, `traceId`). */
-    get(key: string): unknown;
+  /** Cloudflare Worker `env` narrowed to the fields we read. */
+  readonly env: RateLimitEnv;
+  /** Request metadata — we only need the header reader. */
+  readonly req: RateLimitRequest;
+  /** Reads a variable set by upstream middleware (`authClaims`, `traceId`). */
+  get(key: string): unknown;
 }
 
 /* ------------------------------------------------------------------ */
@@ -225,14 +225,14 @@ export interface RateLimitContext {
 const redisCache = new Map<string, Redis>();
 
 function getCachedRedis(env: RateLimitEnv): Redis {
-    const url = env.REDIS_URL;
-    const cached = redisCache.get(url);
-    if (cached !== undefined) {
-        return cached;
-    }
-    const client = new Redis({ url, token: env.REDIS_TOKEN });
-    redisCache.set(url, client);
-    return client;
+  const url = env.REDIS_URL;
+  const cached = redisCache.get(url);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const client = new Redis({ url, token: env.REDIS_TOKEN });
+  redisCache.set(url, client);
+  return client;
 }
 
 /**
@@ -240,7 +240,7 @@ function getCachedRedis(env: RateLimitEnv): Redis {
  * consecutive tests can swap in fresh fakes without residue.
  */
 export function __resetRateLimitRedisCache(): void {
-    redisCache.clear();
+  redisCache.clear();
 }
 
 /* ------------------------------------------------------------------ */
@@ -263,23 +263,23 @@ export function __resetRateLimitRedisCache(): void {
  * so a misbehaving proxy cannot split the IP bucket.
  */
 export function deriveClientIp(req: RateLimitRequest): string {
-    const cfIp = req.header('CF-Connecting-IP');
-    if (typeof cfIp === 'string' && cfIp.trim().length > 0) {
-        return cfIp.trim();
-    }
+  const cfIp = req.header('CF-Connecting-IP');
+  if (typeof cfIp === 'string' && cfIp.trim().length > 0) {
+    return cfIp.trim();
+  }
 
-    const xff = req.header('x-forwarded-for');
-    if (typeof xff === 'string' && xff.trim().length > 0) {
-        const firstToken = xff.split(',')[0];
-        if (firstToken !== undefined) {
-            const trimmed = firstToken.trim();
-            if (trimmed.length > 0) {
-                return trimmed;
-            }
-        }
+  const xff = req.header('x-forwarded-for');
+  if (typeof xff === 'string' && xff.trim().length > 0) {
+    const firstToken = xff.split(',')[0];
+    if (firstToken !== undefined) {
+      const trimmed = firstToken.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
     }
+  }
 
-    return UNKNOWN_IP_BUCKET;
+  return UNKNOWN_IP_BUCKET;
 }
 
 /**
@@ -293,15 +293,15 @@ export function deriveClientIp(req: RateLimitRequest): string {
  * branch.
  */
 function readUserId(c: RateLimitContext): string | undefined {
-    const raw = c.get('authClaims');
-    if (raw === undefined || raw === null || typeof raw !== 'object') {
-        return undefined;
-    }
-    const claims = raw as LimiterAuthClaims;
-    if (typeof claims.userId !== 'string' || claims.userId.length === 0) {
-        return undefined;
-    }
-    return claims.userId;
+  const raw = c.get('authClaims');
+  if (raw === undefined || raw === null || typeof raw !== 'object') {
+    return undefined;
+  }
+  const claims = raw as LimiterAuthClaims;
+  if (typeof claims.userId !== 'string' || claims.userId.length === 0) {
+    return undefined;
+  }
+  return claims.userId;
 }
 
 /**
@@ -311,8 +311,8 @@ function readUserId(c: RateLimitContext): string | undefined {
  * either way.
  */
 function readTraceId(c: RateLimitContext): string {
-    const raw = c.get('traceId');
-    return typeof raw === 'string' && raw.length > 0 ? raw : 'unknown';
+  const raw = c.get('traceId');
+  return typeof raw === 'string' && raw.length > 0 ? raw : 'unknown';
 }
 
 /* ------------------------------------------------------------------ */
@@ -331,8 +331,8 @@ type RateLimitNext = () => Promise<void>;
  * the request continue through the pipeline.
  */
 export type RateLimitMiddleware = (
-    c: RateLimitContext,
-    next: RateLimitNext,
+  c: RateLimitContext,
+  next: RateLimitNext,
 ) => Promise<Response | undefined>;
 
 /**
@@ -341,32 +341,32 @@ export type RateLimitMiddleware = (
  * it without coupling to the factory internals.
  */
 function buildDenyResponse(
-    decision: Extract<RateLimitDecision, { kind: 'deny' }>,
-    traceId: string,
+  decision: Extract<RateLimitDecision, { kind: 'deny' }>,
+  traceId: string,
 ): Response {
-    // Floor at 1 — `Retry-After: 0` is legal but tells clients to
-    // retry immediately, which defeats the purpose of emitting it at
-    // all. The limiter already clamps to `[1, windowSec]` but belt-
-    // and-braces defence is cheap.
-    const retryAfterSec = Math.max(
-        1,
-        Math.floor(Number.isFinite(decision.retryAfterSec) ? decision.retryAfterSec : 1),
-    );
+  // Floor at 1 — `Retry-After: 0` is legal but tells clients to
+  // retry immediately, which defeats the purpose of emitting it at
+  // all. The limiter already clamps to `[1, windowSec]` but belt-
+  // and-braces defence is cheap.
+  const retryAfterSec = Math.max(
+    1,
+    Math.floor(Number.isFinite(decision.retryAfterSec) ? decision.retryAfterSec : 1),
+  );
 
-    const body = JSON.stringify({
-        type: 'about:blank',
-        title: 'Too Many Requests',
-        status: 429,
-        traceId,
-    });
+  const body = JSON.stringify({
+    type: 'about:blank',
+    title: 'Too Many Requests',
+    status: 429,
+    traceId,
+  });
 
-    return new Response(body, {
-        status: 429,
-        headers: {
-            'content-type': PROBLEM_JSON,
-            'retry-after': String(retryAfterSec),
-        },
-    });
+  return new Response(body, {
+    status: 429,
+    headers: {
+      'content-type': PROBLEM_JSON,
+      'retry-after': String(retryAfterSec),
+    },
+  });
 }
 
 /**
@@ -391,55 +391,50 @@ function buildDenyResponse(
  * caller's responsibility (task 8.11 does it on the gateway app).
  */
 export function rateLimit(opts: RateLimitOptions = {}): RateLimitMiddleware {
-    const userLimit = opts.userLimit ?? DEFAULT_USER_LIMIT;
-    const ipLimit = opts.ipLimit ?? DEFAULT_IP_LIMIT;
-    const windowSec = opts.windowSec ?? DEFAULT_WINDOW_SEC;
-    const injectedRedis = opts.redis;
+  const userLimit = opts.userLimit ?? DEFAULT_USER_LIMIT;
+  const ipLimit = opts.ipLimit ?? DEFAULT_IP_LIMIT;
+  const windowSec = opts.windowSec ?? DEFAULT_WINDOW_SEC;
+  const injectedRedis = opts.redis;
 
-    if (!Number.isFinite(userLimit) || userLimit <= 0) {
-        throw new RangeError(`rateLimit: userLimit must be > 0, got ${String(userLimit)}`);
+  if (!Number.isFinite(userLimit) || userLimit <= 0) {
+    throw new RangeError(`rateLimit: userLimit must be > 0, got ${String(userLimit)}`);
+  }
+  if (!Number.isFinite(ipLimit) || ipLimit <= 0) {
+    throw new RangeError(`rateLimit: ipLimit must be > 0, got ${String(ipLimit)}`);
+  }
+  if (!Number.isFinite(windowSec) || windowSec <= 0) {
+    throw new RangeError(`rateLimit: windowSec must be > 0, got ${String(windowSec)}`);
+  }
+
+  return async (c, next) => {
+    const redis = injectedRedis ?? getCachedRedis(c.env);
+
+    const userId = readUserId(c);
+    const isAuthenticated = userId !== undefined;
+    const key = isAuthenticated
+      ? `${USER_BUCKET_PREFIX}:${userId}`
+      : `${IP_BUCKET_PREFIX}:${deriveClientIp(c.req)}`;
+    const limit = isAuthenticated ? userLimit : ipLimit;
+
+    const decision = await rateLimitSlidingWindow({ redis }, key, limit, windowSec);
+
+    if (decision.kind === 'deny') {
+      const traceId = readTraceId(c);
+      return buildDenyResponse(decision, traceId);
     }
-    if (!Number.isFinite(ipLimit) || ipLimit <= 0) {
-        throw new RangeError(`rateLimit: ipLimit must be > 0, got ${String(ipLimit)}`);
+
+    // Allow: optionally surface the bucket state on the outgoing
+    // response. Hono's `Context.header(k, v)` is the standard
+    // setter; duck-typing lets non-Hono callers skip the headers
+    // without crashing. Nice-to-have per the task spec, not
+    // required by Req 14.3 / 14.4.
+    const maybeHeader = (c as { header?: (k: string, v: string) => void }).header;
+    if (typeof maybeHeader === 'function') {
+      maybeHeader.call(c, 'X-RateLimit-Limit', String(limit));
+      maybeHeader.call(c, 'X-RateLimit-Remaining', String(decision.remaining));
     }
-    if (!Number.isFinite(windowSec) || windowSec <= 0) {
-        throw new RangeError(`rateLimit: windowSec must be > 0, got ${String(windowSec)}`);
-    }
 
-    return async (c, next) => {
-        const redis = injectedRedis ?? getCachedRedis(c.env);
-
-        const userId = readUserId(c);
-        const isAuthenticated = userId !== undefined;
-        const key = isAuthenticated
-            ? `${USER_BUCKET_PREFIX}:${userId}`
-            : `${IP_BUCKET_PREFIX}:${deriveClientIp(c.req)}`;
-        const limit = isAuthenticated ? userLimit : ipLimit;
-
-        const decision = await rateLimitSlidingWindow(
-            { redis },
-            key,
-            limit,
-            windowSec,
-        );
-
-        if (decision.kind === 'deny') {
-            const traceId = readTraceId(c);
-            return buildDenyResponse(decision, traceId);
-        }
-
-        // Allow: optionally surface the bucket state on the outgoing
-        // response. Hono's `Context.header(k, v)` is the standard
-        // setter; duck-typing lets non-Hono callers skip the headers
-        // without crashing. Nice-to-have per the task spec, not
-        // required by Req 14.3 / 14.4.
-        const maybeHeader = (c as { header?: (k: string, v: string) => void }).header;
-        if (typeof maybeHeader === 'function') {
-            maybeHeader.call(c, 'X-RateLimit-Limit', String(limit));
-            maybeHeader.call(c, 'X-RateLimit-Remaining', String(decision.remaining));
-        }
-
-        await next();
-        return undefined;
-    };
+    await next();
+    return undefined;
+  };
 }

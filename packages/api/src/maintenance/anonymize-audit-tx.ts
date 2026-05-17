@@ -53,47 +53,43 @@ import type { CronSqlExecutor } from '../adapters/cron-sql-executor.js';
  * @returns nombre total de rows audit_log touchées.
  */
 export async function anonymizeAuditLogViaSql(
-    executeSql: CronSqlExecutor,
-    userId: string,
+  executeSql: CronSqlExecutor,
+  userId: string,
 ): Promise<number> {
-    // Validation runtime — le runner upstream a déjà filtré sur
-    // `users WHERE deleted_at + 30d AND audit_anonymized_at IS NULL`,
-    // donc le userId arrivant ici provient toujours de la base.
-    // Garde-fou défensif : on rejette quand même les valeurs
-    // malformées pour ne pas envoyer un payload bogué à Postgres.
-    if (
-        typeof userId !== 'string' ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(
-            userId,
-        )
-    ) {
-        throw new Error(
-            `anonymizeAuditLogViaSql: malformed userId "${userId}"`,
-        );
-    }
+  // Validation runtime — le runner upstream a déjà filtré sur
+  // `users WHERE deleted_at + 30d AND audit_anonymized_at IS NULL`,
+  // donc le userId arrivant ici provient toujours de la base.
+  // Garde-fou défensif : on rejette quand même les valeurs
+  // malformées pour ne pas envoyer un payload bogué à Postgres.
+  if (
+    typeof userId !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(userId)
+  ) {
+    throw new Error(`anonymizeAuditLogViaSql: malformed userId "${userId}"`);
+  }
 
-    // Step 1 — anonymise les rows where the user IS the actor.
-    // `actor_id = NULL` + scrub metadata. `jsonb_strip_nulls` n'est
-    // pas requis ici parce que `metadata - 'email'` produit déjà
-    // un objet sans la clef.
-    const actorRows = await executeSql.execute(
-        `UPDATE audit_log
+  // Step 1 — anonymise les rows where the user IS the actor.
+  // `actor_id = NULL` + scrub metadata. `jsonb_strip_nulls` n'est
+  // pas requis ici parce que `metadata - 'email'` produit déjà
+  // un objet sans la clef.
+  const actorRows = await executeSql.execute(
+    `UPDATE audit_log
             SET actor_id = NULL,
                 metadata = (metadata - 'email' - 'userAgent' - 'ip')
           WHERE actor_id = $1::uuid`,
-        [userId],
-    );
+    [userId],
+  );
 
-    // Step 2 — anonymise les rows where the user est référencé dans
-    // metadata.subjectUserId (ex : un admin qui a soft-deleted un
-    // user — l'admin est `actor_id`, le user supprimé est dans
-    // `metadata.subjectUserId`).
-    const subjectRows = await executeSql.execute(
-        `UPDATE audit_log
+  // Step 2 — anonymise les rows where the user est référencé dans
+  // metadata.subjectUserId (ex : un admin qui a soft-deleted un
+  // user — l'admin est `actor_id`, le user supprimé est dans
+  // `metadata.subjectUserId`).
+  const subjectRows = await executeSql.execute(
+    `UPDATE audit_log
             SET metadata = (metadata - 'email' - 'userAgent' - 'ip')
           WHERE metadata->>'subjectUserId' = $1`,
-        [userId],
-    );
+    [userId],
+  );
 
-    return actorRows + subjectRows;
+  return actorRows + subjectRows;
 }

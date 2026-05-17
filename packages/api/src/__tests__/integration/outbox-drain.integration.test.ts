@@ -51,10 +51,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { assertNotSeen } from '../../events/dedup.js';
 import {
-    drainOutbox,
-    type ClaimedRow,
-    type OutboxStore,
-    type QueueProducer,
+  drainOutbox,
+  type ClaimedRow,
+  type OutboxStore,
+  type QueueProducer,
 } from '../../events/drain-worker.js';
 
 import type { Redis } from '@upstash/redis';
@@ -70,13 +70,13 @@ import type { Redis } from '@upstash/redis';
  * predicate `published_at IS NULL` in the real adapter.
  */
 interface OutboxRow {
-    readonly id: string;
-    readonly eventId: string;
-    readonly eventType: string;
-    readonly payload: Record<string, unknown>;
-    readonly occurredAt: Date;
-    attempts: number;
-    publishedAt: Date | null;
+  readonly id: string;
+  readonly eventId: string;
+  readonly eventType: string;
+  readonly payload: Record<string, unknown>;
+  readonly occurredAt: Date;
+  attempts: number;
+  publishedAt: Date | null;
 }
 
 /**
@@ -97,89 +97,89 @@ interface OutboxRow {
  * the rest of the batch.
  */
 class InMemoryOutbox implements OutboxStore {
-    private readonly rows = new Map<string, OutboxRow>();
-    private nextRowId = 1;
-    /**
-     * Per-row failure switch for {@link markPublished}. The test sets
-     * `markPublishedShouldFail.add(id)` to make the next stamp throw
-     * for that row exactly once.
-     */
-    public readonly markPublishedShouldFail = new Set<string>();
+  private readonly rows = new Map<string, OutboxRow>();
+  private nextRowId = 1;
+  /**
+   * Per-row failure switch for {@link markPublished}. The test sets
+   * `markPublishedShouldFail.add(id)` to make the next stamp throw
+   * for that row exactly once.
+   */
+  public readonly markPublishedShouldFail = new Set<string>();
 
-    /** Insert a new pending row. Returns the synthetic outbox id. */
-    insert(event: {
-        eventId: string;
-        eventType: string;
-        payload: Record<string, unknown>;
-        occurredAt: Date;
-    }): string {
-        // Mirror the real adapter's `ON CONFLICT (event_id) DO NOTHING`.
-        for (const row of this.rows.values()) {
-            if (row.eventId === event.eventId) return row.id;
-        }
-        const id = `row-${String(this.nextRowId++).padStart(4, '0')}`;
-        this.rows.set(id, {
-            id,
-            eventId: event.eventId,
-            eventType: event.eventType,
-            payload: event.payload,
-            occurredAt: event.occurredAt,
-            attempts: 0,
-            publishedAt: null,
-        });
-        return id;
+  /** Insert a new pending row. Returns the synthetic outbox id. */
+  insert(event: {
+    eventId: string;
+    eventType: string;
+    payload: Record<string, unknown>;
+    occurredAt: Date;
+  }): string {
+    // Mirror the real adapter's `ON CONFLICT (event_id) DO NOTHING`.
+    for (const row of this.rows.values()) {
+      if (row.eventId === event.eventId) return row.id;
     }
+    const id = `row-${String(this.nextRowId++).padStart(4, '0')}`;
+    this.rows.set(id, {
+      id,
+      eventId: event.eventId,
+      eventType: event.eventType,
+      payload: event.payload,
+      occurredAt: event.occurredAt,
+      attempts: 0,
+      publishedAt: null,
+    });
+    return id;
+  }
 
-    /**
-     * Mirror of `claimBatch` from `@athlya/db/outbox`. Sorted by
-     * `occurredAt` ASC so the FIFO contract the SQL helper guarantees
-     * also holds here. We bump `attempts` synchronously to match the
-     * `UPDATE … RETURNING` shape of the real query.
-     */
-    async claimBatch(size: number): Promise<readonly ClaimedRow[]> {
-        const pending = [...this.rows.values()]
-            .filter((r) => r.publishedAt === null)
-            .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
-            .slice(0, size);
+  /**
+   * Mirror of `claimBatch` from `@athlya/db/outbox`. Sorted by
+   * `occurredAt` ASC so the FIFO contract the SQL helper guarantees
+   * also holds here. We bump `attempts` synchronously to match the
+   * `UPDATE … RETURNING` shape of the real query.
+   */
+  async claimBatch(size: number): Promise<readonly ClaimedRow[]> {
+    const pending = [...this.rows.values()]
+      .filter((r) => r.publishedAt === null)
+      .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
+      .slice(0, size);
 
-        const claimed: ClaimedRow[] = pending.map((row) => {
-            row.attempts += 1;
-            return {
-                id: row.id,
-                eventId: row.eventId,
-                eventType: row.eventType,
-                payload: row.payload,
-                occurredAt: row.occurredAt,
-                attempts: row.attempts,
-            };
-        });
+    const claimed: ClaimedRow[] = pending.map((row) => {
+      row.attempts += 1;
+      return {
+        id: row.id,
+        eventId: row.eventId,
+        eventType: row.eventType,
+        payload: row.payload,
+        occurredAt: row.occurredAt,
+        attempts: row.attempts,
+      };
+    });
 
-        // Mimic an awaitable I/O boundary. Without this, every
-        // microtask runs before the test gets a chance to schedule
-        // intermediate assertions.
-        await Promise.resolve();
-        return claimed;
+    // Mimic an awaitable I/O boundary. Without this, every
+    // microtask runs before the test gets a chance to schedule
+    // intermediate assertions.
+    await Promise.resolve();
+    return claimed;
+  }
+
+  async markPublished(id: string): Promise<void> {
+    if (this.markPublishedShouldFail.delete(id)) {
+      throw new Error(`pg-failure: cannot stamp ${id}`);
     }
-
-    async markPublished(id: string): Promise<void> {
-        if (this.markPublishedShouldFail.delete(id)) {
-            throw new Error(`pg-failure: cannot stamp ${id}`);
-        }
-        const row = this.rows.get(id);
-        if (row !== undefined) {
-            row.publishedAt = new Date();
-        }
-        await Promise.resolve();
+    const row = this.rows.get(id);
+    if (row !== undefined) {
+      row.publishedAt = new Date();
     }
+    await Promise.resolve();
+  }
 
-    /** Test helper: number of rows still waiting for the drain. */
-    pendingCount(): number {
-        let n = 0;
-        for (const r of this.rows.values()) {
-            if (r.publishedAt === null) n += 1;
-        }
-        return n;
+  /** Test helper: number of rows still waiting for the drain. */
+  pendingCount(): number {
+    let n = 0;
+    for (const r of this.rows.values()) {
+      if (r.publishedAt === null) n += 1;
     }
+    return n;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -188,10 +188,10 @@ class InMemoryOutbox implements OutboxStore {
 
 /** Reconstructed envelope shape `drainOutbox` puts on the bus. */
 interface BusEnvelope {
-    readonly id: string;
-    readonly type: string;
-    readonly occurredAt: string;
-    readonly payload: Record<string, unknown>;
+  readonly id: string;
+  readonly type: string;
+  readonly occurredAt: string;
+  readonly payload: Record<string, unknown>;
 }
 
 /**
@@ -204,17 +204,17 @@ interface BusEnvelope {
  * breaking the rest of the batch.
  */
 class InMemoryQueue implements QueueProducer {
-    public readonly delivered: BusEnvelope[] = [];
-    public readonly failOnce = new Set<string>();
+  public readonly delivered: BusEnvelope[] = [];
+  public readonly failOnce = new Set<string>();
 
-    async send(message: unknown): Promise<void> {
-        const envelope = message as BusEnvelope;
-        if (this.failOnce.delete(envelope.id)) {
-            throw new Error(`queue-failure: ${envelope.id}`);
-        }
-        this.delivered.push(envelope);
-        await Promise.resolve();
+  async send(message: unknown): Promise<void> {
+    const envelope = message as BusEnvelope;
+    if (this.failOnce.delete(envelope.id)) {
+      throw new Error(`queue-failure: ${envelope.id}`);
     }
+    this.delivered.push(envelope);
+    await Promise.resolve();
+  }
 }
 
 /**
@@ -225,18 +225,18 @@ class InMemoryQueue implements QueueProducer {
  * loop, so the surface stays minimal.
  */
 class FakeRedis {
-    readonly store = new Map<string, string>();
+  readonly store = new Map<string, string>();
 
-    async set(
-        key: string,
-        value: string,
-        opts?: { ex?: number; nx?: boolean },
-    ): Promise<'OK' | null> {
-        if (opts?.nx === true && this.store.has(key)) return null;
-        this.store.set(key, value);
-        await Promise.resolve();
-        return 'OK';
-    }
+  async set(
+    key: string,
+    value: string,
+    opts?: { ex?: number; nx?: boolean },
+  ): Promise<'OK' | null> {
+    if (opts?.nx === true && this.store.has(key)) return null;
+    this.store.set(key, value);
+    await Promise.resolve();
+    return 'OK';
+  }
 }
 
 const asRedis = (r: FakeRedis): Redis => r as unknown as Redis;
@@ -258,29 +258,29 @@ const asRedis = (r: FakeRedis): Redis => r as unknown as Redis;
  * exactly how many times each handler ran.
  */
 async function consume(
-    queue: InMemoryQueue,
-    redis: Redis,
-    handlers: Record<string, (event: BusEnvelope) => void>,
+  queue: InMemoryQueue,
+  redis: Redis,
+  handlers: Record<string, (event: BusEnvelope) => void>,
 ): Promise<{ processed: number; deduped: number; missingHandler: number }> {
-    let processed = 0;
-    let deduped = 0;
-    let missingHandler = 0;
+  let processed = 0;
+  let deduped = 0;
+  let missingHandler = 0;
 
-    for (const envelope of queue.delivered) {
-        const fresh = await assertNotSeen(redis, envelope.id);
-        if (!fresh) {
-            deduped += 1;
-            continue;
-        }
-        const handler = handlers[envelope.type];
-        if (handler === undefined) {
-            missingHandler += 1;
-            continue;
-        }
-        handler(envelope);
-        processed += 1;
+  for (const envelope of queue.delivered) {
+    const fresh = await assertNotSeen(redis, envelope.id);
+    if (!fresh) {
+      deduped += 1;
+      continue;
     }
-    return { processed, deduped, missingHandler };
+    const handler = handlers[envelope.type];
+    if (handler === undefined) {
+      missingHandler += 1;
+      continue;
+    }
+    handler(envelope);
+    processed += 1;
+  }
+  return { processed, deduped, missingHandler };
 }
 
 /* ------------------------------------------------------------------ */
@@ -300,60 +300,60 @@ const EXPORT_JOB_ID = '00000000-0000-4000-8000-000000000004';
 const STUDIO_ID = '00000000-0000-4000-8000-000000000005';
 
 interface SeedEvent {
-    readonly eventId: string;
-    readonly eventType: string;
-    readonly payload: Record<string, unknown>;
-    readonly occurredAt: Date;
+  readonly eventId: string;
+  readonly eventType: string;
+  readonly payload: Record<string, unknown>;
+  readonly occurredAt: Date;
 }
 
 const CRITICAL_EVENTS: readonly SeedEvent[] = [
-    {
-        eventId: '11111111-1111-4000-8000-000000000001',
-        eventType: 'reservation.created',
-        payload: { reservationId: RESERVATION_ID, classId: CLASS_ID, userId: USER_ID },
-        occurredAt: new Date('2025-01-01T08:00:00.000Z'),
+  {
+    eventId: '11111111-1111-4000-8000-000000000001',
+    eventType: 'reservation.created',
+    payload: { reservationId: RESERVATION_ID, classId: CLASS_ID, userId: USER_ID },
+    occurredAt: new Date('2025-01-01T08:00:00.000Z'),
+  },
+  {
+    eventId: '22222222-2222-4000-8000-000000000002',
+    eventType: 'reservation.promoted',
+    payload: { reservationId: RESERVATION_ID, classId: CLASS_ID, userId: USER_ID },
+    occurredAt: new Date('2025-01-01T08:01:00.000Z'),
+  },
+  {
+    eventId: '33333333-3333-4000-8000-000000000003',
+    eventType: 'reservation.cancelled',
+    payload: { reservationId: RESERVATION_ID, classId: CLASS_ID, userId: USER_ID },
+    occurredAt: new Date('2025-01-01T08:02:00.000Z'),
+  },
+  {
+    eventId: '44444444-4444-4000-8000-000000000004',
+    eventType: 'members.export.requested',
+    payload: { exportJobId: EXPORT_JOB_ID, userId: USER_ID, studioId: STUDIO_ID },
+    occurredAt: new Date('2025-01-01T08:03:00.000Z'),
+  },
+  {
+    eventId: '55555555-5555-4000-8000-000000000005',
+    eventType: 'members.export.completed',
+    payload: {
+      exportJobId: EXPORT_JOB_ID,
+      userId: USER_ID,
+      downloadUrl: 'https://r2.athlya.app/export/abc.zip',
+      expiresAt: '2025-01-04T08:03:00.000Z',
     },
-    {
-        eventId: '22222222-2222-4000-8000-000000000002',
-        eventType: 'reservation.promoted',
-        payload: { reservationId: RESERVATION_ID, classId: CLASS_ID, userId: USER_ID },
-        occurredAt: new Date('2025-01-01T08:01:00.000Z'),
-    },
-    {
-        eventId: '33333333-3333-4000-8000-000000000003',
-        eventType: 'reservation.cancelled',
-        payload: { reservationId: RESERVATION_ID, classId: CLASS_ID, userId: USER_ID },
-        occurredAt: new Date('2025-01-01T08:02:00.000Z'),
-    },
-    {
-        eventId: '44444444-4444-4000-8000-000000000004',
-        eventType: 'members.export.requested',
-        payload: { exportJobId: EXPORT_JOB_ID, userId: USER_ID, studioId: STUDIO_ID },
-        occurredAt: new Date('2025-01-01T08:03:00.000Z'),
-    },
-    {
-        eventId: '55555555-5555-4000-8000-000000000005',
-        eventType: 'members.export.completed',
-        payload: {
-            exportJobId: EXPORT_JOB_ID,
-            userId: USER_ID,
-            downloadUrl: 'https://r2.athlya.app/export/abc.zip',
-            expiresAt: '2025-01-04T08:03:00.000Z',
-        },
-        occurredAt: new Date('2025-01-01T08:04:00.000Z'),
-    },
+    occurredAt: new Date('2025-01-01T08:04:00.000Z'),
+  },
 ];
 
 const SILENT_LOGGER = {
-    info: () => {
-        /* swallowed in tests */
-    },
-    warn: () => {
-        /* swallowed in tests */
-    },
-    error: () => {
-        /* swallowed in tests */
-    },
+  info: () => {
+    /* swallowed in tests */
+  },
+  warn: () => {
+    /* swallowed in tests */
+  },
+  error: () => {
+    /* swallowed in tests */
+  },
 };
 
 /* ------------------------------------------------------------------ */
@@ -365,9 +365,9 @@ let queue: InMemoryQueue;
 let redis: FakeRedis;
 
 beforeEach(() => {
-    outbox = new InMemoryOutbox();
-    queue = new InMemoryQueue();
-    redis = new FakeRedis();
+  outbox = new InMemoryOutbox();
+  queue = new InMemoryQueue();
+  redis = new FakeRedis();
 });
 
 /* ------------------------------------------------------------------ */
@@ -375,76 +375,76 @@ beforeEach(() => {
 /* ------------------------------------------------------------------ */
 
 describe('outbox → drain → consumer (5 critical events)', () => {
-    it('publishes, drains and consumes each event with the right side-effects', async () => {
-        // Seed the outbox with one pending row per critical event.
-        for (const evt of CRITICAL_EVENTS) outbox.insert(evt);
+  it('publishes, drains and consumes each event with the right side-effects', async () => {
+    // Seed the outbox with one pending row per critical event.
+    for (const evt of CRITICAL_EVENTS) outbox.insert(evt);
 
-        // Drain.
-        const result = await drainOutbox({
-            store: outbox,
-            queue,
-            logger: SILENT_LOGGER,
-        });
-
-        // Every row was claimed, sent and stamped.
-        expect(result).toEqual({ processed: 5, succeeded: 5, failed: 0 });
-        expect(outbox.pendingCount()).toBe(0);
-        expect(queue.delivered).toHaveLength(5);
-
-        // Wire-shape sanity: each delivered envelope carries the
-        // event id (consumer dedup key) and a serialised occurredAt.
-        const deliveredIds = queue.delivered.map((e) => e.id);
-        expect(deliveredIds).toEqual(CRITICAL_EVENTS.map((e) => e.eventId));
-        for (const env of queue.delivered) {
-            expect(typeof env.occurredAt).toBe('string');
-            expect(env.payload).toBeTypeOf('object');
-        }
-
-        // Consumer side-effects: one handler per type, asserted by
-        // call count. A regression in the type discriminator would
-        // surface here as a missing handler invocation.
-        const reservationCreated = vi.fn();
-        const reservationPromoted = vi.fn();
-        const reservationCancelled = vi.fn();
-        const exportRequested = vi.fn();
-        const exportCompleted = vi.fn();
-
-        const summary = await consume(queue, asRedis(redis), {
-            'reservation.created': reservationCreated,
-            'reservation.promoted': reservationPromoted,
-            'reservation.cancelled': reservationCancelled,
-            'members.export.requested': exportRequested,
-            'members.export.completed': exportCompleted,
-        });
-
-        expect(summary).toEqual({ processed: 5, deduped: 0, missingHandler: 0 });
-        expect(reservationCreated).toHaveBeenCalledTimes(1);
-        expect(reservationPromoted).toHaveBeenCalledTimes(1);
-        expect(reservationCancelled).toHaveBeenCalledTimes(1);
-        expect(exportRequested).toHaveBeenCalledTimes(1);
-        expect(exportCompleted).toHaveBeenCalledTimes(1);
-
-        // Dedup keys exist for every event id under the canonical prefix.
-        for (const evt of CRITICAL_EVENTS) {
-            expect(redis.store.has(`events:seen:${evt.eventId}`)).toBe(true);
-        }
+    // Drain.
+    const result = await drainOutbox({
+      store: outbox,
+      queue,
+      logger: SILENT_LOGGER,
     });
 
-    it('a second drain after a clean cycle is a no-op (no double publish)', async () => {
-        for (const evt of CRITICAL_EVENTS) outbox.insert(evt);
+    // Every row was claimed, sent and stamped.
+    expect(result).toEqual({ processed: 5, succeeded: 5, failed: 0 });
+    expect(outbox.pendingCount()).toBe(0);
+    expect(queue.delivered).toHaveLength(5);
 
-        await drainOutbox({ store: outbox, queue, logger: SILENT_LOGGER });
-        const beforeRedrain = queue.delivered.length;
+    // Wire-shape sanity: each delivered envelope carries the
+    // event id (consumer dedup key) and a serialised occurredAt.
+    const deliveredIds = queue.delivered.map((e) => e.id);
+    expect(deliveredIds).toEqual(CRITICAL_EVENTS.map((e) => e.eventId));
+    for (const env of queue.delivered) {
+      expect(typeof env.occurredAt).toBe('string');
+      expect(env.payload).toBeTypeOf('object');
+    }
 
-        const second = await drainOutbox({
-            store: outbox,
-            queue,
-            logger: SILENT_LOGGER,
-        });
+    // Consumer side-effects: one handler per type, asserted by
+    // call count. A regression in the type discriminator would
+    // surface here as a missing handler invocation.
+    const reservationCreated = vi.fn();
+    const reservationPromoted = vi.fn();
+    const reservationCancelled = vi.fn();
+    const exportRequested = vi.fn();
+    const exportCompleted = vi.fn();
 
-        expect(second).toEqual({ processed: 0, succeeded: 0, failed: 0 });
-        expect(queue.delivered).toHaveLength(beforeRedrain);
+    const summary = await consume(queue, asRedis(redis), {
+      'reservation.created': reservationCreated,
+      'reservation.promoted': reservationPromoted,
+      'reservation.cancelled': reservationCancelled,
+      'members.export.requested': exportRequested,
+      'members.export.completed': exportCompleted,
     });
+
+    expect(summary).toEqual({ processed: 5, deduped: 0, missingHandler: 0 });
+    expect(reservationCreated).toHaveBeenCalledTimes(1);
+    expect(reservationPromoted).toHaveBeenCalledTimes(1);
+    expect(reservationCancelled).toHaveBeenCalledTimes(1);
+    expect(exportRequested).toHaveBeenCalledTimes(1);
+    expect(exportCompleted).toHaveBeenCalledTimes(1);
+
+    // Dedup keys exist for every event id under the canonical prefix.
+    for (const evt of CRITICAL_EVENTS) {
+      expect(redis.store.has(`events:seen:${evt.eventId}`)).toBe(true);
+    }
+  });
+
+  it('a second drain after a clean cycle is a no-op (no double publish)', async () => {
+    for (const evt of CRITICAL_EVENTS) outbox.insert(evt);
+
+    await drainOutbox({ store: outbox, queue, logger: SILENT_LOGGER });
+    const beforeRedrain = queue.delivered.length;
+
+    const second = await drainOutbox({
+      store: outbox,
+      queue,
+      logger: SILENT_LOGGER,
+    });
+
+    expect(second).toEqual({ processed: 0, succeeded: 0, failed: 0 });
+    expect(queue.delivered).toHaveLength(beforeRedrain);
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -452,91 +452,91 @@ describe('outbox → drain → consumer (5 critical events)', () => {
 /* ------------------------------------------------------------------ */
 
 describe('outbox → drain → consumer — failure modes', () => {
-    it('queue.send failure: row stays pending, next drain republishes once', async () => {
-        for (const evt of CRITICAL_EVENTS) outbox.insert(evt);
+  it('queue.send failure: row stays pending, next drain republishes once', async () => {
+    for (const evt of CRITICAL_EVENTS) outbox.insert(evt);
 
-        // Fail the FIRST send for the `reservation.promoted` event
-        // exactly once. `failOnce` is a Set, so the next attempt
-        // succeeds.
-        const promotedId = CRITICAL_EVENTS[1]!.eventId;
-        queue.failOnce.add(promotedId);
+    // Fail the FIRST send for the `reservation.promoted` event
+    // exactly once. `failOnce` is a Set, so the next attempt
+    // succeeds.
+    const promotedId = CRITICAL_EVENTS[1]!.eventId;
+    queue.failOnce.add(promotedId);
 
-        // Drain #1: 4 succeed, 1 fails.
-        const first = await drainOutbox({
-            store: outbox,
-            queue,
-            logger: SILENT_LOGGER,
-        });
-        expect(first).toEqual({ processed: 5, succeeded: 4, failed: 1 });
-        expect(outbox.pendingCount()).toBe(1);
-        // The failing row was NOT marked published — the queue does
-        // not have it.
-        expect(queue.delivered.find((e) => e.id === promotedId)).toBeUndefined();
+    // Drain #1: 4 succeed, 1 fails.
+    const first = await drainOutbox({
+      store: outbox,
+      queue,
+      logger: SILENT_LOGGER,
+    });
+    expect(first).toEqual({ processed: 5, succeeded: 4, failed: 1 });
+    expect(outbox.pendingCount()).toBe(1);
+    // The failing row was NOT marked published — the queue does
+    // not have it.
+    expect(queue.delivered.find((e) => e.id === promotedId)).toBeUndefined();
 
-        // Drain #2: the leftover row goes through.
-        const second = await drainOutbox({
-            store: outbox,
-            queue,
-            logger: SILENT_LOGGER,
-        });
-        expect(second).toEqual({ processed: 1, succeeded: 1, failed: 0 });
-        expect(outbox.pendingCount()).toBe(0);
+    // Drain #2: the leftover row goes through.
+    const second = await drainOutbox({
+      store: outbox,
+      queue,
+      logger: SILENT_LOGGER,
+    });
+    expect(second).toEqual({ processed: 1, succeeded: 1, failed: 0 });
+    expect(outbox.pendingCount()).toBe(0);
 
-        // Total publishes: exactly 5 (one per event). No duplicate.
-        const ids = queue.delivered.map((e) => e.id).sort();
-        const expected = CRITICAL_EVENTS.map((e) => e.eventId).sort();
-        expect(ids).toEqual(expected);
+    // Total publishes: exactly 5 (one per event). No duplicate.
+    const ids = queue.delivered.map((e) => e.id).sort();
+    const expected = CRITICAL_EVENTS.map((e) => e.eventId).sort();
+    expect(ids).toEqual(expected);
+  });
+
+  it('markPublished failure: queue keeps the event, consumer dedup absorbs the redelivery', async () => {
+    for (const evt of CRITICAL_EVENTS) outbox.insert(evt);
+
+    // Fail the markPublished for the `members.export.requested`
+    // row. The queue.send happens BEFORE the stamp, so the queue
+    // already has it — the row will simply look pending again to
+    // the next drain.
+    const stampFailureRowId = 'row-0004'; // 4th inserted in seed order
+    outbox.markPublishedShouldFail.add(stampFailureRowId);
+
+    const first = await drainOutbox({
+      store: outbox,
+      queue,
+      logger: SILENT_LOGGER,
+    });
+    // 5 sends happened; only 4 stamps succeeded.
+    expect(first).toEqual({ processed: 5, succeeded: 4, failed: 1 });
+    expect(queue.delivered).toHaveLength(5);
+    expect(outbox.pendingCount()).toBe(1);
+
+    // Drain #2: the leftover row is republished — that's a
+    // legitimate at-least-once duplicate. The queue now has 6
+    // envelopes, two of which share the same event id.
+    const second = await drainOutbox({
+      store: outbox,
+      queue,
+      logger: SILENT_LOGGER,
+    });
+    expect(second).toEqual({ processed: 1, succeeded: 1, failed: 0 });
+    expect(queue.delivered).toHaveLength(6);
+
+    const duplicateId = CRITICAL_EVENTS[3]!.eventId;
+    const duplicates = queue.delivered.filter((e) => e.id === duplicateId);
+    expect(duplicates).toHaveLength(2);
+
+    // Consumer-side dedup: even with a duplicate envelope on the
+    // bus, the side-effect runs exactly once.
+    const exportRequested = vi.fn();
+    const summary = await consume(queue, asRedis(redis), {
+      'reservation.created': () => undefined,
+      'reservation.promoted': () => undefined,
+      'reservation.cancelled': () => undefined,
+      'members.export.requested': exportRequested,
+      'members.export.completed': () => undefined,
     });
 
-    it('markPublished failure: queue keeps the event, consumer dedup absorbs the redelivery', async () => {
-        for (const evt of CRITICAL_EVENTS) outbox.insert(evt);
-
-        // Fail the markPublished for the `members.export.requested`
-        // row. The queue.send happens BEFORE the stamp, so the queue
-        // already has it — the row will simply look pending again to
-        // the next drain.
-        const stampFailureRowId = 'row-0004'; // 4th inserted in seed order
-        outbox.markPublishedShouldFail.add(stampFailureRowId);
-
-        const first = await drainOutbox({
-            store: outbox,
-            queue,
-            logger: SILENT_LOGGER,
-        });
-        // 5 sends happened; only 4 stamps succeeded.
-        expect(first).toEqual({ processed: 5, succeeded: 4, failed: 1 });
-        expect(queue.delivered).toHaveLength(5);
-        expect(outbox.pendingCount()).toBe(1);
-
-        // Drain #2: the leftover row is republished — that's a
-        // legitimate at-least-once duplicate. The queue now has 6
-        // envelopes, two of which share the same event id.
-        const second = await drainOutbox({
-            store: outbox,
-            queue,
-            logger: SILENT_LOGGER,
-        });
-        expect(second).toEqual({ processed: 1, succeeded: 1, failed: 0 });
-        expect(queue.delivered).toHaveLength(6);
-
-        const duplicateId = CRITICAL_EVENTS[3]!.eventId;
-        const duplicates = queue.delivered.filter((e) => e.id === duplicateId);
-        expect(duplicates).toHaveLength(2);
-
-        // Consumer-side dedup: even with a duplicate envelope on the
-        // bus, the side-effect runs exactly once.
-        const exportRequested = vi.fn();
-        const summary = await consume(queue, asRedis(redis), {
-            'reservation.created': () => undefined,
-            'reservation.promoted': () => undefined,
-            'reservation.cancelled': () => undefined,
-            'members.export.requested': exportRequested,
-            'members.export.completed': () => undefined,
-        });
-
-        // 5 fresh + 1 duplicate skipped by dedup.
-        expect(summary.processed).toBe(5);
-        expect(summary.deduped).toBe(1);
-        expect(exportRequested).toHaveBeenCalledTimes(1);
-    });
+    // 5 fresh + 1 duplicate skipped by dedup.
+    expect(summary.processed).toBe(5);
+    expect(summary.deduped).toBe(1);
+    expect(exportRequested).toHaveBeenCalledTimes(1);
+  });
 });

@@ -1,9 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2024",
-    "lib": [
-      "ES2024"
-    ],
+    "lib": ["ES2024"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "moduleDetection": "force",
@@ -27,12 +25,5 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "exclude": [
-    "node_modules",
-    "dist",
-    "build",
-    ".next",
-    ".turbo",
-    "coverage"
-  ]
+  "exclude": ["node_modules", "dist", "build", ".next", ".turbo", "coverage"]
 }

@@ -52,10 +52,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import {
-    canTransition,
-    type ReservationStatus,
-} from '../../src/state-machine.js';
+import { canTransition, type ReservationStatus } from '../../src/state-machine.js';
 
 /**
  * All four reservation statuses in declaration order. Declared local
@@ -64,10 +61,10 @@ import {
  * would silently reduce coverage instead of producing a red test.
  */
 const STATUSES: readonly ReservationStatus[] = [
-    'confirmed',
-    'waitlist',
-    'cancelled',
-    'no_show',
+  'confirmed',
+  'waitlist',
+  'cancelled',
+  'no_show',
 ] as const;
 
 /**
@@ -80,10 +77,10 @@ const STATUSES: readonly ReservationStatus[] = [
  * negative-path property below would fail loudly, as intended.
  */
 const LEGAL_SET: ReadonlySet<string> = new Set<string>([
-    'confirmed->cancelled',
-    'confirmed->no_show',
-    'waitlist->confirmed',
-    'waitlist->cancelled',
+  'confirmed->cancelled',
+  'confirmed->no_show',
+  'waitlist->confirmed',
+  'waitlist->cancelled',
 ]);
 
 /**
@@ -91,7 +88,7 @@ const LEGAL_SET: ReadonlySet<string> = new Set<string>([
  * {@link LEGAL_SET}'s key.
  */
 function key(from: ReservationStatus, to: ReservationStatus): string {
-    return `${from}->${to}`;
+  return `${from}->${to}`;
 }
 
 /**
@@ -132,80 +129,81 @@ const transitionSequenceArb = fc.array(transitionArb, { minLength: 1, maxLength:
 const RUN_OPTS = { numRuns: 200, seed: 0x5e1a1b0c } as const;
 
 describe('canTransition — Property 3 (state-machine monotonicity)', () => {
-    it('accepts every same-state no-op (Req 10.2)', () => {
-        fc.assert(
-            fc.property(statusArb, (s) => canTransition(s, s) === true),
-            RUN_OPTS,
-        );
-    });
+  it('accepts every same-state no-op (Req 10.2)', () => {
+    fc.assert(
+      fc.property(statusArb, (s) => canTransition(s, s) === true),
+      RUN_OPTS,
+    );
+  });
 
-    it('accepts every legal non-identity edge enumerated by Req 10.1', () => {
-        fc.assert(
-            fc.property(transitionArb, ([from, to]) => {
-                // Only consider the legal-non-identity slice of the
-                // 16-element sample space on this property; the
-                // negative path is covered by the next one.
-                fc.pre(from !== to);
-                fc.pre(LEGAL_SET.has(key(from, to)));
-                return canTransition(from, to) === true;
-            }),
-            RUN_OPTS,
-        );
-    });
+  it('accepts every legal non-identity edge enumerated by Req 10.1', () => {
+    fc.assert(
+      fc.property(transitionArb, ([from, to]) => {
+        // Only consider the legal-non-identity slice of the
+        // 16-element sample space on this property; the
+        // negative path is covered by the next one.
+        fc.pre(from !== to);
+        fc.pre(LEGAL_SET.has(key(from, to)));
+        return canTransition(from, to) === true;
+      }),
+      RUN_OPTS,
+    );
+  });
 
-    it('rejects every illegal ordered pair where from !== to (Req 10.3, 10.4)', () => {
-        fc.assert(
-            fc.property(transitionArb, ([from, to]) => {
-                fc.pre(from !== to);
-                fc.pre(!LEGAL_SET.has(key(from, to)));
-                return canTransition(from, to) === false;
-            }),
-            RUN_OPTS,
-        );
-    });
+  it('rejects every illegal ordered pair where from !== to (Req 10.3, 10.4)', () => {
+    fc.assert(
+      fc.property(transitionArb, ([from, to]) => {
+        fc.pre(from !== to);
+        fc.pre(!LEGAL_SET.has(key(from, to)));
+        return canTransition(from, to) === false;
+      }),
+      RUN_OPTS,
+    );
+  });
 
-    it('agrees with the legal-set oracle on every step of a random transition sequence', () => {
-        fc.assert(
-            fc.property(transitionSequenceArb, (sequence) => {
-                for (const [from, to] of sequence) {
-                    const expected = from === to || LEGAL_SET.has(key(from, to));
-                    if (canTransition(from, to) !== expected) {
-                        return false;
-                    }
-                }
-                return true;
-            }),
-            RUN_OPTS,
-        );
-    });
+  it('agrees with the legal-set oracle on every step of a random transition sequence', () => {
+    fc.assert(
+      fc.property(transitionSequenceArb, (sequence) => {
+        for (const [from, to] of sequence) {
+          const expected = from === to || LEGAL_SET.has(key(from, to));
+          if (canTransition(from, to) !== expected) {
+            return false;
+          }
+        }
+        return true;
+      }),
+      RUN_OPTS,
+    );
+  });
 
-    it('never accepts cancelled → confirmed, regardless of sequence position (Req 10.4)', () => {
-        // This property is slightly redundant with the negative-path
-        // one above, but spelling it out makes Req 10.4 trivially
-        // auditable from the test report and gives fast-check a
-        // sharp, always-exercised witness for the terminal-state
-        // invariant — even when upstream arbitraries drift.
-        fc.assert(
-            fc.property(transitionSequenceArb, (sequence) => {
-                // Inject the forbidden edge at a random position by
-                // prepending it to the sample; the predicate must
-                // still reject it.
-                const forbidden: readonly [
-                    ReservationStatus,
-                    ReservationStatus,
-                ] = ['cancelled', 'confirmed'];
-                const withForbidden: ReadonlyArray<
-                    readonly [ReservationStatus, ReservationStatus]
-                > = [forbidden, ...sequence];
-                const head = withForbidden[0] ?? forbidden;
-                return canTransition(head[0], head[1]) === false;
-            }),
-            RUN_OPTS,
-        );
+  it('never accepts cancelled → confirmed, regardless of sequence position (Req 10.4)', () => {
+    // This property is slightly redundant with the negative-path
+    // one above, but spelling it out makes Req 10.4 trivially
+    // auditable from the test report and gives fast-check a
+    // sharp, always-exercised witness for the terminal-state
+    // invariant — even when upstream arbitraries drift.
+    fc.assert(
+      fc.property(transitionSequenceArb, (sequence) => {
+        // Inject the forbidden edge at a random position by
+        // prepending it to the sample; the predicate must
+        // still reject it.
+        const forbidden: readonly [ReservationStatus, ReservationStatus] = [
+          'cancelled',
+          'confirmed',
+        ];
+        const withForbidden: ReadonlyArray<readonly [ReservationStatus, ReservationStatus]> = [
+          forbidden,
+          ...sequence,
+        ];
+        const head = withForbidden[0] ?? forbidden;
+        return canTransition(head[0], head[1]) === false;
+      }),
+      RUN_OPTS,
+    );
 
-        // Belt-and-braces: a single non-random assertion so a broken
-        // fast-check harness (e.g. all preconditions filtered out)
-        // still cannot let a regression slip through.
-        expect(canTransition('cancelled', 'confirmed')).toBe(false);
-    });
+    // Belt-and-braces: a single non-random assertion so a broken
+    // fast-check harness (e.g. all preconditions filtered out)
+    // still cannot let a regression slip through.
+    expect(canTransition('cancelled', 'confirmed')).toBe(false);
+  });
 });

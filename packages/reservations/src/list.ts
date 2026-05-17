@@ -51,10 +51,7 @@ import type { ClassWithRemaining } from '@athlya/shared/schemas/api';
  *     (missing field, non-ISO string, …). Acts as a catch-all so the
  *     use case never leaks a raw `ZodError` through its contract.
  */
-export type ClassListErrorCode =
-    | 'range_inverted'
-    | 'range_too_large'
-    | 'invalid_range';
+export type ClassListErrorCode = 'range_inverted' | 'range_too_large' | 'invalid_range';
 
 /**
  * Lightweight issue shape we attach to {@link ClassListError.issues}.
@@ -62,12 +59,12 @@ export type ClassListErrorCode =
  * can keep a single Problem Details renderer for both.
  */
 export interface ClassListValidationIssue {
-    /** Dot-joined Zod path, empty string for the root object. */
-    path: string;
-    /** Zod issue `code` (e.g. `invalid_string`, `custom`). */
-    code: string;
-    /** Human-readable message. */
-    message: string;
+  /** Dot-joined Zod path, empty string for the root object. */
+  path: string;
+  /** Zod issue `code` (e.g. `invalid_string`, `custom`). */
+  code: string;
+  /** Human-readable message. */
+  message: string;
 }
 
 /**
@@ -77,19 +74,19 @@ export interface ClassListValidationIssue {
  * Details `title` / `code` slug.
  */
 export class ClassListError extends Error {
-    public readonly code: ClassListErrorCode;
-    public readonly issues: readonly ClassListValidationIssue[];
+  public readonly code: ClassListErrorCode;
+  public readonly issues: readonly ClassListValidationIssue[];
 
-    public constructor(
-        code: ClassListErrorCode,
-        message: string,
-        issues: readonly ClassListValidationIssue[] = [],
-    ) {
-        super(message);
-        this.name = 'ClassListError';
-        this.code = code;
-        this.issues = issues;
-    }
+  public constructor(
+    code: ClassListErrorCode,
+    message: string,
+    issues: readonly ClassListValidationIssue[] = [],
+  ) {
+    super(message);
+    this.name = 'ClassListError';
+    this.code = code;
+    this.issues = issues;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -110,15 +107,15 @@ export class ClassListError extends Error {
  * round-trip through the codec layer.
  */
 export interface ClassRow {
-    id: string;
-    studioId: string;
-    coachId: string | null;
-    title: string;
-    startsAt: Date;
-    durationMin: number;
-    capacity: number;
-    version: number;
-    createdAt: Date;
+  id: string;
+  studioId: string;
+  coachId: string | null;
+  title: string;
+  startsAt: Date;
+  durationMin: number;
+  capacity: number;
+  version: number;
+  createdAt: Date;
 }
 
 /**
@@ -127,8 +124,8 @@ export interface ClassRow {
  * from the already-validated ISO-8601 query strings.
  */
 export interface FindInRangeRange {
-    from: Date;
-    to: Date;
+  from: Date;
+  to: Date;
 }
 
 /**
@@ -149,7 +146,7 @@ export interface FindInRangeRange {
  *     ordering, so no extra `ORDER BY` cost is incurred.
  */
 export interface ClassRepo {
-    findInRange(studioId: string, range: FindInRangeRange): Promise<ClassRow[]>;
+  findInRange(studioId: string, range: FindInRangeRange): Promise<ClassRow[]>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -160,8 +157,8 @@ export interface ClassRepo {
  * Dependencies injected into {@link listClasses}.
  */
 export interface ListClassesDeps {
-    readonly classRepo: ClassRepo;
-    readonly counter: RemainingCounterReader;
+  readonly classRepo: ClassRepo;
+  readonly counter: RemainingCounterReader;
 }
 
 /**
@@ -182,17 +179,17 @@ export type ClassListing = ClassWithRemaining;
  * {@link ClassListValidationIssue} shape.
  */
 function toValidationIssues(
-    issues: ReadonlyArray<{
-        path: ReadonlyArray<PropertyKey>;
-        code: string;
-        message: string;
-    }>,
+  issues: ReadonlyArray<{
+    path: ReadonlyArray<PropertyKey>;
+    code: string;
+    message: string;
+  }>,
 ): ClassListValidationIssue[] {
-    return issues.map((issue) => ({
-        path: issue.path.map(String).join('.'),
-        code: issue.code,
-        message: issue.message,
-    }));
+  return issues.map((issue) => ({
+    path: issue.path.map(String).join('.'),
+    code: issue.code,
+    message: issue.message,
+  }));
 }
 
 /**
@@ -223,29 +220,29 @@ function toValidationIssues(
  * this helper stays forward-compatible with Zod v4 shape changes.
  */
 function pickErrorCode(issues: ReadonlyArray<unknown>): ClassListErrorCode {
-    let sawInverted = false;
-    let sawTooLarge = false;
-    let sawPrimaryFailure = false;
+  let sawInverted = false;
+  let sawTooLarge = false;
+  let sawPrimaryFailure = false;
 
-    for (const issue of issues) {
-        const paramCode = extractParamCode(issue);
-        if (paramCode === 'range_inverted') {
-            sawInverted = true;
-            continue;
-        }
-        if (paramCode === 'range_too_large') {
-            sawTooLarge = true;
-            continue;
-        }
-        // Any issue WITHOUT a `params.code` is a primary (shape) failure:
-        // missing field, non-ISO string, unknown key, wrong type.
-        sawPrimaryFailure = true;
+  for (const issue of issues) {
+    const paramCode = extractParamCode(issue);
+    if (paramCode === 'range_inverted') {
+      sawInverted = true;
+      continue;
     }
+    if (paramCode === 'range_too_large') {
+      sawTooLarge = true;
+      continue;
+    }
+    // Any issue WITHOUT a `params.code` is a primary (shape) failure:
+    // missing field, non-ISO string, unknown key, wrong type.
+    sawPrimaryFailure = true;
+  }
 
-    if (sawPrimaryFailure) return 'invalid_range';
-    if (sawInverted) return 'range_inverted';
-    if (sawTooLarge) return 'range_too_large';
-    return 'invalid_range';
+  if (sawPrimaryFailure) return 'invalid_range';
+  if (sawInverted) return 'range_inverted';
+  if (sawTooLarge) return 'range_too_large';
+  return 'invalid_range';
 }
 
 /**
@@ -256,11 +253,11 @@ function pickErrorCode(issues: ReadonlyArray<unknown>): ClassListErrorCode {
  * read keeps this helper forward-compatible.
  */
 function extractParamCode(issue: unknown): string | undefined {
-    if (typeof issue !== 'object' || issue === null) return undefined;
-    const params = (issue as { params?: unknown }).params;
-    if (typeof params !== 'object' || params === null) return undefined;
-    const code = (params as { code?: unknown }).code;
-    return typeof code === 'string' ? code : undefined;
+  if (typeof issue !== 'object' || issue === null) return undefined;
+  const params = (issue as { params?: unknown }).params;
+  if (typeof params !== 'object' || params === null) return undefined;
+  const code = (params as { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
 }
 
 /* ------------------------------------------------------------------ */
@@ -289,60 +286,60 @@ function extractParamCode(issue: unknown): string | undefined {
  * Problem Details responses.
  */
 export async function listClasses(
-    studioId: string,
-    rangeInput: unknown,
-    deps: ListClassesDeps,
+  studioId: string,
+  rangeInput: unknown,
+  deps: ListClassesDeps,
 ): Promise<ClassListing[]> {
-    const parsed = ListClassesQuerySchema.safeParse(rangeInput);
-    if (!parsed.success) {
-        const issues = toValidationIssues(parsed.error.issues);
-        const code = pickErrorCode(parsed.error.issues);
-        const message =
-            code === 'range_too_large'
-                ? 'class list range exceeds the 90-day limit'
-                : code === 'range_inverted'
-                    ? 'class list range must have to > from'
-                    : `invalid class list range: ${issues
-                        .map((i) => `${i.path || '<root>'} ${i.message}`)
-                        .join('; ')}`;
-        throw new ClassListError(code, message, issues);
-    }
+  const parsed = ListClassesQuerySchema.safeParse(rangeInput);
+  if (!parsed.success) {
+    const issues = toValidationIssues(parsed.error.issues);
+    const code = pickErrorCode(parsed.error.issues);
+    const message =
+      code === 'range_too_large'
+        ? 'class list range exceeds the 90-day limit'
+        : code === 'range_inverted'
+          ? 'class list range must have to > from'
+          : `invalid class list range: ${issues
+              .map((i) => `${i.path || '<root>'} ${i.message}`)
+              .join('; ')}`;
+    throw new ClassListError(code, message, issues);
+  }
 
-    const from = new Date(parsed.data.from);
-    const to = new Date(parsed.data.to);
+  const from = new Date(parsed.data.from);
+  const to = new Date(parsed.data.to);
 
-    const rows = await deps.classRepo.findInRange(studioId, { from, to });
-    if (rows.length === 0) {
-        return [];
-    }
+  const rows = await deps.classRepo.findInRange(studioId, { from, to });
+  if (rows.length === 0) {
+    return [];
+  }
 
-    // Kick off every counter read in parallel. The listing endpoint is
-    // latency-sensitive (Req 27.1 ties calendar reads to the p95 budget)
-    // and the counter reads are independent, so serialising them would
-    // be a pure waste of wall-clock time — especially in the edge
-    // runtime where round-trip cost dominates.
-    const remainings = await Promise.all(
-        rows.map(async (row) => {
-            const remote = await deps.counter.getRemaining(row.id);
-            return remote ?? row.capacity;
-        }),
-    );
+  // Kick off every counter read in parallel. The listing endpoint is
+  // latency-sensitive (Req 27.1 ties calendar reads to the p95 budget)
+  // and the counter reads are independent, so serialising them would
+  // be a pure waste of wall-clock time — especially in the edge
+  // runtime where round-trip cost dominates.
+  const remainings = await Promise.all(
+    rows.map(async (row) => {
+      const remote = await deps.counter.getRemaining(row.id);
+      return remote ?? row.capacity;
+    }),
+  );
 
-    return rows.map((row, index) => ({
-        id: row.id,
-        studioId: row.studioId,
-        coachId: row.coachId,
-        title: row.title,
-        startsAt: row.startsAt.toISOString(),
-        durationMin: row.durationMin,
-        capacity: row.capacity,
-        version: row.version,
-        createdAt: row.createdAt.toISOString(),
-        // `remaining` is clamped at 0 because Redis can transiently
-        // hold a negative value between a losing `DECR` and its
-        // compensating `INCR` (Algorithm 1). Surfacing a negative
-        // number through the public API would violate the
-        // `nonnegative()` refinement on `ClassWithRemainingSchema`.
-        remaining: Math.max(0, remainings[index] ?? row.capacity),
-    })) as ClassListing[];
+  return rows.map((row, index) => ({
+    id: row.id,
+    studioId: row.studioId,
+    coachId: row.coachId,
+    title: row.title,
+    startsAt: row.startsAt.toISOString(),
+    durationMin: row.durationMin,
+    capacity: row.capacity,
+    version: row.version,
+    createdAt: row.createdAt.toISOString(),
+    // `remaining` is clamped at 0 because Redis can transiently
+    // hold a negative value between a losing `DECR` and its
+    // compensating `INCR` (Algorithm 1). Surfacing a negative
+    // number through the public API would violate the
+    // `nonnegative()` refinement on `ClassWithRemainingSchema`.
+    remaining: Math.max(0, remainings[index] ?? row.capacity),
+  })) as ClassListing[];
 }

@@ -22,31 +22,29 @@ import { ResetPasswordForm } from './ResetPasswordForm';
 import type { ReactElement } from 'react';
 
 export default async function ResetPasswordPage({
-    params,
+  params,
 }: {
-    params: Promise<{ token: string }>;
+  params: Promise<{ token: string }>;
 }): Promise<ReactElement> {
-    const { token } = await params;
-    const h = await headers();
-    const nonce = h.get('x-nonce') ?? '';
-    void nonce;
-    void (await getLocale());
+  const { token } = await params;
+  const h = await headers();
+  const nonce = h.get('x-nonce') ?? '';
+  void nonce;
+  void (await getLocale());
 
-    return (
-        <main
-            id="main-content"
-            className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 px-6 py-12"
-        >
-            <header className="space-y-2">
-                <h1 className="text-3xl font-semibold">
-                    Choisir un nouveau mot de passe
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                    Une fois le mot de passe enregistré, toutes vos sessions
-                    actives seront fermées et vous devrez vous reconnecter.
-                </p>
-            </header>
-            <ResetPasswordForm token={token} />
-        </main>
-    );
+  return (
+    <main
+      id="main-content"
+      className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 px-6 py-12"
+    >
+      <header className="space-y-2">
+        <h1 className="text-3xl font-semibold">Choisir un nouveau mot de passe</h1>
+        <p className="text-sm text-muted-foreground">
+          Une fois le mot de passe enregistré, toutes vos sessions actives seront fermées et vous
+          devrez vous reconnecter.
+        </p>
+      </header>
+      <ResetPasswordForm token={token} />
+    </main>
+  );
 }

@@ -16,7 +16,7 @@
  * configuration — the api route is proxied via Next's rewrites.
  */
 export function getPublicApiUrl(): string {
-    return process.env['NEXT_PUBLIC_API_URL'] ?? '';
+  return process.env['NEXT_PUBLIC_API_URL'] ?? '';
 }
 
 /**
@@ -33,9 +33,9 @@ export function getPublicApiUrl(): string {
  * @see Requirements 26.1, 26.2 — anti-bot challenge on register/login.
  */
 export function getTurnstileSiteKey(): string | undefined {
-    const raw = process.env['NEXT_PUBLIC_TURNSTILE_SITE_KEY'];
-    if (raw === undefined || raw === '') return undefined;
-    return raw;
+  const raw = process.env['NEXT_PUBLIC_TURNSTILE_SITE_KEY'];
+  if (raw === undefined || raw === '') return undefined;
+  return raw;
 }
 
 /**
@@ -51,7 +51,7 @@ export function getTurnstileSiteKey(): string | undefined {
  * https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP#reporting.
  */
 export function getCspReportUri(): string | undefined {
-    const raw = process.env['NEXT_PUBLIC_CSP_REPORT_URI'];
-    if (raw === undefined || raw === '') return undefined;
-    return raw;
+  const raw = process.env['NEXT_PUBLIC_CSP_REPORT_URI'];
+  if (raw === undefined || raw === '') return undefined;
+  return raw;
 }

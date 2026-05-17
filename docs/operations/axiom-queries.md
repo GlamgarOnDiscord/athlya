@@ -34,6 +34,7 @@ partir des spans OTel exportés par le gateway.
 ```
 
 **Cibles SLO** :
+
 - `auth.login` : p95 < 200ms
 - `reservations.book` : p99 < 500ms
 - `classes.list` : p95 < 100ms (avec ETag → 304 souvent)
@@ -165,14 +166,14 @@ Détection des users qui touchent le cap.
 Panneaux recommandés (à créer manuellement dans l'UI Axiom) :
 
 1. **p50/p95/p99 latency** (timeseries) — query `Latency timeseries
-   par opération`, group by `operation`, 6h window.
+par opération`, group by `operation`, 6h window.
 2. **Error rate** (single value) — query `Error rate par status
-   code`, agrégé all operations, 1h.
+code`, agrégé all operations, 1h.
 3. **RPS** (timeseries) — query `RPS`, group by `operation`, 15m
    window.
 4. **Top 10 slowest operations** (table) — query `Top N opérations`.
 5. **Errors by tenant** (table avec drill-down) — query `Erreurs par
-   tenant`.
+tenant`.
 6. **Queue lag p99** (timeseries) — query `Queue lag`, 1h window.
 
 ### Export JSON
@@ -203,7 +204,6 @@ régression côté instrumentation.
   `addBreadcrumb`
 - Requirement 30.4 — observabilité
 - Axiom APL docs: <https://axiom.co/docs/apl/introduction>
-
 
 ## SLO computation queries (Sprint 14 / Slice 14.6 — CN.1.1+CN.1.3)
 

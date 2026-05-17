@@ -15,28 +15,26 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-    test: {
-        include: [
-            'src/**/*.test.ts',
-            'tests/**/*.test.ts',
-            'tests/**/*.property.test.ts',
-        ],
+  test: {
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'tests/**/*.property.test.ts'],
 
-        exclude: ['**/node_modules/**', '**/dist/**'],
+    exclude: ['**/node_modules/**', '**/dist/**'],
 
-        // Explicit imports from `vitest`; no globals. Matches the style
-        // used across the rest of the monorepo.
-        globals: false,
+    // Explicit imports from `vitest`; no globals. Matches the style
+    // used across the rest of the monorepo.
+    globals: false,
 
-        // Pure Node domain logic — no DOM shim required.
-        environment: 'node',
+    // Pure Node domain logic — no DOM shim required.
+    environment: 'node',
 
-        // Threads keep fast-check's RNG seeding deterministic across
-        // runs; the worker pool does not interfere with seeded runs.
-        pool: 'threads',
+    // Threads keep fast-check's RNG seeding deterministic across
+    // runs; the worker pool does not interfere with seeded runs.
+    pool: 'threads',
 
-        // Give fast-check enough room to shrink a large counter-example
-        // without tripping the default 5 s timeout.
-        testTimeout: 30_000,
-    },
+    // Give fast-check enough room to shrink a large counter-example
+    // without tripping the default 5 s timeout. Per-hook timeouts
+    // (e.g. 180 s for the Testcontainers `beforeAll`) are passed as
+    // the third argument to `beforeAll` directly.
+    testTimeout: 30_000,
+  },
 });

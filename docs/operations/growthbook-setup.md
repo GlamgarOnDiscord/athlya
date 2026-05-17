@@ -10,6 +10,7 @@ deviennent complexes.
 ## Quand migrer ?
 
 Critères :
+
 - ≥ 10 flags actifs
 - Besoin de rollout par attribute (plan abonnement, device type,
   geo) — le provider statique ne le supporte que via
@@ -26,6 +27,7 @@ simple, moins de dépendance externe, ZERO cost.
 ### 1. Créer le compte
 
 <https://www.growthbook.io/> → free tier inclut :
+
 - 5 environments
 - 100 flags
 - 1k MAU sur l'évaluation client-side
@@ -68,45 +70,45 @@ implémente `FeatureFlagProvider` :
 import type { FeatureFlagProvider, FeatureFlagContext } from '../feature-flags.js';
 
 export function createGrowthBookProvider(
-    clientKey: string,
-    apiHost: string = 'https://api.growthbook.io',
+  clientKey: string,
+  apiHost: string = 'https://api.growthbook.io',
 ): FeatureFlagProvider {
-    // Cache du payload features GrowthBook — TTL 60s aligné avec
-    // notre cache wrapper.
-    let cache: { features: Record<string, unknown>; expiresAt: number } | null = null;
+  // Cache du payload features GrowthBook — TTL 60s aligné avec
+  // notre cache wrapper.
+  let cache: { features: Record<string, unknown>; expiresAt: number } | null = null;
 
-    async function loadFeatures() {
-        if (cache !== null && cache.expiresAt > Date.now()) {
-            return cache.features;
-        }
-        const res = await fetch(`${apiHost}/api/features/${clientKey}`);
-        if (!res.ok) {
-            // Fail-OPEN aligné avec les autres défenses
-            return cache?.features ?? {};
-        }
-        const body = (await res.json()) as { features: Record<string, unknown> };
-        cache = {
-            features: body.features,
-            expiresAt: Date.now() + 60_000,
-        };
-        return body.features;
+  async function loadFeatures() {
+    if (cache !== null && cache.expiresAt > Date.now()) {
+      return cache.features;
     }
-
-    return {
-        async getFlag(name: string, ctx: FeatureFlagContext): Promise<boolean> {
-            const features = await loadFeatures();
-            const def = features[name] as { defaultValue?: boolean; rules?: unknown[] } | undefined;
-            if (def === undefined) return false;
-
-            // GrowthBook eval: matchers contre les attributes ctx.
-            // L'eval natif est dans le SDK officiel — pour rester
-            // léger on n'inclut ici que la branche defaultValue.
-            // Le SDK complet (`@growthbook/growthbook` 1.x, ~30KB
-            // gzipped) supporte les rules conditions, splits A/B,
-            // etc.
-            return def.defaultValue ?? false;
-        },
+    const res = await fetch(`${apiHost}/api/features/${clientKey}`);
+    if (!res.ok) {
+      // Fail-OPEN aligné avec les autres défenses
+      return cache?.features ?? {};
+    }
+    const body = (await res.json()) as { features: Record<string, unknown> };
+    cache = {
+      features: body.features,
+      expiresAt: Date.now() + 60_000,
     };
+    return body.features;
+  }
+
+  return {
+    async getFlag(name: string, ctx: FeatureFlagContext): Promise<boolean> {
+      const features = await loadFeatures();
+      const def = features[name] as { defaultValue?: boolean; rules?: unknown[] } | undefined;
+      if (def === undefined) return false;
+
+      // GrowthBook eval: matchers contre les attributes ctx.
+      // L'eval natif est dans le SDK officiel — pour rester
+      // léger on n'inclut ici que la branche defaultValue.
+      // Le SDK complet (`@growthbook/growthbook` 1.x, ~30KB
+      // gzipped) supporte les rules conditions, splits A/B,
+      // etc.
+      return def.defaultValue ?? false;
+    },
+  };
 }
 ```
 
@@ -117,14 +119,14 @@ import { createGrowthBookProvider } from './feature-flags-growthbook.js';
 import { isEnabled } from '../feature-flags.js';
 
 const flagProvider = (env as { GROWTHBOOK_CLIENT_KEY?: string }).GROWTHBOOK_CLIENT_KEY
-    ? createGrowthBookProvider(env.GROWTHBOOK_CLIENT_KEY)
-    : buildStaticFeatureFlagProvider(env.FEATURE_FLAGS_JSON);
+  ? createGrowthBookProvider(env.GROWTHBOOK_CLIENT_KEY)
+  : buildStaticFeatureFlagProvider(env.FEATURE_FLAGS_JSON);
 
 // Usage:
 const showCoachAI = await isEnabled(
-    'coach-ai-enabled',
-    { userId: claims.userId, studioId: claims.studioId },
-    flagProvider,
+  'coach-ai-enabled',
+  { userId: claims.userId, studioId: claims.studioId },
+  flagProvider,
 );
 ```
 
@@ -135,7 +137,7 @@ const showCoachAI = await isEnabled(
    divergence) pendant 2 semaines.
 2. **Phase B — Switch** : passer la production sur GrowthBook,
    garder le static comme fallback (`if GROWTHBOOK_CLIENT_KEY
-   missing, fall back`).
+missing, fall back`).
 3. **Phase C — Decom** : retirer le provider static + le binding
    `FEATURE_FLAGS_JSON`.
 
@@ -152,14 +154,14 @@ qui supporte tout le rules engine. Out of scope Sprint 14.
 
 ## Provisioning checklist
 
-| Item | Status | Owner |
-|---|---|---|
-| Compte GrowthBook free tier | ⏳ | DevOps |
-| Environnements dev/staging/prod | ⏳ | DevOps |
-| Secret `GROWTHBOOK_CLIENT_KEY` | ⏳ | DevOps |
-| Adapter `feature-flags-growthbook.ts` | ⏳ | Eng (à coder quand le compte est prêt) |
-| Migration des 3 flags pilotes | ⏳ | Eng |
-| Decom `FEATURE_FLAGS_JSON` | ⏳ | Eng (post-migration) |
+| Item                                  | Status | Owner                                  |
+| ------------------------------------- | ------ | -------------------------------------- |
+| Compte GrowthBook free tier           | ⏳     | DevOps                                 |
+| Environnements dev/staging/prod       | ⏳     | DevOps                                 |
+| Secret `GROWTHBOOK_CLIENT_KEY`        | ⏳     | DevOps                                 |
+| Adapter `feature-flags-growthbook.ts` | ⏳     | Eng (à coder quand le compte est prêt) |
+| Migration des 3 flags pilotes         | ⏳     | Eng                                    |
+| Decom `FEATURE_FLAGS_JSON`            | ⏳     | Eng (post-migration)                   |
 
 ## Références
 

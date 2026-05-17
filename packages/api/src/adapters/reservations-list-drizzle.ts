@@ -45,30 +45,30 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /** Query params mirrored from `ListMyReservationsQuerySchema`. */
 export interface ListMyReservationsQuery {
-    readonly from?: string | undefined;
-    readonly to?: string | undefined;
-    readonly limit?: number | undefined;
+  readonly from?: string | undefined;
+  readonly to?: string | undefined;
+  readonly limit?: number | undefined;
 }
 
 /** Row shape returned to the route handler — flattened for the client. */
 export interface ReservationListItem {
+  readonly id: string;
+  readonly classId: string;
+  readonly userId: string;
+  readonly status: 'confirmed' | 'waitlist' | 'cancelled' | 'no_show';
+  readonly createdAt: string;
+  readonly cancelledAt: string | null;
+  readonly checkedInAt: string | null;
+  readonly class: {
     readonly id: string;
-    readonly classId: string;
-    readonly userId: string;
-    readonly status: 'confirmed' | 'waitlist' | 'cancelled' | 'no_show';
-    readonly createdAt: string;
-    readonly cancelledAt: string | null;
-    readonly checkedInAt: string | null;
-    readonly class: {
-        readonly id: string;
-        readonly title: string;
-        readonly startsAt: string;
-        readonly durationMin: number;
-    };
+    readonly title: string;
+    readonly startsAt: string;
+    readonly durationMin: number;
+  };
 }
 
 export interface ListMyReservationsDeps {
-    readonly db: AthlyaDbAny;
+  readonly db: AthlyaDbAny;
 }
 
 /**
@@ -80,63 +80,63 @@ export interface ListMyReservationsDeps {
  * even if a caller bypasses validation (e.g. an internal script).
  */
 export async function listMyReservations(
-    userId: string,
-    query: ListMyReservationsQuery,
-    deps: ListMyReservationsDeps,
+  userId: string,
+  query: ListMyReservationsQuery,
+  deps: ListMyReservationsDeps,
 ): Promise<{ items: ReservationListItem[] }> {
-    const nowMs = Date.now();
-    const from =
-        query.from !== undefined
-            ? new Date(query.from)
-            : new Date(nowMs - DEFAULT_LOOKBACK_DAYS * MS_PER_DAY);
-    const to =
-        query.to !== undefined
-            ? new Date(query.to)
-            : new Date(nowMs + DEFAULT_LOOKAHEAD_DAYS * MS_PER_DAY);
-    const limit = Math.min(Math.max(query.limit ?? 50, 1), 100);
+  const nowMs = Date.now();
+  const from =
+    query.from !== undefined
+      ? new Date(query.from)
+      : new Date(nowMs - DEFAULT_LOOKBACK_DAYS * MS_PER_DAY);
+  const to =
+    query.to !== undefined
+      ? new Date(query.to)
+      : new Date(nowMs + DEFAULT_LOOKAHEAD_DAYS * MS_PER_DAY);
+  const limit = Math.min(Math.max(query.limit ?? 50, 1), 100);
 
-    const rows = await withConnectionRetry(() =>
-        deps.db
-            .select({
-                id: reservations.id,
-                classId: reservations.classId,
-                userId: reservations.userId,
-                status: reservations.status,
-                createdAt: reservations.createdAt,
-                cancelledAt: reservations.cancelledAt,
-                checkedInAt: reservations.checkedInAt,
-                classTitle: classes.title,
-                classStartsAt: classes.startsAt,
-                classDurationMin: classes.durationMin,
-            })
-            .from(reservations)
-            .innerJoin(classes, eq(classes.id, reservations.classId))
-            .where(
-                and(
-                    eq(reservations.userId, userId),
-                    gte(classes.startsAt, from),
-                    lte(classes.startsAt, to),
-                ),
-            )
-            .orderBy(asc(classes.startsAt))
-            .limit(limit),
-    );
+  const rows = await withConnectionRetry(() =>
+    deps.db
+      .select({
+        id: reservations.id,
+        classId: reservations.classId,
+        userId: reservations.userId,
+        status: reservations.status,
+        createdAt: reservations.createdAt,
+        cancelledAt: reservations.cancelledAt,
+        checkedInAt: reservations.checkedInAt,
+        classTitle: classes.title,
+        classStartsAt: classes.startsAt,
+        classDurationMin: classes.durationMin,
+      })
+      .from(reservations)
+      .innerJoin(classes, eq(classes.id, reservations.classId))
+      .where(
+        and(
+          eq(reservations.userId, userId),
+          gte(classes.startsAt, from),
+          lte(classes.startsAt, to),
+        ),
+      )
+      .orderBy(asc(classes.startsAt))
+      .limit(limit),
+  );
 
-    const items: ReservationListItem[] = rows.map((row) => ({
-        id: row.id,
-        classId: row.classId,
-        userId: row.userId,
-        status: row.status,
-        createdAt: row.createdAt.toISOString(),
-        cancelledAt: row.cancelledAt?.toISOString() ?? null,
-        checkedInAt: row.checkedInAt?.toISOString() ?? null,
-        class: {
-            id: row.classId,
-            title: row.classTitle,
-            startsAt: row.classStartsAt.toISOString(),
-            durationMin: row.classDurationMin,
-        },
-    }));
+  const items: ReservationListItem[] = rows.map((row) => ({
+    id: row.id,
+    classId: row.classId,
+    userId: row.userId,
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+    cancelledAt: row.cancelledAt?.toISOString() ?? null,
+    checkedInAt: row.checkedInAt?.toISOString() ?? null,
+    class: {
+      id: row.classId,
+      title: row.classTitle,
+      startsAt: row.classStartsAt.toISOString(),
+      durationMin: row.classDurationMin,
+    },
+  }));
 
-    return { items };
+  return { items };
 }

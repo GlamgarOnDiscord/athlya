@@ -26,39 +26,39 @@ import { uuidPrimaryKey } from './_shared.js';
 import { users } from './users.js';
 
 export const passwordResetTokens = pgTable(
-    'password_reset_tokens',
-    {
-        id: uuidPrimaryKey(),
-        userId: uuid('user_id')
-            .notNull()
-            .references(() => users.id, { onDelete: 'cascade' }),
-        tokenHash: text('token_hash').notNull(),
-        expiresAt: timestamp('expires_at', {
-            withTimezone: true,
-            mode: 'date',
-        }).notNull(),
-        consumedAt: timestamp('consumed_at', {
-            withTimezone: true,
-            mode: 'date',
-        }),
-        requestedAt: timestamp('requested_at', {
-            withTimezone: true,
-            mode: 'date',
-        })
-            .notNull()
-            .defaultNow(),
-    },
-    (table) => [
-        // Lookup index (also enforces uniqueness — two tokens with
-        // the same hash would be a SHA-256 collision, which would
-        // be a much bigger problem than a duplicate entry).
-        uniqueIndex('password_reset_tokens_token_hash_uq').on(table.tokenHash),
-        // User-scoped index for the rate-limit guard ("max 3 reset
-        // requests per email per 24h", wired at the route layer)
-        // and the GDPR cascade
-        // (`DELETE password_reset_tokens WHERE user_id = $1`).
-        index('password_reset_tokens_user_idx').on(table.userId),
-    ],
+  'password_reset_tokens',
+  {
+    id: uuidPrimaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+    consumedAt: timestamp('consumed_at', {
+      withTimezone: true,
+      mode: 'date',
+    }),
+    requestedAt: timestamp('requested_at', {
+      withTimezone: true,
+      mode: 'date',
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // Lookup index (also enforces uniqueness — two tokens with
+    // the same hash would be a SHA-256 collision, which would
+    // be a much bigger problem than a duplicate entry).
+    uniqueIndex('password_reset_tokens_token_hash_uq').on(table.tokenHash),
+    // User-scoped index for the rate-limit guard ("max 3 reset
+    // requests per email per 24h", wired at the route layer)
+    // and the GDPR cascade
+    // (`DELETE password_reset_tokens WHERE user_id = $1`).
+    index('password_reset_tokens_user_idx').on(table.userId),
+  ],
 );
 
 export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;

@@ -9,39 +9,25 @@
  */
 'use client';
 
-import {
-    createContext,
-    use,
-    type ReactElement,
-    type ReactNode,
-} from 'react';
+import { createContext, use, type ReactElement, type ReactNode } from 'react';
 
 import type { Locale } from '@athlya/shared/i18n';
 
 const LocaleContext = createContext<Locale | null>(null);
 
 export interface LocaleProviderProps {
-    readonly locale: Locale;
-    readonly children: ReactNode;
+  readonly locale: Locale;
+  readonly children: ReactNode;
 }
 
-export function LocaleProvider({
-    locale,
-    children,
-}: LocaleProviderProps): ReactElement {
-    return (
-        <LocaleContext.Provider value={locale}>
-            {children}
-        </LocaleContext.Provider>
-    );
+export function LocaleProvider({ locale, children }: LocaleProviderProps): ReactElement {
+  return <LocaleContext.Provider value={locale}>{children}</LocaleContext.Provider>;
 }
 
 export function useLocale(): Locale {
-    const value = use(LocaleContext);
-    if (value === null) {
-        throw new Error(
-            'useLocale must be called within a <LocaleProvider>',
-        );
-    }
-    return value;
+  const value = use(LocaleContext);
+  if (value === null) {
+    throw new Error('useLocale must be called within a <LocaleProvider>');
+  }
+  return value;
 }

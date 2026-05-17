@@ -42,22 +42,22 @@ export * from './i18n/negotiate.js';
 export * from './tracing/ids.js';
 export * from './types.js';
 export {
-    buildAuthRouter,
-    buildCheckinsRouter,
-    buildClassesRouter,
-    buildDefaultDeps,
-    buildMembersRouter,
-    buildReservationsRouter,
-    buildSessionsRouter,
-    mountDomainRoutes,
+  buildAuthRouter,
+  buildCheckinsRouter,
+  buildClassesRouter,
+  buildDefaultDeps,
+  buildMembersRouter,
+  buildReservationsRouter,
+  buildSessionsRouter,
+  mountDomainRoutes,
 } from './routes/index.js';
 export type {
-    AuthDeps,
-    CheckinsDeps,
-    ClassesDeps,
-    DomainDeps,
-    MembersDeps,
-    ReservationsDeps,
-    SessionsDeps,
+  AuthDeps,
+  CheckinsDeps,
+  ClassesDeps,
+  DomainDeps,
+  MembersDeps,
+  ReservationsDeps,
+  SessionsDeps,
 } from './routes/index.js';
 export { app, buildApp } from './worker.js';

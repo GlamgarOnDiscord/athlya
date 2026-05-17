@@ -18,15 +18,15 @@ import { z } from 'zod';
 
 import { ConsentsSchema } from './consents.js';
 import {
-    ClassIdSchema,
-    IsoDateTimeSchema,
-    ReservationIdSchema,
-    ReservationStatusSchema,
-    RoleSchema,
-    SlugSchema,
-    StudioIdSchema,
-    UserIdSchema,
-    UuidSchema,
+  ClassIdSchema,
+  IsoDateTimeSchema,
+  ReservationIdSchema,
+  ReservationStatusSchema,
+  RoleSchema,
+  SlugSchema,
+  StudioIdSchema,
+  UserIdSchema,
+  UuidSchema,
 } from './primitives.js';
 
 /* ------------------------------------------------------------------ */
@@ -41,15 +41,15 @@ import {
  * Requirement 6.1 (studio binding), Requirement 13.2–13.3 (isolation).
  */
 export const StudioSchema = z
-    .object({
-        id: StudioIdSchema,
-        slug: SlugSchema,
-        name: z.string().trim().min(1).max(120),
-        brandColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'must be a #RRGGBB hex color'),
-        createdAt: IsoDateTimeSchema,
-        deletedAt: IsoDateTimeSchema.nullable(),
-    })
-    .strict();
+  .object({
+    id: StudioIdSchema,
+    slug: SlugSchema,
+    name: z.string().trim().min(1).max(120),
+    brandColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'must be a #RRGGBB hex color'),
+    createdAt: IsoDateTimeSchema,
+    deletedAt: IsoDateTimeSchema.nullable(),
+  })
+  .strict();
 
 export type Studio = z.infer<typeof StudioSchema>;
 
@@ -66,18 +66,18 @@ export type Studio = z.infer<typeof StudioSchema>;
  * Requirement 3.1 (profile fields), Requirement 3.4 (displayName bounds).
  */
 export const UserSchema = z
-    .object({
-        id: UserIdSchema,
-        studioId: StudioIdSchema,
-        email: z.email().max(254),
-        displayName: z.string().trim().min(1).max(80),
-        avatarUrl: z.url().nullable(),
-        role: RoleSchema,
-        consents: ConsentsSchema,
-        createdAt: IsoDateTimeSchema,
-        deletedAt: IsoDateTimeSchema.nullable(),
-    })
-    .strict();
+  .object({
+    id: UserIdSchema,
+    studioId: StudioIdSchema,
+    email: z.email().max(254),
+    displayName: z.string().trim().min(1).max(80),
+    avatarUrl: z.url().nullable(),
+    role: RoleSchema,
+    consents: ConsentsSchema,
+    createdAt: IsoDateTimeSchema,
+    deletedAt: IsoDateTimeSchema.nullable(),
+  })
+  .strict();
 
 export type User = z.infer<typeof UserSchema>;
 
@@ -94,18 +94,18 @@ export type User = z.infer<typeof UserSchema>;
  * Requirement 6.1–6.4 (creation rules), Requirement 7.1–7.3 (browsing).
  */
 export const ClassSchema = z
-    .object({
-        id: ClassIdSchema,
-        studioId: StudioIdSchema,
-        coachId: UserIdSchema.nullable(),
-        title: z.string().trim().min(1).max(200),
-        startsAt: IsoDateTimeSchema,
-        durationMin: z.number().int().min(5).max(480),
-        capacity: z.number().int().min(1).max(500),
-        version: z.number().int().nonnegative(),
-        createdAt: IsoDateTimeSchema,
-    })
-    .strict();
+  .object({
+    id: ClassIdSchema,
+    studioId: StudioIdSchema,
+    coachId: UserIdSchema.nullable(),
+    title: z.string().trim().min(1).max(200),
+    startsAt: IsoDateTimeSchema,
+    durationMin: z.number().int().min(5).max(480),
+    capacity: z.number().int().min(1).max(500),
+    version: z.number().int().nonnegative(),
+    createdAt: IsoDateTimeSchema,
+  })
+  .strict();
 
 export type Class = z.infer<typeof ClassSchema>;
 
@@ -122,16 +122,16 @@ export type Class = z.infer<typeof ClassSchema>;
  * 10.1–10.5 (state machine), 11.6 (`checkedInAt` set on successful scan).
  */
 export const ReservationSchema = z
-    .object({
-        id: ReservationIdSchema,
-        classId: ClassIdSchema,
-        userId: UserIdSchema,
-        status: ReservationStatusSchema,
-        createdAt: IsoDateTimeSchema,
-        cancelledAt: IsoDateTimeSchema.nullable(),
-        checkedInAt: IsoDateTimeSchema.nullable(),
-    })
-    .strict();
+  .object({
+    id: ReservationIdSchema,
+    classId: ClassIdSchema,
+    userId: UserIdSchema,
+    status: ReservationStatusSchema,
+    createdAt: IsoDateTimeSchema,
+    cancelledAt: IsoDateTimeSchema.nullable(),
+    checkedInAt: IsoDateTimeSchema.nullable(),
+  })
+  .strict();
 
 export type Reservation = z.infer<typeof ReservationSchema>;
 
@@ -148,12 +148,12 @@ export type Reservation = z.infer<typeof ReservationSchema>;
  * Requirement 12.3 (30 sets per exercise maximum enforced at the parent).
  */
 export const SetSchema = z
-    .object({
-        reps: z.number().int().nonnegative().max(1000),
-        weightKg: z.number().nonnegative().max(1000).optional(),
-        durationSec: z.number().int().nonnegative().max(86_400).optional(),
-    })
-    .strict();
+  .object({
+    reps: z.number().int().nonnegative().max(1000),
+    weightKg: z.number().nonnegative().max(1000).optional(),
+    durationSec: z.number().int().nonnegative().max(86_400).optional(),
+  })
+  .strict();
 
 export type Set = z.infer<typeof SetSchema>;
 
@@ -162,11 +162,11 @@ export type Set = z.infer<typeof SetSchema>;
  * 30 items per Requirement 12.3.
  */
 export const ExerciseSchema = z
-    .object({
-        name: z.string().trim().min(1).max(120),
-        sets: z.array(SetSchema).max(30),
-    })
-    .strict();
+  .object({
+    name: z.string().trim().min(1).max(120),
+    sets: z.array(SetSchema).max(30),
+  })
+  .strict();
 
 export type Exercise = z.infer<typeof ExerciseSchema>;
 
@@ -177,19 +177,20 @@ export type Exercise = z.infer<typeof ExerciseSchema>;
  * Requirement 12.1 (persistence), 12.2 (≤ 50 exercises), 12.4 (history).
  */
 export const WorkoutSessionSchema = z
-    .object({
-        id: UuidSchema.transform((v): string & { readonly __brand: 'WorkoutSessionId' } =>
-            v as string & { readonly __brand: 'WorkoutSessionId' },
-        ),
-        userId: UserIdSchema,
-        studioId: StudioIdSchema.nullable(),
-        startedAt: IsoDateTimeSchema,
-        durationMin: z.number().int().positive().nullable(),
-        exercises: z.array(ExerciseSchema).max(50),
-        notes: z.string().max(2000).nullable(),
-        createdAt: IsoDateTimeSchema,
-    })
-    .strict();
+  .object({
+    id: UuidSchema.transform(
+      (v): string & { readonly __brand: 'WorkoutSessionId' } =>
+        v as string & { readonly __brand: 'WorkoutSessionId' },
+    ),
+    userId: UserIdSchema,
+    studioId: StudioIdSchema.nullable(),
+    startedAt: IsoDateTimeSchema,
+    durationMin: z.number().int().positive().nullable(),
+    exercises: z.array(ExerciseSchema).max(50),
+    notes: z.string().max(2000).nullable(),
+    createdAt: IsoDateTimeSchema,
+  })
+  .strict();
 
 export type WorkoutSession = z.infer<typeof WorkoutSessionSchema>;
 
@@ -211,15 +212,15 @@ export type WorkoutSession = z.infer<typeof WorkoutSessionSchema>;
  * the referenced user is deleted — hence the nullable `actorId`).
  */
 export const AuditLogSchema = z
-    .object({
-        id: z.string().min(1),
-        actorId: UserIdSchema.nullable(),
-        action: z.string().min(1).max(120),
-        targetType: z.string().max(60).nullable(),
-        targetId: z.string().max(80).nullable(),
-        metadata: z.record(z.string(), z.unknown()),
-        createdAt: IsoDateTimeSchema,
-    })
-    .strict();
+  .object({
+    id: z.string().min(1),
+    actorId: UserIdSchema.nullable(),
+    action: z.string().min(1).max(120),
+    targetType: z.string().max(60).nullable(),
+    targetId: z.string().max(80).nullable(),
+    metadata: z.record(z.string(), z.unknown()),
+    createdAt: IsoDateTimeSchema,
+  })
+  .strict();
 
 export type AuditLog = z.infer<typeof AuditLogSchema>;

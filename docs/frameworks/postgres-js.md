@@ -1,15 +1,15 @@
 # postgres.js — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^3.4 |
-| **Latest** | 3.4.x (current stable) |
-| **Purpose** | PostgreSQL driver (Workers-compatible, Neon-compatible) |
-| **Paired with** | Drizzle ORM 0.45.2 |
+|                 | Value                                                   |
+| --------------- | ------------------------------------------------------- |
+| **Used**        | ^3.4                                                    |
+| **Latest**      | 3.4.x (current stable)                                  |
+| **Purpose**     | PostgreSQL driver (Workers-compatible, Neon-compatible) |
+| **Paired with** | Drizzle ORM 0.45.2                                      |
 
 ---
 
@@ -27,9 +27,9 @@
 
 ```ts
 const driverOptions = {
-    max: 10,           // pool size per isolate
-    idle_timeout: 30,  // seconds
-    prepare: false,    // required for serverless pooling
+  max: 10, // pool size per isolate
+  idle_timeout: 30, // seconds
+  prepare: false, // required for serverless pooling
 };
 const client = postgres(connectionString, driverOptions);
 ```
@@ -53,8 +53,8 @@ Each Workers isolate maintains its own pool. With `max: 10`, one isolate handles
 ```ts
 // Created once per isolate lifetime
 export function createDb(connectionString: string): AthlyaDb {
-    const client = postgres(connectionString, driverOptions);
-    return drizzle(client, { schema });
+  const client = postgres(connectionString, driverOptions);
+  return drizzle(client, { schema });
 }
 ```
 
@@ -66,10 +66,10 @@ The `createDb()` function is called once per isolate. The `postgres` instance ha
 
 ```ts
 export async function withTenant<T>(db, claims, fn): Promise<T> {
-    return db.transaction(async (tx) => {
-        await tx.execute(sql`select set_config('app.user_id', ${safe.userId}, true)`);
-        return fn(tx);
-    });
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select set_config('app.user_id', ${safe.userId}, true)`);
+    return fn(tx);
+  });
 }
 ```
 
@@ -79,11 +79,11 @@ export async function withTenant<T>(db, claims, fn): Promise<T> {
 
 ## Known Issues
 
-| Issue | Severity | Mitigation |
-|---|---|---|
-| Neon cold start 300-500ms after scale-to-zero | Medium | Add Cloudflare Hyperdrive binding |
-| No `COPY` support | Low | Use multi-row `INSERT VALUES (...)` |
-| WebSocket handshake overhead on first query | Low | Mitigated by isolate-lifetime pooling |
+| Issue                                         | Severity | Mitigation                            |
+| --------------------------------------------- | -------- | ------------------------------------- |
+| Neon cold start 300-500ms after scale-to-zero | Medium   | Add Cloudflare Hyperdrive binding     |
+| No `COPY` support                             | Low      | Use multi-row `INSERT VALUES (...)`   |
+| WebSocket handshake overhead on first query   | Low      | Mitigated by isolate-lifetime pooling |
 
 ---
 
@@ -94,12 +94,12 @@ When adding Hyperdrive:
 ```ts
 // packages/db/src/client.ts
 export function createDb(env: { DB_URL: string; HYPERDRIVE?: Hyperdrive }): AthlyaDb {
-    const connectionString = env.HYPERDRIVE?.connectionString ?? env.DB_URL;
-    const client = postgres(connectionString, {
-        max: env.HYPERDRIVE ? 3 : 10,  // smaller pool when Hyperdrive handles pooling
-        prepare: false,
-    });
-    return drizzle(client, { schema });
+  const connectionString = env.HYPERDRIVE?.connectionString ?? env.DB_URL;
+  const client = postgres(connectionString, {
+    max: env.HYPERDRIVE ? 3 : 10, // smaller pool when Hyperdrive handles pooling
+    prepare: false,
+  });
+  return drizzle(client, { schema });
 }
 ```
 

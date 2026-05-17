@@ -1,15 +1,15 @@
 # Wrangler — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^4.0.0 |
-| **Resolved** | ~4.90.0 |
-| **Latest** | **4.91.0** |
-| **Purpose** | Cloudflare Workers CLI (dev, deploy, secrets) |
+|              | Value                                         |
+| ------------ | --------------------------------------------- |
+| **Used**     | ^4.0.0                                        |
+| **Resolved** | ~4.90.0                                       |
+| **Latest**   | **4.91.0**                                    |
+| **Purpose**  | Cloudflare Workers CLI (dev, deploy, secrets) |
 
 ---
 
@@ -25,6 +25,7 @@ wrangler dev --remote --tunnel-name athlya-dev
 ```
 
 Useful for:
+
 - Webhook development (Stripe, Turnstile callbacks)
 - OAuth redirect URIs that need to stay consistent between sessions
 - Sharing dev environment with external parties
@@ -46,19 +47,20 @@ Exposes the Worker as an MCP server for AI tooling (Claude Code, Cursor). Not ap
 ## Configuration (wrangler.toml)
 
 Well-structured three-environment setup:
+
 - `[env.dev]` — local development (no route, localhost)
 - `[env.staging]` — `staging.api.athlya.app/*`
 - `[env.production]` — `api.athlya.app/*`
 
 ### Key Settings
 
-| Setting | Value | Assessment |
-|---|---|---|
-| `compatibility_date` | 2025-10-30 | Adequate — see note below |
-| `compatibility_flags` | `["nodejs_compat"]` | Required for postgres.js |
-| `main` | `src/worker.ts` | Direct TS entry |
-| `observability.enabled` | true | 100% head sampling |
-| `placement.mode` | "smart" (staging/prod) | EU co-location |
+| Setting                 | Value                  | Assessment                |
+| ----------------------- | ---------------------- | ------------------------- |
+| `compatibility_date`    | 2025-10-30             | Adequate — see note below |
+| `compatibility_flags`   | `["nodejs_compat"]`    | Required for postgres.js  |
+| `main`                  | `src/worker.ts`        | Direct TS entry           |
+| `observability.enabled` | true                   | 100% head sampling        |
+| `placement.mode`        | "smart" (staging/prod) | EU co-location            |
 
 **Note on `compatibility_date`**: Wrangler 4.91 defaults to the current date for new projects. The project is on 2025-10-30. Consider bumping to 2026-03-01 or later to access newer Workers runtime features (updated V8 APIs, improved `nodejs_compat`). Test before bumping.
 
@@ -66,11 +68,11 @@ Well-structured three-environment setup:
 
 Two queues: `athlya-events` (main) + `athlya-events-dlq` (dead letter).
 
-| Config | Events Queue | DLQ |
-|---|---|---|
-| max_batch_size | 10 | 10 |
-| max_batch_timeout | 5s | 30s |
-| max_retries | 5 | 3 |
+| Config            | Events Queue      | DLQ    |
+| ----------------- | ----------------- | ------ |
+| max_batch_size    | 10                | 10     |
+| max_batch_timeout | 5s                | 30s    |
+| max_retries       | 5                 | 3      |
 | dead_letter_queue | athlya-events-dlq | (none) |
 
 Queue bindings duplicated into each named env (defensive against Wrangler 3.x inheritance bugs — still valid practice).
@@ -87,6 +89,7 @@ crons = ["* * * * *"]  # Every minute — outbox drain
 ## Secrets Policy
 
 All credentials via `wrangler secret put`:
+
 - `REDIS_TOKEN` / `REDIS_URL`
 - `DB_URL`
 - `JWT_JWKS_URL`

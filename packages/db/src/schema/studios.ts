@@ -21,16 +21,16 @@ import { pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { createdAt, deletedAt, uuidPrimaryKey } from './_shared.js';
 
 export const studios = pgTable(
-    'studios',
-    {
-        id: uuidPrimaryKey(),
-        slug: text('slug').notNull(),
-        name: text('name').notNull(),
-        brandColor: text('brand_color').notNull().default('#0EA5E9'),
-        createdAt: createdAt(),
-        deletedAt: deletedAt(),
-    },
-    (table) => [uniqueIndex('studios_slug_unique').on(table.slug)],
+  'studios',
+  {
+    id: uuidPrimaryKey(),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    brandColor: text('brand_color').notNull().default('#0EA5E9'),
+    createdAt: createdAt(),
+    deletedAt: deletedAt(),
+  },
+  (table) => [uniqueIndex('studios_slug_unique').on(table.slug)],
 );
 
 export type StudioRow = typeof studios.$inferSelect;

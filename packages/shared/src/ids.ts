@@ -39,13 +39,13 @@ export type ReservationId = Brand<string, 'ReservationId'>;
  * validate the exact same shape instead of maintaining a parallel regex.
  */
 export const UUID_REGEX =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * Returns true when `value` is a string matching the UUID regex above.
  */
 export function isUuid(value: unknown): value is string {
-    return typeof value === 'string' && UUID_REGEX.test(value);
+  return typeof value === 'string' && UUID_REGEX.test(value);
 }
 
 /**
@@ -53,21 +53,23 @@ export function isUuid(value: unknown): value is string {
  * given branded ID. Keeps the 4 public IDs consistent and makes it cheap to
  * add more (e.g. `WorkoutSessionId`) later.
  */
-function makeBrand<B extends Brand<string, string>>(label: string): {
-    make: (value: string) => B;
-    is: (value: unknown) => value is B;
+function makeBrand<B extends Brand<string, string>>(
+  label: string,
+): {
+  make: (value: string) => B;
+  is: (value: unknown) => value is B;
 } {
-    return {
-        make(value: string): B {
-            if (!isUuid(value)) {
-                throw new TypeError(`invalid UUID for ${label}: ${String(value)}`);
-            }
-            return value as B;
-        },
-        is(value: unknown): value is B {
-            return isUuid(value);
-        },
-    };
+  return {
+    make(value: string): B {
+      if (!isUuid(value)) {
+        throw new TypeError(`invalid UUID for ${label}: ${String(value)}`);
+      }
+      return value as B;
+    },
+    is(value: unknown): value is B {
+      return isUuid(value);
+    },
+  };
 }
 
 const userIdBrand = makeBrand<UserId>('UserId');

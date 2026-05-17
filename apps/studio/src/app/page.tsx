@@ -24,23 +24,21 @@ import type { ReactElement } from 'react';
 export const metadata: Metadata = { title: 'Athlya Studio' };
 
 export default async function StudioHome(): Promise<ReactElement> {
-    const locale = await getLocale();
-    const t = createTranslator(locale);
+  const locale = await getLocale();
+  const t = createTranslator(locale);
 
-    return (
-        <main className="mx-auto flex min-h-dvh max-w-3xl flex-col items-center justify-center gap-6 px-6 py-12">
-            <h1 className="text-4xl font-semibold">{t('studio.home.title')}</h1>
-            <p className="text-center text-lg text-muted-foreground">
-                {t('studio.home.tagline')}
-            </p>
-            <div className="flex flex-wrap justify-center gap-4">
-                <Link className={buttonVariants()} href="/login">
-                    {t('auth.login.title')}
-                </Link>
-                <Link className={buttonVariants({ variant: 'outline' })} href="/dashboard">
-                    {t('studio.home.dashboard')}
-                </Link>
-            </div>
-        </main>
-    );
+  return (
+    <main className="mx-auto flex min-h-dvh max-w-3xl flex-col items-center justify-center gap-6 px-6 py-12">
+      <h1 className="text-4xl font-semibold">{t('studio.home.title')}</h1>
+      <p className="text-center text-lg text-muted-foreground">{t('studio.home.tagline')}</p>
+      <div className="flex flex-wrap justify-center gap-4">
+        <Link className={buttonVariants()} href="/login">
+          {t('auth.login.title')}
+        </Link>
+        <Link className={buttonVariants({ variant: 'outline' })} href="/dashboard">
+          {t('studio.home.dashboard')}
+        </Link>
+      </div>
+    </main>
+  );
 }

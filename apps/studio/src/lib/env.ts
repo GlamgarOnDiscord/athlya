@@ -7,17 +7,17 @@
  */
 
 export function getPublicApiUrl(): string {
-    return process.env['NEXT_PUBLIC_API_URL'] ?? '';
+  return process.env['NEXT_PUBLIC_API_URL'] ?? '';
 }
 
 export function getTurnstileSiteKey(): string | undefined {
-    const raw = process.env['NEXT_PUBLIC_TURNSTILE_SITE_KEY'];
-    if (raw === undefined || raw === '') return undefined;
-    return raw;
+  const raw = process.env['NEXT_PUBLIC_TURNSTILE_SITE_KEY'];
+  if (raw === undefined || raw === '') return undefined;
+  return raw;
 }
 
 export function getCspReportUri(): string | undefined {
-    const raw = process.env['NEXT_PUBLIC_CSP_REPORT_URI'];
-    if (raw === undefined || raw === '') return undefined;
-    return raw;
+  const raw = process.env['NEXT_PUBLIC_CSP_REPORT_URI'];
+  if (raw === undefined || raw === '') return undefined;
+  return raw;
 }

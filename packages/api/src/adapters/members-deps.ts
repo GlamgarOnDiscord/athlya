@@ -29,23 +29,23 @@
  */
 
 import {
-    getProfile as svcGetProfile,
-    listMembersByStudio as svcListMembersByStudio,
-    updateConsents as svcUpdateConsents,
-    updateProfile as svcUpdateProfile,
-    enqueueExport as svcEnqueueExport,
-    type EnqueueExportResult,
-    type MemberProfile,
-    type MembersPage,
-    type Role,
+  getProfile as svcGetProfile,
+  listMembersByStudio as svcListMembersByStudio,
+  updateConsents as svcUpdateConsents,
+  updateProfile as svcUpdateProfile,
+  enqueueExport as svcEnqueueExport,
+  type EnqueueExportResult,
+  type MemberProfile,
+  type MembersPage,
+  type Role,
 } from '@athlya/members';
 
 import { publish, type Queue } from '../events/publish.js';
 
 import {
-    getOrCreateDbHttp,
-    primeDbHttpForTests,
-    resetAllDepsCachesForTests,
+  getOrCreateDbHttp,
+  primeDbHttpForTests,
+  resetAllDepsCachesForTests,
 } from './deps-cache.js';
 import { createDrizzleAuditLogWriter } from './members-audit-writer-drizzle.js';
 import { createDrizzleConsentsRepo } from './members-consents-repo-drizzle.js';
@@ -56,12 +56,7 @@ import type { MembersDeps } from '../routes/members.js';
 import type { AthlyaBindings } from '../types.js';
 import type { AthlyaDbHttp } from '@athlya/db/client';
 import type { AthlyaEvent } from '@athlya/shared/events';
-import type {
-    UpdateConsentsRequest,
-    UpdateProfileRequest,
-} from '@athlya/shared/schemas/api';
-
-
+import type { UpdateConsentsRequest, UpdateProfileRequest } from '@athlya/shared/schemas/api';
 
 /* ------------------------------------------------------------------ */
 /*  Per-isolate cache for the HTTP-driver Drizzle handle               */
@@ -77,7 +72,7 @@ import type {
  * caches; members has no domain-specific cache to clear.
  */
 export function __resetMembersDepsCachesForTests(): void {
-    resetAllDepsCachesForTests();
+  resetAllDepsCachesForTests();
 }
 
 /**
@@ -91,10 +86,10 @@ export function __resetMembersDepsCachesForTests(): void {
  * (`primeMembersDb`) keep working.
  */
 export function __primeDbHttpForTests(url: string): {
-    readonly size: number;
-    readonly handle: AthlyaDbHttp;
+  readonly size: number;
+  readonly handle: AthlyaDbHttp;
 } {
-    return primeDbHttpForTests(url);
+  return primeDbHttpForTests(url);
 }
 
 /* ------------------------------------------------------------------ */
@@ -108,25 +103,24 @@ export function __primeDbHttpForTests(url: string): {
  * will pick it up once the queue is back.
  */
 function buildEventPublisher(env: AthlyaBindings): {
-    publish: (event: AthlyaEvent) => Promise<void>;
+  publish: (event: AthlyaEvent) => Promise<void>;
 } {
-    return {
-        async publish(event) {
-            try {
-                await publish(event, undefined, {
-                    // FIXME(B8.3): Queue type not exposed by Cloudflare types — investigate
-                    queue: env.EVENTS_QUEUE as unknown as Queue,
-                });
-            } catch (err) {
-                console.warn('[members-deps] publishEvent failed', {
-                    eventId: event.id,
-                    eventType: event.type,
-                    error:
-                        err instanceof Error ? err.message : String(err),
-                });
-            }
-        },
-    };
+  return {
+    async publish(event) {
+      try {
+        await publish(event, undefined, {
+          // FIXME(B8.3): Queue type not exposed by Cloudflare types — investigate
+          queue: env.EVENTS_QUEUE as unknown as Queue,
+        });
+      } catch (err) {
+        console.warn('[members-deps] publishEvent failed', {
+          eventId: event.id,
+          eventType: event.type,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -141,71 +135,65 @@ function buildEventPublisher(env: AthlyaBindings): {
  * fresh per call.
  */
 export function buildMembersDeps(env: AthlyaBindings): MembersDeps {
-    const now = () => Date.now();
-    const events = buildEventPublisher(env);
+  const now = () => Date.now();
+  const events = buildEventPublisher(env);
 
-    return {
-        async getProfile(userId): Promise<MemberProfile> {
-            const db = getOrCreateDbHttp(env.DB_URL);
-            const repo = createDrizzleMemberRepo(db);
-            return svcGetProfile(userId, { repo });
-        },
+  return {
+    async getProfile(userId): Promise<MemberProfile> {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const repo = createDrizzleMemberRepo(db);
+      return svcGetProfile(userId, { repo });
+    },
 
-        async updateProfile(
-            userId: string,
-            patch: UpdateProfileRequest,
-        ): Promise<MemberProfile> {
-            const db = getOrCreateDbHttp(env.DB_URL);
-            const repo = createDrizzleMemberRepo(db);
-            return svcUpdateProfile(userId, patch, { repo });
-        },
+    async updateProfile(userId: string, patch: UpdateProfileRequest): Promise<MemberProfile> {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const repo = createDrizzleMemberRepo(db);
+      return svcUpdateProfile(userId, patch, { repo });
+    },
 
-        async updateConsents(userId: string, input: UpdateConsentsRequest) {
-            const db = getOrCreateDbHttp(env.DB_URL);
-            const consentsRepo = createDrizzleConsentsRepo(db);
-            const audit = createDrizzleAuditLogWriter(db);
-            return svcUpdateConsents(userId, input, {
-                consentsRepo,
-                audit,
-                now,
-            });
-        },
+    async updateConsents(userId: string, input: UpdateConsentsRequest) {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const consentsRepo = createDrizzleConsentsRepo(db);
+      const audit = createDrizzleAuditLogWriter(db);
+      return svcUpdateConsents(userId, input, {
+        consentsRepo,
+        audit,
+        now,
+      });
+    },
 
-        async enqueueExport(userId: string): Promise<{ jobId: string }> {
-            const db = getOrCreateDbHttp(env.DB_URL);
-            const jobs = createDrizzleExportJobStore(db);
-            const result: EnqueueExportResult = await svcEnqueueExport(
-                userId,
-                {
-                    jobs,
-                    events,
-                    clock: { now },
-                    uuid: () => crypto.randomUUID(),
-                },
-            );
-            // Both `ok` and `deduped` surface the same `jobId` to the
-            // caller — the HTTP layer does not differentiate (both
-            // map to 202). The `kind` is logged by the gateway's
-            // request log for observability.
-            return { jobId: result.jobId };
-        },
+    async enqueueExport(userId: string): Promise<{ jobId: string }> {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const jobs = createDrizzleExportJobStore(db);
+      const result: EnqueueExportResult = await svcEnqueueExport(userId, {
+        jobs,
+        events,
+        clock: { now },
+        uuid: () => crypto.randomUUID(),
+      });
+      // Both `ok` and `deduped` surface the same `jobId` to the
+      // caller — the HTTP layer does not differentiate (both
+      // map to 202). The `kind` is logged by the gateway's
+      // request log for observability.
+      return { jobId: result.jobId };
+    },
 
-        async listMembersByStudio(
-            studioId: string,
-            requesterRole: 'admin' | 'coach',
-            opts,
-        ): Promise<MembersPage> {
-            const db = getOrCreateDbHttp(env.DB_URL);
-            const repo = createDrizzleMemberRepo(db);
-            const role: Role = requesterRole;
-            // Project the route-level `ListMembersQuery` shape onto
-            // the service-level `ListMembersOptions` shape so the
-            // `exactOptionalPropertyTypes` boundary stays tight (no
-            // explicit `undefined` leaking onto an optional field).
-            const repoOpts: { cursor?: string; limit?: number } = {};
-            if (opts.cursor !== undefined) repoOpts.cursor = opts.cursor;
-            if (opts.limit !== undefined) repoOpts.limit = opts.limit;
-            return svcListMembersByStudio(studioId, role, repoOpts, { repo });
-        },
-    };
+    async listMembersByStudio(
+      studioId: string,
+      requesterRole: 'admin' | 'coach',
+      opts,
+    ): Promise<MembersPage> {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const repo = createDrizzleMemberRepo(db);
+      const role: Role = requesterRole;
+      // Project the route-level `ListMembersQuery` shape onto
+      // the service-level `ListMembersOptions` shape so the
+      // `exactOptionalPropertyTypes` boundary stays tight (no
+      // explicit `undefined` leaking onto an optional field).
+      const repoOpts: { cursor?: string; limit?: number } = {};
+      if (opts.cursor !== undefined) repoOpts.cursor = opts.cursor;
+      if (opts.limit !== undefined) repoOpts.limit = opts.limit;
+      return svcListMembersByStudio(studioId, role, repoOpts, { repo });
+    },
+  };
 }

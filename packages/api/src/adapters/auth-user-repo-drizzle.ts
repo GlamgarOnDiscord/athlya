@@ -52,107 +52,97 @@ import type { Consents } from '@athlya/shared/schemas';
  * no per-request state.
  */
 export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
-    return {
-        async findUserByEmail(email) {
-            const rows = await withConnectionRetry(() =>
-                db
-                    .select()
-                    .from(users)
-                    .where(eq(users.email, email))
-                    .limit(1),
-            );
-            const row = rows[0];
-            return row === undefined ? null : toUserRow(row);
-        },
+  return {
+    async findUserByEmail(email) {
+      const rows = await withConnectionRetry(() =>
+        db.select().from(users).where(eq(users.email, email)).limit(1),
+      );
+      const row = rows[0];
+      return row === undefined ? null : toUserRow(row);
+    },
 
-        async findUserById(id) {
-            const rows = await withConnectionRetry(() =>
-                db
-                    .select()
-                    .from(users)
-                    .where(eq(users.id, id))
-                    .limit(1),
-            );
-            const row = rows[0];
-            return row === undefined ? null : toUserRow(row);
-        },
+    async findUserById(id) {
+      const rows = await withConnectionRetry(() =>
+        db.select().from(users).where(eq(users.id, id)).limit(1),
+      );
+      const row = rows[0];
+      return row === undefined ? null : toUserRow(row);
+    },
 
-        async findStudioBySlug(slug) {
-            const rows = await withConnectionRetry(() =>
-                db
-                    .select({
-                        id: studios.id,
-                        slug: studios.slug,
-                        name: studios.name,
-                    })
-                    .from(studios)
-                    .where(eq(studios.slug, slug))
-                    .limit(1),
-            );
-            const row = rows[0];
-            return row === undefined ? null : row;
-        },
+    async findStudioBySlug(slug) {
+      const rows = await withConnectionRetry(() =>
+        db
+          .select({
+            id: studios.id,
+            slug: studios.slug,
+            name: studios.name,
+          })
+          .from(studios)
+          .where(eq(studios.slug, slug))
+          .limit(1),
+      );
+      const row = rows[0];
+      return row === undefined ? null : row;
+    },
 
-        async createUser(input) {
-            try {
-                const [row] = await withConnectionRetry(() =>
-                    db
-                        .insert(users)
-                        .values({
-                            studioId: input.studioId,
-                            email: input.email,
-                            displayName: input.displayName,
-                            passwordHash: input.passwordHash,
-                            role: input.role,
-                            consents: input.consents satisfies Consents,
-                        })
-                        .returning(),
-                );
-                if (row === undefined) {
-                    throw new Error(
-                        'createUser: Drizzle returned an empty result set',
-                    );
-                }
-                return toUserRow(row);
-            } catch (err) {
-                // postgres-js surfaces unique-violation as SQLSTATE
-                // 23505. Re-throw as the domain-level sentinel so the
-                // service can map to `email_taken` without importing
-                // pg codes.
-                if (isPostgresUniqueViolation(err)) {
-                    throw new EmailTakenError();
-                }
-                throw err;
-            }
-        },
+    async createUser(input) {
+      try {
+        const [row] = await withConnectionRetry(() =>
+          db
+            .insert(users)
+            .values({
+              studioId: input.studioId,
+              email: input.email,
+              displayName: input.displayName,
+              passwordHash: input.passwordHash,
+              role: input.role,
+              consents: input.consents satisfies Consents,
+            })
+            .returning(),
+        );
+        if (row === undefined) {
+          throw new Error('createUser: Drizzle returned an empty result set');
+        }
+        return toUserRow(row);
+      } catch (err) {
+        // postgres-js surfaces unique-violation as SQLSTATE
+        // 23505. Re-throw as the domain-level sentinel so the
+        // service can map to `email_taken` without importing
+        // pg codes.
+        if (isPostgresUniqueViolation(err)) {
+          throw new EmailTakenError();
+        }
+        throw err;
+      }
+    },
 
-        async softDeleteUser(id) {
-            await withConnectionRetry(async () => {
-                await db
-                    .update(users)
-                    .set({ deletedAt: new Date() })
-                    .where(and(eq(users.id, id)));
-            });
-        },
+    async softDeleteUser(id) {
+      await withConnectionRetry(async () => {
+        await db
+          .update(users)
+          .set({ deletedAt: new Date() })
+          .where(and(eq(users.id, id)));
+      });
+    },
 
-        findOrCreateOAuthUser() {
-            // OAuth sign-in is out of scope for the Niveau 2 MVP. The
-            // public `/login-with-apple` and `/login-with-google`
-            // routes were removed in slice B8.4 because they shipped
-            // unconditional 500 stubs that expanded the public attack
-            // surface for no functional gain. The `UserRepo`
-            // interface still declares this method (for the
-            // `loginWithApple` / `loginWithGoogle` service-layer
-            // entry points covered by `@athlya/auth`'s own unit
-            // tests), so we keep a defensive throw in the production
-            // adapter. It can no longer be reached from the HTTP
-            // surface area; landed as a dedicated slice once Apple /
-            // Google developer credentials are provisioned.
-            throw new Error(
-                'findOrCreateOAuthUser: OAuth adapter not yet wired; use email/password register + login for now',
-            );
-        },
-    };
+    findOrCreateOAuthUser() {
+      // OAuth sign-in is out of scope for the Niveau 2 MVP. The
+      // public `/login-with-apple` and `/login-with-google`
+      // routes were removed in slice B8.4 because they shipped
+      // unconditional 500 stubs that expanded the public attack
+      // surface for no functional gain. The `UserRepo`
+      // interface still declares this method (for the
+      // `loginWithApple` / `loginWithGoogle` service-layer
+      // entry points covered by `@athlya/auth`'s own unit
+      // tests), so we keep a defensive throw in the production
+      // adapter. It can no longer be reached from the HTTP
+      // surface area; landed as a dedicated slice once Apple /
+      // Google developer credentials are provisioned.
+      throw new Error(
+        'findOrCreateOAuthUser: OAuth adapter not yet wired; use email/password register + login for now',
+      );
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -166,13 +156,13 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
  * `avatarUrl` and `createdAt` which the service does not consume.
  */
 function toUserRow(row: typeof users.$inferSelect): UserRow {
-    return {
-        id: row.id,
-        studioId: row.studioId,
-        email: row.email,
-        displayName: row.displayName,
-        role: row.role,
-        passwordHash: row.passwordHash,
-        deletedAt: row.deletedAt,
-    };
+  return {
+    id: row.id,
+    studioId: row.studioId,
+    email: row.email,
+    displayName: row.displayName,
+    role: row.role,
+    passwordHash: row.passwordHash,
+    deletedAt: row.deletedAt,
+  };
 }

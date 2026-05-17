@@ -48,11 +48,11 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { currentJwks, publicJwkOf } from '../../src/jwt.js';
 import {
-    InvalidQRTokenError,
-    QR_TTL_SEC,
-    QRReplayError,
-    generateAccessQR,
-    verifyAccessQR,
+  InvalidQRTokenError,
+  QR_TTL_SEC,
+  QRReplayError,
+  generateAccessQR,
+  verifyAccessQR,
 } from '../../src/qr.js';
 
 import type { Jwks, SigningKey } from '../../src/jwt.js';
@@ -87,13 +87,13 @@ let signingKey: SigningKey;
 let jwks: Jwks;
 
 beforeAll(async () => {
-    const { privateKey, publicKey } = await generateKeyPair('RS256', {
-        modulusLength: 2048,
-        extractable: true,
-    });
-    signingKey = { kid: 'qr-prop-key', privateKey, publicKey };
-    const jwk = await publicJwkOf(signingKey);
-    jwks = currentJwks([{ kid: signingKey.kid, publicKey: jwk }]);
+  const { privateKey, publicKey } = await generateKeyPair('RS256', {
+    modulusLength: 2048,
+    extractable: true,
+  });
+  signingKey = { kid: 'qr-prop-key', privateKey, publicKey };
+  const jwk = await publicJwkOf(signingKey);
+  jwks = currentJwks([{ kid: signingKey.kid, publicKey: jwk }]);
 });
 
 /**
@@ -102,16 +102,16 @@ beforeAll(async () => {
  * is what keeps the seed reproducible.
  */
 function makeReplay(): ReplayStore {
-    const seen = new Map<string, number>();
-    return {
-        has(jti) {
-            return Promise.resolve(seen.has(jti));
-        },
-        add(jti, ttlSec) {
-            if (!seen.has(jti)) seen.set(jti, ttlSec);
-            return Promise.resolve();
-        },
-    };
+  const seen = new Map<string, number>();
+  return {
+    has(jti) {
+      return Promise.resolve(seen.has(jti));
+    },
+    add(jti, ttlSec) {
+      if (!seen.has(jti)) seen.set(jti, ttlSec);
+      return Promise.resolve();
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -119,75 +119,66 @@ function makeReplay(): ReplayStore {
 // ---------------------------------------------------------------------------
 
 describe('Property 6.1 — forgery (single-character mutation → invalid_token)', () => {
-    it('rejects every one-char mutation of a valid token with InvalidQRTokenError', async () => {
-        // One canonical token for the whole property run. We want to
-        // exercise many different tampers against a fixed valid
-        // baseline; regenerating the token per sample would add cost
-        // without increasing the semantic coverage (a tamper at index
-        // 42 of *any* token should still fail).
-        const validToken = await generateAccessQR(USER_ID, STUDIO_ID, {
-            signingKey,
-            now: () => FROZEN_NOW,
-            jti: () => 'jti-forge-baseline',
-        });
-
-        await fc.assert(
-            fc.asyncProperty(
-                // Index of the char to mutate.
-                fc.nat({ max: validToken.length - 1 }),
-                // Rotation in the alphabet; strictly positive so the
-                // replacement is always distinct from the original.
-                fc.integer({ min: 1, max: JWS_ALPHABET.length - 1 }),
-                async (index, delta) => {
-                    const original = validToken.charAt(index);
-                    const originalIdx = JWS_ALPHABET.indexOf(original);
-                    // The baseline token is pure base64url + '.', so every
-                    // char lives in our alphabet. Guard anyway so a future
-                    // jose version that emits padding-style output fails
-                    // loudly rather than silently skipping.
-                    if (originalIdx < 0) {
-                        throw new Error(
-                            `Unexpected non-alphabet char '${original}' at index ${index}`,
-                        );
-                    }
-                    const replacementIdx =
-                        (originalIdx + delta) % JWS_ALPHABET.length;
-                    const replacement = JWS_ALPHABET.charAt(replacementIdx);
-                    // With delta ∈ [1, 64] on a 65-sized alphabet the
-                    // rotation is never the identity, so replacement
-                    // differs from original by construction.
-                    const tampered =
-                        validToken.slice(0, index) +
-                        replacement +
-                        validToken.slice(index + 1);
-
-                    // A fresh replay store so any accidental successful
-                    // verify would not pollute neighbouring samples.
-                    const replay = makeReplay();
-                    try {
-                        await verifyAccessQR(tampered, STUDIO_ID, {
-                            jwks,
-                            replayStore: replay,
-                            now: () => FROZEN_NOW + 1,
-                        });
-                        // Reaching here means the tamper was accepted —
-                        // a forgery counter-example. Fail loudly.
-                        return false;
-                    } catch (err) {
-                        // The QR module surfaces every signature /
-                        // structure / payload failure as
-                        // InvalidQRTokenError with code 'invalid_token'
-                        // (Req 11.3).
-                        return (
-                            err instanceof InvalidQRTokenError &&
-                            err.code === 'invalid_token'
-                        );
-                    }
-                },
-            ),
-            RUN_OPTS,
-        );
+  it('rejects every one-char mutation of a valid token with InvalidQRTokenError', async () => {
+    // One canonical token for the whole property run. We want to
+    // exercise many different tampers against a fixed valid
+    // baseline; regenerating the token per sample would add cost
+    // without increasing the semantic coverage (a tamper at index
+    // 42 of *any* token should still fail).
+    const validToken = await generateAccessQR(USER_ID, STUDIO_ID, {
+      signingKey,
+      now: () => FROZEN_NOW,
+      jti: () => 'jti-forge-baseline',
     });
+
+    await fc.assert(
+      fc.asyncProperty(
+        // Index of the char to mutate.
+        fc.nat({ max: validToken.length - 1 }),
+        // Rotation in the alphabet; strictly positive so the
+        // replacement is always distinct from the original.
+        fc.integer({ min: 1, max: JWS_ALPHABET.length - 1 }),
+        async (index, delta) => {
+          const original = validToken.charAt(index);
+          const originalIdx = JWS_ALPHABET.indexOf(original);
+          // The baseline token is pure base64url + '.', so every
+          // char lives in our alphabet. Guard anyway so a future
+          // jose version that emits padding-style output fails
+          // loudly rather than silently skipping.
+          if (originalIdx < 0) {
+            throw new Error(`Unexpected non-alphabet char '${original}' at index ${index}`);
+          }
+          const replacementIdx = (originalIdx + delta) % JWS_ALPHABET.length;
+          const replacement = JWS_ALPHABET.charAt(replacementIdx);
+          // With delta ∈ [1, 64] on a 65-sized alphabet the
+          // rotation is never the identity, so replacement
+          // differs from original by construction.
+          const tampered = validToken.slice(0, index) + replacement + validToken.slice(index + 1);
+
+          // A fresh replay store so any accidental successful
+          // verify would not pollute neighbouring samples.
+          const replay = makeReplay();
+          try {
+            await verifyAccessQR(tampered, STUDIO_ID, {
+              jwks,
+              replayStore: replay,
+              now: () => FROZEN_NOW + 1,
+            });
+            // Reaching here means the tamper was accepted —
+            // a forgery counter-example. Fail loudly.
+            return false;
+          } catch (err) {
+            // The QR module surfaces every signature /
+            // structure / payload failure as
+            // InvalidQRTokenError with code 'invalid_token'
+            // (Req 11.3).
+            return err instanceof InvalidQRTokenError && err.code === 'invalid_token';
+          }
+        },
+      ),
+      RUN_OPTS,
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -195,37 +186,34 @@ describe('Property 6.1 — forgery (single-character mutation → invalid_token)
 // ---------------------------------------------------------------------------
 
 describe('Property 6.2 — expiry (now > exp → invalid_token)', () => {
-    it('rejects tokens verified past exp with InvalidQRTokenError', async () => {
-        await fc.assert(
-            fc.asyncProperty(
-                // Any elapsed time strictly greater than QR_TTL_SEC.
-                // Upper bound 3600 keeps the numerical range tight so
-                // shrinking lands on a small, legible counter-example.
-                fc.integer({ min: QR_TTL_SEC + 1, max: 3600 }),
-                async (elapsedSec) => {
-                    const token = await generateAccessQR(USER_ID, STUDIO_ID, {
-                        signingKey,
-                        now: () => FROZEN_NOW,
-                    });
-                    const replay = makeReplay();
-                    try {
-                        await verifyAccessQR(token, STUDIO_ID, {
-                            jwks,
-                            replayStore: replay,
-                            now: () => FROZEN_NOW + elapsedSec,
-                        });
-                        return false;
-                    } catch (err) {
-                        return (
-                            err instanceof InvalidQRTokenError &&
-                            err.code === 'invalid_token'
-                        );
-                    }
-                },
-            ),
-            RUN_OPTS,
-        );
-    });
+  it('rejects tokens verified past exp with InvalidQRTokenError', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        // Any elapsed time strictly greater than QR_TTL_SEC.
+        // Upper bound 3600 keeps the numerical range tight so
+        // shrinking lands on a small, legible counter-example.
+        fc.integer({ min: QR_TTL_SEC + 1, max: 3600 }),
+        async (elapsedSec) => {
+          const token = await generateAccessQR(USER_ID, STUDIO_ID, {
+            signingKey,
+            now: () => FROZEN_NOW,
+          });
+          const replay = makeReplay();
+          try {
+            await verifyAccessQR(token, STUDIO_ID, {
+              jwks,
+              replayStore: replay,
+              now: () => FROZEN_NOW + elapsedSec,
+            });
+            return false;
+          } catch (err) {
+            return err instanceof InvalidQRTokenError && err.code === 'invalid_token';
+          }
+        },
+      ),
+      RUN_OPTS,
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -233,51 +221,48 @@ describe('Property 6.2 — expiry (now > exp → invalid_token)', () => {
 // ---------------------------------------------------------------------------
 
 describe('Property 6.3 — replay (second verify with same jti → replay)', () => {
-    it('first verify succeeds, every retry on the same store throws QRReplayError', async () => {
-        await fc.assert(
-            fc.asyncProperty(
-                // Non-empty jti strings; the QR module accepts any
-                // string-valued jti, so we don't constrain to UUID
-                // shape — we want fast-check to probe the boundary.
-                fc.string({ minLength: 1, maxLength: 64 }),
-                async (jti) => {
-                    const token = await generateAccessQR(USER_ID, STUDIO_ID, {
-                        signingKey,
-                        now: () => FROZEN_NOW,
-                        jti: () => jti,
-                    });
+  it('first verify succeeds, every retry on the same store throws QRReplayError', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        // Non-empty jti strings; the QR module accepts any
+        // string-valued jti, so we don't constrain to UUID
+        // shape — we want fast-check to probe the boundary.
+        fc.string({ minLength: 1, maxLength: 64 }),
+        async (jti) => {
+          const token = await generateAccessQR(USER_ID, STUDIO_ID, {
+            signingKey,
+            now: () => FROZEN_NOW,
+            jti: () => jti,
+          });
 
-                    // Fresh store per run so each sample is independent.
-                    const replay = makeReplay();
+          // Fresh store per run so each sample is independent.
+          const replay = makeReplay();
 
-                    // First presentation: must succeed and record the jti.
-                    const first = await verifyAccessQR(token, STUDIO_ID, {
-                        jwks,
-                        replayStore: replay,
-                        now: () => FROZEN_NOW + 1,
-                    });
-                    if (first.jti !== jti) return false;
+          // First presentation: must succeed and record the jti.
+          const first = await verifyAccessQR(token, STUDIO_ID, {
+            jwks,
+            replayStore: replay,
+            now: () => FROZEN_NOW + 1,
+          });
+          if (first.jti !== jti) return false;
 
-                    // Second presentation against the SAME replay store:
-                    // must fail with QRReplayError / code 'replay'.
-                    try {
-                        await verifyAccessQR(token, STUDIO_ID, {
-                            jwks,
-                            replayStore: replay,
-                            now: () => FROZEN_NOW + 2,
-                        });
-                        return false;
-                    } catch (err) {
-                        return (
-                            err instanceof QRReplayError &&
-                            err.code === 'replay'
-                        );
-                    }
-                },
-            ),
-            RUN_OPTS,
-        );
-    });
+          // Second presentation against the SAME replay store:
+          // must fail with QRReplayError / code 'replay'.
+          try {
+            await verifyAccessQR(token, STUDIO_ID, {
+              jwks,
+              replayStore: replay,
+              now: () => FROZEN_NOW + 2,
+            });
+            return false;
+          } catch (err) {
+            return err instanceof QRReplayError && err.code === 'replay';
+          }
+        },
+      ),
+      RUN_OPTS,
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -285,54 +270,51 @@ describe('Property 6.3 — replay (second verify with same jti → replay)', () 
 // ---------------------------------------------------------------------------
 
 describe('Property 6.4 — wrong studio (studio claim ≠ expected → invalid_token)', () => {
-    it('rejects tokens whose studio claim differs from expectedStudioId', async () => {
-        await fc.assert(
-            fc.asyncProperty(
-                // Two UUID v4 strings; we skip samples where they
-                // coincide so the property targets the mismatch branch.
-                fc.uuid({ version: 4 }),
-                fc.uuid({ version: 4 }),
-                async (actualStudio, expectedStudio) => {
-                    fc.pre(actualStudio !== expectedStudio);
+  it('rejects tokens whose studio claim differs from expectedStudioId', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        // Two UUID v4 strings; we skip samples where they
+        // coincide so the property targets the mismatch branch.
+        fc.uuid({ version: 4 }),
+        fc.uuid({ version: 4 }),
+        async (actualStudio, expectedStudio) => {
+          fc.pre(actualStudio !== expectedStudio);
 
-                    const token = await generateAccessQR(USER_ID, actualStudio, {
-                        signingKey,
-                        now: () => FROZEN_NOW,
-                    });
-                    const replay = makeReplay();
-                    try {
-                        await verifyAccessQR(token, expectedStudio, {
-                            jwks,
-                            replayStore: replay,
-                            now: () => FROZEN_NOW + 1,
-                        });
-                        return false;
-                    } catch (err) {
-                        return (
-                            err instanceof InvalidQRTokenError &&
-                            err.code === 'invalid_token'
-                        );
-                    }
-                },
-            ),
-            RUN_OPTS,
-        );
-    });
-
-    // Regression anchor: the asymmetric case above never exercises a
-    // collision, but the happy path — expected === actual — must stay
-    // green so a future refactor that over-rejects is caught early.
-    it('accepts a token whose studio claim equals the expected studio', async () => {
-        const token = await generateAccessQR(USER_ID, STUDIO_ID, {
+          const token = await generateAccessQR(USER_ID, actualStudio, {
             signingKey,
             now: () => FROZEN_NOW,
-        });
-        const replay = makeReplay();
-        const result = await verifyAccessQR(token, STUDIO_ID, {
-            jwks,
-            replayStore: replay,
-            now: () => FROZEN_NOW + 1,
-        });
-        expect(result.studioId).toBe(STUDIO_ID);
+          });
+          const replay = makeReplay();
+          try {
+            await verifyAccessQR(token, expectedStudio, {
+              jwks,
+              replayStore: replay,
+              now: () => FROZEN_NOW + 1,
+            });
+            return false;
+          } catch (err) {
+            return err instanceof InvalidQRTokenError && err.code === 'invalid_token';
+          }
+        },
+      ),
+      RUN_OPTS,
+    );
+  });
+
+  // Regression anchor: the asymmetric case above never exercises a
+  // collision, but the happy path — expected === actual — must stay
+  // green so a future refactor that over-rejects is caught early.
+  it('accepts a token whose studio claim equals the expected studio', async () => {
+    const token = await generateAccessQR(USER_ID, STUDIO_ID, {
+      signingKey,
+      now: () => FROZEN_NOW,
     });
+    const replay = makeReplay();
+    const result = await verifyAccessQR(token, STUDIO_ID, {
+      jwks,
+      replayStore: replay,
+      now: () => FROZEN_NOW + 1,
+    });
+    expect(result.studioId).toBe(STUDIO_ID);
+  });
 });

@@ -1,21 +1,22 @@
 # Drizzle ORM — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^0.45.2 |
-| **Latest stable** | **0.45.2** (current stable — stay here) |
-| **v1.0.0-rc.2** | Release candidate — do NOT use in production |
-| **drizzle-kit** | ^0.31.10 (compatible) |
+|                   | Value                                        |
+| ----------------- | -------------------------------------------- |
+| **Used**          | ^0.45.2                                      |
+| **Latest stable** | **0.45.2** (current stable — stay here)      |
+| **v1.0.0-rc.2**   | Release candidate — do NOT use in production |
+| **drizzle-kit**   | ^0.31.10 (compatible)                        |
 
 ---
 
 ## HOLD — Do Not Upgrade to Drizzle v1.0.0-rc
 
 Drizzle v1.0.0-rc.2 is a release candidate with significant API changes:
+
 - New `casing` API (table/column name transformations)
 - `codec` system for custom type serialization
 - Changes to `$type<T>()` behavior for JSONB columns
@@ -46,6 +47,7 @@ The project uses `sql` template tags with parameter binding (`${safe.userId}`) w
 Drizzle 0.45+ supports `pgTable.withRLS()` and `policy()` helpers. The project uses raw SQL migrations for RLS which is also valid. No migration needed.
 
 Current `SET LOCAL` via `set_config()` pattern:
+
 ```ts
 await tx.execute(sql`select set_config('app.user_id', ${safe.userId}, true)`);
 ```
@@ -55,6 +57,7 @@ Correct and idiomatic. The `true` argument makes the setting local to the transa
 ### Transactions
 
 The `withTenant()` pattern is exemplary:
+
 - Validates claims before touching DB
 - Uses `SET LOCAL` (transaction-scoped, never leaks to pool)
 - Parameter binding for all values

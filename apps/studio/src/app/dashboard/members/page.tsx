@@ -23,20 +23,16 @@ import type { ReactElement } from 'react';
 export const metadata: Metadata = { title: 'Membres — Athlya Studio' };
 
 export default async function MembersAdminPage(): Promise<ReactElement> {
-    const locale = await getLocale();
-    const t = createTranslator(locale);
+  const locale = await getLocale();
+  const t = createTranslator(locale);
 
-    return (
-        <section className="flex flex-col gap-4">
-            <header>
-                <h1 className="text-3xl font-semibold">
-                    {t('studio.members.title')}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                    {t('studio.members.subtitle')}
-                </p>
-            </header>
-            <MembersAdminList />
-        </section>
-    );
+  return (
+    <section className="flex flex-col gap-4">
+      <header>
+        <h1 className="text-3xl font-semibold">{t('studio.members.title')}</h1>
+        <p className="text-sm text-muted-foreground">{t('studio.members.subtitle')}</p>
+      </header>
+      <MembersAdminList />
+    </section>
+  );
 }

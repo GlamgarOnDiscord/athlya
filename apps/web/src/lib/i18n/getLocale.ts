@@ -33,10 +33,10 @@ const DEFAULT_LOCALE: Locale = 'fr';
  * proxy header is absent / malformed. Never throws.
  */
 export async function getLocale(): Promise<Locale> {
-    const h = await headers();
-    const raw = h.get('x-locale');
-    if (raw === null) return DEFAULT_LOCALE;
-    const normalised = raw.trim().toLowerCase();
-    const match = SUPPORTED.find((s) => s === normalised);
-    return match ?? DEFAULT_LOCALE;
+  const h = await headers();
+  const raw = h.get('x-locale');
+  if (raw === null) return DEFAULT_LOCALE;
+  const normalised = raw.trim().toLowerCase();
+  const match = SUPPORTED.find((s) => s === normalised);
+  return match ?? DEFAULT_LOCALE;
 }

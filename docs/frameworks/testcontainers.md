@@ -2,23 +2,24 @@
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^10.13.0 |
-| **PostgreSQL module** | @testcontainers/postgresql ^10.13.0 |
-| **Purpose** | Real PostgreSQL for integration/property tests |
+|                       | Value                                          |
+| --------------------- | ---------------------------------------------- |
+| **Used**              | ^10.13.0                                       |
+| **PostgreSQL module** | @testcontainers/postgresql ^10.13.0            |
+| **Purpose**           | Real PostgreSQL for integration/property tests |
 
 ## Usage in Project
 
-| Package | Usage |
-|---|---|
-| `packages/db` | RLS property tests (real Postgres with policies) |
+| Package                 | Usage                                               |
+| ----------------------- | --------------------------------------------------- |
+| `packages/db`           | RLS property tests (real Postgres with policies)    |
 | `packages/reservations` | Booking property tests (concurrency, state machine) |
-| `packages/members` | Cascade integration tests (RGPD deletion) |
+| `packages/members`      | Cascade integration tests (RGPD deletion)           |
 
 ## Pattern
 
 Each test suite:
+
 1. Starts a PostgreSQL container via testcontainers
 2. Runs migrations against it
 3. Seeds data per test run

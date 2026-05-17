@@ -84,12 +84,12 @@ export const CHECKIN_WINDOW_HALF_MS = 30 * MINUTE_MS;
  * can show actionable UI.
  */
 export type QRVerifyFailReason =
-    | 'invalid_signature'
-    | 'token_expired'
-    | 'replay'
-    | 'wrong_studio'
-    | 'wrong_kind'
-    | 'malformed';
+  | 'invalid_signature'
+  | 'token_expired'
+  | 'replay'
+  | 'wrong_studio'
+  | 'wrong_kind'
+  | 'malformed';
 
 /**
  * Success envelope returned by the verifier. Matches the three pieces
@@ -101,10 +101,10 @@ export type QRVerifyFailReason =
  *   - `jti`       — retained for audit / tracing.
  */
 export interface QRVerifySuccess {
-    readonly ok: true;
-    readonly userId: string;
-    readonly studioId: string;
-    readonly jti: string;
+  readonly ok: true;
+  readonly userId: string;
+  readonly studioId: string;
+  readonly jti: string;
 }
 
 /**
@@ -112,8 +112,8 @@ export interface QRVerifySuccess {
  * the canonical machine-readable code.
  */
 export interface QRVerifyFailure {
-    readonly ok: false;
-    readonly reason: QRVerifyFailReason;
+  readonly ok: false;
+  readonly reason: QRVerifyFailReason;
 }
 
 /**
@@ -137,7 +137,7 @@ export type QRVerifyResult = QRVerifySuccess | QRVerifyFailure;
  * need to import `jose` or stand up a Redis fake.
  */
 export interface QRVerifier {
-    verify(token: string, expectedStudioId: string): Promise<QRVerifyResult>;
+  verify(token: string, expectedStudioId: string): Promise<QRVerifyResult>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -155,10 +155,10 @@ export interface QRVerifier {
  * that would sit on the reservation-POST p99 budget (Requirement 23.2).
  */
 export interface CheckinCandidate {
-    /** The full reservation row — carries `checkedInAt` for step 5. */
-    readonly reservation: ReservationRow;
-    /** `classes.starts_at` of the class the reservation points at. */
-    readonly classStartsAt: Date;
+  /** The full reservation row — carries `checkedInAt` for step 5. */
+  readonly reservation: ReservationRow;
+  /** `classes.starts_at` of the class the reservation points at. */
+  readonly classStartsAt: Date;
 }
 
 /**
@@ -172,59 +172,59 @@ export interface CheckinCandidate {
  * (Requirement 13) is enforced transparently.
  */
 export interface CheckinReservationRepo {
-    /**
-     * Find the candidate reservation for a QR check-in.
-     *
-     * Contract:
-     *   - Return a non-`null` {@link CheckinCandidate} if and only if
-     *     `(userId, studioId)` has exactly one `confirmed` reservation
-     *     whose class `starts_at` is plausibly near `now`. The
-     *     implementation SHOULD search a slightly broader range than
-     *     the strict 30-minute window so the *service* can distinguish
-     *     `outside_window` (a reservation that exists but is too far
-     *     in the future) from `no_reservation` (nothing at all). A
-     *     ±2 h search band is a reasonable default.
-     *   - `window` is passed through so repos that prefer a strict
-     *     database filter can use it directly; the service still
-     *     re-validates the returned `classStartsAt` against the
-     *     strict window (defense in depth).
-     *   - If multiple confirmed reservations match, the repo SHOULD
-     *     return the one whose `classStartsAt` is closest to `now`.
-     *     Returning the wrong candidate is not a correctness bug —
-     *     the service will surface `outside_window` in that case —
-     *     but it degrades UX.
-     *   - `null` means "no confirmed reservation for this user at
-     *     this studio near this time"; the service maps it to
-     *     `no_reservation`.
-     *   - A reservation whose `checkedInAt` is already set MUST still
-     *     be returned here so the service can surface
-     *     `already_checked_in`. The repo does not filter out
-     *     already-consumed rows.
-     */
-    findConfirmedForCheckin(
-        userId: string,
-        studioId: string,
-        window: CheckinWindow,
-    ): Promise<CheckinCandidate | null>;
+  /**
+   * Find the candidate reservation for a QR check-in.
+   *
+   * Contract:
+   *   - Return a non-`null` {@link CheckinCandidate} if and only if
+   *     `(userId, studioId)` has exactly one `confirmed` reservation
+   *     whose class `starts_at` is plausibly near `now`. The
+   *     implementation SHOULD search a slightly broader range than
+   *     the strict 30-minute window so the *service* can distinguish
+   *     `outside_window` (a reservation that exists but is too far
+   *     in the future) from `no_reservation` (nothing at all). A
+   *     ±2 h search band is a reasonable default.
+   *   - `window` is passed through so repos that prefer a strict
+   *     database filter can use it directly; the service still
+   *     re-validates the returned `classStartsAt` against the
+   *     strict window (defense in depth).
+   *   - If multiple confirmed reservations match, the repo SHOULD
+   *     return the one whose `classStartsAt` is closest to `now`.
+   *     Returning the wrong candidate is not a correctness bug —
+   *     the service will surface `outside_window` in that case —
+   *     but it degrades UX.
+   *   - `null` means "no confirmed reservation for this user at
+   *     this studio near this time"; the service maps it to
+   *     `no_reservation`.
+   *   - A reservation whose `checkedInAt` is already set MUST still
+   *     be returned here so the service can surface
+   *     `already_checked_in`. The repo does not filter out
+   *     already-consumed rows.
+   */
+  findConfirmedForCheckin(
+    userId: string,
+    studioId: string,
+    window: CheckinWindow,
+  ): Promise<CheckinCandidate | null>;
 
-    /**
-     * Stamp `checkedInAt = at` on the reservation identified by
-     * `reservationId` and return the updated row.
-     *
-     * Implementations SHOULD issue a single statement of the form
-     *
-     *     UPDATE reservations
-     *     SET checked_in_at = $2
-     *     WHERE id = $1 AND checked_in_at IS NULL
-     *     RETURNING *
-     *
-     * The `WHERE checked_in_at IS NULL` guard is a belt-and-braces
-     * check: the service already verified the field was null before
-     * calling, but a concurrent check-in from another terminal could
-     * in theory race. Returning the updated row lets the service
-     * pass it straight to the gateway for serialisation.
-     */
-    markCheckedIn(reservationId: string, at: Date): Promise<ReservationRow>;
+  /**
+   * Stamp `checkedInAt = at` on the reservation identified by
+   * `reservationId` and return the updated row.
+   *
+   * Implementations SHOULD issue a single statement of the form
+   *
+   *     UPDATE reservations
+   *     SET checked_in_at = $2
+   *     WHERE id = $1 AND checked_in_at IS NULL
+   *     RETURNING *
+   *
+   * The `WHERE checked_in_at IS NULL` guard is a belt-and-braces
+   * check: the service already verified the field was null before
+   * calling, but a concurrent check-in from another terminal could
+   * in theory race. Returning the updated row lets the service
+   * pass it straight to the gateway for serialisation.
+   */
+  markCheckedIn(reservationId: string, at: Date): Promise<ReservationRow>;
 }
 
 /**
@@ -233,8 +233,8 @@ export interface CheckinReservationRepo {
  * inclusive.
  */
 export interface CheckinWindow {
-    readonly start: Date;
-    readonly end: Date;
+  readonly start: Date;
+  readonly end: Date;
 }
 
 /* ------------------------------------------------------------------ */
@@ -248,8 +248,8 @@ export interface CheckinWindow {
  * guaranteed non-null.
  */
 export interface CheckInOk {
-    readonly code: 'ok';
-    readonly reservation: ReservationRow;
+  readonly code: 'ok';
+  readonly reservation: ReservationRow;
 }
 
 /**
@@ -266,9 +266,9 @@ export interface CheckInOk {
  *     `[now − 30 min, now + 30 min]`.
  */
 export type CheckInBusinessFailure =
-    | { readonly code: 'no_reservation' }
-    | { readonly code: 'already_checked_in'; readonly reservation: ReservationRow }
-    | { readonly code: 'outside_window'; readonly reservation: ReservationRow };
+  | { readonly code: 'no_reservation' }
+  | { readonly code: 'already_checked_in'; readonly reservation: ReservationRow }
+  | { readonly code: 'outside_window'; readonly reservation: ReservationRow };
 
 /**
  * Discriminated union returned by {@link checkIn}.
@@ -283,9 +283,9 @@ export type CheckInBusinessFailure =
  *   - The success branch carries the fully-updated reservation.
  */
 export type CheckInResult =
-    | CheckInOk
-    | { readonly code: QRVerifyFailReason }
-    | CheckInBusinessFailure;
+  | CheckInOk
+  | { readonly code: QRVerifyFailReason }
+  | CheckInBusinessFailure;
 
 /* ------------------------------------------------------------------ */
 /*  Service input                                                      */
@@ -307,19 +307,19 @@ export type Clock = () => number;
  * function body so callers get named-parameter ergonomics.
  */
 export interface CheckInInput {
-    /** Raw compact-JWS QR token handed over by the scanning terminal. */
-    readonly token: string;
-    /** Tenant the terminal belongs to. */
-    readonly studioId: string;
-    /** Pluggable port for signature / replay verification. */
-    readonly qrVerifier: QRVerifier;
-    /** Pluggable repo for the reservation read + stamp. */
-    readonly repo: CheckinReservationRepo;
-    /**
-     * Optional clock override. Defaults to `Date.now`. Tests pin it
-     * so the 30-minute window computation is deterministic.
-     */
-    readonly clock?: Clock;
+  /** Raw compact-JWS QR token handed over by the scanning terminal. */
+  readonly token: string;
+  /** Tenant the terminal belongs to. */
+  readonly studioId: string;
+  /** Pluggable port for signature / replay verification. */
+  readonly qrVerifier: QRVerifier;
+  /** Pluggable repo for the reservation read + stamp. */
+  readonly repo: CheckinReservationRepo;
+  /**
+   * Optional clock override. Defaults to `Date.now`. Tests pin it
+   * so the 30-minute window computation is deterministic.
+   */
+  readonly clock?: Clock;
 }
 
 /* ------------------------------------------------------------------ */
@@ -358,83 +358,76 @@ export interface CheckInInput {
  * Problem Details with a `traceId`.
  */
 export async function checkIn(input: CheckInInput): Promise<CheckInResult> {
-    const { token, studioId, qrVerifier, repo } = input;
-    const now = (input.clock ?? Date.now)();
+  const { token, studioId, qrVerifier, repo } = input;
+  const now = (input.clock ?? Date.now)();
 
-    // ---- Step 1: QR verification -----------------------------------
-    //
-    // Delegates to the auth layer. Any failure short-circuits before
-    // the repo is even constructed as a memory-resident object
-    // (Requirement 11.2 — "before any database read"). The reason
-    // code is passed straight through so the gateway never has to
-    // translate it.
-    const verifyResult = await qrVerifier.verify(token, studioId);
-    if (!verifyResult.ok) {
-        return { code: verifyResult.reason };
-    }
+  // ---- Step 1: QR verification -----------------------------------
+  //
+  // Delegates to the auth layer. Any failure short-circuits before
+  // the repo is even constructed as a memory-resident object
+  // (Requirement 11.2 — "before any database read"). The reason
+  // code is passed straight through so the gateway never has to
+  // translate it.
+  const verifyResult = await qrVerifier.verify(token, studioId);
+  if (!verifyResult.ok) {
+    return { code: verifyResult.reason };
+  }
 
-    // ---- Step 2: strict 30-minute window ---------------------------
-    //
-    // Computed *after* QR verification succeeded so a malformed token
-    // can't cause unnecessary Date allocations. `start` and `end` are
-    // both inclusive — a reservation whose class starts exactly at
-    // `now + 30 min` is valid.
-    const window: CheckinWindow = {
-        start: new Date(now - CHECKIN_WINDOW_HALF_MS),
-        end: new Date(now + CHECKIN_WINDOW_HALF_MS),
+  // ---- Step 2: strict 30-minute window ---------------------------
+  //
+  // Computed *after* QR verification succeeded so a malformed token
+  // can't cause unnecessary Date allocations. `start` and `end` are
+  // both inclusive — a reservation whose class starts exactly at
+  // `now + 30 min` is valid.
+  const window: CheckinWindow = {
+    start: new Date(now - CHECKIN_WINDOW_HALF_MS),
+    end: new Date(now + CHECKIN_WINDOW_HALF_MS),
+  };
+
+  // ---- Step 3: candidate lookup ----------------------------------
+  const candidate = await repo.findConfirmedForCheckin(verifyResult.userId, studioId, window);
+  if (candidate === null) {
+    return { code: 'no_reservation' };
+  }
+
+  // ---- Step 4: already-consumed guard ----------------------------
+  //
+  // Checked *before* the window guard because a user who is already
+  // checked in should always see the same message — they want to
+  // know "you're in", not "you were in but you're now outside the
+  // 30-minute window". The reservation they already consumed is
+  // echoed back so the UI can render their check-in timestamp.
+  if (candidate.reservation.checkedInAt !== null) {
+    return {
+      code: 'already_checked_in',
+      reservation: candidate.reservation,
     };
+  }
 
-    // ---- Step 3: candidate lookup ----------------------------------
-    const candidate = await repo.findConfirmedForCheckin(
-        verifyResult.userId,
-        studioId,
-        window,
-    );
-    if (candidate === null) {
-        return { code: 'no_reservation' };
-    }
+  // ---- Step 5: strict window filter ------------------------------
+  //
+  // Re-validates the window even though the repo is expected to
+  // pre-filter. Two reasons:
+  //   - Defence in depth: a repo bug cannot leak a too-early
+  //     check-in that would break the waitlist promotion window.
+  //   - The repo deliberately broadens its search band so the
+  //     service can surface `outside_window` instead of a less
+  //     actionable `no_reservation` — the strict filter here is
+  //     what makes that design work.
+  const startMs = candidate.classStartsAt.getTime();
+  if (startMs < window.start.getTime() || startMs > window.end.getTime()) {
+    return {
+      code: 'outside_window',
+      reservation: candidate.reservation,
+    };
+  }
 
-    // ---- Step 4: already-consumed guard ----------------------------
-    //
-    // Checked *before* the window guard because a user who is already
-    // checked in should always see the same message — they want to
-    // know "you're in", not "you were in but you're now outside the
-    // 30-minute window". The reservation they already consumed is
-    // echoed back so the UI can render their check-in timestamp.
-    if (candidate.reservation.checkedInAt !== null) {
-        return {
-            code: 'already_checked_in',
-            reservation: candidate.reservation,
-        };
-    }
+  // ---- Step 6: stamp checked_in_at -------------------------------
+  //
+  // `now` is reused so the timestamp persisted in the DB matches
+  // the clock reading the window was computed from — keeps log
+  // timestamps consistent across a single request.
+  const updated = await repo.markCheckedIn(candidate.reservation.id, new Date(now));
 
-    // ---- Step 5: strict window filter ------------------------------
-    //
-    // Re-validates the window even though the repo is expected to
-    // pre-filter. Two reasons:
-    //   - Defence in depth: a repo bug cannot leak a too-early
-    //     check-in that would break the waitlist promotion window.
-    //   - The repo deliberately broadens its search band so the
-    //     service can surface `outside_window` instead of a less
-    //     actionable `no_reservation` — the strict filter here is
-    //     what makes that design work.
-    const startMs = candidate.classStartsAt.getTime();
-    if (startMs < window.start.getTime() || startMs > window.end.getTime()) {
-        return {
-            code: 'outside_window',
-            reservation: candidate.reservation,
-        };
-    }
-
-    // ---- Step 6: stamp checked_in_at -------------------------------
-    //
-    // `now` is reused so the timestamp persisted in the DB matches
-    // the clock reading the window was computed from — keeps log
-    // timestamps consistent across a single request.
-    const updated = await repo.markCheckedIn(
-        candidate.reservation.id,
-        new Date(now),
-    );
-
-    return { code: 'ok', reservation: updated };
+  return { code: 'ok', reservation: updated };
 }

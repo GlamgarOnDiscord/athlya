@@ -43,17 +43,17 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 interface ProblemBody {
-    readonly type: string;
-    readonly title: string;
-    readonly status: number;
-    readonly code: string;
+  readonly type: string;
+  readonly title: string;
+  readonly status: number;
+  readonly code: string;
 }
 
 function problemJson(status: number, body: ProblemBody): NextResponse {
-    return NextResponse.json(body, {
-        status,
-        headers: { 'content-type': 'application/problem+json' },
-    });
+  return NextResponse.json(body, {
+    status,
+    headers: { 'content-type': 'application/problem+json' },
+  });
 }
 
 /**
@@ -71,51 +71,51 @@ function problemJson(status: number, body: ProblemBody): NextResponse {
  * Returns `null` on accept, the rejection `NextResponse` on deny.
  */
 export function assertSameOrigin(request: NextRequest): NextResponse | null {
-    const expected = request.nextUrl.origin;
-    const origin = request.headers.get('origin');
+  const expected = request.nextUrl.origin;
+  const origin = request.headers.get('origin');
 
-    // Missing Origin on a state-changing route is a CSRF tell.
-    // Modern browsers always attach it on POST/PATCH/DELETE; an
-    // absent header means the request was hand-crafted (curl /
-    // server-to-server / a stale browser). None of those are valid
-    // entry points for `/api/auth/*` so we fail closed.
-    if (origin === null || origin.length === 0) {
-        return problemJson(403, {
-            type: 'about:blank',
-            title: 'Forbidden',
-            status: 403,
-            code: 'cross_site_request',
-        });
-    }
-    if (origin !== expected) {
-        return problemJson(403, {
-            type: 'about:blank',
-            title: 'Forbidden',
-            status: 403,
-            code: 'cross_site_request',
-        });
-    }
+  // Missing Origin on a state-changing route is a CSRF tell.
+  // Modern browsers always attach it on POST/PATCH/DELETE; an
+  // absent header means the request was hand-crafted (curl /
+  // server-to-server / a stale browser). None of those are valid
+  // entry points for `/api/auth/*` so we fail closed.
+  if (origin === null || origin.length === 0) {
+    return problemJson(403, {
+      type: 'about:blank',
+      title: 'Forbidden',
+      status: 403,
+      code: 'cross_site_request',
+    });
+  }
+  if (origin !== expected) {
+    return problemJson(403, {
+      type: 'about:blank',
+      title: 'Forbidden',
+      status: 403,
+      code: 'cross_site_request',
+    });
+  }
 
-    // Belt-and-braces — when `Referer` is present, it must agree
-    // with `Origin`. A disagreement is the textbook fingerprint of
-    // a man-in-the-middle proxy / IDS bypass attempt.
-    const referer = request.headers.get('referer');
-    if (referer !== null && referer.length > 0) {
-        let refererOrigin: string | null = null;
-        try {
-            refererOrigin = new URL(referer).origin;
-        } catch {
-            // Malformed referer — same posture as missing origin: deny.
-        }
-        if (refererOrigin !== expected) {
-            return problemJson(403, {
-                type: 'about:blank',
-                title: 'Forbidden',
-                status: 403,
-                code: 'cross_site_request',
-            });
-        }
+  // Belt-and-braces — when `Referer` is present, it must agree
+  // with `Origin`. A disagreement is the textbook fingerprint of
+  // a man-in-the-middle proxy / IDS bypass attempt.
+  const referer = request.headers.get('referer');
+  if (referer !== null && referer.length > 0) {
+    let refererOrigin: string | null = null;
+    try {
+      refererOrigin = new URL(referer).origin;
+    } catch {
+      // Malformed referer — same posture as missing origin: deny.
     }
+    if (refererOrigin !== expected) {
+      return problemJson(403, {
+        type: 'about:blank',
+        title: 'Forbidden',
+        status: 403,
+        code: 'cross_site_request',
+      });
+    }
+  }
 
-    return null;
+  return null;
 }

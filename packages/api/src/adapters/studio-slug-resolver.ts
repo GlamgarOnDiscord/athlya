@@ -62,17 +62,15 @@ import type { AthlyaBindings } from '../types.js';
  * reuse a single Drizzle client across the worker isolate — there is
  * no per-call setup cost beyond the SQL round-trip itself.
  */
-export function buildStudioSlugResolver(
-    env: AthlyaBindings,
-): StudioSlugResolver {
-    return async (slug) => {
-        const db = getOrCreateDbHttp(env.DB_URL);
-        const rows = await db
-            .select({ id: studios.id })
-            .from(studios)
-            .where(eq(studios.slug, slug))
-            .limit(1);
-        const row = rows[0];
-        return row === undefined ? null : row.id;
-    };
+export function buildStudioSlugResolver(env: AthlyaBindings): StudioSlugResolver {
+  return async (slug) => {
+    const db = getOrCreateDbHttp(env.DB_URL);
+    const rows = await db
+      .select({ id: studios.id })
+      .from(studios)
+      .where(eq(studios.slug, slug))
+      .limit(1);
+    const row = rows[0];
+    return row === undefined ? null : row.id;
+  };
 }

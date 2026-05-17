@@ -66,12 +66,12 @@ export const redisCache = new Map<string, Redis>();
  * Worker isolate.
  */
 export function getOrCreateDbHttp(url: string): AthlyaDbHttp {
-    let db = dbHttpCache.get(url);
-    if (db === undefined) {
-        db = createDbHttp(url);
-        dbHttpCache.set(url, db);
-    }
-    return db;
+  let db = dbHttpCache.get(url);
+  if (db === undefined) {
+    db = createDbHttp(url);
+    dbHttpCache.set(url, db);
+  }
+  return db;
 }
 
 /**
@@ -81,13 +81,13 @@ export function getOrCreateDbHttp(url: string): AthlyaDbHttp {
  * unreferenced and is GC'd at the next compaction.
  */
 export function getOrCreateRedis(url: string, token: string): Redis {
-    const key = `${url}::${token}`;
-    let redis = redisCache.get(key);
-    if (redis === undefined) {
-        redis = new Redis({ url, token });
-        redisCache.set(key, redis);
-    }
-    return redis;
+  const key = `${url}::${token}`;
+  let redis = redisCache.get(key);
+  if (redis === undefined) {
+    redis = new Redis({ url, token });
+    redisCache.set(key, redis);
+  }
+  return redis;
 }
 
 /* ------------------------------------------------------------------ */
@@ -106,8 +106,8 @@ export function getOrCreateRedis(url: string, token: string): Redis {
  * `jwtCache`).
  */
 export function resetAllDepsCachesForTests(): void {
-    dbHttpCache.clear();
-    redisCache.clear();
+  dbHttpCache.clear();
+  redisCache.clear();
 }
 
 /**
@@ -117,9 +117,9 @@ export function resetAllDepsCachesForTests(): void {
  * handle. Production code paths never call this.
  */
 export function primeDbHttpForTests(url: string): {
-    readonly size: number;
-    readonly handle: AthlyaDbHttp;
+  readonly size: number;
+  readonly handle: AthlyaDbHttp;
 } {
-    const handle = getOrCreateDbHttp(url);
-    return { size: dbHttpCache.size, handle };
+  const handle = getOrCreateDbHttp(url);
+  return { size: dbHttpCache.size, handle };
 }

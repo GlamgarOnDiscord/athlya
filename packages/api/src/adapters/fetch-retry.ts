@@ -30,23 +30,23 @@
 
 /** Options accepted by {@link fetchWithRetry}. */
 export interface FetchWithRetryOptions {
-    /**
-     * Number of additional attempts on transient failures. Default 2
-     * (= 3 total attempts). Pass `0` to disable retry entirely (used
-     * by tests that want to assert single-attempt failure).
-     */
-    readonly retries?: number;
-    /**
-     * Per-attempt deadline in ms. Default 5000. Implemented via
-     * `AbortSignal.timeout()` so the underlying fetch is actually
-     * aborted, not just abandoned.
-     */
-    readonly timeoutMs?: number;
-    /**
-     * Override `globalThis.fetch`. Tests inject a deterministic
-     * `vi.fn()`. Default is the ambient global.
-     */
-    readonly fetch?: typeof fetch;
+  /**
+   * Number of additional attempts on transient failures. Default 2
+   * (= 3 total attempts). Pass `0` to disable retry entirely (used
+   * by tests that want to assert single-attempt failure).
+   */
+  readonly retries?: number;
+  /**
+   * Per-attempt deadline in ms. Default 5000. Implemented via
+   * `AbortSignal.timeout()` so the underlying fetch is actually
+   * aborted, not just abandoned.
+   */
+  readonly timeoutMs?: number;
+  /**
+   * Override `globalThis.fetch`. Tests inject a deterministic
+   * `vi.fn()`. Default is the ambient global.
+   */
+  readonly fetch?: typeof fetch;
 }
 
 /** Default total attempts before giving up: 3. */
@@ -62,17 +62,13 @@ export const FETCH_RETRY_DEFAULT_TIMEOUT_MS = 5000;
  * redeliver, password-reset transport would log without throwing).
  */
 export class FetchRetryExhaustedError extends Error {
-    public override readonly name = 'FetchRetryExhaustedError';
-    public readonly attempts: number;
+  public override readonly name = 'FetchRetryExhaustedError';
+  public readonly attempts: number;
 
-    public constructor(
-        message: string,
-        attempts: number,
-        options?: { cause?: unknown },
-    ) {
-        super(message, options);
-        this.attempts = attempts;
-    }
+  public constructor(message: string, attempts: number, options?: { cause?: unknown }) {
+    super(message, options);
+    this.attempts = attempts;
+  }
 }
 
 /**
@@ -84,10 +80,10 @@ export class FetchRetryExhaustedError extends Error {
  * sleep that runs after the initial request failed).
  */
 async function sleepWithJitter(attempt: number): Promise<void> {
-    const baseMs = 100 * 2 ** attempt;
-    const capMs = Math.min(baseMs, 2000);
-    const jittered = Math.random() * capMs;
-    await new Promise<void>((resolve) => setTimeout(resolve, jittered));
+  const baseMs = 100 * 2 ** attempt;
+  const capMs = Math.min(baseMs, 2000);
+  const jittered = Math.random() * capMs;
+  await new Promise<void>((resolve) => setTimeout(resolve, jittered));
 }
 
 /**
@@ -110,72 +106,65 @@ async function sleepWithJitter(attempt: number): Promise<void> {
  * since 2024 and Node 20 support `AbortSignal.any`.
  */
 export async function fetchWithRetry(
-    url: string,
-    init: RequestInit = {},
-    opts: FetchWithRetryOptions = {},
+  url: string,
+  init: RequestInit = {},
+  opts: FetchWithRetryOptions = {},
 ): Promise<Response> {
-    const doFetch = opts.fetch ?? globalThis.fetch;
-    const retries = opts.retries ?? FETCH_RETRY_DEFAULT_RETRIES;
-    const timeoutMs = opts.timeoutMs ?? FETCH_RETRY_DEFAULT_TIMEOUT_MS;
+  const doFetch = opts.fetch ?? globalThis.fetch;
+  const retries = opts.retries ?? FETCH_RETRY_DEFAULT_RETRIES;
+  const timeoutMs = opts.timeoutMs ?? FETCH_RETRY_DEFAULT_TIMEOUT_MS;
 
-    if (typeof doFetch !== 'function') {
-        throw new FetchRetryExhaustedError(
-            'no global fetch available and no fetch injected',
-            0,
-        );
+  if (typeof doFetch !== 'function') {
+    throw new FetchRetryExhaustedError('no global fetch available and no fetch injected', 0);
+  }
+
+  let lastError: unknown = new Error('no attempt made (retries < 0)');
+  const totalAttempts = retries + 1;
+
+  for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const signal: AbortSignal =
+      init.signal !== null && init.signal !== undefined
+        ? AbortSignal.any([init.signal, timeoutSignal])
+        : timeoutSignal;
+
+    try {
+      const response = await doFetch(url, { ...init, signal });
+
+      // Non-retryable success or client error (except 429) —
+      // surface to the caller. They decide what to do with a
+      // 4xx body.
+      if (
+        response.ok ||
+        (response.status >= 300 && response.status < 400) ||
+        (response.status >= 400 && response.status < 500 && response.status !== 429)
+      ) {
+        return response;
+      }
+
+      // 5xx or 429 — retryable. Capture the status as the
+      // "last error" but do not throw yet; the loop continues
+      // unless we have exhausted the budget.
+      lastError = new Error(`fetch ${url} returned HTTP ${String(response.status)}`);
+    } catch (err) {
+      // Network error, abort, etc. — always retryable.
+      lastError = err;
     }
 
-    let lastError: unknown = new Error('no attempt made (retries < 0)');
-    const totalAttempts = retries + 1;
-
-    for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
-        const timeoutSignal = AbortSignal.timeout(timeoutMs);
-        const signal: AbortSignal =
-            init.signal !== null && init.signal !== undefined
-                ? AbortSignal.any([init.signal, timeoutSignal])
-                : timeoutSignal;
-
-        try {
-            const response = await doFetch(url, { ...init, signal });
-
-            // Non-retryable success or client error (except 429) —
-            // surface to the caller. They decide what to do with a
-            // 4xx body.
-            if (
-                response.ok ||
-                (response.status >= 300 && response.status < 400) ||
-                (response.status >= 400 &&
-                    response.status < 500 &&
-                    response.status !== 429)
-            ) {
-                return response;
-            }
-
-            // 5xx or 429 — retryable. Capture the status as the
-            // "last error" but do not throw yet; the loop continues
-            // unless we have exhausted the budget.
-            lastError = new Error(
-                `fetch ${url} returned HTTP ${String(response.status)}`,
-            );
-        } catch (err) {
-            // Network error, abort, etc. — always retryable.
-            lastError = err;
-        }
-
-        if (attempt < retries) {
-            await sleepWithJitter(attempt);
-        }
+    if (attempt < retries) {
+      await sleepWithJitter(attempt);
     }
+  }
 
-    throw new FetchRetryExhaustedError(
-        `fetch ${url} failed after ${String(totalAttempts)} attempt(s): ${describeError(lastError)}`,
-        totalAttempts,
-        { cause: lastError },
-    );
+  throw new FetchRetryExhaustedError(
+    `fetch ${url} failed after ${String(totalAttempts)} attempt(s): ${describeError(lastError)}`,
+    totalAttempts,
+    { cause: lastError },
+  );
 }
 
 function describeError(err: unknown): string {
-    if (err instanceof Error) return err.message;
-    if (typeof err === 'string') return err;
-    return 'unknown error';
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  return 'unknown error';
 }

@@ -72,16 +72,16 @@ export const CURRENT_CGU_VERSION = '2026-01';
  * trail still captures a `previousVersion` of `'0000-00'`.
  */
 export interface ConsentsRepo {
-    /** Return the current consents for `userId`, or `null` if unknown. */
-    findConsents(userId: string): Promise<Consents | null>;
+  /** Return the current consents for `userId`, or `null` if unknown. */
+  findConsents(userId: string): Promise<Consents | null>;
 
-    /**
-     * Replace the consents record for `userId` with `consents` and
-     * return the stored row. The caller has already stamped
-     * `consents.version` and `consents.updatedAt`; the repo must
-     * simply persist and echo the record.
-     */
-    updateConsents(userId: string, consents: Consents): Promise<Consents>;
+  /**
+   * Replace the consents record for `userId` with `consents` and
+   * return the stored row. The caller has already stamped
+   * `consents.version` and `consents.updatedAt`; the repo must
+   * simply persist and echo the record.
+   */
+  updateConsents(userId: string, consents: Consents): Promise<Consents>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -99,16 +99,16 @@ export interface ConsentsRepo {
  * exactly the posture `AuditLogSchema` takes at the domain level.
  */
 export interface AuditLogEntry {
-    /** UserId of the actor that triggered the action; nullable post-anonymisation. */
-    actorId: string;
-    /** Dotted action identifier, e.g. `user.consents.updated`. */
-    action: string;
-    /** Domain tag for the target, e.g. `user`. */
-    targetType: string;
-    /** Identifier of the target within `targetType`. */
-    targetId: string;
-    /** Free-form JSON metadata — shape depends on `action`. */
-    metadata: Record<string, unknown>;
+  /** UserId of the actor that triggered the action; nullable post-anonymisation. */
+  actorId: string;
+  /** Dotted action identifier, e.g. `user.consents.updated`. */
+  action: string;
+  /** Domain tag for the target, e.g. `user`. */
+  targetType: string;
+  /** Identifier of the target within `targetType`. */
+  targetId: string;
+  /** Free-form JSON metadata — shape depends on `action`. */
+  metadata: Record<string, unknown>;
 }
 
 /**
@@ -118,7 +118,7 @@ export interface AuditLogEntry {
  * so RLS is applied.
  */
 export interface AuditLogWriter {
-    append(entry: AuditLogEntry): Promise<void>;
+  append(entry: AuditLogEntry): Promise<void>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -133,14 +133,14 @@ export interface AuditLogWriter {
  * asserted in tests without shadowing `console.warn` globally.
  */
 export interface ConsentsServiceDeps {
-    consentsRepo: ConsentsRepo;
-    audit: AuditLogWriter;
-    /** Defaults to `Date.now`. Supplied explicitly in tests. */
-    now?: () => number;
-    /** Defaults to a thin wrapper over `console.warn`. */
-    logger?: {
-        warn: (msg: string, extra?: Record<string, unknown>) => void;
-    };
+  consentsRepo: ConsentsRepo;
+  audit: AuditLogWriter;
+  /** Defaults to `Date.now`. Supplied explicitly in tests. */
+  now?: () => number;
+  /** Defaults to a thin wrapper over `console.warn`. */
+  logger?: {
+    warn: (msg: string, extra?: Record<string, unknown>) => void;
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -157,11 +157,11 @@ export interface ConsentsServiceDeps {
  * user as "behind" the current version until the update succeeds.
  */
 const NEVER_ACCEPTED: Consents = {
-    marketing: false,
-    analytics: false,
-    thirdParty: false,
-    version: '0000-00',
-    updatedAt: '1970-01-01T00:00:00.000Z',
+  marketing: false,
+  analytics: false,
+  thirdParty: false,
+  version: '0000-00',
+  updatedAt: '1970-01-01T00:00:00.000Z',
 };
 
 /* ------------------------------------------------------------------ */
@@ -196,70 +196,63 @@ const NEVER_ACCEPTED: Consents = {
  * Requirements: 3.3, 22.1.
  */
 export async function updateConsents(
-    userId: string,
-    input: unknown,
-    deps: ConsentsServiceDeps,
+  userId: string,
+  input: unknown,
+  deps: ConsentsServiceDeps,
 ): Promise<Consents> {
-    const parsed = ConsentsInputSchema.safeParse(input);
-    if (!parsed.success) {
-        const issues = parsed.error.issues.map((issue) => ({
-            path: issue.path.map(String).join('.'),
-            code: issue.code,
-            message: issue.message,
-        }));
-        throw new MembersError(
-            'validation_failed',
-            `invalid consents: ${issues
-                .map((i) => `${i.path || '<root>'} ${i.message}`)
-                .join('; ')}`,
-            issues,
-        );
-    }
+  const parsed = ConsentsInputSchema.safeParse(input);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((issue) => ({
+      path: issue.path.map(String).join('.'),
+      code: issue.code,
+      message: issue.message,
+    }));
+    throw new MembersError(
+      'validation_failed',
+      `invalid consents: ${issues.map((i) => `${i.path || '<root>'} ${i.message}`).join('; ')}`,
+      issues,
+    );
+  }
 
-    const previous =
-        (await deps.consentsRepo.findConsents(userId)) ?? NEVER_ACCEPTED;
+  const previous = (await deps.consentsRepo.findConsents(userId)) ?? NEVER_ACCEPTED;
 
-    const nowFn = deps.now ?? Date.now;
-    const next: Consents = {
-        ...parsed.data,
-        version: CURRENT_CGU_VERSION,
-        updatedAt: new Date(nowFn()).toISOString(),
-    };
+  const nowFn = deps.now ?? Date.now;
+  const next: Consents = {
+    ...parsed.data,
+    version: CURRENT_CGU_VERSION,
+    updatedAt: new Date(nowFn()).toISOString(),
+  };
 
-    const stored = await deps.consentsRepo.updateConsents(userId, next);
+  const stored = await deps.consentsRepo.updateConsents(userId, next);
 
-    // Audit append failure MUST NOT mask a successful consents update,
-    // but the failure must be observable in logs for compliance audits.
-    try {
-        await deps.audit.append({
-            actorId: userId,
-            action: 'user.consents.updated',
-            targetType: 'user',
-            targetId: userId,
-            metadata: {
-                previousVersion: previous.version,
-                newVersion: stored.version,
-                flags: {
-                    marketing: stored.marketing,
-                    analytics: stored.analytics,
-                    thirdParty: stored.thirdParty,
-                },
-            },
-        });
-    } catch (err) {
-        const logger = deps.logger ?? { warn: console.warn.bind(console) };
-        logger.warn('audit append failed; consents still persisted', {
-            userId,
-            error:
-                err instanceof Error
-                    ? { name: err.name, message: err.message }
-                    : String(err),
-        });
-    }
+  // Audit append failure MUST NOT mask a successful consents update,
+  // but the failure must be observable in logs for compliance audits.
+  try {
+    await deps.audit.append({
+      actorId: userId,
+      action: 'user.consents.updated',
+      targetType: 'user',
+      targetId: userId,
+      metadata: {
+        previousVersion: previous.version,
+        newVersion: stored.version,
+        flags: {
+          marketing: stored.marketing,
+          analytics: stored.analytics,
+          thirdParty: stored.thirdParty,
+        },
+      },
+    });
+  } catch (err) {
+    const logger = deps.logger ?? { warn: console.warn.bind(console) };
+    logger.warn('audit append failed; consents still persisted', {
+      userId,
+      error: err instanceof Error ? { name: err.name, message: err.message } : String(err),
+    });
+  }
 
-    return stored;
+  return stored;
 }
-
 
 /* ------------------------------------------------------------------ */
 /*  Re-consent gating — Sprint-4 SP4.2 (Vague 32, finding S5-013)      */
@@ -301,14 +294,12 @@ export const NEVER_CONSENTED_VERSION = '0000-00';
  *
  * Returns `true` when the user MUST re-consent before continuing.
  */
-export function needsConsentRefresh(
-    userVersion: string | null | undefined,
-): boolean {
-    if (userVersion === null || userVersion === undefined || userVersion === '') {
-        return true;
-    }
-    if (userVersion === NEVER_CONSENTED_VERSION) {
-        return true;
-    }
-    return userVersion < CURRENT_CGU_VERSION;
+export function needsConsentRefresh(userVersion: string | null | undefined): boolean {
+  if (userVersion === null || userVersion === undefined || userVersion === '') {
+    return true;
+  }
+  if (userVersion === NEVER_CONSENTED_VERSION) {
+    return true;
+  }
+  return userVersion < CURRENT_CGU_VERSION;
 }

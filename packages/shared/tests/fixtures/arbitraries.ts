@@ -30,14 +30,14 @@ import { fc } from '@fast-check/vitest';
 import type { ClassId, ReservationId, StudioId, UserId } from '../../src/ids.js';
 import type { Consents } from '../../src/schemas/consents.js';
 import type {
-    AuditLog,
-    Class,
-    Exercise,
-    Reservation,
-    Set,
-    Studio,
-    User,
-    WorkoutSession,
+  AuditLog,
+  Class,
+  Exercise,
+  Reservation,
+  Set,
+  Studio,
+  User,
+  WorkoutSession,
 } from '../../src/schemas/domain.js';
 
 /* ------------------------------------------------------------------ */
@@ -72,7 +72,7 @@ export const reservationIdArb = uuidArb as fc.Arbitrary<ReservationId>;
  * we mirror that shape here.
  */
 export const workoutSessionIdArb = uuidArb as fc.Arbitrary<
-    string & { readonly __brand: 'WorkoutSessionId' }
+  string & { readonly __brand: 'WorkoutSessionId' }
 >;
 
 /**
@@ -85,8 +85,8 @@ const EPOCH_MIN_MS = Date.UTC(1970, 0, 1, 0, 0, 0, 0);
 const EPOCH_MAX_MS = Date.UTC(2100, 11, 31, 23, 59, 59, 999);
 
 export const isoDateTimeArb = fc
-    .integer({ min: EPOCH_MIN_MS, max: EPOCH_MAX_MS })
-    .map((ms) => new Date(ms).toISOString());
+  .integer({ min: EPOCH_MIN_MS, max: EPOCH_MAX_MS })
+  .map((ms) => new Date(ms).toISOString());
 
 /**
  * URL-safe studio slug — `/^[a-z0-9-]{3,50}$/`. Matches `SlugSchema`
@@ -95,8 +95,8 @@ export const isoDateTimeArb = fc
 const SLUG_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789-'.split('');
 
 export const slugArb = fc.stringOf(fc.constantFrom(...SLUG_CHARS), {
-    minLength: 3,
-    maxLength: 50,
+  minLength: 3,
+  maxLength: 50,
 });
 
 /**
@@ -107,8 +107,8 @@ export const slugArb = fc.stringOf(fc.constantFrom(...SLUG_CHARS), {
 const HEX_CHARS = '0123456789abcdef'.split('');
 
 export const hexColorArb = fc
-    .stringOf(fc.constantFrom(...HEX_CHARS), { minLength: 6, maxLength: 6 })
-    .map((s) => `#${s}`);
+  .stringOf(fc.constantFrom(...HEX_CHARS), { minLength: 6, maxLength: 6 })
+  .map((s) => `#${s}`);
 
 /**
  * Email address. Zod 4's `.email()` uses an HTML5-like regex that
@@ -124,13 +124,13 @@ const ALNUM_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789'.split('');
 const TLD_CHARS = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
 export const emailArb = fc
-    .tuple(
-        fc.stringOf(fc.constantFrom(...ALNUM_CHARS), { minLength: 1, maxLength: 30 }),
-        fc.stringOf(fc.constantFrom(...ALNUM_CHARS), { minLength: 1, maxLength: 20 }),
-        fc.stringOf(fc.constantFrom(...TLD_CHARS), { minLength: 2, maxLength: 6 }),
-    )
-    .map(([local, domain, tld]) => `${local}@${domain}.${tld}`)
-    .filter((e) => e.length <= 254);
+  .tuple(
+    fc.stringOf(fc.constantFrom(...ALNUM_CHARS), { minLength: 1, maxLength: 30 }),
+    fc.stringOf(fc.constantFrom(...ALNUM_CHARS), { minLength: 1, maxLength: 20 }),
+    fc.stringOf(fc.constantFrom(...TLD_CHARS), { minLength: 2, maxLength: 6 }),
+  )
+  .map(([local, domain, tld]) => `${local}@${domain}.${tld}`)
+  .filter((e) => e.length <= 254);
 
 /**
  * A string that survives Zod's `.trim().min(1).max(max)` unchanged. We
@@ -138,26 +138,26 @@ export const emailArb = fc
  * identity and length is preserved across serialisation.
  */
 const VISIBLE_NON_WS = (
-    'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ' +
-    '0123456789' +
-    "!@#$%^&*()_=+[]{};:,.<>?"
+  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ' +
+  '0123456789' +
+  '!@#$%^&*()_=+[]{};:,.<>?'
 ).split('');
 
 export const nonEmptyTrimmedString = (max: number): fc.Arbitrary<string> =>
-    fc.stringOf(fc.constantFrom(...VISIBLE_NON_WS), { minLength: 1, maxLength: max });
+  fc.stringOf(fc.constantFrom(...VISIBLE_NON_WS), { minLength: 1, maxLength: max });
 
 /* ------------------------------------------------------------------ */
 /*  Enums                                                              */
 /* ------------------------------------------------------------------ */
 
 export const roleArb: fc.Arbitrary<'member' | 'coach' | 'admin'> = fc.constantFrom(
-    'member',
-    'coach',
-    'admin',
+  'member',
+  'coach',
+  'admin',
 );
 
 export const reservationStatusArb: fc.Arbitrary<
-    'confirmed' | 'waitlist' | 'cancelled' | 'no_show'
+  'confirmed' | 'waitlist' | 'cancelled' | 'no_show'
 > = fc.constantFrom('confirmed', 'waitlist', 'cancelled', 'no_show');
 
 /**
@@ -167,32 +167,30 @@ export const reservationStatusArb: fc.Arbitrary<
  * elsewhere.
  */
 export const consentsVersionArb = fc
-    .integer({ min: 1970, max: 2099 })
-    .chain((year) =>
-        fc
-            .integer({ min: 1, max: 12 })
-            .map((month) => `${year}-${String(month).padStart(2, '0')}`),
-    );
+  .integer({ min: 1970, max: 2099 })
+  .chain((year) =>
+    fc.integer({ min: 1, max: 12 }).map((month) => `${year}-${String(month).padStart(2, '0')}`),
+  );
 
 /* ------------------------------------------------------------------ */
 /*  Composite domain shapes                                             */
 /* ------------------------------------------------------------------ */
 
 export const consentsArb: fc.Arbitrary<Consents> = fc.record({
-    marketing: fc.boolean(),
-    analytics: fc.boolean(),
-    thirdParty: fc.boolean(),
-    version: consentsVersionArb,
-    updatedAt: isoDateTimeArb,
+  marketing: fc.boolean(),
+  analytics: fc.boolean(),
+  thirdParty: fc.boolean(),
+  version: consentsVersionArb,
+  updatedAt: isoDateTimeArb,
 });
 
 export const studioArb: fc.Arbitrary<Studio> = fc.record({
-    id: studioIdArb,
-    slug: slugArb,
-    name: nonEmptyTrimmedString(120),
-    brandColor: hexColorArb,
-    createdAt: isoDateTimeArb,
-    deletedAt: fc.option(isoDateTimeArb, { nil: null }),
+  id: studioIdArb,
+  slug: slugArb,
+  name: nonEmptyTrimmedString(120),
+  brandColor: hexColorArb,
+  createdAt: isoDateTimeArb,
+  deletedAt: fc.option(isoDateTimeArb, { nil: null }),
 });
 
 /**
@@ -201,37 +199,37 @@ export const studioArb: fc.Arbitrary<Studio> = fc.record({
  * that constructor, so no extra filtering is required.
  */
 export const userArb: fc.Arbitrary<User> = fc.record({
-    id: userIdArb,
-    studioId: studioIdArb,
-    email: emailArb,
-    displayName: nonEmptyTrimmedString(80),
-    avatarUrl: fc.option(fc.webUrl(), { nil: null }),
-    role: roleArb,
-    consents: consentsArb,
-    createdAt: isoDateTimeArb,
-    deletedAt: fc.option(isoDateTimeArb, { nil: null }),
+  id: userIdArb,
+  studioId: studioIdArb,
+  email: emailArb,
+  displayName: nonEmptyTrimmedString(80),
+  avatarUrl: fc.option(fc.webUrl(), { nil: null }),
+  role: roleArb,
+  consents: consentsArb,
+  createdAt: isoDateTimeArb,
+  deletedAt: fc.option(isoDateTimeArb, { nil: null }),
 });
 
 export const classArb: fc.Arbitrary<Class> = fc.record({
-    id: classIdArb,
-    studioId: studioIdArb,
-    coachId: fc.option(userIdArb, { nil: null }),
-    title: nonEmptyTrimmedString(200),
-    startsAt: isoDateTimeArb,
-    durationMin: fc.integer({ min: 5, max: 480 }),
-    capacity: fc.integer({ min: 1, max: 500 }),
-    version: fc.nat(),
-    createdAt: isoDateTimeArb,
+  id: classIdArb,
+  studioId: studioIdArb,
+  coachId: fc.option(userIdArb, { nil: null }),
+  title: nonEmptyTrimmedString(200),
+  startsAt: isoDateTimeArb,
+  durationMin: fc.integer({ min: 5, max: 480 }),
+  capacity: fc.integer({ min: 1, max: 500 }),
+  version: fc.nat(),
+  createdAt: isoDateTimeArb,
 });
 
 export const reservationArb: fc.Arbitrary<Reservation> = fc.record({
-    id: reservationIdArb,
-    classId: classIdArb,
-    userId: userIdArb,
-    status: reservationStatusArb,
-    createdAt: isoDateTimeArb,
-    cancelledAt: fc.option(isoDateTimeArb, { nil: null }),
-    checkedInAt: fc.option(isoDateTimeArb, { nil: null }),
+  id: reservationIdArb,
+  classId: classIdArb,
+  userId: userIdArb,
+  status: reservationStatusArb,
+  createdAt: isoDateTimeArb,
+  cancelledAt: fc.option(isoDateTimeArb, { nil: null }),
+  checkedInAt: fc.option(isoDateTimeArb, { nil: null }),
 });
 
 /**
@@ -241,44 +239,44 @@ export const reservationArb: fc.Arbitrary<Reservation> = fc.record({
  * this behaviour, so the generator must mirror it.
  */
 export const setArb: fc.Arbitrary<Set> = fc
-    .tuple(
-        fc.integer({ min: 0, max: 1000 }),
-        fc.option(
-            fc.double({
-                min: 0,
-                max: 1000,
-                noNaN: true,
-                noDefaultInfinity: true,
-            }),
-            { nil: null },
-        ),
-        fc.option(fc.integer({ min: 0, max: 86_400 }), { nil: null }),
-    )
-    .map(([reps, weight, duration]) => {
-        const out: Set = { reps };
-        if (weight !== null) {
-            out.weightKg = weight;
-        }
-        if (duration !== null) {
-            out.durationSec = duration;
-        }
-        return out;
-    });
+  .tuple(
+    fc.integer({ min: 0, max: 1000 }),
+    fc.option(
+      fc.double({
+        min: 0,
+        max: 1000,
+        noNaN: true,
+        noDefaultInfinity: true,
+      }),
+      { nil: null },
+    ),
+    fc.option(fc.integer({ min: 0, max: 86_400 }), { nil: null }),
+  )
+  .map(([reps, weight, duration]) => {
+    const out: Set = { reps };
+    if (weight !== null) {
+      out.weightKg = weight;
+    }
+    if (duration !== null) {
+      out.durationSec = duration;
+    }
+    return out;
+  });
 
 export const exerciseArb: fc.Arbitrary<Exercise> = fc.record({
-    name: nonEmptyTrimmedString(120),
-    sets: fc.array(setArb, { maxLength: 30 }),
+  name: nonEmptyTrimmedString(120),
+  sets: fc.array(setArb, { maxLength: 30 }),
 });
 
 export const workoutSessionArb: fc.Arbitrary<WorkoutSession> = fc.record({
-    id: workoutSessionIdArb,
-    userId: userIdArb,
-    studioId: fc.option(studioIdArb, { nil: null }),
-    startedAt: isoDateTimeArb,
-    durationMin: fc.option(fc.integer({ min: 1, max: 86_400 }), { nil: null }),
-    exercises: fc.array(exerciseArb, { maxLength: 50 }),
-    notes: fc.option(fc.string({ maxLength: 2000 }), { nil: null }),
-    createdAt: isoDateTimeArb,
+  id: workoutSessionIdArb,
+  userId: userIdArb,
+  studioId: fc.option(studioIdArb, { nil: null }),
+  startedAt: isoDateTimeArb,
+  durationMin: fc.option(fc.integer({ min: 1, max: 86_400 }), { nil: null }),
+  exercises: fc.array(exerciseArb, { maxLength: 50 }),
+  notes: fc.option(fc.string({ maxLength: 2000 }), { nil: null }),
+  createdAt: isoDateTimeArb,
 });
 
 /**
@@ -294,15 +292,13 @@ export const workoutSessionArb: fc.Arbitrary<WorkoutSession> = fc.record({
  * more useful with concrete labels.
  */
 export const auditLogArb: fc.Arbitrary<AuditLog> = fc.record({
-    id: fc.bigInt({ min: 1n, max: 2n ** 63n - 1n }).map((n) => String(n)),
-    actorId: fc.option(userIdArb, { nil: null }),
-    action: nonEmptyTrimmedString(120),
-    targetType: fc.option(fc.string({ maxLength: 60 }), { nil: null }),
-    targetId: fc.option(fc.string({ maxLength: 80 }), { nil: null }),
-    metadata: fc.dictionary(
-        fc.string({ minLength: 1, maxLength: 40 }),
-        fc.jsonValue(),
-        { maxKeys: 8 },
-    ),
-    createdAt: isoDateTimeArb,
+  id: fc.bigInt({ min: 1n, max: 2n ** 63n - 1n }).map((n) => String(n)),
+  actorId: fc.option(userIdArb, { nil: null }),
+  action: nonEmptyTrimmedString(120),
+  targetType: fc.option(fc.string({ maxLength: 60 }), { nil: null }),
+  targetId: fc.option(fc.string({ maxLength: 80 }), { nil: null }),
+  metadata: fc.dictionary(fc.string({ minLength: 1, maxLength: 40 }), fc.jsonValue(), {
+    maxKeys: 8,
+  }),
+  createdAt: isoDateTimeArb,
 });

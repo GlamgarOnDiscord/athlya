@@ -32,7 +32,7 @@ const listeners = new Set<Listener>();
 
 /** Read the current in-memory access token, or `null` when signed out. */
 export function getAccessToken(): string | null {
-    return currentToken;
+  return currentToken;
 }
 
 /**
@@ -45,10 +45,10 @@ export function getAccessToken(): string | null {
  * being silently swallowed).
  */
 export function setAccessToken(token: string | null): void {
-    currentToken = token;
-    for (const listener of listeners) {
-        listener(token);
-    }
+  currentToken = token;
+  for (const listener of listeners) {
+    listener(token);
+  }
 }
 
 /**
@@ -56,10 +56,10 @@ export function setAccessToken(token: string | null): void {
  * React consumers can tear down cleanly in their `useEffect` cleanup.
  */
 export function subscribeToAccessToken(listener: Listener): () => void {
-    listeners.add(listener);
-    return () => {
-        listeners.delete(listener);
-    };
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 /**
@@ -67,6 +67,6 @@ export function subscribeToAccessToken(listener: Listener): () => void {
  * signal "not for production use" and keep the public API tight.
  */
 export function __resetTokenStore(): void {
-    currentToken = null;
-    listeners.clear();
+  currentToken = null;
+  listeners.clear();
 }

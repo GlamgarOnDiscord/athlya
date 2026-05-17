@@ -65,16 +65,14 @@ export type TranslationBundle = typeof en;
 type Prev = [never, 0, 1, 2, 3, 4, 5, 6];
 
 type DotPath<T, D extends number = 6> = [D] extends [never]
-    ? never
-    : T extends string
+  ? never
+  : T extends string
     ? ''
     : T extends object
-    ? {
-        [K in keyof T & string]: T[K] extends string
-        ? K
-        : `${K}.${DotPath<T[K], Prev[D]>}`;
-    }[keyof T & string]
-    : never;
+      ? {
+          [K in keyof T & string]: T[K] extends string ? K : `${K}.${DotPath<T[K], Prev[D]>}`;
+        }[keyof T & string]
+      : never;
 
 /**
  * Every valid dotted translation key, derived from the English bundle.
@@ -88,23 +86,23 @@ export type TranslationKeys = DotPath<TranslationBundle>;
 
 /** Internal — walk a dotted path against a JSON bundle. */
 function resolvePath(bundle: unknown, key: string): string | undefined {
-    const segments = key.split('.');
-    let cursor: unknown = bundle;
-    for (const segment of segments) {
-        if (cursor === null || typeof cursor !== 'object') return undefined;
-        cursor = (cursor as Record<string, unknown>)[segment];
-    }
-    return typeof cursor === 'string' ? cursor : undefined;
+  const segments = key.split('.');
+  let cursor: unknown = bundle;
+  for (const segment of segments) {
+    if (cursor === null || typeof cursor !== 'object') return undefined;
+    cursor = (cursor as Record<string, unknown>)[segment];
+  }
+  return typeof cursor === 'string' ? cursor : undefined;
 }
 
 /** True only when we are confident we're running a production build. */
 function isProduction(): boolean {
-    try {
-        // `process` may be undefined in edge / browser runtimes; guard defensively.
-        return typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
-    } catch {
-        return false;
-    }
+  try {
+    // `process` may be undefined in edge / browser runtimes; guard defensively.
+    return typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -117,7 +115,9 @@ function isProduction(): boolean {
  * a missing counter reads as `"Waitlist position: "` rather than
  * `"Waitlist position: undefined"`.
  */
-export type InterpolationValues = Readonly<Record<string, string | number | bigint | boolean | null | undefined>>;
+export type InterpolationValues = Readonly<
+  Record<string, string | number | bigint | boolean | null | undefined>
+>;
 
 /**
  * Replace every `{name}` marker in `input` with the matching entry from
@@ -125,13 +125,13 @@ export type InterpolationValues = Readonly<Record<string, string | number | bigi
  * tooling can surface the untranslated variable for debugging.
  */
 function interpolate(input: string, values: InterpolationValues | undefined): string {
-    if (values === undefined) return input;
-    return input.replace(/\{([a-zA-Z0-9_]+)\}/gu, (match, rawKey: string) => {
-        if (!Object.prototype.hasOwnProperty.call(values, rawKey)) return match;
-        const raw = values[rawKey];
-        if (raw === undefined || raw === null) return '';
-        return String(raw);
-    });
+  if (values === undefined) return input;
+  return input.replace(/\{([a-zA-Z0-9_]+)\}/gu, (match, rawKey: string) => {
+    if (!Object.prototype.hasOwnProperty.call(values, rawKey)) return match;
+    const raw = values[rawKey];
+    if (raw === undefined || raw === null) return '';
+    return String(raw);
+  });
 }
 
 /**
@@ -147,26 +147,26 @@ function interpolate(input: string, values: InterpolationValues | undefined): st
  * previews rather than silently eaten.
  */
 export function t(
-    key: TranslationKeys,
-    locale: Locale = defaultLocale,
-    values?: InterpolationValues,
+  key: TranslationKeys,
+  locale: Locale = defaultLocale,
+  values?: InterpolationValues,
 ): string {
-    const primary = resolvePath(bundles[locale], key);
-    if (primary !== undefined) return interpolate(primary, values);
+  const primary = resolvePath(bundles[locale], key);
+  if (primary !== undefined) return interpolate(primary, values);
 
-    const fallback =
-        locale === fallbackLocale ? undefined : resolvePath(bundles[fallbackLocale], key);
-    if (fallback !== undefined) {
-        if (!isProduction()) {
-            console.warn(`[i18n] Missing "${key}" for locale "${locale}" — using "${fallbackLocale}".`);
-        }
-        return interpolate(fallback, values);
-    }
-
+  const fallback =
+    locale === fallbackLocale ? undefined : resolvePath(bundles[fallbackLocale], key);
+  if (fallback !== undefined) {
     if (!isProduction()) {
-        console.warn(`[i18n] Missing "${key}" in every bundle — returning key as-is.`);
+      console.warn(`[i18n] Missing "${key}" for locale "${locale}" — using "${fallbackLocale}".`);
     }
-    return key;
+    return interpolate(fallback, values);
+  }
+
+  if (!isProduction()) {
+    console.warn(`[i18n] Missing "${key}" in every bundle — returning key as-is.`);
+  }
+  return key;
 }
 
 /**
@@ -178,7 +178,7 @@ export function t(
  * so placeholder interpolation works the same way via either entry point.
  */
 export function createTranslator(
-    locale: Locale,
+  locale: Locale,
 ): (key: TranslationKeys, values?: InterpolationValues) => string {
-    return (key, values) => t(key, locale, values);
+  return (key, values) => t(key, locale, values);
 }

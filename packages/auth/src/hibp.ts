@@ -58,11 +58,11 @@ export const HIBP_DEFAULT_ENDPOINT = 'https://api.pwnedpasswords.com/range';
  * swallowing the network stack trace.
  */
 export class HibpUnavailableError extends Error {
-    public override readonly name = 'HibpUnavailableError';
+  public override readonly name = 'HibpUnavailableError';
 
-    public constructor(message: string, options?: { cause?: unknown }) {
-        super(message, options);
-    }
+  public constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+  }
 }
 
 /**
@@ -82,10 +82,10 @@ export class HibpUnavailableError extends Error {
  *   (Epic CN.6.2).
  */
 export interface IsBreachedOptions {
-    readonly fetch?: typeof fetch;
-    readonly endpoint?: string;
-    readonly retries?: number;
-    readonly timeoutMs?: number;
+  readonly fetch?: typeof fetch;
+  readonly endpoint?: string;
+  readonly retries?: number;
+  readonly timeoutMs?: number;
 }
 
 /**
@@ -115,10 +115,10 @@ const HIBP_DEFAULT_TIMEOUT_MS = 2000;
  * a high `retries` value can't queue a multi-second wait.
  */
 async function sleepWithJitter(attempt: number): Promise<void> {
-    const baseMs = 100 * 2 ** attempt;
-    const capMs = Math.min(baseMs, 2000);
-    const jittered = Math.random() * capMs;
-    await new Promise<void>((resolve) => setTimeout(resolve, jittered));
+  const baseMs = 100 * 2 ** attempt;
+  const capMs = Math.min(baseMs, 2000);
+  const jittered = Math.random() * capMs;
+  await new Promise<void>((resolve) => setTimeout(resolve, jittered));
 }
 
 /**
@@ -144,112 +144,95 @@ async function sleepWithJitter(attempt: number): Promise<void> {
  * HIBP API has historically returned both upper-case and (rarely)
  * mixed-case suffixes across versions.
  */
-export async function isBreached(
-    password: string,
-    opts: IsBreachedOptions = {},
-): Promise<boolean> {
-    const doFetch = opts.fetch ?? globalThis.fetch;
-    const endpoint = opts.endpoint ?? HIBP_DEFAULT_ENDPOINT;
-    const retries = opts.retries ?? HIBP_DEFAULT_RETRIES;
-    const timeoutMs = opts.timeoutMs ?? HIBP_DEFAULT_TIMEOUT_MS;
+export async function isBreached(password: string, opts: IsBreachedOptions = {}): Promise<boolean> {
+  const doFetch = opts.fetch ?? globalThis.fetch;
+  const endpoint = opts.endpoint ?? HIBP_DEFAULT_ENDPOINT;
+  const retries = opts.retries ?? HIBP_DEFAULT_RETRIES;
+  const timeoutMs = opts.timeoutMs ?? HIBP_DEFAULT_TIMEOUT_MS;
 
-    if (typeof doFetch !== 'function') {
-        throw new HibpUnavailableError(
-            'no global fetch available and no fetch injected',
-        );
-    }
+  if (typeof doFetch !== 'function') {
+    throw new HibpUnavailableError('no global fetch available and no fetch injected');
+  }
 
-    const digest = await sha1Hex(password);
-    const prefix = digest.slice(0, 5);
-    const suffix = digest.slice(5);
+  const digest = await sha1Hex(password);
+  const prefix = digest.slice(0, 5);
+  const suffix = digest.slice(5);
 
-    // Sprint 11 / Slice 11.3 (Epic CN.6.1+CN.6.2). The fetch is
-    // wrapped in a retry+timeout loop so a transient HIBP / network
-    // hiccup does not flip a legitimate registration to
-    // `hibp_unavailable`. Each attempt has its own
-    // `AbortSignal.timeout()` so a hung connection is killed on
-    // schedule rather than blocking the Worker's CPU budget.
-    //
-    // Failures are accumulated and the last one is rethrown so the
-    // service layer logs the underlying cause rather than a generic
-    // "all retries exhausted" wrapper.
-    let lastError: unknown = new HibpUnavailableError(
-        'no attempt was made (retries < 0)',
-    );
-    const totalAttempts = retries + 1;
-    for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
+  // Sprint 11 / Slice 11.3 (Epic CN.6.1+CN.6.2). The fetch is
+  // wrapped in a retry+timeout loop so a transient HIBP / network
+  // hiccup does not flip a legitimate registration to
+  // `hibp_unavailable`. Each attempt has its own
+  // `AbortSignal.timeout()` so a hung connection is killed on
+  // schedule rather than blocking the Worker's CPU budget.
+  //
+  // Failures are accumulated and the last one is rethrown so the
+  // service layer logs the underlying cause rather than a generic
+  // "all retries exhausted" wrapper.
+  let lastError: unknown = new HibpUnavailableError('no attempt was made (retries < 0)');
+  const totalAttempts = retries + 1;
+  for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
+    try {
+      const response = await doFetch(`${endpoint}/${prefix}`, {
+        method: 'GET',
+        headers: {
+          'Add-Padding': 'true',
+          // HIBP rejects requests without a UA; use a stable,
+          // honest identifier so they can rate-limit us cleanly
+          // instead of globally blocking our edge.
+          'User-Agent': 'athlya-auth/1 (+https://athlya.app)',
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+
+      if (!response.ok) {
+        // 4xx are not retryable (HIBP doesn't issue them in
+        // practice, but surfaces them on auth-key abuse).
+        // 5xx and 429 ARE retryable — fall through to the
+        // backoff branch below.
+        if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+          throw new HibpUnavailableError(
+            `HIBP returned HTTP ${String(response.status)} (non-retryable)`,
+          );
+        }
+        lastError = new HibpUnavailableError(`HIBP returned HTTP ${String(response.status)}`);
+      } else {
+        let body: string;
         try {
-            const response = await doFetch(`${endpoint}/${prefix}`, {
-                method: 'GET',
-                headers: {
-                    'Add-Padding': 'true',
-                    // HIBP rejects requests without a UA; use a stable,
-                    // honest identifier so they can rate-limit us cleanly
-                    // instead of globally blocking our edge.
-                    'User-Agent':
-                        'athlya-auth/1 (+https://athlya.app)',
-                },
-                signal: AbortSignal.timeout(timeoutMs),
-            });
-
-            if (!response.ok) {
-                // 4xx are not retryable (HIBP doesn't issue them in
-                // practice, but surfaces them on auth-key abuse).
-                // 5xx and 429 ARE retryable — fall through to the
-                // backoff branch below.
-                if (
-                    response.status >= 400 &&
-                    response.status < 500 &&
-                    response.status !== 429
-                ) {
-                    throw new HibpUnavailableError(
-                        `HIBP returned HTTP ${String(response.status)} (non-retryable)`,
-                    );
-                }
-                lastError = new HibpUnavailableError(
-                    `HIBP returned HTTP ${String(response.status)}`,
-                );
-            } else {
-                let body: string;
-                try {
-                    body = await response.text();
-                } catch (err) {
-                    lastError = new HibpUnavailableError(
-                        `failed to read HIBP response body: ${describeError(err)}`,
-                        { cause: err },
-                    );
-                    if (attempt < retries) {
-                        await sleepWithJitter(attempt);
-                        continue;
-                    }
-                    throw lastError;
-                }
-                return hasBreachedSuffix(body, suffix);
-            }
+          body = await response.text();
         } catch (err) {
-            // Re-throw the non-retryable 4xx surfaced above without
-            // consuming a retry slot.
-            if (
-                err instanceof HibpUnavailableError &&
-                err.message.endsWith('(non-retryable)')
-            ) {
-                throw err;
-            }
-            lastError = new HibpUnavailableError(
-                `network error while calling HIBP: ${describeError(err)}`,
-                { cause: err },
-            );
-        }
-
-        // Reached only on retryable failures. Sleep with jitter
-        // unless we've exhausted the budget, in which case the loop
-        // exits and the caller sees `lastError`.
-        if (attempt < retries) {
+          lastError = new HibpUnavailableError(
+            `failed to read HIBP response body: ${describeError(err)}`,
+            { cause: err },
+          );
+          if (attempt < retries) {
             await sleepWithJitter(attempt);
+            continue;
+          }
+          throw lastError;
         }
+        return hasBreachedSuffix(body, suffix);
+      }
+    } catch (err) {
+      // Re-throw the non-retryable 4xx surfaced above without
+      // consuming a retry slot.
+      if (err instanceof HibpUnavailableError && err.message.endsWith('(non-retryable)')) {
+        throw err;
+      }
+      lastError = new HibpUnavailableError(
+        `network error while calling HIBP: ${describeError(err)}`,
+        { cause: err },
+      );
     }
 
-    throw lastError;
+    // Reached only on retryable failures. Sleep with jitter
+    // unless we've exhausted the budget, in which case the loop
+    // exits and the caller sees `lastError`.
+    if (attempt < retries) {
+      await sleepWithJitter(attempt);
+    }
+  }
+
+  throw lastError;
 }
 
 /**
@@ -262,21 +245,21 @@ export async function isBreached(
  * a breach. Comparison is case-insensitive.
  */
 export function hasBreachedSuffix(body: string, suffix: string): boolean {
-    const needle = suffix.toUpperCase();
-    for (const rawLine of body.split('\n')) {
-        const line = rawLine.trim();
-        if (line.length === 0) continue;
-        const colon = line.indexOf(':');
-        if (colon === -1) continue;
-        const lineSuffix = line.slice(0, colon).toUpperCase();
-        if (lineSuffix !== needle) continue;
-        const count = Number.parseInt(line.slice(colon + 1), 10);
-        if (Number.isFinite(count) && count > 0) {
-            return true;
-        }
-        return false;
+  const needle = suffix.toUpperCase();
+  for (const rawLine of body.split('\n')) {
+    const line = rawLine.trim();
+    if (line.length === 0) continue;
+    const colon = line.indexOf(':');
+    if (colon === -1) continue;
+    const lineSuffix = line.slice(0, colon).toUpperCase();
+    if (lineSuffix !== needle) continue;
+    const count = Number.parseInt(line.slice(colon + 1), 10);
+    if (Number.isFinite(count) && count > 0) {
+      return true;
     }
     return false;
+  }
+  return false;
 }
 
 /**
@@ -285,24 +268,22 @@ export function hasBreachedSuffix(body: string, suffix: string): boolean {
  * Workers and Node.
  */
 async function sha1Hex(input: string): Promise<string> {
-    const subtle = globalThis.crypto?.subtle;
-    if (!subtle) {
-        throw new HibpUnavailableError(
-            'Web Crypto subtle API not available in this runtime',
-        );
-    }
-    const bytes = new TextEncoder().encode(input);
-    const digest = await subtle.digest('SHA-1', bytes);
-    const view = new Uint8Array(digest);
-    let hex = '';
-    for (const byte of view) {
-        hex += byte.toString(16).padStart(2, '0');
-    }
-    return hex.toUpperCase();
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) {
+    throw new HibpUnavailableError('Web Crypto subtle API not available in this runtime');
+  }
+  const bytes = new TextEncoder().encode(input);
+  const digest = await subtle.digest('SHA-1', bytes);
+  const view = new Uint8Array(digest);
+  let hex = '';
+  for (const byte of view) {
+    hex += byte.toString(16).padStart(2, '0');
+  }
+  return hex.toUpperCase();
 }
 
 function describeError(err: unknown): string {
-    if (err instanceof Error) return err.message;
-    if (typeof err === 'string') return err;
-    return 'unknown error';
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  return 'unknown error';
 }

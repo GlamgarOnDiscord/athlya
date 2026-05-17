@@ -1,17 +1,17 @@
 {
-    "extends": "./tsconfig.json",
-    "compilerOptions": {
-        "rootDir": "src",
-        "noEmit": false
-    },
-    "exclude": [
-        "node_modules",
-        "dist",
-        ".turbo",
-        "coverage",
-        "src/**/__tests__/**",
-        "src/**/*.test.ts",
-        "tests",
-        "vitest.config.ts"
-    ]
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "noEmit": false
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".turbo",
+    "coverage",
+    "src/**/__tests__/**",
+    "src/**/*.test.ts",
+    "tests",
+    "vitest.config.ts"
+  ]
 }

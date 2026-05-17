@@ -1,51 +1,51 @@
 {
-    "name": "@athlya/notifications",
-    "version": "0.0.0",
-    "private": true,
-    "type": "module",
-    "description": "Notifications consumer for Athlya — routes bus events to email (Resend) and push (Expo), consent-gated and deduplicated",
-    "license": "AGPL-3.0-only",
-    "engines": {
-        "node": ">=20"
+  "name": "@athlya/notifications",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Notifications consumer for Athlya — routes bus events to email (Resend) and push (Expo), consent-gated and deduplicated",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     },
-    "sideEffects": false,
-    "exports": {
-        ".": {
-            "types": "./src/index.ts",
-            "default": "./src/index.ts"
-        },
-        "./consumer": {
-            "types": "./src/consumer.ts",
-            "default": "./src/consumer.ts"
-        },
-        "./scheduler": {
-            "types": "./src/scheduler.ts",
-            "default": "./src/scheduler.ts"
-        }
+    "./consumer": {
+      "types": "./src/consumer.ts",
+      "default": "./src/consumer.ts"
     },
-    "files": [
-        "src",
-        "dist"
-    ],
-    "scripts": {
-        "build": "tsc -p tsconfig.build.json",
-        "lint": "eslint .",
-        "typecheck": "tsc --noEmit -p tsconfig.json",
-        "test": "vitest run",
-        "clean": "rimraf dist .turbo *.tsbuildinfo"
-    },
-    "dependencies": {
-        "@athlya/shared": "workspace:*"
-    },
-    "devDependencies": {
-        "@athlya/eslint-config": "workspace:*",
-        "@athlya/tsconfig": "workspace:*",
-        "@fast-check/vitest": "^0.4.1",
-        "@types/node": "^20.19.9",
-        "eslint": "^9.39.1",
-        "fast-check": "^3.23.2",
-        "rimraf": "^6.0.1",
-        "typescript": "^5.9.3",
-        "vitest": "^3.2.4"
+    "./scheduler": {
+      "types": "./src/scheduler.ts",
+      "default": "./src/scheduler.ts"
     }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "clean": "rimraf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@athlya/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@athlya/eslint-config": "workspace:*",
+    "@athlya/tsconfig": "workspace:*",
+    "@fast-check/vitest": "^0.3.0",
+    "@types/node": "^20.19.9",
+    "eslint": "^9.39.1",
+    "fast-check": "^3.23.2",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
 }

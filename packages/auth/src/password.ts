@@ -40,10 +40,10 @@ export const BCRYPT_COST = 12;
  * happily hash an empty string.
  */
 export class EmptyPasswordError extends Error {
-    public override readonly name = 'EmptyPasswordError';
-    public constructor() {
-        super('password must be a non-empty string');
-    }
+  public override readonly name = 'EmptyPasswordError';
+  public constructor() {
+    super('password must be a non-empty string');
+  }
 }
 
 /**
@@ -66,10 +66,10 @@ export class EmptyPasswordError extends Error {
  * @throws {@link EmptyPasswordError} when `password` is an empty string.
  */
 export async function hash(password: string): Promise<string> {
-    if (password.length === 0) {
-        throw new EmptyPasswordError();
-    }
-    return bcrypt.hash(password, BCRYPT_COST);
+  if (password.length === 0) {
+    throw new EmptyPasswordError();
+  }
+  return bcrypt.hash(password, BCRYPT_COST);
 }
 
 /**
@@ -83,12 +83,9 @@ export async function hash(password: string): Promise<string> {
  *
  * @throws {@link EmptyPasswordError} when `password` is an empty string.
  */
-export async function verify(
-    password: string,
-    storedHash: string,
-): Promise<boolean> {
-    if (password.length === 0) {
-        throw new EmptyPasswordError();
-    }
-    return bcrypt.compare(password, storedHash);
+export async function verify(password: string, storedHash: string): Promise<boolean> {
+  if (password.length === 0) {
+    throw new EmptyPasswordError();
+  }
+  return bcrypt.compare(password, storedHash);
 }

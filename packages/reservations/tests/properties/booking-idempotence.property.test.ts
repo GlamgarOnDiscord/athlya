@@ -90,15 +90,15 @@ import { fc, it } from '@fast-check/vitest';
 import { describe, expect } from 'vitest';
 
 import {
-    bookClass,
-    UniqueViolationError,
-    type BookingClassRow,
-    type BookingCounter,
-    type BookingEventPublisher,
-    type BookingOutboxEvent,
-    type BookingRepo,
-    type BookingReservationRow,
-    type BookingTx,
+  bookClass,
+  UniqueViolationError,
+  type BookingClassRow,
+  type BookingCounter,
+  type BookingEventPublisher,
+  type BookingOutboxEvent,
+  type BookingRepo,
+  type BookingReservationRow,
+  type BookingTx,
 } from '../../src/book.js';
 
 /* ------------------------------------------------------------------ */
@@ -112,8 +112,8 @@ import {
  * mismatch if we ever tightened the suite.
  */
 interface FakeTx {
-    readonly __brand: 'BookingTx';
-    readonly id: number;
+  readonly __brand: 'BookingTx';
+  readonly id: number;
 }
 
 /**
@@ -124,14 +124,14 @@ interface FakeTx {
  * integer does both jobs without pulling in `crypto.randomUUID()`.
  */
 function makeCounter(prefix: string): () => string {
-    let n = 0;
-    return () => `${prefix}-${(++n).toString(16).padStart(12, '0')}`;
+  let n = 0;
+  return () => `${prefix}-${(++n).toString(16).padStart(12, '0')}`;
 }
 
 interface FakeRepoState {
-    readonly reservations: Map<string, BookingReservationRow>;
-    readonly outbox: BookingOutboxEvent[];
-    txCount: number;
+  readonly reservations: Map<string, BookingReservationRow>;
+  readonly outbox: BookingOutboxEvent[];
+  txCount: number;
 }
 
 /**
@@ -159,85 +159,79 @@ interface FakeRepoState {
  * tx that later rolls back must not survive.
  */
 function buildFakeRepo(
-    state: FakeRepoState,
-    classRow: BookingClassRow,
-    nextReservationId: () => string,
-    clock: () => number,
+  state: FakeRepoState,
+  classRow: BookingClassRow,
+  nextReservationId: () => string,
+  clock: () => number,
 ): BookingRepo {
-    return {
-        findClass: async (classId: string) =>
-            classId === classRow.id ? classRow : null,
+  return {
+    findClass: async (classId: string) => (classId === classRow.id ? classRow : null),
 
-        withTransaction: async <T>(
-            fn: (tx: BookingTx) => Promise<T>,
-        ): Promise<T> => {
-            const tx: FakeTx = { __brand: 'BookingTx', id: state.txCount++ };
-            // Snapshot the state so we can roll back on rejection.
-            const reservationSnapshot = new Map(state.reservations);
-            const outboxSnapshot = state.outbox.length;
-            try {
-                return await fn(tx);
-            } catch (err) {
-                // Roll back both the reservation insert and any outbox
-                // rows written inside the failed transaction.
-                state.reservations.clear();
-                for (const [k, v] of reservationSnapshot) {
-                    state.reservations.set(k, v);
-                }
-                state.outbox.length = outboxSnapshot;
-                throw err;
-            }
-        },
+    withTransaction: async <T>(fn: (tx: BookingTx) => Promise<T>): Promise<T> => {
+      const tx: FakeTx = { __brand: 'BookingTx', id: state.txCount++ };
+      // Snapshot the state so we can roll back on rejection.
+      const reservationSnapshot = new Map(state.reservations);
+      const outboxSnapshot = state.outbox.length;
+      try {
+        return await fn(tx);
+      } catch (err) {
+        // Roll back both the reservation insert and any outbox
+        // rows written inside the failed transaction.
+        state.reservations.clear();
+        for (const [k, v] of reservationSnapshot) {
+          state.reservations.set(k, v);
+        }
+        state.outbox.length = outboxSnapshot;
+        throw err;
+      }
+    },
 
-        findExistingConfirmedOrWaitlistReservation: async (
-            _tx: BookingTx,
-            classId: string,
-            userId: string,
-        ): Promise<BookingReservationRow | null> => {
-            const row = state.reservations.get(`${classId}|${userId}`);
-            return row ?? null;
-        },
+    findExistingConfirmedOrWaitlistReservation: async (
+      _tx: BookingTx,
+      classId: string,
+      userId: string,
+    ): Promise<BookingReservationRow | null> => {
+      const row = state.reservations.get(`${classId}|${userId}`);
+      return row ?? null;
+    },
 
-        insertReservation: async (
-            _tx: BookingTx,
-            input: {
-                readonly classId: string;
-                readonly userId: string;
-                readonly status: 'confirmed' | 'waitlist';
-            },
-        ): Promise<BookingReservationRow> => {
-            const key = `${input.classId}|${input.userId}`;
-            if (state.reservations.has(key)) {
-                // Mirror the Postgres `UNIQUE(class_id, user_id)`
-                // violation (SQLSTATE 23505). `bookClass` catches this
-                // inside the confirmed branch, issues the compensating
-                // `INCR`, and returns `already_booked`; inside the
-                // waitlist branch it propagates, at which point the
-                // enclosing `withTransaction` call rolls back.
-                throw new UniqueViolationError();
-            }
-            const row: BookingReservationRow = {
-                id: nextReservationId(),
-                classId: input.classId,
-                userId: input.userId,
-                status: input.status,
-                createdAt: new Date(clock()),
-                cancelledAt: null,
-                checkedInAt: null,
-            };
-            state.reservations.set(key, row);
-            return row;
-        },
+    insertReservation: async (
+      _tx: BookingTx,
+      input: {
+        readonly classId: string;
+        readonly userId: string;
+        readonly status: 'confirmed' | 'waitlist';
+      },
+    ): Promise<BookingReservationRow> => {
+      const key = `${input.classId}|${input.userId}`;
+      if (state.reservations.has(key)) {
+        // Mirror the Postgres `UNIQUE(class_id, user_id)`
+        // violation (SQLSTATE 23505). `bookClass` catches this
+        // inside the confirmed branch, issues the compensating
+        // `INCR`, and returns `already_booked`; inside the
+        // waitlist branch it propagates, at which point the
+        // enclosing `withTransaction` call rolls back.
+        throw new UniqueViolationError();
+      }
+      const row: BookingReservationRow = {
+        id: nextReservationId(),
+        classId: input.classId,
+        userId: input.userId,
+        status: input.status,
+        createdAt: new Date(clock()),
+        cancelledAt: null,
+        checkedInAt: null,
+      };
+      state.reservations.set(key, row);
+      return row;
+    },
 
-        insertOutbox: async (
-            _tx: BookingTx,
-            event: BookingOutboxEvent,
-        ): Promise<void> => {
-            state.outbox.push(event);
-        },
+    insertOutbox: async (_tx: BookingTx, event: BookingOutboxEvent): Promise<void> => {
+      state.outbox.push(event);
+    },
 
-        countWaitlistAhead: async (): Promise<number> => 0,
-    };
+    countWaitlistAhead: async (): Promise<number> => 0,
+  };
 }
 
 /**
@@ -249,17 +243,17 @@ function buildFakeRepo(
  * under test.
  */
 function buildFakeCounter(capacity: number): BookingCounter {
-    let remaining = capacity;
-    return {
-        decrRemaining: async () => {
-            remaining -= 1;
-            return remaining;
-        },
-        incrRemaining: async () => {
-            remaining += 1;
-            return remaining;
-        },
-    };
+  let remaining = capacity;
+  return {
+    decrRemaining: async () => {
+      remaining -= 1;
+      return remaining;
+    },
+    incrRemaining: async () => {
+      remaining += 1;
+      return remaining;
+    },
+  };
 }
 
 /**
@@ -269,35 +263,32 @@ function buildFakeCounter(capacity: number): BookingCounter {
  * need real UUIDs — a monotonic hex counter is deterministic and
  * collision-free for the bounded runs we exercise.
  */
-function buildFakePublisher(
-    nextEventId: () => string,
-    clock: () => number,
-): BookingEventPublisher {
-    return {
-        buildReservationCreated: (input) => ({
-            eventId: nextEventId(),
-            eventType: 'reservation.created',
-            payload: {
-                reservationId: input.reservationId,
-                classId: input.classId,
-                userId: input.userId,
-                studioId: input.studioId,
-            },
-            occurredAt: new Date(clock()),
-        }),
-        buildReservationWaitlisted: (input) => ({
-            eventId: nextEventId(),
-            eventType: 'reservation.waitlisted',
-            payload: {
-                reservationId: input.reservationId,
-                classId: input.classId,
-                userId: input.userId,
-                studioId: input.studioId,
-                position: input.position,
-            },
-            occurredAt: new Date(clock()),
-        }),
-    };
+function buildFakePublisher(nextEventId: () => string, clock: () => number): BookingEventPublisher {
+  return {
+    buildReservationCreated: (input) => ({
+      eventId: nextEventId(),
+      eventType: 'reservation.created',
+      payload: {
+        reservationId: input.reservationId,
+        classId: input.classId,
+        userId: input.userId,
+        studioId: input.studioId,
+      },
+      occurredAt: new Date(clock()),
+    }),
+    buildReservationWaitlisted: (input) => ({
+      eventId: nextEventId(),
+      eventType: 'reservation.waitlisted',
+      payload: {
+        reservationId: input.reservationId,
+        classId: input.classId,
+        userId: input.userId,
+        studioId: input.studioId,
+        position: input.position,
+      },
+      occurredAt: new Date(clock()),
+    }),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -334,19 +325,19 @@ const RUN_OPTS = { numRuns: 100, seed: 0xb00c_11d1 } as const;
 /* ------------------------------------------------------------------ */
 
 interface FakeWorld {
-    readonly state: FakeRepoState;
-    readonly repo: BookingRepo;
-    readonly counter: BookingCounter;
-    readonly publisher: BookingEventPublisher;
-    readonly classRow: BookingClassRow;
-    /**
-     * Frozen clock to pass as `BookClassInput.clock`. Keeping the
-     * clock pinned guarantees `startsAt > now()` on every replay so
-     * the property under test never incidentally trips the
-     * `class_in_past` short-circuit (which would make P2.3 vacuously
-     * true without exercising the idempotence branches).
-     */
-    readonly clock: () => number;
+  readonly state: FakeRepoState;
+  readonly repo: BookingRepo;
+  readonly counter: BookingCounter;
+  readonly publisher: BookingEventPublisher;
+  readonly classRow: BookingClassRow;
+  /**
+   * Frozen clock to pass as `BookClassInput.clock`. Keeping the
+   * clock pinned guarantees `startsAt > now()` on every replay so
+   * the property under test never incidentally trips the
+   * `class_in_past` short-circuit (which would make P2.3 vacuously
+   * true without exercising the idempotence branches).
+   */
+  readonly clock: () => number;
 }
 
 /**
@@ -355,49 +346,45 @@ interface FakeWorld {
  * grow over replays — this makes a shrunk counter-example easier to
  * eyeball without affecting any assertion.
  */
-function buildWorld(
-    capacity: number,
-    classId: string,
-    studioId: string,
-): FakeWorld {
-    // Pin the simulated wall-clock at a fixed instant we can reason about,
-    // and run every `bookClass` call under a frozen `clock` that returns
-    // this same value. Doing the clock injection — rather than picking a
-    // future date and hoping — means the test keeps passing in 2030, 2040,
-    // and beyond, without any calendar-dependent drift.
-    const NOW_MS = Date.parse('2026-06-01T09:00:00.000Z');
-    // Monotonic internal clock used for `createdAt` stamps so repeated
-    // reservation rows (if the flow ever produced them, which it mustn't)
-    // would be distinguishable in a shrunk counter-example. Note that
-    // this is DISTINCT from the `clock` passed to `bookClass` below: the
-    // latter must satisfy `startsAt > clock()` on every replay, so it
-    // stays pinned.
-    let tick = 0;
-    const stampClock = (): number => NOW_MS + tick++;
-    const bookClock = (): number => NOW_MS;
+function buildWorld(capacity: number, classId: string, studioId: string): FakeWorld {
+  // Pin the simulated wall-clock at a fixed instant we can reason about,
+  // and run every `bookClass` call under a frozen `clock` that returns
+  // this same value. Doing the clock injection — rather than picking a
+  // future date and hoping — means the test keeps passing in 2030, 2040,
+  // and beyond, without any calendar-dependent drift.
+  const NOW_MS = Date.parse('2026-06-01T09:00:00.000Z');
+  // Monotonic internal clock used for `createdAt` stamps so repeated
+  // reservation rows (if the flow ever produced them, which it mustn't)
+  // would be distinguishable in a shrunk counter-example. Note that
+  // this is DISTINCT from the `clock` passed to `bookClass` below: the
+  // latter must satisfy `startsAt > clock()` on every replay, so it
+  // stays pinned.
+  let tick = 0;
+  const stampClock = (): number => NOW_MS + tick++;
+  const bookClock = (): number => NOW_MS;
 
-    const state: FakeRepoState = {
-        reservations: new Map(),
-        outbox: [],
-        txCount: 0,
-    };
+  const state: FakeRepoState = {
+    reservations: new Map(),
+    outbox: [],
+    txCount: 0,
+  };
 
-    const classRow: BookingClassRow = {
-        id: classId,
-        studioId,
-        capacity,
-        // `startsAt` is always 1 h after the frozen `bookClock()`, so
-        // `bookClass` never returns `class_in_past` — the property under
-        // test applies to the non-short-circuit branches.
-        startsAt: new Date(NOW_MS + 60 * 60_000),
-        version: 0,
-    };
+  const classRow: BookingClassRow = {
+    id: classId,
+    studioId,
+    capacity,
+    // `startsAt` is always 1 h after the frozen `bookClock()`, so
+    // `bookClass` never returns `class_in_past` — the property under
+    // test applies to the non-short-circuit branches.
+    startsAt: new Date(NOW_MS + 60 * 60_000),
+    version: 0,
+  };
 
-    const repo = buildFakeRepo(state, classRow, makeCounter('res'), stampClock);
-    const counter = buildFakeCounter(capacity);
-    const publisher = buildFakePublisher(makeCounter('evt'), stampClock);
+  const repo = buildFakeRepo(state, classRow, makeCounter('res'), stampClock);
+  const counter = buildFakeCounter(capacity);
+  const publisher = buildFakePublisher(makeCounter('evt'), stampClock);
 
-    return { state, repo, counter, publisher, classRow, clock: bookClock };
+  return { state, repo, counter, publisher, classRow, clock: bookClock };
 }
 
 /**
@@ -407,34 +394,34 @@ function buildWorld(
  * swallowing them is correct for this property.
  */
 async function replayBook(
-    world: FakeWorld,
-    n: number,
-    userId: string,
-    idempotencyKey: string,
+  world: FakeWorld,
+  n: number,
+  userId: string,
+  idempotencyKey: string,
 ): Promise<void> {
-    for (let i = 0; i < n; i++) {
-        try {
-            await bookClass({
-                classId: world.classRow.id,
-                userId,
-                studioId: world.classRow.studioId,
-                idempotencyKey,
-                repo: world.repo,
-                counter: world.counter,
-                publisher: world.publisher,
-                clock: world.clock,
-            });
-        } catch (err) {
-            // The waitlist branch does not catch UniqueViolationError —
-            // a duplicate replay on that path throws. The transaction
-            // has already rolled back, so both invariants (≤ 1 row,
-            // ≤ 1 event) are preserved. Any OTHER error would be a
-            // real regression in the fake infrastructure.
-            if (!(err instanceof UniqueViolationError)) {
-                throw err;
-            }
-        }
+  for (let i = 0; i < n; i++) {
+    try {
+      await bookClass({
+        classId: world.classRow.id,
+        userId,
+        studioId: world.classRow.studioId,
+        idempotencyKey,
+        repo: world.repo,
+        counter: world.counter,
+        publisher: world.publisher,
+        clock: world.clock,
+      });
+    } catch (err) {
+      // The waitlist branch does not catch UniqueViolationError —
+      // a duplicate replay on that path throws. The transaction
+      // has already rolled back, so both invariants (≤ 1 row,
+      // ≤ 1 event) are preserved. Any OTHER error would be a
+      // real regression in the fake infrastructure.
+      if (!(err instanceof UniqueViolationError)) {
+        throw err;
+      }
     }
+  }
 }
 
 /**
@@ -443,17 +430,14 @@ async function replayBook(
  * mirrors the production outbox schema where `payload` is
  * `Record<string, unknown>`.
  */
-function outboxEventsForPair(
-    world: FakeWorld,
-    userId: string,
-): BookingOutboxEvent[] {
-    return world.state.outbox.filter((e) => {
-        const p = e.payload as {
-            readonly classId?: unknown;
-            readonly userId?: unknown;
-        };
-        return p.classId === world.classRow.id && p.userId === userId;
-    });
+function outboxEventsForPair(world: FakeWorld, userId: string): BookingOutboxEvent[] {
+  return world.state.outbox.filter((e) => {
+    const p = e.payload as {
+      readonly classId?: unknown;
+      readonly userId?: unknown;
+    };
+    return p.classId === world.classRow.id && p.userId === userId;
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -461,176 +445,167 @@ function outboxEventsForPair(
 /* ------------------------------------------------------------------ */
 
 describe('bookClass — Property 2 (idempotence)', () => {
-    /**
-     * P2.1 — at most one row (Req 8.4).
-     *
-     * The fake repo enforces `UNIQUE(class_id, user_id)` via a `Map`.
-     * The invariant `|rows for (classId, userId)| ≤ 1` must hold
-     * after ANY number of replays, regardless of which branch of
-     * Algorithm 1 each call takes.
-     */
-    it.prop(
-        [capacityArb, replayCountArb, uuidArb, uuidArb, uuidArb, idempotencyKeyArb],
-        RUN_OPTS,
-    )(
-        'N replays with the same (userId, classId) produce at most one reservation row (Req 8.4, 8.5, 20.1)',
-        async (capacity, n, classId, userId, studioId, idempotencyKey) => {
-            const world = buildWorld(capacity, classId, studioId);
-            await replayBook(world, n, userId, idempotencyKey);
+  /**
+   * P2.1 — at most one row (Req 8.4).
+   *
+   * The fake repo enforces `UNIQUE(class_id, user_id)` via a `Map`.
+   * The invariant `|rows for (classId, userId)| ≤ 1` must hold
+   * after ANY number of replays, regardless of which branch of
+   * Algorithm 1 each call takes.
+   */
+  it.prop([capacityArb, replayCountArb, uuidArb, uuidArb, uuidArb, idempotencyKeyArb], RUN_OPTS)(
+    'N replays with the same (userId, classId) produce at most one reservation row (Req 8.4, 8.5, 20.1)',
+    async (capacity, n, classId, userId, studioId, idempotencyKey) => {
+      const world = buildWorld(capacity, classId, studioId);
+      await replayBook(world, n, userId, idempotencyKey);
 
-            // Count rows that match the (classId, userId) pair under
-            // test. The fake repo keys its Map with `${classId}|${userId}`
-            // so there is at most one such entry by construction; the
-            // assertion still exists so a future refactor that removed
-            // the Map's uniqueness would fail the property loudly.
-            const rowsForPair = Array.from(world.state.reservations.keys()).filter(
-                (k) => k === `${classId}|${userId}`,
-            );
-            return rowsForPair.length <= 1;
-        },
-    );
+      // Count rows that match the (classId, userId) pair under
+      // test. The fake repo keys its Map with `${classId}|${userId}`
+      // so there is at most one such entry by construction; the
+      // assertion still exists so a future refactor that removed
+      // the Map's uniqueness would fail the property loudly.
+      const rowsForPair = Array.from(world.state.reservations.keys()).filter(
+        (k) => k === `${classId}|${userId}`,
+      );
+      return rowsForPair.length <= 1;
+    },
+  );
 
-    /**
-     * P2.2 — at most one outbox event (Req 8.5, 20.1).
-     *
-     * The confirmed branch returns `already_booked` on the unique
-     * violation and does NOT publish a second event. The waitlist
-     * branch rolls the transaction back on the unique violation,
-     * which also prevents the second outbox row from being committed
-     * (the fake `withTransaction` restores the outbox length on
-     * rejection, mirroring Postgres ROLLBACK semantics).
-     *
-     * In both paths the invariant holds: at most one published event
-     * per `(classId, userId)` pair.
-     */
-    it.prop(
-        [capacityArb, replayCountArb, uuidArb, uuidArb, uuidArb, idempotencyKeyArb],
-        RUN_OPTS,
-    )(
-        'across N replays, at most one reservation.{created,waitlisted} outbox event is published (Req 8.5, 20.1)',
-        async (capacity, n, classId, userId, studioId, idempotencyKey) => {
-            const world = buildWorld(capacity, classId, studioId);
-            await replayBook(world, n, userId, idempotencyKey);
+  /**
+   * P2.2 — at most one outbox event (Req 8.5, 20.1).
+   *
+   * The confirmed branch returns `already_booked` on the unique
+   * violation and does NOT publish a second event. The waitlist
+   * branch rolls the transaction back on the unique violation,
+   * which also prevents the second outbox row from being committed
+   * (the fake `withTransaction` restores the outbox length on
+   * rejection, mirroring Postgres ROLLBACK semantics).
+   *
+   * In both paths the invariant holds: at most one published event
+   * per `(classId, userId)` pair.
+   */
+  it.prop([capacityArb, replayCountArb, uuidArb, uuidArb, uuidArb, idempotencyKeyArb], RUN_OPTS)(
+    'across N replays, at most one reservation.{created,waitlisted} outbox event is published (Req 8.5, 20.1)',
+    async (capacity, n, classId, userId, studioId, idempotencyKey) => {
+      const world = buildWorld(capacity, classId, studioId);
+      await replayBook(world, n, userId, idempotencyKey);
 
-            const eventsForPair = outboxEventsForPair(world, userId);
-            if (eventsForPair.length > 1) {
-                return false;
-            }
+      const eventsForPair = outboxEventsForPair(world, userId);
+      if (eventsForPair.length > 1) {
+        return false;
+      }
 
-            // When an event IS published (the common case — the very
-            // first call always succeeds), it must be one of the two
-            // legal booking-lifecycle event types. Any other type is
-            // a regression in the publisher wiring.
-            const legalTypes = new Set<BookingOutboxEvent['eventType']>([
-                'reservation.created',
-                'reservation.waitlisted',
-            ]);
-            return eventsForPair.every((e) => legalTypes.has(e.eventType));
-        },
-    );
+      // When an event IS published (the common case — the very
+      // first call always succeeds), it must be one of the two
+      // legal booking-lifecycle event types. Any other type is
+      // a regression in the publisher wiring.
+      const legalTypes = new Set<BookingOutboxEvent['eventType']>([
+        'reservation.created',
+        'reservation.waitlisted',
+      ]);
+      return eventsForPair.every((e) => legalTypes.has(e.eventType));
+    },
+  );
 
-    /**
-     * P2.3 — first call succeeds, subsequent confirmed-branch replays
-     * return `already_booked` without publishing (Req 8.5).
-     *
-     * This restricts attention to the regime where every replay
-     * stays on the confirmed branch of Algorithm 1. That requires
-     * `capacity ≥ 2`: after the first `DECR` the counter sits at
-     * `capacity - 1`; a confirmed-branch replay takes a compensating
-     * `INCR` after its UniqueViolation, which restores the counter
-     * to `capacity - 1` again. So the counter stays at `capacity - 1
-     * ≥ 1 > 0` on every replay — `bookClass` never falls through to
-     * the waitlist branch — and the stronger idempotence contract
-     * (every replay returns `already_booked`, publishes nothing)
-     * must hold.
-     *
-     * When `capacity = 1`, the second call's `DECR` reaches `-1`,
-     * entering the waitlist branch, where the current implementation
-     * does not catch `UniqueViolationError` (see module header).
-     * That path is already covered by P2.1 and P2.2, so excluding
-     * it here is sound.
-     */
-    it.prop(
-        [capacityArb, replayCountArb, uuidArb, uuidArb, uuidArb, idempotencyKeyArb],
-        RUN_OPTS,
-    )(
-        'after a confirmed first call, replays return already_booked and publish no further events (Req 8.5, 20.1)',
-        async (capacity, n, classId, userId, studioId, idempotencyKey) => {
-            // Precondition: `capacity ≥ 2` guarantees every call stays
-            // on the confirmed branch of Algorithm 1 (see JSDoc above).
-            fc.pre(capacity >= 2);
+  /**
+   * P2.3 — first call succeeds, subsequent confirmed-branch replays
+   * return `already_booked` without publishing (Req 8.5).
+   *
+   * This restricts attention to the regime where every replay
+   * stays on the confirmed branch of Algorithm 1. That requires
+   * `capacity ≥ 2`: after the first `DECR` the counter sits at
+   * `capacity - 1`; a confirmed-branch replay takes a compensating
+   * `INCR` after its UniqueViolation, which restores the counter
+   * to `capacity - 1` again. So the counter stays at `capacity - 1
+   * ≥ 1 > 0` on every replay — `bookClass` never falls through to
+   * the waitlist branch — and the stronger idempotence contract
+   * (every replay returns `already_booked`, publishes nothing)
+   * must hold.
+   *
+   * When `capacity = 1`, the second call's `DECR` reaches `-1`,
+   * entering the waitlist branch, where the current implementation
+   * does not catch `UniqueViolationError` (see module header).
+   * That path is already covered by P2.1 and P2.2, so excluding
+   * it here is sound.
+   */
+  it.prop([capacityArb, replayCountArb, uuidArb, uuidArb, uuidArb, idempotencyKeyArb], RUN_OPTS)(
+    'after a confirmed first call, replays return already_booked and publish no further events (Req 8.5, 20.1)',
+    async (capacity, n, classId, userId, studioId, idempotencyKey) => {
+      // Precondition: `capacity ≥ 2` guarantees every call stays
+      // on the confirmed branch of Algorithm 1 (see JSDoc above).
+      fc.pre(capacity >= 2);
 
-            const world = buildWorld(capacity, classId, studioId);
+      const world = buildWorld(capacity, classId, studioId);
 
-            const firstResult = await bookClass({
-                classId,
-                userId,
-                studioId,
-                idempotencyKey,
-                repo: world.repo,
-                counter: world.counter,
-                publisher: world.publisher,
-                clock: world.clock,
-            });
-            if (firstResult.code !== 'ok') {
-                return false;
-            }
+      const firstResult = await bookClass({
+        classId,
+        userId,
+        studioId,
+        idempotencyKey,
+        repo: world.repo,
+        counter: world.counter,
+        publisher: world.publisher,
+        clock: world.clock,
+      });
+      if (firstResult.code !== 'ok') {
+        return false;
+      }
 
-            const outboxSizeAfterFirst = world.state.outbox.length;
+      const outboxSizeAfterFirst = world.state.outbox.length;
 
-            for (let i = 1; i < n; i++) {
-                const replay = await bookClass({
-                    classId,
-                    userId,
-                    studioId,
-                    idempotencyKey,
-                    repo: world.repo,
-                    counter: world.counter,
-                    publisher: world.publisher,
-                    clock: world.clock,
-                });
-                if (replay.code !== 'already_booked') {
-                    return false;
-                }
-                if (world.state.outbox.length !== outboxSizeAfterFirst) {
-                    return false;
-                }
-            }
-
-            return true;
-        },
-    );
-
-    /* ------------------------------------------------------------------ */
-    /*  Belt-and-braces regression anchor                                   */
-    /* ------------------------------------------------------------------ */
-
-    // A single hand-picked example so a broken fast-check harness
-    // (e.g. every sample filtered out) still cannot let a regression
-    // slip through this file.
-    it('regression anchor: 5 confirmed-branch replays yield one row and one reservation.created event', async () => {
-        const world = buildWorld(
-            5,
-            '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ab',
-            '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ac',
-        );
-        const userId = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c800';
-
-        for (let i = 0; i < 5; i++) {
-            await bookClass({
-                classId: world.classRow.id,
-                userId,
-                studioId: world.classRow.studioId,
-                idempotencyKey: 'ba5ebabe-dead-4bee-8000-000000000001',
-                repo: world.repo,
-                counter: world.counter,
-                publisher: world.publisher,
-                clock: world.clock,
-            });
+      for (let i = 1; i < n; i++) {
+        const replay = await bookClass({
+          classId,
+          userId,
+          studioId,
+          idempotencyKey,
+          repo: world.repo,
+          counter: world.counter,
+          publisher: world.publisher,
+          clock: world.clock,
+        });
+        if (replay.code !== 'already_booked') {
+          return false;
         }
+        if (world.state.outbox.length !== outboxSizeAfterFirst) {
+          return false;
+        }
+      }
 
-        expect(world.state.reservations.size).toBe(1);
-        expect(world.state.outbox).toHaveLength(1);
-        expect(world.state.outbox[0]!.eventType).toBe('reservation.created');
-    });
+      return true;
+    },
+  );
+
+  /* ------------------------------------------------------------------ */
+  /*  Belt-and-braces regression anchor                                   */
+  /* ------------------------------------------------------------------ */
+
+  // A single hand-picked example so a broken fast-check harness
+  // (e.g. every sample filtered out) still cannot let a regression
+  // slip through this file.
+  it('regression anchor: 5 confirmed-branch replays yield one row and one reservation.created event', async () => {
+    const world = buildWorld(
+      5,
+      '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ab',
+      '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ac',
+    );
+    const userId = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c800';
+
+    for (let i = 0; i < 5; i++) {
+      await bookClass({
+        classId: world.classRow.id,
+        userId,
+        studioId: world.classRow.studioId,
+        idempotencyKey: 'ba5ebabe-dead-4bee-8000-000000000001',
+        repo: world.repo,
+        counter: world.counter,
+        publisher: world.publisher,
+        clock: world.clock,
+      });
+    }
+
+    expect(world.state.reservations.size).toBe(1);
+    expect(world.state.outbox).toHaveLength(1);
+    expect(world.state.outbox[0]!.eventType).toBe('reservation.created');
+  });
 });

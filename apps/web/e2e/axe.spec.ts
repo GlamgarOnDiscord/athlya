@@ -25,22 +25,22 @@ const publicPaths = ['/', '/login', '/register'] as const;
 const authPaths = ['/classes', '/me', '/me/export', '/me/delete'] as const;
 
 for (const path of publicPaths) {
-    test(`axe: ${path} (public)`, async ({ page }) => {
-        await page.goto(path);
-        const results = await new AxeBuilder({ page })
-            .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
-            .analyze();
-        expect(results.violations).toEqual([]);
-    });
+  test(`axe: ${path} (public)`, async ({ page }) => {
+    await page.goto(path);
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
+      .analyze();
+    expect(results.violations).toEqual([]);
+  });
 }
 
 for (const path of authPaths) {
-    test(`axe: ${path} (authenticated)`, async ({ page }) => {
-        await loginWithStub(page);
-        await page.goto(path);
-        const results = await new AxeBuilder({ page })
-            .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
-            .analyze();
-        expect(results.violations).toEqual([]);
-    });
+  test(`axe: ${path} (authenticated)`, async ({ page }) => {
+    await loginWithStub(page);
+    await page.goto(path);
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
+      .analyze();
+    expect(results.violations).toEqual([]);
+  });
 }

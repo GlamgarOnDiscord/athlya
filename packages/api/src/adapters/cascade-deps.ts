@@ -28,7 +28,6 @@
  * cascade primitive and the live Worker bindings.
  */
 
-
 import { createR2AvatarStore } from './avatar-store-r2.js';
 import { createDrizzleDeletionRepo } from './cascade-repo-drizzle.js';
 import { getOrCreateDbHttp } from './deps-cache.js';
@@ -59,19 +58,19 @@ import type { HandleUserDeletedDeps, Scheduler } from '@athlya/members';
  * Worker `queue()` dispatcher.
  */
 function buildDegradedScheduler(env: AthlyaBindings): Scheduler {
-    return {
-        scheduleAnonymization(userId, dueAt) {
-            console.warn(
-                '[cascade-deps] QStash binding missing — anonymisation schedule skipped (mode dégradé, finding S5-003)',
-                {
-                    userId,
-                    dueAt: dueAt.toISOString(),
-                    env: env.ENVIRONMENT,
-                },
-            );
-            return Promise.resolve();
+  return {
+    scheduleAnonymization(userId, dueAt) {
+      console.warn(
+        '[cascade-deps] QStash binding missing — anonymisation schedule skipped (mode dégradé, finding S5-003)',
+        {
+          userId,
+          dueAt: dueAt.toISOString(),
+          env: env.ENVIRONMENT,
         },
-    };
+      );
+      return Promise.resolve();
+    },
+  };
 }
 
 /**
@@ -87,25 +86,25 @@ function buildDegradedScheduler(env: AthlyaBindings): Scheduler {
  * dispatcher in `worker.ts` once per `auth.user.deleted` event.
  */
 export function buildCascadeDeps(env: AthlyaBindings): HandleUserDeletedDeps {
-    const db = getOrCreateDbHttp(env.DB_URL);
-    const repo = createDrizzleDeletionRepo(db);
-    const avatars = createR2AvatarStore(env.AVATARS_BUCKET, {
-        env: env.ENVIRONMENT,
-    });
-    const scheduler = buildDegradedScheduler(env);
+  const db = getOrCreateDbHttp(env.DB_URL);
+  const repo = createDrizzleDeletionRepo(db);
+  const avatars = createR2AvatarStore(env.AVATARS_BUCKET, {
+    env: env.ENVIRONMENT,
+  });
+  const scheduler = buildDegradedScheduler(env);
 
-    return {
-        repo,
-        avatars,
-        scheduler,
-        clock: { now: () => Date.now() },
-        logger: {
-            warn: (msg, extra) => {
-                console.warn(`[cascade] ${msg}`, extra ?? {});
-            },
-            error: (msg, extra) => {
-                console.error(`[cascade] ${msg}`, extra ?? {});
-            },
-        },
-    };
+  return {
+    repo,
+    avatars,
+    scheduler,
+    clock: { now: () => Date.now() },
+    logger: {
+      warn: (msg, extra) => {
+        console.warn(`[cascade] ${msg}`, extra ?? {});
+      },
+      error: (msg, extra) => {
+        console.error(`[cascade] ${msg}`, extra ?? {});
+      },
+    },
+  };
 }

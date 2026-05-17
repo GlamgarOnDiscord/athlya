@@ -21,18 +21,18 @@ import { pushPlatformEnum } from './enums.js';
 import { users } from './users.js';
 
 export const pushTokens = pgTable(
-    'push_tokens',
-    {
-        id: uuidPrimaryKey(),
-        userId: uuid('user_id')
-            .notNull()
-            .references(() => users.id, { onDelete: 'cascade' }),
-        platform: pushPlatformEnum('platform').notNull(),
-        token: text('token').notNull(),
-        createdAt: createdAt(),
-        deletedAt: deletedAt(),
-    },
-    (table) => [uniqueIndex('push_tokens_token_unique').on(table.token)],
+  'push_tokens',
+  {
+    id: uuidPrimaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    platform: pushPlatformEnum('platform').notNull(),
+    token: text('token').notNull(),
+    createdAt: createdAt(),
+    deletedAt: deletedAt(),
+  },
+  (table) => [uniqueIndex('push_tokens_token_unique').on(table.token)],
 );
 
 export type PushTokenRow = typeof pushTokens.$inferSelect;

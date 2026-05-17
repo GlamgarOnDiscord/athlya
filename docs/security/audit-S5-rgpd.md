@@ -8,34 +8,35 @@ Rappel: l'audit suppose les conditions actuelles (`B7`/`B8` slices, voir `docs/m
 
 ## Conformité RGPD — vue d'ensemble
 
-| Article | Sujet | Statut |
-|---|---|---|
-| 13-14 | Information transparente / mentions | ⚠️ Partiel — pas de page Politique / CGU exposée côté `apps/web` (cf. S5-014) |
-| 15 | Droit d'accès | 🟠 Implémenté côté logique (`enqueueExport`, `runExportJob`) mais **consumer non câblé en prod** (cf. S5-001 [PROD-BLOCKER]) |
-| 16 | Rectification | ✅ `PATCH /v1/members/me` + `PATCH /v1/members/me/consents` |
-| 17 | Effacement | 🟠 `DELETE /v1/auth/me` soft-delete OK, **cascade consumer non câblé** (cf. S5-002 [PROD-BLOCKER]) |
-| 20 | Portabilité | ✅ format ZIP JSON+CSV (Req 4.4) — bloqué par S5-001 |
-| 21 | Opposition | 🟡 `consents.marketing` respecté par `notifications/consumer.ts` (Req 17.1/17.2) — pas de marketing emails actifs aujourd'hui |
-| 25 | Privacy by design | 🟢 RLS, immutabilité audit_log, projection `MemberProfile` (pas de `password_hash`), schémas Zod stricts |
-| 32 | Sécurité du traitement | 🟢 chiffrement transport TLS, hashage bcrypt, JWT RS256 — voir audits S2/S4 |
-| 33-34 | Notification breach | ⚠️ Pas de runbook formalisé `docs/runbooks/breach-notification.md` (cf. S5-019) |
+| Article | Sujet                               | Statut                                                                                                                        |
+| ------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 13-14   | Information transparente / mentions | ⚠️ Partiel — pas de page Politique / CGU exposée côté `apps/web` (cf. S5-014)                                                 |
+| 15      | Droit d'accès                       | 🟠 Implémenté côté logique (`enqueueExport`, `runExportJob`) mais **consumer non câblé en prod** (cf. S5-001 [PROD-BLOCKER])  |
+| 16      | Rectification                       | ✅ `PATCH /v1/members/me` + `PATCH /v1/members/me/consents`                                                                   |
+| 17      | Effacement                          | 🟠 `DELETE /v1/auth/me` soft-delete OK, **cascade consumer non câblé** (cf. S5-002 [PROD-BLOCKER])                            |
+| 20      | Portabilité                         | ✅ format ZIP JSON+CSV (Req 4.4) — bloqué par S5-001                                                                          |
+| 21      | Opposition                          | 🟡 `consents.marketing` respecté par `notifications/consumer.ts` (Req 17.1/17.2) — pas de marketing emails actifs aujourd'hui |
+| 25      | Privacy by design                   | 🟢 RLS, immutabilité audit_log, projection `MemberProfile` (pas de `password_hash`), schémas Zod stricts                      |
+| 32      | Sécurité du traitement              | 🟢 chiffrement transport TLS, hashage bcrypt, JWT RS256 — voir audits S2/S4                                                   |
+| 33-34   | Notification breach                 | ⚠️ Pas de runbook formalisé `docs/runbooks/breach-notification.md` (cf. S5-019)                                               |
 
 ---
 
 ## Résumé exécutif
 
-| Sévérité | Findings |
-|---|---|
-| **CRITICAL** | 2 |
-| HIGH | 4 |
-| MEDIUM | 6 |
-| LOW | 5 |
-| INFO | 3 |
-| **Total** | **20** |
+| Sévérité     | Findings |
+| ------------ | -------- |
+| **CRITICAL** | 2        |
+| HIGH         | 4        |
+| MEDIUM       | 6        |
+| LOW          | 5        |
+| INFO         | 3        |
+| **Total**    | **20**   |
 
 **Score conformité RGPD : 62 / 100.**
 
 Détail :
+
 - **Article 17 (effacement) : 4 / 20** — la machinerie cascade existe (`handleUserDeleted`, `anonymizeAuditLog`) et est unit-testée + intégration Postgres. Mais le `worker.ts` n'a **aucun branchement queue → cascade**. Le `DELETE /v1/auth/me` produit un `auth.user.deleted` qui transite par l'outbox, est livré sur Cloudflare Queues, mais aucune fonction `queue()` ne le route vers `handleUserDeleted`. Résultat : reservations / workout_sessions / push_tokens / R2 avatar **persistent après "suppression"**. Bloquant prod.
 - **Article 15 (accès) : 7 / 20** — même problème : `runExportJob` n'est appelé par aucun consumer en prod. Le `POST /v1/members/me/export` insère bien un `pending` dans `export_jobs`, publie `members.export.requested`, mais le ZIP n'est jamais assemblé. L'utilisateur reste en attente perpétuelle. Bloquant prod.
 - **Article 13-14 : 5 / 10** — pas de page Politique de confidentialité publique (`/privacy`, `/legal`, `/cookies`). Le formulaire d'inscription demande consentement aux trois flags mais ne renvoie vers aucun document légal.
@@ -54,7 +55,7 @@ Détail :
   - producer service : `packages/members/src/export.ts:483-541` (`enqueueExport`)
   - consumer attendu : `packages/members/src/export.ts:571-657` (`runExportJob`)
   - `packages/api/src/worker.ts:436-457` (handler `queue(...)`)
-- **Description** : `enqueueExport` insère bien une ligne dans `export_jobs(status='pending')` et publie un `members.export.requested` sur l'outbox → drain → `EVENTS_QUEUE`. Mais le `queue()` handler du Worker ne route **que** la queue `athlya-events-dlq` ; tous les autres messages — y compris `members.export.requested` — tombent dans la branche silencieuse "/* Other queue consumers ... */" (worker.ts:451-456). Aucun appel à `runExportJob` n'existe dans `packages/api/src/**`.
+- **Description** : `enqueueExport` insère bien une ligne dans `export_jobs(status='pending')` et publie un `members.export.requested` sur l'outbox → drain → `EVENTS_QUEUE`. Mais le `queue()` handler du Worker ne route **que** la queue `athlya-events-dlq` ; tous les autres messages — y compris `members.export.requested` — tombent dans la branche silencieuse "/_ Other queue consumers ... _/" (worker.ts:451-456). Aucun appel à `runExportJob` n'existe dans `packages/api/src/**`.
 - **Scénario** : un utilisateur invoque `POST /v1/members/me/export` → reçoit `202 { jobId }` → `GET /v1/members/me/export/:jobId` (s'il existait) renverrait éternellement `status: 'pending'`. Le ZIP n'est jamais assemblé, jamais uploadé sur R2, le membre n'est jamais notifié.
 - **Impact privacy** : non-respect Art 12§3 — le responsable de traitement doit fournir l'export "dans les meilleurs délais et au plus tard dans un délai d'un mois". Une plainte CNIL après 30 jours sans export est mécaniquement gagnante.
 - **Mitigation** :
@@ -177,7 +178,7 @@ Détail :
 
 - **Article RGPD** : 32§1.a
 - **Localisation** : `packages/api/src/logging.ts:81-104`
-- **Description** : `redactKeys(['password', 'token', 'authorization', 'stripeSignature', 'secret'])` est exporté et bien testé, mais **aucun call site dans `packages/**`** ne l'utilise. Tous les `logger.info(...)` ajoutent leurs champs en confiance. Aujourd'hui, par chance, aucun appel n'inclut un mot de passe ou un token complet (cf. observations détaillées : `served` log = method/path/status/durationMs/traceId, `idempotency` log = key/userId, `turnstile` = traceId only). Mais l'absence de discipline programmatique signifie qu'une future PR peut introduire `logger.info('login attempt', { email })` ou similaire **sans CI guardrail**.
+- **Description** : `redactKeys(['password', 'token', 'authorization', 'stripeSignature', 'secret'])` est exporté et bien testé, mais **aucun call site dans `packages/**`** ne l'utilise. Tous les `logger.info(...)`ajoutent leurs champs en confiance. Aujourd'hui, par chance, aucun appel n'inclut un mot de passe ou un token complet (cf. observations détaillées :`served`log = method/path/status/durationMs/traceId,`idempotency`log = key/userId,`turnstile`= traceId only). Mais l'absence de discipline programmatique signifie qu'une future PR peut introduire`logger.info('login attempt', { email })` ou similaire **sans CI guardrail**.
 - **Impact privacy** : risque latent de leak vers Tail Workers / Logpush. Une fois envoyé sur Logpush S3, la donnée est hors RGPD-anonymizable.
 - **Mitigation** :
   1. Wrapper `createLogger(...)` pour appliquer `redactKeys(DEFAULT_REDACTED_KEYS)` à chaque emit, en autopilote. Brisera certains tests qui assertent l'absence d'auto-redaction — à mettre à jour.
@@ -190,7 +191,7 @@ Détail :
 
 - **Article RGPD** : 7§1, ePrivacy Directive 2009/136/CE
 - **Localisation** : `apps/web/src/app/layout.tsx`, aucun composant `CookieBanner.tsx`, aucun import `tarteaucitron`/`cookiebot`/`onetrust`
-- **Description** : actuellement aucune SDK analytics / tracking n'est chargée dans `apps/web` ou `apps/studio`. Donc *de facto* aucun cookie tiers n'est déposé et aucune bannière n'est nécessaire au sens strict de l'ePrivacy Directive. Mais :
+- **Description** : actuellement aucune SDK analytics / tracking n'est chargée dans `apps/web` ou `apps/studio`. Donc _de facto_ aucun cookie tiers n'est déposé et aucune bannière n'est nécessaire au sens strict de l'ePrivacy Directive. Mais :
   - dès qu'on ajoutera `@sentry/browser` ou `posthog-js` ou `plausible-script` (déjà mentionnés dans `project.md` § "Sous-traitants"), la bannière deviendra obligatoire AVANT le chargement de ces SDK.
   - le cookie `LOCALE` (technique strict) n'a pas besoin de consent — OK.
   - le cookie `refresh` (auth strict) n'a pas besoin non plus — OK.
@@ -223,9 +224,11 @@ Détail :
 - **Article RGPD** : 44, 46, Req 5.5
 - **Localisation** : `packages/api/wrangler.toml:31-40`, `:228-232`
 - **Description** : le commentaire de `wrangler.toml` est lucide :
+
   > Smart Placement is NOT a hard EU-only region pin. A dedicated EU region constraint requires a Workers Enterprise contract and a separate `compatibility_flags = ["region_exclusive_eu"]` entry — that is NOT in scope.
-  
+
   Conséquence : un Worker peut être instancié hors UE (notamment lors des bursts / cold-start failovers). Le code applicatif s'exécute alors hors UE, même si Postgres/Redis sont EU.
+
 - **Scénario** : un utilisateur depuis Tokyo déclenche un cold-start → l'isolat Worker tourne potentiellement à Tokyo → `req.body` (login email + password) transite par RAM Tokyo avant de POST vers Neon Frankfurt. L'exécution-en-RAM "transit" est juridiquement floue mais l'EDPB tend à le considérer comme transfert.
 - **Impact privacy** : risque résiduel — l'EDPB consider que les fournisseurs CDN avec POPs mondiaux ne traitent pas "réellement" en dehors de l'UE tant que le payload n'y séjourne pas. Le débat est ouvert (cf. Schrems II).
 - **Mitigation** :
@@ -358,19 +361,19 @@ Détail :
 
 ## Score conformité RGPD détaillé (sur 100)
 
-| Axe | Pondération | Score |
-|---|---|---|
-| Art 13-14 (information) | 10 | 5 |
-| Art 15 (accès) | 20 | 7 |
-| Art 16 (rectification) | 5 | 5 |
-| Art 17 (effacement) | 20 | 4 |
-| Art 20 (portabilité) | 5 | 4 |
-| Art 21 (opposition) | 5 | 5 |
-| Art 25 (privacy by design) | 10 | 9 |
-| Art 32 (sécurité du traitement) | 15 | 14 |
-| Art 33-34 (breach notif) | 5 | 3 |
-| Art 44-46 (transferts UE) | 5 | 3 |
-| **Total** | **100** | **62** |
+| Axe                             | Pondération | Score  |
+| ------------------------------- | ----------- | ------ |
+| Art 13-14 (information)         | 10          | 5      |
+| Art 15 (accès)                  | 20          | 7      |
+| Art 16 (rectification)          | 5           | 5      |
+| Art 17 (effacement)             | 20          | 4      |
+| Art 20 (portabilité)            | 5           | 4      |
+| Art 21 (opposition)             | 5           | 5      |
+| Art 25 (privacy by design)      | 10          | 9      |
+| Art 32 (sécurité du traitement) | 15          | 14     |
+| Art 33-34 (breach notif)        | 5           | 3      |
+| Art 44-46 (transferts UE)       | 5           | 3      |
+| **Total**                       | **100**     | **62** |
 
 ---
 
@@ -410,4 +413,3 @@ Détail :
 - EDPB Guidelines 04/2018 (consent), 05/2020 (consent updates).
 - Schrems II — CJUE C-311/18 (transferts internationaux).
 - Article 29 Working Party WP259 (transparency).
-

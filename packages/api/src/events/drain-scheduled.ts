@@ -44,12 +44,12 @@
 import { claimBatch, markPublished } from '@athlya/db/outbox';
 
 import {
-    drainOutbox,
-    type ClaimedRow,
-    type DrainResult,
-    type Logger,
-    type OutboxStore,
-    type QueueProducer,
+  drainOutbox,
+  type ClaimedRow,
+  type DrainResult,
+  type Logger,
+  type OutboxStore,
+  type QueueProducer,
 } from './drain-worker.js';
 
 import type { AthlyaDb } from '@athlya/db/client';
@@ -65,10 +65,10 @@ import type { AthlyaDb } from '@athlya/db/client';
  * avoids a peer-dependency footprint for tests.
  */
 export interface ScheduledEvent {
-    /** Millisecond epoch the cron was scheduled for. */
-    readonly scheduledTime: number;
-    /** Cron expression that triggered this invocation. */
-    readonly cron: string;
+  /** Millisecond epoch the cron was scheduled for. */
+  readonly scheduledTime: number;
+  /** Cron expression that triggered this invocation. */
+  readonly cron: string;
 }
 
 /**
@@ -77,7 +77,7 @@ export interface ScheduledEvent {
  * essential for a cron handler that kicks off async work.
  */
 export interface ExecutionContext {
-    waitUntil(promise: Promise<unknown>): void;
+  waitUntil(promise: Promise<unknown>): void;
 }
 
 /**
@@ -86,28 +86,24 @@ export interface ExecutionContext {
  * without needing a cast.
  */
 export interface ScheduledEnv {
-    /** Producer binding declared in `wrangler.toml` (task 9.4). */
-    readonly EVENTS_QUEUE: QueueProducer;
-    /**
-     * Resolver for an initialised Drizzle client. Using a thunk (not
-     * a direct `db` property) keeps the wrangler-side wiring flexible:
-     * the gateway can inject a Hyperdrive-backed client, a
-     * neon-serverless client, or (in tests) an in-memory double.
-     */
-    getDb(): AthlyaDb | Promise<AthlyaDb>;
-    /** Optional swappable logger; defaults to the {@link drainOutbox} default. */
-    readonly logger?: Logger;
-    /** Optional override for the batch size. Defaults to 100. */
-    readonly batchSize?: number;
+  /** Producer binding declared in `wrangler.toml` (task 9.4). */
+  readonly EVENTS_QUEUE: QueueProducer;
+  /**
+   * Resolver for an initialised Drizzle client. Using a thunk (not
+   * a direct `db` property) keeps the wrangler-side wiring flexible:
+   * the gateway can inject a Hyperdrive-backed client, a
+   * neon-serverless client, or (in tests) an in-memory double.
+   */
+  getDb(): AthlyaDb | Promise<AthlyaDb>;
+  /** Optional swappable logger; defaults to the {@link drainOutbox} default. */
+  readonly logger?: Logger;
+  /** Optional override for the batch size. Defaults to 100. */
+  readonly batchSize?: number;
 }
 
 /** Scheduled Worker handler signature, Cloudflare-compatible. */
 export interface ScheduledWorker {
-    scheduled(
-        event: ScheduledEvent,
-        env: ScheduledEnv,
-        ctx: ExecutionContext,
-    ): void | Promise<void>;
+  scheduled(event: ScheduledEvent, env: ScheduledEnv, ctx: ExecutionContext): void | Promise<void>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -128,43 +124,43 @@ export interface ScheduledWorker {
  * `scheduled` invocation.
  */
 export function createTxBackedStore(db: AthlyaDb): {
-    readonly store: OutboxStore;
-    commit: () => Promise<void>;
-    rollback: (err: unknown) => Promise<void>;
+  readonly store: OutboxStore;
+  commit: () => Promise<void>;
+  rollback: (err: unknown) => Promise<void>;
 } {
-    // We intentionally do NOT use `db.transaction(fn)` here because
-    // that API expects a single callback that owns the lifetime of
-    // the transaction. The drain worker is a two-phase operation
-    // (claim → send → mark) that lives OUTSIDE the store, so we need
-    // an imperative begin / commit / rollback API instead. Drizzle
-    // exposes exactly that via `db.execute(sql`BEGIN`)` + explicit
-    // `COMMIT` / `ROLLBACK` statements, but that approach would bypass
-    // the `AthlyaTx` type system guarantees the db helpers rely on.
-    //
-    // The pragmatic compromise: run `drainOutbox` INSIDE
-    // `db.transaction` by inverting control — the caller hands us the
-    // logic as a callback. That is exactly what `runScheduledDrain`
-    // below does, so this exported helper is actually unused from the
-    // scheduled entrypoint. It exists as a named export to make the
-    // adapter seam testable: a test can build its own transaction
-    // mock and hand it to `drainOutbox` directly.
-    const store: OutboxStore = {
-        async claimBatch(size: number): Promise<readonly ClaimedRow[]> {
-            return db.transaction(async (tx) => {
-                const rows = await claimBatch(tx, size);
-                return rows;
-            });
-        },
-        async markPublished(id: string): Promise<void> {
-            await markPublished(db, id);
-        },
-    };
+  // We intentionally do NOT use `db.transaction(fn)` here because
+  // that API expects a single callback that owns the lifetime of
+  // the transaction. The drain worker is a two-phase operation
+  // (claim → send → mark) that lives OUTSIDE the store, so we need
+  // an imperative begin / commit / rollback API instead. Drizzle
+  // exposes exactly that via `db.execute(sql`BEGIN`)` + explicit
+  // `COMMIT` / `ROLLBACK` statements, but that approach would bypass
+  // the `AthlyaTx` type system guarantees the db helpers rely on.
+  //
+  // The pragmatic compromise: run `drainOutbox` INSIDE
+  // `db.transaction` by inverting control — the caller hands us the
+  // logic as a callback. That is exactly what `runScheduledDrain`
+  // below does, so this exported helper is actually unused from the
+  // scheduled entrypoint. It exists as a named export to make the
+  // adapter seam testable: a test can build its own transaction
+  // mock and hand it to `drainOutbox` directly.
+  const store: OutboxStore = {
+    async claimBatch(size: number): Promise<readonly ClaimedRow[]> {
+      return db.transaction(async (tx) => {
+        const rows = await claimBatch(tx, size);
+        return rows;
+      });
+    },
+    async markPublished(id: string): Promise<void> {
+      await markPublished(db, id);
+    },
+  };
 
-    return {
-        store,
-        commit: () => Promise.resolve(),
-        rollback: () => Promise.resolve(),
-    };
+  return {
+    store,
+    commit: () => Promise.resolve(),
+    rollback: () => Promise.resolve(),
+  };
 }
 
 /**
@@ -176,38 +172,38 @@ export function createTxBackedStore(db: AthlyaDb): {
  * round-tripping through the default export.
  */
 export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult> {
-    const db = await env.getDb();
+  const db = await env.getDb();
 
-    // One transaction per drain cycle: holds the SELECT FOR UPDATE
-    // SKIP LOCKED locks on claimed rows until every row has been
-    // processed (succeeded, failed, or skipped). A crash mid-batch
-    // rolls the transaction back and the next cycle re-claims — the
-    // `attempts` counter bump is discarded, but the consumer dedup
-    // window (24 h, Req 17.4) absorbs any resulting duplicates.
-    return db.transaction(async (tx) => {
-        const store: OutboxStore = {
-            async claimBatch(size: number): Promise<readonly ClaimedRow[]> {
-                return claimBatch(tx, size);
-            },
-            async markPublished(id: string): Promise<void> {
-                await markPublished(tx, id);
-            },
-        };
+  // One transaction per drain cycle: holds the SELECT FOR UPDATE
+  // SKIP LOCKED locks on claimed rows until every row has been
+  // processed (succeeded, failed, or skipped). A crash mid-batch
+  // rolls the transaction back and the next cycle re-claims — the
+  // `attempts` counter bump is discarded, but the consumer dedup
+  // window (24 h, Req 17.4) absorbs any resulting duplicates.
+  return db.transaction(async (tx) => {
+    const store: OutboxStore = {
+      async claimBatch(size: number): Promise<readonly ClaimedRow[]> {
+        return claimBatch(tx, size);
+      },
+      async markPublished(id: string): Promise<void> {
+        await markPublished(tx, id);
+      },
+    };
 
-        // Build the options bag conditionally so `exactOptionalPropertyTypes`
-        // is respected: we only add `batchSize` / `logger` when the env
-        // actually provides them. Spreading `undefined` into a property
-        // would violate the strict optional semantics drainOutbox's
-        // `DrainOutboxOptions` declares.
-        const opts: Parameters<typeof drainOutbox>[0] = {
-            store,
-            queue: env.EVENTS_QUEUE,
-            ...(env.batchSize !== undefined ? { batchSize: env.batchSize } : {}),
-            ...(env.logger !== undefined ? { logger: env.logger } : {}),
-        };
+    // Build the options bag conditionally so `exactOptionalPropertyTypes`
+    // is respected: we only add `batchSize` / `logger` when the env
+    // actually provides them. Spreading `undefined` into a property
+    // would violate the strict optional semantics drainOutbox's
+    // `DrainOutboxOptions` declares.
+    const opts: Parameters<typeof drainOutbox>[0] = {
+      store,
+      queue: env.EVENTS_QUEUE,
+      ...(env.batchSize !== undefined ? { batchSize: env.batchSize } : {}),
+      ...(env.logger !== undefined ? { logger: env.logger } : {}),
+    };
 
-        return drainOutbox(opts);
-    });
+    return drainOutbox(opts);
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -234,21 +230,21 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
  *     only fires on infrastructural failures.
  */
 const worker: ScheduledWorker = {
-    scheduled(event, env, ctx) {
-        const logger = env.logger;
-        const task = runScheduledDrain(env).catch((err: unknown) => {
-            if (logger !== undefined) {
-                logger.error('outbox drain: scheduled invocation failed', {
-                    cron: event.cron,
-                    scheduledTime: event.scheduledTime,
-                    error: err instanceof Error ? err.message : String(err),
-                });
-            } else {
-                console.error('[drain] scheduled invocation failed', err);
-            }
+  scheduled(event, env, ctx) {
+    const logger = env.logger;
+    const task = runScheduledDrain(env).catch((err: unknown) => {
+      if (logger !== undefined) {
+        logger.error('outbox drain: scheduled invocation failed', {
+          cron: event.cron,
+          scheduledTime: event.scheduledTime,
+          error: err instanceof Error ? err.message : String(err),
         });
-        ctx.waitUntil(task);
-    },
+      } else {
+        console.error('[drain] scheduled invocation failed', err);
+      }
+    });
+    ctx.waitUntil(task);
+  },
 };
 
 export default worker;

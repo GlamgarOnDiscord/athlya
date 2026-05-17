@@ -1,15 +1,15 @@
 # fast-check — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^3.23.2 |
-| **Latest v3** | 3.23.2 (stable) |
-| **Latest v4** | **4.1.0** (released 2026) |
-| **@fast-check/vitest** | ^0.3.0 |
+|                        | Value                     |
+| ---------------------- | ------------------------- |
+| **Used**               | ^3.23.2                   |
+| **Latest v3**          | 3.23.2 (stable)           |
+| **Latest v4**          | **4.1.0** (released 2026) |
+| **@fast-check/vitest** | ^0.3.0                    |
 
 ---
 
@@ -17,13 +17,13 @@
 
 fast-check 4.0 was released in 2026 with the following breaking changes:
 
-| Change | Impact |
-|---|---|
+| Change                                                                        | Impact                                         |
+| ----------------------------------------------------------------------------- | ---------------------------------------------- |
 | `fc.integer()` now requires explicit `min`/`max` — no more unbounded integers | Update all `fc.integer()` calls without bounds |
-| `fc.string()` encoding option renamed from `'ascii'` to `'utf-8'` | Check string arbitraries in test files |
-| `fc.commands()` API changed — `ICommand` renamed to `Command` | Update model-based tests if used |
-| `fc.sample()` returns typed tuple instead of array | Minor — update destructuring |
-| New `fc.gen()` — function-based arbitrary composition | Optional, does not replace existing APIs |
+| `fc.string()` encoding option renamed from `'ascii'` to `'utf-8'`             | Check string arbitraries in test files         |
+| `fc.commands()` API changed — `ICommand` renamed to `Command`                 | Update model-based tests if used               |
+| `fc.sample()` returns typed tuple instead of array                            | Minor — update destructuring                   |
+| New `fc.gen()` — function-based arbitrary composition                         | Optional, does not replace existing APIs       |
 
 ### Upgrade Path
 
@@ -42,14 +42,14 @@ pnpm why fast-check @fast-check/vitest
 
 ## Usage in Project
 
-| Package | Test File | What's Tested |
-|---|---|---|
-| `packages/db` | `rls.property.test.ts` | RLS policies hold under random claims/data |
-| `packages/reservations` | `booking.property.test.ts` | No double-booking under concurrent random bookings |
-| `packages/auth` | *(devDep present, no test file)* | Not yet used |
-| `packages/billing` | *(devDep present, no test file)* | Not yet used |
-| `packages/notifications` | *(devDep present, no test file)* | Not yet used |
-| `packages/ratelimit` | *(devDep present, no test file)* | Not yet used |
+| Package                  | Test File                        | What's Tested                                      |
+| ------------------------ | -------------------------------- | -------------------------------------------------- |
+| `packages/db`            | `rls.property.test.ts`           | RLS policies hold under random claims/data         |
+| `packages/reservations`  | `booking.property.test.ts`       | No double-booking under concurrent random bookings |
+| `packages/auth`          | _(devDep present, no test file)_ | Not yet used                                       |
+| `packages/billing`       | _(devDep present, no test file)_ | Not yet used                                       |
+| `packages/notifications` | _(devDep present, no test file)_ | Not yet used                                       |
+| `packages/ratelimit`     | _(devDep present, no test file)_ | Not yet used                                       |
 
 ---
 
@@ -78,11 +78,11 @@ pnpm why fast-check @fast-check/vitest
 import { fc, test } from '@fast-check/vitest';
 
 test.prop([
-    fc.record({ sub: fc.uuid(), studio: fc.uuid(), role: fc.constantFrom('member', 'owner') })
+  fc.record({ sub: fc.uuid(), studio: fc.uuid(), role: fc.constantFrom('member', 'owner') }),
 ])('JWT sign/verify is identity for valid claims', async (claims) => {
-    const token = await sign(claims, privateKey);
-    const verified = await verify(token, publicKey);
-    expect(verified.sub).toBe(claims.sub);
+  const token = await sign(claims, privateKey);
+  const verified = await verify(token, publicKey);
+  expect(verified.sub).toBe(claims.sub);
 });
 ```
 
@@ -90,15 +90,15 @@ test.prop([
 
 ```ts
 test.prop([
-    fc.integer({ min: 1, max: 100 }),  // numRequests
-    fc.integer({ min: 1, max: 60 })    // windowSeconds
+  fc.integer({ min: 1, max: 100 }), // numRequests
+  fc.integer({ min: 1, max: 60 }), // windowSeconds
 ])('remaining never increases without time passing', async (numRequests, window) => {
-    const results = await Promise.all(Array.from({ length: numRequests }, () => checkLimit()));
-    const remaining = results.map(r => r.remaining);
-    // Remaining should be non-increasing
-    for (let i = 1; i < remaining.length; i++) {
-        expect(remaining[i]).toBeLessThanOrEqual(remaining[i - 1]);
-    }
+  const results = await Promise.all(Array.from({ length: numRequests }, () => checkLimit()));
+  const remaining = results.map((r) => r.remaining);
+  // Remaining should be non-increasing
+  for (let i = 1; i < remaining.length; i++) {
+    expect(remaining[i]).toBeLessThanOrEqual(remaining[i - 1]);
+  }
 });
 ```
 

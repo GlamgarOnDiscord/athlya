@@ -31,7 +31,7 @@ import { useEffect, type ReactElement, type ReactNode } from 'react';
 import { useAuth } from '../lib/auth/AuthContext';
 
 export interface RequireAuthProps {
-    readonly children: ReactNode;
+  readonly children: ReactNode;
 }
 
 /**
@@ -39,25 +39,25 @@ export interface RequireAuthProps {
  * users. Unauthenticated visitors are redirected to `/login`.
  */
 export function RequireAuth({ children }: RequireAuthProps): ReactElement | null {
-    const { push } = useRouter();
-    const { isAuthenticated, bootResolved } = useAuth();
+  const { push } = useRouter();
+  const { isAuthenticated, bootResolved } = useAuth();
 
-    useEffect(() => {
-        // Wait for the boot silent-refresh to resolve before
-        // deciding to redirect — see `apps/studio/.../RequireAdmin.tsx`
-        // for the matching rationale.
-        if (!bootResolved) return;
-        if (!isAuthenticated) {
-            push('/login');
-        }
-    }, [bootResolved, isAuthenticated, push]);
-
-    if (!bootResolved) {
-        return null;
-    }
+  useEffect(() => {
+    // Wait for the boot silent-refresh to resolve before
+    // deciding to redirect — see `apps/studio/.../RequireAdmin.tsx`
+    // for the matching rationale.
+    if (!bootResolved) return;
     if (!isAuthenticated) {
-        return null;
+      push('/login');
     }
+  }, [bootResolved, isAuthenticated, push]);
 
-    return <>{children}</>;
+  if (!bootResolved) {
+    return null;
+  }
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  return <>{children}</>;
 }

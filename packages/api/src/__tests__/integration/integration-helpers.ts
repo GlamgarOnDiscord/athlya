@@ -37,14 +37,14 @@ import { mountDomainRoutes } from '../../routes/index.js';
 import { buildApp } from '../../worker.js';
 import { buildAppNoDomainRoutes } from '../helpers/test-app.js';
 import {
-    FakeRedis,
-    TEST_STUDIO_ID,
-    TEST_USER_ID,
-    buildLocalResolver,
-    buildMockEnv,
-    mintTestKeypair,
-    signTestJwt,
-    type TestKeypair,
+  FakeRedis,
+  TEST_STUDIO_ID,
+  TEST_USER_ID,
+  buildLocalResolver,
+  buildMockEnv,
+  mintTestKeypair,
+  signTestJwt,
+  type TestKeypair,
 } from '../helpers/test-app.js';
 
 import type { AuthClaims, JwksKeyResolver } from '../../middleware/auth.js';
@@ -54,19 +54,18 @@ import type { HonoEnv } from '../../types.js';
 import type { Redis } from '@upstash/redis';
 import type { Hono } from 'hono';
 
-
 /* ------------------------------------------------------------------ */
 /*  Re-exports                                                         */
 /* ------------------------------------------------------------------ */
 
 export {
-    FakeRedis,
-    TEST_STUDIO_ID,
-    TEST_USER_ID,
-    buildLocalResolver,
-    buildMockEnv,
-    mintTestKeypair,
-    signTestJwt,
+  FakeRedis,
+  TEST_STUDIO_ID,
+  TEST_USER_ID,
+  buildLocalResolver,
+  buildMockEnv,
+  mintTestKeypair,
+  signTestJwt,
 };
 export type { TestKeypair };
 
@@ -76,29 +75,29 @@ export type { TestKeypair };
 
 /** Lightweight user record kept in the in-memory tenant store. */
 export interface UserRecord {
-    readonly userId: string;
-    readonly email: string;
-    readonly studioId: string;
-    readonly displayName: string;
-    readonly role: AuthClaims['role'];
+  readonly userId: string;
+  readonly email: string;
+  readonly studioId: string;
+  readonly displayName: string;
+  readonly role: AuthClaims['role'];
 }
 
 /** Lightweight reservation record. `status` transitions over the journey. */
 export interface ReservationRecord {
-    id: string;
-    classId: string;
-    userId: string;
-    status: 'confirmed' | 'waitlist' | 'cancelled';
-    position?: number;
+  id: string;
+  classId: string;
+  userId: string;
+  status: 'confirmed' | 'waitlist' | 'cancelled';
+  position?: number;
 }
 
 /** Lightweight class record kept in the in-memory tenant store. */
 export interface ClassRecord {
-    id: string;
-    title: string;
-    studioId: string;
-    capacity: number;
-    startsAt: string;
+  id: string;
+  title: string;
+  studioId: string;
+  capacity: number;
+  startsAt: string;
 }
 
 /**
@@ -107,16 +106,16 @@ export interface ClassRecord {
  * module is a drop-in substitute.
  */
 export interface IdempotencyRecord {
-    readonly response: Record<string, unknown>;
-    readonly statusCode: number;
-    readonly createdAt: Date;
-    readonly expiresAt: Date;
+  readonly response: Record<string, unknown>;
+  readonly statusCode: number;
+  readonly createdAt: Date;
+  readonly expiresAt: Date;
 }
 
 /** Recorded business event — a minimal subset of the production envelope. */
 export interface RecordedEvent {
-    readonly type: string;
-    readonly payload: Record<string, unknown>;
+  readonly type: string;
+  readonly payload: Record<string, unknown>;
 }
 
 /**
@@ -124,27 +123,27 @@ export interface RecordedEvent {
  * through the deps stubs; the assertions then read it back.
  */
 export interface IntegrationState {
-    readonly users: Map<string, UserRecord>;
-    readonly usersByEmail: Map<string, UserRecord>;
-    readonly classes: Map<string, ClassRecord>;
-    readonly reservationsById: Map<string, ReservationRecord>;
-    /** `classId → reservations ordered by creation`. Used for waitlist. */
-    readonly reservationsByClass: Map<string, ReservationRecord[]>;
-    readonly idempotencyStore: Map<string, IdempotencyRecord>;
-    readonly events: RecordedEvent[];
+  readonly users: Map<string, UserRecord>;
+  readonly usersByEmail: Map<string, UserRecord>;
+  readonly classes: Map<string, ClassRecord>;
+  readonly reservationsById: Map<string, ReservationRecord>;
+  /** `classId → reservations ordered by creation`. Used for waitlist. */
+  readonly reservationsByClass: Map<string, ReservationRecord[]>;
+  readonly idempotencyStore: Map<string, IdempotencyRecord>;
+  readonly events: RecordedEvent[];
 }
 
 /** Build a fresh, empty integration state. */
 export function createIntegrationState(): IntegrationState {
-    return {
-        users: new Map(),
-        usersByEmail: new Map(),
-        classes: new Map(),
-        reservationsById: new Map(),
-        reservationsByClass: new Map(),
-        idempotencyStore: new Map(),
-        events: [],
-    };
+  return {
+    users: new Map(),
+    usersByEmail: new Map(),
+    classes: new Map(),
+    reservationsById: new Map(),
+    reservationsByClass: new Map(),
+    idempotencyStore: new Map(),
+    events: [],
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -153,8 +152,8 @@ export function createIntegrationState(): IntegrationState {
 
 /** Deterministic-ish UUID v4 factory so tests stay reproducible. */
 export function makeUuid(prefix: number): string {
-    const hex = prefix.toString(16).padStart(4, '0');
-    return `${hex}0000-0000-4000-8000-000000000000`.padStart(36, '0');
+  const hex = prefix.toString(16).padStart(4, '0');
+  return `${hex}0000-0000-4000-8000-000000000000`.padStart(36, '0');
 }
 
 /* ------------------------------------------------------------------ */
@@ -169,27 +168,27 @@ export function makeUuid(prefix: number): string {
  * test can produce a JWT whose `exp` sits in the past.
  */
 export async function signUserJwt(
-    kp: TestKeypair,
-    params: {
-        readonly userId?: string;
-        readonly studioId?: string;
-        readonly role?: AuthClaims['role'];
-        readonly expSec?: number;
-        readonly iatSec?: number;
-    } = {},
+  kp: TestKeypair,
+  params: {
+    readonly userId?: string;
+    readonly studioId?: string;
+    readonly role?: AuthClaims['role'];
+    readonly expSec?: number;
+    readonly iatSec?: number;
+  } = {},
 ): Promise<string> {
-    const opts: Parameters<typeof signTestJwt>[2] = {};
-    if (params.expSec !== undefined) opts.expSec = params.expSec;
-    if (params.iatSec !== undefined) opts.iatSec = params.iatSec;
-    return signTestJwt(
-        kp.privateKey,
-        {
-            sub: params.userId ?? TEST_USER_ID,
-            studio: params.studioId ?? TEST_STUDIO_ID,
-            role: params.role ?? 'member',
-        },
-        opts,
-    );
+  const opts: Parameters<typeof signTestJwt>[2] = {};
+  if (params.expSec !== undefined) opts.expSec = params.expSec;
+  if (params.iatSec !== undefined) opts.iatSec = params.iatSec;
+  return signTestJwt(
+    kp.privateKey,
+    {
+      sub: params.userId ?? TEST_USER_ID,
+      studio: params.studioId ?? TEST_STUDIO_ID,
+      role: params.role ?? 'member',
+    },
+    opts,
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -205,11 +204,11 @@ export async function signUserJwt(
  * the journey surface as 401.
  */
 export interface IntegrationDepsOptions {
-    readonly state: IntegrationState;
-    /** Produces a bearer token for a newly-registered / logged-in user. */
-    signSessionToken(user: UserRecord): Promise<string>;
-    /** When set, the reservations router wires the idempotency middleware. */
-    readonly idempotencyDb?: unknown;
+  readonly state: IntegrationState;
+  /** Produces a bearer token for a newly-registered / logged-in user. */
+  signSessionToken(user: UserRecord): Promise<string>;
+  /** When set, the reservations router wires the idempotency middleware. */
+  readonly idempotencyDb?: unknown;
 }
 
 /**
@@ -222,300 +221,300 @@ export interface IntegrationDepsOptions {
  * `state.events` so the journey's event flow can be verified in one
  * place.
  */
-export function buildIntegrationDeps(
-    options: IntegrationDepsOptions,
-): DomainDeps {
-    const { state, signSessionToken } = options;
+export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDeps {
+  const { state, signSessionToken } = options;
 
-    /* --------------------- auth ---------------------- */
-    const auth: DomainDeps['auth'] = {
-        register: vi.fn(async (input: {
-            readonly email: string;
-            readonly displayName: string;
-            readonly studioSlug: string;
-        }) => {
-            const userId = makeUuid(state.users.size + 1);
-            const studioId = TEST_STUDIO_ID;
-            const user: UserRecord = {
-                userId,
-                email: input.email,
-                studioId,
-                displayName: input.displayName,
-                role: 'member',
-            };
-            state.users.set(userId, user);
-            state.usersByEmail.set(input.email.toLowerCase(), user);
-            state.events.push({
-                type: 'auth.user.registered',
-                payload: { userId, studioId, email: input.email },
-            });
-            const accessToken = await signSessionToken(user);
-            return {
-                user: {
-                    id: userId,
-                    email: input.email,
-                    displayName: input.displayName,
-                    studioId,
-                },
-                accessToken,
-                refreshToken: `refresh.${userId}`,
-                accessTokenExpiresIn: 900,
-                refreshTokenExpiresIn: 2_592_000,
-            };
-        }),
-        login: vi.fn(async (input: { readonly email: string }) => {
-            const user = state.usersByEmail.get(input.email.toLowerCase());
-            if (user === undefined) {
-                throw new Error('user not found');
-            }
-            const accessToken = await signSessionToken(user);
-            return {
-                user: {
-                    id: user.userId,
-                    email: user.email,
-                    displayName: user.displayName,
-                    studioId: user.studioId,
-                },
-                accessToken,
-                refreshToken: `refresh.${user.userId}`,
-                accessTokenExpiresIn: 900,
-                refreshTokenExpiresIn: 2_592_000,
-            };
-        }),
-        refresh: vi.fn(async () => {
-            throw new Error('refresh not used in integration suite');
-        }),
-        logout: vi.fn(async () => undefined),
-        logoutAll: vi.fn(async () => undefined),
-        deleteMe: vi.fn(async () => undefined),
-        requestPasswordReset: vi.fn(async () => undefined),
-        confirmPasswordReset: vi.fn(async () => undefined),
-    };
-
-    /* --------------------- classes -------------------- */
-    const classes: DomainDeps['classes'] = {
-        listClasses: vi.fn(async (studioId: string) => {
-            const items: ClassRecord[] = [];
-            for (const cls of state.classes.values()) {
-                if (cls.studioId === studioId) items.push(cls);
-            }
-            return { items };
-        }),
-        createClass: vi.fn(async (studioId: string, input: {
-            readonly title: string;
-            readonly startsAt: string;
-            readonly capacity: number;
-        }) => {
-            const classId = makeUuid(1000 + state.classes.size);
-            const cls: ClassRecord = {
-                id: classId,
-                title: input.title,
-                studioId,
-                capacity: input.capacity,
-                startsAt: input.startsAt,
-            };
-            state.classes.set(classId, cls);
-            state.events.push({
-                type: 'class.created',
-                payload: { classId, studioId },
-            });
-            return cls;
-        }),
-        updateClass: vi.fn(async () => ({ kind: 'not_found' as const })),
-        deleteClass: vi.fn(async () => ({ kind: 'not_found' as const })),
-    };
-
-    /* --------------------- reservations --------------- */
-    const reservations: DomainDeps['reservations'] = {
-        bookClass: vi.fn(async (
-            userId: string,
-            input: { readonly classId: string },
-        ) => {
-            const cls = state.classes.get(input.classId);
-            if (cls === undefined) {
-                return { kind: 'not_found' as const };
-            }
-            const resId = makeUuid(2000 + state.reservationsById.size);
-            const existing = state.reservationsByClass.get(input.classId) ?? [];
-            const confirmedCount = existing.filter(
-                (r) => r.status === 'confirmed',
-            ).length;
-            if (confirmedCount < cls.capacity) {
-                const r: ReservationRecord = {
-                    id: resId,
-                    classId: input.classId,
-                    userId,
-                    status: 'confirmed',
-                };
-                existing.push(r);
-                state.reservationsById.set(resId, r);
-                state.reservationsByClass.set(input.classId, existing);
-                state.events.push({
-                    type: 'reservation.created',
-                    payload: { reservationId: resId, classId: input.classId, userId },
-                });
-                return { kind: 'confirmed' as const, reservation: r };
-            }
-            // Waitlist
-            const position = existing.filter((r) => r.status === 'waitlist').length + 1;
-            const r: ReservationRecord = {
-                id: resId,
-                classId: input.classId,
-                userId,
-                status: 'waitlist',
-                position,
-            };
-            existing.push(r);
-            state.reservationsById.set(resId, r);
-            state.reservationsByClass.set(input.classId, existing);
-            state.events.push({
-                type: 'reservation.waitlisted',
-                payload: { reservationId: resId, classId: input.classId, userId, position },
-            });
-            return { kind: 'waitlist' as const, reservation: r, position };
-        }),
-        cancelReservation: vi.fn(async (
-            userId: string,
-            params: { readonly reservationId: string },
-        ) => {
-            const r = state.reservationsById.get(params.reservationId);
-            if (r === undefined || r.userId !== userId) {
-                return { kind: 'not_found' as const };
-            }
-            r.status = 'cancelled';
-            state.events.push({
-                type: 'reservation.cancelled',
-                payload: { reservationId: r.id, classId: r.classId, userId },
-            });
-            // Waitlist promotion: the first waitlisted reservation on the
-            // same class flips to 'confirmed'.
-            const siblings = state.reservationsByClass.get(r.classId) ?? [];
-            const nextWaitlisted = siblings.find((s) => s.status === 'waitlist');
-            if (nextWaitlisted !== undefined) {
-                nextWaitlisted.status = 'confirmed';
-                delete nextWaitlisted.position;
-                state.events.push({
-                    type: 'reservation.promoted',
-                    payload: {
-                        reservationId: nextWaitlisted.id,
-                        classId: r.classId,
-                        userId: nextWaitlisted.userId,
-                    },
-                });
-                return { kind: 'promoted' as const, reservation: r };
-            }
-            return { kind: 'cancelled' as const, reservation: r };
-        }),
-        listMyReservations: vi.fn(async (userId: string) => {
-            const items: ReservationRecord[] = [];
-            for (const r of state.reservationsById.values()) {
-                if (r.userId === userId) items.push(r);
-            }
-            return { items };
-        }),
-    };
-
-    if (options.idempotencyDb !== undefined) {
-        (reservations as { idempotency?: unknown }).idempotency = {
-            db: options.idempotencyDb,
-            ttlSec: 60,
+  /* --------------------- auth ---------------------- */
+  const auth: DomainDeps['auth'] = {
+    register: vi.fn(
+      async (input: {
+        readonly email: string;
+        readonly displayName: string;
+        readonly studioSlug: string;
+      }) => {
+        const userId = makeUuid(state.users.size + 1);
+        const studioId = TEST_STUDIO_ID;
+        const user: UserRecord = {
+          userId,
+          email: input.email,
+          studioId,
+          displayName: input.displayName,
+          role: 'member',
         };
-    }
+        state.users.set(userId, user);
+        state.usersByEmail.set(input.email.toLowerCase(), user);
+        state.events.push({
+          type: 'auth.user.registered',
+          payload: { userId, studioId, email: input.email },
+        });
+        const accessToken = await signSessionToken(user);
+        return {
+          user: {
+            id: userId,
+            email: input.email,
+            displayName: input.displayName,
+            studioId,
+          },
+          accessToken,
+          refreshToken: `refresh.${userId}`,
+          accessTokenExpiresIn: 900,
+          refreshTokenExpiresIn: 2_592_000,
+        };
+      },
+    ),
+    login: vi.fn(async (input: { readonly email: string }) => {
+      const user = state.usersByEmail.get(input.email.toLowerCase());
+      if (user === undefined) {
+        throw new Error('user not found');
+      }
+      const accessToken = await signSessionToken(user);
+      return {
+        user: {
+          id: user.userId,
+          email: user.email,
+          displayName: user.displayName,
+          studioId: user.studioId,
+        },
+        accessToken,
+        refreshToken: `refresh.${user.userId}`,
+        accessTokenExpiresIn: 900,
+        refreshTokenExpiresIn: 2_592_000,
+      };
+    }),
+    refresh: vi.fn(async () => {
+      throw new Error('refresh not used in integration suite');
+    }),
+    logout: vi.fn(async () => undefined),
+    logoutAll: vi.fn(async () => undefined),
+    deleteMe: vi.fn(async () => undefined),
+    requestPasswordReset: vi.fn(async () => undefined),
+    confirmPasswordReset: vi.fn(async () => undefined),
+  };
 
-    /* --------------------- sessions / checkins / members --------- */
-    const sessions: DomainDeps['sessions'] = {
-        logSession: vi.fn(async () => ({ id: 'session-1' })),
-        listSessions: vi.fn(async () => []),
+  /* --------------------- classes -------------------- */
+  const classes: DomainDeps['classes'] = {
+    listClasses: vi.fn(async (studioId: string) => {
+      const items: ClassRecord[] = [];
+      for (const cls of state.classes.values()) {
+        if (cls.studioId === studioId) items.push(cls);
+      }
+      return { items };
+    }),
+    createClass: vi.fn(
+      async (
+        studioId: string,
+        input: {
+          readonly title: string;
+          readonly startsAt: string;
+          readonly capacity: number;
+        },
+      ) => {
+        const classId = makeUuid(1000 + state.classes.size);
+        const cls: ClassRecord = {
+          id: classId,
+          title: input.title,
+          studioId,
+          capacity: input.capacity,
+          startsAt: input.startsAt,
+        };
+        state.classes.set(classId, cls);
+        state.events.push({
+          type: 'class.created',
+          payload: { classId, studioId },
+        });
+        return cls;
+      },
+    ),
+    updateClass: vi.fn(async () => ({ kind: 'not_found' as const })),
+    deleteClass: vi.fn(async () => ({ kind: 'not_found' as const })),
+  };
+
+  /* --------------------- reservations --------------- */
+  const reservations: DomainDeps['reservations'] = {
+    bookClass: vi.fn(async (userId: string, input: { readonly classId: string }) => {
+      const cls = state.classes.get(input.classId);
+      if (cls === undefined) {
+        return { kind: 'not_found' as const };
+      }
+      const resId = makeUuid(2000 + state.reservationsById.size);
+      const existing = state.reservationsByClass.get(input.classId) ?? [];
+      const confirmedCount = existing.filter((r) => r.status === 'confirmed').length;
+      if (confirmedCount < cls.capacity) {
+        const r: ReservationRecord = {
+          id: resId,
+          classId: input.classId,
+          userId,
+          status: 'confirmed',
+        };
+        existing.push(r);
+        state.reservationsById.set(resId, r);
+        state.reservationsByClass.set(input.classId, existing);
+        state.events.push({
+          type: 'reservation.created',
+          payload: { reservationId: resId, classId: input.classId, userId },
+        });
+        return { kind: 'confirmed' as const, reservation: r };
+      }
+      // Waitlist
+      const position = existing.filter((r) => r.status === 'waitlist').length + 1;
+      const r: ReservationRecord = {
+        id: resId,
+        classId: input.classId,
+        userId,
+        status: 'waitlist',
+        position,
+      };
+      existing.push(r);
+      state.reservationsById.set(resId, r);
+      state.reservationsByClass.set(input.classId, existing);
+      state.events.push({
+        type: 'reservation.waitlisted',
+        payload: { reservationId: resId, classId: input.classId, userId, position },
+      });
+      return { kind: 'waitlist' as const, reservation: r, position };
+    }),
+    cancelReservation: vi.fn(async (userId: string, params: { readonly reservationId: string }) => {
+      const r = state.reservationsById.get(params.reservationId);
+      if (r === undefined || r.userId !== userId) {
+        return { kind: 'not_found' as const };
+      }
+      r.status = 'cancelled';
+      state.events.push({
+        type: 'reservation.cancelled',
+        payload: { reservationId: r.id, classId: r.classId, userId },
+      });
+      // Waitlist promotion: the first waitlisted reservation on the
+      // same class flips to 'confirmed'.
+      const siblings = state.reservationsByClass.get(r.classId) ?? [];
+      const nextWaitlisted = siblings.find((s) => s.status === 'waitlist');
+      if (nextWaitlisted !== undefined) {
+        nextWaitlisted.status = 'confirmed';
+        delete nextWaitlisted.position;
+        state.events.push({
+          type: 'reservation.promoted',
+          payload: {
+            reservationId: nextWaitlisted.id,
+            classId: r.classId,
+            userId: nextWaitlisted.userId,
+          },
+        });
+        return { kind: 'promoted' as const, reservation: r };
+      }
+      return { kind: 'cancelled' as const, reservation: r };
+    }),
+    listMyReservations: vi.fn(async (userId: string) => {
+      const items: ReservationRecord[] = [];
+      for (const r of state.reservationsById.values()) {
+        if (r.userId === userId) items.push(r);
+      }
+      return { items };
+    }),
+  };
+
+  if (options.idempotencyDb !== undefined) {
+    (reservations as { idempotency?: unknown }).idempotency = {
+      db: options.idempotencyDb,
+      ttlSec: 60,
     };
+  }
 
-    const checkins: DomainDeps['checkins'] = {
-        checkIn: vi.fn(async (_studioId: string, _input) => {
-            // The integration tests do not verify the QR token itself
-            // (Epic 11 owns that). We simulate a successful check-in:
-            // the caller's JWT already proved tenant scope via jwtAuth.
-            state.events.push({
-                type: 'checkin.recorded',
-                payload: { at: new Date().toISOString() },
-            });
-            return {
-                kind: 'success' as const,
-                reservation: { id: 'r-checkin' },
-                member: { id: 'u-checkin', displayName: 'Test' },
-            };
-        }),
-    };
+  /* --------------------- sessions / checkins / members --------- */
+  const sessions: DomainDeps['sessions'] = {
+    logSession: vi.fn(async () => ({ id: 'session-1' })),
+    listSessions: vi.fn(async () => []),
+  };
 
-    const members: DomainDeps['members'] = {
-        getProfile: vi.fn(async (userId: string) => {
-            const u = state.users.get(userId);
-            if (u === undefined) {
-                throw new Error('member profile not found');
-            }
-            return { id: u.userId, displayName: u.displayName, email: u.email };
-        }),
-        updateProfile: vi.fn(async () => ({})),
-        updateConsents: vi.fn(async () => ({})),
-        enqueueExport: vi.fn(async () => ({ jobId: makeUuid(9999) })),
-        listMembersByStudio: vi.fn(async () => ({ items: [], nextCursor: null })),
-    };
+  const checkins: DomainDeps['checkins'] = {
+    checkIn: vi.fn(async (_studioId: string, _input) => {
+      // The integration tests do not verify the QR token itself
+      // (Epic 11 owns that). We simulate a successful check-in:
+      // the caller's JWT already proved tenant scope via jwtAuth.
+      state.events.push({
+        type: 'checkin.recorded',
+        payload: { at: new Date().toISOString() },
+      });
+      return {
+        kind: 'success' as const,
+        reservation: { id: 'r-checkin' },
+        member: { id: 'u-checkin', displayName: 'Test' },
+      };
+    }),
+  };
 
-    /* --------------------- studios --------------------- */
-    const studios: DomainDeps['studios'] = {
-        getStudio: vi.fn(async (studioId: string) => {
-            // Best-effort lookup against the seeded studio set. The
-            // integration suite seeds two studios via `seedTwoStudios`
-            // (Studio A + Studio B); a request for any other id
-            // resolves to `null` so the route renders 404.
-            const studioMap: Record<string, {
-                slug: string;
-                name: string;
-                brandColor: string;
-            }> = {
-                [STUDIO_A_ID]: {
-                    slug: 'athlya-paris',
-                    name: 'Athlya Paris',
-                    brandColor: '#0EA5E9',
-                },
-                [STUDIO_B_ID]: {
-                    slug: 'athlya-lyon',
-                    name: 'Athlya Lyon',
-                    brandColor: '#22C55E',
-                },
-            };
-            const seed = studioMap[studioId];
-            if (seed === undefined) return null;
-            return {
-                id: studioId,
-                slug: seed.slug,
-                name: seed.name,
-                brandColor: seed.brandColor,
-                brandLogo: null,
-            };
-        }),
-        updateStudio: vi.fn(async (studioId: string, patch) => {
-            // Echo the patch back as if the row existed and was
-            // mutated. Tests overriding this stub can return `null` to
-            // simulate a vanished tenant row.
-            return {
-                id: studioId,
-                slug: 'athlya-paris',
-                name: patch.name ?? 'Athlya Paris',
-                brandColor: patch.brandColor ?? '#0EA5E9',
-                brandLogo: patch.brandLogo ?? null,
-            };
-        }),
-    };
+  const members: DomainDeps['members'] = {
+    getProfile: vi.fn(async (userId: string) => {
+      const u = state.users.get(userId);
+      if (u === undefined) {
+        throw new Error('member profile not found');
+      }
+      return { id: u.userId, displayName: u.displayName, email: u.email };
+    }),
+    updateProfile: vi.fn(async () => ({})),
+    updateConsents: vi.fn(async () => ({})),
+    enqueueExport: vi.fn(async () => ({ jobId: makeUuid(9999) })),
+    listMembersByStudio: vi.fn(async () => ({ items: [], nextCursor: null })),
+  };
 
-    /* --------------------- billing --------------------- */
-    const billing: DomainDeps['billing'] = {
-        createCheckoutSession: vi.fn(async () => ({
-            kind: 'not_configured' as const,
-        })),
-        listInvoices: vi.fn(async () => ({ items: [], nextCursor: null })),
-        handleWebhook: vi.fn(async () => ({ kind: 'ok' as const })),
-    };
+  /* --------------------- studios --------------------- */
+  const studios: DomainDeps['studios'] = {
+    getStudio: vi.fn(async (studioId: string) => {
+      // Best-effort lookup against the seeded studio set. The
+      // integration suite seeds two studios via `seedTwoStudios`
+      // (Studio A + Studio B); a request for any other id
+      // resolves to `null` so the route renders 404.
+      const studioMap: Record<
+        string,
+        {
+          slug: string;
+          name: string;
+          brandColor: string;
+        }
+      > = {
+        [STUDIO_A_ID]: {
+          slug: 'athlya-paris',
+          name: 'Athlya Paris',
+          brandColor: '#0EA5E9',
+        },
+        [STUDIO_B_ID]: {
+          slug: 'athlya-lyon',
+          name: 'Athlya Lyon',
+          brandColor: '#22C55E',
+        },
+      };
+      const seed = studioMap[studioId];
+      if (seed === undefined) return null;
+      return {
+        id: studioId,
+        slug: seed.slug,
+        name: seed.name,
+        brandColor: seed.brandColor,
+        brandLogo: null,
+      };
+    }),
+    updateStudio: vi.fn(async (studioId: string, patch) => {
+      // Echo the patch back as if the row existed and was
+      // mutated. Tests overriding this stub can return `null` to
+      // simulate a vanished tenant row.
+      return {
+        id: studioId,
+        slug: 'athlya-paris',
+        name: patch.name ?? 'Athlya Paris',
+        brandColor: patch.brandColor ?? '#0EA5E9',
+        brandLogo: patch.brandLogo ?? null,
+      };
+    }),
+  };
 
-    return { auth, classes, reservations, sessions, checkins, members, studios, billing };
+  /* --------------------- billing --------------------- */
+  const billing: DomainDeps['billing'] = {
+    createCheckoutSession: vi.fn(async () => ({
+      kind: 'not_configured' as const,
+    })),
+    listInvoices: vi.fn(async () => ({ items: [], nextCursor: null })),
+    handleWebhook: vi.fn(async () => ({ kind: 'ok' as const })),
+  };
+
+  return { auth, classes, reservations, sessions, checkins, members, studios, billing };
 }
 
 /* ------------------------------------------------------------------ */
@@ -533,14 +532,14 @@ export function buildIntegrationDeps(
  * default `buildApp({ deps })` composition is returned unchanged.
  */
 export interface BuildIntegrationAppOptions {
-    readonly deps: DomainDeps;
-    readonly jwksResolver: JwksKeyResolver;
-    readonly rateLimit?: {
-        readonly redis: Redis;
-        readonly userLimit?: number;
-        readonly ipLimit?: number;
-        readonly windowSec?: number;
-    };
+  readonly deps: DomainDeps;
+  readonly jwksResolver: JwksKeyResolver;
+  readonly rateLimit?: {
+    readonly redis: Redis;
+    readonly userLimit?: number;
+    readonly ipLimit?: number;
+    readonly windowSec?: number;
+  };
 }
 
 /**
@@ -566,36 +565,34 @@ export interface BuildIntegrationAppOptions {
  * {@link buildAppNoDomainRoutes} from the dedicated test helpers
  * module instead.
  */
-export function buildIntegrationApp(
-    options: BuildIntegrationAppOptions,
-): Hono<HonoEnv> {
-    if (options.rateLimit === undefined) {
-        return buildApp({ deps: options.deps });
-    }
+export function buildIntegrationApp(options: BuildIntegrationAppOptions): Hono<HonoEnv> {
+  if (options.rateLimit === undefined) {
+    return buildApp({ deps: options.deps });
+  }
 
-    // Custom composition so rate-limit can sit between app-level auth
-    // and the reservations router. `buildAppNoDomainRoutes()`
-    // suppresses the default mount so we can slide middleware in
-    // between, then `mountDomainRoutes()` runs at the bottom of the
-    // chain.
-    const app = buildAppNoDomainRoutes({ deps: options.deps });
+  // Custom composition so rate-limit can sit between app-level auth
+  // and the reservations router. `buildAppNoDomainRoutes()`
+  // suppresses the default mount so we can slide middleware in
+  // between, then `mountDomainRoutes()` runs at the bottom of the
+  // chain.
+  const app = buildAppNoDomainRoutes({ deps: options.deps });
 
-    const rlOpts: RateLimitOptions = { redis: options.rateLimit.redis };
-    if (options.rateLimit.userLimit !== undefined) {
-        (rlOpts as { userLimit: number }).userLimit = options.rateLimit.userLimit;
-    }
-    if (options.rateLimit.ipLimit !== undefined) {
-        (rlOpts as { ipLimit: number }).ipLimit = options.rateLimit.ipLimit;
-    }
-    if (options.rateLimit.windowSec !== undefined) {
-        (rlOpts as { windowSec: number }).windowSec = options.rateLimit.windowSec;
-    }
+  const rlOpts: RateLimitOptions = { redis: options.rateLimit.redis };
+  if (options.rateLimit.userLimit !== undefined) {
+    (rlOpts as { userLimit: number }).userLimit = options.rateLimit.userLimit;
+  }
+  if (options.rateLimit.ipLimit !== undefined) {
+    (rlOpts as { ipLimit: number }).ipLimit = options.rateLimit.ipLimit;
+  }
+  if (options.rateLimit.windowSec !== undefined) {
+    (rlOpts as { windowSec: number }).windowSec = options.rateLimit.windowSec;
+  }
 
-    app.use('/v1/reservations/*', jwtAuth({ keyResolver: options.jwksResolver }));
-    app.use('/v1/reservations/*', rateLimit(rlOpts));
+  app.use('/v1/reservations/*', jwtAuth({ keyResolver: options.jwksResolver }));
+  app.use('/v1/reservations/*', rateLimit(rlOpts));
 
-    mountDomainRoutes(app, options.deps);
-    return app;
+  mountDomainRoutes(app, options.deps);
+  return app;
 }
 
 /* ------------------------------------------------------------------ */
@@ -651,68 +648,68 @@ export const RESERVATION_B_ID = '4e5e4000-0000-4000-8000-00000000000b';
  * `multi-tenant-isolation.integration.test.ts`.
  */
 export function seedTwoStudios(state: IntegrationState): void {
-    /* users */
-    const alice: UserRecord = {
-        userId: ALICE_ID,
-        email: 'alice@studio-a.example',
-        studioId: STUDIO_A_ID,
-        displayName: 'Alice',
-        role: 'member',
-    };
-    const bob: UserRecord = {
-        userId: BOB_ID,
-        email: 'bob@studio-b.example',
-        studioId: STUDIO_B_ID,
-        displayName: 'Bob',
-        role: 'member',
-    };
-    const adminA: UserRecord = {
-        userId: ADMIN_A_ID,
-        email: 'admin@studio-a.example',
-        studioId: STUDIO_A_ID,
-        displayName: 'Studio-A Admin',
-        role: 'admin',
-    };
-    state.users.set(alice.userId, alice);
-    state.users.set(bob.userId, bob);
-    state.users.set(adminA.userId, adminA);
-    state.usersByEmail.set(alice.email, alice);
-    state.usersByEmail.set(bob.email, bob);
-    state.usersByEmail.set(adminA.email, adminA);
+  /* users */
+  const alice: UserRecord = {
+    userId: ALICE_ID,
+    email: 'alice@studio-a.example',
+    studioId: STUDIO_A_ID,
+    displayName: 'Alice',
+    role: 'member',
+  };
+  const bob: UserRecord = {
+    userId: BOB_ID,
+    email: 'bob@studio-b.example',
+    studioId: STUDIO_B_ID,
+    displayName: 'Bob',
+    role: 'member',
+  };
+  const adminA: UserRecord = {
+    userId: ADMIN_A_ID,
+    email: 'admin@studio-a.example',
+    studioId: STUDIO_A_ID,
+    displayName: 'Studio-A Admin',
+    role: 'admin',
+  };
+  state.users.set(alice.userId, alice);
+  state.users.set(bob.userId, bob);
+  state.users.set(adminA.userId, adminA);
+  state.usersByEmail.set(alice.email, alice);
+  state.usersByEmail.set(bob.email, bob);
+  state.usersByEmail.set(adminA.email, adminA);
 
-    /* classes */
-    const classA: ClassRecord = {
-        id: CLASS_A_ID,
-        title: 'Morning yoga',
-        studioId: STUDIO_A_ID,
-        capacity: 10,
-        startsAt: '2099-01-01T09:00:00.000Z',
-    };
-    const classB: ClassRecord = {
-        id: CLASS_B_ID,
-        title: 'Evening HIIT',
-        studioId: STUDIO_B_ID,
-        capacity: 10,
-        startsAt: '2099-01-01T19:00:00.000Z',
-    };
-    state.classes.set(classA.id, classA);
-    state.classes.set(classB.id, classB);
+  /* classes */
+  const classA: ClassRecord = {
+    id: CLASS_A_ID,
+    title: 'Morning yoga',
+    studioId: STUDIO_A_ID,
+    capacity: 10,
+    startsAt: '2099-01-01T09:00:00.000Z',
+  };
+  const classB: ClassRecord = {
+    id: CLASS_B_ID,
+    title: 'Evening HIIT',
+    studioId: STUDIO_B_ID,
+    capacity: 10,
+    startsAt: '2099-01-01T19:00:00.000Z',
+  };
+  state.classes.set(classA.id, classA);
+  state.classes.set(classB.id, classB);
 
-    /* reservations */
-    const reservationA: ReservationRecord = {
-        id: RESERVATION_A_ID,
-        classId: CLASS_A_ID,
-        userId: ALICE_ID,
-        status: 'confirmed',
-    };
-    const reservationB: ReservationRecord = {
-        id: RESERVATION_B_ID,
-        classId: CLASS_B_ID,
-        userId: BOB_ID,
-        status: 'confirmed',
-    };
-    state.reservationsById.set(reservationA.id, reservationA);
-    state.reservationsById.set(reservationB.id, reservationB);
-    state.reservationsByClass.set(CLASS_A_ID, [reservationA]);
-    state.reservationsByClass.set(CLASS_B_ID, [reservationB]);
+  /* reservations */
+  const reservationA: ReservationRecord = {
+    id: RESERVATION_A_ID,
+    classId: CLASS_A_ID,
+    userId: ALICE_ID,
+    status: 'confirmed',
+  };
+  const reservationB: ReservationRecord = {
+    id: RESERVATION_B_ID,
+    classId: CLASS_B_ID,
+    userId: BOB_ID,
+    status: 'confirmed',
+  };
+  state.reservationsById.set(reservationA.id, reservationA);
+  state.reservationsById.set(reservationB.id, reservationB);
+  state.reservationsByClass.set(CLASS_A_ID, [reservationA]);
+  state.reservationsByClass.set(CLASS_B_ID, [reservationB]);
 }

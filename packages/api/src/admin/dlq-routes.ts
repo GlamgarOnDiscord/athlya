@@ -60,8 +60,8 @@ import type { Context } from 'hono';
  * access to the trace id + per-request logger set up by the gateway.
  */
 export interface DlqAdminEnv {
-    Bindings: DlqBindings;
-    Variables: AthlyaVariables;
+  Bindings: DlqBindings;
+  Variables: AthlyaVariables;
 }
 
 /* ------------------------------------------------------------------ */
@@ -79,12 +79,12 @@ const NOT_FOUND_TYPE = `${ATHLYA_PROBLEM_NAMESPACE}not-found`;
 
 /** Shape of the Problem Details body the router emits on failures. */
 interface AdminProblemBody {
-    readonly type: string;
-    readonly title: string;
-    readonly status: number;
-    readonly detail: string;
-    readonly code: string;
-    readonly traceId: string;
+  readonly type: string;
+  readonly title: string;
+  readonly status: number;
+  readonly detail: string;
+  readonly code: string;
+  readonly traceId: string;
 }
 
 /**
@@ -95,14 +95,14 @@ interface AdminProblemBody {
  * the 403 and 404 paths (they are the entire admin API contract).
  */
 function buildProblem(
-    status: number,
-    title: string,
-    code: string,
-    detail: string,
-    traceId: string,
-    type: string,
+  status: number,
+  title: string,
+  code: string,
+  detail: string,
+  traceId: string,
+  type: string,
 ): AdminProblemBody {
-    return { type, title, status, detail, code, traceId };
+  return { type, title, status, detail, code, traceId };
 }
 
 /**
@@ -110,13 +110,10 @@ function buildProblem(
  * `content-type: application/problem+json` per RFC 9457. `c.json`
  * would stamp `application/json` on top.
  */
-function problemResponse(
-    c: Context<DlqAdminEnv>,
-    body: AdminProblemBody,
-): Response {
-    return c.body(JSON.stringify(body), body.status as 403 | 404, {
-        'content-type': PROBLEM_JSON_CONTENT_TYPE,
-    });
+function problemResponse(c: Context<DlqAdminEnv>, body: AdminProblemBody): Response {
+  return c.body(JSON.stringify(body), body.status as 403 | 404, {
+    'content-type': PROBLEM_JSON_CONTENT_TYPE,
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -134,34 +131,34 @@ function problemResponse(
  * not `{ role: 'admin' }` as a deny.
  */
 function enforceAdmin(c: Context<DlqAdminEnv>): Response | null {
-    const claims = c.get('authClaims');
-    if (claims === undefined || claims === null) {
-        return problemResponse(
-            c,
-            buildProblem(
-                403,
-                'Forbidden',
-                'forbidden',
-                'admin role required',
-                c.get('traceId'),
-                FORBIDDEN_TYPE,
-            ),
-        );
-    }
-    if (claims.role !== 'admin') {
-        return problemResponse(
-            c,
-            buildProblem(
-                403,
-                'Forbidden',
-                'forbidden',
-                'admin role required',
-                c.get('traceId'),
-                FORBIDDEN_TYPE,
-            ),
-        );
-    }
-    return null;
+  const claims = c.get('authClaims');
+  if (claims === undefined || claims === null) {
+    return problemResponse(
+      c,
+      buildProblem(
+        403,
+        'Forbidden',
+        'forbidden',
+        'admin role required',
+        c.get('traceId'),
+        FORBIDDEN_TYPE,
+      ),
+    );
+  }
+  if (claims.role !== 'admin') {
+    return problemResponse(
+      c,
+      buildProblem(
+        403,
+        'Forbidden',
+        'forbidden',
+        'admin role required',
+        c.get('traceId'),
+        FORBIDDEN_TYPE,
+      ),
+    );
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -174,9 +171,9 @@ function enforceAdmin(c: Context<DlqAdminEnv>): Response | null {
  * interface so consumers (admin UI, integration tests) can import it.
  */
 export interface DlqStatsResponse {
-    readonly pending: number;
-    readonly oldestAgeMs: number | null;
-    readonly entries: readonly DlqEntry[];
+  readonly pending: number;
+  readonly oldestAgeMs: number | null;
+  readonly entries: readonly DlqEntry[];
 }
 
 /**
@@ -194,67 +191,67 @@ export interface DlqStatsResponse {
  * surface to a single distribution.
  */
 export function buildDlqRouter(): Hono<DlqAdminEnv> {
-    const router = new Hono<DlqAdminEnv>();
+  const router = new Hono<DlqAdminEnv>();
 
-    /* -------------------------------------------------------------- */
-    /*  GET /admin/dlq/stats                                          */
-    /* -------------------------------------------------------------- */
+  /* -------------------------------------------------------------- */
+  /*  GET /admin/dlq/stats                                          */
+  /* -------------------------------------------------------------- */
 
-    router.get('/admin/dlq/stats', async (c) => {
-        const forbidden = enforceAdmin(c);
-        if (forbidden !== null) return forbidden;
+  router.get('/admin/dlq/stats', async (c) => {
+    const forbidden = enforceAdmin(c);
+    if (forbidden !== null) return forbidden;
 
-        const snapshot = await dlqStats(c.env);
-        const body: DlqStatsResponse = {
-            pending: snapshot.pending,
-            oldestAgeMs: snapshot.oldestAgeMs,
-            entries: snapshot.entries,
-        };
-        return c.json(body, 200);
-    });
+    const snapshot = await dlqStats(c.env);
+    const body: DlqStatsResponse = {
+      pending: snapshot.pending,
+      oldestAgeMs: snapshot.oldestAgeMs,
+      entries: snapshot.entries,
+    };
+    return c.json(body, 200);
+  });
 
-    /* -------------------------------------------------------------- */
-    /*  POST /admin/dlq/replay/:id                                    */
-    /* -------------------------------------------------------------- */
+  /* -------------------------------------------------------------- */
+  /*  POST /admin/dlq/replay/:id                                    */
+  /* -------------------------------------------------------------- */
 
-    router.post('/admin/dlq/replay/:id', async (c) => {
-        const forbidden = enforceAdmin(c);
-        if (forbidden !== null) return forbidden;
+  router.post('/admin/dlq/replay/:id', async (c) => {
+    const forbidden = enforceAdmin(c);
+    if (forbidden !== null) return forbidden;
 
-        const id = c.req.param('id');
-        const result = await dlqReplay(c.env, id);
-        if (!result.replayed) {
-            // `reason` is `'not_found'` for a missing id; any other
-            // future reason ({@link dlqReplay} may grow more) falls
-            // into the same 404 bucket for now. When a new reason
-            // warrants a different status, extend the dispatch here.
-            return problemResponse(
-                c,
-                buildProblem(
-                    404,
-                    'Not Found',
-                    'dlq_entry_not_found',
-                    `DLQ entry ${id} not found`,
-                    c.get('traceId'),
-                    NOT_FOUND_TYPE,
-                ),
-            );
-        }
-        return c.json({ replayed: true }, 200);
-    });
+    const id = c.req.param('id');
+    const result = await dlqReplay(c.env, id);
+    if (!result.replayed) {
+      // `reason` is `'not_found'` for a missing id; any other
+      // future reason ({@link dlqReplay} may grow more) falls
+      // into the same 404 bucket for now. When a new reason
+      // warrants a different status, extend the dispatch here.
+      return problemResponse(
+        c,
+        buildProblem(
+          404,
+          'Not Found',
+          'dlq_entry_not_found',
+          `DLQ entry ${id} not found`,
+          c.get('traceId'),
+          NOT_FOUND_TYPE,
+        ),
+      );
+    }
+    return c.json({ replayed: true }, 200);
+  });
 
-    /* -------------------------------------------------------------- */
-    /*  POST /admin/dlq/discard/:id                                   */
-    /* -------------------------------------------------------------- */
+  /* -------------------------------------------------------------- */
+  /*  POST /admin/dlq/discard/:id                                   */
+  /* -------------------------------------------------------------- */
 
-    router.post('/admin/dlq/discard/:id', async (c) => {
-        const forbidden = enforceAdmin(c);
-        if (forbidden !== null) return forbidden;
+  router.post('/admin/dlq/discard/:id', async (c) => {
+    const forbidden = enforceAdmin(c);
+    if (forbidden !== null) return forbidden;
 
-        const id = c.req.param('id');
-        const result = await dlqDiscard(c.env, id);
-        return c.json({ discarded: result.discarded }, 200);
-    });
+    const id = c.req.param('id');
+    const result = await dlqDiscard(c.env, id);
+    return c.json({ discarded: result.discarded }, 200);
+  });
 
-    return router;
+  return router;
 }

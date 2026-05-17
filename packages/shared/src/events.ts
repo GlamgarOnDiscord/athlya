@@ -30,12 +30,12 @@
 import { z } from 'zod';
 
 import {
-    ClassIdSchema,
-    IsoDateTimeSchema,
-    ReservationIdSchema,
-    StudioIdSchema,
-    UserIdSchema,
-    UuidSchema,
+  ClassIdSchema,
+  IsoDateTimeSchema,
+  ReservationIdSchema,
+  StudioIdSchema,
+  UserIdSchema,
+  UuidSchema,
 } from './schemas/primitives.js';
 
 /* ------------------------------------------------------------------ */
@@ -67,18 +67,18 @@ import {
  *                    asserting the field.
  */
 function envelopeShape<TType extends string, TPayload extends z.ZodTypeAny>(
-    typeLiteral: TType,
-    payload: TPayload,
+  typeLiteral: TType,
+  payload: TPayload,
 ) {
-    return z
-        .object({
-            id: UuidSchema,
-            type: z.literal(typeLiteral),
-            occurredAt: IsoDateTimeSchema,
-            studioId: StudioIdSchema.optional(),
-            payload,
-        })
-        .strict();
+  return z
+    .object({
+      id: UuidSchema,
+      type: z.literal(typeLiteral),
+      occurredAt: IsoDateTimeSchema,
+      studioId: StudioIdSchema.optional(),
+      payload,
+    })
+    .strict();
 }
 
 /* ------------------------------------------------------------------ */
@@ -87,12 +87,12 @@ function envelopeShape<TType extends string, TPayload extends z.ZodTypeAny>(
 
 /** Payload shared by every reservation lifecycle event. */
 const ReservationLifecyclePayloadSchema = z
-    .object({
-        reservationId: ReservationIdSchema,
-        classId: ClassIdSchema,
-        userId: UserIdSchema,
-    })
-    .strict();
+  .object({
+    reservationId: ReservationIdSchema,
+    classId: ClassIdSchema,
+    userId: UserIdSchema,
+  })
+  .strict();
 
 /**
  * `reservation.created` — emitted on successful booking commit
@@ -100,8 +100,8 @@ const ReservationLifecyclePayloadSchema = z
  * `reservation.reminder` job (Requirement 17.3).
  */
 export const ReservationCreatedEventSchema = envelopeShape(
-    'reservation.created',
-    ReservationLifecyclePayloadSchema,
+  'reservation.created',
+  ReservationLifecyclePayloadSchema,
 );
 export type ReservationCreatedEvent = z.infer<typeof ReservationCreatedEventSchema>;
 
@@ -110,10 +110,10 @@ export type ReservationCreatedEvent = z.infer<typeof ReservationCreatedEventSche
  * user joins the waitlist (Requirement 8.2). `position` is 1-based.
  */
 export const ReservationWaitlistedEventSchema = envelopeShape(
-    'reservation.waitlisted',
-    ReservationLifecyclePayloadSchema.extend({
-        position: z.number().int().positive(),
-    }).strict(),
+  'reservation.waitlisted',
+  ReservationLifecyclePayloadSchema.extend({
+    position: z.number().int().positive(),
+  }).strict(),
 );
 export type ReservationWaitlistedEvent = z.infer<typeof ReservationWaitlistedEventSchema>;
 
@@ -123,8 +123,8 @@ export type ReservationWaitlistedEvent = z.infer<typeof ReservationWaitlistedEve
  * Notifications_Service to send the cancellation email.
  */
 export const ReservationCancelledEventSchema = envelopeShape(
-    'reservation.cancelled',
-    ReservationLifecyclePayloadSchema,
+  'reservation.cancelled',
+  ReservationLifecyclePayloadSchema,
 );
 export type ReservationCancelledEvent = z.infer<typeof ReservationCancelledEventSchema>;
 
@@ -134,8 +134,8 @@ export type ReservationCancelledEvent = z.infer<typeof ReservationCancelledEvent
  * (Requirement 10.3).
  */
 export const ReservationPromotedEventSchema = envelopeShape(
-    'reservation.promoted',
-    ReservationLifecyclePayloadSchema,
+  'reservation.promoted',
+  ReservationLifecyclePayloadSchema,
 );
 export type ReservationPromotedEvent = z.infer<typeof ReservationPromotedEventSchema>;
 
@@ -146,10 +146,10 @@ export type ReservationPromotedEvent = z.infer<typeof ReservationPromotedEventSc
  * the class.
  */
 export const ReservationReminderEventSchema = envelopeShape(
-    'reservation.reminder',
-    ReservationLifecyclePayloadSchema.extend({
-        startsAt: IsoDateTimeSchema,
-    }).strict(),
+  'reservation.reminder',
+  ReservationLifecyclePayloadSchema.extend({
+    startsAt: IsoDateTimeSchema,
+  }).strict(),
 );
 export type ReservationReminderEvent = z.infer<typeof ReservationReminderEventSchema>;
 
@@ -173,12 +173,12 @@ export type ReservationReminderEvent = z.infer<typeof ReservationReminderEventSc
  * minimisation win (RGPD Art 5§1.c) without any consumer impact.
  */
 export const AuthUserRegisteredEventSchema = envelopeShape(
-    'auth.user.registered',
-    z
-        .object({
-            userId: UserIdSchema,
-        })
-        .strict(),
+  'auth.user.registered',
+  z
+    .object({
+      userId: UserIdSchema,
+    })
+    .strict(),
 );
 export type AuthUserRegisteredEvent = z.infer<typeof AuthUserRegisteredEventSchema>;
 
@@ -188,12 +188,12 @@ export type AuthUserRegisteredEvent = z.infer<typeof AuthUserRegisteredEventSche
  * audit-log anonymisation routine on the consumer side.
  */
 export const AuthUserDeletedEventSchema = envelopeShape(
-    'auth.user.deleted',
-    z
-        .object({
-            userId: UserIdSchema,
-        })
-        .strict(),
+  'auth.user.deleted',
+  z
+    .object({
+      userId: UserIdSchema,
+    })
+    .strict(),
 );
 export type AuthUserDeletedEvent = z.infer<typeof AuthUserDeletedEventSchema>;
 
@@ -215,17 +215,15 @@ export type AuthUserDeletedEvent = z.infer<typeof AuthUserDeletedEventSchema>;
  * if forensics ever need them.
  */
 export const AuthSuspiciousRefreshReuseEventSchema = envelopeShape(
-    'auth.suspicious.refresh.reuse',
-    z
-        .object({
-            userId: UserIdSchema,
-            rootSid: z.string().min(1).max(128),
-        })
-        .strict(),
+  'auth.suspicious.refresh.reuse',
+  z
+    .object({
+      userId: UserIdSchema,
+      rootSid: z.string().min(1).max(128),
+    })
+    .strict(),
 );
-export type AuthSuspiciousRefreshReuseEvent = z.infer<
-    typeof AuthSuspiciousRefreshReuseEventSchema
->;
+export type AuthSuspiciousRefreshReuseEvent = z.infer<typeof AuthSuspiciousRefreshReuseEventSchema>;
 
 /**
  * `auth.suspicious.login.anomaly` — emitted when the gateway
@@ -251,42 +249,27 @@ export type AuthSuspiciousRefreshReuseEvent = z.infer<
  * the full UA string in this event — those live in the audit log.
  */
 export const AuthSuspiciousLoginAnomalyEventSchema = envelopeShape(
-    'auth.suspicious.login.anomaly',
-    z
-        .object({
-            userId: UserIdSchema,
-            country: z.string().length(2).regex(/^[A-Z]{2}$/u),
-            previousCountry: z
-                .string()
-                .length(2)
-                .regex(/^[A-Z]{2}$/u)
-                .nullable(),
-            uaFamily: z.enum([
-                'chrome',
-                'firefox',
-                'safari',
-                'edge',
-                'mobile',
-                'bot',
-                'other',
-            ]),
-            previousUaFamily: z
-                .enum([
-                    'chrome',
-                    'firefox',
-                    'safari',
-                    'edge',
-                    'mobile',
-                    'bot',
-                    'other',
-                ])
-                .nullable(),
-        })
-        .strict(),
+  'auth.suspicious.login.anomaly',
+  z
+    .object({
+      userId: UserIdSchema,
+      country: z
+        .string()
+        .length(2)
+        .regex(/^[A-Z]{2}$/u),
+      previousCountry: z
+        .string()
+        .length(2)
+        .regex(/^[A-Z]{2}$/u)
+        .nullable(),
+      uaFamily: z.enum(['chrome', 'firefox', 'safari', 'edge', 'mobile', 'bot', 'other']),
+      previousUaFamily: z
+        .enum(['chrome', 'firefox', 'safari', 'edge', 'mobile', 'bot', 'other'])
+        .nullable(),
+    })
+    .strict(),
 );
-export type AuthSuspiciousLoginAnomalyEvent = z.infer<
-    typeof AuthSuspiciousLoginAnomalyEventSchema
->;
+export type AuthSuspiciousLoginAnomalyEvent = z.infer<typeof AuthSuspiciousLoginAnomalyEventSchema>;
 
 /* ------------------------------------------------------------------ */
 /*  Billing events                                                     */
@@ -300,19 +283,17 @@ export type AuthSuspiciousLoginAnomalyEvent = z.infer<
  * plans without a shared-package release.
  */
 export const BillingSubscriptionStartedEventSchema = envelopeShape(
-    'billing.subscription.started',
-    z
-        .object({
-            userId: UserIdSchema,
-            subscriptionId: z.string().min(1).max(120),
-            plan: z.string().min(1).max(80),
-            startsAt: IsoDateTimeSchema,
-        })
-        .strict(),
+  'billing.subscription.started',
+  z
+    .object({
+      userId: UserIdSchema,
+      subscriptionId: z.string().min(1).max(120),
+      plan: z.string().min(1).max(80),
+      startsAt: IsoDateTimeSchema,
+    })
+    .strict(),
 );
-export type BillingSubscriptionStartedEvent = z.infer<
-    typeof BillingSubscriptionStartedEventSchema
->;
+export type BillingSubscriptionStartedEvent = z.infer<typeof BillingSubscriptionStartedEventSchema>;
 
 /**
  * `billing.subscription.failed` — emitted after a Stripe
@@ -320,14 +301,14 @@ export type BillingSubscriptionStartedEvent = z.infer<
  * the Notifications_Service to send the dunning email.
  */
 export const BillingSubscriptionFailedEventSchema = envelopeShape(
-    'billing.subscription.failed',
-    z
-        .object({
-            userId: UserIdSchema,
-            subscriptionId: z.string().min(1).max(120),
-            reason: z.string().min(1).max(500),
-        })
-        .strict(),
+  'billing.subscription.failed',
+  z
+    .object({
+      userId: UserIdSchema,
+      subscriptionId: z.string().min(1).max(120),
+      reason: z.string().min(1).max(500),
+    })
+    .strict(),
 );
 export type BillingSubscriptionFailedEvent = z.infer<typeof BillingSubscriptionFailedEventSchema>;
 
@@ -345,13 +326,13 @@ export type BillingSubscriptionFailedEvent = z.infer<typeof BillingSubscriptionF
  * producer wants to carry tenant context for analytics fan-out.
  */
 export const MembersExportRequestedEventSchema = envelopeShape(
-    'members.export.requested',
-    z
-        .object({
-            userId: UserIdSchema,
-            exportJobId: UuidSchema,
-        })
-        .strict(),
+  'members.export.requested',
+  z
+    .object({
+      userId: UserIdSchema,
+      exportJobId: UuidSchema,
+    })
+    .strict(),
 );
 export type MembersExportRequestedEvent = z.infer<typeof MembersExportRequestedEventSchema>;
 
@@ -362,15 +343,15 @@ export type MembersExportRequestedEvent = z.infer<typeof MembersExportRequestedE
  * Notifications_Service can render the email copy without a round-trip.
  */
 export const MembersExportCompletedEventSchema = envelopeShape(
-    'members.export.completed',
-    z
-        .object({
-            userId: UserIdSchema,
-            exportJobId: UuidSchema,
-            downloadUrl: z.url().max(2048),
-            expiresAt: IsoDateTimeSchema,
-        })
-        .strict(),
+  'members.export.completed',
+  z
+    .object({
+      userId: UserIdSchema,
+      exportJobId: UuidSchema,
+      downloadUrl: z.url().max(2048),
+      expiresAt: IsoDateTimeSchema,
+    })
+    .strict(),
 );
 export type MembersExportCompletedEvent = z.infer<typeof MembersExportCompletedEventSchema>;
 
@@ -392,19 +373,19 @@ export type MembersExportCompletedEvent = z.infer<typeof MembersExportCompletedE
  * metrics labels) behaviour-preserving.
  */
 export const EVENT_TYPES = [
-    'reservation.created',
-    'reservation.waitlisted',
-    'reservation.cancelled',
-    'reservation.promoted',
-    'reservation.reminder',
-    'auth.user.registered',
-    'auth.user.deleted',
-    'auth.suspicious.refresh.reuse',
-    'auth.suspicious.login.anomaly',
-    'billing.subscription.started',
-    'billing.subscription.failed',
-    'members.export.completed',
-    'members.export.requested',
+  'reservation.created',
+  'reservation.waitlisted',
+  'reservation.cancelled',
+  'reservation.promoted',
+  'reservation.reminder',
+  'auth.user.registered',
+  'auth.user.deleted',
+  'auth.suspicious.refresh.reuse',
+  'auth.suspicious.login.anomaly',
+  'billing.subscription.started',
+  'billing.subscription.failed',
+  'members.export.completed',
+  'members.export.requested',
 ] as const;
 
 /** Union of the literal `type` values above. */
@@ -417,19 +398,19 @@ export type AthlyaEventType = (typeof EVENT_TYPES)[number];
  * version drift between services and must never be dispatched.
  */
 export const AthlyaEventSchema = z.discriminatedUnion('type', [
-    ReservationCreatedEventSchema,
-    ReservationWaitlistedEventSchema,
-    ReservationCancelledEventSchema,
-    ReservationPromotedEventSchema,
-    ReservationReminderEventSchema,
-    AuthUserRegisteredEventSchema,
-    AuthUserDeletedEventSchema,
-    AuthSuspiciousRefreshReuseEventSchema,
-    AuthSuspiciousLoginAnomalyEventSchema,
-    BillingSubscriptionStartedEventSchema,
-    BillingSubscriptionFailedEventSchema,
-    MembersExportCompletedEventSchema,
-    MembersExportRequestedEventSchema,
+  ReservationCreatedEventSchema,
+  ReservationWaitlistedEventSchema,
+  ReservationCancelledEventSchema,
+  ReservationPromotedEventSchema,
+  ReservationReminderEventSchema,
+  AuthUserRegisteredEventSchema,
+  AuthUserDeletedEventSchema,
+  AuthSuspiciousRefreshReuseEventSchema,
+  AuthSuspiciousLoginAnomalyEventSchema,
+  BillingSubscriptionStartedEventSchema,
+  BillingSubscriptionFailedEventSchema,
+  MembersExportCompletedEventSchema,
+  MembersExportRequestedEventSchema,
 ]);
 
 /** Inferred discriminated union type covering every Athlya event. */
@@ -446,12 +427,12 @@ export type AthlyaEvent = z.infer<typeof AthlyaEventSchema>;
  * don't need to depend on Zod internals.
  */
 export interface InvalidEventIssue {
-    /** Dotted path to the offending field, e.g. `payload.position`. */
-    readonly path: string;
-    /** Zod issue code (`invalid_type`, `too_small`, …). */
-    readonly code: string;
-    /** Human-readable message from the schema. */
-    readonly message: string;
+  /** Dotted path to the offending field, e.g. `payload.position`. */
+  readonly path: string;
+  /** Zod issue code (`invalid_type`, `too_small`, …). */
+  readonly code: string;
+  /** Human-readable message from the schema. */
+  readonly message: string;
 }
 
 /**
@@ -461,19 +442,17 @@ export interface InvalidEventIssue {
  * on whether the failure is structural (malformed) or transient.
  */
 export class InvalidEventError extends Error {
-    public override readonly name = 'InvalidEventError';
+  public override readonly name = 'InvalidEventError';
 
-    /** Normalised issues extracted from the Zod error. */
-    public readonly issues: ReadonlyArray<InvalidEventIssue>;
+  /** Normalised issues extracted from the Zod error. */
+  public readonly issues: ReadonlyArray<InvalidEventIssue>;
 
-    public constructor(issues: ReadonlyArray<InvalidEventIssue>) {
-        super(
-            `Invalid Athlya event: ${issues
-                .map((i) => `${i.path || '<root>'} ${i.message}`)
-                .join('; ')}`,
-        );
-        this.issues = issues;
-    }
+  public constructor(issues: ReadonlyArray<InvalidEventIssue>) {
+    super(
+      `Invalid Athlya event: ${issues.map((i) => `${i.path || '<root>'} ${i.message}`).join('; ')}`,
+    );
+    this.issues = issues;
+  }
 }
 
 /**
@@ -488,14 +467,14 @@ export class InvalidEventError extends Error {
  * `Result.Err` would swallow the protocol violation.
  */
 export function parseEvent(raw: unknown): AthlyaEvent {
-    const result = AthlyaEventSchema.safeParse(raw);
-    if (result.success) {
-        return result.data;
-    }
-    const issues: InvalidEventIssue[] = result.error.issues.map((issue) => ({
-        path: issue.path.map(String).join('.'),
-        code: issue.code,
-        message: issue.message,
-    }));
-    throw new InvalidEventError(issues);
+  const result = AthlyaEventSchema.safeParse(raw);
+  if (result.success) {
+    return result.data;
+  }
+  const issues: InvalidEventIssue[] = result.error.issues.map((issue) => ({
+    path: issue.path.map(String).join('.'),
+    code: issue.code,
+    message: issue.message,
+  }));
+  throw new InvalidEventError(issues);
 }

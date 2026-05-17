@@ -74,12 +74,12 @@
 import { t, type Locale } from '@athlya/shared/i18n';
 
 import type {
-    AthlyaEvent,
-    BillingSubscriptionFailedEvent,
-    ReservationCancelledEvent,
-    ReservationCreatedEvent,
-    ReservationPromotedEvent,
-    ReservationReminderEvent,
+  AthlyaEvent,
+  BillingSubscriptionFailedEvent,
+  ReservationCancelledEvent,
+  ReservationCreatedEvent,
+  ReservationPromotedEvent,
+  ReservationReminderEvent,
 } from '@athlya/shared/events';
 import type { Consents } from '@athlya/shared/schemas';
 
@@ -119,11 +119,11 @@ export const DEDUP_TTL_SECONDS = 24 * 60 * 60;
  *                       MVP locale).
  */
 export interface Recipient {
-    readonly userId: string;
-    readonly email: string | null;
-    readonly pushTokens: readonly string[];
-    readonly consents: Consents;
-    readonly locale: 'fr' | 'en';
+  readonly userId: string;
+  readonly email: string | null;
+  readonly pushTokens: readonly string[];
+  readonly consents: Consents;
+  readonly locale: 'fr' | 'en';
 }
 
 /* ------------------------------------------------------------------ */
@@ -157,32 +157,32 @@ export interface Recipient {
  * await dedup.release(event.id); throw err; }`.
  */
 export interface DedupStore {
-    /**
-     * Atomically claim `eventId` for `ttlSec` seconds. Returns
-     * `true` if this caller is the first writer (and the event is
-     * now persisted as seen). Returns `false` if another worker
-     * already claimed the same id within the TTL window.
-     *
-     * The implementation MUST be atomic at the storage level —
-     * a `GET` + `SET` pair would re-introduce the race the
-     * single-call shape exists to prevent. With Upstash Redis,
-     * use `SET key value NX EX ttl` and treat the reply (`'OK'`
-     * or `null`) as the first-writer signal.
-     */
-    tryAcquire(eventId: string, ttlSec: number): Promise<boolean>;
+  /**
+   * Atomically claim `eventId` for `ttlSec` seconds. Returns
+   * `true` if this caller is the first writer (and the event is
+   * now persisted as seen). Returns `false` if another worker
+   * already claimed the same id within the TTL window.
+   *
+   * The implementation MUST be atomic at the storage level —
+   * a `GET` + `SET` pair would re-introduce the race the
+   * single-call shape exists to prevent. With Upstash Redis,
+   * use `SET key value NX EX ttl` and treat the reply (`'OK'`
+   * or `null`) as the first-writer signal.
+   */
+  tryAcquire(eventId: string, ttlSec: number): Promise<boolean>;
 
-    /**
-     * Drop a previously-acquired claim so a redelivered event can
-     * be re-processed. Called by the consumer's `catch` arm when a
-     * sender throws — the queue redelivery semantics guarantee a
-     * later worker will pick the same `eventId` up.
-     *
-     * Idempotent: calling `release()` on a key that has already
-     * expired (or was never claimed) MUST NOT throw. With Upstash
-     * Redis, a plain `DEL` is sufficient — the response is the
-     * count of keys removed and is not inspected.
-     */
-    release(eventId: string): Promise<void>;
+  /**
+   * Drop a previously-acquired claim so a redelivered event can
+   * be re-processed. Called by the consumer's `catch` arm when a
+   * sender throws — the queue redelivery semantics guarantee a
+   * later worker will pick the same `eventId` up.
+   *
+   * Idempotent: calling `release()` on a key that has already
+   * expired (or was never claimed) MUST NOT throw. With Upstash
+   * Redis, a plain `DEL` is sufficient — the response is the
+   * count of keys removed and is not inspected.
+   */
+  release(eventId: string): Promise<void>;
 }
 
 /**
@@ -193,15 +193,15 @@ export interface DedupStore {
  * `'skipped_no_recipient'`.
  */
 export interface RecipientRepo {
-    getRecipient(userId: string): Promise<Recipient | null>;
+  getRecipient(userId: string): Promise<Recipient | null>;
 }
 
 /** Arguments accepted by {@link EmailSender.send}. */
 export interface EmailMessage {
-    readonly to: string;
-    readonly subject: string;
-    readonly html: string;
-    readonly text: string;
+  readonly to: string;
+  readonly subject: string;
+  readonly html: string;
+  readonly text: string;
 }
 
 /**
@@ -212,15 +212,15 @@ export interface EmailMessage {
  * policy to the adapter).
  */
 export interface EmailSender {
-    send(message: EmailMessage): Promise<void>;
+  send(message: EmailMessage): Promise<void>;
 }
 
 /** Arguments accepted by {@link PushSender.send}. */
 export interface PushMessage {
-    readonly tokens: readonly string[];
-    readonly title: string;
-    readonly body: string;
-    readonly data?: Record<string, string>;
+  readonly tokens: readonly string[];
+  readonly title: string;
+  readonly body: string;
+  readonly data?: Record<string, string>;
 }
 
 /**
@@ -231,7 +231,7 @@ export interface PushMessage {
  * infrastructure level, out of scope here).
  */
 export interface PushSender {
-    send(message: PushMessage): Promise<void>;
+  send(message: PushMessage): Promise<void>;
 }
 
 /**
@@ -241,9 +241,9 @@ export interface PushSender {
  * structured fields (`eventId`, `userId`, …).
  */
 export interface Logger {
-    info(msg: string, meta?: Record<string, unknown>): void;
-    warn(msg: string, meta?: Record<string, unknown>): void;
-    error(msg: string, meta?: Record<string, unknown>): void;
+  info(msg: string, meta?: Record<string, unknown>): void;
+  warn(msg: string, meta?: Record<string, unknown>): void;
+  error(msg: string, meta?: Record<string, unknown>): void;
 }
 
 /**
@@ -276,13 +276,13 @@ export type Clock = () => number;
  *     reports `false`.
  */
 export type HandleResult =
-    | { readonly status: 'skipped_duplicate' }
-    | { readonly status: 'skipped_no_recipient' }
-    | { readonly status: 'skipped_no_consent' }
-    | {
-        readonly status: 'ok';
-        readonly email: boolean;
-        readonly push: boolean;
+  | { readonly status: 'skipped_duplicate' }
+  | { readonly status: 'skipped_no_recipient' }
+  | { readonly status: 'skipped_no_consent' }
+  | {
+      readonly status: 'ok';
+      readonly email: boolean;
+      readonly push: boolean;
     };
 
 /* ------------------------------------------------------------------ */
@@ -291,28 +291,28 @@ export type HandleResult =
 
 /** Dependency bag accepted by {@link handleEvent}. */
 export interface HandleEventDeps {
-    readonly dedup: DedupStore;
-    readonly recipients: RecipientRepo;
-    readonly email: EmailSender;
-    readonly push: PushSender;
-    readonly logger: Logger;
-    /** Optional — defaults to `Date.now`. Tests pin it for determinism. */
-    readonly clock?: Clock;
-    /**
-     * Optional override for the transactional / marketing classifier.
-     *
-     * All four event types handled today are transactional per the
-     * built-in {@link TRANSACTIONAL_KIND} table, so in production this
-     * port is not wired. Unit tests pass a stub to exercise the
-     * marketing / consent-gated branch (Requirement 17.1) without
-     * needing to first land a real marketing event type in
-     * `@athlya/shared/events`. When present, the function is called
-     * with the already-narrowed handled event type and its return
-     * value overrides the built-in lookup: `true` means "ship
-     * regardless of consents.marketing" (Req 17.2), `false` means
-     * "require consents.marketing = true" (Req 17.1).
-     */
-    readonly isTransactional?: (eventType: string) => boolean;
+  readonly dedup: DedupStore;
+  readonly recipients: RecipientRepo;
+  readonly email: EmailSender;
+  readonly push: PushSender;
+  readonly logger: Logger;
+  /** Optional — defaults to `Date.now`. Tests pin it for determinism. */
+  readonly clock?: Clock;
+  /**
+   * Optional override for the transactional / marketing classifier.
+   *
+   * All four event types handled today are transactional per the
+   * built-in {@link TRANSACTIONAL_KIND} table, so in production this
+   * port is not wired. Unit tests pass a stub to exercise the
+   * marketing / consent-gated branch (Requirement 17.1) without
+   * needing to first land a real marketing event type in
+   * `@athlya/shared/events`. When present, the function is called
+   * with the already-narrowed handled event type and its return
+   * value overrides the built-in lookup: `true` means "ship
+   * regardless of consents.marketing" (Req 17.2), `false` means
+   * "require consents.marketing = true" (Req 17.1).
+   */
+  readonly isTransactional?: (eventType: string) => boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -328,11 +328,11 @@ export interface HandleEventDeps {
  * queue-binding level without importing every arm individually.
  */
 export const HANDLED_EVENT_TYPES = [
-    'reservation.created',
-    'reservation.reminder',
-    'reservation.cancelled',
-    'reservation.promoted',
-    'billing.subscription.failed',
+  'reservation.created',
+  'reservation.reminder',
+  'reservation.cancelled',
+  'reservation.promoted',
+  'billing.subscription.failed',
 ] as const;
 
 type HandledEventType = (typeof HANDLED_EVENT_TYPES)[number];
@@ -345,11 +345,11 @@ type HandledEventType = (typeof HANDLED_EVENT_TYPES)[number];
  * dispatch code.
  */
 const TRANSACTIONAL_KIND: Readonly<Record<HandledEventType, boolean>> = {
-    'reservation.created': true,
-    'reservation.reminder': true,
-    'reservation.cancelled': true,
-    'reservation.promoted': true,
-    'billing.subscription.failed': true,
+  'reservation.created': true,
+  'reservation.reminder': true,
+  'reservation.cancelled': true,
+  'reservation.promoted': true,
+  'billing.subscription.failed': true,
 };
 
 /* ------------------------------------------------------------------ */
@@ -372,11 +372,11 @@ const TRANSACTIONAL_KIND: Readonly<Record<HandledEventType, boolean>> = {
  * "push-only" behaviour described in the task.
  */
 interface RenderedMessage {
-    readonly emailSubject?: string;
-    readonly emailBody?: string;
-    readonly pushTitle?: string;
-    readonly pushBody?: string;
-    readonly pushData?: Record<string, string>;
+  readonly emailSubject?: string;
+  readonly emailBody?: string;
+  readonly pushTitle?: string;
+  readonly pushBody?: string;
+  readonly pushData?: Record<string, string>;
 }
 
 /**
@@ -402,70 +402,67 @@ interface RenderedMessage {
  *      `pushData` field — it is deep-link metadata, not a UI string.
  */
 function render(event: AthlyaEvent, locale: Locale): RenderedMessage {
-    switch (event.type) {
-        case 'reservation.created':
-            return renderReservationCreated(event, locale);
-        case 'reservation.reminder':
-            return renderReservationReminder(event, locale);
-        case 'reservation.cancelled':
-            return renderReservationCancelled(event, locale);
-        case 'reservation.promoted':
-            return renderReservationPromoted(event, locale);
-        case 'billing.subscription.failed':
-            return renderBillingFailed(event, locale);
-        default:
-            // Any non-handled event type falls through to an empty
-            // template; the caller decides what to do with it.
-            return {};
-    }
+  switch (event.type) {
+    case 'reservation.created':
+      return renderReservationCreated(event, locale);
+    case 'reservation.reminder':
+      return renderReservationReminder(event, locale);
+    case 'reservation.cancelled':
+      return renderReservationCancelled(event, locale);
+    case 'reservation.promoted':
+      return renderReservationPromoted(event, locale);
+    case 'billing.subscription.failed':
+      return renderBillingFailed(event, locale);
+    default:
+      // Any non-handled event type falls through to an empty
+      // template; the caller decides what to do with it.
+      return {};
+  }
 }
 
-function renderReservationCreated(
-    event: ReservationCreatedEvent,
-    locale: Locale,
-): RenderedMessage {
-    const { reservationId, classId } = event.payload;
-    return {
-        emailSubject: t('notifications.reservationCreated.email.subject', locale),
-        emailBody: t('notifications.reservationCreated.email.body', locale, {
-            reservationId,
-        }),
-        pushTitle: t('notifications.reservationCreated.push.title', locale),
-        pushBody: t('notifications.reservationCreated.push.body', locale),
-        pushData: { reservationId, classId, type: event.type },
-    };
+function renderReservationCreated(event: ReservationCreatedEvent, locale: Locale): RenderedMessage {
+  const { reservationId, classId } = event.payload;
+  return {
+    emailSubject: t('notifications.reservationCreated.email.subject', locale),
+    emailBody: t('notifications.reservationCreated.email.body', locale, {
+      reservationId,
+    }),
+    pushTitle: t('notifications.reservationCreated.push.title', locale),
+    pushBody: t('notifications.reservationCreated.push.body', locale),
+    pushData: { reservationId, classId, type: event.type },
+  };
 }
 
 function renderReservationReminder(
-    event: ReservationReminderEvent,
-    locale: Locale,
+  event: ReservationReminderEvent,
+  locale: Locale,
 ): RenderedMessage {
-    const { reservationId, classId, startsAt } = event.payload;
-    // Reminder is push-only by design (design.md §Component 5) —
-    // sending a reminder email 1 h before class would compete with
-    // the confirmation email and hit inbox-placement limits on Resend
-    // free tier.
-    return {
-        pushTitle: t('notifications.reservationReminder.push.title', locale),
-        pushBody: t('notifications.reservationReminder.push.body', locale),
-        pushData: { reservationId, classId, startsAt, type: event.type },
-    };
+  const { reservationId, classId, startsAt } = event.payload;
+  // Reminder is push-only by design (design.md §Component 5) —
+  // sending a reminder email 1 h before class would compete with
+  // the confirmation email and hit inbox-placement limits on Resend
+  // free tier.
+  return {
+    pushTitle: t('notifications.reservationReminder.push.title', locale),
+    pushBody: t('notifications.reservationReminder.push.body', locale),
+    pushData: { reservationId, classId, startsAt, type: event.type },
+  };
 }
 
 function renderReservationCancelled(
-    event: ReservationCancelledEvent,
-    locale: Locale,
+  event: ReservationCancelledEvent,
+  locale: Locale,
 ): RenderedMessage {
-    const { reservationId, classId } = event.payload;
-    return {
-        emailSubject: t('notifications.reservationCancelled.email.subject', locale),
-        emailBody: t('notifications.reservationCancelled.email.body', locale, {
-            reservationId,
-        }),
-        pushTitle: t('notifications.reservationCancelled.push.title', locale),
-        pushBody: t('notifications.reservationCancelled.push.body', locale),
-        pushData: { reservationId, classId, type: event.type },
-    };
+  const { reservationId, classId } = event.payload;
+  return {
+    emailSubject: t('notifications.reservationCancelled.email.subject', locale),
+    emailBody: t('notifications.reservationCancelled.email.body', locale, {
+      reservationId,
+    }),
+    pushTitle: t('notifications.reservationCancelled.push.title', locale),
+    pushBody: t('notifications.reservationCancelled.push.body', locale),
+    pushData: { reservationId, classId, type: event.type },
+  };
 }
 
 /**
@@ -483,37 +480,37 @@ function renderReservationCancelled(
  * push types uniformly.
  */
 function renderReservationPromoted(
-    event: ReservationPromotedEvent,
-    locale: Locale,
+  event: ReservationPromotedEvent,
+  locale: Locale,
 ): RenderedMessage {
-    const { reservationId, classId } = event.payload;
-    return {
-        emailSubject: t('notifications.reservationPromoted.email.subject', locale),
-        emailBody: t('notifications.reservationPromoted.email.body', locale, {
-            reservationId,
-        }),
-        pushTitle: t('notifications.reservationPromoted.push.title', locale),
-        pushBody: t('notifications.reservationPromoted.push.body', locale),
-        pushData: { reservationId, classId, type: event.type },
-    };
+  const { reservationId, classId } = event.payload;
+  return {
+    emailSubject: t('notifications.reservationPromoted.email.subject', locale),
+    emailBody: t('notifications.reservationPromoted.email.body', locale, {
+      reservationId,
+    }),
+    pushTitle: t('notifications.reservationPromoted.push.title', locale),
+    pushBody: t('notifications.reservationPromoted.push.body', locale),
+    pushData: { reservationId, classId, type: event.type },
+  };
 }
 
 function renderBillingFailed(
-    event: BillingSubscriptionFailedEvent,
-    locale: Locale,
+  event: BillingSubscriptionFailedEvent,
+  locale: Locale,
 ): RenderedMessage {
-    const { subscriptionId, reason } = event.payload;
-    // Billing-failed is email-only. A push that says "your payment
-    // failed" would fire on every device including a spouse's phone
-    // with a shared Apple ID; email is the right channel for
-    // financial notices.
-    return {
-        emailSubject: t('notifications.billingSubscriptionFailed.email.subject', locale),
-        emailBody: t('notifications.billingSubscriptionFailed.email.body', locale, {
-            subscriptionId,
-            reason,
-        }),
-    };
+  const { subscriptionId, reason } = event.payload;
+  // Billing-failed is email-only. A push that says "your payment
+  // failed" would fire on every device including a spouse's phone
+  // with a shared Apple ID; email is the right channel for
+  // financial notices.
+  return {
+    emailSubject: t('notifications.billingSubscriptionFailed.email.subject', locale),
+    emailBody: t('notifications.billingSubscriptionFailed.email.body', locale, {
+      subscriptionId,
+      reason,
+    }),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -528,7 +525,7 @@ function renderBillingFailed(
  * {@link TRANSACTIONAL_KIND}.
  */
 function isTransactional(eventType: HandledEventType): boolean {
-    return TRANSACTIONAL_KIND[eventType];
+  return TRANSACTIONAL_KIND[eventType];
 }
 
 /* ------------------------------------------------------------------ */
@@ -573,160 +570,154 @@ function isTransactional(eventType: HandledEventType): boolean {
  * on `result.status` without a try/catch.
  */
 export async function handleEvent(
-    event: AthlyaEvent,
-    deps: HandleEventDeps,
+  event: AthlyaEvent,
+  deps: HandleEventDeps,
 ): Promise<HandleResult> {
-    const { dedup, recipients, email, push, logger } = deps;
+  const { dedup, recipients, email, push, logger } = deps;
 
-    // ---- Step 1: dedup guard --------------------------------------
-    //
-    // Sprint 11 / Slice 11.1 (critique C2.4) — atomic claim. The
-    // `tryAcquire(eventId, ttl)` reply tells us whether we are the
-    // first worker to pick this `event.id` up. A `false` reply means
-    // a previous worker already wrote the claim row (or the same
-    // worker on a queue redelivery), so we short-circuit with
-    // `skipped_duplicate` before touching any downstream port.
-    //
-    // The TTL uses the full {@link DEDUP_TTL_SECONDS} value (24 h),
-    // matching the previous `markSeen()` behaviour. We extend
-    // claim+commit into a single round-trip; the `release()` call
-    // in the `catch` arm and the early-return paths below restore
-    // the redelivery semantics the old `hasSeen()`/`markSeen()`
-    // pair offered.
-    const acquired = await dedup.tryAcquire(event.id, DEDUP_TTL_SECONDS);
-    if (!acquired) {
-        logger.info('notifications.skipped_duplicate', {
-            eventId: event.id,
-            type: event.type,
-        });
-        return { status: 'skipped_duplicate' };
+  // ---- Step 1: dedup guard --------------------------------------
+  //
+  // Sprint 11 / Slice 11.1 (critique C2.4) — atomic claim. The
+  // `tryAcquire(eventId, ttl)` reply tells us whether we are the
+  // first worker to pick this `event.id` up. A `false` reply means
+  // a previous worker already wrote the claim row (or the same
+  // worker on a queue redelivery), so we short-circuit with
+  // `skipped_duplicate` before touching any downstream port.
+  //
+  // The TTL uses the full {@link DEDUP_TTL_SECONDS} value (24 h),
+  // matching the previous `markSeen()` behaviour. We extend
+  // claim+commit into a single round-trip; the `release()` call
+  // in the `catch` arm and the early-return paths below restore
+  // the redelivery semantics the old `hasSeen()`/`markSeen()`
+  // pair offered.
+  const acquired = await dedup.tryAcquire(event.id, DEDUP_TTL_SECONDS);
+  if (!acquired) {
+    logger.info('notifications.skipped_duplicate', {
+      eventId: event.id,
+      type: event.type,
+    });
+    return { status: 'skipped_duplicate' };
+  }
+
+  try {
+    // ---- Step 2: ignore untracked event types -----------------
+    if (!isHandled(event.type)) {
+      logger.info('notifications.ignored_type', {
+        eventId: event.id,
+        type: event.type,
+      });
+      // NOT keeping the claim: an operator who later teaches
+      // this consumer about the event type should be able to
+      // backfill via a replay. Release so the redelivery is
+      // not silently swallowed.
+      await dedup.release(event.id);
+      return { status: 'ok', email: false, push: false };
     }
 
+    // Narrow `event` to the handled arms so `payload.userId` is
+    // available below. Every handled event's payload has `userId`.
+    const handled = event as
+      | ReservationCreatedEvent
+      | ReservationReminderEvent
+      | ReservationCancelledEvent
+      | ReservationPromotedEvent
+      | BillingSubscriptionFailedEvent;
+    const userId = handled.payload.userId;
+
+    // ---- Step 4: recipient lookup -----------------------------
+    //
+    // We do the recipient lookup *before* the consent gate
+    // because the consent flag lives on the recipient row
+    // itself — reading the row is the cheapest way to know
+    // whether to send.
+    const recipient = await recipients.getRecipient(userId);
+    if (recipient === null) {
+      logger.warn('notifications.skipped_no_recipient', {
+        eventId: event.id,
+        type: event.type,
+        userId,
+      });
+      // Release the claim: the replay machinery will retry if
+      // the user reappears (e.g. RGPD export restore).
+      await dedup.release(event.id);
+      return { status: 'skipped_no_recipient' };
+    }
+
+    // ---- Step 3 (delayed): consent gate -----------------------
+    //
+    // Transactional events bypass the marketing flag (Req 17.2).
+    // The analytics / thirdParty flags are unused by the
+    // notifications module today — they gate other consumers
+    // entirely.
+    //
+    // The built-in `isTransactional` table classifies every
+    // handled event type as transactional today. Tests inject
+    // `deps.isTransactional` to flip a handled type to
+    // marketing without needing a real marketing event in the
+    // shared catalog (see `__tests__/consent.test.ts`).
+    const isTx =
+      deps.isTransactional !== undefined
+        ? deps.isTransactional(handled.type)
+        : isTransactional(handled.type);
+    if (!isTx && !recipient.consents.marketing) {
+      logger.info('notifications.skipped_no_consent', {
+        eventId: event.id,
+        type: event.type,
+        userId,
+      });
+      // Release the claim: if the user updates their consent
+      // later and an operator replays the event, it should
+      // fire.
+      await dedup.release(event.id);
+      return { status: 'skipped_no_consent' };
+    }
+
+    // ---- Step 5: render + dispatch ----------------------------
+    const message = render(handled, recipient.locale);
+
+    const emailPromise = maybeSendEmail(message, recipient, email);
+    const pushPromise = maybeSendPush(message, recipient, push);
+
+    const [emailSent, pushSent] = await Promise.all([emailPromise, pushPromise]);
+
+    // ---- Step 6: keep the claim (success path) ----------------
+    //
+    // The atomic claim from Step 1 is already persisted with the
+    // 24 h TTL — there is nothing more to do here. A bus
+    // redelivery within the TTL window will see the claim and
+    // short-circuit at Step 1 with `skipped_duplicate`, which
+    // is the deduplication contract Req 17.4 asks for.
+    logger.info('notifications.ok', {
+      eventId: event.id,
+      type: handled.type,
+      userId,
+      email: emailSent,
+      push: pushSent,
+    });
+
+    return { status: 'ok', email: emailSent, push: pushSent };
+  } catch (err) {
+    // Sprint 11 / Slice 11.1 (critique C2.4) — release the claim
+    // so Cloudflare Queues' at-least-once redelivery semantics
+    // can re-process the event. Without this branch, a transient
+    // Resend / push failure would silently squash all subsequent
+    // retries because the claim row would still answer
+    // `tryAcquire() === false` at Step 1 above.
+    //
+    // `release()` is idempotent (DEL of an absent key is a
+    // no-op), so we do not branch on the type of failure.
     try {
-        // ---- Step 2: ignore untracked event types -----------------
-        if (!isHandled(event.type)) {
-            logger.info('notifications.ignored_type', {
-                eventId: event.id,
-                type: event.type,
-            });
-            // NOT keeping the claim: an operator who later teaches
-            // this consumer about the event type should be able to
-            // backfill via a replay. Release so the redelivery is
-            // not silently swallowed.
-            await dedup.release(event.id);
-            return { status: 'ok', email: false, push: false };
-        }
-
-        // Narrow `event` to the handled arms so `payload.userId` is
-        // available below. Every handled event's payload has `userId`.
-        const handled = event as
-            | ReservationCreatedEvent
-            | ReservationReminderEvent
-            | ReservationCancelledEvent
-            | ReservationPromotedEvent
-            | BillingSubscriptionFailedEvent;
-        const userId = handled.payload.userId;
-
-        // ---- Step 4: recipient lookup -----------------------------
-        //
-        // We do the recipient lookup *before* the consent gate
-        // because the consent flag lives on the recipient row
-        // itself — reading the row is the cheapest way to know
-        // whether to send.
-        const recipient = await recipients.getRecipient(userId);
-        if (recipient === null) {
-            logger.warn('notifications.skipped_no_recipient', {
-                eventId: event.id,
-                type: event.type,
-                userId,
-            });
-            // Release the claim: the replay machinery will retry if
-            // the user reappears (e.g. RGPD export restore).
-            await dedup.release(event.id);
-            return { status: 'skipped_no_recipient' };
-        }
-
-        // ---- Step 3 (delayed): consent gate -----------------------
-        //
-        // Transactional events bypass the marketing flag (Req 17.2).
-        // The analytics / thirdParty flags are unused by the
-        // notifications module today — they gate other consumers
-        // entirely.
-        //
-        // The built-in `isTransactional` table classifies every
-        // handled event type as transactional today. Tests inject
-        // `deps.isTransactional` to flip a handled type to
-        // marketing without needing a real marketing event in the
-        // shared catalog (see `__tests__/consent.test.ts`).
-        const isTx =
-            deps.isTransactional !== undefined
-                ? deps.isTransactional(handled.type)
-                : isTransactional(handled.type);
-        if (!isTx && !recipient.consents.marketing) {
-            logger.info('notifications.skipped_no_consent', {
-                eventId: event.id,
-                type: event.type,
-                userId,
-            });
-            // Release the claim: if the user updates their consent
-            // later and an operator replays the event, it should
-            // fire.
-            await dedup.release(event.id);
-            return { status: 'skipped_no_consent' };
-        }
-
-        // ---- Step 5: render + dispatch ----------------------------
-        const message = render(handled, recipient.locale);
-
-        const emailPromise = maybeSendEmail(message, recipient, email);
-        const pushPromise = maybeSendPush(message, recipient, push);
-
-        const [emailSent, pushSent] = await Promise.all([
-            emailPromise,
-            pushPromise,
-        ]);
-
-        // ---- Step 6: keep the claim (success path) ----------------
-        //
-        // The atomic claim from Step 1 is already persisted with the
-        // 24 h TTL — there is nothing more to do here. A bus
-        // redelivery within the TTL window will see the claim and
-        // short-circuit at Step 1 with `skipped_duplicate`, which
-        // is the deduplication contract Req 17.4 asks for.
-        logger.info('notifications.ok', {
-            eventId: event.id,
-            type: handled.type,
-            userId,
-            email: emailSent,
-            push: pushSent,
-        });
-
-        return { status: 'ok', email: emailSent, push: pushSent };
-    } catch (err) {
-        // Sprint 11 / Slice 11.1 (critique C2.4) — release the claim
-        // so Cloudflare Queues' at-least-once redelivery semantics
-        // can re-process the event. Without this branch, a transient
-        // Resend / push failure would silently squash all subsequent
-        // retries because the claim row would still answer
-        // `tryAcquire() === false` at Step 1 above.
-        //
-        // `release()` is idempotent (DEL of an absent key is a
-        // no-op), so we do not branch on the type of failure.
-        try {
-            await dedup.release(event.id);
-        } catch (releaseErr) {
-            // Log but rethrow the ORIGINAL error — the dispatch
-            // failure is the operationally-meaningful one.
-            logger.warn('notifications.release_failed', {
-                eventId: event.id,
-                error:
-                    releaseErr instanceof Error
-                        ? releaseErr.message
-                        : String(releaseErr),
-            });
-        }
-        throw err;
+      await dedup.release(event.id);
+    } catch (releaseErr) {
+      // Log but rethrow the ORIGINAL error — the dispatch
+      // failure is the operationally-meaningful one.
+      logger.warn('notifications.release_failed', {
+        eventId: event.id,
+        error: releaseErr instanceof Error ? releaseErr.message : String(releaseErr),
+      });
     }
+    throw err;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -739,7 +730,7 @@ export async function handleEvent(
  * cast is isolated here rather than sprinkled at every call site.
  */
 function isHandled(type: AthlyaEvent['type']): type is HandledEventType {
-    return (HANDLED_EVENT_TYPES as readonly string[]).includes(type);
+  return (HANDLED_EVENT_TYPES as readonly string[]).includes(type);
 }
 
 /**
@@ -748,28 +739,24 @@ function isHandled(type: AthlyaEvent['type']): type is HandledEventType {
  * actually attempted and the sender resolved.
  */
 async function maybeSendEmail(
-    message: RenderedMessage,
-    recipient: Recipient,
-    email: EmailSender,
+  message: RenderedMessage,
+  recipient: Recipient,
+  email: EmailSender,
 ): Promise<boolean> {
-    const { emailSubject, emailBody } = message;
-    if (
-        emailSubject === undefined ||
-        emailBody === undefined ||
-        recipient.email === null
-    ) {
-        return false;
-    }
-    await email.send({
-        to: recipient.email,
-        subject: emailSubject,
-        // The adapter is responsible for escaping — this module
-        // ships plain text as both `text` and a minimally-wrapped
-        // `html`. Resend accepts both and picks per content-type.
-        html: `<p>${escapeHtml(emailBody)}</p>`,
-        text: emailBody,
-    });
-    return true;
+  const { emailSubject, emailBody } = message;
+  if (emailSubject === undefined || emailBody === undefined || recipient.email === null) {
+    return false;
+  }
+  await email.send({
+    to: recipient.email,
+    subject: emailSubject,
+    // The adapter is responsible for escaping — this module
+    // ships plain text as both `text` and a minimally-wrapped
+    // `html`. Resend accepts both and picks per content-type.
+    html: `<p>${escapeHtml(emailBody)}</p>`,
+    text: emailBody,
+  });
+  return true;
 }
 
 /**
@@ -777,25 +764,21 @@ async function maybeSendEmail(
  * recipient registered at least one device token.
  */
 async function maybeSendPush(
-    message: RenderedMessage,
-    recipient: Recipient,
-    push: PushSender,
+  message: RenderedMessage,
+  recipient: Recipient,
+  push: PushSender,
 ): Promise<boolean> {
-    const { pushTitle, pushBody, pushData } = message;
-    if (
-        pushTitle === undefined ||
-        pushBody === undefined ||
-        recipient.pushTokens.length === 0
-    ) {
-        return false;
-    }
-    await push.send({
-        tokens: recipient.pushTokens,
-        title: pushTitle,
-        body: pushBody,
-        ...(pushData !== undefined ? { data: pushData } : {}),
-    });
-    return true;
+  const { pushTitle, pushBody, pushData } = message;
+  if (pushTitle === undefined || pushBody === undefined || recipient.pushTokens.length === 0) {
+    return false;
+  }
+  await push.send({
+    tokens: recipient.pushTokens,
+    title: pushTitle,
+    body: pushBody,
+    ...(pushData !== undefined ? { data: pushData } : {}),
+  });
+  return true;
 }
 
 /**
@@ -806,10 +789,10 @@ async function maybeSendPush(
  * `notifications.*` namespace (task 19.2 / Req 28.3).
  */
 function escapeHtml(input: string): string {
-    return input
-        .replace(/&/gu, '&amp;')
-        .replace(/</gu, '&lt;')
-        .replace(/>/gu, '&gt;')
-        .replace(/"/gu, '&quot;')
-        .replace(/'/gu, '&#39;');
+  return input
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;')
+    .replace(/'/gu, '&#39;');
 }

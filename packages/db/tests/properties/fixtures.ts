@@ -33,9 +33,9 @@ export const uuidArb = fc.uuid({ version: 4 });
 
 /** The three RBAC roles the tenant middleware accepts. */
 export const roleArb: fc.Arbitrary<TenantRole> = fc.constantFrom<TenantRole>(
-    'member',
-    'coach',
-    'admin',
+  'member',
+  'coach',
+  'admin',
 );
 
 /**
@@ -45,17 +45,17 @@ export const roleArb: fc.Arbitrary<TenantRole> = fc.constantFrom<TenantRole>(
  * pairs without needing fast-check's `fc.uniqueArray` shrinker gymnastics.
  */
 export interface StudioSeed {
-    readonly id: string;
-    readonly slug: string;
-    readonly name: string;
+  readonly id: string;
+  readonly slug: string;
+  readonly name: string;
 }
 
 export const studioArb: fc.Arbitrary<StudioSeed> = uuidArb.map((id) => ({
-    id,
-    // Slugs include the uuid so every generated studio is guaranteed
-    // unique even when fast-check replays the same base id across runs.
-    slug: `studio-${id.slice(0, 8)}`,
-    name: `Studio ${id.slice(0, 4)}`,
+  id,
+  // Slugs include the uuid so every generated studio is guaranteed
+  // unique even when fast-check replays the same base id across runs.
+  slug: `studio-${id.slice(0, 8)}`,
+  name: `Studio ${id.slice(0, 4)}`,
 }));
 
 /**
@@ -63,9 +63,7 @@ export const studioArb: fc.Arbitrary<StudioSeed> = uuidArb.map((id) => ({
  * legible counter-examples like `u-abc12345@athlya.test` rather than
  * full Unicode garbage.
  */
-const emailLocalArb = fc
-    .stringMatching(/^[a-z0-9]{3,16}$/)
-    .filter((s) => s.length >= 3);
+const emailLocalArb = fc.stringMatching(/^[a-z0-9]{3,16}$/).filter((s) => s.length >= 3);
 
 /**
  * User seed. `studioId` is set by the scenario builder (never by the
@@ -74,28 +72,28 @@ const emailLocalArb = fc
  * and admin-scoped queries.
  */
 export interface UserSeed {
-    readonly id: string;
-    readonly studioId: string;
-    readonly email: string;
-    readonly displayName: string;
-    readonly role: TenantRole;
+  readonly id: string;
+  readonly studioId: string;
+  readonly email: string;
+  readonly displayName: string;
+  readonly role: TenantRole;
 }
 
 export interface UserSeedBase {
-    readonly id: string;
-    readonly email: string;
-    readonly displayName: string;
-    readonly role: TenantRole;
+  readonly id: string;
+  readonly email: string;
+  readonly displayName: string;
+  readonly role: TenantRole;
 }
 
 export const userSeedBaseArb: fc.Arbitrary<UserSeedBase> = fc
-    .tuple(uuidArb, emailLocalArb, roleArb)
-    .map(([id, local, role]) => ({
-        id,
-        email: `${local}-${id.slice(0, 8)}@athlya.test`,
-        displayName: `User ${id.slice(0, 4)}`,
-        role,
-    }));
+  .tuple(uuidArb, emailLocalArb, roleArb)
+  .map(([id, local, role]) => ({
+    id,
+    email: `${local}-${id.slice(0, 8)}@athlya.test`,
+    displayName: `User ${id.slice(0, 4)}`,
+    role,
+  }));
 
 /**
  * Class seed. `studioId` is filled in by the scenario builder.
@@ -103,33 +101,29 @@ export const userSeedBaseArb: fc.Arbitrary<UserSeedBase> = fc
  * test do not depend on the timestamp.
  */
 export interface ClassSeed {
-    readonly id: string;
-    readonly studioId: string;
-    readonly title: string;
-    readonly startsAt: string;
-    readonly durationMin: number;
-    readonly capacity: number;
+  readonly id: string;
+  readonly studioId: string;
+  readonly title: string;
+  readonly startsAt: string;
+  readonly durationMin: number;
+  readonly capacity: number;
 }
 
 export interface ClassSeedBase {
-    readonly id: string;
-    readonly title: string;
-    readonly durationMin: number;
-    readonly capacity: number;
+  readonly id: string;
+  readonly title: string;
+  readonly durationMin: number;
+  readonly capacity: number;
 }
 
 export const classSeedBaseArb: fc.Arbitrary<ClassSeedBase> = fc
-    .tuple(
-        uuidArb,
-        fc.integer({ min: 15, max: 120 }),
-        fc.integer({ min: 1, max: 50 }),
-    )
-    .map(([id, durationMin, capacity]) => ({
-        id,
-        title: `Class ${id.slice(0, 4)}`,
-        durationMin,
-        capacity,
-    }));
+  .tuple(uuidArb, fc.integer({ min: 15, max: 120 }), fc.integer({ min: 1, max: 50 }))
+  .map(([id, durationMin, capacity]) => ({
+    id,
+    title: `Class ${id.slice(0, 4)}`,
+    durationMin,
+    capacity,
+  }));
 
 /**
  * Reservation seed. `classId` and `userId` are filled in by the
@@ -137,9 +131,9 @@ export const classSeedBaseArb: fc.Arbitrary<ClassSeedBase> = fc
  * an owner-class.
  */
 export interface ReservationSeed {
-    readonly id: string;
-    readonly classId: string;
-    readonly userId: string;
+  readonly id: string;
+  readonly classId: string;
+  readonly userId: string;
 }
 
 export const reservationIdArb = uuidArb;
@@ -156,14 +150,14 @@ export const reservationIdArb = uuidArb;
  * crystal clear).
  */
 export interface IsolationScenario {
-    readonly studioA: StudioSeed;
-    readonly studioB: StudioSeed;
-    readonly userA: UserSeed;
-    readonly userB: UserSeed;
-    readonly classA: ClassSeed;
-    readonly classB: ClassSeed;
-    readonly reservationA: ReservationSeed;
-    readonly reservationB: ReservationSeed;
+  readonly studioA: StudioSeed;
+  readonly studioB: StudioSeed;
+  readonly userA: UserSeed;
+  readonly userB: UserSeed;
+  readonly classA: ClassSeed;
+  readonly classB: ClassSeed;
+  readonly reservationA: ReservationSeed;
+  readonly reservationB: ReservationSeed;
 }
 
 /**
@@ -184,53 +178,53 @@ export interface IsolationScenario {
  *      A from seeing any B-owned row.
  */
 export const isolationScenarioArb: fc.Arbitrary<IsolationScenario> = fc
-    .record({
-        studioA: studioArb,
-        studioB: studioArb,
-        userABase: userSeedBaseArb,
-        userBBase: userSeedBaseArb,
-        classABase: classSeedBaseArb,
-        classBBase: classSeedBaseArb,
-        reservationAId: reservationIdArb,
-        reservationBId: reservationIdArb,
-    })
-    .map(
-        ({
-            studioA,
-            studioB,
-            userABase,
-            userBBase,
-            classABase,
-            classBBase,
-            reservationAId,
-            reservationBId,
-        }) => ({
-            studioA,
-            studioB,
-            userA: { ...userABase, studioId: studioA.id },
-            userB: { ...userBBase, studioId: studioB.id },
-            classA: {
-                ...classABase,
-                studioId: studioA.id,
-                startsAt: '2030-01-01T09:00:00Z',
-            },
-            classB: {
-                ...classBBase,
-                studioId: studioB.id,
-                startsAt: '2030-01-01T19:00:00Z',
-            },
-            reservationA: {
-                id: reservationAId,
-                classId: classABase.id,
-                userId: userABase.id,
-            },
-            reservationB: {
-                id: reservationBId,
-                classId: classBBase.id,
-                userId: userBBase.id,
-            },
-        }),
-    );
+  .record({
+    studioA: studioArb,
+    studioB: studioArb,
+    userABase: userSeedBaseArb,
+    userBBase: userSeedBaseArb,
+    classABase: classSeedBaseArb,
+    classBBase: classSeedBaseArb,
+    reservationAId: reservationIdArb,
+    reservationBId: reservationIdArb,
+  })
+  .map(
+    ({
+      studioA,
+      studioB,
+      userABase,
+      userBBase,
+      classABase,
+      classBBase,
+      reservationAId,
+      reservationBId,
+    }) => ({
+      studioA,
+      studioB,
+      userA: { ...userABase, studioId: studioA.id },
+      userB: { ...userBBase, studioId: studioB.id },
+      classA: {
+        ...classABase,
+        studioId: studioA.id,
+        startsAt: '2030-01-01T09:00:00Z',
+      },
+      classB: {
+        ...classBBase,
+        studioId: studioB.id,
+        startsAt: '2030-01-01T19:00:00Z',
+      },
+      reservationA: {
+        id: reservationAId,
+        classId: classABase.id,
+        userId: userABase.id,
+      },
+      reservationB: {
+        id: reservationBId,
+        classId: classBBase.id,
+        userId: userBBase.id,
+      },
+    }),
+  );
 
 /**
  * Rejects scenarios whose cross-tenant ids happen to coincide. A
@@ -241,24 +235,24 @@ export const isolationScenarioArb: fc.Arbitrary<IsolationScenario> = fc
  * easy to interpret.
  */
 export function scenarioIdsAllDistinct(s: IsolationScenario): boolean {
-    const ids = [
-        s.studioA.id,
-        s.studioB.id,
-        s.userA.id,
-        s.userB.id,
-        s.classA.id,
-        s.classB.id,
-        s.reservationA.id,
-        s.reservationB.id,
-    ];
-    return new Set(ids).size === ids.length;
+  const ids = [
+    s.studioA.id,
+    s.studioB.id,
+    s.userA.id,
+    s.userB.id,
+    s.classA.id,
+    s.classB.id,
+    s.reservationA.id,
+    s.reservationB.id,
+  ];
+  return new Set(ids).size === ids.length;
 }
 
 /** Versioned consents JSON payload — shape documented by `ConsentsSchema`. */
 export const DEFAULT_CONSENTS_JSON = {
-    marketing: false,
-    analytics: false,
-    thirdParty: false,
-    version: 1,
-    updatedAt: '2030-01-01T00:00:00Z',
+  marketing: false,
+  analytics: false,
+  thirdParty: false,
+  version: 1,
+  updatedAt: '2030-01-01T00:00:00Z',
 } as const;

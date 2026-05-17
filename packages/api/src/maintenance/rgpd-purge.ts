@@ -62,7 +62,7 @@
  * (`postgres-js` and `neon-http`) always exposes the count.
  */
 export interface SqlExecutor {
-    execute(query: string, params: readonly unknown[]): Promise<number>;
+  execute(query: string, params: readonly unknown[]): Promise<number>;
 }
 
 /**
@@ -70,7 +70,7 @@ export interface SqlExecutor {
  * `Date.now()`.
  */
 export interface PurgeClock {
-    now(): Date;
+  now(): Date;
 }
 
 const realClock: PurgeClock = { now: () => new Date() };
@@ -109,7 +109,7 @@ export const DEFAULT_BATCH_LIMIT = 500;
  * 30-day grace window since the last cron tick).
  */
 export interface AnonymizeUsersResult {
-    readonly anonymizedCount: number;
+  readonly anonymizedCount: number;
 }
 
 /**
@@ -145,23 +145,23 @@ export interface AnonymizeUsersResult {
  * re-fire on its next tick to drain the rest.
  */
 export async function anonymizeExpiredUsers(
-    deps: SqlExecutor,
-    options: {
-        readonly anonymizeAfterDays?: number;
-        readonly batchLimit?: number;
-        readonly clock?: PurgeClock;
-    } = {},
+  deps: SqlExecutor,
+  options: {
+    readonly anonymizeAfterDays?: number;
+    readonly batchLimit?: number;
+    readonly clock?: PurgeClock;
+  } = {},
 ): Promise<AnonymizeUsersResult> {
-    const days = options.anonymizeAfterDays ?? DEFAULT_USER_ANONYMIZE_AFTER_DAYS;
-    const limit = options.batchLimit ?? DEFAULT_BATCH_LIMIT;
-    const clock = options.clock ?? realClock;
-    const cutoff = new Date(clock.now().getTime() - days * 24 * 60 * 60 * 1000);
+  const days = options.anonymizeAfterDays ?? DEFAULT_USER_ANONYMIZE_AFTER_DAYS;
+  const limit = options.batchLimit ?? DEFAULT_BATCH_LIMIT;
+  const clock = options.clock ?? realClock;
+  const cutoff = new Date(clock.now().getTime() - days * 24 * 60 * 60 * 1000);
 
-    // Guard with a CTE so the LIMIT applies inside the UPDATE — bare
-    // `UPDATE ... LIMIT` is a Postgres syntax error. The IS NOT NULL
-    // guard on `email` makes the operation idempotent (a second pass
-    // re-selects 0 rows even if the cutoff has not advanced).
-    const query = `
+  // Guard with a CTE so the LIMIT applies inside the UPDATE — bare
+  // `UPDATE ... LIMIT` is a Postgres syntax error. The IS NOT NULL
+  // guard on `email` makes the operation idempotent (a second pass
+  // re-selects 0 rows even if the cutoff has not advanced).
+  const query = `
         WITH expired AS (
             SELECT id FROM users
             WHERE deleted_at IS NOT NULL
@@ -179,8 +179,8 @@ export async function anonymizeExpiredUsers(
         WHERE id IN (SELECT id FROM expired)
     `;
 
-    const anonymizedCount = await deps.execute(query, [cutoff, limit]);
-    return { anonymizedCount };
+  const anonymizedCount = await deps.execute(query, [cutoff, limit]);
+  return { anonymizedCount };
 }
 
 /* ------------------------------------------------------------------ */
@@ -188,7 +188,7 @@ export async function anonymizeExpiredUsers(
 /* ------------------------------------------------------------------ */
 
 export interface PurgeOutboxResult {
-    readonly deletedCount: number;
+  readonly deletedCount: number;
 }
 
 /**
@@ -204,19 +204,19 @@ export interface PurgeOutboxResult {
  * than a week ago is irrelevant for live ops.
  */
 export async function purgeExpiredOutbox(
-    deps: SqlExecutor,
-    options: {
-        readonly retentionDays?: number;
-        readonly batchLimit?: number;
-        readonly clock?: PurgeClock;
-    } = {},
+  deps: SqlExecutor,
+  options: {
+    readonly retentionDays?: number;
+    readonly batchLimit?: number;
+    readonly clock?: PurgeClock;
+  } = {},
 ): Promise<PurgeOutboxResult> {
-    const days = options.retentionDays ?? DEFAULT_OUTBOX_RETENTION_DAYS;
-    const limit = options.batchLimit ?? DEFAULT_BATCH_LIMIT;
-    const clock = options.clock ?? realClock;
-    const cutoff = new Date(clock.now().getTime() - days * 24 * 60 * 60 * 1000);
+  const days = options.retentionDays ?? DEFAULT_OUTBOX_RETENTION_DAYS;
+  const limit = options.batchLimit ?? DEFAULT_BATCH_LIMIT;
+  const clock = options.clock ?? realClock;
+  const cutoff = new Date(clock.now().getTime() - days * 24 * 60 * 60 * 1000);
 
-    const query = `
+  const query = `
         DELETE FROM outbox
         WHERE id IN (
             SELECT id FROM outbox
@@ -227,8 +227,8 @@ export async function purgeExpiredOutbox(
         )
     `;
 
-    const deletedCount = await deps.execute(query, [cutoff, limit]);
-    return { deletedCount };
+  const deletedCount = await deps.execute(query, [cutoff, limit]);
+  return { deletedCount };
 }
 
 /* ------------------------------------------------------------------ */
@@ -236,7 +236,7 @@ export async function purgeExpiredOutbox(
 /* ------------------------------------------------------------------ */
 
 export interface PurgeExportJobsResult {
-    readonly deletedCount: number;
+  readonly deletedCount: number;
 }
 
 /**
@@ -252,20 +252,19 @@ export interface PurgeExportJobsResult {
  * TTL is 72 h).
  */
 export async function purgeExpiredExportJobs(
-    deps: SqlExecutor,
-    options: {
-        readonly retentionDays?: number;
-        readonly batchLimit?: number;
-        readonly clock?: PurgeClock;
-    } = {},
+  deps: SqlExecutor,
+  options: {
+    readonly retentionDays?: number;
+    readonly batchLimit?: number;
+    readonly clock?: PurgeClock;
+  } = {},
 ): Promise<PurgeExportJobsResult> {
-    const days =
-        options.retentionDays ?? DEFAULT_EXPORT_JOBS_RETENTION_DAYS;
-    const limit = options.batchLimit ?? DEFAULT_BATCH_LIMIT;
-    const clock = options.clock ?? realClock;
-    const cutoff = new Date(clock.now().getTime() - days * 24 * 60 * 60 * 1000);
+  const days = options.retentionDays ?? DEFAULT_EXPORT_JOBS_RETENTION_DAYS;
+  const limit = options.batchLimit ?? DEFAULT_BATCH_LIMIT;
+  const clock = options.clock ?? realClock;
+  const cutoff = new Date(clock.now().getTime() - days * 24 * 60 * 60 * 1000);
 
-    const query = `
+  const query = `
         DELETE FROM export_jobs
         WHERE id IN (
             SELECT id FROM export_jobs
@@ -276,8 +275,8 @@ export async function purgeExpiredExportJobs(
         )
     `;
 
-    const deletedCount = await deps.execute(query, [cutoff, limit]);
-    return { deletedCount };
+  const deletedCount = await deps.execute(query, [cutoff, limit]);
+  return { deletedCount };
 }
 
 /* ------------------------------------------------------------------ */
@@ -291,9 +290,9 @@ export async function purgeExpiredExportJobs(
  * log line stays self-describing.
  */
 export interface RgpdMaintenanceResult {
-    readonly anonymizedUsers: number;
-    readonly purgedOutbox: number;
-    readonly purgedExportJobs: number;
+  readonly anonymizedUsers: number;
+  readonly purgedOutbox: number;
+  readonly purgedExportJobs: number;
 }
 
 /**
@@ -307,80 +306,74 @@ export interface RgpdMaintenanceResult {
  * batched DELETEs / UPDATEs of 500 rows each.
  */
 export async function runRgpdMaintenanceCycle(
-    deps: SqlExecutor,
-    options: {
-        readonly anonymizeAfterDays?: number;
-        readonly outboxRetentionDays?: number;
-        readonly exportJobsRetentionDays?: number;
-        readonly batchLimit?: number;
-        readonly clock?: PurgeClock;
-    } = {},
+  deps: SqlExecutor,
+  options: {
+    readonly anonymizeAfterDays?: number;
+    readonly outboxRetentionDays?: number;
+    readonly exportJobsRetentionDays?: number;
+    readonly batchLimit?: number;
+    readonly clock?: PurgeClock;
+  } = {},
 ): Promise<RgpdMaintenanceResult> {
-    const errors: Error[] = [];
+  const errors: Error[] = [];
 
-    let anonymizedUsers = 0;
-    try {
-        const r = await anonymizeExpiredUsers(deps, {
-            ...(options.anonymizeAfterDays !== undefined
-                ? { anonymizeAfterDays: options.anonymizeAfterDays }
-                : {}),
-            ...(options.batchLimit !== undefined
-                ? { batchLimit: options.batchLimit }
-                : {}),
-            ...(options.clock !== undefined ? { clock: options.clock } : {}),
-        });
-        anonymizedUsers = r.anonymizedCount;
-    } catch (err) {
-        errors.push(err instanceof Error ? err : new Error(String(err)));
-    }
+  let anonymizedUsers = 0;
+  try {
+    const r = await anonymizeExpiredUsers(deps, {
+      ...(options.anonymizeAfterDays !== undefined
+        ? { anonymizeAfterDays: options.anonymizeAfterDays }
+        : {}),
+      ...(options.batchLimit !== undefined ? { batchLimit: options.batchLimit } : {}),
+      ...(options.clock !== undefined ? { clock: options.clock } : {}),
+    });
+    anonymizedUsers = r.anonymizedCount;
+  } catch (err) {
+    errors.push(err instanceof Error ? err : new Error(String(err)));
+  }
 
-    let purgedOutbox = 0;
-    try {
-        const r = await purgeExpiredOutbox(deps, {
-            ...(options.outboxRetentionDays !== undefined
-                ? { retentionDays: options.outboxRetentionDays }
-                : {}),
-            ...(options.batchLimit !== undefined
-                ? { batchLimit: options.batchLimit }
-                : {}),
-            ...(options.clock !== undefined ? { clock: options.clock } : {}),
-        });
-        purgedOutbox = r.deletedCount;
-    } catch (err) {
-        errors.push(err instanceof Error ? err : new Error(String(err)));
-    }
+  let purgedOutbox = 0;
+  try {
+    const r = await purgeExpiredOutbox(deps, {
+      ...(options.outboxRetentionDays !== undefined
+        ? { retentionDays: options.outboxRetentionDays }
+        : {}),
+      ...(options.batchLimit !== undefined ? { batchLimit: options.batchLimit } : {}),
+      ...(options.clock !== undefined ? { clock: options.clock } : {}),
+    });
+    purgedOutbox = r.deletedCount;
+  } catch (err) {
+    errors.push(err instanceof Error ? err : new Error(String(err)));
+  }
 
-    let purgedExportJobs = 0;
-    try {
-        const r = await purgeExpiredExportJobs(deps, {
-            ...(options.exportJobsRetentionDays !== undefined
-                ? { retentionDays: options.exportJobsRetentionDays }
-                : {}),
-            ...(options.batchLimit !== undefined
-                ? { batchLimit: options.batchLimit }
-                : {}),
-            ...(options.clock !== undefined ? { clock: options.clock } : {}),
-        });
-        purgedExportJobs = r.deletedCount;
-    } catch (err) {
-        errors.push(err instanceof Error ? err : new Error(String(err)));
-    }
+  let purgedExportJobs = 0;
+  try {
+    const r = await purgeExpiredExportJobs(deps, {
+      ...(options.exportJobsRetentionDays !== undefined
+        ? { retentionDays: options.exportJobsRetentionDays }
+        : {}),
+      ...(options.batchLimit !== undefined ? { batchLimit: options.batchLimit } : {}),
+      ...(options.clock !== undefined ? { clock: options.clock } : {}),
+    });
+    purgedExportJobs = r.deletedCount;
+  } catch (err) {
+    errors.push(err instanceof Error ? err : new Error(String(err)));
+  }
 
-    if (errors.length > 0) {
-        // Surface the first error verbatim and append the others as
-        // serialised messages so the structured logger captures every
-        // failure on a single line.
-        const head = errors[0]!;
-        const tail = errors
-            .slice(1)
-            .map((e) => e.message)
-            .join('; ');
-        throw new Error(
-            tail.length > 0
-                ? `rgpd maintenance cycle: ${head.message}; subsequent: ${tail}`
-                : `rgpd maintenance cycle: ${head.message}`,
-        );
-    }
+  if (errors.length > 0) {
+    // Surface the first error verbatim and append the others as
+    // serialised messages so the structured logger captures every
+    // failure on a single line.
+    const head = errors[0]!;
+    const tail = errors
+      .slice(1)
+      .map((e) => e.message)
+      .join('; ');
+    throw new Error(
+      tail.length > 0
+        ? `rgpd maintenance cycle: ${head.message}; subsequent: ${tail}`
+        : `rgpd maintenance cycle: ${head.message}`,
+    );
+  }
 
-    return { anonymizedUsers, purgedOutbox, purgedExportJobs };
+  return { anonymizedUsers, purgedOutbox, purgedExportJobs };
 }

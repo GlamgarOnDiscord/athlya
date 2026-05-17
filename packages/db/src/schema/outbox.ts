@@ -24,28 +24,28 @@ import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'dr
 import { createdAt, sqlIsNull, uuidPrimaryKey } from './_shared.js';
 
 export const outbox = pgTable(
-    'outbox',
-    {
-        id: uuidPrimaryKey(),
-        /** Domain-level event identifier. Unique so retries are safe. */
-        eventId: text('event_id').notNull(),
-        eventType: text('event_type').notNull(),
-        payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
-        occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'date' }).notNull(),
-        publishedAt: timestamp('published_at', { withTimezone: true, mode: 'date' }),
-        attempts: integer('attempts').notNull().default(0),
-        createdAt: createdAt(),
-    },
-    (table) => [
-        uniqueIndex('outbox_event_id_unique').on(table.eventId),
-        /**
-         * The drain worker's primary query: "give me unpublished events,
-         * oldest first". Partial index on the pending slice keeps the
-         * index tiny (most rows are `publishedAt IS NOT NULL` after
-         * delivery, which itself is cleaned up periodically).
-         */
-        index('outbox_pending_idx').on(table.occurredAt).where(sqlIsNull('published_at')),
-    ],
+  'outbox',
+  {
+    id: uuidPrimaryKey(),
+    /** Domain-level event identifier. Unique so retries are safe. */
+    eventId: text('event_id').notNull(),
+    eventType: text('event_type').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'date' }).notNull(),
+    publishedAt: timestamp('published_at', { withTimezone: true, mode: 'date' }),
+    attempts: integer('attempts').notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('outbox_event_id_unique').on(table.eventId),
+    /**
+     * The drain worker's primary query: "give me unpublished events,
+     * oldest first". Partial index on the pending slice keeps the
+     * index tiny (most rows are `publishedAt IS NOT NULL` after
+     * delivery, which itself is cleaned up periodically).
+     */
+    index('outbox_pending_idx').on(table.occurredAt).where(sqlIsNull('published_at')),
+  ],
 );
 
 export type OutboxRow = typeof outbox.$inferSelect;

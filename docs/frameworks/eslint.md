@@ -1,16 +1,16 @@
 # ESLint — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Utilisé** | ^9.39.1 |
-| **Dernière stable** | **10.3.0** (1er mai 2026) |
-| **ESLint 9 EOL** | **6 août 2026** (~3 mois) |
-| **typescript-eslint** | ^8.50.0 → latest 8.59.3 |
-| **Action urgente** | Migrer vers v10 avant août 2026 |
+|                       | Value                           |
+| --------------------- | ------------------------------- |
+| **Utilisé**           | ^9.39.1                         |
+| **Dernière stable**   | **10.3.0** (1er mai 2026)       |
+| **ESLint 9 EOL**      | **6 août 2026** (~3 mois)       |
+| **typescript-eslint** | ^8.50.0 → latest 8.59.3         |
+| **Action urgente**    | Migrer vers v10 avant août 2026 |
 
 ---
 
@@ -36,14 +36,14 @@ import { config as athlyaConfig } from '@athlya/eslint-config/react';
 import nextPlugin from '@next/eslint-plugin-next';
 
 export default [
-    ...athlyaConfig,
-    {
-        plugins: { '@next/next': nextPlugin },
-        rules: {
-            ...nextPlugin.configs.recommended.rules,
-            ...nextPlugin.configs['core-web-vitals'].rules,
-        },
+  ...athlyaConfig,
+  {
+    plugins: { '@next/next': nextPlugin },
+    rules: {
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs['core-web-vitals'].rules,
     },
+  },
 ];
 ```
 
@@ -74,14 +74,14 @@ export const config = [
 
 ### Règles clés
 
-| Règle | Réglage | Évaluation |
-|---|---|---|
-| `consistent-type-imports` | error (separate) | ✓ optimal pour tree-shaking |
-| `unused-imports/no-unused-imports` | error | ✓ |
-| `unused-imports/no-unused-vars` | warn (underscore) | ✓ |
-| `import/order` | warn (alphabetize) | ✓ |
-| `import/no-duplicates` | error | ✓ |
-| `no-misused-promises` | error (void attrs false) | ✓ prévient les bugs async |
+| Règle                              | Réglage                  | Évaluation                  |
+| ---------------------------------- | ------------------------ | --------------------------- |
+| `consistent-type-imports`          | error (separate)         | ✓ optimal pour tree-shaking |
+| `unused-imports/no-unused-imports` | error                    | ✓                           |
+| `unused-imports/no-unused-vars`    | warn (underscore)        | ✓                           |
+| `import/order`                     | warn (alphabetize)       | ✓                           |
+| `import/no-duplicates`             | error                    | ✓                           |
+| `no-misused-promises`              | error (void attrs false) | ✓ prévient les bugs async   |
 
 ### Type-Checked Rules
 
@@ -120,12 +120,14 @@ La règle propose maintenant des corrections automatiques (suggestions) pour les
 ## typescript-eslint 8.59.3
 
 Dernière version stable. Releases récentes :
+
 - 8.59.2 : fix crash `no-unsafe-type-assertion` sur templates récursifs, améliorations `no-deprecated`
 - Pas de breaking changes depuis 8.50.0
 
 ### Opportunité : preset `strict-type-checked`
 
 Le projet utilise `recommendedTypeChecked`. Le preset `strictTypeChecked` est plus strict et ajoute :
+
 - `no-unnecessary-condition` — conditions toujours true/false
 - `no-unsafe-*` — usage de `any` non contrôlé
 - `strict-boolean-expressions` — expressions booléennes non-standard

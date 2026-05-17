@@ -41,10 +41,10 @@ Wrangler n'applique pas la même négociation automatique que l'edge. Les répon
 
 ## 2. Cache HTTP — ETag + Cache-Control (B5.1, B5.2)
 
-| Endpoint | `Cache-Control` | ETag fingerprint | Justification du TTL |
-|----------|-----------------|------------------|----------------------|
-| `GET /v1/classes` | `private, max-age=10, must-revalidate` | `(id, version, remaining, startsAt)` joint par `\|` | Le compteur Redis `remaining` change quand un membre book/cancelle, mais 10 s de stale est tolérable côté UI (le book ré-incrémente / décompte côté serveur via une transaction PG, pas via le ETag). |
-| `GET /v1/reservations/me` | `private, max-age=5, must-revalidate` | `(id, status, cancelledAt, checkedInAt)` | Le statut peut basculer en temps réel (cancellation utilisateur, promotion FIFO depuis la waitlist). 5 s pinne une fenêtre stale courte sans casser l'observabilité. |
+| Endpoint                  | `Cache-Control`                        | ETag fingerprint                                    | Justification du TTL                                                                                                                                                                                  |
+| ------------------------- | -------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/classes`         | `private, max-age=10, must-revalidate` | `(id, version, remaining, startsAt)` joint par `\|` | Le compteur Redis `remaining` change quand un membre book/cancelle, mais 10 s de stale est tolérable côté UI (le book ré-incrémente / décompte côté serveur via une transaction PG, pas via le ETag). |
+| `GET /v1/reservations/me` | `private, max-age=5, must-revalidate`  | `(id, status, cancelledAt, checkedInAt)`            | Le statut peut basculer en temps réel (cancellation utilisateur, promotion FIFO depuis la waitlist). 5 s pinne une fenêtre stale courte sans casser l'observabilité.                                  |
 
 ### Mécanique
 
@@ -76,10 +76,10 @@ Aucune optimisation de requête nécessaire. Si une nouvelle slice introduit un 
 
 ## 5. Slice B5 — récap
 
-| Sous-tâche | Statut | Référence |
-|------------|--------|-----------|
-| B5.1 — ETag + Cache-Control sur GET /v1/classes | ✅ | section 2 |
-| B5.2 — ETag sur GET /v1/reservations/me | ✅ | section 2 |
-| B5.3 — Compression | ✅ déléguée à Cloudflare | section 1 |
-| B5.4 — Audit indexes | ✅ documenté | section 3 |
-| B5.5 — N+1 audit | ✅ documenté | section 4 |
+| Sous-tâche                                      | Statut                   | Référence |
+| ----------------------------------------------- | ------------------------ | --------- |
+| B5.1 — ETag + Cache-Control sur GET /v1/classes | ✅                       | section 2 |
+| B5.2 — ETag sur GET /v1/reservations/me         | ✅                       | section 2 |
+| B5.3 — Compression                              | ✅ déléguée à Cloudflare | section 1 |
+| B5.4 — Audit indexes                            | ✅ documenté             | section 3 |
+| B5.5 — N+1 audit                                | ✅ documenté             | section 4 |

@@ -1,14 +1,14 @@
 # React 19 — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^19.2.0 |
-| **Latest secure** | 19.2.6 |
-| **react-dom** | ^19.2.0 |
+|                   | Value   |
+| ----------------- | ------- |
+| **Used**          | ^19.2.0 |
+| **Latest secure** | 19.2.6  |
+| **react-dom**     | ^19.2.0 |
 
 ---
 
@@ -20,11 +20,11 @@ React 19.x a subi trois CVE critiques corrigées à partir de 19.2.1. **Vérifie
 pnpm why react   # doit afficher 19.2.6 ou supérieur
 ```
 
-| CVE | CVSS | Description | Corrigé dans |
-|---|---|---|---|
+| CVE            | CVSS              | Description                                               | Corrigé dans             |
+| -------------- | ----------------- | --------------------------------------------------------- | ------------------------ |
 | CVE-2025-55182 | **10.0 Critical** | RCE via décodage de payload Server Components malveillant | 19.0.6 / 19.1.7 / 19.2.1 |
-| CVE-2025-55184 | 7.5 High | DoS via payload forgé | 19.0.6 / 19.1.7 / 19.2.1 |
-| CVE-2025-55183 | 5.3 Medium | Exposition de code source (fuite d'API keys/secrets) | 19.0.6 / 19.1.7 / 19.2.1 |
+| CVE-2025-55184 | 7.5 High          | DoS via payload forgé                                     | 19.0.6 / 19.1.7 / 19.2.1 |
+| CVE-2025-55183 | 5.3 Medium        | Exposition de code source (fuite d'API keys/secrets)      | 19.0.6 / 19.1.7 / 19.2.1 |
 
 ---
 
@@ -58,11 +58,11 @@ Extrait la logique non-réactive hors des Effects, empêche les re-runs inutiles
 import { useEffectEvent } from 'react';
 
 function ChatRoom({ onMessage }) {
-    const handleMessage = useEffectEvent(onMessage); // non-réactif
-    useEffect(() => {
-        socket.on('message', handleMessage);
-        return () => socket.off('message', handleMessage);
-    }, []); // onMessage n'est pas une dépendance
+  const handleMessage = useEffectEvent(onMessage); // non-réactif
+  useEffect(() => {
+    socket.on('message', handleMessage);
+    return () => socket.off('message', handleMessage);
+  }, []); // onMessage n'est pas une dépendance
 }
 ```
 
@@ -76,8 +76,8 @@ Contrôle la visibilité avec des mises à jour différées :
 import { Activity } from 'react';
 
 <Activity mode={isDrawerOpen ? 'visible' : 'hidden'}>
-    <ExpensivePanel />
-</Activity>
+  <ExpensivePanel />
+</Activity>;
 ```
 
 - `hidden` : effects démontés, state préservé, updates différés
@@ -92,8 +92,8 @@ Anime les changements de DOM via la Web Animations API (intégré avec Next.js 1
 import { ViewTransition } from 'react';
 
 <ViewTransition>
-    <ClassCard key={classId} />
-</ViewTransition>
+  <ClassCard key={classId} />
+</ViewTransition>;
 ```
 
 ### `cacheSignal()` — Server Components uniquement
@@ -103,9 +103,9 @@ Donne accès au signal d'expiration du cache dans un Server Component :
 ```tsx
 import { cacheSignal } from 'react';
 async function ServerComponent() {
-    const signal = cacheSignal();
-    const data = await fetch(url, { signal });
-    return <div>{data}</div>;
+  const signal = cacheSignal();
+  const data = await fetch(url, { signal });
+  return <div>{data}</div>;
 }
 ```
 
@@ -123,9 +123,9 @@ async function ServerComponent() {
 import { useSyncExternalStore } from 'react';
 
 const accessToken = useSyncExternalStore(
-    subscribeToAccessToken, // subscribe
-    getAccessToken,         // getSnapshot
-    () => null              // getServerSnapshot
+  subscribeToAccessToken, // subscribe
+  getAccessToken, // getSnapshot
+  () => null, // getServerSnapshot
 );
 ```
 
@@ -134,6 +134,7 @@ const accessToken = useSyncExternalStore(
 ### 2. Pas de boundaries `<Suspense>`
 
 Requis pour :
+
 - `use()` hook (lecture de contexte/promises)
 - Cache Components (Next.js 16 PPR)
 - Streaming de données Server → Client
@@ -148,12 +149,12 @@ Ajouter `<Suspense fallback={<Skeleton />}>` autour des consommateurs de donnée
 
 ## Patterns dépréciés
 
-| Pattern | Remplacement | Statut |
-|---|---|---|
-| `useState + useEffect` sur store externe | `useSyncExternalStore` | Risque tearing |
-| Nettoyage manuel dans effects | `useEffectEvent` | Verbeux inutilement |
-| `React.createFactory()` | JSX | Supprimé |
-| `defaultProps` sur function components | Paramètres par défaut TS | Non utilisé ici |
+| Pattern                                  | Remplacement             | Statut              |
+| ---------------------------------------- | ------------------------ | ------------------- |
+| `useState + useEffect` sur store externe | `useSyncExternalStore`   | Risque tearing      |
+| Nettoyage manuel dans effects            | `useEffectEvent`         | Verbeux inutilement |
+| `React.createFactory()`                  | JSX                      | Supprimé            |
+| `defaultProps` sur function components   | Paramètres par défaut TS | Non utilisé ici     |
 
 ---
 

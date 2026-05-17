@@ -11,12 +11,12 @@ service container whenever SQL migrations change.
 
 ## Workflow matrix
 
-| Workflow           | Task | Trigger                                                | Status      |
-| ------------------ | ---- | ------------------------------------------------------ | ----------- |
-| `ci.yml`           | 13.1 | PRs, push to `main` / `release/*`                      | implemented |
-| `zap-baseline.yml` | 13.2 | PRs (planned)                                          | planned     |
-| `deps-audit.yml`   | 13.3 | daily cron + PRs touching lockfiles + manual dispatch  | implemented |
-| `pgtap.yml`        | 13.4 | PRs touching `packages/db` migrations or RLS tests     | implemented |
+| Workflow           | Task | Trigger                                               | Status      |
+| ------------------ | ---- | ----------------------------------------------------- | ----------- |
+| `ci.yml`           | 13.1 | PRs, push to `main` / `release/*`                     | implemented |
+| `zap-baseline.yml` | 13.2 | PRs (planned)                                         | planned     |
+| `deps-audit.yml`   | 13.3 | daily cron + PRs touching lockfiles + manual dispatch | implemented |
+| `pgtap.yml`        | 13.4 | PRs touching `packages/db` migrations or RLS tests    | implemented |
 
 Dependabot keeps npm and GitHub Actions dependencies up to date on a weekly
 cadence (`dependabot.yml`).

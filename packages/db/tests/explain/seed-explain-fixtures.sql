@@ -34,22 +34,26 @@ VALUES ('10000000-0000-4000-8000-000000000001', 'explain-test-studio', 'Explain 
 ON CONFLICT (id) DO NOTHING;
 
 -- 200 users — UUIDs déterministes pour idempotence du seed.
-INSERT INTO users (id, studio_id, email, role)
+INSERT INTO users (id, studio_id, email, display_name, consents, role)
 SELECT
     ('10000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid,
     '10000000-0000-4000-8000-000000000001',
     'user-' || gs || '@explain-test.invalid',
+    'User ' || gs,
+    '{"marketing":false,"analytics":false,"thirdParty":false,"version":"2026-01","updatedAt":"2026-01-01T00:00:00.000Z"}'::jsonb,
     'member'
 FROM generate_series(1, 200) AS gs
 ON CONFLICT (id) DO NOTHING;
 
 -- Le user "principal" pour la query Q4 (listMyReservations).
 -- ID stable, on s'assure qu'il existe.
-INSERT INTO users (id, studio_id, email, role)
+INSERT INTO users (id, studio_id, email, display_name, consents, role)
 VALUES (
     '10000000-0000-4000-8000-000000000002',
     '10000000-0000-4000-8000-000000000001',
     'principal@explain-test.invalid',
+    'Principal User',
+    '{"marketing":false,"analytics":false,"thirdParty":false,"version":"2026-01","updatedAt":"2026-01-01T00:00:00.000Z"}'::jsonb,
     'member'
 )
 ON CONFLICT (id) DO NOTHING;
@@ -59,28 +63,28 @@ ON CONFLICT (id) DO NOTHING;
 -- ---------------------------------------------------------------------
 -- Distribution : ~16 cours par jour pendant 30 jours.
 
-INSERT INTO classes (id, studio_id, title, capacity, starts_at, ends_at, version)
+INSERT INTO classes (id, studio_id, title, capacity, starts_at, duration_min, version)
 SELECT
     ('10000000-0000-4000-8000-' || lpad((gs + 1000)::text, 12, '0'))::uuid,
     '10000000-0000-4000-8000-000000000001',
     'Explain test class #' || gs,
     20,
     NOW() + (gs || ' minutes')::interval * 90,  -- ~1 cours / 90 min
-    NOW() + (gs || ' minutes')::interval * 90 + INTERVAL '60 minutes',
+    60,
     1
 FROM generate_series(1, 500) AS gs
 ON CONFLICT (id) DO NOTHING;
 
 -- Class "principale" pour Q1+Q5 — avec 50 waitlist pour exercer
 -- la query waitlist FIFO.
-INSERT INTO classes (id, studio_id, title, capacity, starts_at, ends_at, version)
+INSERT INTO classes (id, studio_id, title, capacity, starts_at, duration_min, version)
 VALUES (
     '10000000-0000-4000-8000-000000000003',
     '10000000-0000-4000-8000-000000000001',
     'Principal explain test class',
     20,
     NOW() + INTERVAL '2 hours',
-    NOW() + INTERVAL '3 hours',
+    60,
     1
 )
 ON CONFLICT (id) DO NOTHING;
@@ -100,10 +104,10 @@ SELECT
         WHEN gs % 100 < 80 THEN 'confirmed'
         WHEN gs % 100 < 95 THEN 'waitlist'
         ELSE 'cancelled'
-    END,
+    END::reservation_status,
     NOW() - (gs || ' minutes')::interval * 5
 FROM generate_series(1, 10000) AS gs
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- 50 réservations waitlist sur la class principale (Q5).
 INSERT INTO reservations (id, class_id, user_id, status, created_at)
@@ -111,10 +115,10 @@ SELECT
     ('30000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid,
     '10000000-0000-4000-8000-000000000003',
     ('10000000-0000-4000-8000-' || lpad(((gs % 200) + 1)::text, 12, '0'))::uuid,
-    'waitlist',
+    'waitlist'::reservation_status,
     NOW() - (gs || ' minutes')::interval * 2
 FROM generate_series(1, 50) AS gs
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- 100 réservations confirmed pour le user principal (Q4).
 INSERT INTO reservations (id, class_id, user_id, status, created_at)
@@ -122,10 +126,10 @@ SELECT
     ('40000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid,
     ('10000000-0000-4000-8000-' || lpad(((gs % 500) + 1001)::text, 12, '0'))::uuid,
     '10000000-0000-4000-8000-000000000002',
-    'confirmed',
+    'confirmed'::reservation_status,
     NOW() - (gs || ' hours')::interval * 1
 FROM generate_series(1, 100) AS gs
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------
 -- ANALYZE pour mettre à jour les stats du planner

@@ -30,50 +30,45 @@
  * unchanged so a genuine bug never gets papered over by retry
  * amplification.
  */
-export async function withConnectionRetry<T>(
-    fn: () => Promise<T>,
-): Promise<T> {
-    try {
-        return await fn();
-    } catch (err) {
-        if (!isTransientConnectionError(err)) {
-            throw err;
-        }
-        // Brief backoff before the retry — Neon wakes in < 500 ms on
-        // a warm resume; longer delays would just inflate latency on
-        // the dev free tier.
-        await new Promise<void>((resolve) => {
-            setTimeout(resolve, 250);
-        });
-        return fn();
+export async function withConnectionRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!isTransientConnectionError(err)) {
+      throw err;
     }
+    // Brief backoff before the retry — Neon wakes in < 500 ms on
+    // a warm resume; longer delays would just inflate latency on
+    // the dev free tier.
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 250);
+    });
+    return fn();
+  }
 }
 
 function isTransientConnectionError(err: unknown): boolean {
-    if (typeof err !== 'object' || err === null) return false;
-    const withCode = err as { code?: unknown; message?: unknown };
-    const code = typeof withCode.code === 'string' ? withCode.code : '';
-    if (
-        code === 'ECONNRESET' ||
-        code === 'ECONNREFUSED' ||
-        code === 'ETIMEDOUT' ||
-        code === 'CONNECTION_ENDED' ||
-        code === 'CONNECTION_DESTROYED' ||
-        code === 'CONNECTION_CLOSED' ||
-        code === '57P01' ||
-        code === '57P02' ||
-        code === '57P03'
-    ) {
-        return true;
-    }
-    const msg =
-        typeof withCode.message === 'string'
-            ? withCode.message.toLowerCase()
-            : '';
-    return (
-        msg.includes('connection terminated') ||
-        msg.includes('connection closed') ||
-        msg.includes('connection ended') ||
-        msg.includes('socket hang up')
-    );
+  if (typeof err !== 'object' || err === null) return false;
+  const withCode = err as { code?: unknown; message?: unknown };
+  const code = typeof withCode.code === 'string' ? withCode.code : '';
+  if (
+    code === 'ECONNRESET' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEDOUT' ||
+    code === 'CONNECTION_ENDED' ||
+    code === 'CONNECTION_DESTROYED' ||
+    code === 'CONNECTION_CLOSED' ||
+    code === '57P01' ||
+    code === '57P02' ||
+    code === '57P03'
+  ) {
+    return true;
+  }
+  const msg = typeof withCode.message === 'string' ? withCode.message.toLowerCase() : '';
+  return (
+    msg.includes('connection terminated') ||
+    msg.includes('connection closed') ||
+    msg.includes('connection ended') ||
+    msg.includes('socket hang up')
+  );
 }

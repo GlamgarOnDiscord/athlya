@@ -31,20 +31,11 @@
  * the input and hands the work off.
  */
 
-import {
-    LogSessionRequestSchema,
-    ListSessionsQuerySchema,
-} from '@athlya/shared/schemas/api';
+import { LogSessionRequestSchema, ListSessionsQuerySchema } from '@athlya/shared/schemas/api';
 
-import {
-    MembersError,
-    type MembersValidationIssue,
-} from './service.js';
+import { MembersError, type MembersValidationIssue } from './service.js';
 
-import type {
-    Exercise,
-    WorkoutSession,
-} from '@athlya/shared/schemas/domain';
+import type { Exercise, WorkoutSession } from '@athlya/shared/schemas/domain';
 
 /* ------------------------------------------------------------------ */
 /*  Repository port                                                    */
@@ -61,12 +52,12 @@ import type {
  * through verbatim from the parsed request body.
  */
 export interface CreateWorkoutSessionInput {
-    userId: string;
-    studioId?: string | undefined;
-    startedAt: string;
-    durationMin?: number | undefined;
-    exercises: ReadonlyArray<Exercise>;
-    notes?: string | undefined;
+  userId: string;
+  studioId?: string | undefined;
+  startedAt: string;
+  durationMin?: number | undefined;
+  exercises: ReadonlyArray<Exercise>;
+  notes?: string | undefined;
 }
 
 /**
@@ -76,12 +67,12 @@ export interface CreateWorkoutSessionInput {
  * them as timestamptz without re-parsing.
  */
 export interface ListWorkoutSessionsOptions {
-    /** Inclusive lower bound of the window. */
-    from: Date;
-    /** Exclusive upper bound of the window. */
-    to: Date;
-    /** Maximum number of rows to return. The service always passes 100. */
-    limit: number;
+  /** Inclusive lower bound of the window. */
+  from: Date;
+  /** Exclusive upper bound of the window. */
+  to: Date;
+  /** Maximum number of rows to return. The service always passes 100. */
+  limit: number;
 }
 
 /**
@@ -100,26 +91,23 @@ export interface ListWorkoutSessionsOptions {
  *     (Requirement 12.4).
  */
 export interface WorkoutSessionRepo {
-    /**
-     * Persist a new workout session and return the stored row.
-     *
-     * The caller has already validated `input` through
-     * {@link LogSessionRequestSchema}; the repo must simply insert the
-     * supplied fields and return the resulting {@link WorkoutSession}.
-     */
-    create(input: CreateWorkoutSessionInput): Promise<WorkoutSession>;
+  /**
+   * Persist a new workout session and return the stored row.
+   *
+   * The caller has already validated `input` through
+   * {@link LogSessionRequestSchema}; the repo must simply insert the
+   * supplied fields and return the resulting {@link WorkoutSession}.
+   */
+  create(input: CreateWorkoutSessionInput): Promise<WorkoutSession>;
 
-    /**
-     * Return the member's workout sessions whose `started_at` falls
-     * within `[from, to)`, ordered `started_at DESC`, capped at
-     * `limit` rows. The repo is responsible for the ordering clause —
-     * the service contract requires descending order (Req 12.4) but
-     * the service itself does no post-filtering.
-     */
-    listByUser(
-        userId: string,
-        opts: ListWorkoutSessionsOptions,
-    ): Promise<WorkoutSession[]>;
+  /**
+   * Return the member's workout sessions whose `started_at` falls
+   * within `[from, to)`, ordered `started_at DESC`, capped at
+   * `limit` rows. The repo is responsible for the ordering clause —
+   * the service contract requires descending order (Req 12.4) but
+   * the service itself does no post-filtering.
+   */
+  listByUser(userId: string, opts: ListWorkoutSessionsOptions): Promise<WorkoutSession[]>;
 }
 
 /**
@@ -130,9 +118,9 @@ export interface WorkoutSessionRepo {
  * signature stable.
  */
 export interface SessionsServiceDeps {
-    repo: WorkoutSessionRepo;
-    /** Defaults to `Date.now`. Supplied explicitly in tests. */
-    now?: () => number;
+  repo: WorkoutSessionRepo;
+  /** Defaults to `Date.now`. Supplied explicitly in tests. */
+  now?: () => number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -158,17 +146,17 @@ const LIST_SESSIONS_HARD_LIMIT = 100;
  * produce identical error shapes regardless of which schema tripped.
  */
 function toValidationIssues(
-    issues: ReadonlyArray<{
-        path: ReadonlyArray<PropertyKey>;
-        code: string;
-        message: string;
-    }>,
+  issues: ReadonlyArray<{
+    path: ReadonlyArray<PropertyKey>;
+    code: string;
+    message: string;
+  }>,
 ): MembersValidationIssue[] {
-    return issues.map((issue) => ({
-        path: issue.path.map(String).join('.'),
-        code: issue.code,
-        message: issue.message,
-    }));
+  return issues.map((issue) => ({
+    path: issue.path.map(String).join('.'),
+    code: issue.code,
+    message: issue.message,
+  }));
 }
 
 /**
@@ -176,13 +164,8 @@ function toValidationIssues(
  * Matches the format used by `./service.ts` so gateway logs stay
  * consistent across use cases.
  */
-function formatIssueSummary(
-    prefix: string,
-    issues: ReadonlyArray<MembersValidationIssue>,
-): string {
-    return `${prefix}: ${issues
-        .map((i) => `${i.path || '<root>'} ${i.message}`)
-        .join('; ')}`;
+function formatIssueSummary(prefix: string, issues: ReadonlyArray<MembersValidationIssue>): string {
+  return `${prefix}: ${issues.map((i) => `${i.path || '<root>'} ${i.message}`).join('; ')}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -213,30 +196,30 @@ function formatIssueSummary(
  * that to HTTP 422 with an `application/problem+json` body.
  */
 export async function logSession(
-    userId: string,
-    input: unknown,
-    deps: SessionsServiceDeps,
+  userId: string,
+  input: unknown,
+  deps: SessionsServiceDeps,
 ): Promise<WorkoutSession> {
-    const parsed = LogSessionRequestSchema.safeParse(input);
-    if (!parsed.success) {
-        const issues = toValidationIssues(parsed.error.issues);
-        throw new MembersError(
-            'validation_failed',
-            formatIssueSummary('invalid workout session', issues),
-            issues,
-        );
-    }
+  const parsed = LogSessionRequestSchema.safeParse(input);
+  if (!parsed.success) {
+    const issues = toValidationIssues(parsed.error.issues);
+    throw new MembersError(
+      'validation_failed',
+      formatIssueSummary('invalid workout session', issues),
+      issues,
+    );
+  }
 
-    const { startedAt, durationMin, exercises, notes, studioId } = parsed.data;
-    const createInput: CreateWorkoutSessionInput = {
-        userId,
-        startedAt,
-        exercises,
-        ...(durationMin === undefined ? {} : { durationMin }),
-        ...(notes === undefined ? {} : { notes }),
-        ...(studioId === undefined ? {} : { studioId }),
-    };
-    return deps.repo.create(createInput);
+  const { startedAt, durationMin, exercises, notes, studioId } = parsed.data;
+  const createInput: CreateWorkoutSessionInput = {
+    userId,
+    startedAt,
+    exercises,
+    ...(durationMin === undefined ? {} : { durationMin }),
+    ...(notes === undefined ? {} : { notes }),
+    ...(studioId === undefined ? {} : { studioId }),
+  };
+  return deps.repo.create(createInput);
 }
 
 /* ------------------------------------------------------------------ */
@@ -263,25 +246,25 @@ export async function logSession(
  * any schema violation.
  */
 export async function listSessions(
-    userId: string,
-    rangeInput: unknown,
-    deps: SessionsServiceDeps,
+  userId: string,
+  rangeInput: unknown,
+  deps: SessionsServiceDeps,
 ): Promise<WorkoutSession[]> {
-    const parsed = ListSessionsQuerySchema.safeParse(rangeInput);
-    if (!parsed.success) {
-        const issues = toValidationIssues(parsed.error.issues);
-        throw new MembersError(
-            'validation_failed',
-            formatIssueSummary('invalid session history range', issues),
-            issues,
-        );
-    }
+  const parsed = ListSessionsQuerySchema.safeParse(rangeInput);
+  if (!parsed.success) {
+    const issues = toValidationIssues(parsed.error.issues);
+    throw new MembersError(
+      'validation_failed',
+      formatIssueSummary('invalid session history range', issues),
+      issues,
+    );
+  }
 
-    const from = new Date(parsed.data.from);
-    const to = new Date(parsed.data.to);
-    return deps.repo.listByUser(userId, {
-        from,
-        to,
-        limit: LIST_SESSIONS_HARD_LIMIT,
-    });
+  const from = new Date(parsed.data.from);
+  const to = new Date(parsed.data.to);
+  return deps.repo.listByUser(userId, {
+    from,
+    to,
+    limit: LIST_SESSIONS_HARD_LIMIT,
+  });
 }

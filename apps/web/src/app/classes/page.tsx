@@ -27,15 +27,15 @@ import type { ReactElement } from 'react';
 export const metadata: Metadata = { title: 'Cours disponibles — Athlya' };
 
 export default async function ClassesPage(): Promise<ReactElement> {
-    const locale = await getLocale();
-    const t = createTranslator(locale);
+  const locale = await getLocale();
+  const t = createTranslator(locale);
 
-    return (
-        <main id="main-content" className="mx-auto flex min-h-dvh max-w-5xl flex-col gap-8 px-6 py-12">
-            <h1 className="text-3xl font-semibold">{t('classes.list.title')}</h1>
-            <RequireAuth>
-                <ClassesList />
-            </RequireAuth>
-        </main>
-    );
+  return (
+    <main id="main-content" className="mx-auto flex min-h-dvh max-w-5xl flex-col gap-8 px-6 py-12">
+      <h1 className="text-3xl font-semibold">{t('classes.list.title')}</h1>
+      <RequireAuth>
+        <ClassesList />
+      </RequireAuth>
+    </main>
+  );
 }

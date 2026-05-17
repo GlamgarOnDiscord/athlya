@@ -59,30 +59,30 @@
  * always enforced in addition to any extension, never replaced.
  */
 export const RESERVED_SUBDOMAINS = [
-    // `www.athlya.app` serves the canonical marketing site and should
-    // redirect to the apex; it is never a tenant.
-    'www',
-    // `api.athlya.app` is the gateway's own host. Treating it as a
-    // tenant would make the gateway try to look up a studio named
-    // "api" on every request.
-    'api',
-    // `admin.athlya.app` is the platform-level admin console (not to
-    // be confused with a studio's admin area, which lives at
-    // `{slug}.athlya.app/admin`).
-    'admin',
-    // `app.athlya.app` is reserved for the generic app shell / SSO
-    // landing that does not belong to any one studio.
-    'app',
-    // `staging.athlya.app` runs the pre-production environment on a
-    // separate origin so cookies and CSP do not leak into prod.
-    'staging',
-    // `dev.athlya.app` is the shared development environment.
-    'dev',
-    // `auth.athlya.app` is reserved for the OAuth/SSO issuer host so
-    // that identity URLs remain stable across studio domains.
-    'auth',
-    // `status.athlya.app` hosts the public status page.
-    'status',
+  // `www.athlya.app` serves the canonical marketing site and should
+  // redirect to the apex; it is never a tenant.
+  'www',
+  // `api.athlya.app` is the gateway's own host. Treating it as a
+  // tenant would make the gateway try to look up a studio named
+  // "api" on every request.
+  'api',
+  // `admin.athlya.app` is the platform-level admin console (not to
+  // be confused with a studio's admin area, which lives at
+  // `{slug}.athlya.app/admin`).
+  'admin',
+  // `app.athlya.app` is reserved for the generic app shell / SSO
+  // landing that does not belong to any one studio.
+  'app',
+  // `staging.athlya.app` runs the pre-production environment on a
+  // separate origin so cookies and CSP do not leak into prod.
+  'staging',
+  // `dev.athlya.app` is the shared development environment.
+  'dev',
+  // `auth.athlya.app` is reserved for the OAuth/SSO issuer host so
+  // that identity URLs remain stable across studio domains.
+  'auth',
+  // `status.athlya.app` hosts the public status page.
+  'status',
 ] as const;
 
 /* ------------------------------------------------------------------ */
@@ -137,8 +137,8 @@ const IPV4_REGEX = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
  * to strip those before dispatching.
  */
 export interface TenantResolutionInput {
-    host: string;
-    path: string;
+  host: string;
+  path: string;
 }
 
 /**
@@ -158,29 +158,29 @@ export interface TenantResolutionInput {
  * a tenant picker — but it must NOT use an arbitrary fallback studio.
  */
 export type TenantResolution =
-    | { source: 'subdomain'; slug: string }
-    | { source: 'path'; slug: string; pathWithoutPrefix: string }
-    | { source: 'none' };
+  | { source: 'subdomain'; slug: string }
+  | { source: 'path'; slug: string; pathWithoutPrefix: string }
+  | { source: 'none' };
 
 /**
  * Optional overrides for {@link resolveTenant}.
  */
 export interface TenantResolverOptions {
-    /**
-     * Apex host the tenant subdomains hang off. Defaults to
-     * {@link DEFAULT_APEX_HOST}. Useful for staging domains
-     * (`staging.athlya.app`-based subdomains), local development with
-     * a custom hosts file, and white-label deployments that use a
-     * different apex entirely.
-     */
-    apexHost?: string;
+  /**
+   * Apex host the tenant subdomains hang off. Defaults to
+   * {@link DEFAULT_APEX_HOST}. Useful for staging domains
+   * (`staging.athlya.app`-based subdomains), local development with
+   * a custom hosts file, and white-label deployments that use a
+   * different apex entirely.
+   */
+  apexHost?: string;
 
-    /**
-     * Additional reserved subdomains, merged with
-     * {@link RESERVED_SUBDOMAINS}. Cannot shrink the default set —
-     * the defaults are always enforced.
-     */
-    reservedSubdomains?: readonly string[];
+  /**
+   * Additional reserved subdomains, merged with
+   * {@link RESERVED_SUBDOMAINS}. Cannot shrink the default set —
+   * the defaults are always enforced.
+   */
+  reservedSubdomains?: readonly string[];
 }
 
 const DEFAULT_APEX_HOST = 'athlya.app';
@@ -204,31 +204,31 @@ const DEFAULT_APEX_HOST = 'athlya.app';
  *     "fix" it).
  */
 function normalizeHost(raw: string): string {
-    const trimmed = raw.trim();
-    if (trimmed.length === 0) {
-        return '';
-    }
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return '';
+  }
 
-    let hostOnly: string;
-    if (trimmed.startsWith('[')) {
-        const end = trimmed.indexOf(']');
-        if (end === -1) {
-            // Malformed IPv6 literal — keep verbatim so the caller
-            // gets `{ source: 'none' }` via the IP-literal fast path.
-            hostOnly = trimmed;
-        } else {
-            hostOnly = trimmed.slice(0, end + 1);
-        }
+  let hostOnly: string;
+  if (trimmed.startsWith('[')) {
+    const end = trimmed.indexOf(']');
+    if (end === -1) {
+      // Malformed IPv6 literal — keep verbatim so the caller
+      // gets `{ source: 'none' }` via the IP-literal fast path.
+      hostOnly = trimmed;
     } else {
-        const colon = trimmed.lastIndexOf(':');
-        if (colon !== -1 && /^\d+$/.test(trimmed.slice(colon + 1))) {
-            hostOnly = trimmed.slice(0, colon);
-        } else {
-            hostOnly = trimmed;
-        }
+      hostOnly = trimmed.slice(0, end + 1);
     }
+  } else {
+    const colon = trimmed.lastIndexOf(':');
+    if (colon !== -1 && /^\d+$/.test(trimmed.slice(colon + 1))) {
+      hostOnly = trimmed.slice(0, colon);
+    } else {
+      hostOnly = trimmed;
+    }
+  }
 
-    return hostOnly.toLowerCase();
+  return hostOnly.toLowerCase();
 }
 
 /**
@@ -237,10 +237,10 @@ function normalizeHost(raw: string): string {
  * four-dotted-quad IPv4 literal short-circuit the subdomain branch.
  */
 function isIpLiteral(host: string): boolean {
-    if (host.startsWith('[')) {
-        return true;
-    }
-    return IPV4_REGEX.test(host);
+  if (host.startsWith('[')) {
+    return true;
+  }
+  return IPV4_REGEX.test(host);
 }
 
 /**
@@ -252,7 +252,7 @@ function isIpLiteral(host: string): boolean {
  * `{ apexHost: 'localhost' }` explicitly.
  */
 function isLocalhost(host: string): boolean {
-    return host === 'localhost';
+  return host === 'localhost';
 }
 
 /* ------------------------------------------------------------------ */
@@ -281,58 +281,50 @@ function isLocalhost(host: string): boolean {
  * a 404 at the edge.
  */
 export function resolveTenant(
-    input: TenantResolutionInput,
-    options: TenantResolverOptions = {},
+  input: TenantResolutionInput,
+  options: TenantResolverOptions = {},
 ): TenantResolution {
-    const apexHost = (options.apexHost ?? DEFAULT_APEX_HOST).toLowerCase();
-    const reserved: ReadonlySet<string> = new Set<string>(
-        [
-            ...RESERVED_SUBDOMAINS,
-            ...(options.reservedSubdomains ?? []),
-        ].map((s) => s.toLowerCase()),
-    );
+  const apexHost = (options.apexHost ?? DEFAULT_APEX_HOST).toLowerCase();
+  const reserved: ReadonlySet<string> = new Set<string>(
+    [...RESERVED_SUBDOMAINS, ...(options.reservedSubdomains ?? [])].map((s) => s.toLowerCase()),
+  );
 
-    const host = normalizeHost(input.host);
+  const host = normalizeHost(input.host);
 
-    // Step 2: decide whether step 3 can even apply.
-    const canTrySubdomain =
-        host.length > 0 &&
-        host !== apexHost &&
-        !isIpLiteral(host) &&
-        !isLocalhost(host);
+  // Step 2: decide whether step 3 can even apply.
+  const canTrySubdomain =
+    host.length > 0 && host !== apexHost && !isIpLiteral(host) && !isLocalhost(host);
 
-    // Step 3: subdomain match against `{sub}.{apexHost}`.
-    if (canTrySubdomain) {
-        const suffix = `.${apexHost}`;
-        if (host.endsWith(suffix)) {
-            const sub = host.slice(0, host.length - suffix.length);
-            if (SLUG_REGEX.test(sub) && !reserved.has(sub)) {
-                return { source: 'subdomain', slug: sub };
-            }
-            // Reserved or malformed — fall through to step 4. A
-            // reserved host with a path like `/s/acme/...` could
-            // legally still pick up a tenant, though in practice
-            // reserved surfaces never mount `/s/*` routes.
-        }
+  // Step 3: subdomain match against `{sub}.{apexHost}`.
+  if (canTrySubdomain) {
+    const suffix = `.${apexHost}`;
+    if (host.endsWith(suffix)) {
+      const sub = host.slice(0, host.length - suffix.length);
+      if (SLUG_REGEX.test(sub) && !reserved.has(sub)) {
+        return { source: 'subdomain', slug: sub };
+      }
+      // Reserved or malformed — fall through to step 4. A
+      // reserved host with a path like `/s/acme/...` could
+      // legally still pick up a tenant, though in practice
+      // reserved surfaces never mount `/s/*` routes.
     }
+  }
 
-    // Step 4: path-based match `^/s/{slug}(/|$)`.
-    const match = PATH_PREFIX_REGEX.exec(input.path);
-    if (match !== null) {
-        const slug = match[1];
-        if (slug !== undefined) {
-            const prefix = `/s/${slug}`;
-            const rest = input.path.slice(prefix.length);
-            const pathWithoutPrefix =
-                rest.length === 0 || rest === '/' ? '/' : rest;
-            return { source: 'path', slug, pathWithoutPrefix };
-        }
+  // Step 4: path-based match `^/s/{slug}(/|$)`.
+  const match = PATH_PREFIX_REGEX.exec(input.path);
+  if (match !== null) {
+    const slug = match[1];
+    if (slug !== undefined) {
+      const prefix = `/s/${slug}`;
+      const rest = input.path.slice(prefix.length);
+      const pathWithoutPrefix = rest.length === 0 || rest === '/' ? '/' : rest;
+      return { source: 'path', slug, pathWithoutPrefix };
     }
+  }
 
-    // Step 5: nothing matched.
-    return { source: 'none' };
+  // Step 5: nothing matched.
+  return { source: 'none' };
 }
-
 
 /* ================================================================== */
 /*  Hono integration — Slice 1.4 (Sprint 1 — SP1.5, finding S2-007)   */
@@ -386,12 +378,12 @@ export function resolveTenant(
  * fabricated context) without a cast.
  */
 export interface TenantResolverContext {
-    readonly req: {
-        header(name: string): string | undefined;
-        readonly url: string;
-    };
-    set(key: 'tenantSlug', value: string | undefined): void;
-    set(key: 'tenantSource', value: 'subdomain' | 'path' | 'none'): void;
+  readonly req: {
+    header(name: string): string | undefined;
+    readonly url: string;
+  };
+  set(key: 'tenantSlug', value: string | undefined): void;
+  set(key: 'tenantSource', value: 'subdomain' | 'path' | 'none'): void;
 }
 
 /**
@@ -402,8 +394,8 @@ export interface TenantResolverContext {
  * being set; the cross-check explicitly guards against that.
  */
 export type TenantResolverMiddleware = (
-    c: TenantResolverContext,
-    next: () => Promise<void>,
+  c: TenantResolverContext,
+  next: () => Promise<void>,
 ) => Promise<void>;
 
 /**
@@ -443,46 +435,46 @@ export type TenantResolverMiddleware = (
  * ```
  */
 export function tenantResolverMiddleware(
-    options: TenantResolverOptions = {},
+  options: TenantResolverOptions = {},
 ): TenantResolverMiddleware {
-    return async (c, next) => {
-        // Real Cloudflare Worker requests always carry a `Host`
-        // header; Hono's in-process `app.request(absoluteUrl, …)`
-        // test harness drops it but parses the URL host out of the
-        // first argument. Mirror the host-check fallback in
-        // `worker.ts` so the middleware behaves identically across
-        // both surfaces.
-        let host = c.req.header('host') ?? '';
-        if (host === '') {
-            try {
-                host = new URL(c.req.url).host;
-            } catch {
-                host = '';
-            }
-        }
+  return async (c, next) => {
+    // Real Cloudflare Worker requests always carry a `Host`
+    // header; Hono's in-process `app.request(absoluteUrl, …)`
+    // test harness drops it but parses the URL host out of the
+    // first argument. Mirror the host-check fallback in
+    // `worker.ts` so the middleware behaves identically across
+    // both surfaces.
+    let host = c.req.header('host') ?? '';
+    if (host === '') {
+      try {
+        host = new URL(c.req.url).host;
+      } catch {
+        host = '';
+      }
+    }
 
-        let path = '/';
-        try {
-            path = new URL(c.req.url).pathname;
-        } catch {
-            // `c.req.url` is supplied by the Workers runtime and is
-            // guaranteed to be parseable; this catch is belt-and-
-            // braces. A fabricated context with a garbage URL still
-            // gets a sane fallback path so the resolver runs.
-            path = '/';
-        }
+    let path = '/';
+    try {
+      path = new URL(c.req.url).pathname;
+    } catch {
+      // `c.req.url` is supplied by the Workers runtime and is
+      // guaranteed to be parseable; this catch is belt-and-
+      // braces. A fabricated context with a garbage URL still
+      // gets a sane fallback path so the resolver runs.
+      path = '/';
+    }
 
-        const resolution = resolveTenant({ host, path }, options);
+    const resolution = resolveTenant({ host, path }, options);
 
-        c.set('tenantSource', resolution.source);
-        if (resolution.source === 'subdomain' || resolution.source === 'path') {
-            c.set('tenantSlug', resolution.slug);
-        } else {
-            c.set('tenantSlug', undefined);
-        }
+    c.set('tenantSource', resolution.source);
+    if (resolution.source === 'subdomain' || resolution.source === 'path') {
+      c.set('tenantSlug', resolution.slug);
+    } else {
+      c.set('tenantSlug', undefined);
+    }
 
-        await next();
-    };
+    await next();
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -521,10 +513,10 @@ export const TENANT_MISMATCH_CODE = 'tenant_mismatch' as const;
  * inject distinct fake studios across cases.
  */
 interface TenantSlugCacheEntry {
-    /** Studio UUID, or `null` when the slug is unknown. */
-    readonly studioId: string | null;
-    /** `Date.now()` after which the entry must be re-fetched. */
-    readonly expiresAt: number;
+  /** Studio UUID, or `null` when the slug is unknown. */
+  readonly studioId: string | null;
+  /** `Date.now()` after which the entry must be re-fetched. */
+  readonly expiresAt: number;
 }
 
 const tenantSlugCache = new Map<string, TenantSlugCacheEntry>();
@@ -540,7 +532,7 @@ const DEFAULT_TENANT_CACHE_TTL_MS = 60 * 1_000;
  * tests can swap in fresh fake studios without residue.
  */
 export function __resetTenantClaimGuardCache(): void {
-    tenantSlugCache.clear();
+  tenantSlugCache.clear();
 }
 
 /**
@@ -550,7 +542,7 @@ export function __resetTenantClaimGuardCache(): void {
  * preview deploy reused the same isolate.
  */
 function cacheKey(dbUrl: string, slug: string): string {
-    return `${dbUrl}\u0000${slug}`;
+  return `${dbUrl}\u0000${slug}`;
 }
 
 /**
@@ -579,59 +571,51 @@ export type StudioSlugResolver = (slug: string) => Promise<string | null>;
  * happy/fail-open paths just call `next()`.
  */
 export interface TenantClaimGuardContext {
-    readonly req: {
-        readonly path: string;
-    };
-    get(key: 'tenantSlug'): string | undefined;
-    get(key: 'authClaims'):
-        | { studioId: string; userId?: string; role?: string }
-        | undefined;
-    get(key: 'traceId'): string;
-    get(key: 'logger'):
-        | { warn: (msg: string, ctx?: Record<string, unknown>) => void }
-        | undefined;
-    body(
-        data: string,
-        status: 404,
-        headers: Record<string, string>,
-    ): Response;
+  readonly req: {
+    readonly path: string;
+  };
+  get(key: 'tenantSlug'): string | undefined;
+  get(key: 'authClaims'): { studioId: string; userId?: string; role?: string } | undefined;
+  get(key: 'traceId'): string;
+  get(key: 'logger'): { warn: (msg: string, ctx?: Record<string, unknown>) => void } | undefined;
+  body(data: string, status: 404, headers: Record<string, string>): Response;
 }
 
 /**
  * Options for {@link tenantClaimGuard}.
  */
 export interface TenantClaimGuardOptions {
-    /**
-     * REQUIRED — given a slug, return the matching `studios.id` or
-     * `null`. Errors thrown by this resolver trigger fail-open
-     * (the guard logs `warn` and lets the request through; the
-     * downstream JWT claim-based filtering still enforces tenant
-     * isolation).
-     */
-    readonly resolveStudioBySlug: StudioSlugResolver;
+  /**
+   * REQUIRED — given a slug, return the matching `studios.id` or
+   * `null`. Errors thrown by this resolver trigger fail-open
+   * (the guard logs `warn` and lets the request through; the
+   * downstream JWT claim-based filtering still enforces tenant
+   * isolation).
+   */
+  readonly resolveStudioBySlug: StudioSlugResolver;
 
-    /**
-     * Cache TTL in milliseconds. Defaults to 60 s.
-     */
-    readonly cacheTtlMs?: number;
+  /**
+   * Cache TTL in milliseconds. Defaults to 60 s.
+   */
+  readonly cacheTtlMs?: number;
 
-    /**
-     * Stable cache namespace — typically `env.DB_URL`, so two distinct
-     * envs sharing one isolate (preview deploys) never see each
-     * other's slug→studioId mapping.
-     */
-    readonly cacheNamespace: string;
+  /**
+   * Stable cache namespace — typically `env.DB_URL`, so two distinct
+   * envs sharing one isolate (preview deploys) never see each
+   * other's slug→studioId mapping.
+   */
+  readonly cacheNamespace: string;
 
-    /**
-     * Path prefixes that bypass the cross-check entirely. Defaults
-     * to `['/v1/auth/']` because those endpoints (login, register,
-     * refresh) run pre-auth: the JWT claim is not yet present, so a
-     * cross-check would always be a no-op or a false 404.
-     *
-     * Each entry is matched as a strict prefix (e.g. `/v1/auth/`
-     * matches `/v1/auth/login` but NOT `/v1/authentic`).
-     */
-    readonly bypassPrefixes?: readonly string[];
+  /**
+   * Path prefixes that bypass the cross-check entirely. Defaults
+   * to `['/v1/auth/']` because those endpoints (login, register,
+   * refresh) run pre-auth: the JWT claim is not yet present, so a
+   * cross-check would always be a no-op or a false 404.
+   *
+   * Each entry is matched as a strict prefix (e.g. `/v1/auth/`
+   * matches `/v1/auth/login` but NOT `/v1/authentic`).
+   */
+  readonly bypassPrefixes?: readonly string[];
 }
 
 /**
@@ -641,8 +625,8 @@ export interface TenantClaimGuardOptions {
  * fail-open paths return `void` after awaiting `next()`.
  */
 export type TenantClaimGuardMiddleware = (
-    c: TenantClaimGuardContext,
-    next: () => Promise<void>,
+  c: TenantClaimGuardContext,
+  next: () => Promise<void>,
 ) => Promise<Response | void>;
 
 /** Problem Details content-type per RFC 9457. */
@@ -698,79 +682,74 @@ const PROBLEM_JSON = 'application/problem+json';
  * TTL absorbs burst traffic — at 1k rps per slug, the steady-state
  * load on the `studios` table is 1 query / 60 s / slug.
  */
-export function tenantClaimGuard(
-    options: TenantClaimGuardOptions,
-): TenantClaimGuardMiddleware {
-    const ttlMs = options.cacheTtlMs ?? DEFAULT_TENANT_CACHE_TTL_MS;
-    const bypassPrefixes = options.bypassPrefixes ?? ['/v1/auth/'];
-    const namespace = options.cacheNamespace;
+export function tenantClaimGuard(options: TenantClaimGuardOptions): TenantClaimGuardMiddleware {
+  const ttlMs = options.cacheTtlMs ?? DEFAULT_TENANT_CACHE_TTL_MS;
+  const bypassPrefixes = options.bypassPrefixes ?? ['/v1/auth/'];
+  const namespace = options.cacheNamespace;
 
-    return async (c, next) => {
-        // 1. Bypass list — pre-auth routes have no claim to compare.
-        const path = c.req.path;
-        for (const prefix of bypassPrefixes) {
-            if (path.startsWith(prefix)) {
-                await next();
-                return;
-            }
-        }
-
-        // 2. Skip when there is nothing to cross-check.
-        const slug = c.get('tenantSlug');
-        const claims = c.get('authClaims');
-        if (slug === undefined || claims === undefined) {
-            await next();
-            return;
-        }
-
-        // 3. Cache lookup with fail-open on resolver errors.
-        const key = cacheKey(namespace, slug);
-        const now = Date.now();
-        const cached = tenantSlugCache.get(key);
-        let studioId: string | null;
-        if (cached !== undefined && cached.expiresAt > now) {
-            studioId = cached.studioId;
-        } else {
-            try {
-                studioId = await options.resolveStudioBySlug(slug);
-                tenantSlugCache.set(key, {
-                    studioId,
-                    expiresAt: now + ttlMs,
-                });
-            } catch (err) {
-                // DB unreachable — fail open. The downstream claim-
-                // based filtering still enforces tenant isolation.
-                const logger = c.get('logger');
-                logger?.warn(
-                    'tenant claim guard: studio lookup failed, failing open',
-                    {
-                        slug,
-                        error: err instanceof Error ? err.message : String(err),
-                    },
-                );
-                await next();
-                return;
-            }
-        }
-
-        // 4. Mismatch (or unknown slug) → 404 Problem Details. Never
-        //    403: the absence of leak is the whole point of this code.
-        if (studioId === null || studioId !== claims.studioId) {
-            const traceId = c.get('traceId');
-            const body = JSON.stringify({
-                type: 'about:blank',
-                title: 'Not Found',
-                status: 404,
-                code: TENANT_MISMATCH_CODE,
-                traceId,
-            });
-            return c.body(body, 404, {
-                'content-type': PROBLEM_JSON,
-            });
-        }
-
-        // 5. Match — proceed.
+  return async (c, next) => {
+    // 1. Bypass list — pre-auth routes have no claim to compare.
+    const path = c.req.path;
+    for (const prefix of bypassPrefixes) {
+      if (path.startsWith(prefix)) {
         await next();
         return;
-    };
+      }
+    }
+
+    // 2. Skip when there is nothing to cross-check.
+    const slug = c.get('tenantSlug');
+    const claims = c.get('authClaims');
+    if (slug === undefined || claims === undefined) {
+      await next();
+      return;
+    }
+
+    // 3. Cache lookup with fail-open on resolver errors.
+    const key = cacheKey(namespace, slug);
+    const now = Date.now();
+    const cached = tenantSlugCache.get(key);
+    let studioId: string | null;
+    if (cached !== undefined && cached.expiresAt > now) {
+      studioId = cached.studioId;
+    } else {
+      try {
+        studioId = await options.resolveStudioBySlug(slug);
+        tenantSlugCache.set(key, {
+          studioId,
+          expiresAt: now + ttlMs,
+        });
+      } catch (err) {
+        // DB unreachable — fail open. The downstream claim-
+        // based filtering still enforces tenant isolation.
+        const logger = c.get('logger');
+        logger?.warn('tenant claim guard: studio lookup failed, failing open', {
+          slug,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        await next();
+        return;
+      }
+    }
+
+    // 4. Mismatch (or unknown slug) → 404 Problem Details. Never
+    //    403: the absence of leak is the whole point of this code.
+    if (studioId === null || studioId !== claims.studioId) {
+      const traceId = c.get('traceId');
+      const body = JSON.stringify({
+        type: 'about:blank',
+        title: 'Not Found',
+        status: 404,
+        code: TENANT_MISMATCH_CODE,
+        traceId,
+      });
+      return c.body(body, 404, {
+        'content-type': PROBLEM_JSON,
+      });
+    }
+
+    // 5. Match — proceed.
+    await next();
+    return;
+  };
 }

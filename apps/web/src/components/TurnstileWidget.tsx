@@ -32,19 +32,19 @@
 'use client';
 
 import {
-    useEffect,
-    useImperativeHandle,
-    useMemo,
-    useRef,
-    type ReactElement,
-    type Ref,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  type ReactElement,
+  type Ref,
 } from 'react';
 
 import { useLocale } from '../lib/i18n/LocaleContext';
 import { createTranslator } from '../lib/i18n/t';
 
 const TURNSTILE_SCRIPT_URL =
-    'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+  'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 
 /**
  * Imperative handle exposed by {@link TurnstileWidget} through its
@@ -53,24 +53,24 @@ const TURNSTILE_SCRIPT_URL =
  * via a `key` prop.
  */
 export interface TurnstileWidgetHandle {
-    /**
-     * Reset the widget so the next submit issues a fresh token.
-     *
-     * A no-op when the widget is not mounted (dev banner path,
-     * script still loading, or `siteKey` missing).
-     */
-    reset(): void;
+  /**
+   * Reset the widget so the next submit issues a fresh token.
+   *
+   * A no-op when the widget is not mounted (dev banner path,
+   * script still loading, or `siteKey` missing).
+   */
+  reset(): void;
 }
 
 export interface TurnstileWidgetProps {
-    /** Cloudflare Turnstile site key. Empty string / undefined → dev banner. */
-    readonly siteKey: string | undefined;
-    /** Invoked with the token string once the user clears the challenge. */
-    readonly onToken: (token: string) => void;
-    /** CSP nonce, forwarded onto the injected `<script>` tag. */
-    readonly nonce: string;
-    /** React 19 ref prop — opt-in handle for imperative controls. */
-    readonly ref?: Ref<TurnstileWidgetHandle>;
+  /** Cloudflare Turnstile site key. Empty string / undefined → dev banner. */
+  readonly siteKey: string | undefined;
+  /** Invoked with the token string once the user clears the challenge. */
+  readonly onToken: (token: string) => void;
+  /** CSP nonce, forwarded onto the injected `<script>` tag. */
+  readonly nonce: string;
+  /** React 19 ref prop — opt-in handle for imperative controls. */
+  readonly ref?: Ref<TurnstileWidgetHandle>;
 }
 
 /**
@@ -81,197 +81,191 @@ export interface TurnstileWidgetProps {
 let scriptPromise: Promise<void> | null = null;
 
 function loadTurnstileScript(nonce: string): Promise<void> {
-    if (typeof window === 'undefined') {
-        // SSR / Node — the widget never renders server-side, but the
-        // Turnstile render is gated behind `useEffect` so this branch
-        // is defensive only.
-        return Promise.resolve();
+  if (typeof window === 'undefined') {
+    // SSR / Node — the widget never renders server-side, but the
+    // Turnstile render is gated behind `useEffect` so this branch
+    // is defensive only.
+    return Promise.resolve();
+  }
+  if (window.turnstile !== undefined) return Promise.resolve();
+  if (scriptPromise !== null) return scriptPromise;
+
+  scriptPromise = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[src="${TURNSTILE_SCRIPT_URL}"]`,
+    );
+    if (existing !== null) {
+      if (window.turnstile !== undefined) {
+        resolve();
+      } else {
+        existing.addEventListener('load', () => {
+          resolve();
+        });
+        existing.addEventListener('error', () => {
+          reject(new Error('Failed to load Turnstile script'));
+        });
+      }
+      return;
     }
-    if (window.turnstile !== undefined) return Promise.resolve();
-    if (scriptPromise !== null) return scriptPromise;
-
-    scriptPromise = new Promise<void>((resolve, reject) => {
-        const existing = document.querySelector<HTMLScriptElement>(
-            `script[src="${TURNSTILE_SCRIPT_URL}"]`,
-        );
-        if (existing !== null) {
-            if (window.turnstile !== undefined) {
-                resolve();
-            } else {
-                existing.addEventListener('load', () => {
-                    resolve();
-                });
-                existing.addEventListener('error', () => {
-                    reject(new Error('Failed to load Turnstile script'));
-                });
-            }
-            return;
-        }
-        const script = document.createElement('script');
-        script.src = TURNSTILE_SCRIPT_URL;
-        script.async = true;
-        script.defer = true;
-        if (nonce !== '') script.setAttribute('nonce', nonce);
-        script.addEventListener('load', () => {
-            resolve();
-        });
-        script.addEventListener('error', () => {
-            reject(new Error('Failed to load Turnstile script'));
-        });
-        document.head.appendChild(script);
+    const script = document.createElement('script');
+    script.src = TURNSTILE_SCRIPT_URL;
+    script.async = true;
+    script.defer = true;
+    if (nonce !== '') script.setAttribute('nonce', nonce);
+    script.addEventListener('load', () => {
+      resolve();
     });
+    script.addEventListener('error', () => {
+      reject(new Error('Failed to load Turnstile script'));
+    });
+    document.head.appendChild(script);
+  });
 
-    return scriptPromise;
+  return scriptPromise;
 }
 
 export function TurnstileWidget({
-    siteKey,
-    onToken,
-    nonce,
-    ref,
+  siteKey,
+  onToken,
+  nonce,
+  ref,
 }: TurnstileWidgetProps): ReactElement {
-    const containerRef = useRef<HTMLDivElement | null>(null);
-    /**
-     * `turnstile.render` returns the widget id that `turnstile.reset`
-     * accepts. Stash it so the imperative handle can forward it.
-     */
-    const widgetIdRef = useRef<string | null>(null);
-    const locale = useLocale();
-    const t = useMemo(() => createTranslator(locale), [locale]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * `turnstile.render` returns the widget id that `turnstile.reset`
+   * accepts. Stash it so the imperative handle can forward it.
+   */
+  const widgetIdRef = useRef<string | null>(null);
+  const locale = useLocale();
+  const t = useMemo(() => createTranslator(locale), [locale]);
 
-    const keyConfigured = siteKey !== undefined && siteKey !== '';
+  const keyConfigured = siteKey !== undefined && siteKey !== '';
 
-    useImperativeHandle(
-        ref,
-        () => ({
-            reset() {
-                if (
-                    typeof window === 'undefined' ||
-                    window.turnstile === undefined ||
-                    widgetIdRef.current === null
-                ) {
-                    return;
-                }
-                window.turnstile.reset(widgetIdRef.current);
-                // `reset` invalidates the currently-held token; mirror
-                // that on the React side so the form's submit guard
-                // blocks until the user clears the fresh challenge.
-                onToken('');
-            },
-        }),
-        [onToken],
-    );
+  useImperativeHandle(
+    ref,
+    () => ({
+      reset() {
+        if (
+          typeof window === 'undefined' ||
+          window.turnstile === undefined ||
+          widgetIdRef.current === null
+        ) {
+          return;
+        }
+        window.turnstile.reset(widgetIdRef.current);
+        // `reset` invalidates the currently-held token; mirror
+        // that on the React side so the form's submit guard
+        // blocks until the user clears the fresh challenge.
+        onToken('');
+      },
+    }),
+    [onToken],
+  );
 
-    useEffect(() => {
-        if (!keyConfigured) return;
-        let cancelled = false;
+  useEffect(() => {
+    if (!keyConfigured) return;
+    let cancelled = false;
 
-        loadTurnstileScript(nonce)
-            .then(() => {
-                if (cancelled) return;
-                const container = containerRef.current;
-                if (container === null || window.turnstile === undefined) return;
-                const id = window.turnstile.render(container, {
-                    sitekey: siteKey as string,
-                    // Cloudflare auto-refreshes expired tokens; keep
-                    // that on so a slow user never submits an
-                    // expired one.
-                    'refresh-expired': 'auto',
-                    callback: (token: string) => {
-                        onToken(token);
-                    },
-                    'error-callback': () => {
-                        // Challenge failed to load / evaluate — drop
-                        // any stale token so the submit guard blocks.
-                        onToken('');
-                    },
-                    'expired-callback': () => {
-                        // Cloudflare expires tokens after ~5 min.
-                        // Mirror on our side so the form re-asks.
-                        onToken('');
-                        // Proactively ask Cloudflare to issue a fresh
-                        // token so the user doesn't have to click
-                        // "retry" on an expired challenge.
-                        if (
-                            typeof window !== 'undefined' &&
-                            window.turnstile !== undefined &&
-                            widgetIdRef.current !== null
-                        ) {
-                            try {
-                                window.turnstile.reset(widgetIdRef.current);
-                            } catch {
-                                // Widget already gone — ignore.
-                            }
-                        }
-                    },
-                    'timeout-callback': () => {
-                        // Challenge UI timed out before the user
-                        // solved it. Same cleanup + reset as expired.
-                        onToken('');
-                        if (
-                            typeof window !== 'undefined' &&
-                            window.turnstile !== undefined &&
-                            widgetIdRef.current !== null
-                        ) {
-                            try {
-                                window.turnstile.reset(widgetIdRef.current);
-                            } catch {
-                                // Widget already gone — ignore.
-                            }
-                        }
-                    },
-                });
-                if (typeof id === 'string') {
-                    widgetIdRef.current = id;
-                }
-            })
-            .catch(() => {
-                // Failure to load the script is surfaced to the caller
-                // via an empty token state — the form submit guard
-                // already blocks on "no token yet".
-            });
-
-        return () => {
-            cancelled = true;
-            // Remove the widget before unmount to prevent
-            // "already rendered in this container" warnings on remount
-            // (especially in React StrictMode where effects double-invoke).
-            if (
-                typeof window !== 'undefined' &&
-                window.turnstile !== undefined &&
-                widgetIdRef.current !== null
-            ) {
-                window.turnstile.remove(widgetIdRef.current);
-                widgetIdRef.current = null;
-            }
-            // Drop any token captured by the destroyed widget so the
-            // parent form's state goes back to "no token yet". Without
-            // this reset a remount (StrictMode double-invoke, navigate
-            // away & back to /login) keeps the stale `turnstileToken`
-            // in React state and the next submit ships a token whose
-            // widget no longer exists — Cloudflare then rejects with
-            // `invalid-input-response`.
+    loadTurnstileScript(nonce)
+      .then(() => {
+        if (cancelled) return;
+        const container = containerRef.current;
+        if (container === null || window.turnstile === undefined) return;
+        const id = window.turnstile.render(container, {
+          sitekey: siteKey as string,
+          // Cloudflare auto-refreshes expired tokens; keep
+          // that on so a slow user never submits an
+          // expired one.
+          'refresh-expired': 'auto',
+          callback: (token: string) => {
+            onToken(token);
+          },
+          'error-callback': () => {
+            // Challenge failed to load / evaluate — drop
+            // any stale token so the submit guard blocks.
             onToken('');
-        };
-    }, [keyConfigured, siteKey, nonce, onToken]);
+          },
+          'expired-callback': () => {
+            // Cloudflare expires tokens after ~5 min.
+            // Mirror on our side so the form re-asks.
+            onToken('');
+            // Proactively ask Cloudflare to issue a fresh
+            // token so the user doesn't have to click
+            // "retry" on an expired challenge.
+            if (
+              typeof window !== 'undefined' &&
+              window.turnstile !== undefined &&
+              widgetIdRef.current !== null
+            ) {
+              try {
+                window.turnstile.reset(widgetIdRef.current);
+              } catch {
+                // Widget already gone — ignore.
+              }
+            }
+          },
+          'timeout-callback': () => {
+            // Challenge UI timed out before the user
+            // solved it. Same cleanup + reset as expired.
+            onToken('');
+            if (
+              typeof window !== 'undefined' &&
+              window.turnstile !== undefined &&
+              widgetIdRef.current !== null
+            ) {
+              try {
+                window.turnstile.reset(widgetIdRef.current);
+              } catch {
+                // Widget already gone — ignore.
+              }
+            }
+          },
+        });
+        if (typeof id === 'string') {
+          widgetIdRef.current = id;
+        }
+      })
+      .catch(() => {
+        // Failure to load the script is surfaced to the caller
+        // via an empty token state — the form submit guard
+        // already blocks on "no token yet".
+      });
 
-    if (!keyConfigured) {
-        return (
-            <div
-                role="status"
-                className="rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
-                data-testid="turnstile-widget-devwarning"
-            >
-                {t('web.turnstile.notConfigured')}
-            </div>
-        );
-    }
+    return () => {
+      cancelled = true;
+      // Remove the widget before unmount to prevent
+      // "already rendered in this container" warnings on remount
+      // (especially in React StrictMode where effects double-invoke).
+      if (
+        typeof window !== 'undefined' &&
+        window.turnstile !== undefined &&
+        widgetIdRef.current !== null
+      ) {
+        window.turnstile.remove(widgetIdRef.current);
+        widgetIdRef.current = null;
+      }
+      // Drop any token captured by the destroyed widget so the
+      // parent form's state goes back to "no token yet". Without
+      // this reset a remount (StrictMode double-invoke, navigate
+      // away & back to /login) keeps the stale `turnstileToken`
+      // in React state and the next submit ships a token whose
+      // widget no longer exists — Cloudflare then rejects with
+      // `invalid-input-response`.
+      onToken('');
+    };
+  }, [keyConfigured, siteKey, nonce, onToken]);
 
+  if (!keyConfigured) {
     return (
-        <div
-            ref={containerRef}
-            data-testid="turnstile-widget"
-            className="cf-turnstile"
-        />
+      <div
+        role="status"
+        className="rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
+        data-testid="turnstile-widget-devwarning"
+      >
+        {t('web.turnstile.notConfigured')}
+      </div>
     );
+  }
+
+  return <div ref={containerRef} data-testid="turnstile-widget" className="cf-turnstile" />;
 }

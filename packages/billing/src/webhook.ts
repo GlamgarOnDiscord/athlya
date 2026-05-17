@@ -84,18 +84,18 @@
  * handler pure and independently testable.
  */
 export type WebhookOutcome =
-    | {
-        readonly kind: 'processed';
-        readonly eventType: string;
-        readonly eventId: string;
+  | {
+      readonly kind: 'processed';
+      readonly eventType: string;
+      readonly eventId: string;
     }
-    | {
-        readonly kind: 'signature_invalid';
-        readonly reason: SignatureFailureReason;
+  | {
+      readonly kind: 'signature_invalid';
+      readonly reason: SignatureFailureReason;
     }
-    | {
-        readonly kind: 'unknown_event_type';
-        readonly eventType: string;
+  | {
+      readonly kind: 'unknown_event_type';
+      readonly eventType: string;
     };
 
 /**
@@ -113,10 +113,10 @@ export type WebhookOutcome =
  *                             valid JSON or lacks `id` / `type`.
  */
 export type SignatureFailureReason =
-    | 'malformed_header'
-    | 'timestamp_stale'
-    | 'hmac_mismatch'
-    | 'malformed_payload';
+  | 'malformed_header'
+  | 'timestamp_stale'
+  | 'hmac_mismatch'
+  | 'malformed_payload';
 
 /* ------------------------------------------------------------------ */
 /*  Parsed event                                                       */
@@ -129,9 +129,9 @@ export type SignatureFailureReason =
  * validate Stripe's full schema here.
  */
 export interface StripeEvent {
-    readonly id: string;
-    readonly type: string;
-    readonly data: unknown;
+  readonly id: string;
+  readonly type: string;
+  readonly data: unknown;
 }
 
 /* ------------------------------------------------------------------ */
@@ -159,11 +159,11 @@ export interface StripeEvent {
  *                    never logs the payload.
  */
 export interface WebhookAuditEntry {
-    readonly actorId: string | null;
-    readonly action: string;
-    readonly targetType: string;
-    readonly targetId: string;
-    readonly metadata: Record<string, unknown>;
+  readonly actorId: string | null;
+  readonly action: string;
+  readonly targetType: string;
+  readonly targetId: string;
+  readonly metadata: Record<string, unknown>;
 }
 
 /**
@@ -176,11 +176,11 @@ export interface WebhookAuditEntry {
  * `packages/api/src/events/publish.ts`.
  */
 export interface WebhookPublishEnvelope {
-    readonly id: string;
-    readonly type: string;
-    readonly occurredAt: string;
-    readonly studioId?: string;
-    readonly payload: Record<string, unknown>;
+  readonly id: string;
+  readonly type: string;
+  readonly occurredAt: string;
+  readonly studioId?: string;
+  readonly payload: Record<string, unknown>;
 }
 
 /**
@@ -210,14 +210,14 @@ export interface WebhookPublishEnvelope {
  *                         rolls back if it throws.
  */
 export interface WebhookDeps {
-    readonly verifySignature: (
-        payload: string,
-        signatureHeader: string,
-        secret: string,
-    ) => Promise<StripeEvent | null>;
-    readonly appendAudit: (entry: WebhookAuditEntry) => Promise<void>;
-    readonly publish: (event: WebhookPublishEnvelope) => Promise<void>;
-    readonly withTransaction: <T>(fn: () => Promise<T>) => Promise<T>;
+  readonly verifySignature: (
+    payload: string,
+    signatureHeader: string,
+    secret: string,
+  ) => Promise<StripeEvent | null>;
+  readonly appendAudit: (entry: WebhookAuditEntry) => Promise<void>;
+  readonly publish: (event: WebhookPublishEnvelope) => Promise<void>;
+  readonly withTransaction: <T>(fn: () => Promise<T>) => Promise<T>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -237,17 +237,17 @@ export const DEFAULT_TOLERANCE_SECONDS = 300;
 
 /** Options accepted by {@link verifyStripeSignature}. */
 export interface VerifyStripeSignatureOptions {
-    /**
-     * Clock used for timestamp tolerance. Defaults to
-     * `() => Date.now()`. Tests inject a deterministic clock.
-     */
-    readonly now?: () => number;
-    /**
-     * Maximum absolute skew between the header's `t=` field and
-     * `now()`, in seconds. Defaults to
-     * {@link DEFAULT_TOLERANCE_SECONDS}.
-     */
-    readonly toleranceSeconds?: number;
+  /**
+   * Clock used for timestamp tolerance. Defaults to
+   * `() => Date.now()`. Tests inject a deterministic clock.
+   */
+  readonly now?: () => number;
+  /**
+   * Maximum absolute skew between the header's `t=` field and
+   * `now()`, in seconds. Defaults to
+   * {@link DEFAULT_TOLERANCE_SECONDS}.
+   */
+  readonly toleranceSeconds?: number;
 }
 
 /**
@@ -259,8 +259,8 @@ export interface VerifyStripeSignatureOptions {
  *     match counts as verification success.
  */
 interface ParsedSignatureHeader {
-    readonly timestamp: number;
-    readonly v1Signatures: readonly string[];
+  readonly timestamp: number;
+  readonly v1Signatures: readonly string[];
 }
 
 /**
@@ -271,79 +271,77 @@ interface ParsedSignatureHeader {
  * signatures, non-integer timestamp, unexpected field shape. Callers
  * turn this `null` into a `malformed_header` failure reason.
  */
-function parseStripeSignatureHeader(
-    header: string,
-): ParsedSignatureHeader | null {
-    if (header.length === 0) {
+function parseStripeSignatureHeader(header: string): ParsedSignatureHeader | null {
+  if (header.length === 0) {
+    return null;
+  }
+  let timestamp: number | null = null;
+  const v1Signatures: string[] = [];
+
+  for (const rawPart of header.split(',')) {
+    const part = rawPart.trim();
+    const eqIdx = part.indexOf('=');
+    if (eqIdx <= 0) {
+      return null;
+    }
+    const key = part.slice(0, eqIdx);
+    const value = part.slice(eqIdx + 1);
+    if (value.length === 0) {
+      return null;
+    }
+
+    if (key === 't') {
+      if (!/^[0-9]+$/.test(value)) {
         return null;
-    }
-    let timestamp: number | null = null;
-    const v1Signatures: string[] = [];
-
-    for (const rawPart of header.split(',')) {
-        const part = rawPart.trim();
-        const eqIdx = part.indexOf('=');
-        if (eqIdx <= 0) {
-            return null;
-        }
-        const key = part.slice(0, eqIdx);
-        const value = part.slice(eqIdx + 1);
-        if (value.length === 0) {
-            return null;
-        }
-
-        if (key === 't') {
-            if (!/^[0-9]+$/.test(value)) {
-                return null;
-            }
-            const parsed = Number(value);
-            if (!Number.isFinite(parsed) || parsed <= 0) {
-                return null;
-            }
-            timestamp = parsed;
-        } else if (key === 'v1') {
-            // v1 is a hex-encoded HMAC-SHA256 → 64 hex chars. Reject
-            // anything that is not purely hex to short-circuit
-            // `hexDecode` below for obviously malformed signatures.
-            if (!/^[0-9a-fA-F]+$/.test(value) || value.length % 2 !== 0) {
-                return null;
-            }
-            v1Signatures.push(value);
-        }
-        // Other schemes (`v0`, future `v2`, …) are ignored per
-        // Stripe's documentation.
-    }
-
-    if (timestamp === null || v1Signatures.length === 0) {
+      }
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
         return null;
+      }
+      timestamp = parsed;
+    } else if (key === 'v1') {
+      // v1 is a hex-encoded HMAC-SHA256 → 64 hex chars. Reject
+      // anything that is not purely hex to short-circuit
+      // `hexDecode` below for obviously malformed signatures.
+      if (!/^[0-9a-fA-F]+$/.test(value) || value.length % 2 !== 0) {
+        return null;
+      }
+      v1Signatures.push(value);
     }
+    // Other schemes (`v0`, future `v2`, …) are ignored per
+    // Stripe's documentation.
+  }
 
-    return { timestamp, v1Signatures };
+  if (timestamp === null || v1Signatures.length === 0) {
+    return null;
+  }
+
+  return { timestamp, v1Signatures };
 }
 
 /** Decode a strictly-hex string into bytes. Returns `null` on error. */
 function hexDecode(hex: string): Uint8Array<ArrayBuffer> | null {
-    if (hex.length % 2 !== 0) {
-        return null;
+  if (hex.length % 2 !== 0) {
+    return null;
+  }
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    const hi = hexCharToNibble(hex.charCodeAt(i));
+    const lo = hexCharToNibble(hex.charCodeAt(i + 1));
+    if (hi < 0 || lo < 0) {
+      return null;
     }
-    const out = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < hex.length; i += 2) {
-        const hi = hexCharToNibble(hex.charCodeAt(i));
-        const lo = hexCharToNibble(hex.charCodeAt(i + 1));
-        if (hi < 0 || lo < 0) {
-            return null;
-        }
-        out[i / 2] = (hi << 4) | lo;
-    }
-    return out;
+    out[i / 2] = (hi << 4) | lo;
+  }
+  return out;
 }
 
 /** Map an ASCII hex character code to its 4-bit value, or -1 on error. */
 function hexCharToNibble(code: number): number {
-    if (code >= 0x30 && code <= 0x39) return code - 0x30; // 0-9
-    if (code >= 0x61 && code <= 0x66) return code - 0x61 + 10; // a-f
-    if (code >= 0x41 && code <= 0x46) return code - 0x41 + 10; // A-F
-    return -1;
+  if (code >= 0x30 && code <= 0x39) return code - 0x30; // 0-9
+  if (code >= 0x61 && code <= 0x66) return code - 0x61 + 10; // a-f
+  if (code >= 0x41 && code <= 0x46) return code - 0x41 + 10; // A-F
+  return -1;
 }
 
 /**
@@ -373,102 +371,97 @@ function hexCharToNibble(code: number): number {
  * imports the HMAC key locally; no shared state.
  */
 export async function verifyStripeSignature(
-    payload: string,
-    signatureHeader: string,
-    secret: string,
-    opts: VerifyStripeSignatureOptions = {},
+  payload: string,
+  signatureHeader: string,
+  secret: string,
+  opts: VerifyStripeSignatureOptions = {},
 ): Promise<StripeEvent | null> {
-    const now = opts.now ?? (() => Date.now());
-    const toleranceSeconds =
-        opts.toleranceSeconds ?? DEFAULT_TOLERANCE_SECONDS;
+  const now = opts.now ?? (() => Date.now());
+  const toleranceSeconds = opts.toleranceSeconds ?? DEFAULT_TOLERANCE_SECONDS;
 
-    // 1. Header parse.
-    const parsed = parseStripeSignatureHeader(signatureHeader);
-    if (parsed === null) {
-        return null;
-    }
+  // 1. Header parse.
+  const parsed = parseStripeSignatureHeader(signatureHeader);
+  if (parsed === null) {
+    return null;
+  }
 
-    // 2. Timestamp tolerance. `t` is epoch seconds; `now()` is ms.
-    const nowSeconds = Math.floor(now() / 1000);
-    if (Math.abs(nowSeconds - parsed.timestamp) > toleranceSeconds) {
-        return null;
-    }
+  // 2. Timestamp tolerance. `t` is epoch seconds; `now()` is ms.
+  const nowSeconds = Math.floor(now() / 1000);
+  if (Math.abs(nowSeconds - parsed.timestamp) > toleranceSeconds) {
+    return null;
+  }
 
-    // 3. HMAC-SHA256 verification.
-    const encoder = new TextEncoder();
-    const keyBytes = encoder.encode(secret);
-    const signedPayload = `${String(parsed.timestamp)}.${payload}`;
-    const dataBytes = encoder.encode(signedPayload);
+  // 3. HMAC-SHA256 verification.
+  const encoder = new TextEncoder();
+  const keyBytes = encoder.encode(secret);
+  const signedPayload = `${String(parsed.timestamp)}.${payload}`;
+  const dataBytes = encoder.encode(signedPayload);
 
-    let key: Awaited<ReturnType<typeof crypto.subtle.importKey>>;
-    try {
-        key = await crypto.subtle.importKey(
-            'raw',
-            keyBytes,
-            { name: 'HMAC', hash: 'SHA-256' },
-            false,
-            ['verify'],
-        );
-    } catch {
-        // An empty secret (or a host without Web Crypto) cannot
-        // import. Treat as verification failure rather than throwing
-        // so the caller's audit path fires.
-        return null;
-    }
+  let key: Awaited<ReturnType<typeof crypto.subtle.importKey>>;
+  try {
+    key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, [
+      'verify',
+    ]);
+  } catch {
+    // An empty secret (or a host without Web Crypto) cannot
+    // import. Treat as verification failure rather than throwing
+    // so the caller's audit path fires.
+    return null;
+  }
 
-    let anyMatch = false;
-    for (const sigHex of parsed.v1Signatures) {
-        const sigBytes = hexDecode(sigHex);
-        if (sigBytes === null) {
-            continue;
-        }
-        // `verify` is specified as constant-time.
-        const ok = await crypto.subtle.verify(
-            'HMAC',
-            key,
-            // `crypto.subtle.verify` accepts a BufferSource. The
-            // narrowed `Uint8Array` is one. The `.buffer` projection
-            // is avoided on purpose — SharedArrayBuffer shenanigans
-            // only bite when you go there.
-            sigBytes,
-            dataBytes,
-        );
-        if (ok) {
-            anyMatch = true;
-            // Don't early-break: iterating every signature keeps the
-            // total time independent of which signature matched,
-            // avoiding a timing side channel on the v1 list order.
-        }
+  let anyMatch = false;
+  for (const sigHex of parsed.v1Signatures) {
+    const sigBytes = hexDecode(sigHex);
+    if (sigBytes === null) {
+      continue;
     }
-    if (!anyMatch) {
-        return null;
+    // `verify` is specified as constant-time.
+    const ok = await crypto.subtle.verify(
+      'HMAC',
+      key,
+      // `crypto.subtle.verify` accepts a BufferSource. The
+      // narrowed `Uint8Array` is one. The `.buffer` projection
+      // is avoided on purpose — SharedArrayBuffer shenanigans
+      // only bite when you go there.
+      sigBytes,
+      dataBytes,
+    );
+    if (ok) {
+      anyMatch = true;
+      // Don't early-break: iterating every signature keeps the
+      // total time independent of which signature matched,
+      // avoiding a timing side channel on the v1 list order.
     }
+  }
+  if (!anyMatch) {
+    return null;
+  }
 
-    // 4. JSON parse and shape check.
-    let raw: unknown;
-    try {
-        raw = JSON.parse(payload);
-    } catch {
-        return null;
-    }
-    if (typeof raw !== 'object' || raw === null) {
-        return null;
-    }
-    const obj = raw as Record<string, unknown>;
-    const id = obj['id'];
-    const type = obj['type'];
-    if (typeof id !== 'string' || id.length === 0) {
-        return null;
-    }
-    if (typeof type !== 'string' || type.length === 0) {
-        return null;
-    }
+  // 4. JSON parse and shape check.
+  let raw: unknown;
+  try {
+    raw = JSON.parse(payload);
+  } catch {
+    return null;
+  }
+  if (typeof raw !== 'object' || raw === null) {
+    return null;
+  }
+  const obj = raw as Record<string, unknown>;
+  const id = obj['id'];
+  const type = obj['type'];
+  if (typeof id !== 'string' || id.length === 0) {
+    return null;
+  }
+  if (typeof type !== 'string' || type.length === 0) {
+    return null;
+  }
 
-    return {
-        id,
-        type,
-        data: obj['data'],
-    };
+  return {
+    id,
+    type,
+    data: obj['data'],
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -506,20 +499,20 @@ const PUB_SUBSCRIPTION_FAILED = 'billing.subscription.failed';
  * Returns {@link AUDIT_TARGET_UNKNOWN} when no id is present.
  */
 function tryExtractEventId(rawPayload: string): string {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(rawPayload);
-    } catch {
-        return AUDIT_TARGET_UNKNOWN;
-    }
-    if (typeof parsed !== 'object' || parsed === null || !('id' in parsed)) {
-        return AUDIT_TARGET_UNKNOWN;
-    }
-    const { id } = parsed;
-    if (typeof id !== 'string' || id.length === 0 || id.length > 128) {
-        return AUDIT_TARGET_UNKNOWN;
-    }
-    return id;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawPayload);
+  } catch {
+    return AUDIT_TARGET_UNKNOWN;
+  }
+  if (typeof parsed !== 'object' || parsed === null || !('id' in parsed)) {
+    return AUDIT_TARGET_UNKNOWN;
+  }
+  const { id } = parsed;
+  if (typeof id !== 'string' || id.length === 0 || id.length > 128) {
+    return AUDIT_TARGET_UNKNOWN;
+  }
+  return id;
 }
 
 /**
@@ -547,121 +540,117 @@ function tryExtractEventId(rawPayload: string): string {
  * outcome, never writes headers or bodies.
  */
 export async function handleStripeWebhook(
-    rawPayload: string,
-    signatureHeader: string,
-    webhookSecret: string,
-    deps: WebhookDeps,
+  rawPayload: string,
+  signatureHeader: string,
+  webhookSecret: string,
+  deps: WebhookDeps,
 ): Promise<WebhookOutcome> {
-    // Step 1 — verify signature. A `null` here triggers the audit path.
-    const event = await deps.verifySignature(
-        rawPayload,
-        signatureHeader,
-        webhookSecret,
-    );
+  // Step 1 — verify signature. A `null` here triggers the audit path.
+  const event = await deps.verifySignature(rawPayload, signatureHeader, webhookSecret);
 
-    if (event === null) {
-        // Requirement 18.3 — reject + audit atomically. We keep the
-        // audit inside a transaction so the wiring layer can combine
-        // it with any additional state writes (not needed today) or
-        // guarantee the commit ordering.
-        //
-        // The reason is best-effort: we cannot re-run verification
-        // here (it already returned null); the specific cause has
-        // been discarded by the port. A richer port would propagate
-        // a structured reason — acceptable to defer until the port
-        // shape is upgraded.
-        const reason: SignatureFailureReason = 'hmac_mismatch';
-        const targetId = tryExtractEventId(rawPayload);
+  if (event === null) {
+    // Requirement 18.3 — reject + audit atomically. We keep the
+    // audit inside a transaction so the wiring layer can combine
+    // it with any additional state writes (not needed today) or
+    // guarantee the commit ordering.
+    //
+    // The reason is best-effort: we cannot re-run verification
+    // here (it already returned null); the specific cause has
+    // been discarded by the port. A richer port would propagate
+    // a structured reason — acceptable to defer until the port
+    // shape is upgraded.
+    const reason: SignatureFailureReason = 'hmac_mismatch';
+    const targetId = tryExtractEventId(rawPayload);
 
-        await deps.withTransaction(async () => {
-            await deps.appendAudit({
-                actorId: null,
-                action: AUDIT_ACTION_SIGNATURE_FAILED,
-                targetType: AUDIT_TARGET_TYPE,
-                targetId,
-                metadata: {
-                    reason,
-                    // The `Stripe-Signature` header carries timing
-                    // data; it contributes no forensic value beyond
-                    // the reason, so we redact it. The raw payload is
-                    // never logged.
-                    signatureHeader: '[REDACTED]',
-                },
-            });
+    await deps.withTransaction(async () => {
+      await deps.appendAudit({
+        actorId: null,
+        action: AUDIT_ACTION_SIGNATURE_FAILED,
+        targetType: AUDIT_TARGET_TYPE,
+        targetId,
+        metadata: {
+          reason,
+          // The `Stripe-Signature` header carries timing
+          // data; it contributes no forensic value beyond
+          // the reason, so we redact it. The raw payload is
+          // never logged.
+          signatureHeader: '[REDACTED]',
+        },
+      });
+    });
+
+    return { kind: 'signature_invalid', reason };
+  }
+
+  // Step 2 — dispatch by event type.
+  const occurredAt = new Date().toISOString();
+
+  switch (event.type) {
+    case EVENT_CHECKOUT_COMPLETED: {
+      await deps.withTransaction(async () => {
+        await deps.publish({
+          id: event.id,
+          type: PUB_SUBSCRIPTION_STARTED,
+          occurredAt,
+          payload: {
+            stripeEventId: event.id,
+            stripeEventType: event.type,
+            session: event.data,
+          },
         });
-
-        return { kind: 'signature_invalid', reason };
+      });
+      return {
+        kind: 'processed',
+        eventType: event.type,
+        eventId: event.id,
+      };
     }
 
-    // Step 2 — dispatch by event type.
-    const occurredAt = new Date().toISOString();
-
-    switch (event.type) {
-        case EVENT_CHECKOUT_COMPLETED: {
-            await deps.withTransaction(async () => {
-                await deps.publish({
-                    id: event.id,
-                    type: PUB_SUBSCRIPTION_STARTED,
-                    occurredAt,
-                    payload: {
-                        stripeEventId: event.id,
-                        stripeEventType: event.type,
-                        session: event.data,
-                    },
-                });
-            });
-            return {
-                kind: 'processed',
-                eventType: event.type,
-                eventId: event.id,
-            };
-        }
-
-        case EVENT_SUBSCRIPTION_CREATED: {
-            await deps.withTransaction(async () => {
-                await deps.publish({
-                    id: event.id,
-                    type: PUB_SUBSCRIPTION_STARTED,
-                    occurredAt,
-                    payload: {
-                        stripeEventId: event.id,
-                        stripeEventType: event.type,
-                        subscription: event.data,
-                    },
-                });
-            });
-            return {
-                kind: 'processed',
-                eventType: event.type,
-                eventId: event.id,
-            };
-        }
-
-        case EVENT_INVOICE_PAYMENT_FAILED: {
-            await deps.withTransaction(async () => {
-                await deps.publish({
-                    id: event.id,
-                    type: PUB_SUBSCRIPTION_FAILED,
-                    occurredAt,
-                    payload: {
-                        stripeEventId: event.id,
-                        stripeEventType: event.type,
-                        invoice: event.data,
-                    },
-                });
-            });
-            return {
-                kind: 'processed',
-                eventType: event.type,
-                eventId: event.id,
-            };
-        }
-
-        default: {
-            // Stripe emits plenty of events we don't care about
-            // (`charge.updated`, `customer.updated`, …). Treat them
-            // as a no-op so Stripe stops retrying the delivery.
-            return { kind: 'unknown_event_type', eventType: event.type };
-        }
+    case EVENT_SUBSCRIPTION_CREATED: {
+      await deps.withTransaction(async () => {
+        await deps.publish({
+          id: event.id,
+          type: PUB_SUBSCRIPTION_STARTED,
+          occurredAt,
+          payload: {
+            stripeEventId: event.id,
+            stripeEventType: event.type,
+            subscription: event.data,
+          },
+        });
+      });
+      return {
+        kind: 'processed',
+        eventType: event.type,
+        eventId: event.id,
+      };
     }
+
+    case EVENT_INVOICE_PAYMENT_FAILED: {
+      await deps.withTransaction(async () => {
+        await deps.publish({
+          id: event.id,
+          type: PUB_SUBSCRIPTION_FAILED,
+          occurredAt,
+          payload: {
+            stripeEventId: event.id,
+            stripeEventType: event.type,
+            invoice: event.data,
+          },
+        });
+      });
+      return {
+        kind: 'processed',
+        eventType: event.type,
+        eventId: event.id,
+      };
+    }
+
+    default: {
+      // Stripe emits plenty of events we don't care about
+      // (`charge.updated`, `customer.updated`, …). Treat them
+      // as a no-op so Stripe stops retrying the delivery.
+      return { kind: 'unknown_event_type', eventType: event.type };
+    }
+  }
 }

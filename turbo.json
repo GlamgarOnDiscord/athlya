@@ -21,12 +21,10 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"],
       "env": ["CI"]
     },
     "typecheck": {
-      "dependsOn": ["^build"],
-      "outputs": ["*.tsbuildinfo", "**/*.tsbuildinfo"]
+      "dependsOn": ["^build"]
     },
     "clean": {
       "cache": false

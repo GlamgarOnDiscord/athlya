@@ -57,9 +57,9 @@ export const ANALYTICS_CONSENT_TTL_MS = 13 * 30 * 24 * 60 * 60 * 1000;
  *                   13-month re-prompt window.
  */
 export interface AnalyticsConsent {
-    readonly analytics: boolean;
-    readonly errorTracking: boolean;
-    readonly acceptedAt: string;
+  readonly analytics: boolean;
+  readonly errorTracking: boolean;
+  readonly acceptedAt: string;
 }
 
 /**
@@ -68,9 +68,9 @@ export interface AnalyticsConsent {
  * user acts, every analytics-gated SDK MUST stay un-initialised.
  */
 export const DEFAULT_CONSENT: AnalyticsConsent = {
-    analytics: false,
-    errorTracking: false,
-    acceptedAt: '1970-01-01T00:00:00.000Z',
+  analytics: false,
+  errorTracking: false,
+  acceptedAt: '1970-01-01T00:00:00.000Z',
 };
 
 /**
@@ -83,40 +83,37 @@ export const DEFAULT_CONSENT: AnalyticsConsent = {
  *   - We're SSR-rendering (no `window`).
  */
 export function readAnalyticsConsent(): AnalyticsConsent {
-    if (typeof window === 'undefined') return DEFAULT_CONSENT;
-    let raw: string | null;
-    try {
-        raw = window.localStorage.getItem(ANALYTICS_CONSENT_KEY);
-    } catch {
-        // Privacy-mode browsers throw on `localStorage` access — the
-        // fail-safe posture is to assume no consent.
-        return DEFAULT_CONSENT;
+  if (typeof window === 'undefined') return DEFAULT_CONSENT;
+  let raw: string | null;
+  try {
+    raw = window.localStorage.getItem(ANALYTICS_CONSENT_KEY);
+  } catch {
+    // Privacy-mode browsers throw on `localStorage` access — the
+    // fail-safe posture is to assume no consent.
+    return DEFAULT_CONSENT;
+  }
+  if (raw === null) return DEFAULT_CONSENT;
+  try {
+    const parsed = JSON.parse(raw) as Partial<AnalyticsConsent>;
+    if (
+      typeof parsed.analytics !== 'boolean' ||
+      typeof parsed.errorTracking !== 'boolean' ||
+      typeof parsed.acceptedAt !== 'string'
+    ) {
+      return DEFAULT_CONSENT;
     }
-    if (raw === null) return DEFAULT_CONSENT;
-    try {
-        const parsed = JSON.parse(raw) as Partial<AnalyticsConsent>;
-        if (
-            typeof parsed.analytics !== 'boolean' ||
-            typeof parsed.errorTracking !== 'boolean' ||
-            typeof parsed.acceptedAt !== 'string'
-        ) {
-            return DEFAULT_CONSENT;
-        }
-        const acceptedAtMs = Date.parse(parsed.acceptedAt);
-        if (
-            Number.isNaN(acceptedAtMs) ||
-            Date.now() - acceptedAtMs > ANALYTICS_CONSENT_TTL_MS
-        ) {
-            return DEFAULT_CONSENT;
-        }
-        return {
-            analytics: parsed.analytics,
-            errorTracking: parsed.errorTracking,
-            acceptedAt: parsed.acceptedAt,
-        };
-    } catch {
-        return DEFAULT_CONSENT;
+    const acceptedAtMs = Date.parse(parsed.acceptedAt);
+    if (Number.isNaN(acceptedAtMs) || Date.now() - acceptedAtMs > ANALYTICS_CONSENT_TTL_MS) {
+      return DEFAULT_CONSENT;
     }
+    return {
+      analytics: parsed.analytics,
+      errorTracking: parsed.errorTracking,
+      acceptedAt: parsed.acceptedAt,
+    };
+  } catch {
+    return DEFAULT_CONSENT;
+  }
 }
 
 /**
@@ -125,26 +122,23 @@ export function readAnalyticsConsent(): AnalyticsConsent {
  * not the moment of first visit.
  */
 export function writeAnalyticsConsent(
-    consent: Pick<AnalyticsConsent, 'analytics' | 'errorTracking'>,
+  consent: Pick<AnalyticsConsent, 'analytics' | 'errorTracking'>,
 ): AnalyticsConsent {
-    const stamped: AnalyticsConsent = {
-        analytics: consent.analytics,
-        errorTracking: consent.errorTracking,
-        acceptedAt: new Date().toISOString(),
-    };
-    if (typeof window !== 'undefined') {
-        try {
-            window.localStorage.setItem(
-                ANALYTICS_CONSENT_KEY,
-                JSON.stringify(stamped),
-            );
-        } catch {
-            // Privacy-mode browsers — silently swallow. The in-
-            // memory state held by `<CookieBanner />` is the
-            // source of truth for the current page lifetime.
-        }
+  const stamped: AnalyticsConsent = {
+    analytics: consent.analytics,
+    errorTracking: consent.errorTracking,
+    acceptedAt: new Date().toISOString(),
+  };
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(ANALYTICS_CONSENT_KEY, JSON.stringify(stamped));
+    } catch {
+      // Privacy-mode browsers — silently swallow. The in-
+      // memory state held by `<CookieBanner />` is the
+      // source of truth for the current page lifetime.
     }
-    return stamped;
+  }
+  return stamped;
 }
 
 /**
@@ -153,21 +147,21 @@ export function writeAnalyticsConsent(
  * to render the banner UI.
  */
 export function shouldPromptForConsent(): boolean {
-    if (typeof window === 'undefined') return false;
-    let raw: string | null;
-    try {
-        raw = window.localStorage.getItem(ANALYTICS_CONSENT_KEY);
-    } catch {
-        return false;
-    }
-    if (raw === null) return true;
-    try {
-        const parsed = JSON.parse(raw) as Partial<AnalyticsConsent>;
-        if (typeof parsed.acceptedAt !== 'string') return true;
-        const acceptedAtMs = Date.parse(parsed.acceptedAt);
-        if (Number.isNaN(acceptedAtMs)) return true;
-        return Date.now() - acceptedAtMs > ANALYTICS_CONSENT_TTL_MS;
-    } catch {
-        return true;
-    }
+  if (typeof window === 'undefined') return false;
+  let raw: string | null;
+  try {
+    raw = window.localStorage.getItem(ANALYTICS_CONSENT_KEY);
+  } catch {
+    return false;
+  }
+  if (raw === null) return true;
+  try {
+    const parsed = JSON.parse(raw) as Partial<AnalyticsConsent>;
+    if (typeof parsed.acceptedAt !== 'string') return true;
+    const acceptedAtMs = Date.parse(parsed.acceptedAt);
+    if (Number.isNaN(acceptedAtMs)) return true;
+    return Date.now() - acceptedAtMs > ANALYTICS_CONSENT_TTL_MS;
+  } catch {
+    return true;
+  }
 }

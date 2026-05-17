@@ -86,45 +86,45 @@ const TOKEN_RAW_BYTES = 32; // 256-bit
  * single SQL statement. Tests stub via `vi.fn()`.
  */
 export interface PasswordResetRepo {
-    /**
-     * Insert a new token row keyed on `tokenHash`. The plain
-     * token is NEVER persisted — the repo only sees the hash.
-     */
-    insertToken(input: {
-        readonly userId: string;
-        readonly tokenHash: string;
-        readonly expiresAt: Date;
-    }): Promise<void>;
+  /**
+   * Insert a new token row keyed on `tokenHash`. The plain
+   * token is NEVER persisted — the repo only sees the hash.
+   */
+  insertToken(input: {
+    readonly userId: string;
+    readonly tokenHash: string;
+    readonly expiresAt: Date;
+  }): Promise<void>;
 
-    /**
-     * Lookup an active (un-consumed, non-expired) token by its
-     * hash. Returns `null` when no row matches; the SQL filter
-     * MUST be `consumed_at IS NULL AND expires_at > NOW()`.
-     */
-    findActiveTokenByHash(tokenHash: string): Promise<{
-        readonly userId: string;
-        readonly expiresAt: Date;
-    } | null>;
+  /**
+   * Lookup an active (un-consumed, non-expired) token by its
+   * hash. Returns `null` when no row matches; the SQL filter
+   * MUST be `consumed_at IS NULL AND expires_at > NOW()`.
+   */
+  findActiveTokenByHash(tokenHash: string): Promise<{
+    readonly userId: string;
+    readonly expiresAt: Date;
+  } | null>;
 
-    /**
-     * Atomically (a) mark the token consumed and (b) update the
-     * user's password hash. Implementations MUST run both writes
-     * in a single transaction so a partial failure does not
-     * leave a "consumed token but old password" state.
-     */
-    consumeAndResetPassword(input: {
-        readonly tokenHash: string;
-        readonly userId: string;
-        readonly newPasswordHash: string;
-    }): Promise<void>;
+  /**
+   * Atomically (a) mark the token consumed and (b) update the
+   * user's password hash. Implementations MUST run both writes
+   * in a single transaction so a partial failure does not
+   * leave a "consumed token but old password" state.
+   */
+  consumeAndResetPassword(input: {
+    readonly tokenHash: string;
+    readonly userId: string;
+    readonly newPasswordHash: string;
+  }): Promise<void>;
 
-    /**
-     * Optional rate-limit hook — the cron sweeper deletes
-     * tokens whose `expires_at < now() - 30 days`. Documented
-     * here for the migration to wire correctly; not invoked
-     * directly by this module.
-     */
-    purgeExpired?(): Promise<{ readonly deleted: number }>;
+  /**
+   * Optional rate-limit hook — the cron sweeper deletes
+   * tokens whose `expires_at < now() - 30 days`. Documented
+   * here for the migration to wire correctly; not invoked
+   * directly by this module.
+   */
+  purgeExpired?(): Promise<{ readonly deleted: number }>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -137,17 +137,17 @@ export interface PasswordResetRepo {
  * keep the contract narrow so the transport stays swappable.
  */
 export interface PasswordResetEmailTransport {
-    /**
-     * Send the reset email. The `link` already carries the plain
-     * token — implementations MUST send the email AS-IS without
-     * logging or persisting `link` content, because the link
-     * grants a 1-hour bearer credential.
-     */
-    sendResetEmail(input: {
-        readonly to: string;
-        readonly link: string;
-        readonly expiresAt: Date;
-    }): Promise<void>;
+  /**
+   * Send the reset email. The `link` already carries the plain
+   * token — implementations MUST send the email AS-IS without
+   * logging or persisting `link` content, because the link
+   * grants a 1-hour bearer credential.
+   */
+  sendResetEmail(input: {
+    readonly to: string;
+    readonly link: string;
+    readonly expiresAt: Date;
+  }): Promise<void>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -156,25 +156,21 @@ export interface PasswordResetEmailTransport {
 
 /** Generate a cryptographically secure random reset token. */
 function generateRandomToken(): string {
-    const bytes = new Uint8Array(TOKEN_RAW_BYTES);
-    globalThis.crypto.getRandomValues(bytes);
-    // base64url — URL-safe, no padding so the email link looks clean.
-    let binary = '';
-    for (const b of bytes) binary += String.fromCharCode(b);
-    return globalThis
-        .btoa(binary)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/u, '');
+  const bytes = new Uint8Array(TOKEN_RAW_BYTES);
+  globalThis.crypto.getRandomValues(bytes);
+  // base64url — URL-safe, no padding so the email link looks clean.
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return globalThis.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/u, '');
 }
 
 /** SHA-256 + hex encode — same primitive used by the throttle key. */
 async function sha256Hex(input: string): Promise<string> {
-    const data = new TextEncoder().encode(input);
-    const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
+  const data = new TextEncoder().encode(input);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 /* ------------------------------------------------------------------ */
@@ -182,25 +178,25 @@ async function sha256Hex(input: string): Promise<string> {
 /* ------------------------------------------------------------------ */
 
 export interface RequestResetDeps {
-    readonly userRepo: AuthServiceDeps['userRepo'];
-    readonly passwordResetRepo: PasswordResetRepo;
-    readonly emailTransport: PasswordResetEmailTransport;
-    /** Base URL of the web app. Token is appended to build `link`. */
-    readonly resetLinkBaseUrl: string;
-    /** Optional clock injection for tests. */
-    readonly now?: () => number;
-    /** Optional TTL override (default 1 hour). */
-    readonly tokenTtlSec?: number;
+  readonly userRepo: AuthServiceDeps['userRepo'];
+  readonly passwordResetRepo: PasswordResetRepo;
+  readonly emailTransport: PasswordResetEmailTransport;
+  /** Base URL of the web app. Token is appended to build `link`. */
+  readonly resetLinkBaseUrl: string;
+  /** Optional clock injection for tests. */
+  readonly now?: () => number;
+  /** Optional TTL override (default 1 hour). */
+  readonly tokenTtlSec?: number;
 }
 
 export interface RequestResetResult {
-    /**
-     * Always `'sent'` from the caller's perspective — see the
-     * email-enumeration defence rationale in the module doc.
-     * The actual side-effect (email dispatched) only fires when
-     * a matching active user was found.
-     */
-    readonly kind: 'sent';
+  /**
+   * Always `'sent'` from the caller's perspective — see the
+   * email-enumeration defence rationale in the module doc.
+   * The actual side-effect (email dispatched) only fires when
+   * a matching active user was found.
+   */
+  readonly kind: 'sent';
 }
 
 /**
@@ -210,44 +206,44 @@ export interface RequestResetResult {
  * defeat email-enumeration probes.
  */
 export async function requestReset(
-    email: string,
-    deps: RequestResetDeps,
+  email: string,
+  deps: RequestResetDeps,
 ): Promise<RequestResetResult> {
-    if (typeof email !== 'string' || email.length === 0) {
-        // Validation upstream is the gateway's job. Bail to
-        // `token_invalid` to keep the error surface narrow rather
-        // than leaking the validation failure.
-        throw new AuthError('token_invalid');
-    }
+  if (typeof email !== 'string' || email.length === 0) {
+    // Validation upstream is the gateway's job. Bail to
+    // `token_invalid` to keep the error surface narrow rather
+    // than leaking the validation failure.
+    throw new AuthError('token_invalid');
+  }
 
-    const normalized = email.trim().toLowerCase();
-    const user = await deps.userRepo.findUserByEmail(normalized);
+  const normalized = email.trim().toLowerCase();
+  const user = await deps.userRepo.findUserByEmail(normalized);
 
-    // Branch ONLY on whether the side-effect (email) fires. The
-    // returned shape is identical so the response time is also
-    // similar.
-    if (user !== null && user.deletedAt === null) {
-        const ttlSec = deps.tokenTtlSec ?? DEFAULT_RESET_TOKEN_TTL_SEC;
-        const nowMs = deps.now !== undefined ? deps.now() * 1000 : Date.now();
-        const expiresAt = new Date(nowMs + ttlSec * 1000);
-        const plainToken = generateRandomToken();
-        const tokenHash = await sha256Hex(plainToken);
+  // Branch ONLY on whether the side-effect (email) fires. The
+  // returned shape is identical so the response time is also
+  // similar.
+  if (user !== null && user.deletedAt === null) {
+    const ttlSec = deps.tokenTtlSec ?? DEFAULT_RESET_TOKEN_TTL_SEC;
+    const nowMs = deps.now !== undefined ? deps.now() * 1000 : Date.now();
+    const expiresAt = new Date(nowMs + ttlSec * 1000);
+    const plainToken = generateRandomToken();
+    const tokenHash = await sha256Hex(plainToken);
 
-        await deps.passwordResetRepo.insertToken({
-            userId: user.id,
-            tokenHash,
-            expiresAt,
-        });
+    await deps.passwordResetRepo.insertToken({
+      userId: user.id,
+      tokenHash,
+      expiresAt,
+    });
 
-        const link = `${deps.resetLinkBaseUrl.replace(/\/+$/u, '')}/reset-password/${plainToken}`;
-        await deps.emailTransport.sendResetEmail({
-            to: user.email,
-            link,
-            expiresAt,
-        });
-    }
+    const link = `${deps.resetLinkBaseUrl.replace(/\/+$/u, '')}/reset-password/${plainToken}`;
+    await deps.emailTransport.sendResetEmail({
+      to: user.email,
+      link,
+      expiresAt,
+    });
+  }
 
-    return { kind: 'sent' };
+  return { kind: 'sent' };
 }
 
 /* ------------------------------------------------------------------ */
@@ -255,17 +251,17 @@ export async function requestReset(
 /* ------------------------------------------------------------------ */
 
 export interface ConfirmResetInput {
-    readonly token: string;
-    readonly newPassword: string;
+  readonly token: string;
+  readonly newPassword: string;
 }
 
 export interface ConfirmResetDeps {
-    readonly passwordResetRepo: PasswordResetRepo;
-    readonly sessionStore: AuthServiceDeps['sessionStore'];
-    /** Optional HIBP `fetch` override (mirror of register's). */
-    readonly hibpFetch?: typeof fetch;
-    /** Optional clock for tests. */
-    readonly now?: () => number;
+  readonly passwordResetRepo: PasswordResetRepo;
+  readonly sessionStore: AuthServiceDeps['sessionStore'];
+  /** Optional HIBP `fetch` override (mirror of register's). */
+  readonly hibpFetch?: typeof fetch;
+  /** Optional clock for tests. */
+  readonly now?: () => number;
 }
 
 /**
@@ -290,55 +286,55 @@ export interface ConfirmResetDeps {
  *   `token_expired`, `hibp_unavailable`, `password_breached`.
  */
 export async function confirmReset(
-    input: ConfirmResetInput,
-    deps: ConfirmResetDeps,
+  input: ConfirmResetInput,
+  deps: ConfirmResetDeps,
 ): Promise<{ readonly userId: string }> {
-    if (typeof input.token !== 'string' || input.token.length === 0) {
-        throw new AuthError('token_invalid');
+  if (typeof input.token !== 'string' || input.token.length === 0) {
+    throw new AuthError('token_invalid');
+  }
+  if (typeof input.newPassword !== 'string' || input.newPassword.length === 0) {
+    throw new AuthError('token_invalid');
+  }
+
+  const tokenHash = await sha256Hex(input.token);
+  const found = await deps.passwordResetRepo.findActiveTokenByHash(tokenHash);
+  if (found === null) {
+    throw new AuthError('token_invalid');
+  }
+
+  const nowMs = deps.now !== undefined ? deps.now() * 1000 : Date.now();
+  if (found.expiresAt.getTime() <= nowMs) {
+    throw new AuthError('token_expired');
+  }
+
+  // HIBP fail-closed (mirror Sprint-3 SP3.2 / S2-009).
+  let breached: boolean;
+  try {
+    breached = await defaultIsBreached(
+      input.newPassword,
+      deps.hibpFetch !== undefined ? { fetch: deps.hibpFetch } : {},
+    );
+  } catch (err) {
+    if (err instanceof HibpUnavailableError) {
+      throw new AuthError('hibp_unavailable');
     }
-    if (typeof input.newPassword !== 'string' || input.newPassword.length === 0) {
-        throw new AuthError('token_invalid');
-    }
+    throw err;
+  }
+  if (breached) {
+    throw new AuthError('password_breached');
+  }
 
-    const tokenHash = await sha256Hex(input.token);
-    const found = await deps.passwordResetRepo.findActiveTokenByHash(tokenHash);
-    if (found === null) {
-        throw new AuthError('token_invalid');
-    }
+  const newPasswordHash = await hashPassword(input.newPassword);
 
-    const nowMs = deps.now !== undefined ? deps.now() * 1000 : Date.now();
-    if (found.expiresAt.getTime() <= nowMs) {
-        throw new AuthError('token_expired');
-    }
+  await deps.passwordResetRepo.consumeAndResetPassword({
+    tokenHash,
+    userId: found.userId,
+    newPasswordHash,
+  });
 
-    // HIBP fail-closed (mirror Sprint-3 SP3.2 / S2-009).
-    let breached: boolean;
-    try {
-        breached = await defaultIsBreached(
-            input.newPassword,
-            deps.hibpFetch !== undefined ? { fetch: deps.hibpFetch } : {},
-        );
-    } catch (err) {
-        if (err instanceof HibpUnavailableError) {
-            throw new AuthError('hibp_unavailable');
-        }
-        throw err;
-    }
-    if (breached) {
-        throw new AuthError('password_breached');
-    }
+  // Security-event posture: tear down every active session on
+  // password reset. The user re-authenticates everywhere.
+  await deps.sessionStore.revokeAllForUser(found.userId);
 
-    const newPasswordHash = await hashPassword(input.newPassword);
-
-    await deps.passwordResetRepo.consumeAndResetPassword({
-        tokenHash,
-        userId: found.userId,
-        newPasswordHash,
-    });
-
-    // Security-event posture: tear down every active session on
-    // password reset. The user re-authenticates everywhere.
-    await deps.sessionStore.revokeAllForUser(found.userId);
-
-    return { userId: found.userId };
+  return { userId: found.userId };
 }
