@@ -32,11 +32,9 @@ export default defineConfig({
     pool: 'threads',
 
     // Give fast-check enough room to shrink a large counter-example
-    // without tripping the default 5 s timeout.
+    // without tripping the default 5 s timeout. Per-hook timeouts
+    // (e.g. 180 s for the Testcontainers `beforeAll`) are passed as
+    // the third argument to `beforeAll` directly.
     testTimeout: 30_000,
-
-    // vitest v4 separates hookTimeout from testTimeout (default 10 s).
-    // Testcontainers + migrations can take up to 2 min on cold CI runners.
-    hookTimeout: 180_000,
   },
 });

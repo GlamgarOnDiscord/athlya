@@ -62,7 +62,10 @@ describe('<ConsentsForm />', () => {
 
     // Both values surface somewhere in the page.
     const version = screen.getByText('2025-01');
-    const updatedAt = screen.getByText('2025-01-15T10:00:00.000Z');
+    // `updatedAt` is rendered through `Intl.DateTimeFormat('fr', { dateStyle: 'medium' })`
+    // (see ConsentsForm.tsx). Asserting on the formatted output keeps the test
+    // tied to the user-visible rendering rather than the raw ISO string.
+    const updatedAt = screen.getByText('15 janv. 2025');
     expect(version.tagName.toLowerCase()).toBe('dd');
     expect(updatedAt.tagName.toLowerCase()).toBe('dd');
   });
@@ -71,11 +74,19 @@ describe('<ConsentsForm />', () => {
     const client = buildFakeClient();
     render(<ConsentsForm consents={BASE_CONSENTS} client={client} t={t} />);
 
-    const marketing = screen.getByLabelText(t('consents.marketing')) as HTMLInputElement;
-    expect(marketing.checked).toBe(false);
+    // base-ui Checkbox renders both a `<span role="checkbox">` (the visible,
+    // a11y-friendly trigger) and a hidden `<input type="checkbox">` (so the
+    // surrounding form submit sees the value). Both are siblings of the shared
+    // `<label>`, so `getByLabelText` matches twice — query by role to pin the
+    // assertion to the user-visible trigger and read `aria-checked` from it.
+    //
+    // PointerEvent is polyfilled in `vitest.setup.ts` because jsdom 26 does
+    // not provide it natively and base-ui's click handler expects it.
+    const trigger = screen.getByRole('checkbox', { name: t('consents.marketing') });
+    expect(trigger.getAttribute('aria-checked')).toBe('false');
 
-    fireEvent.click(marketing);
-    expect(marketing.checked).toBe(true);
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute('aria-checked')).toBe('true');
   });
 
   it('submits only the three boolean flags via PATCH', async () => {
