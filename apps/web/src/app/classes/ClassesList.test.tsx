@@ -22,6 +22,9 @@ vi.mock('../../lib/auth/AuthContext', () => ({
   useAuth: () => ({ bootResolved: true }),
 }));
 
+const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock('sonner', () => ({ toast: toastMock }));
+
 import { ApiError } from '../../lib/api/client';
 import { LocaleProvider } from '../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../lib/i18n/t';
@@ -97,7 +100,8 @@ describe('<ClassesList />', () => {
     });
     renderWithLocale(<ClassesList client={client} t={t} />);
 
-    expect(screen.getByText(t('common.loading'))).toBeDefined();
+    // Loading state renders skeleton placeholders, no interactive buttons.
+    expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('renders a card for each class in the fetched items', async () => {
@@ -122,9 +126,9 @@ describe('<ClassesList />', () => {
 
     expect(screen.getByText('CrossFit')).toBeDefined();
     expect(screen.getByText('Yoga')).toBeDefined();
-    // Both CTAs are rendered (remaining > 0 for both fixtures).
+    // Both CTAs are rendered — aria-label includes the class title.
     const ctas = screen.getAllByRole('button', {
-      name: t('classes.card.book'),
+      name: (n) => n.startsWith(t('classes.card.book')),
     });
     expect(ctas.length).toBe(2);
   });
@@ -170,7 +174,7 @@ describe('<ClassesList />', () => {
     expect(screen.getByText('4 / 12')).toBeDefined();
 
     const cta = screen.getByRole('button', {
-      name: t('classes.card.book'),
+      name: (n) => n.startsWith(t('classes.card.book')),
     });
     await act(async () => {
       fireEvent.click(cta);
@@ -180,8 +184,8 @@ describe('<ClassesList />', () => {
 
     // Post-click: remaining dropped to 3 / 12 and stayed there.
     expect(screen.getByText('3 / 12')).toBeDefined();
-    // Success banner rendered.
-    expect(screen.getByText(t('reservations.confirmed'))).toBeDefined();
+    // Success toast fired.
+    expect(toastMock.success).toHaveBeenCalledWith(t('reservations.confirmed'));
 
     // POST called exactly once, with classId + Idempotency-Key.
     expect(client.post).toHaveBeenCalledTimes(1);
@@ -214,7 +218,7 @@ describe('<ClassesList />', () => {
     await renderAndSettle(<ClassesList client={client} t={t} />);
 
     const cta = screen.getByRole('button', {
-      name: t('classes.card.book'),
+      name: (n) => n.startsWith(t('classes.card.book')),
     });
     await act(async () => {
       fireEvent.click(cta);
