@@ -266,25 +266,17 @@ function buildRepo(client: Sql): DeletionRepo {
             `;
     },
     async anonymizeAuditRows(userId) {
-      // Trigger-relaxation sequence documented in the suite
-      // preamble. DISABLE TRIGGER + UPDATE + re-enable all
-      // live inside a single `sql.begin` transaction so a
-      // failure in the middle rolls the whole block back and
-      // the table returns to its append-only state.
-      const rows = await client.begin(async (tx) => {
-        await tx.unsafe('ALTER TABLE "audit_log" DISABLE TRIGGER audit_log_forbid_update');
-        const updated = await tx.unsafe<{ id: string }[]>(
-          `UPDATE audit_log
-              SET actor_id = NULL,
-                  metadata = metadata - 'email' - 'displayName' - 'ip' - 'userAgent'
-            WHERE actor_id = $1
-            RETURNING id`,
-          [userId],
-        );
-        await tx.unsafe('ALTER TABLE "audit_log" ENABLE TRIGGER audit_log_forbid_update');
-        return updated;
-      });
-      return rows.length;
+      // Delegate to the migration-provided SECURITY DEFINER function
+      // `anonymize_user_audit(uuid)` owned by `athlya_owner`. Running
+      // as SECURITY DEFINER it satisfies the trigger's
+      // `current_user = 'athlya_owner'` guard without needing
+      // DISABLE/ENABLE TRIGGER. The superuser testcontainers connection
+      // can call it despite the REVOKE ALL / GRANT TO athlya_cron
+      // because superusers bypass privilege checks.
+      const result = await client<[{ anonymize_user_audit: number }]>`
+        SELECT anonymize_user_audit(${userId}::uuid)
+      `;
+      return result[0]?.anonymize_user_audit ?? 0;
     },
   };
 }
