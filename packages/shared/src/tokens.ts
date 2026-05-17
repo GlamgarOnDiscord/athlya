@@ -30,7 +30,7 @@ export const colors = {
     primaryForeground: '#FFFFFF',
     secondary: '#F1F5F9',
     muted: '#F1F5F9',
-    mutedForeground: '#64748B',
+    mutedForeground: '#475569',
     accent: '#E0F2FE',
     destructive: '#DC2626',
     success: '#16A34A',

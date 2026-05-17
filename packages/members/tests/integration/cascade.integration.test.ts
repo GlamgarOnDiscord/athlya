@@ -667,7 +667,11 @@ describe.skipIf(!dockerReady)(
         expect(aliceAuditBefore).toHaveLength(aliceAuditIds.length);
         for (const row of aliceAuditBefore) {
           expect(row.actor_id).toBe(ALICE_ID);
-          expect(row.metadata).toHaveProperty('email');
+          const metadata =
+            typeof row.metadata === 'string'
+              ? (JSON.parse(row.metadata) as Record<string, unknown>)
+              : (row.metadata as Record<string, unknown>);
+          expect(metadata).toHaveProperty('email');
         }
 
         /* --- Bob is UNTOUCHED across every table ------------- */
