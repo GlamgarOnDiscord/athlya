@@ -276,11 +276,11 @@ function buildRepo(client: Sql): DeletionRepo {
         const updated = await tx<{ id: string }[]>`
                     UPDATE audit_log
                        SET actor_id = NULL,
-                           metadata = metadata
-                               - 'email'
-                               - 'displayName'
-                               - 'ip'
-                               - 'userAgent'
+                           metadata = CASE
+                               WHEN jsonb_typeof(metadata) = 'object'
+                               THEN metadata - 'email' - 'displayName' - 'ip' - 'userAgent'
+                               ELSE metadata
+                           END
                      WHERE actor_id = ${userId}
                      RETURNING id
                 `;

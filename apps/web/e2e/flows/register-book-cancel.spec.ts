@@ -144,6 +144,14 @@ test('register → book → cancel (happy path, stubbed network)', async ({ page
 
   await page.goto('/register');
 
+  // Dismiss the cookie consent banner if it appears — it sits at the
+  // bottom of the viewport (z-50, fixed) and intercepts pointer events
+  // on form elements that happen to be near it.
+  const refuseBtn = page.getByRole('button', { name: /tout refuser|refuse all/i });
+  if (await refuseBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await refuseBtn.click();
+  }
+
   // Fill the form. Labels come from `@athlya/shared/i18n`
   // (`auth.register.*`) — asserting on the French copy is safe
   // because the test environment resolves `fr` via the Edge proxy
