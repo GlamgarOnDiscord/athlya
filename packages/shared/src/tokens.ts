@@ -27,7 +27,7 @@ export const colors = {
     background: '#FFFFFF',
     foreground: '#0F172A',
     primary: '#0EA5E9',
-    primaryForeground: '#FFFFFF',
+    primaryForeground: '#0F172A',
     secondary: '#F1F5F9',
     muted: '#F1F5F9',
     mutedForeground: '#475569',

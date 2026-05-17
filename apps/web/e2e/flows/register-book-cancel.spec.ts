@@ -144,13 +144,16 @@ test('register → book → cancel (happy path, stubbed network)', async ({ page
 
   await page.goto('/register');
 
-  // Dismiss the cookie consent banner if it appears — it sits at the
-  // bottom of the viewport (z-50, fixed) and intercepts pointer events
-  // on form elements that happen to be near it.
-  const refuseBtn = page.getByRole('button', { name: /tout refuser|refuse all/i });
-  if (await refuseBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await refuseBtn.click();
-  }
+  // Dismiss the cookie consent banner if it appears — it sits fixed at
+  // the bottom of the viewport (z-50) and intercepts pointer events on
+  // form elements that end up beneath it. `click({ timeout: 5000 })`
+  // waits up to 5 s for the button to become ready after hydration;
+  // the caught error is intentional — the banner may be absent when
+  // consent was already stored in a prior session.
+  await page
+    .getByRole('button', { name: /tout refuser|refuse all/i })
+    .click({ timeout: 5000 })
+    .catch(() => undefined);
 
   // Fill the form. Labels come from `@athlya/shared/i18n`
   // (`auth.register.*`) — asserting on the French copy is safe
