@@ -670,7 +670,7 @@ describe.skipIf(!dockerReady)(
           const metadata =
             typeof row.metadata === 'string'
               ? (JSON.parse(row.metadata) as Record<string, unknown>)
-              : (row.metadata as Record<string, unknown>);
+              : row.metadata;
           expect(metadata).toHaveProperty('email');
         }
 
