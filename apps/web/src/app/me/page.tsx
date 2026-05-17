@@ -29,15 +29,15 @@ import type { ReactElement } from 'react';
 export const metadata: Metadata = { title: 'Mon profil — Athlya' };
 
 export default async function MePage(): Promise<ReactElement> {
-    const locale = await getLocale();
-    const t = createTranslator(locale);
+  const locale = await getLocale();
+  const t = createTranslator(locale);
 
-    return (
-        <main id="main-content" className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-6 py-12">
-            <h1 className="text-3xl font-semibold">{t('profile.title')}</h1>
-            <RequireAuth>
-                <ProfileSection />
-            </RequireAuth>
-        </main>
-    );
+  return (
+    <main id="main-content" className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-6 py-12">
+      <h1 className="text-3xl font-semibold">{t('profile.title')}</h1>
+      <RequireAuth>
+        <ProfileSection />
+      </RequireAuth>
+    </main>
+  );
 }

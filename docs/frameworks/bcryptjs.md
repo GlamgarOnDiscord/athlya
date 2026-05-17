@@ -1,21 +1,22 @@
 # bcryptjs — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^3.0.2 |
-| **Latest** | 3.0.2 (current) |
-| **Purpose** | Password hashing (pure JS, Workers-compatible) |
-| **Algorithm** | bcrypt, cost factor 12 |
+|               | Value                                          |
+| ------------- | ---------------------------------------------- |
+| **Used**      | ^3.0.2                                         |
+| **Latest**    | 3.0.2 (current)                                |
+| **Purpose**   | Password hashing (pure JS, Workers-compatible) |
+| **Algorithm** | bcrypt, cost factor 12                         |
 
 ---
 
 ## Why bcryptjs (Not bcrypt)
 
 Native `bcrypt` (npm `bcrypt`) requires N-API/nan bindings — unavailable on Cloudflare Workers. `bcryptjs` is a pure JavaScript implementation that runs identically on:
+
 - Node 20 (tests)
 - Cloudflare Workers (production)
 
@@ -48,7 +49,7 @@ Option 2 is the most secure for users with long passwords. Option 1 is the most 
 import { createHash } from 'node:crypto';
 
 function preparePassword(raw: string): string {
-    return createHash('sha256').update(raw, 'utf8').digest('base64');
+  return createHash('sha256').update(raw, 'utf8').digest('base64');
 }
 
 const hash = await bcrypt.hash(preparePassword(password), 12);
@@ -59,20 +60,20 @@ const valid = await bcrypt.compare(preparePassword(attempt), hash);
 
 ## Security Assessment
 
-| Property | Value |
-|---|---|
-| Cost factor | 12 (~200ms on Workers) |
-| Timing safety | `bcrypt.compare()` is constant-time |
-| Salt | Auto-generated per hash (embedded in `$2b$` string) |
-| Timing oracle prevention | Dummy hash on missing user lookup |
+| Property                 | Value                                               |
+| ------------------------ | --------------------------------------------------- |
+| Cost factor              | 12 (~200ms on Workers)                              |
+| Timing safety            | `bcrypt.compare()` is constant-time                 |
+| Salt                     | Auto-generated per hash (embedded in `$2b$` string) |
+| Timing oracle prevention | Dummy hash on missing user lookup                   |
 
 ---
 
 ## Deprecated Patterns
 
-| Deprecated | Replacement | Status |
-|---|---|---|
-| `bcrypt.hashSync()` | `bcrypt.hash()` async | Not used (correct) |
+| Deprecated             | Replacement              | Status             |
+| ---------------------- | ------------------------ | ------------------ |
+| `bcrypt.hashSync()`    | `bcrypt.hash()` async    | Not used (correct) |
 | `bcrypt.compareSync()` | `bcrypt.compare()` async | Not used (correct) |
 
 ---

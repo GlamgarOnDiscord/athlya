@@ -73,27 +73,27 @@ export type CreateClassErrorCode = 'validation_failed' | 'class_in_past';
  * surface the field-level paths without a second parse of the body.
  */
 export class CreateClassError extends Error {
-    public override readonly name = 'CreateClassError';
-    public readonly code: CreateClassErrorCode;
-    /**
-     * zod issues from the failing parse. Populated only when
-     * `code === 'validation_failed'`. The field is typed as readonly
-     * `unknown[]` to keep this module independent of the exact zod
-     * runtime type surface — the API gateway re-validates via the
-     * same schema before serialising so it has the proper typing
-     * locally.
-     */
-    public readonly issues: ReadonlyArray<unknown>;
+  public override readonly name = 'CreateClassError';
+  public readonly code: CreateClassErrorCode;
+  /**
+   * zod issues from the failing parse. Populated only when
+   * `code === 'validation_failed'`. The field is typed as readonly
+   * `unknown[]` to keep this module independent of the exact zod
+   * runtime type surface — the API gateway re-validates via the
+   * same schema before serialising so it has the proper typing
+   * locally.
+   */
+  public readonly issues: ReadonlyArray<unknown>;
 
-    public constructor(
-        code: CreateClassErrorCode,
-        message?: string,
-        issues: ReadonlyArray<unknown> = [],
-    ) {
-        super(message ?? code);
-        this.code = code;
-        this.issues = issues;
-    }
+  public constructor(
+    code: CreateClassErrorCode,
+    message?: string,
+    issues: ReadonlyArray<unknown> = [],
+  ) {
+    super(message ?? code);
+    this.code = code;
+    this.issues = issues;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -113,13 +113,13 @@ export class CreateClassError extends Error {
  * passes exactly the right shape.
  */
 export interface CreateClassRepoInput {
-    readonly studioId: StudioId;
-    readonly title: string;
-    readonly startsAt: string;
-    readonly durationMin: number;
-    readonly capacity: number;
-    readonly coachId?: UserId;
-    readonly version: 0;
+  readonly studioId: StudioId;
+  readonly title: string;
+  readonly startsAt: string;
+  readonly durationMin: number;
+  readonly capacity: number;
+  readonly coachId?: UserId;
+  readonly version: 0;
 }
 
 /**
@@ -129,20 +129,20 @@ export interface CreateClassRepoInput {
  * methods.
  */
 export interface ClassRepo {
-    /**
-     * Insert the row and return the fully populated {@link ClassRow}.
-     *
-     * The repo owns:
-     *   - UUID generation (`id`).
-     *   - `createdAt` / `deletedAt` stamping.
-     *   - The unique-insert guard — callers do not need to pre-check.
-     *
-     * Implementations SHOULD propagate any SQL error unchanged; the
-     * service layer does not try to remap database-level failures to
-     * domain codes at this point (Requirement 6.1 is a happy-path
-     * rule; 6.5–6.7 cover the error paths around updates).
-     */
-    createClass(input: CreateClassRepoInput): Promise<ClassRow>;
+  /**
+   * Insert the row and return the fully populated {@link ClassRow}.
+   *
+   * The repo owns:
+   *   - UUID generation (`id`).
+   *   - `createdAt` / `deletedAt` stamping.
+   *   - The unique-insert guard — callers do not need to pre-check.
+   *
+   * Implementations SHOULD propagate any SQL error unchanged; the
+   * service layer does not try to remap database-level failures to
+   * domain codes at this point (Requirement 6.1 is a happy-path
+   * rule; 6.5–6.7 cover the error paths around updates).
+   */
+  createClass(input: CreateClassRepoInput): Promise<ClassRow>;
 }
 
 /**
@@ -152,18 +152,18 @@ export interface ClassRepo {
  * binding; this package stays agnostic of the client.
  */
 export interface RemainingCounterWriter {
-    /**
-     * Idempotently seed `class:{classId}:remaining` to `capacity`.
-     *
-     * Called exactly once per newly-created class, immediately after
-     * the DB insert succeeds. If the Redis `SET` fails the caller
-     * surfaces the error: the class is already persisted, but the
-     * counter is absent — Requirement 7.2 would then return `0`
-     * remaining until the next successful booking / cancellation
-     * path rebuilds it. This matches the design.md guidance that the
-     * DB, not Redis, is the authoritative source of truth.
-     */
-    reset(classId: string, capacity: number): Promise<void>;
+  /**
+   * Idempotently seed `class:{classId}:remaining` to `capacity`.
+   *
+   * Called exactly once per newly-created class, immediately after
+   * the DB insert succeeds. If the Redis `SET` fails the caller
+   * surfaces the error: the class is already persisted, but the
+   * counter is absent — Requirement 7.2 would then return `0`
+   * remaining until the next successful booking / cancellation
+   * path rebuilds it. This matches the design.md guidance that the
+   * DB, not Redis, is the authoritative source of truth.
+   */
+  reset(classId: string, capacity: number): Promise<void>;
 }
 
 /**
@@ -172,14 +172,14 @@ export interface RemainingCounterWriter {
  * branch deterministically.
  */
 export interface CreateClassDeps {
-    readonly classRepo: ClassRepo;
-    readonly counter: RemainingCounterWriter;
-    /**
-     * Injected clock. Defaults to `Date.now`. The service calls it
-     * exactly once per invocation — the value is compared as-is
-     * against `Date.parse(startsAt)`, so both are Unix-ms.
-     */
-    readonly now?: () => number;
+  readonly classRepo: ClassRepo;
+  readonly counter: RemainingCounterWriter;
+  /**
+   * Injected clock. Defaults to `Date.now`. The service calls it
+   * exactly once per invocation — the value is compared as-is
+   * against `Date.parse(startsAt)`, so both are Unix-ms.
+   */
+  readonly now?: () => number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -216,59 +216,59 @@ export interface CreateClassDeps {
  *   `class_in_past`.
  */
 export async function createClass(
-    studioId: StudioId,
-    input: unknown,
-    deps: CreateClassDeps,
+  studioId: StudioId,
+  input: unknown,
+  deps: CreateClassDeps,
 ): Promise<ClassRow> {
-    // ---- Step 1: wire-level validation -----------------------------------
-    const parseResult = CreateClassRequestSchema.safeParse(input);
-    if (!parseResult.success) {
-        throw new CreateClassError(
-            'validation_failed',
-            'createClass: payload failed schema validation',
-            parseResult.error.issues,
-        );
-    }
-    const parsed: CreateClassInput = parseResult.data;
+  // ---- Step 1: wire-level validation -----------------------------------
+  const parseResult = CreateClassRequestSchema.safeParse(input);
+  if (!parseResult.success) {
+    throw new CreateClassError(
+      'validation_failed',
+      'createClass: payload failed schema validation',
+      parseResult.error.issues,
+    );
+  }
+  const parsed: CreateClassInput = parseResult.data;
 
-    // ---- Step 2: dynamic "not in the past" check (Requirement 6.4) -------
-    const nowMs = (deps.now ?? defaultNow)();
-    const startsAtMs = Date.parse(parsed.startsAt);
-    if (!(startsAtMs > nowMs)) {
-        throw new CreateClassError(
-            'class_in_past',
-            `createClass: startsAt (${parsed.startsAt}) is not strictly in the future`,
-        );
-    }
+  // ---- Step 2: dynamic "not in the past" check (Requirement 6.4) -------
+  const nowMs = (deps.now ?? defaultNow)();
+  const startsAtMs = Date.parse(parsed.startsAt);
+  if (!(startsAtMs > nowMs)) {
+    throw new CreateClassError(
+      'class_in_past',
+      `createClass: startsAt (${parsed.startsAt}) is not strictly in the future`,
+    );
+  }
 
-    // ---- Step 3: persist with version = 0 (Requirement 6.1) --------------
-    //
-    // `coachId` is conditionally included so the repo sees an
-    // absent property rather than `undefined`, matching Drizzle's
-    // default-column semantics. `version` is pinned here — callers
-    // cannot override it.
-    const repoInput: CreateClassRepoInput = {
-        studioId,
-        title: parsed.title,
-        startsAt: parsed.startsAt,
-        durationMin: parsed.durationMin,
-        capacity: parsed.capacity,
-        version: 0,
-        ...(parsed.coachId !== undefined ? { coachId: parsed.coachId } : {}),
-    };
-    const row = await deps.classRepo.createClass(repoInput);
+  // ---- Step 3: persist with version = 0 (Requirement 6.1) --------------
+  //
+  // `coachId` is conditionally included so the repo sees an
+  // absent property rather than `undefined`, matching Drizzle's
+  // default-column semantics. `version` is pinned here — callers
+  // cannot override it.
+  const repoInput: CreateClassRepoInput = {
+    studioId,
+    title: parsed.title,
+    startsAt: parsed.startsAt,
+    durationMin: parsed.durationMin,
+    capacity: parsed.capacity,
+    version: 0,
+    ...(parsed.coachId !== undefined ? { coachId: parsed.coachId } : {}),
+  };
+  const row = await deps.classRepo.createClass(repoInput);
 
-    // ---- Step 4: seed the Redis remaining-seats counter ------------------
-    //
-    // Ordered strictly AFTER the DB write: if the insert rolls back
-    // we must not leave a dangling counter, and if the counter write
-    // fails the caller can still observe the persisted row and
-    // decide how to recover (e.g. retry the seed from a background
-    // job). The production API layer wraps this call in the same
-    // trace span as the insert for observability.
-    await deps.counter.reset(row.id, row.capacity);
+  // ---- Step 4: seed the Redis remaining-seats counter ------------------
+  //
+  // Ordered strictly AFTER the DB write: if the insert rolls back
+  // we must not leave a dangling counter, and if the counter write
+  // fails the caller can still observe the persisted row and
+  // decide how to recover (e.g. retry the seed from a background
+  // job). The production API layer wraps this call in the same
+  // trace span as the insert for observability.
+  await deps.counter.reset(row.id, row.capacity);
 
-    return row;
+  return row;
 }
 
 /* ------------------------------------------------------------------ */
@@ -276,5 +276,5 @@ export async function createClass(
 /* ------------------------------------------------------------------ */
 
 function defaultNow(): number {
-    return Date.now();
+  return Date.now();
 }

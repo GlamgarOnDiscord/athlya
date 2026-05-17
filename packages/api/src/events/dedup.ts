@@ -84,36 +84,31 @@ export const DEFAULT_DEDUP_PREFIX = 'events:seen';
  * @throws {RangeError} when `ttlSec` is not a finite positive number.
  */
 export async function assertNotSeen(
-    redis: Redis,
-    eventId: string,
-    ttlSec: number = DEFAULT_DEDUP_TTL_SEC,
-    prefix: string = DEFAULT_DEDUP_PREFIX,
+  redis: Redis,
+  eventId: string,
+  ttlSec: number = DEFAULT_DEDUP_TTL_SEC,
+  prefix: string = DEFAULT_DEDUP_PREFIX,
 ): Promise<boolean> {
-    if (typeof eventId !== 'string' || eventId.length === 0) {
-        throw new TypeError('assertNotSeen: eventId must be a non-empty string');
-    }
-    if (typeof prefix !== 'string' || prefix.length === 0) {
-        throw new TypeError('assertNotSeen: prefix must be a non-empty string');
-    }
-    if (!Number.isFinite(ttlSec) || ttlSec <= 0) {
-        throw new RangeError(
-            `assertNotSeen: ttlSec must be > 0, got ${String(ttlSec)}`,
-        );
-    }
+  if (typeof eventId !== 'string' || eventId.length === 0) {
+    throw new TypeError('assertNotSeen: eventId must be a non-empty string');
+  }
+  if (typeof prefix !== 'string' || prefix.length === 0) {
+    throw new TypeError('assertNotSeen: prefix must be a non-empty string');
+  }
+  if (!Number.isFinite(ttlSec) || ttlSec <= 0) {
+    throw new RangeError(`assertNotSeen: ttlSec must be > 0, got ${String(ttlSec)}`);
+  }
 
-    // Clamp to ≥ 1 second to match Upstash's `EX` lower bound; floor
-    // because the protocol does not accept fractional seconds.
-    const ex = Math.max(1, Math.floor(ttlSec));
-    const key = `${prefix}:${eventId}`;
+  // Clamp to ≥ 1 second to match Upstash's `EX` lower bound; floor
+  // because the protocol does not accept fractional seconds.
+  const ex = Math.max(1, Math.floor(ttlSec));
+  const key = `${prefix}:${eventId}`;
 
-    // `set` returns the literal string `'OK'` on a successful write
-    // and `null` when `NX` blocks the write. Both branches are typed
-    // through the Upstash client's overloads; the cast keeps the
-    // compiler honest without forcing the consumer to discriminate.
-    const result = (await redis.set(key, '1', { ex, nx: true })) as
-        | 'OK'
-        | null
-        | undefined;
+  // `set` returns the literal string `'OK'` on a successful write
+  // and `null` when `NX` blocks the write. Both branches are typed
+  // through the Upstash client's overloads; the cast keeps the
+  // compiler honest without forcing the consumer to discriminate.
+  const result = (await redis.set(key, '1', { ex, nx: true })) as 'OK' | null | undefined;
 
-    return result === 'OK';
+  return result === 'OK';
 }

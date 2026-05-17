@@ -73,8 +73,8 @@ import { z } from 'zod';
  *                          in that case.
  */
 export interface StudioBilling {
-    readonly studioId: string;
-    readonly stripeAccountId: string | null;
+  readonly studioId: string;
+  readonly stripeAccountId: string | null;
 }
 
 /**
@@ -90,9 +90,9 @@ export interface StudioBilling {
  *   - `studioId`  — scopes the Stripe account lookup below.
  */
 export interface UserBillingContext {
-    readonly userId: string;
-    readonly email: string;
-    readonly studioId: string;
+  readonly userId: string;
+  readonly email: string;
+  readonly studioId: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -112,7 +112,7 @@ export interface UserBillingContext {
  * not completed Stripe onboarding".
  */
 export interface StudioBillingRepo {
-    getBilling(studioId: string): Promise<StudioBilling | null>;
+  getBilling(studioId: string): Promise<StudioBilling | null>;
 }
 
 /**
@@ -125,7 +125,7 @@ export interface StudioBillingRepo {
  * `{ kind: 'user_not_found' }` without calling Stripe.
  */
 export interface UserLookupRepo {
-    getUser(userId: string): Promise<UserBillingContext | null>;
+  getUser(userId: string): Promise<UserBillingContext | null>;
 }
 
 /**
@@ -138,17 +138,17 @@ export interface UserLookupRepo {
  * keeps the business intent separate from the wire format.
  */
 export interface CheckoutSessionParams {
-    readonly priceId: string;
-    readonly successUrl: string;
-    readonly cancelUrl: string;
-    readonly customerEmail?: string;
-    readonly metadata?: Record<string, string>;
-    /**
-     * Stripe Connect account id (`acct_…`) the session is created
-     * on behalf of. The adapter forwards it as the `Stripe-Account`
-     * header.
-     */
-    readonly stripeAccount?: string;
+  readonly priceId: string;
+  readonly successUrl: string;
+  readonly cancelUrl: string;
+  readonly customerEmail?: string;
+  readonly metadata?: Record<string, string>;
+  /**
+   * Stripe Connect account id (`acct_…`) the session is created
+   * on behalf of. The adapter forwards it as the `Stripe-Account`
+   * header.
+   */
+  readonly stripeAccount?: string;
 }
 
 /**
@@ -158,8 +158,8 @@ export interface CheckoutSessionParams {
  *   - `url` — the hosted redirect URL the member should be sent to.
  */
 export interface CheckoutSession {
-    readonly id: string;
-    readonly url: string;
+  readonly id: string;
+  readonly url: string;
 }
 
 /**
@@ -175,9 +175,7 @@ export interface CheckoutSession {
  * outages from the member.
  */
 export interface StripeClient {
-    createCheckoutSession(
-        params: CheckoutSessionParams,
-    ): Promise<CheckoutSession>;
+  createCheckoutSession(params: CheckoutSessionParams): Promise<CheckoutSession>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -191,19 +189,19 @@ export interface StripeClient {
  * live mode anyway.
  */
 const httpsUrl = z
-    .string()
-    .min(1)
-    .refine(
-        (raw) => {
-            try {
-                const parsed = new URL(raw);
-                return parsed.protocol === 'https:';
-            } catch {
-                return false;
-            }
-        },
-        { message: 'must be an absolute https:// URL' },
-    );
+  .string()
+  .min(1)
+  .refine(
+    (raw) => {
+      try {
+        const parsed = new URL(raw);
+        return parsed.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    },
+    { message: 'must be an absolute https:// URL' },
+  );
 
 /**
  * Public input contract for {@link createCheckoutSession}. Zod-parsed
@@ -211,16 +209,14 @@ const httpsUrl = z
  * can translate into RFC 7807 Problem Details.
  */
 export const CreateCheckoutSessionInputSchema = z.object({
-    userId: z.string().min(1),
-    priceId: z.string().min(1),
-    successUrl: httpsUrl,
-    cancelUrl: httpsUrl,
+  userId: z.string().min(1),
+  priceId: z.string().min(1),
+  successUrl: httpsUrl,
+  cancelUrl: httpsUrl,
 });
 
 /** Inferred input type — callers use this, the schema is internal. */
-export type CreateCheckoutSessionInput = z.infer<
-    typeof CreateCheckoutSessionInputSchema
->;
+export type CreateCheckoutSessionInput = z.infer<typeof CreateCheckoutSessionInputSchema>;
 
 /* ------------------------------------------------------------------ */
 /*  Dependency bag                                                     */
@@ -228,9 +224,9 @@ export type CreateCheckoutSessionInput = z.infer<
 
 /** Dependency bag accepted by {@link createCheckoutSession}. */
 export interface CreateCheckoutSessionDeps {
-    readonly users: UserLookupRepo;
-    readonly billing: StudioBillingRepo;
-    readonly stripe: StripeClient;
+  readonly users: UserLookupRepo;
+  readonly billing: StudioBillingRepo;
+  readonly stripe: StripeClient;
 }
 
 /* ------------------------------------------------------------------ */
@@ -257,13 +253,13 @@ export interface CreateCheckoutSessionDeps {
  * outages from the member.
  */
 export type CreateCheckoutSessionResult =
-    | {
-        readonly kind: 'ok';
-        readonly sessionId: string;
-        readonly url: string;
+  | {
+      readonly kind: 'ok';
+      readonly sessionId: string;
+      readonly url: string;
     }
-    | { readonly kind: 'user_not_found' }
-    | { readonly kind: 'billing_not_configured' };
+  | { readonly kind: 'user_not_found' }
+  | { readonly kind: 'billing_not_configured' };
 
 /* ------------------------------------------------------------------ */
 /*  Public entry point                                                 */
@@ -292,46 +288,46 @@ export type CreateCheckoutSessionResult =
  * Any thrown error from the Stripe client propagates unchanged.
  */
 export async function createCheckoutSession(
-    input: CreateCheckoutSessionInput,
-    deps: CreateCheckoutSessionDeps,
+  input: CreateCheckoutSessionInput,
+  deps: CreateCheckoutSessionDeps,
 ): Promise<CreateCheckoutSessionResult> {
-    // Step 1 — validate. Throws ZodError on malformed input.
-    const parsed = CreateCheckoutSessionInputSchema.parse(input);
+  // Step 1 — validate. Throws ZodError on malformed input.
+  const parsed = CreateCheckoutSessionInputSchema.parse(input);
 
-    const { users, billing, stripe } = deps;
+  const { users, billing, stripe } = deps;
 
-    // Step 2 — user lookup.
-    const user = await users.getUser(parsed.userId);
-    if (user === null) {
-        return { kind: 'user_not_found' };
-    }
+  // Step 2 — user lookup.
+  const user = await users.getUser(parsed.userId);
+  if (user === null) {
+    return { kind: 'user_not_found' };
+  }
 
-    // Step 3 — studio billing lookup.
-    const studioBilling = await billing.getBilling(user.studioId);
-    if (studioBilling === null || studioBilling.stripeAccountId === null) {
-        return { kind: 'billing_not_configured' };
-    }
+  // Step 3 — studio billing lookup.
+  const studioBilling = await billing.getBilling(user.studioId);
+  if (studioBilling === null || studioBilling.stripeAccountId === null) {
+    return { kind: 'billing_not_configured' };
+  }
 
-    // Step 4 — Stripe call. Metadata carries the correlation keys the
-    // webhook handler needs; `customerEmail` pre-fills the Stripe
-    // Checkout page; `stripeAccount` pins the session to the studio's
-    // Connect account.
-    const session = await stripe.createCheckoutSession({
-        priceId: parsed.priceId,
-        successUrl: parsed.successUrl,
-        cancelUrl: parsed.cancelUrl,
-        customerEmail: user.email,
-        metadata: {
-            userId: user.userId,
-            studioId: user.studioId,
-        },
-        stripeAccount: studioBilling.stripeAccountId,
-    });
+  // Step 4 — Stripe call. Metadata carries the correlation keys the
+  // webhook handler needs; `customerEmail` pre-fills the Stripe
+  // Checkout page; `stripeAccount` pins the session to the studio's
+  // Connect account.
+  const session = await stripe.createCheckoutSession({
+    priceId: parsed.priceId,
+    successUrl: parsed.successUrl,
+    cancelUrl: parsed.cancelUrl,
+    customerEmail: user.email,
+    metadata: {
+      userId: user.userId,
+      studioId: user.studioId,
+    },
+    stripeAccount: studioBilling.stripeAccountId,
+  });
 
-    // Step 5 — ok.
-    return {
-        kind: 'ok',
-        sessionId: session.id,
-        url: session.url,
-    };
+  // Step 5 — ok.
+  return {
+    kind: 'ok',
+    sessionId: session.id,
+    url: session.url,
+  };
 }

@@ -33,20 +33,9 @@ import fc from 'fast-check';
 import { generateKeyPair } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import {
-    currentJwks,
-    publicJwkOf,
-    signAccess,
-    signRefresh,
-    verify,
-} from '../../src/jwt.js';
+import { currentJwks, publicJwkOf, signAccess, signRefresh, verify } from '../../src/jwt.js';
 
-import type {
-    AccessClaims,
-    Jwks,
-    RefreshClaims,
-    SigningKey,
-} from '../../src/jwt.js';
+import type { AccessClaims, Jwks, RefreshClaims, SigningKey } from '../../src/jwt.js';
 
 const RUN_OPTS = { numRuns: 50, seed: 0x71c0de } as const;
 
@@ -59,19 +48,15 @@ let jwksA: Jwks;
 let jwksB: Jwks;
 
 beforeAll(async () => {
-    const [{ privateKey: pa, publicKey: ua }, { privateKey: pb, publicKey: ub }] =
-        await Promise.all([
-            generateKeyPair('RS256', { modulusLength: 2048, extractable: true }),
-            generateKeyPair('RS256', { modulusLength: 2048, extractable: true }),
-        ]);
-    keyA = { kid: 'jwt-prop-key-a', privateKey: pa, publicKey: ua };
-    keyB = { kid: 'jwt-prop-key-b', privateKey: pb, publicKey: ub };
-    const [jwkA, jwkB] = await Promise.all([
-        publicJwkOf(keyA),
-        publicJwkOf(keyB),
-    ]);
-    jwksA = currentJwks([{ kid: keyA.kid, publicKey: jwkA }]);
-    jwksB = currentJwks([{ kid: keyB.kid, publicKey: jwkB }]);
+  const [{ privateKey: pa, publicKey: ua }, { privateKey: pb, publicKey: ub }] = await Promise.all([
+    generateKeyPair('RS256', { modulusLength: 2048, extractable: true }),
+    generateKeyPair('RS256', { modulusLength: 2048, extractable: true }),
+  ]);
+  keyA = { kid: 'jwt-prop-key-a', privateKey: pa, publicKey: ua };
+  keyB = { kid: 'jwt-prop-key-b', privateKey: pb, publicKey: ub };
+  const [jwkA, jwkB] = await Promise.all([publicJwkOf(keyA), publicJwkOf(keyB)]);
+  jwksA = currentJwks([{ kid: keyA.kid, publicKey: jwkA }]);
+  jwksB = currentJwks([{ kid: keyB.kid, publicKey: jwkB }]);
 });
 
 /**
@@ -91,59 +76,51 @@ const roleArb = fc.constantFrom<AccessClaims['role']>('member', 'coach', 'admin'
 const ttlArb = fc.integer({ min: 60, max: 3_600 });
 
 describe('Property P-JWT.1 — signAccess/verify round-trip preserves claims and TTL', () => {
-    it('verify(signAccess(claims, keyA), jwksA) = claims for any valid input', async () => {
-        await fc.assert(
-            fc.asyncProperty(
-                uuidArb,
-                uuidArb,
-                roleArb,
-                ttlArb,
-                async (sub, studio, role, ttlSec) => {
-                    const claims: AccessClaims = { sub, studio, role };
-                    const token = await signAccess(claims, {
-                        signingKey: keyA,
-                        ttlSec,
-                        now: () => FROZEN_NOW,
-                    });
-                    const payload = await verify<AccessClaims & { iat: number; exp: number }>(
-                        token,
-                        jwksA,
-                        { currentDate: new Date(FROZEN_NOW * 1000) },
-                    );
-                    // Core claims flow through unchanged.
-                    expect(payload.sub).toBe(sub);
-                    expect(payload.studio).toBe(studio);
-                    expect(payload.role).toBe(role);
-                    // `jose` sets iat/exp in seconds; the delta must equal
-                    // the TTL we asked for.
-                    expect(payload.exp - payload.iat).toBe(ttlSec);
-                    expect(payload.iat).toBe(FROZEN_NOW);
-                },
-            ),
-            RUN_OPTS,
-        );
-    });
+  it('verify(signAccess(claims, keyA), jwksA) = claims for any valid input', async () => {
+    await fc.assert(
+      fc.asyncProperty(uuidArb, uuidArb, roleArb, ttlArb, async (sub, studio, role, ttlSec) => {
+        const claims: AccessClaims = { sub, studio, role };
+        const token = await signAccess(claims, {
+          signingKey: keyA,
+          ttlSec,
+          now: () => FROZEN_NOW,
+        });
+        const payload = await verify<AccessClaims & { iat: number; exp: number }>(token, jwksA, {
+          currentDate: new Date(FROZEN_NOW * 1000),
+        });
+        // Core claims flow through unchanged.
+        expect(payload.sub).toBe(sub);
+        expect(payload.studio).toBe(studio);
+        expect(payload.role).toBe(role);
+        // `jose` sets iat/exp in seconds; the delta must equal
+        // the TTL we asked for.
+        expect(payload.exp - payload.iat).toBe(ttlSec);
+        expect(payload.iat).toBe(FROZEN_NOW);
+      }),
+      RUN_OPTS,
+    );
+  });
 });
 
 describe('Property P-JWT.2 — refresh tokens are unforgeable across deployments', () => {
-    it('a refresh token signed with keyA never verifies against a JWKS listing only keyB', async () => {
-        await fc.assert(
-            fc.asyncProperty(uuidArb, uuidArb, async (sub, sid) => {
-                const claims: RefreshClaims = { sub, sid };
-                const token = await signRefresh(claims, {
-                    signingKey: keyA,
-                    ttlSec: 60,
-                    now: () => FROZEN_NOW,
-                });
-                // verify should reject because the kid in the token
-                // header (`keyA.kid`) is absent from jwksB.
-                await expect(
-                    verify(token, jwksB, {
-                        currentDate: new Date(FROZEN_NOW * 1000),
-                    }),
-                ).rejects.toBeTruthy();
-            }),
-            RUN_OPTS,
-        );
-    });
+  it('a refresh token signed with keyA never verifies against a JWKS listing only keyB', async () => {
+    await fc.assert(
+      fc.asyncProperty(uuidArb, uuidArb, async (sub, sid) => {
+        const claims: RefreshClaims = { sub, sid };
+        const token = await signRefresh(claims, {
+          signingKey: keyA,
+          ttlSec: 60,
+          now: () => FROZEN_NOW,
+        });
+        // verify should reject because the kid in the token
+        // header (`keyA.kid`) is absent from jwksB.
+        await expect(
+          verify(token, jwksB, {
+            currentDate: new Date(FROZEN_NOW * 1000),
+          }),
+        ).rejects.toBeTruthy();
+      }),
+      RUN_OPTS,
+    );
+  });
 });

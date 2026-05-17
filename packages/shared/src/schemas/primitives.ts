@@ -26,8 +26,8 @@ import type { ClassId, ReservationId, StudioId, UserId } from '../ids.js';
  * `@athlya/shared/ids` so application-level and schema-level validation agree.
  */
 export const UuidSchema = z
-    .string()
-    .regex(UUID_REGEX, 'must be a UUID v1–8 with RFC 4122 variant bits');
+  .string()
+  .regex(UUID_REGEX, 'must be a UUID v1–8 with RFC 4122 variant bits');
 
 /**
  * ISO-8601 datetime with a mandatory UTC offset (`Z` or `±HH:MM`).
@@ -42,8 +42,8 @@ export const IsoDateTimeSchema = z.string().datetime({ offset: true });
  * Matches the validation rule attached to the `Studio.slug` domain model.
  */
 export const SlugSchema = z
-    .string()
-    .regex(/^[a-z0-9-]{3,50}$/, 'must be 3–50 lowercase letters, digits or dashes');
+  .string()
+  .regex(/^[a-z0-9-]{3,50}$/, 'must be 3–50 lowercase letters, digits or dashes');
 
 /**
  * RBAC role. Strict enum so anything outside the closed set is rejected at
@@ -58,9 +58,7 @@ export const RoleSchema = z.enum(['member', 'coach', 'admin']);
  * helper {@link parseBrandColor} in `@athlya/shared/theming`; the API
  * layer normalises to lowercase via the helper before persisting.
  */
-export const HexColorSchema = z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/, 'must be a #RRGGBB hex color');
+export const HexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'must be a #RRGGBB hex color');
 
 /**
  * Reservation state. The full state machine lives in the reservations
@@ -96,9 +94,8 @@ export const ReservationIdSchema = UuidSchema.transform((v): ReservationId => v 
 type _UserIdMatches = z.infer<typeof UserIdSchema> extends UserId ? true : false;
 type _StudioIdMatches = z.infer<typeof StudioIdSchema> extends StudioId ? true : false;
 type _ClassIdMatches = z.infer<typeof ClassIdSchema> extends ClassId ? true : false;
-type _ReservationIdMatches = z.infer<typeof ReservationIdSchema> extends ReservationId
-    ? true
-    : false;
+type _ReservationIdMatches =
+  z.infer<typeof ReservationIdSchema> extends ReservationId ? true : false;
 
 const _userIdOk: _UserIdMatches = true;
 const _studioIdOk: _StudioIdMatches = true;

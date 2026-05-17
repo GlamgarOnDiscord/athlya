@@ -1,401 +1,401 @@
 {
-    "common": {
-        "appName": "Athlya",
-        "cancel": "Cancel",
-        "save": "Save",
-        "loading": "Loading…",
-        "retry": "Retry",
-        "confirm": "Confirm",
-        "back": "Back",
-        "skipToContent": "Skip to main content"
+  "common": {
+    "appName": "Athlya",
+    "cancel": "Cancel",
+    "save": "Save",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "confirm": "Confirm",
+    "back": "Back",
+    "skipToContent": "Skip to main content"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "email": "Email address",
+      "password": "Password",
+      "submit": "Sign in",
+      "forgotPassword": "Forgot your password?",
+      "noAccountPrompt": "No account yet?",
+      "error": "Unable to sign in"
     },
-    "auth": {
-        "login": {
-            "title": "Sign in",
-            "email": "Email address",
-            "password": "Password",
-            "submit": "Sign in",
-            "forgotPassword": "Forgot your password?",
-            "noAccountPrompt": "No account yet?",
-            "error": "Unable to sign in"
-        },
-        "register": {
-            "title": "Create an account",
-            "email": "Email address",
-            "password": "Password",
-            "displayName": "Display name",
-            "studioSlug": "Studio slug",
-            "consents": {
-                "legend": "Consents",
-                "marketing": "I accept marketing communications",
-                "analytics": "I accept anonymous analytics",
-                "thirdParty": "I accept sharing with partners"
-            },
-            "submit": "Sign up",
-            "success": "Account created successfully",
-            "hasAccountPrompt": "Already have an account?"
-        },
-        "errors": {
-            "invalidCredentials": "Incorrect email or password. Double-check your credentials.",
-            "networkError": "No connection. Check your network.",
-            "turnstileRequired": "Please complete the anti-bot check."
-        },
-        "logout": "Sign out",
-        "biometric": {
-            "prompt": "Unlock with your fingerprint or face"
-        },
-        "forgotPassword": {
-            "emailLabel": "Email address",
-            "emailPlaceholder": "you@example.com",
-            "submit": "Send reset link",
-            "submitting": "Sending…",
-            "sent": "If your email matches an Athlya account, you will receive a reset link shortly.",
-            "sentSpam": "The link is valid for 1 hour. Check your spam folder.",
-            "errors": {
-                "generic": "Something went wrong. Please try again."
-            }
-        },
-        "resetPassword": {
-            "newPasswordLabel": "New password",
-            "confirmLabel": "Confirm password",
-            "hibpHint": "8 to 72 characters. Password checked against the HIBP database.",
-            "submit": "Save new password",
-            "submitting": "Saving…",
-            "success": "Password updated. Redirecting to sign-in…",
-            "errors": {
-                "tokenInvalid": "The reset link is invalid or has already been used.",
-                "tokenExpired": "The reset link has expired. Please request a new one.",
-                "hibpUnavailable": "The verification service is temporarily unavailable. Please try again shortly.",
-                "passwordLength": "Password must be between 8 and 72 characters.",
-                "passwordMismatch": "Passwords do not match."
-            }
-        }
-    },
-    "profile": {
-        "title": "My profile",
-        "email": "Email address",
-        "displayName": "Display name",
-        "avatar": "Profile picture",
-        "avatarHint": "PNG, JPEG or WebP. Max size {max} KB.",
-        "avatarTooLarge": "File too large (max {max} KB).",
-        "avatarReadError": "Couldn't read this file.",
-        "avatarRemove": "Remove picture",
-        "save": "Save changes",
-        "updateSuccess": "Profile updated",
-        "updateError": "Failed to update profile",
-        "displayNameCounter": "{count} / 80",
-        "dataExport": "Export my data",
-        "deleteAccount": "Delete my account",
-        "accountActions": "Account actions"
-    },
-    "classes": {
-        "list": {
-            "title": "Upcoming classes",
-            "empty": "No classes scheduled for this period."
-        },
-        "card": {
-            "capacity": "Capacity",
-            "remaining": "Seats remaining",
-            "book": "Book",
-            "booked": "Booked",
-            "full": "Full",
-            "joinWaitlist": "Join waitlist"
-        }
-    },
-    "reservations": {
-        "confirmed": "Reservation confirmed",
-        "waitlisted": "Added to the waitlist",
-        "waitlistPosition": "Waitlist position: {position}",
-        "cancel": "Cancel reservation",
-        "cancelled": "Reservation cancelled",
-        "cancelWindowClosed": "Cancellation is not possible less than 2 hours before the class."
-    },
-    "checkin": {
-        "title": "Check-in",
-        "qrExpiresIn": "QR code expires in {seconds}s",
-        "refresh": "Generate a new QR code"
-    },
-    "workouts": {
-        "log": {
-            "title": "New workout",
-            "startedAt": "Started at",
-            "duration": "Duration (minutes)",
-            "addExercise": "Add exercise",
-            "addSet": "Add set",
-            "notes": "Notes",
-            "save": "Save workout"
-        }
-    },
-    "consents": {
-        "title": "My consents",
-        "version": "Version",
-        "updatedAt": "Last updated",
-        "marketing": "Marketing communications",
-        "analytics": "Anonymous analytics",
-        "thirdParty": "Sharing with partners",
-        "save": "Save my preferences",
-        "updateSuccess": "Consents updated"
+    "register": {
+      "title": "Create an account",
+      "email": "Email address",
+      "password": "Password",
+      "displayName": "Display name",
+      "studioSlug": "Studio slug",
+      "consents": {
+        "legend": "Consents",
+        "marketing": "I accept marketing communications",
+        "analytics": "I accept anonymous analytics",
+        "thirdParty": "I accept sharing with partners"
+      },
+      "submit": "Sign up",
+      "success": "Account created successfully",
+      "hasAccountPrompt": "Already have an account?"
     },
     "errors": {
-        "generic": "Something went wrong. Please try again in a moment.",
-        "network": "No connection. Check your network.",
-        "unauthorized": "You must be signed in to perform this action.",
-        "forbidden": "You do not have the required permissions.",
-        "notFound": "Resource not found.",
-        "validation": "Some fields are invalid.",
-        "rateLimited": "Too many attempts. Please try again shortly.",
-        "passwordBreached": "This password has been compromised. Please choose another one.",
-        "bookingFull": "This class is full.",
-        "cancelWindowClosed": "Cancellation is not possible less than 2 hours before the class.",
-        "invalidTransition": "This reservation state transition is not allowed.",
-        "classInPast": "This class has already started.",
-        "rangeTooLarge": "The requested range cannot exceed 90 days."
+      "invalidCredentials": "Incorrect email or password. Double-check your credentials.",
+      "networkError": "No connection. Check your network.",
+      "turnstileRequired": "Please complete the anti-bot check."
     },
-    "rgpd": {
-        "export": {
-            "title": "Export my data",
-            "description": "Your request will be processed within 48 hours. You will receive a download link by email.",
-            "request": "Export my data",
-            "pending": "Export in progress. You will receive an email within 48 hours.",
-            "ready": "Your export is ready. The link expires in 72 hours.",
-            "jobId": "Export reference"
-        },
-        "delete": {
-            "title": "Delete my account",
-            "modalTitle": "Delete my account",
-            "confirm": "Permanently delete my account",
-            "warning": "This action is irreversible. All your data will be deleted within 30 days.",
-            "confirmWord": "DELETE",
-            "confirmInstruction": "Type {word} to confirm",
-            "confirmButton": "Permanently delete"
-        }
+    "logout": "Sign out",
+    "biometric": {
+      "prompt": "Unlock with your fingerprint or face"
     },
-    "web": {
-        "home": {
-            "title": "Athlya",
-            "tagline": "Open-source, multi-tenant, RGPD-first fitness platform.",
-            "register": "Create account",
-            "login": "Sign in",
-            "classes": "Browse classes",
-            "me": "My account",
-            "logout": "Sign out"
-        },
-        "notFound": {
-            "title": "Page not found",
-            "body": "This page does not exist or is no longer available."
-        },
-        "error": {
-            "title": "Something went wrong",
-            "body": "We couldn't display this page. You can try again or go back to the home page.",
-            "retry": "Try again",
-            "home": "Go to home"
-        },
-        "turnstile": {
-            "notConfigured": "Turnstile not configured"
-        },
-        "cookieBanner": {
-            "title": "Your preferences",
-            "description": "We only use cookies strictly necessary for the service to work (authentication, language). No analytics or third-party tracking is loaded without your consent.",
-            "cookiePolicy": "cookie policy",
-            "acceptAll": "Accept all",
-            "refuseAll": "Refuse all",
-            "customize": "Customize",
-            "save": "Save my choices",
-            "categories": {
-                "legend": "Customize categories",
-                "analytics": {
-                    "title": "Anonymous analytics",
-                    "description": "Aggregated visit statistics (no third-party cookie, no user profile)."
-                },
-                "errorTracking": {
-                    "title": "Error tracking",
-                    "description": "Client-side bug diagnostics. Includes your user-agent and technical stack trace. Data hosted in the EU."
-                }
-            }
-        }
+    "forgotPassword": {
+      "emailLabel": "Email address",
+      "emailPlaceholder": "you@example.com",
+      "submit": "Send reset link",
+      "submitting": "Sending…",
+      "sent": "If your email matches an Athlya account, you will receive a reset link shortly.",
+      "sentSpam": "The link is valid for 1 hour. Check your spam folder.",
+      "errors": {
+        "generic": "Something went wrong. Please try again."
+      }
     },
-    "studio": {
-        "home": {
-            "title": "Athlya Studio",
-            "tagline": "Studio admin console.",
-            "dashboard": "Open dashboard"
-        },
-        "login": {
-            "title": "Admin sign-in",
-            "subtitle": "Studio owners only. Members sign in on the main app.",
-            "adminRequired": "This account does not have admin rights."
-        },
-        "nav": {
-            "brand": "Athlya Studio",
-            "classes": "Classes",
-            "members": "Members",
-            "branding": "Branding",
-            "billing": "Billing"
-        },
-        "dashboard": {
-            "title": "Dashboard",
-            "subtitle": "Manage classes, members, branding and billing for your studio.",
-            "classes": {
-                "title": "Classes",
-                "body": "Create, update and schedule the sessions of your studio."
-            },
-            "members": {
-                "title": "Members",
-                "body": "List members and their upcoming reservations."
-            },
-            "branding": {
-                "title": "Branding",
-                "body": "Brand color, logo and email customisation."
-            },
-            "billing": {
-                "title": "Billing",
-                "body": "Stripe subscriptions, invoices and payment status."
-            }
-        },
-        "forbidden": {
-            "title": "Access denied",
-            "body": "This console is restricted to studio administrators.",
-            "signOut": "Sign out"
-        },
-        "classes": {
-            "title": "Classes",
-            "subtitle": "Schedule, edit and manage session capacity.",
-            "create": "+ New class",
-            "empty": "No classes in this range. Create one to get started.",
-            "range": {
-                "from": "From",
-                "to": "To"
-            },
-            "row": {
-                "capacity": "{remaining} / {capacity} seats",
-                "edit": "Edit",
-                "delete": "Delete"
-            },
-            "deleteConfirm": {
-                "title": "Delete this class?",
-                "body": "This action cannot be undone. Existing reservations will be cancelled.",
-                "confirm": "Delete"
-            },
-            "fields": {
-                "title": "Title",
-                "startsAt": "Start date and time",
-                "durationMin": "Duration (min)",
-                "capacity": "Capacity"
-            },
-            "dialog": {
-                "createTitle": "New class",
-                "createSubmit": "Create",
-                "editTitle": "Edit class",
-                "editSubmit": "Save"
-            },
-            "errors": {
-                "generic": "Failed to save.",
-                "versionConflict": "The class was edited meanwhile. List refreshed — please retry."
-            }
-        },
-        "members": {
-            "title": "Members",
-            "subtitle": "Directory of your studio's members.",
-            "empty": "No members yet.",
-            "count": "{n} member(s) loaded",
-            "loadMore": "Load more",
-            "search": "Search members…",
-            "role": {
-                "member": "Member",
-                "coach": "Coach",
-                "admin": "Admin"
-            }
-        },
-        "branding": {
-            "title": "Branding",
-            "subtitle": "Brand color and visual customization.",
-            "edit": "Edit",
-            "editComingSoon": "Editor arrives in a future release.",
-            "save": "Save",
-            "saving": "Saving…",
-            "saveSuccess": "Branding updated.",
-            "saveError": "Update failed.",
-            "lowContrastError": "Contrast too low for WCAG 2.2 AA — pick a more saturated color.",
-            "invalidHexError": "Invalid hex format (#RRGGBB expected).",
-            "brandColor": {
-                "label": "Primary color",
-                "help": "This color applies to buttons, accents and interactive elements in the member app.",
-                "contrast": "Foreground auto-set to {fg} for WCAG 2.2 AA compliance",
-                "fgBlack": "black",
-                "fgWhite": "white",
-                "sampleButton": "Sample button",
-                "input": "Color (hex #RRGGBB)"
-            }
-        },
-        "billing": {
-            "title": "Billing",
-            "subtitle": "Subscription and invoices for your studio.",
-            "comingSoon": "Stripe integration coming soon — buttons disabled meanwhile.",
-            "checkout": "Subscribe",
-            "checkoutComingSoon": "Stripe Checkout arrives in a future release.",
-            "checkoutLoading": "Redirecting…",
-            "checkoutError": "Subscription failed.",
-            "checkoutNotConfigured": "Stripe is not yet configured on this environment.",
-            "plans": {
-                "free": {
-                    "title": "Free",
-                    "price": "€0 / month",
-                    "body": "Up to 50 members, core features."
-                },
-                "pro": {
-                    "title": "Pro",
-                    "price": "€49 / month",
-                    "body": "Unlimited members, custom branding, advanced exports."
-                }
-            },
-            "invoices": {
-                "title": "Invoices",
-                "empty": "No invoices yet."
-            }
-        }
-    },
-    "notifications": {
-        "reservationCreated": {
-            "email": {
-                "subject": "Reservation confirmed",
-                "body": "Your reservation is confirmed. Reference: {reservationId}."
-            },
-            "push": {
-                "title": "Reservation confirmed",
-                "body": "Your spot is booked."
-            }
-        },
-        "reservationReminder": {
-            "push": {
-                "title": "Class reminder",
-                "body": "Your class starts in 1 hour."
-            }
-        },
-        "reservationCancelled": {
-            "email": {
-                "subject": "Reservation cancelled",
-                "body": "Your reservation {reservationId} has been cancelled."
-            },
-            "push": {
-                "title": "Reservation cancelled",
-                "body": "Your reservation has been cancelled."
-            }
-        },
-        "reservationPromoted": {
-            "email": {
-                "subject": "You're in!",
-                "body": "A spot opened up for your class. Reference: {reservationId}."
-            },
-            "push": {
-                "title": "You're in!",
-                "body": "Your class spot is confirmed."
-            }
-        },
-        "billingSubscriptionFailed": {
-            "email": {
-                "subject": "Payment failed",
-                "body": "Payment for your subscription {subscriptionId} failed: {reason}. Please update your payment details."
-            }
-        }
+    "resetPassword": {
+      "newPasswordLabel": "New password",
+      "confirmLabel": "Confirm password",
+      "hibpHint": "8 to 72 characters. Password checked against the HIBP database.",
+      "submit": "Save new password",
+      "submitting": "Saving…",
+      "success": "Password updated. Redirecting to sign-in…",
+      "errors": {
+        "tokenInvalid": "The reset link is invalid or has already been used.",
+        "tokenExpired": "The reset link has expired. Please request a new one.",
+        "hibpUnavailable": "The verification service is temporarily unavailable. Please try again shortly.",
+        "passwordLength": "Password must be between 8 and 72 characters.",
+        "passwordMismatch": "Passwords do not match."
+      }
     }
+  },
+  "profile": {
+    "title": "My profile",
+    "email": "Email address",
+    "displayName": "Display name",
+    "avatar": "Profile picture",
+    "avatarHint": "PNG, JPEG or WebP. Max size {max} KB.",
+    "avatarTooLarge": "File too large (max {max} KB).",
+    "avatarReadError": "Couldn't read this file.",
+    "avatarRemove": "Remove picture",
+    "save": "Save changes",
+    "updateSuccess": "Profile updated",
+    "updateError": "Failed to update profile",
+    "displayNameCounter": "{count} / 80",
+    "dataExport": "Export my data",
+    "deleteAccount": "Delete my account",
+    "accountActions": "Account actions"
+  },
+  "classes": {
+    "list": {
+      "title": "Upcoming classes",
+      "empty": "No classes scheduled for this period."
+    },
+    "card": {
+      "capacity": "Capacity",
+      "remaining": "Seats remaining",
+      "book": "Book",
+      "booked": "Booked",
+      "full": "Full",
+      "joinWaitlist": "Join waitlist"
+    }
+  },
+  "reservations": {
+    "confirmed": "Reservation confirmed",
+    "waitlisted": "Added to the waitlist",
+    "waitlistPosition": "Waitlist position: {position}",
+    "cancel": "Cancel reservation",
+    "cancelled": "Reservation cancelled",
+    "cancelWindowClosed": "Cancellation is not possible less than 2 hours before the class."
+  },
+  "checkin": {
+    "title": "Check-in",
+    "qrExpiresIn": "QR code expires in {seconds}s",
+    "refresh": "Generate a new QR code"
+  },
+  "workouts": {
+    "log": {
+      "title": "New workout",
+      "startedAt": "Started at",
+      "duration": "Duration (minutes)",
+      "addExercise": "Add exercise",
+      "addSet": "Add set",
+      "notes": "Notes",
+      "save": "Save workout"
+    }
+  },
+  "consents": {
+    "title": "My consents",
+    "version": "Version",
+    "updatedAt": "Last updated",
+    "marketing": "Marketing communications",
+    "analytics": "Anonymous analytics",
+    "thirdParty": "Sharing with partners",
+    "save": "Save my preferences",
+    "updateSuccess": "Consents updated"
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again in a moment.",
+    "network": "No connection. Check your network.",
+    "unauthorized": "You must be signed in to perform this action.",
+    "forbidden": "You do not have the required permissions.",
+    "notFound": "Resource not found.",
+    "validation": "Some fields are invalid.",
+    "rateLimited": "Too many attempts. Please try again shortly.",
+    "passwordBreached": "This password has been compromised. Please choose another one.",
+    "bookingFull": "This class is full.",
+    "cancelWindowClosed": "Cancellation is not possible less than 2 hours before the class.",
+    "invalidTransition": "This reservation state transition is not allowed.",
+    "classInPast": "This class has already started.",
+    "rangeTooLarge": "The requested range cannot exceed 90 days."
+  },
+  "rgpd": {
+    "export": {
+      "title": "Export my data",
+      "description": "Your request will be processed within 48 hours. You will receive a download link by email.",
+      "request": "Export my data",
+      "pending": "Export in progress. You will receive an email within 48 hours.",
+      "ready": "Your export is ready. The link expires in 72 hours.",
+      "jobId": "Export reference"
+    },
+    "delete": {
+      "title": "Delete my account",
+      "modalTitle": "Delete my account",
+      "confirm": "Permanently delete my account",
+      "warning": "This action is irreversible. All your data will be deleted within 30 days.",
+      "confirmWord": "DELETE",
+      "confirmInstruction": "Type {word} to confirm",
+      "confirmButton": "Permanently delete"
+    }
+  },
+  "web": {
+    "home": {
+      "title": "Athlya",
+      "tagline": "Open-source, multi-tenant, RGPD-first fitness platform.",
+      "register": "Create account",
+      "login": "Sign in",
+      "classes": "Browse classes",
+      "me": "My account",
+      "logout": "Sign out"
+    },
+    "notFound": {
+      "title": "Page not found",
+      "body": "This page does not exist or is no longer available."
+    },
+    "error": {
+      "title": "Something went wrong",
+      "body": "We couldn't display this page. You can try again or go back to the home page.",
+      "retry": "Try again",
+      "home": "Go to home"
+    },
+    "turnstile": {
+      "notConfigured": "Turnstile not configured"
+    },
+    "cookieBanner": {
+      "title": "Your preferences",
+      "description": "We only use cookies strictly necessary for the service to work (authentication, language). No analytics or third-party tracking is loaded without your consent.",
+      "cookiePolicy": "cookie policy",
+      "acceptAll": "Accept all",
+      "refuseAll": "Refuse all",
+      "customize": "Customize",
+      "save": "Save my choices",
+      "categories": {
+        "legend": "Customize categories",
+        "analytics": {
+          "title": "Anonymous analytics",
+          "description": "Aggregated visit statistics (no third-party cookie, no user profile)."
+        },
+        "errorTracking": {
+          "title": "Error tracking",
+          "description": "Client-side bug diagnostics. Includes your user-agent and technical stack trace. Data hosted in the EU."
+        }
+      }
+    }
+  },
+  "studio": {
+    "home": {
+      "title": "Athlya Studio",
+      "tagline": "Studio admin console.",
+      "dashboard": "Open dashboard"
+    },
+    "login": {
+      "title": "Admin sign-in",
+      "subtitle": "Studio owners only. Members sign in on the main app.",
+      "adminRequired": "This account does not have admin rights."
+    },
+    "nav": {
+      "brand": "Athlya Studio",
+      "classes": "Classes",
+      "members": "Members",
+      "branding": "Branding",
+      "billing": "Billing"
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Manage classes, members, branding and billing for your studio.",
+      "classes": {
+        "title": "Classes",
+        "body": "Create, update and schedule the sessions of your studio."
+      },
+      "members": {
+        "title": "Members",
+        "body": "List members and their upcoming reservations."
+      },
+      "branding": {
+        "title": "Branding",
+        "body": "Brand color, logo and email customisation."
+      },
+      "billing": {
+        "title": "Billing",
+        "body": "Stripe subscriptions, invoices and payment status."
+      }
+    },
+    "forbidden": {
+      "title": "Access denied",
+      "body": "This console is restricted to studio administrators.",
+      "signOut": "Sign out"
+    },
+    "classes": {
+      "title": "Classes",
+      "subtitle": "Schedule, edit and manage session capacity.",
+      "create": "+ New class",
+      "empty": "No classes in this range. Create one to get started.",
+      "range": {
+        "from": "From",
+        "to": "To"
+      },
+      "row": {
+        "capacity": "{remaining} / {capacity} seats",
+        "edit": "Edit",
+        "delete": "Delete"
+      },
+      "deleteConfirm": {
+        "title": "Delete this class?",
+        "body": "This action cannot be undone. Existing reservations will be cancelled.",
+        "confirm": "Delete"
+      },
+      "fields": {
+        "title": "Title",
+        "startsAt": "Start date and time",
+        "durationMin": "Duration (min)",
+        "capacity": "Capacity"
+      },
+      "dialog": {
+        "createTitle": "New class",
+        "createSubmit": "Create",
+        "editTitle": "Edit class",
+        "editSubmit": "Save"
+      },
+      "errors": {
+        "generic": "Failed to save.",
+        "versionConflict": "The class was edited meanwhile. List refreshed — please retry."
+      }
+    },
+    "members": {
+      "title": "Members",
+      "subtitle": "Directory of your studio's members.",
+      "empty": "No members yet.",
+      "count": "{n} member(s) loaded",
+      "loadMore": "Load more",
+      "search": "Search members…",
+      "role": {
+        "member": "Member",
+        "coach": "Coach",
+        "admin": "Admin"
+      }
+    },
+    "branding": {
+      "title": "Branding",
+      "subtitle": "Brand color and visual customization.",
+      "edit": "Edit",
+      "editComingSoon": "Editor arrives in a future release.",
+      "save": "Save",
+      "saving": "Saving…",
+      "saveSuccess": "Branding updated.",
+      "saveError": "Update failed.",
+      "lowContrastError": "Contrast too low for WCAG 2.2 AA — pick a more saturated color.",
+      "invalidHexError": "Invalid hex format (#RRGGBB expected).",
+      "brandColor": {
+        "label": "Primary color",
+        "help": "This color applies to buttons, accents and interactive elements in the member app.",
+        "contrast": "Foreground auto-set to {fg} for WCAG 2.2 AA compliance",
+        "fgBlack": "black",
+        "fgWhite": "white",
+        "sampleButton": "Sample button",
+        "input": "Color (hex #RRGGBB)"
+      }
+    },
+    "billing": {
+      "title": "Billing",
+      "subtitle": "Subscription and invoices for your studio.",
+      "comingSoon": "Stripe integration coming soon — buttons disabled meanwhile.",
+      "checkout": "Subscribe",
+      "checkoutComingSoon": "Stripe Checkout arrives in a future release.",
+      "checkoutLoading": "Redirecting…",
+      "checkoutError": "Subscription failed.",
+      "checkoutNotConfigured": "Stripe is not yet configured on this environment.",
+      "plans": {
+        "free": {
+          "title": "Free",
+          "price": "€0 / month",
+          "body": "Up to 50 members, core features."
+        },
+        "pro": {
+          "title": "Pro",
+          "price": "€49 / month",
+          "body": "Unlimited members, custom branding, advanced exports."
+        }
+      },
+      "invoices": {
+        "title": "Invoices",
+        "empty": "No invoices yet."
+      }
+    }
+  },
+  "notifications": {
+    "reservationCreated": {
+      "email": {
+        "subject": "Reservation confirmed",
+        "body": "Your reservation is confirmed. Reference: {reservationId}."
+      },
+      "push": {
+        "title": "Reservation confirmed",
+        "body": "Your spot is booked."
+      }
+    },
+    "reservationReminder": {
+      "push": {
+        "title": "Class reminder",
+        "body": "Your class starts in 1 hour."
+      }
+    },
+    "reservationCancelled": {
+      "email": {
+        "subject": "Reservation cancelled",
+        "body": "Your reservation {reservationId} has been cancelled."
+      },
+      "push": {
+        "title": "Reservation cancelled",
+        "body": "Your reservation has been cancelled."
+      }
+    },
+    "reservationPromoted": {
+      "email": {
+        "subject": "You're in!",
+        "body": "A spot opened up for your class. Reference: {reservationId}."
+      },
+      "push": {
+        "title": "You're in!",
+        "body": "Your class spot is confirmed."
+      }
+    },
+    "billingSubscriptionFailed": {
+      "email": {
+        "subject": "Payment failed",
+        "body": "Payment for your subscription {subscriptionId} failed: {reason}. Please update your payment details."
+      }
+    }
+  }
 }

@@ -52,22 +52,14 @@ import { ClassCodec } from './class.js';
 import { ReservationCodec } from './reservation.js';
 import { StudioCodec } from './studio.js';
 import { ConsentsCodec, UserCodec } from './user.js';
-import {
-    ExerciseCodec,
-    SetCodec,
-    WorkoutSessionCodec,
-} from './workoutSession.js';
+import { ExerciseCodec, SetCodec, WorkoutSessionCodec } from './workoutSession.js';
 
 export * from './types.js';
 export { StudioCodec } from './studio.js';
 export { UserCodec, ConsentsCodec } from './user.js';
 export { ClassCodec } from './class.js';
 export { ReservationCodec } from './reservation.js';
-export {
-    WorkoutSessionCodec,
-    ExerciseCodec,
-    SetCodec,
-} from './workoutSession.js';
+export { WorkoutSessionCodec, ExerciseCodec, SetCodec } from './workoutSession.js';
 export { AuditLogCodec, bigintToId, idToBigint } from './auditLog.js';
 
 /**
@@ -79,15 +71,15 @@ export { AuditLogCodec, bigintToId, idToBigint } from './auditLog.js';
  * imports when a single codec is enough.
  */
 export const codec = {
-    studio: StudioCodec,
-    user: UserCodec,
-    consents: ConsentsCodec,
-    class: ClassCodec,
-    reservation: ReservationCodec,
-    workoutSession: WorkoutSessionCodec,
-    exercise: ExerciseCodec,
-    set: SetCodec,
-    auditLog: AuditLogCodec,
-    bigintToId,
-    idToBigint,
+  studio: StudioCodec,
+  user: UserCodec,
+  consents: ConsentsCodec,
+  class: ClassCodec,
+  reservation: ReservationCodec,
+  workoutSession: WorkoutSessionCodec,
+  exercise: ExerciseCodec,
+  set: SetCodec,
+  auditLog: AuditLogCodec,
+  bigintToId,
+  idToBigint,
 } as const;

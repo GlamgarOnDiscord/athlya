@@ -24,37 +24,37 @@ import { studios } from './studios.js';
 import { users } from './users.js';
 
 export const classes = pgTable(
-    'classes',
-    {
-        id: uuidPrimaryKey(),
-        studioId: uuid('studio_id')
-            .notNull()
-            .references(() => studios.id, { onDelete: 'cascade' }),
-        coachId: uuid('coach_id').references(() => users.id, { onDelete: 'set null' }),
-        title: text('title').notNull(),
-        /**
-         * `starts_at` is stored as `timestamptz` with UTC normalisation.
-         * The content service rejects past timestamps on creation
-         * (Requirement 6.4) but the DB accepts arbitrary values so
-         * migrations of historical data remain possible.
-         */
-        startsAt: timestamp('starts_at', { withTimezone: true, mode: 'date' }).notNull(),
-        durationMin: integer('duration_min').notNull(),
-        capacity: integer('capacity').notNull(),
-        /** Optimistic-lock counter. Every successful UPDATE bumps this. */
-        version: integer('version').notNull().default(0),
-        createdAt: createdAt(),
-        deletedAt: deletedAt(),
-    },
-    (table) => [
-        /**
-         * Calendar query accelerator — Requirement 7.1 fetches
-         * "classes WHERE studio_id = :s AND starts_at BETWEEN :a AND :b
-         * ORDER BY starts_at ASC". This index serves both the predicate
-         * and the sort order.
-         */
-        index('classes_studio_starts_at_idx').on(table.studioId, table.startsAt),
-    ],
+  'classes',
+  {
+    id: uuidPrimaryKey(),
+    studioId: uuid('studio_id')
+      .notNull()
+      .references(() => studios.id, { onDelete: 'cascade' }),
+    coachId: uuid('coach_id').references(() => users.id, { onDelete: 'set null' }),
+    title: text('title').notNull(),
+    /**
+     * `starts_at` is stored as `timestamptz` with UTC normalisation.
+     * The content service rejects past timestamps on creation
+     * (Requirement 6.4) but the DB accepts arbitrary values so
+     * migrations of historical data remain possible.
+     */
+    startsAt: timestamp('starts_at', { withTimezone: true, mode: 'date' }).notNull(),
+    durationMin: integer('duration_min').notNull(),
+    capacity: integer('capacity').notNull(),
+    /** Optimistic-lock counter. Every successful UPDATE bumps this. */
+    version: integer('version').notNull().default(0),
+    createdAt: createdAt(),
+    deletedAt: deletedAt(),
+  },
+  (table) => [
+    /**
+     * Calendar query accelerator — Requirement 7.1 fetches
+     * "classes WHERE studio_id = :s AND starts_at BETWEEN :a AND :b
+     * ORDER BY starts_at ASC". This index serves both the predicate
+     * and the sort order.
+     */
+    index('classes_studio_starts_at_idx').on(table.studioId, table.startsAt),
+  ],
 );
 
 export type ClassRow = typeof classes.$inferSelect;

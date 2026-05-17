@@ -39,42 +39,42 @@ const policyNameRegex = /CREATE POLICY\s+"([^"]+)"\s+ON/g;
 const policyNames = new Set();
 let match;
 while ((match = policyNameRegex.exec(rlsSql)) !== null) {
-    policyNames.add(match[1]);
+  policyNames.add(match[1]);
 }
 
 if (policyNames.size === 0) {
-    console.error(
-        `lint-rls-coverage: no policies found in ${rlsSqlPath} — the regex is likely stale.`,
-    );
-    process.exit(2);
+  console.error(
+    `lint-rls-coverage: no policies found in ${rlsSqlPath} — the regex is likely stale.`,
+  );
+  process.exit(2);
 }
 
 const testFiles = readdirSync(testsDir)
-    .filter((file) => file.endsWith('.sql'))
-    .map((file) => join(testsDir, file));
+  .filter((file) => file.endsWith('.sql'))
+  .map((file) => join(testsDir, file));
 
 const testBlob = testFiles.map((file) => readFileSync(file, 'utf8')).join('\n');
 
 const missing = [];
 for (const name of policyNames) {
-    if (!testBlob.includes(name)) {
-        missing.push(name);
-    }
+  if (!testBlob.includes(name)) {
+    missing.push(name);
+  }
 }
 
 if (missing.length > 0) {
-    console.error(
-        `lint-rls-coverage: ${missing.length} policy/policies are not referenced by any pgTAP test file:`,
-    );
-    for (const name of missing.sort()) {
-        console.error(`  - ${name}`);
-    }
-    console.error(
-        `\nExpected every CREATE POLICY name from 0001_rls.sql to appear in at least one file under ${testsDir}.`,
-    );
-    process.exit(1);
+  console.error(
+    `lint-rls-coverage: ${missing.length} policy/policies are not referenced by any pgTAP test file:`,
+  );
+  for (const name of missing.sort()) {
+    console.error(`  - ${name}`);
+  }
+  console.error(
+    `\nExpected every CREATE POLICY name from 0001_rls.sql to appear in at least one file under ${testsDir}.`,
+  );
+  process.exit(1);
 }
 
 console.log(
-    `lint-rls-coverage: OK — all ${policyNames.size} policies from 0001_rls.sql are covered by tests under tests/rls/.`,
+  `lint-rls-coverage: OK — all ${policyNames.size} policies from 0001_rls.sql are covered by tests under tests/rls/.`,
 );

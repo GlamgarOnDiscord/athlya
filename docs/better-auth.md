@@ -71,7 +71,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
-    maxPasswordLength: 72,          // matches current HIBP check range
+    maxPasswordLength: 72, // matches current HIBP check range
     requireEmailVerification: false, // enable when email sender is wired
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }, _request) => {
@@ -80,11 +80,11 @@ export const auth = betterAuth({
   },
 
   session: {
-    expiresIn: 60 * 60 * 24 * 7,   // 7 days
-    updateAge: 60 * 60 * 24,        // refresh after 1 day
+    expiresIn: 60 * 60 * 24 * 7, // 7 days
+    updateAge: 60 * 60 * 24, // refresh after 1 day
     cookieCache: {
       enabled: true,
-      maxAge: 60 * 5,               // 5 min cookie cache (reduces DB hits)
+      maxAge: 60 * 5, // 5 min cookie cache (reduces DB hits)
     },
   },
 
@@ -104,7 +104,7 @@ export const auth = betterAuth({
 
 ```ts
 export type Session = typeof auth.$Infer.Session;
-export type User    = typeof auth.$Infer.Session['user'];
+export type User = (typeof auth.$Infer.Session)['user'];
 ```
 
 ---
@@ -207,12 +207,15 @@ import { auth } from '@athlya/auth';
 const app = new Hono();
 
 // CORS must be registered BEFORE routes
-app.use('/api/auth/*', cors({
-  origin: ['https://athlya.app', 'https://studio.athlya.app'],
-  allowHeaders: ['Content-Type', 'Authorization'],
-  allowMethods: ['GET', 'POST', 'OPTIONS'],
-  credentials: true,
-}));
+app.use(
+  '/api/auth/*',
+  cors({
+    origin: ['https://athlya.app', 'https://studio.athlya.app'],
+    allowHeaders: ['Content-Type', 'Authorization'],
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true,
+  }),
+);
 
 app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw));
 
@@ -289,12 +292,12 @@ advanced: {
 
 Better Auth requires four core tables. With the Drizzle adapter + `generate` command, these are created automatically.
 
-| Table          | Key fields |
-|----------------|------------|
-| `user`         | `id`, `name`, `email` (unique), `emailVerified` (bool), `image`, `createdAt`, `updatedAt` |
-| `session`      | `id`, `userId` (FK → user), `token` (unique), `expiresAt`, `ipAddress`, `userAgent`, `createdAt`, `updatedAt` |
+| Table          | Key fields                                                                                                                 |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `user`         | `id`, `name`, `email` (unique), `emailVerified` (bool), `image`, `createdAt`, `updatedAt`                                  |
+| `session`      | `id`, `userId` (FK → user), `token` (unique), `expiresAt`, `ipAddress`, `userAgent`, `createdAt`, `updatedAt`              |
 | `account`      | `id`, `userId` (FK → user), `accountId`, `providerId`, `password`, `accessToken`, `refreshToken`, `createdAt`, `updatedAt` |
-| `verification` | `id`, `identifier`, `value`, `expiresAt`, `createdAt`, `updatedAt` |
+| `verification` | `id`, `identifier`, `value`, `expiresAt`, `createdAt`, `updatedAt`                                                         |
 
 > Passwords live in `account.password` (not on `user`), with `providerId = 'credential'`.
 
@@ -349,8 +352,8 @@ const redis = Redis.fromEnv();
 
 export const auth = betterAuth({
   secondaryStorage: {
-    get:    (key) => redis.get(key),
-    set:    (key, value, ttl) => ttl ? redis.set(key, value, { ex: ttl }) : redis.set(key, value),
+    get: (key) => redis.get(key),
+    set: (key, value, ttl) => (ttl ? redis.set(key, value, { ex: ttl }) : redis.set(key, value)),
     delete: (key) => redis.del(key),
   },
 });
@@ -532,7 +535,7 @@ Requires `strict: true` (or at minimum `strictNullChecks: true`) in `tsconfig.js
 ```ts
 // Server (from auth instance)
 export type Session = typeof auth.$Infer.Session;
-export type User    = Session['user'];
+export type User = Session['user'];
 
 // Client (from auth client)
 import type { auth } from '@athlya/auth';
@@ -549,12 +552,14 @@ export type Session = typeof authClient.$Infer.Session;
 
 ```ts
 export const authClient = createAuthClient({
-  plugins: [inferAdditionalFields({
-    user: {
-      studioId: { type: 'string' },
-      role:     { type: 'string' },
-    },
-  })],
+  plugins: [
+    inferAdditionalFields({
+      user: {
+        studioId: { type: 'string' },
+        role: { type: 'string' },
+      },
+    }),
+  ],
 });
 ```
 
@@ -695,15 +700,15 @@ rateLimit: {
 
 ## Security
 
-| Feature | Better Auth behaviour |
-|---|---|
-| Password hashing | `scrypt` by default (OWASP-compliant); pluggable |
-| Session tokens | `httpOnly`, `secure`, `SameSite=Lax` cookies |
-| CSRF | Origin header validation + SameSite cookies + Fetch Metadata |
-| OAuth | State + PKCE stored in DB, deleted on completion |
+| Feature           | Better Auth behaviour                                                   |
+| ----------------- | ----------------------------------------------------------------------- |
+| Password hashing  | `scrypt` by default (OWASP-compliant); pluggable                        |
+| Session tokens    | `httpOnly`, `secure`, `SameSite=Lax` cookies                            |
+| CSRF              | Origin header validation + SameSite cookies + Fetch Metadata            |
+| OAuth             | State + PKCE stored in DB, deleted on completion                        |
 | Email enumeration | Suppressed when `requireEmailVerification: true` or `autoSignIn: false` |
-| Rate limiting | Built-in, configurable per route |
-| Secret rotation | Versioned secrets — old encrypted data stays readable during rotation |
+| Rate limiting     | Built-in, configurable per route                                        |
+| Secret rotation   | Versioned secrets — old encrypted data stays readable during rotation   |
 
 Report vulnerabilities to security@better-auth.com.
 
@@ -916,19 +921,19 @@ await authClient.signIn.magicLink({ email: 'user@example.com' });
 
 Athlya's current auth (`packages/auth`) maps to better-auth as follows:
 
-| Current | Better Auth equivalent |
-|---|---|
-| `bcryptjs` hash in `password.ts` | `emailAndPassword.password.hash/verify` |
-| `jose` JWT in `jwt.ts` | built-in session tokens (cookie-based, no JWT needed) |
-| `hibp.ts` k-anonymity check | `haveIBeenPwned()` plugin |
-| `replay-redis.ts` nonce store | `secondaryStorage` (Upstash) |
-| `throttle.ts` rate limiter | `rateLimit` config |
-| `/api/auth/login` route | `toNextJsHandler(auth)` at `/api/auth/[...all]` |
-| `/api/auth/refresh` route | built-in token rotation |
-| `/api/auth/logout` route | built-in `signOut` endpoint |
-| `/api/auth/register` route | built-in `signUp.email` endpoint |
-| `AuthContext.tsx` + token-store | `authClient.useSession()` + cookie session |
-| `assertSameOrigin` CSRF guard | built-in origin validation + SameSite cookies |
+| Current                          | Better Auth equivalent                                |
+| -------------------------------- | ----------------------------------------------------- |
+| `bcryptjs` hash in `password.ts` | `emailAndPassword.password.hash/verify`               |
+| `jose` JWT in `jwt.ts`           | built-in session tokens (cookie-based, no JWT needed) |
+| `hibp.ts` k-anonymity check      | `haveIBeenPwned()` plugin                             |
+| `replay-redis.ts` nonce store    | `secondaryStorage` (Upstash)                          |
+| `throttle.ts` rate limiter       | `rateLimit` config                                    |
+| `/api/auth/login` route          | `toNextJsHandler(auth)` at `/api/auth/[...all]`       |
+| `/api/auth/refresh` route        | built-in token rotation                               |
+| `/api/auth/logout` route         | built-in `signOut` endpoint                           |
+| `/api/auth/register` route       | built-in `signUp.email` endpoint                      |
+| `AuthContext.tsx` + token-store  | `authClient.useSession()` + cookie session            |
+| `assertSameOrigin` CSRF guard    | built-in origin validation + SameSite cookies         |
 
 ### DB schema migration checklist
 
@@ -950,4 +955,4 @@ Athlya's current auth (`packages/auth`) maps to better-auth as follows:
 
 ---
 
-*Source: https://better-auth.com/llms.txt — fetched 2026-05-16*
+_Source: https://better-auth.com/llms.txt — fetched 2026-05-16_

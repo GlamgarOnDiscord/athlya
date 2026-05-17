@@ -1,13 +1,13 @@
 # eslint-config-next / next.config.ts — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **eslint-config-next** | ^16.2.6 (devDep in apps/web) |
-| **next-config** | `next.config.ts` (TypeScript config — correct) |
+|                        | Value                                          |
+| ---------------------- | ---------------------------------------------- |
+| **eslint-config-next** | ^16.2.6 (devDep in apps/web)                   |
+| **next-config**        | `next.config.ts` (TypeScript config — correct) |
 
 ---
 
@@ -31,14 +31,14 @@ import { config as athlyaConfig } from '@athlya/eslint-config/react';
 import nextPlugin from '@next/eslint-plugin-next';
 
 export default [
-    ...athlyaConfig,
-    {
-        plugins: { '@next/next': nextPlugin },
-        rules: {
-            ...nextPlugin.configs.recommended.rules,
-            ...nextPlugin.configs['core-web-vitals'].rules,
-        },
+  ...athlyaConfig,
+  {
+    plugins: { '@next/next': nextPlugin },
+    rules: {
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs['core-web-vitals'].rules,
     },
+  },
 ];
 ```
 
@@ -53,7 +53,7 @@ See `eslint.md` for the full migration plan.
 ```ts
 // next.config.ts
 export default {
-    cacheComponents: true, // enables Partial Prerendering
+  cacheComponents: true, // enables Partial Prerendering
 };
 ```
 
@@ -62,7 +62,7 @@ Not enabled yet. Enabling `cacheComponents` activates PPR which requires adding 
 ### `transpilePackages`
 
 ```ts
-transpilePackages: ['@athlya/shared']
+transpilePackages: ['@athlya/shared'];
 ```
 
 Required for workspace packages that export TypeScript source. Correct.
@@ -73,17 +73,19 @@ Required for workspace packages that export TypeScript source. Correct.
 
 ```ts
 // BEFORE (deprecated)
-images: { domains: ['cdn.athlya.app'] }
+images: {
+  domains: ['cdn.athlya.app'];
+}
 
 // AFTER (current)
 images: {
-    remotePatterns: [
-        {
-            protocol: 'https',
-            hostname: 'cdn.athlya.app',
-            pathname: '/**',
-        }
-    ]
+  remotePatterns: [
+    {
+      protocol: 'https',
+      hostname: 'cdn.athlya.app',
+      pathname: '/**',
+    },
+  ];
 }
 ```
 

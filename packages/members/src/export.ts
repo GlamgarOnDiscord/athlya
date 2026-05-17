@@ -36,16 +36,12 @@
  */
 
 import type {
-    AthlyaEvent,
-    MembersExportCompletedEvent,
-    MembersExportRequestedEvent,
+  AthlyaEvent,
+  MembersExportCompletedEvent,
+  MembersExportRequestedEvent,
 } from '@athlya/shared/events';
 import type { Consents } from '@athlya/shared/schemas';
-import type {
-    AuditLog,
-    Reservation,
-    WorkoutSession,
-} from '@athlya/shared/schemas/domain';
+import type { AuditLog, Reservation, WorkoutSession } from '@athlya/shared/schemas/domain';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -81,13 +77,13 @@ export const EXPORT_R2_PREFIX = 'exports/members';
  * evolve without recompiling the profile service.
  */
 export interface ExportProfile {
-    id: string;
-    studioId: string;
-    email: string;
-    displayName: string;
-    avatarUrl: string | null;
-    role: 'member' | 'coach' | 'admin';
-    createdAt: string;
+  id: string;
+  studioId: string;
+  email: string;
+  displayName: string;
+  avatarUrl: string | null;
+  role: 'member' | 'coach' | 'admin';
+  createdAt: string;
 }
 
 /**
@@ -97,9 +93,9 @@ export interface ExportProfile {
  * collection so downstream ZIP entries stay self-describing.
  */
 export interface CheckinRecord {
-    reservationId: string;
-    classId: string;
-    checkedInAt: string;
+  reservationId: string;
+  classId: string;
+  checkedInAt: string;
 }
 
 /**
@@ -109,12 +105,12 @@ export interface CheckinRecord {
  * owned by the member") without leaking Stripe internals.
  */
 export interface InvoiceRecord {
-    id: string;
-    issuedAt: string;
-    amountCents: number;
-    currency: string;
-    description: string;
-    pdfUrl: string | null;
+  id: string;
+  issuedAt: string;
+  amountCents: number;
+  currency: string;
+  description: string;
+  pdfUrl: string | null;
 }
 
 /**
@@ -123,19 +119,19 @@ export interface InvoiceRecord {
  * requires knowing the byte size of every entry up-front.
  */
 export interface MemberExportData {
-    profile: ExportProfile;
-    consents: ReadonlyArray<Consents>;
-    reservations: ReadonlyArray<Reservation>;
-    sessions: ReadonlyArray<WorkoutSession>;
-    checkins: ReadonlyArray<CheckinRecord>;
-    invoices: ReadonlyArray<InvoiceRecord>;
-    /**
-     * Audit rows referencing the user. Optional — the exporter
-     * includes it only when the data source exposes it. Some
-     * deployments gate audit visibility behind an admin role even
-     * for the subject; the unit tests cover both modes.
-     */
-    auditTrail?: ReadonlyArray<AuditLog>;
+  profile: ExportProfile;
+  consents: ReadonlyArray<Consents>;
+  reservations: ReadonlyArray<Reservation>;
+  sessions: ReadonlyArray<WorkoutSession>;
+  checkins: ReadonlyArray<CheckinRecord>;
+  invoices: ReadonlyArray<InvoiceRecord>;
+  /**
+   * Audit rows referencing the user. Optional — the exporter
+   * includes it only when the data source exposes it. Some
+   * deployments gate audit visibility behind an admin role even
+   * for the subject; the unit tests cover both modes.
+   */
+  auditTrail?: ReadonlyArray<AuditLog>;
 }
 
 /**
@@ -144,10 +140,10 @@ export interface MemberExportData {
  * compress entries however it sees fit.
  */
 export interface ArchiveEntry {
-    /** Relative path inside the archive, e.g. `profile.json`. */
-    name: string;
-    /** Raw bytes for the entry. */
-    bytes: Uint8Array;
+  /** Relative path inside the archive, e.g. `profile.json`. */
+  name: string;
+  /** Raw bytes for the entry. */
+  bytes: Uint8Array;
 }
 
 /**
@@ -156,8 +152,8 @@ export interface ArchiveEntry {
  * re-measuring the Uint8Array.
  */
 export interface ArchiveResult {
-    bytes: Uint8Array;
-    sizeBytes: number;
+  bytes: Uint8Array;
+  sizeBytes: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -176,57 +172,57 @@ export interface ArchiveResult {
  * recorded.
  */
 export interface ExportJobStore {
-    /**
-     * Insert a new `pending` row. Must throw on unique-violation so
-     * the caller can decide whether to dedup.
-     */
-    create(jobId: string, userId: string, requestedAt: Date): Promise<void>;
+  /**
+   * Insert a new `pending` row. Must throw on unique-violation so
+   * the caller can decide whether to dedup.
+   */
+  create(jobId: string, userId: string, requestedAt: Date): Promise<void>;
 
-    /**
-     * Transition the row from `pending` → `running`. Idempotent: a
-     * second call with the same `jobId` is a no-op.
-     */
-    markRunning(jobId: string, startedAt: Date): Promise<void>;
+  /**
+   * Transition the row from `pending` → `running`. Idempotent: a
+   * second call with the same `jobId` is a no-op.
+   */
+  markRunning(jobId: string, startedAt: Date): Promise<void>;
 
-    /**
-     * Transition the row from `running` → `completed`, stamping the
-     * signed URL and its expiration. Idempotent.
-     */
-    markCompleted(
-        jobId: string,
-        completedAt: Date,
-        downloadUrl: string,
-        downloadExpiresAt: Date,
-    ): Promise<void>;
+  /**
+   * Transition the row from `running` → `completed`, stamping the
+   * signed URL and its expiration. Idempotent.
+   */
+  markCompleted(
+    jobId: string,
+    completedAt: Date,
+    downloadUrl: string,
+    downloadExpiresAt: Date,
+  ): Promise<void>;
 
-    /**
-     * Transition the row to `failed`, stamping a short human-readable
-     * error reason. Idempotent.
-     */
-    markFailed(jobId: string, error: string): Promise<void>;
+  /**
+   * Transition the row to `failed`, stamping a short human-readable
+   * error reason. Idempotent.
+   */
+  markFailed(jobId: string, error: string): Promise<void>;
 
-    /** Fetch a stored job, or `null` if unknown. */
-    get(jobId: string): Promise<ExportJobRecord | null>;
+  /** Fetch a stored job, or `null` if unknown. */
+  get(jobId: string): Promise<ExportJobRecord | null>;
 
-    /**
-     * Return the `id` of any active (pending / running) job for
-     * `userId`, or `null` if none exists. Used by the dedup path in
-     * {@link enqueueExport}.
-     */
-    findActiveByUser(userId: string): Promise<string | null>;
+  /**
+   * Return the `id` of any active (pending / running) job for
+   * `userId`, or `null` if none exists. Used by the dedup path in
+   * {@link enqueueExport}.
+   */
+  findActiveByUser(userId: string): Promise<string | null>;
 }
 
 /** Shape of a stored job row as exposed to the service layer. */
 export interface ExportJobRecord {
-    id: string;
-    userId: string;
-    status: 'pending' | 'running' | 'completed' | 'failed';
-    requestedAt: string;
-    startedAt: string | null;
-    completedAt: string | null;
-    error: string | null;
-    downloadUrl: string | null;
-    downloadExpiresAt: string | null;
+  id: string;
+  userId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  error: string | null;
+  downloadUrl: string | null;
+  downloadExpiresAt: string | null;
 }
 
 /**
@@ -236,14 +232,14 @@ export interface ExportJobRecord {
  * parallel for throughput.
  */
 export interface MemberDataSource {
-    fetchProfile(userId: string): Promise<ExportProfile>;
-    fetchConsents(userId: string): Promise<ReadonlyArray<Consents>>;
-    listReservations(userId: string): Promise<ReadonlyArray<Reservation>>;
-    listSessions(userId: string): Promise<ReadonlyArray<WorkoutSession>>;
-    listCheckins(userId: string): Promise<ReadonlyArray<CheckinRecord>>;
-    listInvoices(userId: string): Promise<ReadonlyArray<InvoiceRecord>>;
-    /** Optional — audit trail visible to the subject. */
-    listAuditTrail?(userId: string): Promise<ReadonlyArray<AuditLog>>;
+  fetchProfile(userId: string): Promise<ExportProfile>;
+  fetchConsents(userId: string): Promise<ReadonlyArray<Consents>>;
+  listReservations(userId: string): Promise<ReadonlyArray<Reservation>>;
+  listSessions(userId: string): Promise<ReadonlyArray<WorkoutSession>>;
+  listCheckins(userId: string): Promise<ReadonlyArray<CheckinRecord>>;
+  listInvoices(userId: string): Promise<ReadonlyArray<InvoiceRecord>>;
+  /** Optional — audit trail visible to the subject. */
+  listAuditTrail?(userId: string): Promise<ReadonlyArray<AuditLog>>;
 }
 
 /**
@@ -252,7 +248,7 @@ export interface MemberDataSource {
  * stub `Uint8Array` without actually compressing.
  */
 export interface ArchiveBuilder {
-    build(entries: ReadonlyArray<ArchiveEntry>): Promise<ArchiveResult>;
+  build(entries: ReadonlyArray<ArchiveEntry>): Promise<ArchiveResult>;
 }
 
 /**
@@ -262,8 +258,8 @@ export interface ArchiveBuilder {
  * module.
  */
 export interface BlobStore {
-    put(key: string, bytes: Uint8Array): Promise<void>;
-    signedUrl(key: string, expiresSec: number): Promise<string>;
+  put(key: string, bytes: Uint8Array): Promise<void>;
+  signedUrl(key: string, expiresSec: number): Promise<string>;
 }
 
 /**
@@ -275,12 +271,12 @@ export interface BlobStore {
  * transactional backing).
  */
 export interface EventPublisher {
-    publish(event: AthlyaEvent): Promise<void>;
+  publish(event: AthlyaEvent): Promise<void>;
 }
 
 /** Abstract clock so tests can freeze `now()`. */
 export interface Clock {
-    now(): number;
+  now(): number;
 }
 
 /** UUID v4/v7 generator so tests can inject deterministic ids. */
@@ -292,25 +288,25 @@ export type UuidFactory = () => string;
 
 /** Dependencies injected into {@link enqueueExport}. */
 export interface EnqueueExportDeps {
-    jobs: ExportJobStore;
-    events: EventPublisher;
-    clock: Clock;
-    uuid: UuidFactory;
+  jobs: ExportJobStore;
+  events: EventPublisher;
+  clock: Clock;
+  uuid: UuidFactory;
 }
 
 /** Dependencies injected into {@link runExportJob}. */
 export interface RunExportJobDeps {
-    jobs: ExportJobStore;
-    data: MemberDataSource;
-    archive: ArchiveBuilder;
-    blob: BlobStore;
-    events: EventPublisher;
-    clock: Clock;
-    uuid: UuidFactory;
-    logger?: {
-        warn: (msg: string, extra?: Record<string, unknown>) => void;
-        error: (msg: string, extra?: Record<string, unknown>) => void;
-    };
+  jobs: ExportJobStore;
+  data: MemberDataSource;
+  archive: ArchiveBuilder;
+  blob: BlobStore;
+  events: EventPublisher;
+  clock: Clock;
+  uuid: UuidFactory;
+  logger?: {
+    warn: (msg: string, extra?: Record<string, unknown>) => void;
+    error: (msg: string, extra?: Record<string, unknown>) => void;
+  };
 }
 
 /**
@@ -321,8 +317,8 @@ export interface RunExportJobDeps {
  * that can fail meaningfully, and enqueue never touches it.
  */
 export type EnqueueExportResult =
-    | { readonly kind: 'ok'; readonly jobId: string }
-    | { readonly kind: 'deduped'; readonly jobId: string };
+  | { readonly kind: 'ok'; readonly jobId: string }
+  | { readonly kind: 'deduped'; readonly jobId: string };
 
 /**
  * Discriminated result returned by {@link runExportJob}. `completed`
@@ -332,15 +328,15 @@ export type EnqueueExportResult =
  * poisoned QStash message whose `jobId` was already hard-deleted.
  */
 export type RunExportJobResult =
-    | {
-        readonly kind: 'completed';
-        readonly downloadUrl: string;
-        readonly expiresAt: string;
-        readonly sizeBytes: number;
+  | {
+      readonly kind: 'completed';
+      readonly downloadUrl: string;
+      readonly expiresAt: string;
+      readonly sizeBytes: number;
     }
-    | { readonly kind: 'already_completed'; readonly jobId: string }
-    | { readonly kind: 'failed'; readonly reason: string }
-    | { readonly kind: 'not_found'; readonly jobId: string };
+  | { readonly kind: 'already_completed'; readonly jobId: string }
+  | { readonly kind: 'failed'; readonly reason: string }
+  | { readonly kind: 'not_found'; readonly jobId: string };
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -351,7 +347,7 @@ const UTF8 = new TextEncoder();
 
 /** Encode a JSON-serialisable value as pretty-printed UTF-8 bytes. */
 function toJsonBytes(value: unknown): Uint8Array {
-    return UTF8.encode(`${JSON.stringify(value, null, 2)}\n`);
+  return UTF8.encode(`${JSON.stringify(value, null, 2)}\n`);
 }
 
 /**
@@ -365,23 +361,22 @@ function toJsonBytes(value: unknown): Uint8Array {
  * iteration order that would result from `Object.keys`.
  */
 function toCsvBytes<T>(
-    rows: ReadonlyArray<T>,
-    columns: ReadonlyArray<readonly [string, (row: T) => unknown]>,
+  rows: ReadonlyArray<T>,
+  columns: ReadonlyArray<readonly [string, (row: T) => unknown]>,
 ): Uint8Array {
-    const escape = (raw: unknown): string => {
-        if (raw === null || raw === undefined) return '';
-        const asString =
-            typeof raw === 'string' ? raw : JSON.stringify(raw) ?? '';
-        // Always quote; escape embedded quotes by doubling them.
-        return `"${asString.replace(/"/g, '""')}"`;
-    };
-    const lines: string[] = [];
-    lines.push(columns.map(([header]) => escape(header)).join(','));
-    for (const row of rows) {
-        lines.push(columns.map(([, pick]) => escape(pick(row))).join(','));
-    }
-    // CSV consumers (Excel, LibreOffice) expect CRLF line endings.
-    return UTF8.encode(`${lines.join('\r\n')}\r\n`);
+  const escape = (raw: unknown): string => {
+    if (raw === null || raw === undefined) return '';
+    const asString = typeof raw === 'string' ? raw : (JSON.stringify(raw) ?? '');
+    // Always quote; escape embedded quotes by doubling them.
+    return `"${asString.replace(/"/g, '""')}"`;
+  };
+  const lines: string[] = [];
+  lines.push(columns.map(([header]) => escape(header)).join(','));
+  for (const row of rows) {
+    lines.push(columns.map(([, pick]) => escape(pick(row))).join(','));
+  }
+  // CSV consumers (Excel, LibreOffice) expect CRLF line endings.
+  return UTF8.encode(`${lines.join('\r\n')}\r\n`);
 }
 
 /**
@@ -391,85 +386,83 @@ function toCsvBytes<T>(
  * collection is emitted in both JSON and CSV form to match
  * Requirement 4.2 ("JSON and CSV").
  */
-export function buildArchiveEntries(
-    data: MemberExportData,
-): ArchiveEntry[] {
-    const entries: ArchiveEntry[] = [];
+export function buildArchiveEntries(data: MemberExportData): ArchiveEntry[] {
+  const entries: ArchiveEntry[] = [];
 
-    entries.push({ name: 'profile.json', bytes: toJsonBytes(data.profile) });
-    entries.push({ name: 'consents.json', bytes: toJsonBytes(data.consents) });
+  entries.push({ name: 'profile.json', bytes: toJsonBytes(data.profile) });
+  entries.push({ name: 'consents.json', bytes: toJsonBytes(data.consents) });
 
+  entries.push({
+    name: 'reservations.json',
+    bytes: toJsonBytes(data.reservations),
+  });
+  entries.push({
+    name: 'reservations.csv',
+    bytes: toCsvBytes(data.reservations, [
+      ['id', (r) => r.id],
+      ['classId', (r) => r.classId],
+      ['userId', (r) => r.userId],
+      ['status', (r) => r.status],
+      ['createdAt', (r) => r.createdAt],
+      ['cancelledAt', (r) => r.cancelledAt],
+      ['checkedInAt', (r) => r.checkedInAt],
+    ]),
+  });
+
+  entries.push({
+    name: 'workout_sessions.json',
+    bytes: toJsonBytes(data.sessions),
+  });
+  entries.push({
+    name: 'workout_sessions.csv',
+    bytes: toCsvBytes(data.sessions, [
+      ['id', (s) => s.id],
+      ['userId', (s) => s.userId],
+      ['studioId', (s) => s.studioId],
+      ['startedAt', (s) => s.startedAt],
+      ['durationMin', (s) => s.durationMin],
+      ['exercisesJson', (s) => JSON.stringify(s.exercises)],
+      ['notes', (s) => s.notes],
+      ['createdAt', (s) => s.createdAt],
+    ]),
+  });
+
+  entries.push({ name: 'checkins.json', bytes: toJsonBytes(data.checkins) });
+  entries.push({
+    name: 'checkins.csv',
+    bytes: toCsvBytes(data.checkins, [
+      ['reservationId', (c) => c.reservationId],
+      ['classId', (c) => c.classId],
+      ['checkedInAt', (c) => c.checkedInAt],
+    ]),
+  });
+
+  entries.push({ name: 'invoices.json', bytes: toJsonBytes(data.invoices) });
+  entries.push({
+    name: 'invoices.csv',
+    bytes: toCsvBytes(data.invoices, [
+      ['id', (i) => i.id],
+      ['issuedAt', (i) => i.issuedAt],
+      ['amountCents', (i) => i.amountCents],
+      ['currency', (i) => i.currency],
+      ['description', (i) => i.description],
+      ['pdfUrl', (i) => i.pdfUrl],
+    ]),
+  });
+
+  if (data.auditTrail !== undefined) {
     entries.push({
-        name: 'reservations.json',
-        bytes: toJsonBytes(data.reservations),
+      name: 'audit_trail.json',
+      bytes: toJsonBytes(data.auditTrail),
     });
-    entries.push({
-        name: 'reservations.csv',
-        bytes: toCsvBytes(data.reservations, [
-            ['id', (r) => r.id],
-            ['classId', (r) => r.classId],
-            ['userId', (r) => r.userId],
-            ['status', (r) => r.status],
-            ['createdAt', (r) => r.createdAt],
-            ['cancelledAt', (r) => r.cancelledAt],
-            ['checkedInAt', (r) => r.checkedInAt],
-        ]),
-    });
+  }
 
-    entries.push({
-        name: 'workout_sessions.json',
-        bytes: toJsonBytes(data.sessions),
-    });
-    entries.push({
-        name: 'workout_sessions.csv',
-        bytes: toCsvBytes(data.sessions, [
-            ['id', (s) => s.id],
-            ['userId', (s) => s.userId],
-            ['studioId', (s) => s.studioId],
-            ['startedAt', (s) => s.startedAt],
-            ['durationMin', (s) => s.durationMin],
-            ['exercisesJson', (s) => JSON.stringify(s.exercises)],
-            ['notes', (s) => s.notes],
-            ['createdAt', (s) => s.createdAt],
-        ]),
-    });
-
-    entries.push({ name: 'checkins.json', bytes: toJsonBytes(data.checkins) });
-    entries.push({
-        name: 'checkins.csv',
-        bytes: toCsvBytes(data.checkins, [
-            ['reservationId', (c) => c.reservationId],
-            ['classId', (c) => c.classId],
-            ['checkedInAt', (c) => c.checkedInAt],
-        ]),
-    });
-
-    entries.push({ name: 'invoices.json', bytes: toJsonBytes(data.invoices) });
-    entries.push({
-        name: 'invoices.csv',
-        bytes: toCsvBytes(data.invoices, [
-            ['id', (i) => i.id],
-            ['issuedAt', (i) => i.issuedAt],
-            ['amountCents', (i) => i.amountCents],
-            ['currency', (i) => i.currency],
-            ['description', (i) => i.description],
-            ['pdfUrl', (i) => i.pdfUrl],
-        ]),
-    });
-
-    if (data.auditTrail !== undefined) {
-        entries.push({
-            name: 'audit_trail.json',
-            bytes: toJsonBytes(data.auditTrail),
-        });
-    }
-
-    return entries;
+  return entries;
 }
 
 /** Build the R2 object key for `jobId`. */
 export function exportObjectKey(jobId: string): string {
-    return `${EXPORT_R2_PREFIX}/${jobId}.zip`;
+  return `${EXPORT_R2_PREFIX}/${jobId}.zip`;
 }
 
 /**
@@ -478,13 +471,13 @@ export function exportObjectKey(jobId: string): string {
  * a pathological stack trace never blows up the column.
  */
 function toErrorReason(err: unknown, maxLen = 500): string {
-    const raw =
-        err instanceof Error
-            ? `${err.name}: ${err.message}`
-            : typeof err === 'string'
-                ? err
-                : JSON.stringify(err) ?? String(err);
-    return raw.length > maxLen ? `${raw.slice(0, maxLen - 1)}…` : raw;
+  const raw =
+    err instanceof Error
+      ? `${err.name}: ${err.message}`
+      : typeof err === 'string'
+        ? err
+        : (JSON.stringify(err) ?? String(err));
+  return raw.length > maxLen ? `${raw.slice(0, maxLen - 1)}…` : raw;
 }
 
 /* ------------------------------------------------------------------ */
@@ -513,32 +506,32 @@ function toErrorReason(err: unknown, maxLen = 500): string {
  * 20.1 (idempotency posture for repeated mutation calls).
  */
 export async function enqueueExport(
-    userId: string,
-    deps: EnqueueExportDeps,
+  userId: string,
+  deps: EnqueueExportDeps,
 ): Promise<EnqueueExportResult> {
-    // Dedup: reuse an active job if the user already has one in flight.
-    const existingId = await deps.jobs.findActiveByUser(userId);
-    if (existingId !== null) {
-        return { kind: 'deduped', jobId: existingId };
-    }
+  // Dedup: reuse an active job if the user already has one in flight.
+  const existingId = await deps.jobs.findActiveByUser(userId);
+  if (existingId !== null) {
+    return { kind: 'deduped', jobId: existingId };
+  }
 
-    const jobId = deps.uuid();
-    const requestedAt = new Date(deps.clock.now());
+  const jobId = deps.uuid();
+  const requestedAt = new Date(deps.clock.now());
 
-    await deps.jobs.create(jobId, userId, requestedAt);
+  await deps.jobs.create(jobId, userId, requestedAt);
 
-    const event: MembersExportRequestedEvent = {
-        id: deps.uuid(),
-        type: 'members.export.requested',
-        occurredAt: requestedAt.toISOString(),
-        payload: {
-            userId: userId as MembersExportRequestedEvent['payload']['userId'],
-            exportJobId: jobId,
-        },
-    };
-    await deps.events.publish(event);
+  const event: MembersExportRequestedEvent = {
+    id: deps.uuid(),
+    type: 'members.export.requested',
+    occurredAt: requestedAt.toISOString(),
+    payload: {
+      userId: userId as MembersExportRequestedEvent['payload']['userId'],
+      exportJobId: jobId,
+    },
+  };
+  await deps.events.publish(event);
 
-    return { kind: 'ok', jobId };
+  return { kind: 'ok', jobId };
 }
 
 /* ------------------------------------------------------------------ */
@@ -569,115 +562,97 @@ export async function enqueueExport(
  * the event payload cannot drift.
  */
 export async function runExportJob(
-    jobId: string,
-    deps: RunExportJobDeps,
+  jobId: string,
+  deps: RunExportJobDeps,
 ): Promise<RunExportJobResult> {
-    const job = await deps.jobs.get(jobId);
-    if (job === null) {
-        return { kind: 'not_found', jobId };
-    }
-    if (job.status === 'completed' || job.status === 'failed') {
-        return { kind: 'already_completed', jobId };
-    }
+  const job = await deps.jobs.get(jobId);
+  if (job === null) {
+    return { kind: 'not_found', jobId };
+  }
+  if (job.status === 'completed' || job.status === 'failed') {
+    return { kind: 'already_completed', jobId };
+  }
 
-    await deps.jobs.markRunning(jobId, new Date(deps.clock.now()));
+  await deps.jobs.markRunning(jobId, new Date(deps.clock.now()));
 
-    // Step 1: collect data. If any source throws, abort the job.
-    let data: MemberExportData;
-    try {
-        const [
-            profile,
-            consents,
-            reservations,
-            sessions,
-            checkins,
-            invoices,
-        ] = await Promise.all([
-            deps.data.fetchProfile(job.userId),
-            deps.data.fetchConsents(job.userId),
-            deps.data.listReservations(job.userId),
-            deps.data.listSessions(job.userId),
-            deps.data.listCheckins(job.userId),
-            deps.data.listInvoices(job.userId),
-        ]);
+  // Step 1: collect data. If any source throws, abort the job.
+  let data: MemberExportData;
+  try {
+    const [profile, consents, reservations, sessions, checkins, invoices] = await Promise.all([
+      deps.data.fetchProfile(job.userId),
+      deps.data.fetchConsents(job.userId),
+      deps.data.listReservations(job.userId),
+      deps.data.listSessions(job.userId),
+      deps.data.listCheckins(job.userId),
+      deps.data.listInvoices(job.userId),
+    ]);
 
-        const auditTrail =
-            deps.data.listAuditTrail !== undefined
-                ? await deps.data.listAuditTrail(job.userId)
-                : undefined;
+    const auditTrail =
+      deps.data.listAuditTrail !== undefined
+        ? await deps.data.listAuditTrail(job.userId)
+        : undefined;
 
-        data = {
-            profile,
-            consents,
-            reservations,
-            sessions,
-            checkins,
-            invoices,
-            ...(auditTrail === undefined ? {} : { auditTrail }),
-        };
-    } catch (err) {
-        const reason = toErrorReason(err);
-        await deps.jobs.markFailed(jobId, reason);
-        deps.logger?.error('export job: data source failure', {
-            jobId,
-            userId: job.userId,
-            error: reason,
-        });
-        return { kind: 'failed', reason };
-    }
+    data = {
+      profile,
+      consents,
+      reservations,
+      sessions,
+      checkins,
+      invoices,
+      ...(auditTrail === undefined ? {} : { auditTrail }),
+    };
+  } catch (err) {
+    const reason = toErrorReason(err);
+    await deps.jobs.markFailed(jobId, reason);
+    deps.logger?.error('export job: data source failure', {
+      jobId,
+      userId: job.userId,
+      error: reason,
+    });
+    return { kind: 'failed', reason };
+  }
 
-    // Step 2: build archive + upload + publish completion.
-    try {
-        const entries = buildArchiveEntries(data);
-        const { bytes, sizeBytes } = await deps.archive.build(entries);
+  // Step 2: build archive + upload + publish completion.
+  try {
+    const entries = buildArchiveEntries(data);
+    const { bytes, sizeBytes } = await deps.archive.build(entries);
 
-        const objectKey = exportObjectKey(jobId);
-        await deps.blob.put(objectKey, bytes);
-        const downloadUrl = await deps.blob.signedUrl(
-            objectKey,
-            DOWNLOAD_URL_TTL_SECONDS,
-        );
+    const objectKey = exportObjectKey(jobId);
+    await deps.blob.put(objectKey, bytes);
+    const downloadUrl = await deps.blob.signedUrl(objectKey, DOWNLOAD_URL_TTL_SECONDS);
 
-        const completedAt = new Date(deps.clock.now());
-        const expiresAt = new Date(
-            completedAt.getTime() + DOWNLOAD_URL_TTL_SECONDS * 1000,
-        );
+    const completedAt = new Date(deps.clock.now());
+    const expiresAt = new Date(completedAt.getTime() + DOWNLOAD_URL_TTL_SECONDS * 1000);
 
-        await deps.jobs.markCompleted(
-            jobId,
-            completedAt,
-            downloadUrl,
-            expiresAt,
-        );
+    await deps.jobs.markCompleted(jobId, completedAt, downloadUrl, expiresAt);
 
-        const event: MembersExportCompletedEvent = {
-            id: deps.uuid(),
-            type: 'members.export.completed',
-            occurredAt: completedAt.toISOString(),
-            payload: {
-                userId:
-                    job.userId as MembersExportCompletedEvent['payload']['userId'],
-                exportJobId: jobId,
-                downloadUrl,
-                expiresAt: expiresAt.toISOString(),
-            },
-        };
-        await deps.events.publish(event);
+    const event: MembersExportCompletedEvent = {
+      id: deps.uuid(),
+      type: 'members.export.completed',
+      occurredAt: completedAt.toISOString(),
+      payload: {
+        userId: job.userId as MembersExportCompletedEvent['payload']['userId'],
+        exportJobId: jobId,
+        downloadUrl,
+        expiresAt: expiresAt.toISOString(),
+      },
+    };
+    await deps.events.publish(event);
 
-        return {
-            kind: 'completed',
-            downloadUrl,
-            expiresAt: expiresAt.toISOString(),
-            sizeBytes,
-        };
-    } catch (err) {
-        const reason = toErrorReason(err);
-        await deps.jobs.markFailed(jobId, reason);
-        deps.logger?.error('export job: archive / upload failure', {
-            jobId,
-            userId: job.userId,
-            error: reason,
-        });
-        return { kind: 'failed', reason };
-    }
+    return {
+      kind: 'completed',
+      downloadUrl,
+      expiresAt: expiresAt.toISOString(),
+      sizeBytes,
+    };
+  } catch (err) {
+    const reason = toErrorReason(err);
+    await deps.jobs.markFailed(jobId, reason);
+    deps.logger?.error('export job: archive / upload failure', {
+      jobId,
+      userId: job.userId,
+      error: reason,
+    });
+    return { kind: 'failed', reason };
+  }
 }

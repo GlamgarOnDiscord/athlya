@@ -1,15 +1,15 @@
 # Hono — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^4.12.18 |
-| **Latest stable** | 4.12.18 (current) |
-| **Runtime** | Cloudflare Workers |
-| **Performance** | 402,820 ops/sec, <14KB (hono/tiny) |
+|                   | Value                              |
+| ----------------- | ---------------------------------- |
+| **Used**          | ^4.12.18                           |
+| **Latest stable** | 4.12.18 (current)                  |
+| **Runtime**       | Cloudflare Workers                 |
+| **Performance**   | 402,820 ops/sec, <14KB (hono/tiny) |
 
 ---
 
@@ -37,6 +37,7 @@ The project uses custom JWT verification (via `jose`) not Hono's built-in JWT mi
 ### Framework-Free Middleware Design
 
 The project follows a portable middleware pattern:
+
 - `SecurityHeadersContext` interface (not importing Hono types)
 - `RateLimitContext` interface (duck-typed against Hono's `Context`)
 
@@ -92,8 +93,8 @@ Correct — `bind` ensures `this` context is preserved. No change needed.
 ```ts
 // API side
 export const routes = app
-    .get('/users/:id', (c) => c.json({ name: 'Foo' }))
-    .post('/reservations', zValidator('json', schema), handler);
+  .get('/users/:id', (c) => c.json({ name: 'Foo' }))
+  .post('/reservations', zValidator('json', schema), handler);
 export type AppRoutes = typeof routes;
 
 // Client side (apps/web)
@@ -110,7 +111,7 @@ Could replace the custom `createApiClient()` with full type inference. Tradeoff:
 ```ts
 import { zValidator } from '@hono/zod-validator';
 app.post('/reservations', zValidator('json', CreateReservationSchema), (c) => {
-    const body = c.req.valid('json'); // fully typed
+  const body = c.req.valid('json'); // fully typed
 });
 ```
 
@@ -122,12 +123,12 @@ Standard approach in the Hono ecosystem. Could replace the custom `middleware/va
 import { streamSSE } from 'hono/streaming';
 
 app.get('/classes/:id/updates', (c) => {
-    return streamSSE(c, async (stream) => {
-        while (true) {
-            await stream.writeSSE({ data: await getUpdate() });
-            await stream.sleep(1000);
-        }
-    });
+  return streamSSE(c, async (stream) => {
+    while (true) {
+      await stream.writeSSE({ data: await getUpdate() });
+      await stream.sleep(1000);
+    }
+  });
 });
 ```
 
@@ -138,6 +139,7 @@ For future live class capacity updates (alternative to WebSocket/Durable Objects
 ## Deprecated Patterns
 
 No deprecated Hono APIs detected. The project uses:
+
 - `new Hono<HonoEnv>()` — current
 - `app.use('*', middleware)` — current
 - `c.json()` / `c.body()` / `c.header()` / `c.set()` / `c.get()` — current

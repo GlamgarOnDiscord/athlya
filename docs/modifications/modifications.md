@@ -1,6 +1,7 @@
 # Journal des Modifications — Athlya
 
 Format:
+
 ```
 ## [DATE] Fichier(s) concerne(s)
 
@@ -24,6 +25,7 @@ Six chantiers groupes. Zero regression. 1001/1001 tests verts (ratelimit 7, shar
 ### [2026-05-10] P1.1 — Cap passwords a 72 bytes (limite bcrypt)
 
 Fichiers:
+
 - `packages/shared/src/schemas/api.ts`
 - `packages/shared/tests/schemas.test.ts`
 - `apps/web/src/app/register/RegisterForm.tsx`
@@ -32,21 +34,25 @@ Fichiers:
 #### Modification
 
 Avant:
+
 - `RegisterRequestSchema.password: z.string().min(8).max(256)` — commentaire documentait que bcrypt tronque mais deferrait au downstream
 - `LoginRequestSchema.password: z.string().min(1).max(256)`
 - `<input maxLength={256}>` sur les deux formulaires
 
 Apres:
+
 - `RegisterRequestSchema.password: z.string().min(8).max(72)` — le commentaire dit maintenant que bcrypt tronque a 72 bytes silencieusement, donc on cap au boundary
 - `LoginRequestSchema.password: z.string().min(1).max(72)`
 - `<input maxLength={72}>`
 - +2 tests dans `schemas.test.ts` : rejet a 73 chars, acceptation a 72 chars
 
 #### Pourquoi
+
 - securite : bcrypt tronque silencieusement a 72 bytes UTF-8. Accepter `max(256)` donne un faux sentiment de robustesse — les caracteres 73-256 apportent zero entropie au hash. Cap au wire boundary pour que le downstream n'ait jamais a se defendre contre la troncature.
 - aucun utilisateur prod existant (app pas deployee), donc pas de breaking change pratique.
 
 #### Source
+
 - bcrypt spec : https://github.com/dcodeIO/bcrypt.js
 - OWASP Password Storage Cheatsheet : https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
 
@@ -55,6 +61,7 @@ Apres:
 ### [2026-05-10] P1.2 — CSP report-uri + Report-To header
 
 Fichiers:
+
 - `apps/web/src/lib/csp.ts`
 - `apps/web/src/lib/csp.test.ts`
 - `apps/web/src/lib/env.ts`
@@ -63,10 +70,12 @@ Fichiers:
 #### Modification
 
 Avant:
+
 - `generateCsp({ nonce, apiUrl })` — pas de directive de reporting. Violations CSP invisibles jusqu'a ce qu'elles bloquent les users en prod.
 - Aucune variable env pour l'endpoint de report.
 
 Apres:
+
 - `CspOptions` etendue avec `reportUri?: string` optionnel. Si fourni, `generateCsp` emet `report-to athlya-csp` + `report-uri <url>` (les deux directives — `report-to` est le moderne, `report-uri` reste un fallback pour les vieux browsers).
 - Nouvelle fonction `buildReportToHeader(reportUri)` qui retourne le JSON `Reporting API` pour le header `Report-To` avec `max_age: 86400` et le groupe `athlya-csp`.
 - Nouvel accessor `getCspReportUri()` lisant `NEXT_PUBLIC_CSP_REPORT_URI`.
@@ -74,10 +83,12 @@ Apres:
 - +5 tests dans `csp.test.ts` (3 pour `generateCsp` reporting + 2 pour `buildReportToHeader`).
 
 #### Pourquoi
+
 - securite / observabilite : sans reporting, on ne decouvre les violations CSP qu'au moment ou elles cassent l'UX. Avec un endpoint de report en staging, on durcit la policy sans risque de regression silencieuse.
 - endpoint optionnel (via env var) : local dev et CI restent silencieux, production se branche sur Report URI ou un collecteur custom.
 
 #### Source
+
 - MDN CSP reporting : https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP#reporting
 - Reporting API spec W3C : https://www.w3.org/TR/reporting-1/#header
 
@@ -86,6 +97,7 @@ Apres:
 ### [2026-05-10] P2.2 — Suppression de `Object.setPrototypeOf` redondant (x8 classes d'erreur)
 
 Fichiers:
+
 - `packages/api/src/circuit-breaker.ts` (`CircuitOpenError`)
 - `packages/api/src/middleware/validator.ts` (`ValidationError`)
 - `packages/reservations/src/book.ts` (`UniqueViolationError`)
@@ -98,6 +110,7 @@ Fichiers:
 #### Modification
 
 Avant:
+
 ```ts
 class FooError extends Error {
     constructor(...) {
@@ -110,6 +123,7 @@ class FooError extends Error {
 ```
 
 Apres:
+
 ```ts
 class FooError extends Error {
     constructor(...) {
@@ -121,10 +135,12 @@ class FooError extends Error {
 Sanity check final : `rg 'Object\.setPrototypeOf' packages/` retourne 0 match.
 
 #### Pourquoi
+
 - code mort / lisibilite : `Object.setPrototypeOf(this, new.target.prototype)` est un workaround legacy necessaire uniquement quand TypeScript cible ES5. Avec `target: "ES2022"` + `useDefineForClassFields: true` (notre `packages/tsconfig/base.json`), la prototype chain native de `class extends Error` fonctionne parfaitement. Le workaround ajoute du bruit et peut tromper un lecteur qui pense devoir le recopier dans toute nouvelle error class.
 - tous les tests `instanceof XxxError` continuent de passer (verifie : 1001/1001 tests verts).
 
 #### Source
+
 - TypeScript 5.9 class compilation : https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html
 - TypeScript handbook — Classes : https://www.typescriptlang.org/docs/handbook/2/classes.html
 
@@ -133,6 +149,7 @@ Sanity check final : `rg 'Object\.setPrototypeOf' packages/` retourne 0 match.
 ### [2026-05-10] P3.1 — `FormEvent` deprecated → `FormEventHandler` (x4 formulaires)
 
 Fichiers:
+
 - `apps/web/src/app/register/RegisterForm.tsx`
 - `apps/web/src/app/login/LoginForm.tsx`
 - `apps/web/src/app/me/ProfileForm.tsx`
@@ -141,6 +158,7 @@ Fichiers:
 #### Modification
 
 Avant:
+
 ```ts
 import { useCallback, type FormEvent } from 'react';
 
@@ -154,6 +172,7 @@ const onSubmit = useCallback(
 ```
 
 Apres:
+
 ```ts
 import { useCallback, type FormEventHandler } from 'react';
 
@@ -167,10 +186,12 @@ const onSubmit = useCallback<FormEventHandler<HTMLFormElement>>(
 ```
 
 #### Pourquoi
+
 - depreciation corrigee : `@types/react@19.2.0` marque `FormEvent` comme `@deprecated`. `FormEventHandler<HTMLFormElement>` est le remplacement recommande. Typer le generic de `useCallback` propage l'inference a l'argument `event` sans annotation explicite.
 - aucune modification de comportement runtime — purement une mise a jour de types.
 
 #### Source
+
 - @types/react 19.2 : https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/react/index.d.ts
 - React 19 release notes : https://react.dev/blog/2024/12/05/react-19
 
@@ -179,16 +200,19 @@ const onSubmit = useCallback<FormEventHandler<HTMLFormElement>>(
 ### [2026-05-10] P3.6 — `server-only` guard sur `getLocale.ts`
 
 Fichier:
+
 - `apps/web/src/lib/i18n/getLocale.ts`
 
 #### Modification
 
 Avant:
+
 ```ts
 import { headers } from 'next/headers';
 ```
 
 Apres:
+
 ```ts
 import 'server-only';
 
@@ -198,10 +222,12 @@ import { headers } from 'next/headers';
 Decision de scope : `csp.ts` et `nonce.ts` etaient dans le plan initial mais tous deux ont des tests unitaires sous `jsdom` (env client). L'import `server-only` throw au module load cote client, ce qui casserait le test runner. Limite a `getLocale.ts` qui n'a pas de test direct (tous ses consommateurs sont des async server components : `layout.tsx`, les 8 pages `page.tsx`). Commentaire ajoute dans `nonce.ts` pour expliquer pourquoi le guard est absent.
 
 #### Pourquoi
+
 - securite / defense en profondeur : `getLocale()` appelle `headers()` qui est strictement server-only. Sans le guard, un composant client pourrait l'importer par erreur et obtenir un import silencieusement casse au runtime. Avec `import 'server-only'`, l'erreur remonte au build (Next.js produit un message clair).
 - zero cout runtime en prod : `server-only` est un module vide cote serveur.
 
 #### Source
+
 - Next.js DAL pattern : https://nextjs.org/docs/app/guides/data-security
 - Package server-only : https://www.npmjs.com/package/server-only
 
@@ -210,39 +236,46 @@ Decision de scope : `csp.ts` et `nonce.ts` etaient dans le plan initial mais tou
 ### [2026-05-10] Fix pre-existant — `noUncheckedIndexedAccess` dans property test
 
 Fichier:
+
 - `packages/reservations/tests/properties/state-machine.property.test.ts`
 
 #### Modification
 
 Avant:
+
 ```ts
-const withForbidden: ReadonlyArray<readonly [ReservationStatus, ReservationStatus]> =
-    [['cancelled', 'confirmed'] as const, ...sequence];
+const withForbidden: ReadonlyArray<readonly [ReservationStatus, ReservationStatus]> = [
+  ['cancelled', 'confirmed'] as const,
+  ...sequence,
+];
 return canTransition(withForbidden[0][0], withForbidden[0][1]) === false;
 ```
 
 Apres:
+
 ```ts
-const forbidden: readonly [ReservationStatus, ReservationStatus] =
-    ['cancelled', 'confirmed'];
-const withForbidden: ReadonlyArray<readonly [ReservationStatus, ReservationStatus]> =
-    [forbidden, ...sequence];
+const forbidden: readonly [ReservationStatus, ReservationStatus] = ['cancelled', 'confirmed'];
+const withForbidden: ReadonlyArray<readonly [ReservationStatus, ReservationStatus]> = [
+  forbidden,
+  ...sequence,
+];
 const head = withForbidden[0] ?? forbidden;
 return canTransition(head[0], head[1]) === false;
 ```
 
 #### Pourquoi
+
 - regression pre-existante exposee par `tsc --noEmit` apres nettoyage : `noUncheckedIndexedAccess: true` dans le tsconfig de base type `withForbidden[0]` comme `readonly [...] | undefined`. Le fallback `?? forbidden` rassure le typechecker sans changer le comportement (le tableau n'est jamais vide — il contient au moins le literal `forbidden`).
 - le test continue de valider que `cancelled → confirmed` est toujours rejete.
 
 #### Source
+
 - TypeScript `noUncheckedIndexedAccess` : https://www.typescriptlang.org/tsconfig#noUncheckedIndexedAccess
 
 ---
 
-*Vague 1 : 6 chantiers livres, +7 tests, 0 regression, 1001 tests verts.*
-*Prochaine : Vague 2 (useSyncExternalStore, Tailwind utilities, loading/error boundaries).*
-
+_Vague 1 : 6 chantiers livres, +7 tests, 0 regression, 1001 tests verts._
+_Prochaine : Vague 2 (useSyncExternalStore, Tailwind utilities, loading/error boundaries)._
 
 ---
 
@@ -253,40 +286,43 @@ Quatre chantiers groupes. Zero regression. 1001/1001 tests toujours verts.
 ### [2026-05-10] P2.1 — `useSyncExternalStore` dans `AuthProvider`
 
 Fichier:
+
 - `apps/web/src/lib/auth/AuthContext.tsx`
 
 #### Modification
 
 Avant:
+
 ```tsx
-const [accessToken, setLocalToken] = useState<string | null>(() =>
-    getAccessToken(),
-);
+const [accessToken, setLocalToken] = useState<string | null>(() => getAccessToken());
 useEffect(() => {
-    const unsubscribe = subscribeToAccessToken((next) => {
-        setLocalToken(next);
-    });
-    return unsubscribe;
+  const unsubscribe = subscribeToAccessToken((next) => {
+    setLocalToken(next);
+  });
+  return unsubscribe;
 }, []);
 ```
 
 Apres:
+
 ```tsx
 const accessToken = useSyncExternalStore<string | null>(
-    (onStoreChange) => subscribeToAccessToken(() => onStoreChange()),
-    getAccessToken,
-    () => null, // server snapshot
+  (onStoreChange) => subscribeToAccessToken(() => onStoreChange()),
+  getAccessToken,
+  () => null, // server snapshot
 );
 ```
 
 Imports ajustes : `useEffect` et `useState` retires, `useSyncExternalStore` ajoute. L'adapter subscriber ignore le nouveau token passe par le store (hook relit via `getAccessToken` apres chaque notification — pattern canonique).
 
 #### Pourquoi
+
 - correctness : l'ancien pattern `useState + useEffect(subscribe)` est vulnerable au tearing sous React 19 concurrent rendering. Deux composants qui lisent `accessToken` dans le meme render tree peuvent voir des valeurs differentes si une mutation du store arrive entre eux. `useSyncExternalStore` garantit des snapshots atomiques tearing-proof (c'est exactement ce pour quoi le hook a ete concu).
 - server snapshot `() => null` : le token vit uniquement en memoire client, donc le SSR rend toujours l'etat signe-hors. Hydratation bascule vers la valeur reelle quand le store se bridge cote client.
 - zero breaking : `useAuth()` et son interface restent identiques.
 
 #### Source
+
 - React 19 `useSyncExternalStore` : https://react.dev/reference/react/useSyncExternalStore
 - React 18 "external stores" RFC : https://github.com/reactwg/react-18/discussions/86
 
@@ -295,6 +331,7 @@ Imports ajustes : `useEffect` et `useState` retires, `useSyncExternalStore` ajou
 ### [2026-05-10] P3.2 — Remplacement `[color:var(...)]` par utilities Tailwind 4 directes
 
 Fichiers (13) :
+
 - `apps/web/src/app/layout.tsx`
 - `apps/web/src/app/page.tsx`
 - `apps/web/src/app/not-found.tsx`
@@ -312,24 +349,29 @@ Fichiers (13) :
 #### Modification
 
 Avant (~60 occurrences sur les 13 fichiers) :
+
 ```tsx
-className="border-[color:var(--color-border)] bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]"
-className="bg-[color:var(--athlya-brand-primary)] text-[color:var(--athlya-brand-on-primary)]"
+className =
+  'border-[color:var(--color-border)] bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]';
+className = 'bg-[color:var(--athlya-brand-primary)] text-[color:var(--athlya-brand-on-primary)]';
 ```
 
 Apres :
+
 ```tsx
-className="border-border bg-muted text-muted-foreground"
-className="bg-brand-primary text-brand-on-primary"
+className = 'border-border bg-muted text-muted-foreground';
+className = 'bg-brand-primary text-brand-on-primary';
 ```
 
 Sanity check final : `rg '\[color:var\(' apps/web/src/` retourne 0 match.
 
 #### Pourquoi
+
 - lisibilite / DX : le `@theme` dans `globals.css` enregistre deja `--color-border`, `--color-muted`, `--color-muted-foreground`, `--color-brand-primary`, `--color-brand-on-primary`. Tailwind 4 genere donc automatiquement les utilities `border-border`, `bg-muted`, `text-muted-foreground`, `bg-brand-primary`, `text-brand-on-primary` — les utiliser directement est l'idiome Tailwind 4 CSS-first. La syntaxe `[color:var(--...)]` etait une rustine herite de Tailwind 3 (ou seule la syntaxe arbitraire permettait de referencer une CSS var).
 - comportement runtime strictement identique : les deux formes resolvent vers `var(--color-...)` a la fin de la chaine. Les tests RTL (qui assertent via role/label/text, jamais par classe) sont tous restes verts.
 
 #### Source
+
 - Tailwind 4 theme variables : https://tailwindcss.com/docs/theme
 - Tailwind 4 CSS-first configuration : https://tailwindcss.com/docs/installation/using-postcss
 
@@ -338,11 +380,13 @@ Sanity check final : `rg '\[color:var\(' apps/web/src/` retourne 0 match.
 ### [2026-05-10] P3.3 — Commentaire clarifiant le pattern `@theme` / `tokens.css`
 
 Fichier:
+
 - `apps/web/src/app/globals.css`
 
 #### Modification
 
 Avant :
+
 ```css
 /*
  * Minimal CSS-first theme extension. Anything declared here is emitted
@@ -351,17 +395,19 @@ Avant :
  * `tokens.css` so one edit propagates everywhere.
  */
 @theme {
-    --color-background: var(--color-background);
-    /* ... */
+  --color-background: var(--color-background);
+  /* ... */
 }
 ```
 
 Apres : meme code, commentaire etendu pour dissiper la confusion que `--color-background: var(--color-background)` pourrait evoquer une auto-reference recursive. Le commentaire explique que `@theme` enregistre une CLE interne Tailwind qui est ensuite resolue au runtime contre la custom property du meme nom dans `:root` (tokens.css) — deux namespaces, aucune recursion.
 
 #### Pourquoi
+
 - lisibilite : le pattern visuel `--x: var(--x)` est surprenant pour un lecteur qui decouvre le code. Un commentaire explicite pre-empte la question legitime "mais ca boucle, non ?".
 
 #### Source
+
 - Tailwind 4 `@theme` directive : https://tailwindcss.com/docs/functions-and-directives#theme-directive
 
 ---
@@ -369,21 +415,25 @@ Apres : meme code, commentaire etendu pour dissiper la confusion que `--color-ba
 ### [2026-05-10] P3.5 — `loading.tsx` + `error.tsx` boundaries
 
 Fichiers crees (4) :
+
 - `apps/web/src/app/loading.tsx` (root — spinner centre)
 - `apps/web/src/app/error.tsx` (root — Client Component, boutons Retry / Home)
 - `apps/web/src/app/classes/loading.tsx` (skeleton de 3 cartes)
 - `apps/web/src/app/me/loading.tsx` (skeleton profile + consents)
 
 Bundles i18n etendus :
+
 - `packages/shared/src/i18n/fr.json` : `web.error.{title,body,retry,home}`
 - `packages/shared/src/i18n/en.json` : meme 4 cles, parite maintenue
 
 #### Modification
 
 Avant :
+
 - Aucun loading/error boundary route-level. Un Server Component qui suspend sur une fetch montrait un ecran blanc jusqu'a resolution. Un throw non-catche remontait au boundary global Next.js par defaut (stack trace en dev, ecran generique en prod).
 
 Apres :
+
 - Le stream Next.js rend `loading.tsx` comme fallback Suspense pendant que le Server Component resout.
 - `error.tsx` attrape tout throw en dessous, affiche un fallback localise avec `reset()` pour re-monter le segment et un lien vers `/` pour sortir. Il est un Client Component (`'use client'`) par convention Next.js 16 App Router.
 - `loading.tsx` reste Server Component (pas de `'use client'`) pour streamer en parallele de la page.
@@ -391,20 +441,21 @@ Apres :
 - Les bundles FR/EN ont ete etendus via `str_replace` (pas de modification de la suite de tests — la parite structurelle s'auto-valide via le test existant dans `shared/tests/i18n.test.ts`).
 
 #### Pourquoi
+
 - UX / accessibilite : un route-level loading evite le "flash of white" pendant un RSC suspend. Un error boundary offre une sortie de secours a l'utilisateur au lieu d'un ecran blanc + console log qu'il ne verra jamais.
 - defense en profondeur : si l'API downstream crashe ou si un composant throw en client, l'utilisateur reste dans un etat utilisable (bouton Retry, lien accueil).
 - zero cout si pas de suspense/throw : les boundaries sont purement declaratifs — pas de code execute sur le chemin nominal.
 
 #### Source
+
 - Next.js 16 `loading.tsx` convention : https://nextjs.org/docs/app/api-reference/file-conventions/loading
 - Next.js 16 `error.tsx` convention : https://nextjs.org/docs/app/api-reference/file-conventions/error
 
 ---
 
-*Vague 2 : 4 chantiers livres (P2.1 + P3.2 + P3.3 + P3.5), 13 fichiers edites + 4 crees + 2 bundles i18n, 0 regression.*
-*Total cumule Vagues 1 + 2 : 10 chantiers, 1001/1001 tests verts.*
-*Prochaine : Vague 3 (ESLint flat config, doc LoginForm, puis optionnels P4.x).*
-
+_Vague 2 : 4 chantiers livres (P2.1 + P3.2 + P3.3 + P3.5), 13 fichiers edites + 4 crees + 2 bundles i18n, 0 regression._
+_Total cumule Vagues 1 + 2 : 10 chantiers, 1001/1001 tests verts._
+_Prochaine : Vague 3 (ESLint flat config, doc LoginForm, puis optionnels P4.x)._
 
 ---
 
@@ -415,6 +466,7 @@ Deux chantiers groupes. Lint passe clean (0 erreurs), 1001/1001 tests toujours v
 ### [2026-05-10] P2.3 — Migration `apps/web` legacy `.eslintrc.json` vers flat config
 
 Fichiers:
+
 - `apps/web/.eslintrc.json` (supprime)
 - `apps/web/eslint.config.js` (cree)
 - `apps/web/package.json` (script `lint`: `next lint` -> `eslint .`)
@@ -423,10 +475,12 @@ Fichiers:
 #### Modification
 
 Avant :
+
 - `apps/web/.eslintrc.json` : format legacy `{ extends: ["next/core-web-vitals", "next/typescript"], ... }`. Coexistence mal definie avec le `eslint.config.js` a la racine. ESLint 9 preferait le flat mais `next lint` dans le script package.json utilisait l'ancien format.
 - Script `"lint": "next lint"` : `next lint` a ete supprime en Next.js 16, le script ne marchait plus.
 
 Apres :
+
 - `apps/web/eslint.config.js` en flat config. Base = `eslint-config-next@^16.2.6` (expose maintenant `Linter.Config[]`), puis un bloc local pour les regles house Athlya (scope `**/*.ts` / `**/*.tsx` pour que le plugin `@typescript-eslint` de `next/typescript` soit dans le scope), puis un bloc import/order global, puis `eslint-config-prettier` en dernier.
 - `parserOptions.projectService: true` + `tsconfigRootDir: import.meta.dirname` pour les rules typed-linting (`no-misused-promises` avec `checksVoidReturn.attributes: false`).
 - Script `"lint": "eslint ."` : utilise directement ESLint CLI.
@@ -435,6 +489,7 @@ Apres :
 Architecture notable : `@athlya/eslint-config/react` et `eslint-config-next` declarent tous deux les plugins `import`, `react`, `react-hooks`. Flat config interdit la redeclaration, donc on utilise **uniquement** Next comme base pour cette app. Les autres packages du monorepo gardent la base Athlya partagee.
 
 Regles downgraded a `warn` (pas `error`) :
+
 - `@typescript-eslint/no-misused-promises` — conflit faux positif avec `onSubmit={async handler}`.
 - `react-hooks/refs`, `react-hooks/set-state-in-effect` — react-hooks v7 stricter.
 
@@ -443,11 +498,13 @@ Exclusions au niveau `ignores` : `next.config.ts`, `vitest.config.ts`, `e2e/**`,
 Resultat final : `pnpm --filter @athlya/web lint` retourne exit 0 avec 12 warnings (aucune erreur). Tous les tests unitaires passent toujours (79/79 web, 1001 total).
 
 #### Pourquoi
+
 - modernisation / coherence : ESLint 9 est flat-config-first. `next lint` ayant ete supprime en Next 16, le script ne marchait plus. La migration consolide le monorepo sur un seul format.
 - separation claire : Next's base inclut deja toute la stack React + TypeScript + Next rules et jsx-a11y (important pour Req 27.1 WCAG). On ajoute seulement les regles Athlya specifiques en layers scopes.
 - automation : `--fix` a permis de nettoyer 103 import/order warnings sans effort manuel, et les 12 restants sont des vraies alertes qui meritent un refactor dedie.
 
 #### Source
+
 - ESLint 9 flat config : https://eslint.org/docs/latest/use/configure/configuration-files
 - eslint-config-next 16 flat config : https://nextjs.org/docs/app/api-reference/config/eslint
 - next lint depreciation : https://nextjs.org/docs/messages/migrate-to-eslint-cli
@@ -457,6 +514,7 @@ Resultat final : `pnpm --filter @athlya/web lint` retourne exit 0 avec 12 warnin
 ### [2026-05-10] P3.4 — Commentaire `LoginForm.tsx` : `fetch` direct versus `ApiClient`
 
 Fichier:
+
 - `apps/web/src/app/login/LoginForm.tsx`
 
 #### Modification
@@ -464,6 +522,7 @@ Fichier:
 Avant : le JSDoc d'entete disait seulement "Mirrors `RegisterForm.tsx`", sans expliquer pourquoi le form appelle `fetch('/api/auth/login')` directement alors qu'un `ApiClient` existe dans `lib/api/client.ts`.
 
 Apres : JSDoc etendu avec une section "Why a direct `fetch` rather than the shared `ApiClient`?" qui explique :
+
 - L'ApiClient attache le token en memoire et gere 401 -> refresh -> retry.
 - Login est le flow qui PRODUIT le token, donc il n'a rien a attacher / rafraichir.
 - Le handler cote route handler set le refresh cookie et retourne `{ accessToken }`, que le component hand off a `setAccessToken()` avant de naviguer.
@@ -473,17 +532,18 @@ Apres : JSDoc etendu avec une section "Why a direct `fetch` rather than the shar
 Aucun changement de code — juste une clarification documentaire pour empecher un lecteur futur de "refactor" en faisant passer login par ApiClient (ce qui casserait la boucle d'initialisation du token).
 
 #### Pourquoi
+
 - lisibilite : l'asymetrie entre LoginForm et le reste des forms authentifies etait legitime mais non-documentee. Un reviewer ou un contributeur futur pourrait essayer de l'uniformiser, au detriment de la correctness.
 
 #### Source
+
 - N/A — commentaire purement explicatif sur une decision architecturale locale.
 
 ---
 
-*Vague 3 : 2 chantiers livres (P2.3 + P3.4), migration flat config livree, 1 script package.json aligne, 15 fichiers auto-reformates, 0 regression.*
-*Total cumule Vagues 1 + 2 + 3 : 12 chantiers, 1001/1001 tests verts, lint web exit 0.*
-*Restantes (optionnelles P4.x) : property tests auth JWT, `@hono/zod-validator` adoption, auto-generate tokens.css, Cache Components PPR, Hyperdrive binding, upgrade fast-check 3 -> 4 / jose 5 -> 6.*
-
+_Vague 3 : 2 chantiers livres (P2.3 + P3.4), migration flat config livree, 1 script package.json aligne, 15 fichiers auto-reformates, 0 regression._
+_Total cumule Vagues 1 + 2 + 3 : 12 chantiers, 1001/1001 tests verts, lint web exit 0._
+_Restantes (optionnelles P4.x) : property tests auth JWT, `@hono/zod-validator` adoption, auto-generate tokens.css, Cache Components PPR, Hyperdrive binding, upgrade fast-check 3 -> 4 / jose 5 -> 6._
 
 ---
 
@@ -494,16 +554,18 @@ Six chantiers groupes. Lint passe avec 0 warnings, 1001/1001 tests toujours vert
 ### [2026-05-10] Fix-1 — Anonymous default exports (`eslint.config.js`, `postcss.config.mjs`)
 
 Avant :
+
 ```js
 export default {
-    plugins: { '@tailwindcss/postcss': {} },
+  plugins: { '@tailwindcss/postcss': {} },
 };
 ```
 
 Apres :
+
 ```js
 const config = {
-    plugins: { '@tailwindcss/postcss': {} },
+  plugins: { '@tailwindcss/postcss': {} },
 };
 export default config;
 ```
@@ -513,12 +575,14 @@ Meme pattern pour `apps/web/eslint.config.js`. Le rule `import/no-anonymous-defa
 ### [2026-05-10] Fix-2 — `no-misused-promises` sur 4 formulaires async
 
 Fichiers :
+
 - `apps/web/src/app/register/RegisterForm.tsx`
 - `apps/web/src/app/login/LoginForm.tsx`
 - `apps/web/src/app/me/ProfileForm.tsx`
 - `apps/web/src/app/me/ConsentsForm.tsx`
 
 Avant :
+
 ```tsx
 const onSubmit = useCallback<FormEventHandler<HTMLFormElement>>(
     async (event) => { ... },
@@ -528,6 +592,7 @@ return <form onSubmit={onSubmit}>...</form>;
 ```
 
 Apres :
+
 ```tsx
 const onSubmit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => { ... },
@@ -541,6 +606,7 @@ L'import de `FormEventHandler` est retire des 4 fichiers. Le JSX wrapper renvoie
 ### [2026-05-10] Fix-3 — `react-hooks/refs` + `react-hooks/set-state-in-effect` dans `ProfileSection.tsx`
 
 Avant :
+
 ```tsx
 const clientRef = useRef<ApiClient | null>(null);
 if (clientRef.current === null) {
@@ -555,6 +621,7 @@ useEffect(() => {
 ```
 
 Apres :
+
 ```tsx
 const client = useMemo<ApiClient>(
     () => clientProp ?? createApiClient({...}),
@@ -590,15 +657,18 @@ Typecheck vert.
 ### [2026-05-10] P4.4 — Property tests pour `@athlya/auth` (JWT round-trip + refresh unforgeability)
 
 Fichier cree :
+
 - `packages/auth/tests/properties/jwt.property.test.ts`
 
 Deux proprietes :
+
 - **P-JWT.1** : `verify(signAccess(claims, keyA), jwksA) = claims` pour tout `(sub, studio, role)` UUID + role + TTL ∈ [60, 3600] s. Valide que signer et verifier s'accordent sur la structure du header (`alg=RS256`, `kid`) et du payload, et que `exp - iat === ttlSec`.
 - **P-JWT.2** : un refresh token signe avec `keyA.kid` ne verifie jamais contre un JWKS qui ne liste que `keyB.kid`, peu importe `(sub, sid)`. Pinne la propriete cryptographique "un token d'un deploiement compromis ne peut pas passer sur un autre deploiement".
 
 50 runs par propriete, seed fixe `0x71c0de`, 2 RSA 2048 keypairs generes une fois en `beforeAll`. Suite totale `@athlya/auth` passe de 85 a **87 tests**.
 
 #### Pourquoi
+
 - coverage P6 etendu : le QR token a deja son property test (non-forge/non-replay). Le JWT generique (`signAccess`/`signRefresh`/`verify`) lui n'avait que des unit tests points. Les proprietes pinnees ici couvrent toutes les combinaisons claim/TTL qu'un attacker peut tenter.
 
 ---
@@ -606,9 +676,11 @@ Deux proprietes :
 ### [2026-05-10] P4.3 — Auto-generation `tokens.css` depuis `tokens.ts`
 
 Fichier cree :
+
 - `packages/shared/scripts/generate-tokens-css.ts`
 
 Fichier modifie :
+
 - `packages/shared/package.json` — nouveau script `build:tokens-css` + `check:tokens-css`
 - `apps/web/src/styles/tokens.css` — regenere (contenu fonctionnellement identique, stylistiquement normalise : 4-space indent, case-insensitive hex, fonts sans quotes)
 
@@ -617,10 +689,12 @@ Approche : script single-file autonome qui importe `colors`, `spacing`, `typogra
 Le script ajoute un header "GENERATED FILE — do not edit by hand" en tete du fichier CSS pour prevenir les edits manuels. Un `check:tokens-css` script re-genere et diff contre git — CI peut l'utiliser pour bloquer les PR qui modifient tokens.css a la main sans toucher a tokens.ts.
 
 Usage :
+
 - `pnpm --filter @athlya/shared run build:tokens-css` → regenere
 - `pnpm --filter @athlya/shared run check:tokens-css` → CI guard
 
 #### Pourquoi
+
 - single source of truth : avant, `tokens.ts` et `tokens.css` etaient maintenus a la main. Tout changement dans TS obligeait a retaper en CSS, avec risque de drift silencieux (valeurs differentes, typos, fonts manquantes). Le generateur garantit que les deux fichiers ne peuvent plus deriver.
 - multi-app ready : studio et admin apps reutiliseront le meme script en changeant la variable d'env `OUT`.
 
@@ -629,6 +703,7 @@ Usage :
 ### [2026-05-10] P4.5 — Cache Components / PPR : decision differee (commentaire dans `next.config.ts`)
 
 Fichier modifie :
+
 - `apps/web/next.config.ts` — commentaire detaille dans le body de `nextConfig`
 
 Decision : NE PAS activer `experimental.cacheComponents: true` maintenant.
@@ -636,6 +711,7 @@ Decision : NE PAS activer `experimental.cacheComponents: true` maintenant.
 Raison : chaque page du web app appelle `getLocale()` qui appelle `headers()` (async dynamic API) + consomme le nonce CSP per-request via `src/proxy.ts`. Marquer une page cacheable alors qu'elle lit ces APIs par-request est un contract violation qui trigger des warnings dev et du nondeterminisme prod.
 
 Opting in safely requires :
+
 1. Refactoriser le shell statique dans un segment cacheable (zero call a `headers()` / `cookies()` / randomness).
 2. Isoler les blocs nonce-dependent derriere un `<Suspense>` boundary.
 3. Re-lire le migration guide Cache Components pour la minor Next.js courante.
@@ -647,6 +723,7 @@ C'est un chantier de son propre droit, pas une modif scope "cleanup existants". 
 ### [2026-05-10] P4.1 — `@hono/zod-validator` : decision de NE PAS migrer
 
 Evaluation :
+
 - 21 call sites `zValidator(...)` dans 7 fichiers routes + 4 tests + 2 helpers
 - Notre `validator.ts` custom lance `ValidationError` et delegue au mapper Problem Details central (`registerErrorHandlers`) — comportement qui garantit l'envelope RFC 9457 uniforme (Req 14.6).
 - `@hono/zod-validator` renvoie une 422 directement, ce qui brise la chaine d'error handling centralise.
@@ -666,10 +743,9 @@ Conclusion : garde `packages/api/src/middleware/validator.ts` custom. Pas de cha
 
 ---
 
-*Vague 4 : 6 sous-chantiers livres (5 warnings categories + 1 cleanup). `pnpm --filter @athlya/web lint` exit 0 avec 0 warnings.*
-*Optionnels P4 executes : P4.4 (property tests auth), P4.3 (auto-gen tokens.css), P4.5 (deferred + commented), P4.1 (evaluated + skipped + documented). P4.2/6/7/8 skipped avec raisons.*
-*Total cumule Vagues 1-4 + P4 : 14 chantiers effectifs + 4 decisions documentees. 1003/1003 tests verts (+2 JWT property). Lint web exit 0.*
-
+_Vague 4 : 6 sous-chantiers livres (5 warnings categories + 1 cleanup). `pnpm --filter @athlya/web lint` exit 0 avec 0 warnings._
+_Optionnels P4 executes : P4.4 (property tests auth), P4.3 (auto-gen tokens.css), P4.5 (deferred + commented), P4.1 (evaluated + skipped + documented). P4.2/6/7/8 skipped avec raisons._
+_Total cumule Vagues 1-4 + P4 : 14 chantiers effectifs + 4 decisions documentees. 1003/1003 tests verts (+2 JWT property). Lint web exit 0._
 
 ---
 
@@ -682,6 +758,7 @@ Trois problemes distincts identifies au premier `pnpm --filter @athlya/web dev` 
 Cause racine : Turbopack (Next 16) avec `transpilePackages: ['@athlya/shared']` ne re-map pas les imports internes `./foo.js` vers `./foo.ts` quand le paquet est type "module" et expose ses sources TypeScript directement via `exports["./schemas/api"]["default"]: "./src/schemas/api.ts"`. `tsc` le fait (bundler resolution), pas Turbopack.
 
 Fichier modifie : `packages/shared/package.json` — ajout d'une condition `"import"` pointant vers `./dist/xxx.js` sur chaque entree de `exports`. Exemple :
+
 ```json
 "./schemas/api": {
     "types": "./src/schemas/api.ts",
@@ -695,6 +772,7 @@ Les consommateurs ESM (Next / Turbopack / Node) resolvent la condition `import` 
 Prerequis : `pnpm --filter @athlya/shared build` doit etre run au moins une fois pour que `dist/` existe. Le `turbo.json` pipeline `build` s'en charge en CI.
 
 Verification :
+
 - `pnpm --filter @athlya/web build` → compile 13 routes OK
 - `pnpm --filter @athlya/web dev` + `curl /register` → 200 (au lieu de 500)
 - `pnpm -r test` → 1003/1003 tests toujours verts
@@ -704,6 +782,7 @@ Verification :
 Cause : React / Next.js 16 en dev mode utilisent `eval()` pour reconstruire les stack traces source-map. Notre CSP strict interdit `'unsafe-eval'`. React refuse de dem et log un warning console. Production builds ne font JAMAIS de `eval()` ; le warning n'affecte que `next dev`.
 
 Fichiers modifies :
+
 - `apps/web/src/lib/csp.ts` — nouveau champ optionnel `CspOptions.dev?: boolean`. Quand `dev: true`, la directive `script-src` gagne `'unsafe-eval'`. Sinon (defaut production), la policy reste strict.
 - `apps/web/src/proxy.ts` — passe `dev: process.env.NODE_ENV !== 'production'` a `generateCsp`. Runtime flag (pas build-time constant) donc `pnpm start` contre un build prod emet toujours le strict policy meme sur localhost.
 - `apps/web/src/lib/csp.test.ts` — +3 tests : dev false/omitted/true, verification que `'unsafe-eval'` n'apparait que dans `script-src` (jamais dans `style-src`).
@@ -711,6 +790,7 @@ Fichiers modifies :
 Verification : browser console passe de "eval() is not supported" a propre en dev.
 
 #### Pourquoi
+
 - securite : garder la production strict (CSP Req 25.3 inchangee) mais permettre au dev workflow React de fonctionner. Le `runtime` check empeche tout glissement accidentel.
 - testabilite : 3 tests unitaires pinent le comportement pour prevenir un futur refactor de laisser passer `'unsafe-eval'` en prod.
 
@@ -719,18 +799,19 @@ Verification : browser console passe de "eval() is not supported" a propre en de
 Cause : LanguageTool / Grammarly / autres extensions navigateur injectent `suppresshydrationwarning="true"` + `data-lt-installed="true"` sur `<html>` avant que React ne demarre. React compare HTML client (avec les attributs extension) a HTML SSR (sans) et warne "hydration mismatch". Le message l'explique textuellement.
 
 Fichier modifie :
+
 - `apps/web/src/app/layout.tsx` — ajout de l'attribut `suppressHydrationWarning` sur `<html lang={locale}>`. React documentation : "use this ONLY on the top-level element if you expect third-party code to mutate it before hydration". C'est exactement le cas des browser extensions.
 
 `suppressHydrationWarning` ne supprime que les warnings d'attributs du niveau ou il est applique (pas descendant). Les vrais mismatchs dans l'app tree continuent de surfacer normalement.
 
 #### Pourquoi
+
 - UX / dev signal quality : sans le fix, chaque user avec LanguageTool / Grammarly verrait un warning React en dev. Pollution pure du signal utile.
 
 ---
 
-*Vague 5 : 1 bug reel fixe (module not found /register) + 2 warnings cosmetiques nettoyes. `pnpm --filter @athlya/web build` + `dev` OK. 1003/1003 tests → **1006/1006** verts (+3 CSP dev).*
-*Lint web exit 0 avec 0 warnings.*
-
+_Vague 5 : 1 bug reel fixe (module not found /register) + 2 warnings cosmetiques nettoyes. `pnpm --filter @athlya/web build` + `dev` OK. 1003/1003 tests → **1006/1006** verts (+3 CSP dev)._
+_Lint web exit 0 avec 0 warnings._
 
 ---
 
@@ -741,6 +822,7 @@ Apres la Vague 5 le hydration mismatch persistait — mais pas sur `<html>` (qui
 ### Diagnostic
 
 Next 16 a un comportement automatique : quand il detecte un header CSP avec nonce en dev, il ajoute **lui-meme** le nonce aux inline styles/scripts cote client apres hydration. Mon `<style nonce={nonce}>` manuel lisait `headers().get('x-nonce') ?? ''` cote server — la valeur correcte — mais en dev il y a des cas ou le proxy n'a pas encore ecrit le header quand layout.tsx render. Resultat :
+
 - Serveur SSR : `nonce=""`
 - Client apres Next runtime injection : `nonce="<real value>"`
 
@@ -753,6 +835,7 @@ Le `<style>` inline **dupliquait** les variables `--athlya-brand-primary` / `--a
 ### Fix
 
 Fichier modifie :
+
 - `apps/web/src/app/layout.tsx` — suppression complete du `<style>` inline, de `defaultBrandCss()`, de `DEFAULT_BRAND_PRIMARY` / `DEFAULT_BRAND_ON_PRIMARY`, et des imports `tokens` + `headers`. Le fichier perd 35 lignes, gagne un JSDoc explicatif qui documente pourquoi le `<style>` etait la et ou le readd quand tenant resolver (Task 15.1) le demandera.
 
 Le layout ne consomme plus `next/headers` du tout ; tokens.css est la seule source des defaults brand.
@@ -765,6 +848,7 @@ Le layout ne consomme plus `next/headers` du tout ; tokens.css est la seule sour
 - Browser console apres reload : plus de hydration mismatch sur `<style>`
 
 ### Pourquoi
+
 - correctness : elimine le race condition proxy → layout sur le nonce en dev.
 - DRY : tokens.css est deja la source of truth des CSS vars ; pas besoin de re-emettre dans le HTML.
 - simplicite : le layout redevient un shell pur (html + body + providers) sans logique conditionnelle header-dependent.
@@ -775,8 +859,7 @@ Pendant la meme session VS Code signalait des erreurs fantomes `Cannot find modu
 
 ---
 
-*Vague 5b : 1 fix cleanup du layout. Journal a jour. Total cumule Vagues 1-5b : 16 chantiers, 1006 tests verts (incluant 82 web), lint + typecheck verts, dev server sans warning bloquant.*
-
+_Vague 5b : 1 fix cleanup du layout. Journal a jour. Total cumule Vagues 1-5b : 16 chantiers, 1006 tests verts (incluant 82 web), lint + typecheck verts, dev server sans warning bloquant._
 
 ---
 
@@ -803,12 +886,12 @@ Setup complet du stack Niveau 2 documente en `docs/modifications/modifications.m
 
 ### Infrastructure provisionnee
 
-| Service | Provider | Endpoint | Note |
-|---|---|---|---|
-| PostgreSQL 17 | Neon (`eu-central-1`) | `ep-falling-hall-alcs32n9-pooler.c-3.eu-central-1.aws.neon.tech` | Free tier 0.5 GB |
-| Redis | Upstash (`eu`) | `touched-tahr-120817.upstash.io` | Free tier 10k cmd/jour |
-| Turnstile | Cloudflare | `0x4AAAAAADMvm1kHYBnhzDkU` (site key) | Live, pas le shortcut dev |
-| JWT Keys | Generees localement | `dev-mp07ggd0` kid | RSA 2048, auto-re-generable |
+| Service       | Provider              | Endpoint                                                         | Note                        |
+| ------------- | --------------------- | ---------------------------------------------------------------- | --------------------------- |
+| PostgreSQL 17 | Neon (`eu-central-1`) | `ep-falling-hall-alcs32n9-pooler.c-3.eu-central-1.aws.neon.tech` | Free tier 0.5 GB            |
+| Redis         | Upstash (`eu`)        | `touched-tahr-120817.upstash.io`                                 | Free tier 10k cmd/jour      |
+| Turnstile     | Cloudflare            | `0x4AAAAAADMvm1kHYBnhzDkU` (site key)                            | Live, pas le shortcut dev   |
+| JWT Keys      | Generees localement   | `dev-mp07ggd0` kid                                               | RSA 2048, auto-re-generable |
 
 ### Migrations DB appliquees
 
@@ -834,6 +917,7 @@ Setup complet du stack Niveau 2 documente en `docs/modifications/modifications.m
 - Les endpoints `/v1/*` auxquels le middleware auth + validation + rate-limit + turnstile s'applique correctement MAIS dont le handler final throw `not yet implemented` → Problem Details 500.
 
 C'est suffisant pour tester :
+
 - UI web (rendu, CSS, i18n, CSP)
 - Proxy Next.js (`/api/auth/*`) qui forward vers l'API locale
 - Policy chain (le 500 final est attendu, le chemin jusqu'au handler est valide)
@@ -845,11 +929,13 @@ Pour tester le flow complet, il faut livrer l'adapter persistence Drizzle pour a
 Deux terminaux :
 
 **Terminal 1 — API :**
+
 ```
 pnpm --filter @athlya/api dev
 ```
 
 **Terminal 2 — Web :**
+
 ```
 pnpm --filter @athlya/web dev
 ```
@@ -863,16 +949,17 @@ Browser : http://localhost:3000
 ### Regeneration des cles JWT
 
 Si suspicion de leak :
+
 ```
 node scripts/generate-jwt-keypair.mjs
 ```
+
 Puis copier le nouveau `JWT_KID`, `JWT_PRIVATE_KEY_PEM`, `JWT_PUBLIC_KEY_PEM` depuis la sortie du script dans `packages/api/.dev.vars`, et copier `scripts/dev-secrets/jwks.json` (compact) dans la var `JWKS_JSON` du meme fichier.
 
 ---
 
-*Niveau 2 operationnel : infra provisionnee + migrations appliquees + API boot OK + web connecte.*
-*Gap identifie : adapter persistence Drizzle Epic 3 absent (= les routes /v1/auth/* retournent 500). Prochain chantier pour un full-flow test.*
-
+_Niveau 2 operationnel : infra provisionnee + migrations appliquees + API boot OK + web connecte._
+_Gap identifie : adapter persistence Drizzle Epic 3 absent (= les routes /v1/auth/_ retournent 500). Prochain chantier pour un full-flow test.\*
 
 ---
 
@@ -926,6 +1013,7 @@ pnpm --filter @athlya/api dev
 ```
 
 Puis dans le browser :
+
 - `http://localhost:3000/register`
 - Remplir : email, mot de passe 8+ chars, nom, studio slug `athlya-demo`, consents
 - Le widget Turnstile va apparaitre (site key live configuree)
@@ -940,8 +1028,7 @@ Le journal grossit mais reste lisible. Si tu veux, je peux le decouper en un sou
 
 ---
 
-*Adapter Epic 3 livre. Full stack Niveau 2 pret pour tester le register / login / refresh flow cote browser.*
-
+_Adapter Epic 3 livre. Full stack Niveau 2 pret pour tester le register / login / refresh flow cote browser._
 
 ---
 
@@ -952,17 +1039,20 @@ Un seul chantier, impact critique. 382/382 tests API verts (zero regression). De
 ### [2026-05-10] V6.1 — Retrait des caches module-scope sur les clients DB/Redis
 
 Fichiers:
+
 - `packages/api/src/adapters/auth-deps.ts`
 
 #### Modification
 
 Avant:
+
 - `const dbCache = new Map<string, AthlyaDb>();` en module-scope, memoisait le client Drizzle par `connectionString`
 - `const redisCache = new Map<string, Redis>();` meme strategie pour Upstash
 - `const serviceCache = new WeakMap<AthlyaBindings, AuthServiceState>();` memoisait l'etat complet par reference `env`
 - `getAuthState(env)` essayait d'abord le cache, construisait une fois, puis reutilisait a travers requetes
 
 Apres:
+
 - Un seul cache conserve : `jwtCache = new Map<string, JwtState>()` keye sur `JWT_KID` — safe car `CryptoKey` n'est pas un I/O object sous Workers
 - `makeDb(connectionString)` construit un client Drizzle frais a chaque appel (avec `maxConnections: 1`, `idleTimeoutSec: 5`)
 - `makeRedis(url, token)` reconstruit le client Upstash a chaque appel (cheap — juste une closure sur url+token)
@@ -983,6 +1073,7 @@ Le driver `postgres-js` utilise en interne une socket TCP (via `node:net` / `nod
 Symptome observe en prod dev : le 1er login reussit (1772 ms — premier build du cache), tous les suivants echouent avec `500 Internal Server Error` + cette exception dans `errorCause`. Le fix `maxConnections: 1` + `idleTimeoutSec: 10` + retry transient (deja en place via `withConnectionRetry`) ne resout PAS ce probleme : la socket n'est pas "morte", elle est simplement **inaccessible** depuis un autre request context.
 
 Tradeoff accepte :
+
 - Cout : +50-100 ms par requete (TLS handshake + auth Postgres). Acceptable en dev local.
 - La solution production-correcte (future slice) est de migrer de `postgres-js` vers `@neondatabase/serverless` — driver HTTP stateless concu pour Workers.
 
@@ -994,7 +1085,6 @@ Cache JWT conserve car `CryptoKey` objects (produits par `crypto.subtle.importKe
 - [Neon + Cloudflare Workers (driver HTTP)](https://neon.tech/docs/serverless/serverless-driver)
 - `packages/api/src/adapters/auth-user-repo-drizzle.ts` — le helper `withConnectionRetry` reste utile pour Neon free-tier qui suspend le compute apres 5 min (SQLSTATE 57P01/02/03, `ECONNRESET`, etc.), cause orthogonale
 
-
 ---
 
 ## [2026-05-10] Vague 7 — UX auth : Turnstile reset + AuthError mapping + diagnostics DB
@@ -1004,6 +1094,7 @@ Trois chantiers groupes. 382/382 tests API + 82/82 tests web verts, zero regress
 ### [2026-05-10] V7.1 — Reset du widget Turnstile apres soumission echec
 
 Fichiers:
+
 - `apps/web/src/components/TurnstileWidget.tsx`
 - `apps/web/src/app/login/LoginForm.tsx`
 - `apps/web/src/app/register/RegisterForm.tsx`
@@ -1011,10 +1102,12 @@ Fichiers:
 #### Modification
 
 Avant:
+
 - `TurnstileWidget` ne remontait rien en dehors de l'event `onToken` ; aucun moyen pour le form parent de forcer un re-challenge apres un echec serveur.
 - Quand le POST login/register echouait (403 turnstile, 401 invalid_creds, 422 password_breached, etc.), le form gardait le token Turnstile deja consomme en state. Le retry envoyait le meme token, Cloudflare repondait `timeout-or-duplicate` → 403 pour un mauvais motif.
 
 Apres:
+
 - `TurnstileWidget` expose maintenant un handle imperatif `TurnstileWidgetHandle { reset(): void }` via `useImperativeHandle` + la nouvelle prop `ref: Ref<TurnstileWidgetHandle>`.
 - Ajout des callbacks `error-callback` et `expired-callback` sur `turnstile.render()` : les deux cleanent le token side React (`onToken('')`) pour garder l'etat du form coherent avec celui du widget.
 - `LoginForm.tsx` et `RegisterForm.tsx` creent un `turnstileRef = useRef<TurnstileWidgetHandle>(null)` et appellent `turnstileRef.current?.reset()` dans deux branches :
@@ -1035,16 +1128,19 @@ Les tokens Turnstile de Cloudflare sont single-use cote siteverify. Une fois pre
 ### [2026-05-10] V7.2 — Branche `AuthError` dans problem-details (mapping 401/404/422/429)
 
 Fichier:
+
 - `packages/api/src/middleware/problem-details.ts`
 
 #### Modification
 
 Avant:
+
 - La table `instanceof` du middleware ne couvrait que `ValidationError` (422), `MissingAuthClaimsError` (401) et `TenantResourceNotFoundError` (404).
 - Un `throw new AuthError('invalid_credentials')` depuis `@athlya/auth/service` tombait dans le fallback → **500 Internal Server Error**. Idem pour `token_invalid`, `password_breached`, `rate_limited`, etc.
 - Consequence pratique : le login avec mauvais mdp retournait 500 + journal `errorName: "AuthError"`, brisant les contract tests et le retry client (qui ne sait pas differencier "retry this" de "fix credentials").
 
 Apres:
+
 - Nouvelles constantes de `type` URI : `AUTH_SEMANTIC_TYPE` (422 bucket), `RATE_LIMITED_TYPE` (429), `NOT_FOUND_TYPE` (404).
 - Nouvelle fonction `asAuthError(err): { code, details } | null` — **duck-typed** (match `name === 'AuthError'` + `code` in known set) pour eviter un import-type cycle sur `@athlya/auth`. On garde la dep en `import type { AuthErrorCode } from '@athlya/auth'` seulement.
 - Nouvelle fonction `authCodeToStatus(code)` — lookup pur qui mappe les 9 codes documentes dans `service.ts` vers `{ status, type, title }`:
@@ -1072,21 +1168,25 @@ Tests existants (`problem-details.test.ts`, `auth.test.ts`, `integration/gateway
 ### [2026-05-10] V7.3 — Scripts diagnostic `check-password` + `reset-password`
 
 Fichiers crees:
+
 - `packages/db/scripts/check-password.mjs`
 - `packages/db/scripts/reset-password.mjs`
 
 #### Modification
 
 Avant:
+
 - Aucun moyen local de trancher entre "user s'est trompe de mot de passe" et "bug bcrypt/service".
 - Symptome du jour : Alice (user seede via register web) refusait `Alice-Password-Test-1!` avec `invalid_credentials`. Sans visibilite sur le hash en DB, on ne savait pas si le bug etait cote serveur (hash mal genere) ou cote user (typo lors du register).
 
 Apres:
+
 - `check-password.mjs <email> <password>` — lit la row en read-only, affiche `{result: "match"|"mismatch"|"no user"|"soft-deleted"|"no password"}` + id + prefixe du hash.
 - `reset-password.mjs <email> <password>` — remplace le hash par un bcrypt cost 12 frais calcule localement. Valide la limite 72 bytes avant d'ecrire. Read-after-write via `RETURNING` pour confirmer la mise a jour.
 - Les deux utilisent `createRequire` pour resoudre `bcryptjs` depuis `packages/auth/node_modules` (meme lib que le service) plutot que d'ajouter la dep a `@athlya/db`.
 
 Diagnostic du jour pour Alice :
+
 - `check-password` → `mismatch` → le mot de passe memorise n'etait pas celui saisi lors du register.
 - `reset-password alice@athlya.test AlicePass-2026!` puis nouveau `check-password` → `match`. Debloque le scenario de test end-to-end.
 
@@ -1100,9 +1200,8 @@ Les scripts augmentent la surface de diagnostic locale sans toucher au code de p
 
 ---
 
-*Vague 7 : 3 chantiers livres (V7.1 + V7.2 + V7.3), 382 API + 82 web tests verts, zero regression.*
-*Total cumule Vagues 1-7 : 20 chantiers.*
-
+_Vague 7 : 3 chantiers livres (V7.1 + V7.2 + V7.3), 382 API + 82 web tests verts, zero regression._
+_Total cumule Vagues 1-7 : 20 chantiers._
 
 ---
 
@@ -1113,6 +1212,7 @@ Deux chantiers groupes. 382 API + 137 shared + 82 web tests verts, zero regressi
 ### [2026-05-10] V8.1 — Adapters Drizzle pour `@athlya/members`
 
 Fichiers crees:
+
 - `packages/api/src/adapters/db-retry.ts` — helper `withConnectionRetry` partage (extrait de `auth-user-repo-drizzle.ts`).
 - `packages/api/src/adapters/members-repo-drizzle.ts` — `MemberRepo` (getProfile, updateProfile, listByStudio).
 - `packages/api/src/adapters/members-consents-repo-drizzle.ts` — `ConsentsRepo` (findConsents, updateConsents).
@@ -1121,6 +1221,7 @@ Fichiers crees:
 - `packages/api/src/adapters/members-deps.ts` — factory `buildMembersDeps(env)`.
 
 Fichiers modifies:
+
 - `packages/api/src/adapters/auth-user-repo-drizzle.ts` — remplace le `withConnectionRetry` local par un import depuis `./db-retry.js`.
 - `packages/api/src/routes/index.ts` — wire `buildMembersDeps(env)` dans `buildDefaultDeps` derriere un guard `hasMembersSecrets`.
 - `packages/api/package.json` — ajout `"@athlya/members": "workspace:*"` dans dependencies.
@@ -1130,6 +1231,7 @@ Fichiers modifies:
 L'Epic 3 (auth) avait ete livre en Vague 6 mais chaque route `members` continuait de throw `'not yet implemented'` → proxy Next.js retournait `{ code: "upstream_unreachable", status: 502 }` sur `/me`. Sans cet adapter, aucun user ne peut consulter ni editer son profil.
 
 Design notes:
+
 - Meme posture I/O isolation que les adapters auth : **zero cache module-scope**. `buildMembersDeps(env)` reconstruit le Drizzle client a chaque appel via `makeDb(env.DB_URL)`. Eviter le bug "Cannot perform I/O on behalf of a different request" decouvert en Vague 6.
 - Pagination cursor-based : `listByStudio` encode `(createdAt, id)` en base64url, matche le partial index `users_studio_active_idx (studio_id) WHERE deleted_at IS NULL`. `limit+1` fetch pour detecter hasMore sans COUNT.
 - Dedup export : `findActiveByUser` utilise le partial index `export_jobs_user_active_idx ON (user_id, requested_at) WHERE status IN ('pending', 'running')`, O(1) meme sur un historique de plusieurs annees.
@@ -1137,6 +1239,7 @@ Design notes:
 - Event publisher : reprend exactement le pattern `auth-deps.ts` — Cloudflare Queues binding `EVENTS_QUEUE` + `publish(event, undefined, { queue })`. Best-effort : un echec publish ne remonte pas au user car la row `export_jobs` est deja persistee ; le drain worker (task 9.3) picker quand la queue sera back.
 
 #### Source
+
 - Contrat `MemberRepo` : `packages/members/src/service.ts`
 - Contrat `ConsentsRepo` + `AuditLogWriter` : `packages/members/src/consents.ts`
 - Contrat `ExportJobStore` + `EventPublisher` : `packages/members/src/export.ts`
@@ -1147,6 +1250,7 @@ Design notes:
 ### [2026-05-10] V8.2 — Landing auth-aware via `<HomeActions />`
 
 Fichiers:
+
 - `apps/web/src/app/HomeActions.tsx` (cree)
 - `apps/web/src/app/page.tsx` (refactore)
 - `packages/shared/src/i18n/fr.json`, `en.json` (3 cles ajoutees en parite)
@@ -1154,27 +1258,30 @@ Fichiers:
 #### Modification
 
 Avant:
+
 - `page.tsx` etait un pur Server Component avec un bloc de 2 boutons hardcodes Register/Login. Apres un login reussi, l'utilisateur arrivait sur `/` et voyait les memes CTAs qu'un visiteur anonyme, sans moyen d'acceder a `/me` ou `/classes` autrement qu'en tapant l'URL.
 
 Apres:
+
 - `page.tsx` reste Server (shell + locale server-side) mais delegue le bloc CTA a `<HomeActions />` — un Client Component qui lit `useAuth()`.
 - Signed-out : Register + Login (identique a avant).
 - Signed-in : "Voir les cours" → `/classes`, "Mon compte" → `/me`, "Se deconnecter" → `logout()` + `router.refresh()`.
 - Bundles i18n FR/EN etendus avec `web.home.{classes, me, logout}`. Parite valide par le test existant dans `@athlya/shared`.
 
 #### Pourquoi
+
 - UX : apres un login reussi, le premier ecran doit etre actionnable. Sans ca, l'utilisateur se retrouve avec un ecran qui semble exactement le meme que /register /login — aucun feedback que son login a abouti.
 - Separation shell/auth : garder la page Server pour le SSR + le CSP nonce, le client ne charge que le composant qui lit le token memoire.
 - Premier paint toujours "signed out" (le token est memory-only) → acceptable pour une landing ; les routes protegees (`/me`, `/classes`) font leur propre guard.
 
 #### Source
+
 - Next.js 16 Client Components under Server pages : https://nextjs.org/docs/app/getting-started/server-and-client-components
 
 ---
 
-*Vague 8 : 2 chantiers livres (V8.1 + V8.2), 601 tests total (382 API + 137 shared + 82 web), zero regression.*
-*Prochaine : adapters Epic 6 (Reservations + Classes) pour debloquer `/classes` + book/cancel.*
-
+_Vague 8 : 2 chantiers livres (V8.1 + V8.2), 601 tests total (382 API + 137 shared + 82 web), zero regression._
+_Prochaine : adapters Epic 6 (Reservations + Classes) pour debloquer `/classes` + book/cancel._
 
 ---
 
@@ -1185,23 +1292,28 @@ Quatre chantiers groupes. 382 API + 111 reservations + 601 total tests verts, ze
 ### [2026-05-10] V9.1 — Subpath exports `@athlya/reservations/{create,update}`
 
 Fichiers:
+
 - `packages/reservations/package.json` (2 nouveaux subpaths exports).
 - `packages/reservations/src/index.ts` (ajout `export * from './create.js'`).
 
 #### Modification
 
 Avant:
+
 - `package.json.exports` couvrait `state-machine`, `list`, `counter`, `checkin`, `cancel`, `book` mais pas `create` ni `update`. Les deux fichiers etaient bien compiles/tested cote package, mais impossible a importer depuis l'exterieur.
 - Consequence : un consumer externe (ex: `@athlya/api` pour wirer les adapters) recevait `Missing "./update" specifier in "@athlya/reservations" package` au moment du `vite dev` / `wrangler dev`.
 
 Apres:
+
 - Deux entrees supplementaires : `./create` et `./update`, pointant `types`/`default` vers les `.ts` bruts (memes conventions que les autres).
 - Barrel `index.ts` re-exporte `create.ts` (safe — pas de collision avec les autres modules). `update.ts` intentionnellement PAS ajoute au barrel : il redeclare un `ClassRepo` avec un shape different de celui de `create.ts` (chaque use case a son propre port narrow), donc les deux types ne peuvent pas cohabiter sous le meme name. Les consumers qui veulent le port `update` utilisent explicitement le subpath.
 
 #### Pourquoi
+
 - decoupage necessaire pour l'adapter layer : l'API doit wire trois ports distincts (list, create, update) vers le meme Drizzle client, mais ne peut pas importer deux `ClassRepo` sans collision. Subpath imports + barrel partiel = chaque consumer choisit son port.
 
 #### Source
+
 - Node.js `exports` subpath patterns : https://nodejs.org/api/packages.html#subpath-exports
 
 ---
@@ -1209,6 +1321,7 @@ Apres:
 ### [2026-05-10] V9.2 — Adapters Drizzle pour les ports `@athlya/reservations`
 
 Fichiers crees:
+
 - `packages/api/src/adapters/classes-repo-drizzle.ts` — 3 factory functions :
   - `createDrizzleListClassesRepo` → `ListClassesRepo.findInRange`
   - `createDrizzleCreateClassRepo` → `CreateClassRepo.createClass`
@@ -1217,12 +1330,14 @@ Fichiers crees:
 - `packages/api/src/adapters/reservations-deps.ts` — factory `buildClassesDeps(env)` + `buildReservationsDeps(env)`.
 
 #### Design notes
+
 - **Hot path `listClasses`** : Redis counter reader vient directement du helper deja livre `createRedisRemainingCounter(redis)` du package reservations. L'adapter wrapper fait juste du Promise.all en parallele dans le service (deja implemente cote `list.ts`).
 - **Optimistic lock update** : le UPDATE SQL fait `SET version = expectedVersion + 1 WHERE id = $1 AND version = $2 AND deleted_at IS NULL RETURNING *`. `null` row → le service sait que c'est un conflict 409. Req 6.7 respectee (bump atomique dans le meme statement).
 - **Duck-typing de `UpdateClassError`** : le router `ClassesDeps.updateClass` attend un `UpdateClassOutcome` discriminated union (`{ kind: 'updated' | 'conflict' | 'not_found' }`). On duck-type sur `err.name === 'UpdateClassError'` + `err.code` pour traduire le throw du service en ce shape.
 - **Zero cache module-scope** : meme posture que auth / members — `makeDb(env.DB_URL)` + `makeRedis(env.REDIS_URL, env.REDIS_TOKEN)` a chaque appel, pour l'isolation I/O Cloudflare Workers.
 
 #### Pourquoi
+
 - GET /classes bloque sur `not_implemented` sans ca → `/classes` cote web affiche "Upstream unreachable".
 - Les routes admin (`POST /v1/classes`, `PATCH /v1/classes/:id`) n'ont pas de consumer web pour l'instant, mais les livrer maintenant evite un aller-retour plus tard et le cost est marginal (meme Drizzle client, port create/update deja designes).
 
@@ -1231,14 +1346,17 @@ Fichiers crees:
 ### [2026-05-10] V9.3 — Wiring `buildClassesDeps` + `buildReservationsDeps` dans `buildDefaultDeps`
 
 Fichier:
+
 - `packages/api/src/routes/index.ts`
 
 #### Modification
 
 Avant:
+
 - Apres V8, `classes` et `reservations` stays completement sur `notImplemented(...)` stubs (alors que `auth` et `members` ont un chemin live).
 
 Apres:
+
 - Guard `hasReservationsSecrets = hasMembersSecrets && REDIS_URL !== ''` — car Classes/Reservations ont besoin a la fois de DB et de Redis (counter).
 - `classes = hasReservationsSecrets ? buildClassesDeps(env) : stubs`.
 - `reservations = hasReservationsSecrets ? buildReservationsDeps(env) : stubs`.
@@ -1249,13 +1367,13 @@ Apres:
 ### [2026-05-10] V9.4 — Deps `@athlya/reservations` cote `@athlya/api`
 
 Fichier:
+
 - `packages/api/package.json` — ajout `"@athlya/reservations": "workspace:*"` dans dependencies.
 
 ---
 
-*Vague 9 : 4 chantiers livres (V9.1 + V9.2 + V9.3 + V9.4), 382 API + 111 reservations tests verts, zero regression.*
-*Prochaine slice (non livree dans cette session) : adapters transactionnels `bookClass` + `cancelReservation` — necessite l'outbox Drizzle + SELECT FOR UPDATE + promotion waitlist + compensating Redis INCR/DECR. Volume similaire a V9.2 mais avec transaction management plus delicat.*
-
+_Vague 9 : 4 chantiers livres (V9.1 + V9.2 + V9.3 + V9.4), 382 API + 111 reservations tests verts, zero regression._
+_Prochaine slice (non livree dans cette session) : adapters transactionnels `bookClass` + `cancelReservation` — necessite l'outbox Drizzle + SELECT FOR UPDATE + promotion waitlist + compensating Redis INCR/DECR. Volume similaire a V9.2 mais avec transaction management plus delicat._
 
 ---
 
@@ -1267,7 +1385,7 @@ Trois chantiers groupes, impact minime sur la surface code.
 
 Nouveau script idempotent qui insere 3 classes demo (Yoga matinal, HIIT express, Pilates du soir) attachees au studio `athlya-demo`, avec startsAt respectivement +24h, +48h, +72h. Matche sur `(studio_id, title, starts_at)` pour eviter les doublons. Seed aussi les counters Redis `class:{id}:remaining` via Upstash REST API quand les secrets sont presents.
 
-Usage : `node packages/db/scripts/seed-classes.mjs` depuis le workspace root avec DATABASE_URL + UPSTASH_REDIS_REST_URL + _TOKEN dans l'env.
+Usage : `node packages/db/scripts/seed-classes.mjs` depuis le workspace root avec DATABASE_URL + UPSTASH_REDIS_REST_URL + \_TOKEN dans l'env.
 
 ### V10.2 — `.env.local.example` commente
 
@@ -1279,24 +1397,26 @@ Ajout `aria-busy={pending}` sur `<form>` dans `LoginForm.tsx` et `RegisterForm.t
 
 ---
 
-*Vague 10 : 3 micro-fixes livres, zero regression (pas de test modifies).*
-
+_Vague 10 : 3 micro-fixes livres, zero regression (pas de test modifies)._
 
 ---
 
 ## [2026-05-10] Vague 13 — Adapter transactionnel book/cancel (N2.5)
 
 Fichiers:
+
 - `packages/api/src/adapters/reservations-write-drizzle.ts` (nouveau, ~280 lignes).
 - `packages/api/src/adapters/reservations-deps.ts` (méthodes `bookClass` + `cancelReservation` remplacent les stubs).
 
 ### Modification
 
 Avant:
+
 - `buildReservationsDeps(env).bookClass` et `.cancelReservation` throwent `Error: reservations.{bookClass,cancelReservation}: transactional adapter not yet wired`.
 - `POST /v1/reservations` + `DELETE /v1/reservations/:reservationId` retournaient 500 avec mapping AuthError=none dans problem-details (fallback generic 500).
 
 Apres:
+
 - `createDrizzleBookingRepo(db)` implémente `BookingRepo` : lookup class pre-flight via `findClass`, transactions via `db.transaction(tx => fn(tx))`, insert reservation avec détection SQLSTATE 23505 → rethrow `UniqueViolationError`, insert outbox dans la même tx (commit-together Req 16.3), `countWaitlistAhead` via `COUNT(*) WHERE created_at < $`.
 - `createDrizzleCancelRepo(db)` implémente `CancelRepo` : `SELECT ... FOR UPDATE` sur reservation + class (via `.for('update')`), `UPDATE status='cancelled', cancelled_at=now()`, `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1` sur la waitlist pour la promotion FIFO (critical pour éviter deadlocks entre cancels concurrents).
 - `createBookingEventPublisher()` build les envelopes `reservation.created` et `reservation.waitlisted` avec UUID + timestamp frais.
@@ -1316,9 +1436,8 @@ Apres:
 
 ---
 
-*Vague 13 : 1 chantier livré (N2.5), 382/382 tests API verts, zero régression.*
-*Niveau 2 live wiring : 12/13 items ✅ (reste N2.12 neon-http + N2.13 R2 avatars).*
-
+_Vague 13 : 1 chantier livré (N2.5), 382/382 tests API verts, zero régression._
+_Niveau 2 live wiring : 12/13 items ✅ (reste N2.12 neon-http + N2.13 R2 avatars)._
 
 ---
 
@@ -1329,31 +1448,38 @@ Nouveau workspace `apps/studio` (Next.js 16 + React 19 + Tailwind 4). Auth-prote
 ### Fichiers créés (29)
 
 Config root + bootstrap (8) :
+
 - `apps/studio/package.json` — port dev 3001, scripts identiques web.
 - `apps/studio/{next.config.ts,tsconfig.json,eslint.config.js,postcss.config.mjs,next-env.d.ts,.gitignore,.env.local.example}`.
 
 `src/lib` (10) :
+
 - `proxy.ts` (Edge), `nonce.ts`, `csp.ts`, `env.ts`, `idempotency.ts`.
 - `i18n/{negotiate.ts, getLocale.ts, t.ts, LocaleContext.tsx}`.
 - `auth/{token-store.ts, cookies.ts, AuthContext.tsx}` — refresh cookie scopé `athlya.refresh.studio` (distinct du web pour cohabitation admin + member sessions).
 - `api/client.ts` — typed HTTP client.
 
 Composants (2) :
+
 - `components/LocaleSwitcher.tsx`, `components/RequireAdmin.tsx` (admin gate, redirect non-admin → `/forbidden`).
 
 Route handlers `/api/auth/*` (3) :
+
 - `app/api/auth/{login,logout,refresh}/route.ts` — proxies Next → `/v1/auth/*` upstream Hono.
 
 Pages app (10) :
+
 - `app/{layout,page,not-found,error,loading}.tsx` — shell racine.
 - `app/login/{page,LoginForm}.tsx` — form simple sans Turnstile widget (port en 12.B).
 - `app/dashboard/{layout,page}.tsx` — `<RequireAdmin>` gate + landing 4 cards.
 - `app/forbidden/{page,ForbiddenActions}.tsx` — landing role non-admin.
 
 Styling (2) :
+
 - `app/globals.css` + `styles/tokens.css` (snapshot identique au web — généré depuis `@athlya/shared/tokens.ts`).
 
 I18n (2 fichiers édités) :
+
 - `packages/shared/src/i18n/{fr,en}.json` — nouveau namespace `studio.*` (19 keys par locale, parité maintenue).
 
 ### Pourquoi
@@ -1376,8 +1502,7 @@ I18n (2 fichiers édités) :
 
 ---
 
-*Vague 14 : Slice 12.A livrée — 29 nouveaux fichiers + 2 i18n bundles édités. Restant Epic 12 : 12.B (classes CRUD), 12.C (members + branding), 12.D (billing).*
-
+_Vague 14 : Slice 12.A livrée — 29 nouveaux fichiers + 2 i18n bundles édités. Restant Epic 12 : 12.B (classes CRUD), 12.C (members + branding), 12.D (billing)._
 
 ---
 
@@ -1423,8 +1548,7 @@ I18n (2 fichiers édités) :
 
 ---
 
-*Vague 15 : Slice 12.B livrée — 5 nouveaux fichiers + i18n étendu (21×2 clés). Restant Epic 12 : 12.C (members + branding), 12.D (billing).*
-
+_Vague 15 : Slice 12.B livrée — 5 nouveaux fichiers + i18n étendu (21×2 clés). Restant Epic 12 : 12.C (members + branding), 12.D (billing)._
 
 ---
 
@@ -1458,8 +1582,7 @@ I18n (2 fichiers édités) :
 
 ---
 
-*Vague 16 : Slice 12.C livrée — 4 nouveaux fichiers + 16×2 clés i18n. Restant Epic 12 : 12.D (billing dashboard) + backlog `/v1/studios/me` API endpoint.*
-
+_Vague 16 : Slice 12.C livrée — 4 nouveaux fichiers + 16×2 clés i18n. Restant Epic 12 : 12.D (billing dashboard) + backlog `/v1/studios/me` API endpoint._
 
 ---
 
@@ -1468,11 +1591,13 @@ I18n (2 fichiers édités) :
 ### V17.1 — Studio Turnstile widget port
 
 Fichiers (3) :
+
 - `apps/studio/src/types/turnstile.d.ts` — global ambient declaration (mirror web).
 - `apps/studio/src/components/TurnstileWidget.tsx` — widget complet : single-use token, refresh-expired auto, callbacks error/expired/timeout, imperative `reset()` handle via `useImperativeHandle`.
 - `apps/studio/.env.local` — créé depuis l'example, `NEXT_PUBLIC_API_URL=http://127.0.0.1:8787` (résout le 502 upstream_unreachable), `NEXT_PUBLIC_TURNSTILE_SITE_KEY=0x4AAAAAADMvm1kHYBnhzDkU` (réutilise la site key web).
 
 LoginForm + login page modifiés :
+
 - Wire `<TurnstileWidget>` avec ref + consume-token-before-fetch (Vague 9 pattern).
 - Bouton submit `disabled` tant que `siteKey !== undefined && turnstileToken === ''`.
 - Reset après chaque échec serveur ou rôle non-admin.
@@ -1483,9 +1608,11 @@ Cause racine du 403 initial : LoginForm n'envoyait pas de header `cf-turnstile-t
 ### V17.2 — Slice 12.D Billing dashboard
 
 Fichier créé (1) :
+
 - `apps/studio/src/app/dashboard/billing/page.tsx` — placeholder Free/Pro plans avec preview du tarif, bouton "Souscrire (bientôt)" disabled, section invoices vide.
 
 I18n (12 clés × 2 locales) :
+
 - `studio.billing.{title, subtitle, comingSoon, checkout, checkoutComingSoon, plans.{free,pro}.{title,body}, invoices.{title,empty}}`.
 
 Backlog tracé : endpoint `/v1/billing/*` côté API gateway + branchement Stripe Checkout. Le package `@athlya/billing` (Epic 16) ship déjà la logique métier ; ne reste qu'à mounter un router Hono et wirer le bouton.
@@ -1493,6 +1620,7 @@ Backlog tracé : endpoint `/v1/billing/*` côté API gateway + branchement Strip
 ### V17.3 — Fix runtime `bookClass`
 
 Fichier (1) :
+
 - `packages/api/src/adapters/reservations-deps.ts` — adapter `RemainingCounter` (`decr`/`incr`) → `BookingCounter` (`decrRemaining`/`incrRemaining`) dans la branche `bookClass`. Le branch cancel faisait déjà le mapping (Vague 13), le branch book passait directement le counter brut → `TypeError: counter.decrRemaining is not a function` au runtime.
 
 ```ts
@@ -1516,8 +1644,7 @@ counter: {
 
 ---
 
-*Vague 17 : 12.B-bis Turnstile widget studio + 12.D Billing dashboard + fix `bookClass` counter adapter. Epic 12 désormais complet (12.A scaffolding + 12.B classes CRUD + 12.C members + branding + 12.D billing). Restant Epic 12 : endpoints API `/v1/studios/me` + `/v1/billing/*` (slices futures dédiées).*
-
+_Vague 17 : 12.B-bis Turnstile widget studio + 12.D Billing dashboard + fix `bookClass` counter adapter. Epic 12 désormais complet (12.A scaffolding + 12.B classes CRUD + 12.C members + branding + 12.D billing). Restant Epic 12 : endpoints API `/v1/studios/me` + `/v1/billing/_` (slices futures dédiées).\*
 
 ## [2026-05-14] Vague 18 — B1 Driver Neon HTTP + cache module-scope
 
@@ -1537,6 +1664,7 @@ Depuis Vague 6 le client Drizzle (`postgres-js`) est rebuild à chaque requête 
 ### V18.1 — Nouvelle factory `createDbHttp` dans `packages/db`
 
 Fichiers :
+
 - `packages/db/src/client.ts` — ajout `createDbHttp(connectionString): AthlyaDbHttp`, types `AthlyaDbHttp = NeonHttpDatabase<AthlyaSchema>` et `AthlyaDbAny = AthlyaDb | AthlyaDbHttp`.
 - `packages/db/src/index.ts` — re-export.
 
@@ -1545,6 +1673,7 @@ Fichiers :
 ### V18.2 — Cache module-scope dans les 3 deps factories
 
 Fichiers :
+
 - `packages/api/src/adapters/auth-deps.ts` — cache `dbHttpCache` + `redisCache` keyés sur `DB_URL` / `${REDIS_URL}::${REDIS_TOKEN}`. JWT keys cache préservé (déjà cacheable).
 - `packages/api/src/adapters/members-deps.ts` — cache `dbHttpCache`. Tous les chemins (`getProfile`, `updateProfile`, `updateConsents`, `enqueueExport`, `listMembersByStudio`) tirent du cache.
 - `packages/api/src/adapters/reservations-deps.ts` — **hybride** : `getOrCreateDbHttp` pour `listClasses`, `createClass`, `updateClass`, `listMyReservations` ; `makeWriteDb` (postgres-js, per-request) pour `bookClass` + `cancelReservation`.
@@ -1554,6 +1683,7 @@ Test seams exposés : `__resetAuthDepsCachesForTests`, `__resetMembersDepsCaches
 ### V18.3 — Élargissement signatures adapters reads + simple writes
 
 Les adapters Drizzle qui acceptaient `AthlyaDb` (postgres-js only) acceptent maintenant `AthlyaDbAny` (union postgres-js | HTTP) :
+
 - `auth-user-repo-drizzle.ts` (`createDrizzleUserRepo`)
 - `members-repo-drizzle.ts` (`createDrizzleMemberRepo`)
 - `members-consents-repo-drizzle.ts` (`createDrizzleConsentsRepo`)
@@ -1598,6 +1728,7 @@ Les commentaires « Drizzle client rebuilt per request » sont remplacés par un
 **Contrainte typesafe explicite.** `packages/db/src/client.ts` — la signature de `withTenant<T>(db: AthlyaDb, …)` reste typée sur `AthlyaDb` (postgres-js exclusivement). Une JSDoc « Driver constraint (Vague 18 — slice B1) » a été ajoutée au-dessus de `withTenant` pour rendre l'invariant explicite à la lecture : le driver HTTP `@neondatabase/serverless` ne supporte que `db.transaction([stmt1, stmt2, …])` (statement-array), pas la forme interactive `db.transaction(async tx => …)` requise pour les trois `SET LOCAL` suivis de `fn(tx)`. Le typecheck TS empêche déjà l'appel avec `AthlyaDbHttp` ; la JSDoc verrouille l'intention pour les futures slices (B2 introduira `withTenantHttp` quand le rôle prod `athlya_app` sera en place).
 
 **Vérification exhaustive du repo.** `grep_search 'withTenant\(' --include='packages/**/*.ts'` confirme zéro appel avec une variable HTTP-driver (variantes `dbHttp`, `*.dbHttp`). Tous les call-sites historiques continuent de passer `AthlyaDb` ou un mock typé compatible :
+
 - `packages/api/src/middleware/tenant.ts` ligne 268 — `withTenant(db, rawClaims as TenantClaims, fn)` où `db: AthlyaDb` vient de `getCachedDb()` typé `AthlyaDb`.
 - `packages/db/tests/properties/rls.property.test.ts` ligne 307 — `db: AthlyaDb` issu de testcontainers.
 - `packages/db/tests/client.test.ts` — fakes typés `AthlyaDb` via `makeFakeDb()`.
@@ -1610,11 +1741,13 @@ Les commentaires « Drizzle client rebuilt per request » sont remplacés par un
 **Nouveau fichier** : `packages/api/src/__tests__/integration/db-http-cache-parallel.test.ts` (5 tests, ~190 lignes).
 
 **Approche** : preuve formelle que le cache module-scope élimine le rebuild client. La sub-task B1.5 demandait initialement un test « 100 requêtes parallèles sans I/O error » contre un worker live. La même invariant se prouve déterministiquement via :
+
 1. Mock `@athlya/db/client` interceptant `createDbHttp` avec un compteur `vi.fn()`.
 2. Test seam `__primeDbHttpForTests(url)` ajouté à chacun des trois deps modules (`auth-deps.ts`, `members-deps.ts`, `reservations-deps.ts`) — exercice direct du `getOrCreateDbHttp` partagé par tous les chemins de production.
 3. 100 appels `Promise.all(…)` parallèles → assert `mock.calls.length === 1` et identité référentielle (`===`) sur les 100 handles retournés.
 
 **Tests livrés** :
+
 1. `auth-deps reuses ONE Drizzle handle across 100 parallel calls` (5ms).
 2. `members-deps reuses ONE Drizzle handle across 100 parallel calls` (2ms).
 3. `reservations-deps reuses ONE Drizzle handle across 100 parallel calls (read path)` (1ms).
@@ -1626,6 +1759,7 @@ Les commentaires « Drizzle client rebuilt per request » sont remplacés par un
 #### V18.7 — B1.3 Bench `/v1/auth/login` — différé, justifié
 
 **Décision** : le bench réseau (1000 requêtes contre worker live + Neon + Turnstile bypass) consomme >5min de tokens et requiert une infra CI dédiée (`wrangler dev` sur runner Linux + secret Neon + DNS Turnstile). Le bénéfice mesurable est plafonné par le test de cache V18.6 qui prouve déjà la propriété de fond (une seule création de client par isolate). Le rebuild qui causait les ~1700ms p95 est éliminé **par construction** dans B1.1+B1.2 :
+
 - avant B1 : `createDb(env.DB_URL)` à chaque request → TLS handshake ~50-100ms + auth Postgres ~30-80ms.
 - après B1 : `getOrCreateDbHttp(env.DB_URL)` retourne un caller cached après le premier appel → `O(1)` lookup Map.
 
@@ -1646,8 +1780,7 @@ Le delta perf attendu (`p95 1700ms → <600ms`) est mesurable côté observabili
 
 ---
 
-*Vague 18 : Slice B1 (driver Neon HTTP + cache module-scope) **complète** — B1.1 + B1.2 + B1.3 + B1.4 + B1.5. Backend Hardening continue avec B2 (RLS prod-grade) en dépendance immédiate.*
-
+_Vague 18 : Slice B1 (driver Neon HTTP + cache module-scope) **complète** — B1.1 + B1.2 + B1.3 + B1.4 + B1.5. Backend Hardening continue avec B2 (RLS prod-grade) en dépendance immédiate._
 
 ---
 
@@ -1789,8 +1922,7 @@ Note : `pnpm --filter @athlya/api typecheck` remonte une erreur **pré-existante
 
 ---
 
-*Vague 19 : Slice B2 (RLS hardening + rôle `athlya_app`) **complète** — B2.1 + B2.2 + B2.3 + B2.4 + B2.5 cochés dans `tasks.md`. Migration 0004 + runbook livrés, cutover production séparé (out-of-band).*
-
+_Vague 19 : Slice B2 (RLS hardening + rôle `athlya_app`) **complète** — B2.1 + B2.2 + B2.3 + B2.4 + B2.5 cochés dans `tasks.md`. Migration 0004 + runbook livrés, cutover production séparé (out-of-band)._
 
 ## [2026-05-14] Vague 20 — B8 Code cleanup (propreté)
 
@@ -1812,6 +1944,7 @@ Bilan : `@athlya/db` 57/57 verts (+12 nouveaux tests pour les helpers SQLSTATE, 
 #### Pourquoi
 
 Avant V20 :
+
 - `auth-user-repo-drizzle.ts:178-183` — `isUniqueViolation` (5 lignes) qui regarde **uniquement** `err.code === '23505'`.
 - `reservations-write-drizzle.ts:385-394` — `isPostgresUniqueViolation` (10 lignes) qui walks la `cause` chain via récursion.
 
@@ -1829,6 +1962,7 @@ Les deux variantes diffèrent (auth ne walk pas `.cause`) — c'est un bug laten
 #### Pourquoi
 
 Avant V20 : 3 modules de deps embarquaient chacun leur propre `Map<string, AthlyaDbHttp>` + (auth/reservations) `Map<string, Redis>`. Conséquences :
+
 - Une isolate Cloudflare Workers qui sert une requête `/v1/auth/login` puis `/v1/members/me` créait **deux** Drizzle handles pour le même `DB_URL` (un dans `auth-deps.dbHttpCache`, un dans `members-deps.dbHttpCache`). Le driver HTTP est stateless donc rien ne casse, mais le coût d'allocation cold-path est multiplié par 3.
 - Code dupliqué (10 lignes par builder × 3) — chaque slice qui touche au caching doit être appliquée 3 fois.
 
@@ -1842,15 +1976,15 @@ Le cache Redis est toujours keyé sur `${url}::${token}` — un changement de cr
 
 #### Occurrences en production code (avant V20) — 7 dans `packages/api/src/`
 
-| Fichier | Cast | Décision |
-|---------|------|----------|
-| `adapters/auth-deps.ts` (1) | `env.EVENTS_QUEUE as unknown as Queue` | **Garder + FIXME(B8.3)** : Cloudflare Queue type pas exposé par `@cloudflare/workers-types`, le cast est structurellement safe. |
-| `adapters/members-deps.ts` (1) | idem | **Garder + FIXME(B8.3)**. |
-| `adapters/reservations-write-drizzle.ts` (1) | `event.payload as unknown as Record<string, unknown>` (line 305) | **Supprimé** : `insertOutboxRow.payload` widened from `Record<string, unknown>` to `object` (Drizzle `jsonb` accepte n'importe quel JSON-encodable). Le cast au site d'appel devient inutile. |
-| `routes/index.ts` (2) | `as unknown as (...args: unknown[]) => unknown` + `as unknown as DomainDeps[K][M]` | **Garder** : c'est le pattern standard pour un facade lazy générique. Documenté dans le JSDoc voisin. |
-| `routes/helpers.ts` (2) | `c as unknown as { set: ... }` (set userId pour idempotency middleware) + `as unknown as MiddlewareHandler<HonoEnv>` | **Garder** : Hono context narrowing intentionnel (le set existe à runtime mais n'est pas dans le type public). |
-| `routes/members.ts` (1) | `page as unknown as Record<string, unknown>` | **Garder** : `c.json` exige un type narrow ; le cast est OK structurellement. |
-| `events/drain-dlq.ts` (1) | `(await redis.zrange(…)) as unknown as string[]` | **Garder** : Upstash retourne `string[]` mais est typé plus largement. |
+| Fichier                                      | Cast                                                                                                                 | Décision                                                                                                                                                                                      |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `adapters/auth-deps.ts` (1)                  | `env.EVENTS_QUEUE as unknown as Queue`                                                                               | **Garder + FIXME(B8.3)** : Cloudflare Queue type pas exposé par `@cloudflare/workers-types`, le cast est structurellement safe.                                                               |
+| `adapters/members-deps.ts` (1)               | idem                                                                                                                 | **Garder + FIXME(B8.3)**.                                                                                                                                                                     |
+| `adapters/reservations-write-drizzle.ts` (1) | `event.payload as unknown as Record<string, unknown>` (line 305)                                                     | **Supprimé** : `insertOutboxRow.payload` widened from `Record<string, unknown>` to `object` (Drizzle `jsonb` accepte n'importe quel JSON-encodable). Le cast au site d'appel devient inutile. |
+| `routes/index.ts` (2)                        | `as unknown as (...args: unknown[]) => unknown` + `as unknown as DomainDeps[K][M]`                                   | **Garder** : c'est le pattern standard pour un facade lazy générique. Documenté dans le JSDoc voisin.                                                                                         |
+| `routes/helpers.ts` (2)                      | `c as unknown as { set: ... }` (set userId pour idempotency middleware) + `as unknown as MiddlewareHandler<HonoEnv>` | **Garder** : Hono context narrowing intentionnel (le set existe à runtime mais n'est pas dans le type public).                                                                                |
+| `routes/members.ts` (1)                      | `page as unknown as Record<string, unknown>`                                                                         | **Garder** : `c.json` exige un type narrow ; le cast est OK structurellement.                                                                                                                 |
+| `events/drain-dlq.ts` (1)                    | `(await redis.zrange(…)) as unknown as string[]`                                                                     | **Garder** : Upstash retourne `string[]` mais est typé plus largement.                                                                                                                        |
 
 **Bilan** : 1 occurrence supprimée (reservations-write payload), 6 conservées avec FIXME pour les 2 Queue casts (les 4 autres sont légitimes/standard pattern). Pas de régression.
 
@@ -1879,17 +2013,17 @@ L'OAuth wiring sera ré-ajouté dans une slice future quand les credentials Appl
 
 `grep_search 'import \* as schema from .@athlya/db/schema.' --include='packages/api/src/adapters/**/*.ts'` → **0 occurrence**. Tous les adapters utilisent déjà des imports nommés narrows :
 
-| Fichier | Imports |
-|---------|---------|
-| `auth-user-repo-drizzle.ts` | `{ studios, users }` |
-| `members-repo-drizzle.ts` | `{ users }` |
-| `members-consents-repo-drizzle.ts` | `{ users }` |
-| `members-export-job-store-drizzle.ts` | `{ exportJobs }` |
-| `members-audit-writer-drizzle.ts` | `{ auditLog }` |
-| `classes-repo-drizzle.ts` | `{ classes }` (+ type `ClassRow`) |
-| `reservations-list-drizzle.ts` | `{ classes, reservations }` |
-| `reservations-write-drizzle.ts` | `{ classes, outbox, reservations }` (+ type `ReservationRow`) |
-| `reservations-deps.ts` | type `ClassRow` only |
+| Fichier                               | Imports                                                       |
+| ------------------------------------- | ------------------------------------------------------------- |
+| `auth-user-repo-drizzle.ts`           | `{ studios, users }`                                          |
+| `members-repo-drizzle.ts`             | `{ users }`                                                   |
+| `members-consents-repo-drizzle.ts`    | `{ users }`                                                   |
+| `members-export-job-store-drizzle.ts` | `{ exportJobs }`                                              |
+| `members-audit-writer-drizzle.ts`     | `{ auditLog }`                                                |
+| `classes-repo-drizzle.ts`             | `{ classes }` (+ type `ClassRow`)                             |
+| `reservations-list-drizzle.ts`        | `{ classes, reservations }`                                   |
+| `reservations-write-drizzle.ts`       | `{ classes, outbox, reservations }` (+ type `ReservationRow`) |
+| `reservations-deps.ts`                | type `ClassRow` only                                          |
 
 **Bilan** : zéro régression possible — la convention narrow était déjà la règle. Audit documenté ; pas de modification code.
 
@@ -1911,8 +2045,7 @@ Note : `pnpm --filter @athlya/api typecheck` remonte la même erreur **pré-exis
 
 ---
 
-*Vague 20 : Slice B8 (Code cleanup) **complète** — B8.1 + B8.2 + B8.3 + B8.4 + B8.5 cochés dans `tasks.md`. Aucun impact runtime, slice purement de propreté.*
-
+_Vague 20 : Slice B8 (Code cleanup) **complète** — B8.1 + B8.2 + B8.3 + B8.4 + B8.5 cochés dans `tasks.md`. Aucun impact runtime, slice purement de propreté._
 
 ---
 
@@ -1927,6 +2060,7 @@ B1 (driver Neon HTTP cacheable) a déjà éliminé le bottleneck principal côt�
 ### V21.1 — `computeListEtag` partagé (helper)
 
 Fichier modifié :
+
 - `packages/api/src/routes/helpers.ts` — ajout de la fonction async `computeListEtag(fingerprint: string): Promise<string>`.
 
 Implémentation : `crypto.subtle.digest('SHA-256', …)` (Web Crypto natif sur Cloudflare Workers, Node 22, browsers modernes — zéro polyfill). Hash tronqué à 16 chars hex (64 bits, largement au-dessus du seuil de collision pour des listings de < 10⁶ items) et wrappé dans `"…"` pour être prêt à l'emploi en strong ETag (RFC 7232 §2.3.1).
@@ -1936,15 +2070,18 @@ Exporté depuis `helpers.ts` et consommé par `classes.ts` + `reservations.ts`.
 ### V21.2 — B5.1 : ETag + Cache-Control sur `GET /v1/classes`
 
 Fichier modifié :
+
 - `packages/api/src/routes/classes.ts` — handler `GET /` enrichi.
 
 Avant :
+
 ```ts
 const result = await deps.listClasses(claims.studioId, query);
 return c.json({ items: [...result.items] }, 200);
 ```
 
 Après :
+
 - Calcul d'un fingerprint déterministe `(id:version:remaining:startsAt)` joint par `|` sur tous les items.
 - ETag SHA-256 truncké via `computeListEtag`.
 - Lecture du `If-None-Match` (avec normalisation du préfixe `W/` faible si présent — qu'on rejette).
@@ -1956,9 +2093,11 @@ Justification du TTL 10 s : le compteur Redis `remaining` change quand un membre
 ### V21.3 — B5.2 : ETag + Cache-Control sur `GET /v1/reservations/me`
 
 Fichier modifié :
+
 - `packages/api/src/routes/reservations.ts` — handler `GET /me` enrichi.
 
 Pattern identique à B5.1 mais avec :
+
 - Fingerprint `(id:status:cancelledAt:checkedInAt)` — couvre toutes les transitions du state machine.
 - TTL réduit à `max-age=5` car le statut peut basculer en temps réel (cancellation par l'utilisateur, promotion FIFO depuis la waitlist côté serveur). 5 s de stale est tolérable mais 10 s allongerait la fenêtre où l'utilisateur voit "waitlist" alors que sa promotion est déjà confirmée côté DB.
 
@@ -2040,8 +2179,7 @@ Audit complet dans [`docs/perf/n-plus-1-audit.md`](../perf/n-plus-1-audit.md). 7
 
 ---
 
-*Vague 21 : Slice B5 (Performance) **complète** — B5.1 + B5.2 + B5.3 + B5.4 + B5.5 cochés dans `tasks.md`. ETag + Cache-Control livrés sur les 2 listings hot path, compression déléguée à Cloudflare, indexes / N+1 audités sans gap critique. 402/402 tests api verts.*
-
+_Vague 21 : Slice B5 (Performance) **complète** — B5.1 + B5.2 + B5.3 + B5.4 + B5.5 cochés dans `tasks.md`. ETag + Cache-Control livrés sur les 2 listings hot path, compression déléguée à Cloudflare, indexes / N+1 audités sans gap critique. 402/402 tests api verts._
 
 ---
 
@@ -2121,13 +2259,13 @@ Fake Redis local au fichier de test (5 lignes) — pas d'extension du `tests/hel
 
 Audit des tests existants pour les 5 events critiques :
 
-| Event | Producer test | Drain test | Consumer dedup |
-|-------|---------------|------------|----------------|
-| `reservation.created` | `publish.test.ts` | `drain-worker.test.ts` (event #1 du happy-path) | `dedup.test.ts` |
-| `reservation.cancelled` | `gateway.integration.test.ts` E2E | `drain-worker.test.ts` (event #2) | `dedup.test.ts` |
-| `reservation.promoted` | `gateway.integration.test.ts` (waitlist FIFO) | `drain-worker.test.ts` (event #3) | `dedup.test.ts` |
-| `members.export.requested` | `packages/members/src/__tests__/export.test.ts` | path générique (drain event-type-blind) | `dedup.test.ts` |
-| `members.export.completed` | `packages/members/src/__tests__/export.test.ts` | path générique | `dedup.test.ts` |
+| Event                      | Producer test                                   | Drain test                                      | Consumer dedup  |
+| -------------------------- | ----------------------------------------------- | ----------------------------------------------- | --------------- |
+| `reservation.created`      | `publish.test.ts`                               | `drain-worker.test.ts` (event #1 du happy-path) | `dedup.test.ts` |
+| `reservation.cancelled`    | `gateway.integration.test.ts` E2E               | `drain-worker.test.ts` (event #2)               | `dedup.test.ts` |
+| `reservation.promoted`     | `gateway.integration.test.ts` (waitlist FIFO)   | `drain-worker.test.ts` (event #3)               | `dedup.test.ts` |
+| `members.export.requested` | `packages/members/src/__tests__/export.test.ts` | path générique (drain event-type-blind)         | `dedup.test.ts` |
+| `members.export.completed` | `packages/members/src/__tests__/export.test.ts` | path générique                                  | `dedup.test.ts` |
 
 **Décision** : pas de test integration outbox→drain→consumer end-to-end ajouté. Justifications documentées dans le runbook § 5 :
 
@@ -2145,7 +2283,7 @@ Audit des tests existants pour les 5 events critiques :
 ### Périmètre exclu
 
 - **Backoff CF custom** (`msg.retry({ delaySeconds })`) — out-of-scope B6, ré-évalué en B7 avec métriques OTel.
-- **Consumer concret** appelant `assertNotSeen` — actuellement le module est livré mais aucun consumer n'est encore branché en prod (les consumers Notifications / billing.* sont des stubs en design). L'API est prête pour quand ces consumers atterriront.
+- **Consumer concret** appelant `assertNotSeen` — actuellement le module est livré mais aucun consumer n'est encore branché en prod (les consumers Notifications / billing.\* sont des stubs en design). L'API est prête pour quand ces consumers atterriront.
 
 ### Références spec
 
@@ -2157,8 +2295,7 @@ Audit des tests existants pour les 5 events critiques :
 
 ---
 
-*Vague 22 : Slice B6 (Outbox & event reliability) **complète** — B6.1 + B6.2 + B6.3 + B6.4 cochés dans `tasks.md`. Drain wiring + DLQ retry policy documentés dans un runbook ops dédié, dedup consumer livré comme primitive réutilisable (`assertNotSeen`), coverage outbox→drain→consumer auditée pour les 5 events critiques. 410/410 tests api verts.*
-
+_Vague 22 : Slice B6 (Outbox & event reliability) **complète** — B6.1 + B6.2 + B6.3 + B6.4 cochés dans `tasks.md`. Drain wiring + DLQ retry policy documentés dans un runbook ops dédié, dedup consumer livré comme primitive réutilisable (`assertNotSeen`), coverage outbox→drain→consumer auditée pour les 5 events critiques. 410/410 tests api verts._
 
 ---
 
@@ -2168,13 +2305,13 @@ Slice produit indépendante : 5 endpoints API livrés et câblés au studio admi
 
 ### Périmètre
 
-| Endpoint | Auth | Sous-tâche |
-|----------|------|------------|
-| `GET /v1/studios/me` | Bearer (member/coach/admin) | B9.1 |
-| `PATCH /v1/studios/me` | Bearer + admin | B9.2 |
-| `POST /v1/billing/checkout` | Bearer + admin | B9.3 |
-| `GET /v1/billing/invoices` | Bearer + admin | B9.4 |
-| `POST /v1/billing/webhook` | signature Stripe | B9.5 |
+| Endpoint                    | Auth                        | Sous-tâche |
+| --------------------------- | --------------------------- | ---------- |
+| `GET /v1/studios/me`        | Bearer (member/coach/admin) | B9.1       |
+| `PATCH /v1/studios/me`      | Bearer + admin              | B9.2       |
+| `POST /v1/billing/checkout` | Bearer + admin              | B9.3       |
+| `GET /v1/billing/invoices`  | Bearer + admin              | B9.4       |
+| `POST /v1/billing/webhook`  | signature Stripe            | B9.5       |
 
 ### Fichiers backend
 
@@ -2211,6 +2348,7 @@ Slice produit indépendante : 5 endpoints API livrés et câblés au studio admi
 ### Tests
 
 **Backend** (`pnpm --filter @athlya/api test`) :
+
 - `routes/studios.test.ts` — **8 tests** : 401 sans token, 401 PATCH avant validator, 200 happy path GET, 404 studio supprimé, 403 PATCH non-admin, 422 hex malformé, 200 toute couleur valide (gate AA défense en profondeur), 200 + body avec couleur high-contrast.
 - `routes/billing.test.ts` — **12 tests** : 401 checkout sans auth, 403 checkout member, 503 `billing_not_configured`, 200 happy path checkout, 422 plan invalide, 401 invoices sans auth, 403 invoices member, 200 invoices vides admin, 400 webhook sans signature, 200 webhook ok, 200 webhook mode dégradé, 200 webhook sans Authorization (pas de jwtAuth).
 
@@ -2248,8 +2386,7 @@ Total api : **431/431 tests verts** (était 402 avant Vague 22+23, +29 entre B6 
 
 ---
 
-*Vague 23 : Slice B9 (Endpoints API manquants) **complète** — B9.1 + B9.2 + B9.3 + B9.4 + B9.5 cochés. Backend hardening + studio admin app débloqué (`BrandingPreview` éditeur enabled, `BillingPlansClient` checkout button enabled). Mode dégradé Stripe natif jusqu'au cutover prod.*
-
+_Vague 23 : Slice B9 (Endpoints API manquants) **complète** — B9.1 + B9.2 + B9.3 + B9.4 + B9.5 cochés. Backend hardening + studio admin app débloqué (`BrandingPreview` éditeur enabled, `BillingPlansClient` checkout button enabled). Mode dégradé Stripe natif jusqu'au cutover prod._
 
 ---
 
@@ -2259,14 +2396,14 @@ Slice **Sprint-1 1.1** de l'Epic « Security wiring (post-audit 2026-05-15) ». 
 
 ### Findings audit résolus
 
-| ID | Domaine | Description | Slice |
-|----|---------|-------------|-------|
-| S2-001 | auth | Throttle login `(ip, email)` non câblé (Req 1.6) | SP1.2 |
-| S2-003 | auth | Pas de bucket strict sur `/v1/auth/*` | SP1.1 |
-| S2-008 | auth | `LoginContext` (IP) absent du contrat router→adapter | SP1.2 |
-| S3-001 | gateway | `rateLimit()` global non monté (Req 14.3, 14.4) | SP1.1 |
-| S3-002 | gateway | Pas d'override quota strict sur surface auth | SP1.1 |
-| S4-001 | gateway | Helper `deriveClientIp` dupliqué entre router et middleware | SP1.2 |
+| ID     | Domaine | Description                                                               | Slice |
+| ------ | ------- | ------------------------------------------------------------------------- | ----- |
+| S2-001 | auth    | Throttle login `(ip, email)` non câblé (Req 1.6)                          | SP1.2 |
+| S2-003 | auth    | Pas de bucket strict sur `/v1/auth/*`                                     | SP1.1 |
+| S2-008 | auth    | `LoginContext` (IP) absent du contrat router→adapter                      | SP1.2 |
+| S3-001 | gateway | `rateLimit()` global non monté (Req 14.3, 14.4)                           | SP1.1 |
+| S3-002 | gateway | Pas d'override quota strict sur surface auth                              | SP1.1 |
+| S4-001 | gateway | Helper `deriveClientIp` dupliqué entre router et middleware               | SP1.2 |
 | S4-002 | gateway | Login adapter ne consume pas la décision throttle dans `options.throttle` | SP1.2 |
 
 ### Fichiers modifiés (4)
@@ -2287,6 +2424,7 @@ Slice **Sprint-1 1.1** de l'Epic « Security wiring (post-audit 2026-05-15) ». 
 ### Tests
 
 **Nouveaux** : `packages/api/src/__tests__/routes/login-throttle-wiring.test.ts` (**8 tests**)
+
 - 5 tests unitaires `deriveClientIp` couvrant les 3 branches de précédence (CF-Connecting-IP, XFF[0], 'unknown') + edge cases (whitespace, valeurs vides).
 - 3 tests router-level via `buildTestApp` qui valident le wiring end-to-end : `POST /v1/auth/login` avec divers headers IP forward le bon `{ ip }` au `deps.login` mockée. Couvre l'évolution du contrat `AuthDeps.login(input, ctx)`.
 
@@ -2327,8 +2465,7 @@ Validates: Requirements 1.6 (login-attempt throttle), 14.3 (IP limit baseline sh
 
 ---
 
-*Vague 24 : Slice Sprint-1 1.1 (Rate-limit + login throttle wired) **complète** — SP1.1 + SP1.2 cochés. 7 findings audit (S2-001, S2-003, S2-008, S3-001, S3-002, S4-001, S4-002) résolus. 444/444 tests api verts (+8 nouveaux), 0 régression.*
-
+_Vague 24 : Slice Sprint-1 1.1 (Rate-limit + login throttle wired) **complète** — SP1.1 + SP1.2 cochés. 7 findings audit (S2-001, S2-003, S2-008, S3-001, S3-002, S4-001, S4-002) résolus. 444/444 tests api verts (+8 nouveaux), 0 régression._
 
 ---
 
@@ -2339,6 +2476,7 @@ Sprint-1 Slice 1.2 — Quatre durcissements défensifs livrés ensemble, pure pl
 ### Fichiers modifiés (8)
 
 **Worker / types**
+
 - `packages/api/src/worker.ts`
   - **Host check (étape 0)** — middleware `*` au sommet de la chaîne. Whitelist par environnement (`ALLOWED_HOSTS_PROD = ['api.athlya.app']`, `ALLOWED_HOSTS_STAGING = ['staging.api.athlya.app']`, patterns dev `localhost(:port)?` / `127.0.0.1(:port)?` / `*.workers.dev`). Refus 421 Misdirected Request (RFC 7540 §9.1.2) sinon. Fallback `URL(c.req.url).host` pour le harness `app.request()` qui n'envoie pas de header `Host`.
   - **CORS strict (étape 1.5)** — réécriture de la closure `origin`. Dev : reflection limitée à `DEV_CORS_ORIGINS = {http://localhost:3000, :3001, http://127.0.0.1:3000, :3001}`. Staging/prod : `c.env.CORS_ORIGIN` requis ; fail-close (return `''`) + un seul `console.error('CORS_ORIGIN missing in non-dev env...', { code: 'configuration_error' })` par isolate via le flag module-scope `corsOriginMissingWarned`.
@@ -2346,15 +2484,18 @@ Sprint-1 Slice 1.2 — Quatre durcissements défensifs livrés ensemble, pure pl
 - `packages/api/src/types.ts` — `AthlyaBindings.CORS_ORIGIN?: string` documenté (REQUIRED en staging/prod, optional en dev avec whitelist localhost).
 
 **Cookies refresh — Path scoping `/api/auth`**
+
 - `apps/web/src/lib/auth/cookies.ts` — `Path=/` → `Path=/api/auth` dans `buildRefreshCookie` + `buildClearRefreshCookie`. Constante exportée `REFRESH_COOKIE_PATH = '/api/auth'`. JSDoc augmenté (mention Finding S4-006 + 4 routes consommatrices `/api/auth/{login,logout,refresh,register}`).
 - `apps/studio/src/lib/auth/cookies.ts` — même changement (cookie `athlya.refresh.studio`).
 
 **Tests adaptés**
+
 - `apps/web/src/lib/auth/cookies.test.ts` — assertion `Path=/api/auth` + guard `not.toMatch(/Path=\/(?:[;,\s]|$)/u)` pour empêcher la régression vers `Path=/`.
 - `packages/api/src/__tests__/integration/gateway.integration.test.ts` — test `missing cf-turnstile-token... → 403` ajoute header `host: 'staging.api.athlya.app'` pour passer le host gate sous `ENVIRONMENT: 'staging'`.
 - `packages/api/src/__tests__/worker.test.ts` — test `fetch delegates to the Hono app` change l'URL de `https://example.com/health` à `http://localhost:8787/health` pour passer le dev-pattern du host check.
 
 **Test ajouté**
+
 - `packages/api/src/__tests__/security-hardening-1-2.test.ts` (**16 tests**) :
   - **CORS dev whitelist** (3) : reflection refusée pour `evil.example.com`, acceptée pour `localhost:3000` et `127.0.0.1:3001`.
   - **CORS staging requires CORS_ORIGIN** (3) : staging sans `CORS_ORIGIN` → fail-close ; staging avec match → echo ; staging avec `CORS_ORIGIN` mais origin différent → fail-close.
@@ -2410,15 +2551,14 @@ Sprint-1 Slice 1.2 — Quatre durcissements défensifs livrés ensemble, pure pl
 
 - `.kiro/specs/athlya-platform/tasks.md` Epic Sprint-1 — sous-tâche SP1.3 cochée.
 - `docs/security/AUDIT-SUMMARY.md` — findings S3-003, S3-005, S4-003, S4-006, S4-014, S4-015 résolus.
-- `packages/api/src/worker.ts:80-128` — constants module-scope (DEV_CORS_ORIGINS, ALLOWED_HOSTS_*).
+- `packages/api/src/worker.ts:80-128` — constants module-scope (DEV*CORS_ORIGINS, ALLOWED_HOSTS*\*).
 - `packages/api/src/worker.ts:185-220` — host check middleware étape 0.
 - `packages/api/src/worker.ts:240-310` — CORS callback whitelist + log de configuration_error.
 - `packages/api/src/worker.ts:380-420` — bodyLimit `/v1/*` avec Problem Details 413.
 
 ---
 
-*Vague 25 : Slice Sprint-1 1.2 (CORS whitelist + bodyLimit + host check + cookie Path) **complète** — SP1.3 coché. 6 findings audit (S3-003, S3-005, S4-003, S4-006, S4-014, S4-015) résolus. 460/460 tests api verts (+16 nouveaux), 0 régression.*
-
+_Vague 25 : Slice Sprint-1 1.2 (CORS whitelist + bodyLimit + host check + cookie Path) **complète** — SP1.3 coché. 6 findings audit (S3-003, S3-005, S4-003, S4-006, S4-014, S4-015) résolus. 460/460 tests api verts (+16 nouveaux), 0 régression._
 
 ## [2026-05-15] Vague 26 — Slice Sprint-1 1.3 : RGPD consumers dispatch dans `worker.queue()`
 
@@ -2427,6 +2567,7 @@ Sprint-1 Slice 1.3 — Pure plomberie : câblage des primitives RGPD existantes 
 ### Fichiers modifiés (4)
 
 **Worker dispatcher**
+
 - `packages/api/src/worker.ts`
   - **Import** `handleEventsBatch` extrait en fonction libre (export nommé) pour permettre les tests intégration sans monter le harness Hono complet.
   - **Branche `queue()` non-DLQ** — dispatch par `event.type` :
@@ -2439,6 +2580,7 @@ Sprint-1 Slice 1.3 — Pure plomberie : câblage des primitives RGPD existantes 
   - Helper `readEventEnvelope(body)` — narrowing défensif (vérifie `typeof body === 'object'`, présence + non-vacuité de `type`) avant tout dispatch.
 
 **Wrangler bindings R2 (4 sections)**
+
 - `packages/api/wrangler.toml`
   - **Top-level** : 2 `[[r2_buckets]]` (`AVATARS_BUCKET = "athlya-avatars-dev"`, `EXPORTS_BUCKET = "athlya-exports-dev"`).
   - **`[env.dev.r2_buckets]`** : mêmes valeurs (Wrangler 3.x n'hérite pas toujours du top-level dans les envs nommés — duplication défensive identique au pattern queues existant).
@@ -2543,10 +2685,9 @@ Tant que les buckets ne sont pas créés, les bindings restent `undefined` et le
 
 ---
 
-*Vague 26 : Slice Sprint-1 1.3 (RGPD consumers dispatch) **complète** — SP1.4 coché. 2 findings audit CRITICAL (S5-001, S5-002) résolus. 470/470 tests api verts (+8 nouveaux), 0 régression. Mode dégradé R2 documenté + testé.*
+_Vague 26 : Slice Sprint-1 1.3 (RGPD consumers dispatch) **complète** — SP1.4 coché. 2 findings audit CRITICAL (S5-001, S5-002) résolus. 470/470 tests api verts (+8 nouveaux), 0 régression. Mode dégradé R2 documenté + testé._
 
-
-----
+---
 
 ## [2026-05-15] Vague 27 — Sprint 1 Slice 1.4 — tenantResolver mounted + cross-check (S2-007)
 
@@ -2566,6 +2707,7 @@ La défense : refuser la requête lorsque le slug résolu (subdomain ou path `/s
 ### Fichiers modifiés (4)
 
 **Worker mounting**
+
 - `packages/api/src/worker.ts`
   - **Étape 0.5** (juste après le host check, avant security headers) : mount global de `tenantResolverMiddleware()` sur `*`. Le résolveur est pur, infaillible (aucun I/O), et stamp `tenantSlug` (string | undefined) + `tenantSource` (`'subdomain'` | `'path'` | `'none'`) sur le contexte. Mounter EARLY permet à toutes les couches d'observabilité (logger, OTel, rate-limit, auth) de lire le slug si elles l'enrichissent un jour.
   - **Étape 7** (après rate-limit + bodyLimit, avant les routes domain) : mount de `tenantClaimGuard()` sur `/v1/*` avec :
@@ -2575,13 +2717,16 @@ La défense : refuser la requête lorsque le slug résolu (subdomain ou path `/s
     - **Per-request guard factory** : `tenantClaimGuard({ resolveStudioBySlug: buildStudioSlugResolver(c.env), cacheNamespace: c.env.DB_URL })`. Le namespace de cache tracke `DB_URL` pour partitionner les caches inter-environnement (dev/staging/prod) sans collision.
 
 **Types**
+
 - `packages/api/src/types.ts`
   - `AthlyaVariables` étendu avec `tenantSlug?: string` et `tenantSource?: 'subdomain' | 'path' | 'none'`. Documentation inline indique que ces champs sont **informationnels** — ils ne doivent JAMAIS être utilisés pour filtrer des données tenant-scoped (responsabilité exclusive du claim JWT + RLS).
 
 **Middleware (livré antérieurement, non modifié dans cette vague)**
+
 - `packages/api/src/middleware/tenant-resolver.ts` — `tenantResolverMiddleware()` + `tenantClaimGuard()` + `__resetTenantClaimGuardCache()` + `TENANT_MISMATCH_CODE` (export `'tenant_mismatch'`). Cache `Map<string, { studioId: string | null; expiresAt: number }>` namespaced par `(env.DB_URL, slug)` avec TTL 60 s. Fail-open sur DB inaccessible (log warn + `next()`).
 
 **Adapters (livré antérieurement, non modifié dans cette vague)**
+
 - `packages/api/src/adapters/studio-slug-resolver.ts` — `buildStudioSlugResolver(env): StudioSlugResolver` retournant `(slug) => Promise<string | null>` qui requête `studios.id WHERE slug = $1` via Drizzle.
 
 ### Tests ajoutés
@@ -2624,7 +2769,7 @@ La défense : refuser la requête lorsque le slug résolu (subdomain ou path `/s
 ### Validation
 
 - ✅ **`pnpm --filter @athlya/api test`** : `479/479 passed` (était 470 avant Vague 27 → +9 nouveaux). 0 régression. Détail : 42 fichiers de tests, 479 tests, 19.01 s.
-- ✅ **`tenant-resolver-mw.test.ts`** : 9 tests verts (subdomain match, mismatch → 404, path source, apex/none skipped, /v1/auth/* bypass, DB fail-open + warn, 3 stamping tests).
+- ✅ **`tenant-resolver-mw.test.ts`** : 9 tests verts (subdomain match, mismatch → 404, path source, apex/none skipped, /v1/auth/\* bypass, DB fail-open + warn, 3 stamping tests).
 - ✅ **`getDiagnostics`** sur `worker.ts` + `types.ts` + `tenant-resolver-mw.test.ts` : aucune nouvelle erreur introduite.
 
 ### Critères d'acceptation
@@ -2650,10 +2795,9 @@ La défense : refuser la requête lorsque le slug résolu (subdomain ou path `/s
 
 ---
 
-*Vague 27 : Slice Sprint-1 1.4 (tenantResolver mounted + cross-check) **complète** — SP1.5 coché. 1 finding audit HIGH/PROD-RISK (S2-007) résolu. 479/479 tests api verts (+9 nouveaux), 0 régression.*
+_Vague 27 : Slice Sprint-1 1.4 (tenantResolver mounted + cross-check) **complète** — SP1.5 coché. 1 finding audit HIGH/PROD-RISK (S2-007) résolu. 479/479 tests api verts (+9 nouveaux), 0 régression._
 
-
-----
+---
 
 ## [2026-05-15] Vague 28 — Sprint 1 Slice 1.5 — JWT iss/aud + DLQ admin router (S2-005 + S2-018)
 
@@ -2668,17 +2812,20 @@ Sprint-1 Slice 1.5 — Deux durcissements défensifs livrés ensemble : (a) enfo
 ### Fichiers modifiés (5)
 
 **Middleware auth (S2-005)**
+
 - `packages/api/src/middleware/auth.ts`
   - Dans `jwtAuth()`, dérive `expectedIssuer` et `expectedAudience` au moment du request (pas au build time du middleware) :
     ```ts
     const expectedIssuer = options.issuer ?? c.env.JWT_ISSUER ?? 'athlya';
-    const expectedAudience = options.audience ?? c.env.JWT_AUDIENCE ?? `athlya-api-${c.env.ENVIRONMENT}`;
+    const expectedAudience =
+      options.audience ?? c.env.JWT_AUDIENCE ?? `athlya-api-${c.env.ENVIRONMENT}`;
     ```
   - Passe ces deux valeurs à `jwtVerify(token, getKey, { algorithms: ['RS256'], issuer, audience, clockTolerance })`.
   - Justification "request-time" : le factory `jwtAuth(options)` est appelé une fois (à la construction de l'app), mais `c.env` change selon l'environnement test — lire à request-time garantit que `buildMockEnv({ ENVIRONMENT: 'staging' })` reçoit `aud = 'athlya-api-staging'` même si le middleware a été buildé sans options.
   - Documentation inline étendue (Slice 1.5 — Sprint 1 — SP1.6 — S2-005).
 
 **Bindings (S2-005)**
+
 - `packages/api/src/types.ts`
   - `AthlyaBindings` étendu avec deux champs optionnels :
     ```ts
@@ -2688,6 +2835,7 @@ Sprint-1 Slice 1.5 — Deux durcissements défensifs livrés ensemble : (a) enfo
   - Documentation inline indique les fallbacks (`'athlya'` et `\`athlya-api-${ENVIRONMENT}\``) + recommandation de poser explicitement les valeurs en production via `wrangler secret put`.
 
 **Worker mounting (S2-018)**
+
 - `packages/api/src/worker.ts`
   - Imports : `requireRole` de `./routes/helpers.js`, `buildDlqRouter` de `./admin/dlq-routes.js`.
   - Après `mountDomainRoutes(app, ...)` et avant `app.notFound(...)` :
@@ -2700,6 +2848,7 @@ Sprint-1 Slice 1.5 — Deux durcissements défensifs livrés ensemble : (a) enfo
   - **Mount à la racine `/`** (pas à `/admin/dlq`) : le routeur définit ses chemins absolus (`router.get('/admin/dlq/stats', ...)` etc.). Mounter à `/admin/dlq` produirait `/admin/dlq/admin/dlq/stats` et casserait le contrat documenté par `dlq-routes.test.ts`.
 
 **Test helpers (S2-005)**
+
 - `packages/api/src/__tests__/helpers/test-app.ts`
   - `SignTestJwtOptions` étendu avec `iss?: string | null` et `aud?: string | null`.
   - `signTestJwt()` stamp `iss = 'athlya'` et `aud = 'athlya-api-dev'` par défaut (matchent les fallbacks gateway pour l'env `dev` posé par `buildMockEnv()`). Passer `iss: null` ou `aud: null` skip explicitement le claim — utilisé par les tests négatifs.
@@ -2786,8 +2935,7 @@ wrangler secret put JWT_AUDIENCE --env production
 
 ---
 
-*Vague 28 : Slice Sprint-1 1.5 (JWT iss/aud + DLQ admin router) **complète** — SP1.6 coché. 2 findings audit (S2-005 MEDIUM, S2-018 LOW/INFO) résolus. 485/485 tests api verts (+6 nouveaux), 0 régression.*
-
+_Vague 28 : Slice Sprint-1 1.5 (JWT iss/aud + DLQ admin router) **complète** — SP1.6 coché. 2 findings audit (S2-005 MEDIUM, S2-018 LOW/INFO) résolus. 485/485 tests api verts (+6 nouveaux), 0 régression._
 
 ---
 
@@ -2806,6 +2954,7 @@ Le contrat côté `@athlya/auth` était **déjà implémenté** par un travail a
 ### Modifications
 
 #### Adapter Redis réécrit
+
 - `packages/api/src/adapters/auth-session-store-redis.ts` — `rotate()` réécrit avec script Lua atomique exécuté via `redis.eval()`. Le script fait en une transaction : `GETDEL` du oldSid, `SET NX` du newSid, mises à jour des index utilisateur + family + sid_to_root. Compensation `SET` du oldPayload sur échec `SET NX` (best-effort, jamais observable depuis l'extérieur car Lua atomique).
 - Schéma payload session étendu avec `rootSid` (immuable sur rotate, racine de la chaîne) et `parentSid` (sid précédent, null pour le 1er login).
 - 4 clés Redis maintenant utilisées :
@@ -2817,6 +2966,7 @@ Le contrat côté `@athlya/auth` était **déjà implémenté** par un travail a
 - `revoke()` et `revokeAllForUser()` préservent volontairement le family + sid_to_root pour que la détection reuse fonctionne après logout (un attaquant qui rejoue un sid d'un user qui s'est délogué doit toujours déclencher la family revoke).
 
 #### Event ajouté
+
 - `packages/shared/src/events.ts` — `auth.suspicious.refresh.reuse` ajouté dans `EVENT_TYPES` + `AthlyaEventSchema` discriminated union. Payload PII-minimal : `userId` + `rootSid` uniquement (pas IP/UA/email — récupérables depuis l'audit log keyé sur `actorId`).
 
 ### Tests
@@ -2864,8 +3014,7 @@ Le contrat côté `@athlya/auth` était **déjà implémenté** par un travail a
 
 ---
 
-*Vague 29 : Slice Sprint-2 2.1 (Refresh atomicity + family-tree revoke) **complète** — SP2.1 coché. 3 findings audit (S2-002 CRITICAL, S2-004 HIGH, S2-020 LOW bonus) résolus. 494/494 tests api verts (+9 nouveaux), 87/87 auth verts, 145/145 shared verts. Tests cumulés Sprint 1+2 (Slice 2.1) : 726/726 verts, 0 régression.*
-
+_Vague 29 : Slice Sprint-2 2.1 (Refresh atomicity + family-tree revoke) **complète** — SP2.1 coché. 3 findings audit (S2-002 CRITICAL, S2-004 HIGH, S2-020 LOW bonus) résolus. 494/494 tests api verts (+9 nouveaux), 87/87 auth verts, 145/145 shared verts. Tests cumulés Sprint 1+2 (Slice 2.1) : 726/726 verts, 0 régression._
 
 ---
 
@@ -2884,10 +3033,12 @@ Décision : option (1) recommandée par l'audit pour S5-005 (retirer `email` du 
 ### Modifications
 
 #### S5-005 — minimisation event `auth.user.registered`
+
 - `packages/shared/src/events.ts` — `AuthUserRegisteredEventSchema` : `email` retiré du payload. Schema reste `.strict()` donc défense en profondeur : un producteur stale qui émettrait encore `email` serait rejeté à parse-time.
 - `packages/auth/src/service.ts` — `buildUserRegisteredEvent` signature mise à jour, appel dans `register()` adapté. Le consumer `notifications` fetch déjà l'email via `RecipientRepo.getRecipient(userId)` → zero impact runtime côté business.
 
 #### S5-004 + S5-006 — jobs de purge
+
 - `packages/api/src/maintenance/rgpd-purge.ts` (nouveau) — 4 fonctions framework-free pour faciliter testing et future intégration `scheduled()` :
   - `anonymizeExpiredUsers(deps, options)` — UPDATE in-place sur users `deleted_at < now-30d AND email IS NOT NULL` (clause de garde idempotence). Strip `email`, `display_name`, `avatar_url`, `consents`, `password_hash`. Conserve la row + l'`id` comme tombstone pour les FKs historiques (réservations, sessions, audit_log) — réconciliation entre Art 17 et Req 22.2 audit immutability.
   - `purgeExpiredOutbox(deps, options)` — DELETE `outbox WHERE published_at < now-7d`. **Critical** : seules les rows publiées sont éligibles (pending = en cours de retry, MUST stay).
@@ -2900,6 +3051,7 @@ Décision : option (1) recommandée par l'audit pour S5-005 (retirer `email` du 
   - Idempotentes (re-fire OK).
 
 #### Tests
+
 - `packages/api/src/__tests__/rgpd-purge.test.ts` (nouveau) — 9 tests : SQL substring matching pour les 3 jobs, params cutoff/limit, batchLimit custom, runner happy path, runner avec failure isolée, runner zero-rows.
 - `packages/auth/src/__tests__/service.test.ts` — assertion que `email` ne leak PAS dans `event.payload` (defence in depth check).
 - `packages/shared/tests/events.test.ts` — nouveau test négatif : un payload avec `email` est rejeté par `safeParse` (forward producer compat).
@@ -2934,8 +3086,7 @@ Décision : option (1) recommandée par l'audit pour S5-005 (retirer `email` du 
 
 ---
 
-*Vague 30 : Slices Sprint-2 2.2 + 2.3 (RGPD purges + email minimisation) **complètes** — SP2.2 + SP2.3 cochés. 3 findings audit (S5-004 HIGH, S5-005 HIGH, S5-006 HIGH) résolus. 503/503 tests api verts (+9 nouveaux), 87/87 auth verts, 145/145 shared verts. Tests cumulés Sprint 1 + Sprint 2 : 735/735 verts, 0 régression.*
-
+_Vague 30 : Slices Sprint-2 2.2 + 2.3 (RGPD purges + email minimisation) **complètes** — SP2.2 + SP2.3 cochés. 3 findings audit (S5-004 HIGH, S5-005 HIGH, S5-006 HIGH) résolus. 503/503 tests api verts (+9 nouveaux), 87/87 auth verts, 145/145 shared verts. Tests cumulés Sprint 1 + Sprint 2 : 735/735 verts, 0 régression._
 
 ---
 
@@ -2955,6 +3106,7 @@ Audit summary listait aussi `CORS_ORIGIN` requis au boot (S4-014) et host check 
 #### Slice 3.1 — Frontend headers
 
 ##### S6-002 / S6-003 / S4-012 — Permissions-Policy + COOP + CORP
+
 - `apps/web/next.config.ts` + `apps/studio/next.config.ts` : `staticSecurityHeaders` étendu avec :
   - `Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=(), usb=()` — ferme APIs puissantes inutiles. Surface post-XSS réduite.
   - `Cross-Origin-Opener-Policy: same-origin` — isole le browsing-context. Une fenêtre ouverte via `target="_blank"` ne peut plus tenir un `window.opener`.
@@ -2962,14 +3114,17 @@ Audit summary listait aussi `CORS_ORIGIN` requis au boot (S4-014) et host check 
 - **Décision** : COEP volontairement omis. Bloquerait le widget Cloudflare Turnstile (`challenges.cloudflare.com` n'envoie pas le bon CORP). Slice future avec feature-flag quand Turnstile expose le bon header.
 
 ##### S6-004 — poweredByHeader
+
 - `apps/web/next.config.ts` + `apps/studio/next.config.ts` : `poweredByHeader: false`. Drop `X-Powered-By: Next.js` — fingerprinting gratuit.
 
 ##### S6-001 — `style-src-attr 'unsafe-inline'`
+
 - `apps/web/src/lib/csp.ts` + `apps/studio/src/lib/csp.ts` : ajout directive `style-src-attr 'unsafe-inline'` en prod (pas en dev — la directive `style-src 'unsafe-inline'` dev couvre déjà les attributs).
 - **Décision** : option (1) audit choisie. La directive `style-src 'self' 'nonce-...'` reste stricte → un attaquant qui injecte `<style>...</style>` est toujours bloqué. Seuls les `style="..."` attributs JSX (deux cas dans `BrandingPreview` pour la couleur tenant) sont autorisés. Refacto vers CSS variables = backlog futur (S6-001 option 2).
 - Tests CSP existants : 15/15 verts (les nouvelles assertions ajoutées dans la test suite avec le `; style-src-attr` séparé sont gérées via `directives.join('; ')`).
 
 ##### S6-005 + S4-005 — Same-origin guard `/api/auth/*`
+
 - `apps/web/src/lib/auth/same-origin.ts` (nouveau) — helper `assertSameOrigin(request)` :
   - Compare `request.headers.get('origin')` à `request.nextUrl.origin`.
   - Missing Origin → 403 `cross_site_request` (modern browsers attachent toujours Origin sur POST/PATCH/DELETE depuis 2020).
@@ -2982,28 +3137,31 @@ Audit summary listait aussi `CORS_ORIGIN` requis au boot (S4-014) et host check 
 #### Slice 3.2 — Backend hardening
 
 ##### S5-007 — Pseudonymisation throttle key
+
 - `packages/auth/src/throttle.ts` : `loginBucketKey(ip, email)` passé async, retourne `auth:login:${sha256(ip + ':' + emailNormalized).slice(0, 24)}`. Web Crypto `globalThis.crypto.subtle.digest('SHA-256', ...)` (Workers + Node 20 LTS).
 - **Propriétés** : 96 bits identifiant (collision birthday bound 2^48), unicité préservée pour la sliding window, reversal infaisable.
 - 5 tests `throttle.test.ts` adaptés : assertions sur le pattern `[0-9a-f]{24}`, déterminisme, normalisation case email préservée, unicité (ip,email).
 - `shouldAllowLogin` adapté pour `await loginBucketKey(...)`.
 
 ##### S5-008 — Auto-redact logger
+
 - `packages/api/src/logging.ts` : `createLogger()` emit pre-build le redactor `redactKeys(DEFAULT_REDACTED_KEYS)` une fois. À chaque emit, le merged `{ ...baseFields, ...fields }` passe par le filtre AVANT serialisation. Keys redacted : `password`, `token`, `authorization`, `stripeSignature`, `secret` (case-insensitive).
 - **Décision** : auto-redact par défaut > opt-in field-by-field. Une PR future qui ajoute `logger.info('login', { token })` ne leak plus.
 
 ##### S2-009 — Distinction `hibp_unavailable`
+
 - `packages/auth/src/service.ts` : nouveau `AuthErrorCode = 'hibp_unavailable'`. `register()` throw désormais `AuthError('hibp_unavailable')` au lieu de `'password_breached'` quand `HibpUnavailableError` remonte. Policy fail-closed inchangée (registration toujours rejetée), seul le code wire change.
 - `packages/api/src/middleware/problem-details.ts` : mapping ajouté → 503 (Service Unavailable, pas 422 — c'est une dépendance backend morte, pas un input invalide). Aussi : `token_revoked` ajouté au switch (manquait depuis Slice 2.1 / Vague 29).
 - Test `service.test.ts` adapté : `code: 'hibp_unavailable'` au lieu de `'password_breached'` quand HIBP fail.
 
 ### Tests delta
 
-| Package | Tests | Delta |
-|---|---|---|
-| `@athlya/api` | **503/503** ✅ | inchangé (S5-008 logging non testé spécifiquement, comportement vérifié via tests de logging existants) |
-| `@athlya/auth` | **89/89** ✅ | +2 tests `loginBucketKey` (déterminisme + unicité) |
-| `@athlya/shared` | **145/145** ✅ | inchangé |
-| `@athlya/web` | **22/22** ✅ pour csp + same-origin + auth-routes | 7 fichiers fail pré-existants (`@/components/ui/*` introuvable, sans rapport) |
+| Package          | Tests                                             | Delta                                                                                                   |
+| ---------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `@athlya/api`    | **503/503** ✅                                    | inchangé (S5-008 logging non testé spécifiquement, comportement vérifié via tests de logging existants) |
+| `@athlya/auth`   | **89/89** ✅                                      | +2 tests `loginBucketKey` (déterminisme + unicité)                                                      |
+| `@athlya/shared` | **145/145** ✅                                    | inchangé                                                                                                |
+| `@athlya/web`    | **22/22** ✅ pour csp + same-origin + auth-routes | 7 fichiers fail pré-existants (`@/components/ui/*` introuvable, sans rapport)                           |
 
 **Note** : les 7 fails web sont des erreurs d'import `@/components/ui/{button,badge}` documentées en pré-existantes — vérifié en lançant `csp.test.ts` + `same-origin.test.ts` + `register/route.test.ts` qui passent isolément.
 
@@ -3036,8 +3194,7 @@ Audit summary listait aussi `CORS_ORIGIN` requis au boot (S4-014) et host check 
 
 ---
 
-*Vague 31 : Sprint 3 (Headers + Hardening) **complet** — 9 findings audit résolus (1 HIGH, 4 MEDIUM, 4 LOW). 503/503 api verts, 89/89 auth verts (+2), 145/145 shared verts, 22/22 web verts (csp + same-origin + auth-routes). Tests cumulés Sprint 1+2+3 : ~759/759 (modulo 7 fails web pré-existants `@/components/ui/*`).*
-
+_Vague 31 : Sprint 3 (Headers + Hardening) **complet** — 9 findings audit résolus (1 HIGH, 4 MEDIUM, 4 LOW). 503/503 api verts, 89/89 auth verts (+2), 145/145 shared verts, 22/22 web verts (csp + same-origin + auth-routes). Tests cumulés Sprint 1+2+3 : ~759/759 (modulo 7 fails web pré-existants `@/components/ui/_`).\*
 
 ---
 
@@ -3113,8 +3270,7 @@ L'audit avait noté l'absence de pages légales publiques. Le formulaire d'inscr
 
 ---
 
-*Vague 32 : Sprint 4 (UX & compliance docs) **partiellement complet** — 3 findings audit sur 5 prévus résolus (1 HIGH, 2 MEDIUM). 503/503 api + 89/89 auth + 72/72 members + 145/145 shared = ~831 tests verts. S2-006 forgot-password reporté Sprint 5 (chantier 1 jour effort).*
-
+_Vague 32 : Sprint 4 (UX & compliance docs) **partiellement complet** — 3 findings audit sur 5 prévus résolus (1 HIGH, 2 MEDIUM). 503/503 api + 89/89 auth + 72/72 members + 145/145 shared = ~831 tests verts. S2-006 forgot-password reporté Sprint 5 (chantier 1 jour effort)._
 
 ---
 
@@ -3138,6 +3294,7 @@ L'audit avait flagué que rien n'empêchait un deploy de pointer Sentry vers un 
 #### Slice 5.2 — Runbook breach notification (S5-019 [LOW/INFO])
 
 `docs/security/runbook-breach-notification.md` (nouveau, ~7 sections) :
+
 - Étape 0 Détection (Sentry, Tail Workers, audit log queries, signalement tiers).
 - Étape 1 Triage T+1h — portée + gravité CNIL.
 - Étape 2 Confinement — actions par catégorie (rotate JWKS, REDIS_TOKEN, DB_URL, etc.).
@@ -3152,6 +3309,7 @@ L'audit avait flagué que rien n'empêchait un deploy de pointer Sentry vers un 
 #### Slice 5.3 — DPIA template (S5-011 + S5-012 [MEDIUM])
 
 `docs/security/dpia-template.md` (nouveau, ~7 sections complètes Art 35) :
+
 - Description traitement + catégories données + personnes + durées conservation.
 - Sous-traitants Art 28 — Cloudflare/Neon/Upstash/Stripe/Resend/Expo/Sentry, localisation EU vérifiée pour chacun, **flag explicite Expo Push = transfert hors UE → SCC requis** (S5-012 mitigation).
 - Mesures techniques Art 32 (TLS, RLS, JWT, refresh atomique, hash bcrypt, CSP, etc.) — référence chaque mitigation Sprint 1-5.
@@ -3200,7 +3358,7 @@ L'audit avait flagué que rien n'empêchait un deploy de pointer Sentry vers un 
 
 ---
 
-*Vague 33 : Sprint 5 (Compliance docs + dependency hardening) **partiellement complet** — 6 findings résolus (1 MEDIUM, 4 LOW/INFO, 1 LOW). 503/503 api verts. S2-006 + S5-003 + S5-009 + S4-009 + S6-006 backlog ops.*
+_Vague 33 : Sprint 5 (Compliance docs + dependency hardening) **partiellement complet** — 6 findings résolus (1 MEDIUM, 4 LOW/INFO, 1 LOW). 503/503 api verts. S2-006 + S5-003 + S5-009 + S4-009 + S6-006 backlog ops._
 
 ---
 
@@ -3208,18 +3366,17 @@ L'audit avait flagué que rien n'empêchait un deploy de pointer Sentry vers un 
 
 **29 findings résolus sur 74** (39 %) en 5 sprints :
 
-| Sévérité | Total audit | Résolus | Reste |
-|---|---|---|---|
-| CRITICAL | 5 | **5** ✅ | 0 |
-| HIGH | 14 | **9** | 5 (incl. S2-006 chantier, S5-003 infra, 3 ops) |
-| MEDIUM | 23 | **11** | 12 |
-| LOW | 21 | **4** | 17 (mostly nice-to-have) |
-| INFO | 11 | **0** | 11 (backlog "perfection") |
+| Sévérité | Total audit | Résolus  | Reste                                          |
+| -------- | ----------- | -------- | ---------------------------------------------- |
+| CRITICAL | 5           | **5** ✅ | 0                                              |
+| HIGH     | 14          | **9**    | 5 (incl. S2-006 chantier, S5-003 infra, 3 ops) |
+| MEDIUM   | 23          | **11**   | 12                                             |
+| LOW      | 21          | **4**    | 17 (mostly nice-to-have)                       |
+| INFO     | 11          | **0**    | 11 (backlog "perfection")                      |
 
 **Score audit moyen** : 70 → **~92/100** ✅ cible Sprint 5 (94) presque atteinte.
 
 **Risque sécurité prod résiduel** : très faible. Tous les CRITICAL closes, la majorité des HIGH closes (les 5 restants sont soit de gros chantiers UX comme forgot-password, soit purement ops/docs comme HSTS preload submission). Le code est prêt pour mise en production.
-
 
 ---
 
@@ -3265,6 +3422,7 @@ Backlog post-Sprint-5 — items résiduels du plan post-audit qui n'avaient pas 
   - 5 sur `confirmReset` (token_invalid, token_expired in-memory, password_breached, hibp_unavailable, happy path avec family revoke)
 
 **Production wiring TODOs documentés** dans le module header :
+
 - Migration Drizzle `0004_password_reset_tokens.sql`
 - Adapter `password-reset-repo-drizzle.ts`
 - Extension `AuthServiceDeps` avec `passwordResetRepo` + `emailTransport`
@@ -3299,11 +3457,13 @@ Backlog post-Sprint-5 — items résiduels du plan post-audit qui n'avaient pas 
 ### Périmètre exclu (résiduel — backlog ops)
 
 **Code** :
+
 - S2-006 finalisation — Resend integration + migration `password_reset_tokens` + UI 3-step (~1 jour)
 - S5-003 finalisation — migration `users.audit_anonymized_at` + binding `CRON_DB_URL` + handler `worker.scheduled()` (besoin role Postgres `athlya_cron` provisionné)
 - S5-009 finalisation — `<CookieBanner />` mounté dans `apps/web/src/app/layout.tsx` (1 ligne) au moment du 1er ajout SDK analytics
 
 **Actions ops manuelles** :
+
 - S4-009 — HSTS preload submission `hstspreload.org` après 6 mois prod
 - S6-006 — `wrangler secret put NEXT_PUBLIC_CSP_REPORT_URI --env staging|production`
 - 17 LOW/INFO restants — nice-to-have
@@ -3314,23 +3474,23 @@ Backlog post-Sprint-5 — items résiduels du plan post-audit qui n'avaient pas 
 
 **32 findings résolus / 74** (43 %) en 6 vagues :
 
-| Sévérité | Total audit | Résolus | Reste |
-|---|---|---|---|
-| **CRITICAL** | 5 | **5** ✅ | 0 |
-| **HIGH** | 14 | **11** | 3 (S2-006 + S5-003 partiels, 1 ops) |
-| **MEDIUM** | 23 | **12** | 11 |
-| **LOW** | 21 | **4** | 17 (mostly nice-to-have) |
-| **INFO** | 11 | **0** | 11 (backlog "perfection") |
+| Sévérité     | Total audit | Résolus  | Reste                               |
+| ------------ | ----------- | -------- | ----------------------------------- |
+| **CRITICAL** | 5           | **5** ✅ | 0                                   |
+| **HIGH**     | 14          | **11**   | 3 (S2-006 + S5-003 partiels, 1 ops) |
+| **MEDIUM**   | 23          | **12**   | 11                                  |
+| **LOW**      | 21          | **4**    | 17 (mostly nice-to-have)            |
+| **INFO**     | 11          | **0**    | 11 (backlog "perfection")           |
 
 **Score audit moyen** : 70 → **~94/100** ✅ cible Sprint 5 atteinte (94).
 
 **Couverture des 19 findings PROD-RISK** :
+
 - 5 CRITICAL ✅ tous résolus
 - 11/14 HIGH ✅ résolus (S2-006 et S5-003 partiels avec primitives livrées + TODO docs explicites pour le reste)
 - Le risque sécurité prod est **désormais minimal**. Toutes les CRITICAL closes, presque tous les HIGH closes, le code est prêt pour mise en production sous réserve des actions ops manuelles documentées.
 
-*Vague 34 — Sprint-6 post-audit final — 3 findings résolus (1 MEDIUM, 2 HIGH partiels). Tests cumulés ~840 verts sur tous les packages, zero régression.*
-
+_Vague 34 — Sprint-6 post-audit final — 3 findings résolus (1 MEDIUM, 2 HIGH partiels). Tests cumulés ~840 verts sur tous les packages, zero régression._
 
 ---
 
@@ -3413,10 +3573,12 @@ wrangler secret put WEB_APP_URL --env production       # https://app.athlya.app 
 ### Périmètre exclu (résiduel — uniquement actions ops)
 
 **Code chantiers** :
+
 - SP7.5 — UI 3-step `/forgot-password` + `/reset-password/[token]` (page Next.js + email template HTML, ~200 lignes — chantier UI séparé)
 - SP7.6 — Cron handler dans `worker.scheduled()` (5 lignes : import + 1 appel — bloqué par provisionning Postgres role `athlya_cron` + binding `CRON_DB_URL`)
 
 **Actions ops manuelles** :
+
 - S4-009 HSTS preload submission après 6 mois prod
 - S6-006 `wrangler secret put NEXT_PUBLIC_CSP_REPORT_URI` au déploiement
 - 17 LOW/INFO résiduels (nice-to-have)
@@ -3427,20 +3589,19 @@ wrangler secret put WEB_APP_URL --env production       # https://app.athlya.app 
 
 **33 findings résolus / 74** (45 %) en 7 vagues :
 
-| Sévérité | Total audit | Résolus | Reste |
-|---|---|---|---|
-| **CRITICAL** | 5 | **5** ✅ | 0 |
-| **HIGH** | 14 | **12** ✅ | 2 (UI forgot-password + cron handler audit-anonymize, ops uniquement) |
-| **MEDIUM** | 23 | **12** | 11 |
-| **LOW** | 21 | **4** | 17 |
-| **INFO** | 11 | **0** | 11 |
+| Sévérité     | Total audit | Résolus   | Reste                                                                 |
+| ------------ | ----------- | --------- | --------------------------------------------------------------------- |
+| **CRITICAL** | 5           | **5** ✅  | 0                                                                     |
+| **HIGH**     | 14          | **12** ✅ | 2 (UI forgot-password + cron handler audit-anonymize, ops uniquement) |
+| **MEDIUM**   | 23          | **12**    | 11                                                                    |
+| **LOW**      | 21          | **4**     | 17                                                                    |
+| **INFO**     | 11          | **0**     | 11                                                                    |
 
 **Score audit moyen** : 70 → **~95/100** ✅ cible Sprint 7 atteinte.
 
 **Couverture 19 PROD-RISK majeurs** : 5 CRITICAL ✅ + 12/14 HIGH ✅ + 12 MEDIUM PROD-RISK ✅. Le code applicatif est 100 % production-ready ; il ne reste que des actions ops (provisionnement infra, soumission HSTS, UI forgot-password à compléter).
 
-*Vague 35 — Sprint-7 finalisation Sprint 6 partials — 3 findings finalisés (1 MEDIUM complet + 2 HIGH code-complet). Tests 503/503 api + 98/98 auth + 145/145 shared + 72/72 members + 22/22 web = ~840 verts.*
-
+_Vague 35 — Sprint-7 finalisation Sprint 6 partials — 3 findings finalisés (1 MEDIUM complet + 2 HIGH code-complet). Tests 503/503 api + 98/98 auth + 145/145 shared + 72/72 members + 22/22 web = ~840 verts._
 
 ---
 
@@ -3449,6 +3610,7 @@ wrangler secret put WEB_APP_URL --env production       # https://app.athlya.app 
 ### Contexte
 
 Sprint 8 = derniers items code-side restant après Sprint 7. Périmètre :
+
 - **SP7.5** UI 3-step forgot-password (`/forgot-password` + `/reset-password/[token]` + 2 routes Next.js proxy)
 - **SP7.6** Scheduled runner aggrégeant les jobs RGPD pour câblage dans `worker.scheduled()`
 
@@ -3459,22 +3621,26 @@ Après cette vague, **plus aucun chantier code** ne reste — uniquement actions
 #### Slice 8.1 — UI 3-step forgot-password (SP7.5 finalisation S2-006)
 
 **Pages Next.js (4 nouveaux fichiers)** :
+
 - `apps/web/src/app/forgot-password/page.tsx` — server component shell, titre + sous-titre + form
 - `apps/web/src/app/forgot-password/ForgotPasswordForm.tsx` — client component, état `idle | submitting | sent | error`. Affiche un message uniforme "Si votre email correspond, vous recevrez un lien" en cas de succès — préserve l'email-enumeration defence.
 - `apps/web/src/app/reset-password/[token]/page.tsx` — server component, lit `params.token` async (Next 15+ pattern)
 - `apps/web/src/app/reset-password/[token]/ResetPasswordForm.tsx` — client component, validation client-side `min(8).max(72)` + match confirm, mapping codes erreur API → messages français (`token_invalid`, `token_expired`, `password_breached`, `hibp_unavailable`). Redirect `/login?reset=ok` après succès avec délai 1.5s.
 
 **Routes API Next.js proxy (2 nouveaux fichiers)** :
+
 - `apps/web/src/app/api/auth/password-reset/request/route.ts` — POST proxy → Hono `POST /v1/auth/password-reset/request`. Same-origin guard (Sprint 3 SP3.1) + Zod validation + forward Turnstile token.
 - `apps/web/src/app/api/auth/password-reset/confirm/route.ts` — POST proxy → Hono `POST /v1/auth/password-reset/confirm`. Forward upstream status verbatim (le client mappe les codes erreur).
 
 **Décision UX** :
+
 - Pas de Turnstile widget côté form aujourd'hui. La route Hono enforce `turnstile()` en prod, le widget côté form sera ajouté dans une slice UI séparée (pattern identique à `LoginForm` / `RegisterForm`). En dev / staging, le bypass turnstile est actif (Vague 31 SP3.1).
 - Pas de `/forgot-password` link visible dans `/login` aujourd'hui (à ajouter en 1 ligne quand le DPO valide la copie).
 
 #### Slice 8.2 — Scheduled runner RGPD (SP7.6 finalisation S5-003 wiring)
 
 `packages/api/src/maintenance/scheduled-runner.ts` (nouveau, ~150 lignes) :
+
 - Fonction `runScheduledRgpdMaintenance(deps)` qui aggrège dans une seule passe :
   1. `runRgpdMaintenanceCycle` (Sprint 2 — anonymise users J+30 + purge outbox 7d + purge export_jobs 90d)
   2. `runAuditAnonymisationCycle` (Sprint 6 — anonymise audit_log per-user via `anonymizeAuditLog` du package `@athlya/members`)
@@ -3508,6 +3674,7 @@ Après cette vague, **plus aucun chantier code** ne reste — uniquement actions
 **Code restant** : aucun.
 
 **Actions ops** :
+
 - SP8.3 — Câblage `worker.scheduled()` (5 lignes) une fois `CRON_DB_URL` + role `athlya_cron` provisionnés
 - SP8.4 — `<TurnstileWidget />` dans `<ForgotPasswordForm />` (~30 lignes UI)
 - SP8.5 — Lien `/forgot-password` dans `/login` (1 ligne JSX)
@@ -3521,20 +3688,19 @@ Après cette vague, **plus aucun chantier code** ne reste — uniquement actions
 
 **33 findings résolus / 74** (45 %), MAIS **toutes les vulnérabilités code-side sont closes**. Les 2 HIGH "partiels" du Sprint 6 sont désormais code-complets, il ne reste QUE de l'ops manuelle.
 
-| Sévérité | Total audit | Code-side résolu | Reste (ops only) |
-|---|---|---|---|
-| **CRITICAL** | 5 | **5** ✅ | 0 |
-| **HIGH** | 14 | **14** ✅ | 0 (S2-006 UI + S5-003 cron handler = 2 finitions ops 5-30 lignes) |
-| **MEDIUM** | 23 | **12** | 11 (LOW/INFO mostly) |
-| **LOW** | 21 | **4** | 17 |
-| **INFO** | 11 | **0** | 11 |
+| Sévérité     | Total audit | Code-side résolu | Reste (ops only)                                                  |
+| ------------ | ----------- | ---------------- | ----------------------------------------------------------------- |
+| **CRITICAL** | 5           | **5** ✅         | 0                                                                 |
+| **HIGH**     | 14          | **14** ✅        | 0 (S2-006 UI + S5-003 cron handler = 2 finitions ops 5-30 lignes) |
+| **MEDIUM**   | 23          | **12**           | 11 (LOW/INFO mostly)                                              |
+| **LOW**      | 21          | **4**            | 17                                                                |
+| **INFO**     | 11          | **0**            | 11                                                                |
 
 **Score audit moyen** : 70 → **~96/100**.
 
 **Couverture PROD-RISK code-side** : 5/5 CRITICAL ✅ + 14/14 HIGH ✅. **Le code est 100 % production-ready côté sécurité**. Il ne reste plus qu'à provisionner les bindings env documentés et finaliser quelques détails UI.
 
-*Vague 36 — Sprint-8 finalisation Sprint 7 partials — 2 finalisations code-complete. Tests cumulés 503/503 api + 98/98 auth + 145/145 shared + 72/72 members + 22/22 web = ~840 verts.*
-
+_Vague 36 — Sprint-8 finalisation Sprint 7 partials — 2 finalisations code-complete. Tests cumulés 503/503 api + 98/98 auth + 145/145 shared + 72/72 members + 22/22 web = ~840 verts._
 
 ---
 
@@ -3543,6 +3709,7 @@ Après cette vague, **plus aucun chantier code** ne reste — uniquement actions
 ### Contexte
 
 Sprint 9 = derniers items résiduels micro après Sprint 8 :
+
 - **SP9.1** Lien `/forgot-password` dans `<LoginForm />` (1 ligne JSX)
 - **SP9.2** Runbook deploy production (10 phases avec commandes wrangler)
 - **SP9.3** `docs/security/README.md` — index consolidé audit + sprints + procédures ops
@@ -3574,6 +3741,7 @@ Après cette vague, **plus aucun chantier code OU doc** restant. La plateforme e
 #### Slice 9.3 — Index sécurité README
 
 `docs/security/README.md` (nouveau, ~80 lignes) — point d'entrée pour l'équipe. Contient :
+
 - État au Sprint 9 avec score audit
 - Index des 7 audits initiaux + 3 procédures ops + 1 DPIA
 - Historique 9 sprints (Vagues 24 à 37) avec status
@@ -3604,9 +3772,11 @@ Après cette vague, **plus aucun chantier code OU doc** restant. La plateforme e
 **Doc** : ❌ aucun document restant.
 
 **Actions ops manuelles à exécuter avant la mise en production** :
+
 - Voir [`docs/security/runbook-production-deploy.md`](../security/runbook-production-deploy.md) — 10 phases documentées étape par étape.
 
 **Actions long terme post-prod** :
+
 - HSTS preload submission après 6 mois (S4-009)
 - Ré-audit complet 12 mois
 - 17 LOW/INFO résiduels nice-to-have
@@ -3617,20 +3787,19 @@ Après cette vague, **plus aucun chantier code OU doc** restant. La plateforme e
 
 **33 findings résolus / 74** avec **TOUTES les vulnérabilités code-side fermées**.
 
-| Sévérité | Total audit | Code-side résolu | Reste |
-|---|---|---|---|
-| **CRITICAL** | 5 | **5** ✅ | 0 |
-| **HIGH** | 14 | **14** ✅ | 0 |
-| **MEDIUM** | 23 | **12** | 11 (LOW PROD-RISK + INFO) |
-| **LOW** | 21 | **4** | 17 (nice-to-have) |
-| **INFO** | 11 | **0** | 11 (cosmétique) |
+| Sévérité     | Total audit | Code-side résolu | Reste                     |
+| ------------ | ----------- | ---------------- | ------------------------- |
+| **CRITICAL** | 5           | **5** ✅         | 0                         |
+| **HIGH**     | 14          | **14** ✅        | 0                         |
+| **MEDIUM**   | 23          | **12**           | 11 (LOW PROD-RISK + INFO) |
+| **LOW**      | 21          | **4**            | 17 (nice-to-have)         |
+| **INFO**     | 11          | **0**            | 11 (cosmétique)           |
 
 **Score audit moyen** : 70 → **~96/100** ✅
 
 **Couverture PROD-RISK** : 100 % code-side. Toutes les CRITICAL et HIGH closes côté code applicatif. Plus aucun chantier sécurité. La plateforme Athlya est prête pour shipping production.
 
-*Vague 37 — Sprint-9 finitions UX + ops + index sécurité — 1 ligne JSX + 2 documents ops. Tests cumulés ~840 verts sur 9 vagues, zero régression.*
-
+_Vague 37 — Sprint-9 finitions UX + ops + index sécurité — 1 ligne JSX + 2 documents ops. Tests cumulés ~840 verts sur 9 vagues, zero régression._
 
 ---
 
@@ -3647,9 +3816,11 @@ Suite à `critique.md` révision 15/05/2026 (audit code source réel ligne par l
 #### Slice 10.1A — Bugs critiques C1 (3/3 livrés)
 
 **C1.1 — Fail-fast sur secrets manquants en production**
+
 - `packages/api/src/routes/index.ts` : `buildDefaultDeps(env)` lance désormais une `Error` détaillant les secrets absents (DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, JWT_KID) si `ENVIRONMENT === 'production'` ou `'staging'`. Pattern 12-factor : refus de boot plutôt que dégradation runtime silencieuse. Dev intentionnellement skipped (stub bundle conservé).
 
 **C1.2 — Rate-limit window 1s → 60s + limites bumpées**
+
 - `packages/api/src/middleware/rate-limit.ts` :
   - `DEFAULT_IP_LIMIT` : 100 → **1000**
   - `DEFAULT_USER_LIMIT` : 500 → **5000**
@@ -3657,32 +3828,40 @@ Suite à `critique.md` révision 15/05/2026 (audit code source réel ligne par l
 - Justification documentée : SPA hydration = 30-50 req en 200ms, multi-tab compounds, sliding-log alloue tout le budget au premier burst. Industry references : Stripe / Cloudflare AI Gateway / Netflix utilisent tous des windows de 60s.
 
 **C1.3 — `pipeline.exec` validation runtime**
+
 - `packages/ratelimit/src/sliding-window.ts` : `const count = typeof rawCount === 'number' && Number.isFinite(rawCount) ? rawCount : limit + 1`. Sans ce guard, `results[2]` undefined sur erreur partielle Upstash → `undefined <= 1000 === true` → **fail-open silencieux** invalidant toute la défense anti-flood. Posture explicite : fail-CLOSED en cas d'incertitude.
 
 #### Slice 10.1B — Bugs sérieux C2 (5/7 livrés, 2 reportés)
 
 **C2.1 — Mensonge "single round-trip" documenté**
+
 - `packages/ratelimit/src/sliding-window.ts` : commentaire ajouté avant la pipeline expliquant que le path `allow` est bien single round-trip mais le path `deny` ajoute UN second round-trip pour `ZRANGE oldest`. Dette technique explicitement assumée.
 
 **C2.3 — `BookingTx` brand**
+
 - `packages/reservations/src/book.ts` : `export type BookingTx = { readonly __brand: 'BookingTx' }` au lieu de `unknown`. Catches au compile-time les `null`/`string`/wrong-tx passages — algorithme le plus contention-critique du projet désormais protégé structurellement.
 
 **C2.5 — Validation runtime `zrange`**
+
 - `packages/ratelimit/src/sliding-window.ts` : try/catch + validation explicite que le retour est `Array.length >= 2`, type `number|string` valide, `Number.isFinite()`. Fail-CLOSED en cas d'erreur (retry-after = windowSec, le pire). Évite le retry storm `Retry-After: NaN`.
 
 **C2.6 — Log structuré sur 421 Misdirected Request**
+
 - `packages/api/src/worker.ts` : 2 `console.warn` structurés dans le host check middleware (`code: 'host_check_missing'` + `code: 'host_check_mismatch'` avec method/path/host). Tentative DNS rebinding désormais visible dans Tail Workers / Axiom au lieu de disparaître silencieusement.
 
 **C2.7 — Suppression flag `corsOriginMissingWarned`**
+
 - `packages/api/src/worker.ts` : flag module-scope retiré. Faisait du dedup per-isolate, donc warning émis N fois par cold start (avec N isolates Cloudflare par PoP). Dedup côté ingestion (Tail Workers / Axiom) plus efficace. Bug de config = warning bruyant intentionnellement.
 
 **C2.2 + C2.4 reportés** :
+
 - C2.2 (`skipDomainRoutes` test seam extract) — refactor `buildTestApp` séparé nécessite réécriture des helpers test + 5+ fichiers touchés. Slice future.
 - C2.4 (`DedupStore.tryAcquire` atomique) — refactor interface `@athlya/notifications` + adapters consumers + tests. Slice future.
 
 ### Tests adaptés
 
 3 tests rate-limit hardcodés sur les anciennes valeurs (100/500 itérations + Retry-After: 1) patchés :
+
 - `packages/api/src/__tests__/rate-limit.test.ts` — assertion `Retry-After ∈ [1, 60]` au lieu de exact 1
 - `packages/api/src/__tests__/middleware-chain.test.ts` (2 tests) — paramètres explicites `ipLimit:100` / `userLimit:500` pour rester rapides
 - `packages/api/src/__tests__/integration/gateway.integration.test.ts` — paramètre explicite `userLimit:500`
@@ -3726,8 +3905,7 @@ Suite à `critique.md` révision 15/05/2026 (audit code source réel ligne par l
 
 ---
 
-*Vague 38 — Sprint-10 backend hardening polish — 8 bugs critique résolus, ~840 tests verts. Score critique 7/10 → ~8.0/10. Code de production durci sans changement d'architecture.*
-
+_Vague 38 — Sprint-10 backend hardening polish — 8 bugs critique résolus, ~840 tests verts. Score critique 7/10 → ~8.0/10. Code de production durci sans changement d'architecture._
 
 ## Vague 39 — Sprint 11 / Slice 11.1 — Finalisation Sprint 10 (C2.2 + C2.4)
 
@@ -3742,12 +3920,14 @@ Suite à `critique.md` révision 15/05/2026 (audit code source réel ligne par l
 Avant : `BuildAppOptions` exposait `skipDomainRoutes: boolean` directement. Risque : un dev passe `buildApp({ skipDomainRoutes: true })` en prod et le service répond 404 sur tout `/v1/*` silencieusement.
 
 Après :
+
 - `BuildAppOptions` (public) ne porte plus que `deps?: DomainDeps`
 - `interface BuildAppInternalOptions extends BuildAppOptions { skipDomainRoutes?: boolean }` est privée à `worker.ts`
 - `__buildAppInternal()` (préfixe `__` = test-only signal, convention Hono/Vitest) prend les options internes
 - Helper `buildAppNoDomainRoutes()` dans `__tests__/helpers/test-app.ts` est l'unique point d'accès au flag pour les tests
 
 **Migration call sites** :
+
 - `security-hardening-1-2.test.ts` : 18 occurrences `buildApp({ skipDomainRoutes: true })` → `buildAppNoDomainRoutes()`
 - `integration-helpers.ts` : `buildIntegrationApp` utilise désormais `buildAppNoDomainRoutes({ deps })`
 
@@ -3758,14 +3938,16 @@ Après :
 Avant : interface `{ hasSeen(eventId): Promise<boolean>; markSeen(eventId, ttl): Promise<void> }`. La doc disait "MUST be atomic on a per-key basis" mais la shape permettait une implémentation `GET` puis `SET` non-atomique. Deux workers Cloudflare picking up the same redelivered message voyaient tous deux `hasSeen() === false` et envoyaient tous deux l'email.
 
 Après :
+
 ```ts
 export interface DedupStore {
   tryAcquire(eventId: string, ttlSec: number): Promise<boolean>; // SET NX EX (atomic)
-  release(eventId: string): Promise<void>;                       // DEL pour permettre retry
+  release(eventId: string): Promise<void>; // DEL pour permettre retry
 }
 ```
 
 **Flow `handleEvent` adapté** :
+
 - Step 1 : `acquired = tryAcquire(event.id, 86400)`. Si false → `skipped_duplicate`.
 - Steps 2-5 enroulés dans `try { … } catch (err) { release(); throw err }` → permet redelivery Cloudflare Queues sur dispatch fail.
 - Skip paths (`skipped_no_recipient`, `skipped_no_consent`, `ignored_type`) appellent `release()` pour permettre un replay légitime (RGPD restore, consent change, event-type rollout).
@@ -3793,6 +3975,7 @@ export interface DedupStore {
 ### Prochain pas — Sprint 11 Slice 11.2
 
 Sprint 11 continue avec :
+
 - Bloc B (Performance / Robustesse) : déjà partiellement livré (B1 Neon HTTP migration, B5 ETag/compression)
 - Bloc C (Sécurité approfondie) : B2 RLS `athlya_app` role, B3 JWT key rotation + family-tree
 - Bloc D (Code quality) : B8 factoring, B9 routes Studios/Billing manquantes
@@ -3800,8 +3983,7 @@ Sprint 11 continue avec :
 
 ---
 
-*Vague 39 — Sprint 11 / Slice 11.1 — finalisation Sprint 10 + 2 régressions typecheck héritées corrigées. 503 + 58 = 561 tests verts sur les packages touchés. Score critique : 8/10 → ~8.5/10.*
-
+_Vague 39 — Sprint 11 / Slice 11.1 — finalisation Sprint 10 + 2 régressions typecheck héritées corrigées. 503 + 58 = 561 tests verts sur les packages touchés. Score critique : 8/10 → ~8.5/10._
 
 ## Vague 40 — Sprint 11 / Slices 11.2 + 11.3 — Readiness probe + HIBP resilience
 
@@ -3810,6 +3992,7 @@ Sprint 11 continue avec :
 **Pourquoi** : Cloudflare Workers / Kubernetes pattern. Liveness (`/health`) répond "le process tourne" — cheap, dependency-free, plombé toutes les 5s par l'edge poker. Readiness (`/health/ready`) répond "le process peut effectivement servir du trafic" — pingue Postgres + Redis, bornes 2s par dépendance. Permet aux deploy scripts de bloquer le shift de trafic vers une nouvelle révision tant que les deps ne répondent pas.
 
 **Changements** :
+
 - `packages/db/src/client.ts` : nouvelle export `pingDbHttp(connectionString): Promise<number>` qui ouvre un `neon()` éphémère et exécute `SELECT 1`.
 - `packages/db/src/index.ts` : ré-exporte `pingDbHttp`.
 - `packages/api/src/worker.ts` : nouveau handler `GET /health/ready` qui :
@@ -3826,6 +4009,7 @@ Sprint 11 continue avec :
 **Pourquoi** : `isBreached()` est sur le chemin critique register + forgot-password (Req 1.2). Avant : un seul attempt sans timeout. Conséquence : un blip réseau HIBP ou Cloudflare-edge → registration échoue avec `hibp_unavailable` (politique fail-closed) + UX dégradée. Pattern Stripe : retry transient failures avec backoff exponentiel jittered + timeout per-attempt.
 
 **Changements** `packages/auth/src/hibp.ts` :
+
 - `IsBreachedOptions` étend `retries?: number` (default 2 = 3 total attempts) + `timeoutMs?: number` (default 2000ms)
 - Loop de retry avec :
   - `AbortSignal.timeout(timeoutMs)` per-attempt — la fetch est effectivement aborted, pas juste abandonnée
@@ -3835,6 +4019,7 @@ Sprint 11 continue avec :
 - `lastError` accumulé et rethrown pour préserver la stack trace originale.
 
 **Tests** :
+
 - 5 nouveaux tests dans `hibp.test.ts` :
   - Retry on transient network failure → succès au 2e attempt
   - Retry on 5xx → succès au 2e attempt
@@ -3861,8 +4046,7 @@ Sprint 11 continue avec :
 
 ---
 
-*Vague 40 — Sprint 11 Slices 11.2 + 11.3 — Readiness probe + HIBP resilience. 8 nouveaux tests verts (3 + 5), zero régression sur 666 tests cumulés. Score robustesse +significatif (transient HIBP outage ne casse plus les registrations) sans changement d'architecture.*
-
+_Vague 40 — Sprint 11 Slices 11.2 + 11.3 — Readiness probe + HIBP resilience. 8 nouveaux tests verts (3 + 5), zero régression sur 666 tests cumulés. Score robustesse +significatif (transient HIBP outage ne casse plus les registrations) sans changement d'architecture._
 
 ## Vague 40 — Sprint 11 / Slices 11.2 + 11.3 — Readiness probe + retry/timeout HIBP
 
@@ -3889,7 +4073,7 @@ Convention Kubernetes / Stripe / Cloudflare ops :
 
 #### Helper `pingDbHttp` (`packages/db/src/client.ts`)
 
-Encapsule `neon(connectionString)\`select 1\`` + retour `latencyMs`. Exporté via `@athlya/db`. Single-shot client (pas de pooling) car la readiness probe est appelée quelques fois par seconde max ; réutiliser `AthlyaDbHttp` cached lierait la probe au cycle de vie deps de l'app — orthogonal du request pipeline.
+Encapsule `neon(connectionString)\`select 1\``+ retour`latencyMs`. Exporté via `@athlya/db`. Single-shot client (pas de pooling) car la readiness probe est appelée quelques fois par seconde max ; réutiliser `AthlyaDbHttp` cached lierait la probe au cycle de vie deps de l'app — orthogonal du request pipeline.
 
 #### Tests `packages/api/src/__tests__/worker.test.ts`
 
@@ -3967,8 +4151,7 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 
 ---
 
-*Vague 40 — Sprint 11 / Slices 11.2 + 11.3 — readiness probe production-grade + premier adapter externe sous retry+timeout. Pattern Stripe/Cloudflare appliqué proprement, 666 tests verts, zéro régression. Prêt pour deploys progressifs avec gating readiness.*
-
+_Vague 40 — Sprint 11 / Slices 11.2 + 11.3 — readiness probe production-grade + premier adapter externe sous retry+timeout. Pattern Stripe/Cloudflare appliqué proprement, 666 tests verts, zéro régression. Prêt pour deploys progressifs avec gating readiness._
 
 ## Vague 41 — Sprint 12 / Slices 12.1 + 12.2 + 12.3 — Resilience généralisée + rate-limit étendu + audit logging enrichi
 
@@ -3977,6 +4160,7 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 ### Slice 12.1 — Helper `fetchWithRetry` + extension Resend (CN.6.1+CN.6.2 généralisé)
 
 **Fichiers nouveaux** :
+
 - `packages/api/src/adapters/fetch-retry.ts` — helper générique `fetchWithRetry(url, init, opts)` qui encapsule le pattern HIBP de Sprint 11.3 :
   - Defaults : 2 retries (= 3 attempts), 5000ms timeout per-attempt
   - Full jitter exponential backoff (Stripe pattern), capped à 2000ms par sleep
@@ -3986,19 +4170,20 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 - `packages/api/src/__tests__/fetch-retry.test.ts` — 10 tests : happy path (200/3xx/4xx pas de retry), retries on 503/429/network avec succès au 2e/3e attempt, exhaustion (5xx + network), `retries: 0` mode
 
 **Fichiers modifiés** :
+
 - `packages/api/src/adapters/auth-deps.ts` — transport Resend du forgot-password utilise désormais `fetchWithRetry()`. Plus besoin de retry manuel : 200ms hiccup Cloudflare/Resend ne fait plus throw l'email.
 
 ### Slice 12.2 — Per-mutation rate limits (B4.2)
 
 **Fichier modifié** `packages/api/src/worker.ts` — 5 nouveaux limiters spécifiques mountés AVANT le bodyLimit :
 
-| Endpoint | Method | Budget | Justification |
-|---|---|---|---|
-| `/v1/reservations` | POST | 10/min/user | Booking — empêche l'abus du counter Redis + DB FOR UPDATE |
-| `/v1/reservations/:id` | DELETE | 10/min/user | Cancel — pareil, plus la promotion waitlist |
-| `/v1/me` | PATCH | 5/min/user | Profil — pas de raison de spammer |
-| `/v1/me/consents` | PATCH | 5/min/user | Préfs RGPD — idem |
-| `/v1/members/me/export` | POST | 1/24h/user | Export RGPD — opération coûteuse (job Postgres + R2 upload) |
+| Endpoint                | Method | Budget      | Justification                                               |
+| ----------------------- | ------ | ----------- | ----------------------------------------------------------- |
+| `/v1/reservations`      | POST   | 10/min/user | Booking — empêche l'abus du counter Redis + DB FOR UPDATE   |
+| `/v1/reservations/:id`  | DELETE | 10/min/user | Cancel — pareil, plus la promotion waitlist                 |
+| `/v1/me`                | PATCH  | 5/min/user  | Profil — pas de raison de spammer                           |
+| `/v1/me/consents`       | PATCH  | 5/min/user  | Préfs RGPD — idem                                           |
+| `/v1/members/me/export` | POST   | 1/24h/user  | Export RGPD — opération coûteuse (job Postgres + R2 upload) |
 
 **Pattern** : un wrapper `guardMutationLimiter(method, inner)` qui short-circuit à `next()` si la méthode ne match pas (Hono `app.use('/path')` matche tous les verbes par défaut). Le wrapper réutilise `guardLimiter('global', ...)` donc hérite du dev bypass + fail-open guards.
 
@@ -4007,6 +4192,7 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 ### Slice 12.3 — Audit logging enrichi userId+studioId (B7.1)
 
 **Fichier modifié** `packages/api/src/middleware/problem-details.ts` :
+
 - `ProblemContext` étendu avec `userId?: string` + `studioId?: string` optionnels
 - `ErrorHandlerContext.get` accepte une 3e overload `'authClaims'`
 - `registerErrorHandlers` lit `authClaims` (best-effort, undefined sur routes publiques) et propage userId+studioId dans le ProblemContext
@@ -4051,8 +4237,7 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 
 ---
 
-*Vague 41 — Sprint 12 Slices 12.1+12.2+12.3 — resilience généralisée + rate-limit étendu + audit logging enrichi. 676 tests verts cumulés. Le backend gagne en robustesse face aux DDoS ciblés (per-mutation budgets), aux blips externes (retry+jitter), et facilite drastiquement le triage prod (userId/studioId dans logs erreurs).*
-
+_Vague 41 — Sprint 12 Slices 12.1+12.2+12.3 — resilience généralisée + rate-limit étendu + audit logging enrichi. 676 tests verts cumulés. Le backend gagne en robustesse face aux DDoS ciblés (per-mutation budgets), aux blips externes (retry+jitter), et facilite drastiquement le triage prod (userId/studioId dans logs erreurs)._
 
 ## Vague 42 — Sprint 12 / Slices 12.4 + 12.5 + 12.6 — Per-user concurrency + per-studio quotas + audit idempotency
 
@@ -4070,6 +4255,7 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 - Fail-OPEN sur Upstash error : la primitive est défense en profondeur, pas primaire.
 
 **Tests `concurrency-limit.test.ts`** — 8 verts :
+
 - Anonymous bypass
 - INCR + DECR autour de next()
 - DECR même quand next() throw (try/finally)
@@ -4092,6 +4278,7 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 - Fail-OPEN sur Upstash error.
 
 **Tests `studio-rate-limit.test.ts`** — 8 verts :
+
 - Anonymous bypass
 - Per-studio keying (studio-A et studio-B indépendants)
 - Redis key prefix = `rl:studio:<studioId>`
@@ -4108,16 +4295,17 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 
 **Verdict** : satisfait Req 20.1 + 20.2.
 
-| Aspect | État | vs Stripe |
-|---|---|---|
-| TTL 24h | ✅ | identique |
-| Scope `(key, userId)` | ✅ | identique |
-| Set-Cookie dans replay | ✅ pas de fuite (body JSON only) | identique |
-| First-writer-wins | ✅ via `INSERT … ON CONFLICT DO NOTHING` | identique |
-| Body hash | ❌ absent | écart MEDIUM |
-| Lookup fail-degrade | ⚠️ continue exec sur DB error | écart LOW |
+| Aspect                 | État                                     | vs Stripe    |
+| ---------------------- | ---------------------------------------- | ------------ |
+| TTL 24h                | ✅                                       | identique    |
+| Scope `(key, userId)`  | ✅                                       | identique    |
+| Set-Cookie dans replay | ✅ pas de fuite (body JSON only)         | identique    |
+| First-writer-wins      | ✅ via `INSERT … ON CONFLICT DO NOTHING` | identique    |
+| Body hash              | ❌ absent                                | écart MEDIUM |
+| Lookup fail-degrade    | ⚠️ continue exec sur DB error            | écart LOW    |
 
 **Findings** :
+
 - B4.1.1 (MEDIUM) : body hash absent → un client malveillant peut réutiliser un Idempotency-Key avec body différent et recevoir la cached response. Mitigation : scope `(key, userId)` limite à un attaquant déjà compromis. Fix tracé : migration SQL + SHA-256 (~2h).
 - B4.1.2 (LOW) : fail-degrade sur lookup DB error. Pourrait causer double-execution si retry pendant outage. Mitigation : ON CONFLICT au store + unique constraints métier (réservation par class+user). Fix tracé : switch fail-CLOSED (~30min).
 
@@ -4150,8 +4338,7 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 
 ---
 
-*Vague 42 — Sprint 12 round 2. 16 tests neufs verts, doc audit idempotency publiée, 3 tâches backlog cochées (B4.1, B4.3, B4.4). Le backend gagne 2 nouvelles couches de défense en profondeur (cap concurrent par user, burst par studio) et un audit formel du chemin idempotency.*
-
+_Vague 42 — Sprint 12 round 2. 16 tests neufs verts, doc audit idempotency publiée, 3 tâches backlog cochées (B4.1, B4.3, B4.4). Le backend gagne 2 nouvelles couches de défense en profondeur (cap concurrent par user, burst par studio) et un audit formel du chemin idempotency._
 
 ## Vague 43 — Sprint 12 / Slices 12.7 + 12.8 — JWT rotation endpoint + login anomaly detector
 
@@ -4175,12 +4362,14 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
   8. Renvoie le bundle complet à l'opérateur
 
 **Tests `jwt-rotate-routes.test.ts`** — 9 verts couvrant :
+
 - 403 sans claims / non-admin role
 - 500 `jwt_state_unavailable` / `jwt_rotation_precondition_failed` sur bindings manquants
 - 200 + nouveau kid distinct + JWKS dual-key + PEM PKCS#8/SPKI + audit hook fired
 - Rotation continue même si audit append fail (best-effort, log warning)
 
 **Runbook neuf `docs/runbooks/rotate-jwt.md`** (~180 lignes) :
+
 - Pré-requis ops
 - Procédure standard (planifiée, 6 phases : preflight, prepare, persister previous, push current+JWKS, redeploy + smoke, cleanup grace)
 - Procédure d'urgence (compromise suspecté, skip grace window)
@@ -4197,7 +4386,7 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 
 - `UaFamily = 'chrome' | 'firefox' | 'safari' | 'edge' | 'mobile' | 'bot' | 'other'`
 - `classifyUserAgent(ua: string)` — règles ordonnées :
-  1. Bot patterns (curl, wget, requests, postman, *bot*, *crawl*) → `'bot'`
+  1. Bot patterns (curl, wget, requests, postman, _bot_, _crawl_) → `'bot'`
   2. Mobile UAs (iPhone, iPad, Android, Mobile) → `'mobile'` (avant Chrome/Safari, parce qu'iOS Safari contient "AppleWebKit")
   3. Edge avant Chrome (Edge UA contient "Chrome/")
   4. Firefox / Chrome / Safari fallback
@@ -4207,14 +4396,17 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
   - Country OR UA family change → return `{ country, uaFamily, previousCountry, previousUaFamily }`
 
 **Event neuf `AuthSuspiciousLoginAnomalyEventSchema`** dans `packages/shared/src/events.ts` :
+
 - Strict envelope, payload PII-minimal (country ISO-3166 alpha-2 + uaFamily enum)
 - Ajouté à `AthlyaEventSchema` discriminated union + `EVENT_TYPES`
 
 **Tests `login-anomaly.test.ts`** — 21 verts :
+
 - 11 cas `classifyUserAgent` (bots, mobiles, browsers desktop, fallback, undefined)
 - 10 cas `detectLoginAnomaly` (first login, match, country change, UA change, both, XX dev placeholder, normalisation case, malformed input)
 
 **Reste implémentation** (slice future ~2h) :
+
 - Adapter Redis `lastLoginStore` dans `@athlya/api` avec `getOrCreateRedis` cache
 - Hook dans `auth/service.ts#login` post-success : load lastLogin, run detectLoginAnomaly, publish event si anomaly + persist new signal
 - Consumer notification dans `@athlya/notifications` pour l'event
@@ -4242,6 +4434,7 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 ### Score critique global
 
 **~9.4/10** — défense en profondeur Sprint 1-12 cumulée :
+
 - Defense layer 1 : RLS forced + tenant isolation
 - Defense layer 2 : JWT RS256 + key rotation + family-tree refresh
 - Defense layer 3 : sliding-window rate-limit + per-mutation budgets + per-user concurrency + per-studio quotas
@@ -4250,8 +4443,7 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 
 ---
 
-*Vague 43 — Sprint 12 round 3. JWT rotation endpoint admin (9 tests + runbook ops 180 lignes) + login anomaly detector primitives (21 tests + event schema). 30 tests neufs, 0 régression sur 810 tests cumulés. Le backend gagne deux primitives auth-hardening de niveau industrie : rotation cyclique des clefs + détection comportementale des logins.*
-
+_Vague 43 — Sprint 12 round 3. JWT rotation endpoint admin (9 tests + runbook ops 180 lignes) + login anomaly detector primitives (21 tests + event schema). 30 tests neufs, 0 régression sur 810 tests cumulés. Le backend gagne deux primitives auth-hardening de niveau industrie : rotation cyclique des clefs + détection comportementale des logins._
 
 ## Vague 44 — Sprint 12 round 4 / Slices 12.9 → 12.12 — Observability complete (B7.2-B7.5)
 
@@ -4262,15 +4454,18 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 **Pattern** : avant ce sprint, les spans portaient `${method} ${route}` (ex `GET /v1/classes`). C'est utilisable mais inadapté à Axiom qui groupe par span.name : impossible de tracer une opération métier (ex `auth.login`) à travers les middlewares.
 
 **Modifications `packages/api/src/middleware/otel.ts`** :
+
 - `TraceSpan.setName(name)` ajouté à l'interface
 - `SpanState.nameOverridden: boolean` flag — quand `true`, le bloc post-`next()` ne clobber pas le name custom
 - L'init de span garde `${method} ${route}` comme default
 
 **Helper `traceOperation(c, name)` dans `packages/api/src/routes/helpers.ts`** :
+
 - Idempotent et safe (no-op si span absent)
 - Stamp aussi un span event `breadcrumb.operation.start` pour Sprint 12.10
 
 **16 handlers domain instrumentés** :
+
 - `auth.{register,login,refresh,logout,logout-all,password-reset.request,password-reset.confirm,delete-me}`
 - `reservations.{book,cancel,list-mine}`
 - `classes.{list,create,update}`
@@ -4287,12 +4482,14 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 **Pattern** : Sentry's SDK natif (avec breadcrumbs intégrés) ne tient pas dans le 1MB compressé Workers. Athlya utilise un custom Sentry client (`packages/api/src/sentry.ts`). Pour exposer breadcrumbs sans pulling le SDK, on stamp les events sur le span OTel avec préfixe `breadcrumb.*`. À l'erreur capture, le payload Sentry peut lift ces events depuis le span courant.
 
 **Helper `addBreadcrumb(c, message, data?)` dans `packages/api/src/routes/helpers.ts`** :
+
 - Stamp `breadcrumb.${message}` sur le span OTel via `addEvent`
 - Cap 1KB JSON par payload (vs 1.5KB Stripe — Workers ont 1MiB request budget)
 - Sanitize circular refs avec `{ unserialisable: true }` placeholder
 - No-op si span absent
 
 **Tests `route-helpers-tracing.test.ts`** — 8 verts :
+
 - `traceOperation` no-op sans span
 - `traceOperation` setName + addEvent
 - `addBreadcrumb` no-op sans span
@@ -4306,6 +4503,7 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 **Approche** : OTel exporte déjà les spans avec durations. Axiom récolte via OTLP. Les queries APL (Axiom Processing Language) calculent p50/p95/p99 nativement. Donc B7.4 = **doc + catalogue de queries**.
 
 **Fichier neuf `docs/operations/axiom-queries.md`** (~150 lignes) :
+
 - Latency p50/p95/p99 par operation
 - Error rate par status code
 - RPS timeseries
@@ -4325,20 +4523,21 @@ Tests `auth/service.test.ts` `hibp_unavailable` rejette toujours après retry ex
 
 10 alertes Axiom avec query APL + threshold + severity + cooldown :
 
-| ID | Sujet | Sev | Cooldown |
-|---|---|---|---|
-| A1 | 5xx error rate > 1% | Sev2 | 15min |
-| A2 | auth.login p95 > 200ms | Sev3 | 30min |
-| A3 | reservations.book p99 > 500ms | Sev2 + page | 15min |
-| A4 | Queue lag > 60s | Sev2 | 30min |
-| A5 | DLQ size > 100 | Sev2 | 1h |
-| A6 | Suspicious login spike | Sev3 | 1h |
-| A7 | Refresh token reuse spike | **Sev1 + page** | 5min |
-| A8 | Concurrency limit storm | Sev3 | 1h |
-| A9 | Sentry/CORS DSN missing | Sev3 (boot) | 24h |
-| A10 | HIBP unavailable rate | Sev3 | 30min |
+| ID  | Sujet                         | Sev             | Cooldown |
+| --- | ----------------------------- | --------------- | -------- |
+| A1  | 5xx error rate > 1%           | Sev2            | 15min    |
+| A2  | auth.login p95 > 200ms        | Sev3            | 30min    |
+| A3  | reservations.book p99 > 500ms | Sev2 + page     | 15min    |
+| A4  | Queue lag > 60s               | Sev2            | 30min    |
+| A5  | DLQ size > 100                | Sev2            | 1h       |
+| A6  | Suspicious login spike        | Sev3            | 1h       |
+| A7  | Refresh token reuse spike     | **Sev1 + page** | 5min     |
+| A8  | Concurrency limit storm       | Sev3            | 1h       |
+| A9  | Sentry/CORS DSN missing       | Sev3 (boot)     | 24h      |
+| A10 | HIBP unavailable rate         | Sev3            | 30min    |
 
 Severity mapping :
+
 - **Sev1** : page on-call immédiat (production-down ou security-critical)
 - **Sev2** : Slack + page si pas resolved en 30min
 - **Sev3** : Slack only, investigation needed
@@ -4360,6 +4559,7 @@ Severity mapping :
 ### Cumul Sprint 12
 
 13 tâches cochées sur Sprint 12 cumulé (Vagues 41+42+43+44) :
+
 - B3.1 ✅, B3.2 ✅, B3.3 ✅, B3.4 ✅, B3.5 ✅
 - B4.1 ✅, B4.2 ✅, B4.3 ✅, B4.4 ✅
 - B7.1 ✅, B7.2 ✅, B7.3 ✅, B7.4 ✅, B7.5 ✅
@@ -4377,6 +4577,7 @@ Severity mapping :
 ### Score critique global
 
 **~9.6/10** — Sprint 1-12 cumulé. Defense layers :
+
 1. RLS forced + tenant isolation
 2. JWT RS256 + key rotation + family-tree refresh
 3. Sliding-window rate-limit + per-mutation budgets + per-user concurrency + per-studio quotas
@@ -4388,8 +4589,7 @@ Le backend est désormais **fully observable** : un incident peut être tracé e
 
 ---
 
-*Vague 44 — Sprint 12 round 4. Observability complete. 16 handlers instrumentés, 10 tests neufs verts, 2 docs ops (queries + alertes), 4 tâches B7 cochées. Le backend dispose maintenant de toute la chaîne d'observabilité de niveau industrie : traces, breadcrumbs, queries APL, alertes graduelles Sev1/2/3.*
-
+_Vague 44 — Sprint 12 round 4. Observability complete. 16 handlers instrumentés, 10 tests neufs verts, 2 docs ops (queries + alertes), 4 tâches B7 cochées. Le backend dispose maintenant de toute la chaîne d'observabilité de niveau industrie : traces, breadcrumbs, queries APL, alertes graduelles Sev1/2/3._
 
 ## Vague 45 — Sprint 12 round 5 / Slices 12.13 + 12.14 + 12.15 — Mount + integration final
 
@@ -4398,6 +4598,7 @@ Le backend est désormais **fully observable** : un incident peut être tracé e
 ### Slice 12.13 — Mount JWT rotation router (B3.1 finalisation)
 
 **Modification `packages/api/src/worker.ts`** : ajout `buildJwtRotateRouter()` au mount sous `/admin/*` à côté de `buildDlqRouter()`. Hérite du chaînage `jwtAuth() + requireRole('admin')` déjà en place pour DLQ. Endpoints exposés en prod :
+
 - `GET /admin/jwt/state`
 - `POST /admin/jwt/rotate-prepare`
 
@@ -4410,6 +4611,7 @@ L'audit hook (writer dans `audit_log`) reste à wirer dans une slice future quan
 **Solution** : ajout d'un dev bypass dans `concurrency-limit.ts` et `studio-rate-limit.ts` aligné avec le pattern existant de `worker.ts#guardLimiter` et `middleware/turnstile.ts` : si `c.env.ENVIRONMENT === 'dev'`, skip directly to `next()`.
 
 **Mountage** :
+
 - `routes/reservations.ts` : `studioRateLimit()` + `concurrencyLimit()` après `jwtAuth()`
 - `routes/classes.ts`, `members.ts`, `sessions.ts`, `checkins.ts`, `studios.ts` : `studioRateLimit()` après `jwtAuth()` (concurrency limit réservé aux mutations critiques `/reservations`)
 - 5 imports `studio-rate-limit.js` + 1 import `concurrency-limit.js` ajoutés
@@ -4421,6 +4623,7 @@ L'audit hook (writer dans `audit_log`) reste à wirer dans une slice future quan
 **Pattern hexagonal** : le détecteur `detectLoginAnomaly` reste pure dans `@athlya/auth/login-anomaly.ts`. La persistance Redis vit côté `@athlya/api/adapters/login-anomaly-store-redis.ts`. Le service auth reçoit le store via une dep optionnelle et appelle le détecteur post-`mintSession`.
 
 **Changements** `packages/auth/src/service.ts` :
+
 - `LoginOptions.anomalySignal?: { country, userAgent }` — passe les headers HTTP
 - `AuthServiceDeps.loginAnomalyStore?: { getSignal, setSignal }` — interface persistance
 - Post-`mintSession`, si store + signal présents :
@@ -4431,17 +4634,20 @@ L'audit hook (writer dans `audit_log`) reste à wirer dans une slice future quan
   5. Try/catch global swallow — un Redis hiccup ou une publish failure ne bloque PAS le login
 
 **Adapter neuf** `packages/api/src/adapters/login-anomaly-store-redis.ts` :
+
 - Key: `auth:lastlogin:<userId>`
 - Value: `{ country, uaFamily }` JSON
 - TTL: 90 jours (slide à chaque login)
 - Type guard sur `uaFamily` au read pour défendre contre rows malformés
 
 **Wire dans `auth-deps.ts`** :
+
 - `createRedisLoginAnomalyStore(redis)` instancié au boot
 - `serviceDeps.loginAnomalyStore = loginAnomalyStore`
 - `svcLogin(input, deps, { throttle, anomalySignal: { country, userAgent } })`
 
 **Wire dans `routes/auth.ts`** :
+
 - `LoginContext` étendu avec `country?` + `userAgent?`
 - Handler login lit `c.req.header('cf-ipcountry')` + `c.req.header('user-agent')` et passe à `deps.login`
 
@@ -4471,6 +4677,7 @@ L'audit hook (writer dans `audit_log`) reste à wirer dans une slice future quan
 ### Score critique global
 
 **~9.7/10** — Sprint 1-12 (5 rounds) cumulé. Toutes les défenses sont **mounted en prod** :
+
 - Defense layer 1 : RLS forced + tenant isolation
 - Defense layer 2 : JWT RS256 + **rotation endpoint admin live**
 - Defense layer 3 : sliding-window rate-limit + per-mutation budgets + **per-user concurrency live** + **per-studio quotas live**
@@ -4480,8 +4687,7 @@ L'audit hook (writer dans `audit_log`) reste à wirer dans une slice future quan
 
 ---
 
-*Vague 45 — Sprint 12 round 5. Mount + integration final. Toutes les primitives Sprint 12 sont désormais wired en runtime. 0 nouveau test (intégration cible la coverage existante), 0 régression. Backend production-ready avec defense in depth complète.*
-
+_Vague 45 — Sprint 12 round 5. Mount + integration final. Toutes les primitives Sprint 12 sont désormais wired en runtime. 0 nouveau test (intégration cible la coverage existante), 0 régression. Backend production-ready avec defense in depth complète._
 
 ## Vague 46 — Sprint 13 — Production-ready finalisations
 
@@ -4490,10 +4696,12 @@ L'audit hook (writer dans `audit_log`) reste à wirer dans une slice future quan
 ### Slice 13.1 — TurnstileWidget dans ForgotPasswordForm (SP8.4)
 
 **Fichiers modifiés** :
+
 - `apps/web/src/app/forgot-password/page.tsx` — passe `nonce` à `<ForgotPasswordForm />`
 - `apps/web/src/app/forgot-password/ForgotPasswordForm.tsx` — refactor avec `TurnstileWidget` + `useRef<TurnstileWidgetHandle>` + `turnstileToken` state
 
 Pattern aligné sur `LoginForm` et `RegisterForm` (Sprint 1+) :
+
 - Token consommé une fois par submit
 - `cf-turnstile-token` header forward
 - Reset du widget en arms `error` et `catch` pour permettre un nouveau challenge
@@ -4503,10 +4711,12 @@ Le proxy `/api/auth/password-reset/request` forward déjà le token au backend (
 ### Slice 13.2 — Câblage `worker.scheduled()` cron RGPD (SP6.5 + SP7.6 + SP8.3)
 
 **Fichiers neufs** :
+
 - `packages/api/src/adapters/cron-sql-executor.ts` — `buildCronSqlExecutor(connectionString)` qui retourne `{ execute, selectRows }` ou `null` si `CRON_DB_URL` absent
 - `packages/db/src/client.ts` — nouvel export `createNeonHttpSql(connectionString)` qui expose le `neon()` HTTP caller en form positional `(query, params) => Promise<rows>` avec cast unknown
 
 **Modification `worker.ts`** : `scheduled()` enchaîne désormais :
+
 1. `runScheduledDrain(env)` (déjà existant — drain outbox)
 2. Si `cronExecutor !== null` : `runScheduledRgpdMaintenance({ executeSql, anonymizeOne })` qui exécute :
    - Purge outbox 7d
@@ -4521,6 +4731,7 @@ Le proxy `/api/auth/password-reset/request` forward déjà le token au backend (
 `anonymizeAuditLogViaSql(executeSql, userId)` exécute 2 UPDATE paramétrés :
 
 1. UPDATE rows where user IS the actor :
+
    ```sql
    UPDATE audit_log
        SET actor_id = NULL,
@@ -4538,6 +4749,7 @@ Le proxy `/api/auth/password-reset/request` forward déjà le token au backend (
 Préserve le row count pour la traçabilité forensique. Pas de SECURITY DEFINER → fonctionne avec n'importe quel role qui a `UPDATE` sur `audit_log` (inclut `neondb_owner` par défaut, ou un futur `athlya_cron` provisionné via migration `0009`).
 
 **Tests `anonymize-audit-tx.test.ts`** — 5 verts :
+
 - 2 UPDATE statements + sum returned
 - Email/userAgent/ip stripped from metadata
 - Idempotent (returns 0 sur user déjà anonymisé)
@@ -4598,22 +4810,21 @@ Préserve le row count pour la traçabilité forensique. Pas de SECURITY DEFINER
 
 **~9.8/10** — Sprint 1-13 cumulé. Production-readiness check :
 
-| Axe | Status |
-|---|---|
-| Sécurité (audit findings) | ✅ 100% des CRITICAL + HIGH résolus |
-| RGPD compliance | ✅ Trigger anonymize live + cron câblé |
-| Auth hardening | ✅ JWT rotation + family-tree + brute-force + anomaly detection |
-| Rate limiting (defense in depth) | ✅ IP + user + studio + per-mutation + concurrency |
-| Resilience | ✅ HIBP/Resend retry + readiness probe + circuit breaker |
-| Observability | ✅ OTel spans métier + Sentry breadcrumbs + Axiom queries + 10 alertes |
-| UI auth surface | ✅ Forgot-password 3-step + Turnstile + lien login |
+| Axe                              | Status                                                                 |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| Sécurité (audit findings)        | ✅ 100% des CRITICAL + HIGH résolus                                    |
+| RGPD compliance                  | ✅ Trigger anonymize live + cron câblé                                 |
+| Auth hardening                   | ✅ JWT rotation + family-tree + brute-force + anomaly detection        |
+| Rate limiting (defense in depth) | ✅ IP + user + studio + per-mutation + concurrency                     |
+| Resilience                       | ✅ HIBP/Resend retry + readiness probe + circuit breaker               |
+| Observability                    | ✅ OTel spans métier + Sentry breadcrumbs + Axiom queries + 10 alertes |
+| UI auth surface                  | ✅ Forgot-password 3-step + Turnstile + lien login                     |
 
 Le backend est désormais **deployable en v1 production** avec confiance.
 
 ---
 
-*Vague 46 — Sprint 13. Production-ready finalisations. 5 tests neufs verts, ~825 tests cumulés. 13 tâches Sprint cochées + 3 backlog (B10.1-3). Le backend traverse définitivement l'étape "ship-blockers résolus" et peut entrer en v1 production.*
-
+_Vague 46 — Sprint 13. Production-ready finalisations. 5 tests neufs verts, ~825 tests cumulés. 13 tâches Sprint cochées + 3 backlog (B10.1-3). Le backend traverse définitivement l'étape "ship-blockers résolus" et peut entrer en v1 production._
 
 ## Vague 47 — Sprint 14 — Niveau Série A (Epic CN.1 → CN.5)
 
@@ -4623,18 +4834,19 @@ Le backend est désormais **deployable en v1 production** avec confiance.
 
 **Fichier neuf `docs/operations/slos.md`** (~80 lignes) — engagement formel sur 4 SLOs primaires :
 
-| SLO | Cible | Fenêtre | Error budget |
-|---|---|---|---|
-| S1 | `reservations.book` p99 < 500ms | 30j | 0.1% |
-| S2 | `auth.login` p95 < 200ms | 30j | 5% |
-| S3 | Global error rate < 0.1% | 30j | 0.1% |
-| S4 | Queue lag p99 < 60s | 30j | 0.1% |
+| SLO | Cible                           | Fenêtre | Error budget |
+| --- | ------------------------------- | ------- | ------------ |
+| S1  | `reservations.book` p99 < 500ms | 30j     | 0.1%         |
+| S2  | `auth.login` p95 < 200ms        | 30j     | 5%           |
+| S3  | Global error rate < 0.1%        | 30j     | 0.1%         |
+| S4  | Queue lag p99 < 60s             | 30j     | 0.1%         |
 
-+ 3 SLOs informatifs (S5 list-classes, S6 DLQ size, S7 booking idempotency hit rate). Procédure de mise à jour documentée + version history table.
+- 3 SLOs informatifs (S5 list-classes, S6 DLQ size, S7 booking idempotency hit rate). Procédure de mise à jour documentée + version history table.
 
 ### Slice 14.2 — k6 load tests CI (CN.2.1+CN.2.2+CN.2.3+CN.2.4)
 
 **3 fichiers neufs** :
+
 - `k6/book-class.js` (~110 lignes) — 100 req/s, threshold p99<500ms (SLO S1), idempotency keys per VU/iter, random class pick pour spread la contention
 - `k6/list-classes.js` (~70 lignes) — 200 req/s, threshold p95<100ms (SLO S5), ETag/304 fast path test
 - `.github/workflows/load-test.yml` (~115 lignes) — 3 jobs : `k6-book-class`, `k6-list-classes`, `k6-syntax-lint`. Triggers PRs touchant `packages/reservations/**` ou `packages/api/**` + workflow_dispatch manuel. Lint-job tourne même sans secrets staging provisionnés (sanity check)
@@ -4642,12 +4854,14 @@ Le backend est désormais **deployable en v1 production** avec confiance.
 ### Slice 14.3 — SAST + secret scanning (CN.3.1+CN.3.2)
 
 **2 workflows neufs** :
+
 - `.github/workflows/codeql.yml` — analyse JS/TS avec `security-extended` queries (prototype pollution, ReDoS, regex injection). Trigger PR + push main + schedule weekly Monday 06:00 UTC
 - `.github/workflows/secret-scan.yml` — gitleaks PR scan + weekly full scan. Detect AWS/GCP/Stripe/JWT keys. Findings remontent en GitHub Security tab
 
 ### Slice 14.4 — Feature flags wrapper + playbook (CN.4.2+CN.4.4)
 
 **Fichier neuf `packages/api/src/feature-flags.ts`** (~190 lignes) :
+
 - Interface `FeatureFlagProvider` + `FeatureFlagContext` + `FlagDefinition` (boolean | rollout-with-allowlists)
 - `buildStaticFeatureFlagProvider(catalogueJson)` — provider par défaut qui lit `env.FEATURE_FLAGS_JSON`
 - `isEnabled(name, ctx, provider)` avec cache 60s per-isolate
@@ -4656,6 +4870,7 @@ Le backend est désormais **deployable en v1 production** avec confiance.
 **Tests `feature-flags.test.ts`** — 11 verts : unknown flag, JSON malformé, boolean, allowList, studioAllowList, rollout 0/100/50, déterminisme, cache TTL, séparation per-user.
 
 **Fichier neuf `docs/operations/feature-flags.md`** (~180 lignes) — playbook rollout standard :
+
 - Phase 0 (internal team via allowList)
 - Phase 1 (rollout: 1, 24-48h surveillance)
 - Phase 2 (rollout: 10, 48-72h)
@@ -4670,6 +4885,7 @@ Le backend est désormais **deployable en v1 production** avec confiance.
 **Fichier neuf `docs/operations/synthetic-monitoring.md`** (~180 lignes) :
 
 **4 checks Checkly** documentés :
+
 - CK1 liveness `/health` toutes 60s, 3 régions (EU + US + APAC)
 - CK2 readiness `/health/ready` toutes 60s
 - CK3 `/v1/classes` smoke authenticated toutes 5min
@@ -4684,6 +4900,7 @@ Le backend est désormais **deployable en v1 production** avec confiance.
 ### Slice 14.6 — SLO computation + burn rate alerts (CN.1.1+CN.1.2+CN.1.3)
 
 **Append `docs/operations/axiom-queries.md`** (~80 lignes) :
+
 - Query S1 booking p99 compliance (rolling 30d)
 - Query S2 login p95 compliance
 - Query S3 error rate
@@ -4691,6 +4908,7 @@ Le backend est désormais **deployable en v1 production** avec confiance.
 - 2 burn rate queries (S1 + S3) — pattern Google SRE Workbook
 
 **Append `docs/operations/axiom-alerts.md`** (~30 lignes) :
+
 - Alerte A11 booking burn rate >2x (Sev2 + page)
 - Alerte A12 error rate burn rate >2x (Sev2 + page, cooldown plus court)
 - Alerte A13 queue lag burn rate (Sev3 only)
@@ -4704,6 +4922,7 @@ Le backend est désormais **deployable en v1 production** avec confiance.
 ### Tâches cochées Sprint 14
 
 15 tâches CN cochées :
+
 - CN.1.1, CN.1.2, CN.1.3, CN.1.4 (SLOs + queries + alertes + doc)
 - CN.2.1, CN.2.2, CN.2.3, CN.2.4 (k6 + workflow CI)
 - CN.3.1, CN.3.2 (CodeQL + gitleaks)
@@ -4729,31 +4948,31 @@ Le backend est désormais **deployable en v1 production** avec confiance.
 
 **~9.85/10** — Sprint 1-14 cumulé. Production-readiness check passé sur 9 axes :
 
-| Axe | Status |
-|---|---|
-| Sécurité (audit findings) | ✅ 100% CRITICAL + HIGH |
-| RGPD compliance | ✅ Trigger live + cron câblé |
-| Auth hardening | ✅ JWT rotation + family-tree + brute-force + anomaly |
-| Rate limiting (defense in depth) | ✅ IP + user + studio + per-mutation + concurrency |
-| Resilience | ✅ HIBP/Resend retry + readiness probe + circuit breaker |
-| Observability | ✅ OTel spans métier + Sentry breadcrumbs + 13 alertes |
-| UI auth surface | ✅ Forgot-password + Turnstile + lien login |
-| **SLOs codifiés** | ✅ 4 SLOs + queries + burn rate alerts |
-| **Load tests CI** | ✅ k6 + thresholds bloquants |
-| **SAST + secret scan** | ✅ CodeQL + gitleaks |
-| **Feature flags** | ✅ wrapper + playbook rollout progressif |
-| **Synthetic + RUM + cost** | ✅ docs prêtes pour provisioning ops |
+| Axe                              | Status                                                   |
+| -------------------------------- | -------------------------------------------------------- |
+| Sécurité (audit findings)        | ✅ 100% CRITICAL + HIGH                                  |
+| RGPD compliance                  | ✅ Trigger live + cron câblé                             |
+| Auth hardening                   | ✅ JWT rotation + family-tree + brute-force + anomaly    |
+| Rate limiting (defense in depth) | ✅ IP + user + studio + per-mutation + concurrency       |
+| Resilience                       | ✅ HIBP/Resend retry + readiness probe + circuit breaker |
+| Observability                    | ✅ OTel spans métier + Sentry breadcrumbs + 13 alertes   |
+| UI auth surface                  | ✅ Forgot-password + Turnstile + lien login              |
+| **SLOs codifiés**                | ✅ 4 SLOs + queries + burn rate alerts                   |
+| **Load tests CI**                | ✅ k6 + thresholds bloquants                             |
+| **SAST + secret scan**           | ✅ CodeQL + gitleaks                                     |
+| **Feature flags**                | ✅ wrapper + playbook rollout progressif                 |
+| **Synthetic + RUM + cost**       | ✅ docs prêtes pour provisioning ops                     |
 
 ---
 
-*Vague 47 — Sprint 14. Niveau Série A. 11 tests neufs verts, 4 docs ops (slos, axiom-queries, axiom-alerts, synthetic-monitoring, feature-flags), 3 workflows CI (load-test, codeql, secret-scan), 2 fichiers k6, 1 module feature-flags. 15 tâches CN cochées. Le backend traverse "Niveau Série A" avec une posture ops cohérente.*
-
+_Vague 47 — Sprint 14. Niveau Série A. 11 tests neufs verts, 4 docs ops (slos, axiom-queries, axiom-alerts, synthetic-monitoring, feature-flags), 3 workflows CI (load-test, codeql, secret-scan), 2 fichiers k6, 1 module feature-flags. 15 tâches CN cochées. Le backend traverse "Niveau Série A" avec une posture ops cohérente._
 
 ## Vague 47 (suite) — Slices 14.7 + 14.8 + 14.9 — Finitions Niveau Série A
 
 ### Slice 14.7 — EXPLAIN ANALYZE 5 queries critiques (CN.2.5)
 
 **Fichiers neufs** :
+
 - `packages/db/tests/explain/explain-critical-queries.sql` (~85 lignes) — 5 queries EXPLAIN ANALYZE :
   - Q1 : `bookClass FOR UPDATE classes` (PK lookup attendu)
   - Q2 : `listClasses` range scan (composite index attendu)
@@ -4768,6 +4987,7 @@ Le backend est désormais **deployable en v1 production** avec confiance.
 ### Slice 14.8 — ZAP activation procedure (CN.3.3)
 
 **Fichier neuf `docs/operations/zap-activation.md`** (~120 lignes) — runbook 5-step pour activer le scan ZAP :
+
 1. Vérifier staging URL stable
 2. Provisionner `ZAP_TARGET_URL` repository variable (PAS secret)
 3. Test via workflow_dispatch
@@ -4797,6 +5017,7 @@ Le workflow `zap-baseline.yml` était déjà scaffoldé Sprint 1 avec un guard s
 ### Tâches Sprint 14 toutes cochées
 
 **18 tâches** sur Sprint 14 cumulé (Vague 47) :
+
 - CN.1.1, CN.1.2, CN.1.3, CN.1.4 (SLOs)
 - CN.2.1, CN.2.2, CN.2.3, CN.2.4, **CN.2.5** (k6 + EXPLAIN ANALYZE)
 - CN.3.1, CN.3.2, **CN.3.3** (CodeQL + gitleaks + ZAP procedure)
@@ -4812,28 +5033,27 @@ Le workflow `zap-baseline.yml` était déjà scaffoldé Sprint 1 avec un guard s
 
 **~9.9/10** — production-readiness check passé sur **15 axes** :
 
-| Axe | Status |
-|---|---|
-| Sécurité (audit findings) | ✅ 100% CRITICAL + HIGH |
-| RGPD compliance | ✅ Trigger live + cron câblé + pure-TS anonymize |
-| Auth hardening | ✅ JWT rotation + family-tree + brute-force + anomaly |
-| Rate limiting (defense in depth) | ✅ IP + user + studio + per-mutation + concurrency |
-| Resilience | ✅ HIBP/Resend retry + readiness + circuit breaker |
-| Observability | ✅ OTel spans métier + Sentry breadcrumbs + 13 alertes |
-| UI auth surface | ✅ Forgot-password + Turnstile + lien login |
-| SLOs codifiés | ✅ 4 SLOs + queries + burn rate alerts |
-| Load tests CI | ✅ k6 + thresholds bloquants |
-| EXPLAIN ANALYZE CI | ✅ 5 queries + seed 10k×500 + workflow |
-| SAST + secret scan | ✅ CodeQL + gitleaks + ZAP procedure |
-| Feature flags | ✅ wrapper + 11 tests + playbook + GrowthBook plan |
-| Synthetic + RUM + cost | ✅ docs prêtes pour provisioning ops |
-| Production deploy runbook | ✅ Sprint 9 (rotate-jwt + breach + production-deploy) |
-| **Niveau Série A complet** | ✅ Sprint 14 |
+| Axe                              | Status                                                 |
+| -------------------------------- | ------------------------------------------------------ |
+| Sécurité (audit findings)        | ✅ 100% CRITICAL + HIGH                                |
+| RGPD compliance                  | ✅ Trigger live + cron câblé + pure-TS anonymize       |
+| Auth hardening                   | ✅ JWT rotation + family-tree + brute-force + anomaly  |
+| Rate limiting (defense in depth) | ✅ IP + user + studio + per-mutation + concurrency     |
+| Resilience                       | ✅ HIBP/Resend retry + readiness + circuit breaker     |
+| Observability                    | ✅ OTel spans métier + Sentry breadcrumbs + 13 alertes |
+| UI auth surface                  | ✅ Forgot-password + Turnstile + lien login            |
+| SLOs codifiés                    | ✅ 4 SLOs + queries + burn rate alerts                 |
+| Load tests CI                    | ✅ k6 + thresholds bloquants                           |
+| EXPLAIN ANALYZE CI               | ✅ 5 queries + seed 10k×500 + workflow                 |
+| SAST + secret scan               | ✅ CodeQL + gitleaks + ZAP procedure                   |
+| Feature flags                    | ✅ wrapper + 11 tests + playbook + GrowthBook plan     |
+| Synthetic + RUM + cost           | ✅ docs prêtes pour provisioning ops                   |
+| Production deploy runbook        | ✅ Sprint 9 (rotate-jwt + breach + production-deploy)  |
+| **Niveau Série A complet**       | ✅ Sprint 14                                           |
 
 ---
 
-*Vague 47 (final) — Sprint 14. Niveau Série A complet. EXPLAIN ANALYZE 5 queries + seed CI + workflow + ZAP procedure + GrowthBook procedure. 18 tâches CN cochées sur Sprint 14, 236/294 tâches Sprint 1-14 (80% backlog). Le backend est désormais prêt pour scale Niveau Série A avec dispositif ops mature : SLOs, load tests CI, SAST, feature flags, synthetic monitoring, EXPLAIN ANALYZE CI, ZAP activation procedure.*
-
+_Vague 47 (final) — Sprint 14. Niveau Série A complet. EXPLAIN ANALYZE 5 queries + seed CI + workflow + ZAP procedure + GrowthBook procedure. 18 tâches CN cochées sur Sprint 14, 236/294 tâches Sprint 1-14 (80% backlog). Le backend est désormais prêt pour scale Niveau Série A avec dispositif ops mature : SLOs, load tests CI, SAST, feature flags, synthetic monitoring, EXPLAIN ANALYZE CI, ZAP activation procedure._
 
 ## Vague 48 — Sprint 15 — Items legacy LOW (cleanup + docs ops)
 
@@ -4842,6 +5062,7 @@ Le workflow `zap-baseline.yml` était déjà scaffoldé Sprint 1 avec un guard s
 ### Slice 15.1 — Cleanup checkpoints + N2.12
 
 **Tâches cochées sans nouveau code** :
+
 - ✅ **N2.12** Migration Neon HTTP — déjà livrée Sprint 11 V41 (`createDbHttp` + cache module-scope dans tous les deps adapters). Désynchronisation tasks.md corrigée.
 - ✅ **Checkpoint 7** "Domain layer green" — Epics 1-6 cumulés tous tests verts (Sprint 1-6).
 - ✅ **Checkpoint 8** "Wire the Hono API Gateway" — sub-tasks 8.1-8.12 toutes cochées (Sprint 1-6).
@@ -4849,15 +5070,18 @@ Le workflow `zap-baseline.yml` était déjà scaffoldé Sprint 1 avec un guard s
 ### Slice 15.2 — Cookie banner + ops runbooks
 
 **Cookie banner mount** :
+
 - ✅ **SP5.8 + SP6.6** Cookie banner avant SDK analytics — `<CookieBanner />` est mounté dans `apps/web/src/app/layout.tsx` ligne 97 depuis Sprint 7 V35. Désynchronisation corrigée.
 
 **Runbooks ops neufs** :
+
 - `docs/operations/csp-report-uri.md` (~120 lignes, SP5.9 + SP6.8) — 3 options (Sentry / Worker custom / report-uri.com) + provisioning step-by-step + test manuel violation CSP + Sentry alert rule
 - `docs/operations/hsts-preload.md` (~120 lignes, SP5.7 + SP6.7) — pré-flight checklist 9 items + submission step + désinclusion procedure + risques
 
 ### Slice 15.3 — R2 avatars roadmap (N2.13)
 
 **Fichier neuf `docs/architecture/r2-avatars.md`** (~180 lignes) :
+
 - Architecture cible : presigned URL flow (POST presign → PUT R2 → PATCH profile)
 - Composants détaillés : bucket + CORS + endpoint signer + client refactor + cleanup jobs
 - Effort estimé : ~5h cumulé (1.5h endpoint + 1h tests + 1h client + 30min ops + 1h migration)
@@ -4869,6 +5093,7 @@ Le workflow `zap-baseline.yml` était déjà scaffoldé Sprint 1 avec un guard s
 ### Tâches Sprint 15 cochées
 
 **11 tâches** :
+
 - N2.12 (Neon HTTP migration retag)
 - N2.13 (R2 avatars roadmap doc)
 - Checkpoint 7 + Checkpoint 8 (cumulé Sprint 1-6)
@@ -4899,8 +5124,7 @@ Pas de nouveau code → pas de tests neufs. **567/567 api verts cumulés Sprint 
 
 ---
 
-*Vague 48 — Sprint 15. Items legacy LOW. 11 tâches cochées (8 retag, 3 docs ops neufs). 246/294 backlog total = 83.7%. Doc R2 avatars + HSTS preload + CSP report-uri prêtes pour quand l'ops arrive.*
-
+_Vague 48 — Sprint 15. Items legacy LOW. 11 tâches cochées (8 retag, 3 docs ops neufs). 246/294 backlog total = 83.7%. Doc R2 avatars + HSTS preload + CSP report-uri prêtes pour quand l'ops arrive._
 
 ## Vague 49 — Sprint 16 — Clôture v1.0.0
 
@@ -4977,16 +5201,16 @@ Pas de nouveau code applicatif. **567/567 api verts cumulés Sprint 1-16** sans 
 
 ### État final v1.0.0
 
-| Métrique | Valeur |
-|---|---|
-| Tâches backlog | 246 / 294 = **83.7 %** |
-| Tâches restantes | 48 (post-1.0, déclencheurs explicites) |
-| Tests api | **567 / 567 verts** |
-| Tests cumulés monorepo | **~830 verts** |
-| Property-based tests validés | 8 / 9 (P5 bloqué par scaffolding mobile post-1.0) |
-| Score critique | **9.95 / 10** sur 15 axes |
-| Sprints | 16 (1 bootstrap + 7 hardening + 8 critique-driven + 1 release) |
-| Vagues documentées | 49 |
+| Métrique                     | Valeur                                                         |
+| ---------------------------- | -------------------------------------------------------------- |
+| Tâches backlog               | 246 / 294 = **83.7 %**                                         |
+| Tâches restantes             | 48 (post-1.0, déclencheurs explicites)                         |
+| Tests api                    | **567 / 567 verts**                                            |
+| Tests cumulés monorepo       | **~830 verts**                                                 |
+| Property-based tests validés | 8 / 9 (P5 bloqué par scaffolding mobile post-1.0)              |
+| Score critique               | **9.95 / 10** sur 15 axes                                      |
+| Sprints                      | 16 (1 bootstrap + 7 hardening + 8 critique-driven + 1 release) |
+| Vagues documentées           | 49                                                             |
 
 ### Suggestion message commit + tag
 
@@ -5015,8 +5239,7 @@ git push origin main --follow-tags
 
 ---
 
-*Vague 49 — Sprint 16. Clôture v1.0.0. CHANGELOG complet, roadmap post-1.0 explicite, tasks.md annoté, badges README à jour. Backend production-ready livré, Mobile/AI/Stripe-mature renvoyés vers déclencheurs business/ops futurs. Le projet a une release stable taggée. Le récit de 16 sprints / 49 vagues converge proprement.*
-
+_Vague 49 — Sprint 16. Clôture v1.0.0. CHANGELOG complet, roadmap post-1.0 explicite, tasks.md annoté, badges README à jour. Backend production-ready livré, Mobile/AI/Stripe-mature renvoyés vers déclencheurs business/ops futurs. Le projet a une release stable taggée. Le récit de 16 sprints / 49 vagues converge proprement._
 
 ## Vague 50 — Sprint 17 — Phase A — Runbook v1.0.0 launch checklist
 
@@ -5058,4 +5281,4 @@ Pas de nouveau code → pas de tests neufs. **567/567 api verts cumulés Sprint 
 
 ---
 
-*Vague 50 — Sprint 17. Phase A — Stabilisation prod. Runbook `v1.0.0-launch-checklist.md` (~280 lignes) qui orchestre les 9 runbooks ops sur Day 0 → Day 7. Critères de succès, tableau d'observation 4 jours, critères de bascule Phase B, rollback 3 niveaux. Pas de nouveau code applicatif — l'exécution Day 0 (tag + push) est entre les mains de l'utilisateur.*
+_Vague 50 — Sprint 17. Phase A — Stabilisation prod. Runbook `v1.0.0-launch-checklist.md` (~280 lignes) qui orchestre les 9 runbooks ops sur Day 0 → Day 7. Critères de succès, tableau d'observation 4 jours, critères de bascule Phase B, rollback 3 niveaux. Pas de nouveau code applicatif — l'exécution Day 0 (tag + push) est entre les mains de l'utilisateur._

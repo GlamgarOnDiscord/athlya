@@ -68,35 +68,35 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * gateway integration suite — keep the style consistent.
  */
 const dbMocks = vi.hoisted(() => {
-    /**
-     * Sentinel returned by the stubbed `createDbHttp`. Each entry
-     * captures the URL + a unique counter so the test can prove the
-     * caller saw the SAME instance across all 100 concurrent calls.
-     */
-    let counter = 0;
-    const createDbHttp = vi.fn((url: string) => {
-        counter += 1;
-        return {
-            __brand: 'fake-http-db' as const,
-            url,
-            instanceId: counter,
-        };
-    });
-    // The deps modules also import `createDb` (used by the
-    // postgres-js write path inside `reservations-deps.ts`) and
-    // `AthlyaDbAny` types — return shape-compatible stubs so the
-    // factory does not blow up at import time.
-    const createDb = vi.fn((url: string) => ({
-        __brand: 'fake-pg-db' as const,
-        url,
-    }));
+  /**
+   * Sentinel returned by the stubbed `createDbHttp`. Each entry
+   * captures the URL + a unique counter so the test can prove the
+   * caller saw the SAME instance across all 100 concurrent calls.
+   */
+  let counter = 0;
+  const createDbHttp = vi.fn((url: string) => {
+    counter += 1;
+    return {
+      __brand: 'fake-http-db' as const,
+      url,
+      instanceId: counter,
+    };
+  });
+  // The deps modules also import `createDb` (used by the
+  // postgres-js write path inside `reservations-deps.ts`) and
+  // `AthlyaDbAny` types — return shape-compatible stubs so the
+  // factory does not blow up at import time.
+  const createDb = vi.fn((url: string) => ({
+    __brand: 'fake-pg-db' as const,
+    url,
+  }));
 
-    return { createDbHttp, createDb };
+  return { createDbHttp, createDb };
 });
 
 vi.mock('@athlya/db/client', () => ({
-    createDbHttp: dbMocks.createDbHttp,
-    createDb: dbMocks.createDb,
+  createDbHttp: dbMocks.createDbHttp,
+  createDb: dbMocks.createDb,
 }));
 
 /* ------------------------------------------------------------------ */
@@ -111,16 +111,16 @@ vi.mock('@athlya/db/client', () => ({
  * — keep them grouped at the top of the file for readability.
  */
 import {
-    __primeDbHttpForTests as primeAuthDb,
-    __resetAuthDepsCachesForTests as resetAuthCaches,
+  __primeDbHttpForTests as primeAuthDb,
+  __resetAuthDepsCachesForTests as resetAuthCaches,
 } from '../../adapters/auth-deps.js';
 import {
-    __primeDbHttpForTests as primeMembersDb,
-    __resetMembersDepsCachesForTests as resetMembersCaches,
+  __primeDbHttpForTests as primeMembersDb,
+  __resetMembersDepsCachesForTests as resetMembersCaches,
 } from '../../adapters/members-deps.js';
 import {
-    __primeDbHttpForTests as primeReservationsDb,
-    __resetReservationsDepsCachesForTests as resetReservationsCaches,
+  __primeDbHttpForTests as primeReservationsDb,
+  __resetReservationsDepsCachesForTests as resetReservationsCaches,
 } from '../../adapters/reservations-deps.js';
 
 /* ------------------------------------------------------------------ */
@@ -132,89 +132,85 @@ const TEST_DB_URL_OTHER = 'postgres://b15-other.invalid/athlya';
 const PARALLEL = 100;
 
 describe('B1.5 — HTTP-driver Drizzle cache under cross-request contention', () => {
-    beforeEach(() => {
-        // Each test starts from a known-empty cache regardless of
-        // ordering inside the worker. The reset seams are exposed
-        // for exactly this reason — see the `@internal` JSDoc on
-        // each `__resetXxxCachesForTests`.
-        resetAuthCaches();
-        resetMembersCaches();
-        resetReservationsCaches();
-        dbMocks.createDbHttp.mockClear();
-    });
+  beforeEach(() => {
+    // Each test starts from a known-empty cache regardless of
+    // ordering inside the worker. The reset seams are exposed
+    // for exactly this reason — see the `@internal` JSDoc on
+    // each `__resetXxxCachesForTests`.
+    resetAuthCaches();
+    resetMembersCaches();
+    resetReservationsCaches();
+    dbMocks.createDbHttp.mockClear();
+  });
 
-    it('auth-deps reuses ONE Drizzle handle across 100 parallel calls', async () => {
-        // 100 concurrent primes — modelled on the worst case where
-        // every in-flight request inside one isolate hits
-        // `getOrCreateDbHttp` before any of them have populated the
-        // cache (the read-then-write race the cache is designed to
-        // collapse).
-        const results = await Promise.all(
-            Array.from({ length: PARALLEL }, () => primeAuthDb(TEST_DB_URL)),
-        );
+  it('auth-deps reuses ONE Drizzle handle across 100 parallel calls', async () => {
+    // 100 concurrent primes — modelled on the worst case where
+    // every in-flight request inside one isolate hits
+    // `getOrCreateDbHttp` before any of them have populated the
+    // cache (the read-then-write race the cache is designed to
+    // collapse).
+    const results = await Promise.all(
+      Array.from({ length: PARALLEL }, () => primeAuthDb(TEST_DB_URL)),
+    );
 
-        // Single creation — the heart of the B1.5 invariant.
-        expect(dbMocks.createDbHttp).toHaveBeenCalledTimes(1);
-        expect(dbMocks.createDbHttp).toHaveBeenCalledWith(TEST_DB_URL);
+    // Single creation — the heart of the B1.5 invariant.
+    expect(dbMocks.createDbHttp).toHaveBeenCalledTimes(1);
+    expect(dbMocks.createDbHttp).toHaveBeenCalledWith(TEST_DB_URL);
 
-        // Every caller observed the SAME instance — no second handle
-        // slipped through any race window. Identity-equality on the
-        // stub (`===`) is the strongest possible check.
-        const first = results[0]!.handle;
-        expect(results.every((r) => r.handle === first)).toBe(true);
+    // Every caller observed the SAME instance — no second handle
+    // slipped through any race window. Identity-equality on the
+    // stub (`===`) is the strongest possible check.
+    const first = results[0]!.handle;
+    expect(results.every((r) => r.handle === first)).toBe(true);
 
-        // Cache size invariant: one URL → one entry.
-        expect(results[results.length - 1]!.size).toBe(1);
-    });
+    // Cache size invariant: one URL → one entry.
+    expect(results[results.length - 1]!.size).toBe(1);
+  });
 
-    it('members-deps reuses ONE Drizzle handle across 100 parallel calls', async () => {
-        const results = await Promise.all(
-            Array.from({ length: PARALLEL }, () =>
-                primeMembersDb(TEST_DB_URL),
-            ),
-        );
+  it('members-deps reuses ONE Drizzle handle across 100 parallel calls', async () => {
+    const results = await Promise.all(
+      Array.from({ length: PARALLEL }, () => primeMembersDb(TEST_DB_URL)),
+    );
 
-        expect(dbMocks.createDbHttp).toHaveBeenCalledTimes(1);
-        expect(dbMocks.createDbHttp).toHaveBeenCalledWith(TEST_DB_URL);
-        const first = results[0]!.handle;
-        expect(results.every((r) => r.handle === first)).toBe(true);
-        expect(results[results.length - 1]!.size).toBe(1);
-    });
+    expect(dbMocks.createDbHttp).toHaveBeenCalledTimes(1);
+    expect(dbMocks.createDbHttp).toHaveBeenCalledWith(TEST_DB_URL);
+    const first = results[0]!.handle;
+    expect(results.every((r) => r.handle === first)).toBe(true);
+    expect(results[results.length - 1]!.size).toBe(1);
+  });
 
-    it('reservations-deps reuses ONE Drizzle handle across 100 parallel calls (read path)', async () => {
-        const results = await Promise.all(
-            Array.from({ length: PARALLEL }, () =>
-                primeReservationsDb(TEST_DB_URL),
-            ),
-        );
+  it('reservations-deps reuses ONE Drizzle handle across 100 parallel calls (read path)', async () => {
+    const results = await Promise.all(
+      Array.from({ length: PARALLEL }, () => primeReservationsDb(TEST_DB_URL)),
+    );
 
-        expect(dbMocks.createDbHttp).toHaveBeenCalledTimes(1);
-        expect(dbMocks.createDbHttp).toHaveBeenCalledWith(TEST_DB_URL);
-        const first = results[0]!.handle;
-        expect(results.every((r) => r.handle === first)).toBe(true);
-        expect(results[results.length - 1]!.size).toBe(1);
-    });
+    expect(dbMocks.createDbHttp).toHaveBeenCalledTimes(1);
+    expect(dbMocks.createDbHttp).toHaveBeenCalledWith(TEST_DB_URL);
+    const first = results[0]!.handle;
+    expect(results.every((r) => r.handle === first)).toBe(true);
+    expect(results[results.length - 1]!.size).toBe(1);
+  });
 
-    it('caches are keyed on the connection string — distinct URLs yield distinct handles', async () => {
-        // Multi-tenant safety check. A Worker isolate that serves
-        // dev + staging traffic in the same lifetime (preview
-        // builds, A/B routing) MUST keep the two pools separate.
-        const a = primeAuthDb(TEST_DB_URL);
-        const b = primeAuthDb(TEST_DB_URL_OTHER);
+  it('caches are keyed on the connection string — distinct URLs yield distinct handles', async () => {
+    // Multi-tenant safety check. A Worker isolate that serves
+    // dev + staging traffic in the same lifetime (preview
+    // builds, A/B routing) MUST keep the two pools separate.
+    const a = primeAuthDb(TEST_DB_URL);
+    const b = primeAuthDb(TEST_DB_URL_OTHER);
 
-        expect(dbMocks.createDbHttp).toHaveBeenCalledTimes(2);
-        expect(a.handle).not.toBe(b.handle);
-        expect(b.size).toBe(2);
-    });
+    expect(dbMocks.createDbHttp).toHaveBeenCalledTimes(2);
+    expect(a.handle).not.toBe(b.handle);
+    expect(b.size).toBe(2);
+  });
 
-    it('reset seam restores the empty-cache invariant', async () => {
-        primeAuthDb(TEST_DB_URL);
-        expect(dbMocks.createDbHttp).toHaveBeenCalledTimes(1);
+  it('reset seam restores the empty-cache invariant', async () => {
+    primeAuthDb(TEST_DB_URL);
+    expect(dbMocks.createDbHttp).toHaveBeenCalledTimes(1);
 
-        resetAuthCaches();
-        // After reset, the next call MUST recreate the handle.
-        const after = primeAuthDb(TEST_DB_URL);
-        expect(dbMocks.createDbHttp).toHaveBeenCalledTimes(2);
-        expect(after.size).toBe(1);
-    });
+    resetAuthCaches();
+    // After reset, the next call MUST recreate the handle.
+    const after = primeAuthDb(TEST_DB_URL);
+    expect(dbMocks.createDbHttp).toHaveBeenCalledTimes(2);
+    expect(after.size).toBe(1);
+  });
 });

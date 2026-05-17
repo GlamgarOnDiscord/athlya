@@ -29,151 +29,141 @@ import type { ApiClient } from '../../lib/api/client';
 const t = createTranslator('fr');
 
 const BASE_PROFILE: MeProfile = {
-    email: 'a@b.co',
-    displayName: 'Bob',
-    avatarUrl: null,
+  email: 'a@b.co',
+  displayName: 'Bob',
+  avatarUrl: null,
 };
 
 /** Build a fully-typed fake client. Individual tests override `patch`. */
-function buildFakeClient(
-    overrides?: Partial<ApiClient>,
-): ApiClient & {
-    readonly patch: ReturnType<typeof vi.fn>;
+function buildFakeClient(overrides?: Partial<ApiClient>): ApiClient & {
+  readonly patch: ReturnType<typeof vi.fn>;
 } {
-    const defaults = {
-        get: vi.fn(),
-        post: vi.fn(),
-        patch: vi.fn().mockResolvedValue(undefined),
-        del: vi.fn(),
-    };
-    return {
-        ...defaults,
-        ...overrides,
-    } as ApiClient & { readonly patch: ReturnType<typeof vi.fn> };
+  const defaults = {
+    get: vi.fn(),
+    post: vi.fn(),
+    patch: vi.fn().mockResolvedValue(undefined),
+    del: vi.fn(),
+  };
+  return {
+    ...defaults,
+    ...overrides,
+  } as ApiClient & { readonly patch: ReturnType<typeof vi.fn> };
 }
 
 afterEach(() => {
-    cleanup();
-    vi.useRealTimers();
+  cleanup();
+  vi.useRealTimers();
 });
 
 describe('<ProfileForm />', () => {
-    it('renders email (read-only) and displayName populated', () => {
-        const client = buildFakeClient();
-        render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
+  it('renders email (read-only) and displayName populated', () => {
+    const client = buildFakeClient();
+    render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
 
-        const email = screen.getByLabelText(t('profile.email')) as HTMLInputElement;
-        expect(email.value).toBe('a@b.co');
-        expect(email.readOnly).toBe(true);
+    const email = screen.getByLabelText(t('profile.email')) as HTMLInputElement;
+    expect(email.value).toBe('a@b.co');
+    expect(email.readOnly).toBe(true);
 
-        const display = screen.getByLabelText(
-            t('profile.displayName'),
-        ) as HTMLInputElement;
-        expect(display.value).toBe('Bob');
+    const display = screen.getByLabelText(t('profile.displayName')) as HTMLInputElement;
+    expect(display.value).toBe('Bob');
+  });
+
+  it('counter reflects length and updates on input change', () => {
+    const client = buildFakeClient();
+    render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
+
+    // "Bob" → 3 / 80
+    expect(screen.getByText('3 / 80')).toBeDefined();
+
+    const display = screen.getByLabelText(t('profile.displayName')) as HTMLInputElement;
+    fireEvent.change(display, { target: { value: 'Bob Xy' } });
+
+    expect(screen.getByText('6 / 80')).toBeDefined();
+  });
+
+  it('displayName input carries maxLength=80', () => {
+    const client = buildFakeClient();
+    render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
+
+    const display = screen.getByLabelText(t('profile.displayName')) as HTMLInputElement;
+    expect(display.getAttribute('maxlength')).toBe('80');
+  });
+
+  it('disables the submit button while the PATCH is pending', async () => {
+    // Never-resolving patch keeps the form in the `pending` state.
+    // Cast to `unknown` first because TS resolves the generic `patch`
+    // return to `Promise<never>` when the mock implementation never
+    // returns, which is incompatible with `ApiClient['patch']`.
+    const client = buildFakeClient({
+      patch: vi.fn(() => new Promise(() => undefined)) as unknown as ApiClient['patch'],
+    });
+    render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
+
+    const submit = screen.getByRole('button', {
+      name: t('profile.save'),
+    }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+
+    await act(async () => {
+      fireEvent.submit(submit.closest('form') as HTMLFormElement);
     });
 
-    it('counter reflects length and updates on input change', () => {
-        const client = buildFakeClient();
-        render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
+    expect(submit.disabled).toBe(true);
+  });
 
-        // "Bob" → 3 / 80
-        expect(screen.getByText('3 / 80')).toBeDefined();
+  it('shows the success banner and hides it after 3 s', async () => {
+    vi.useFakeTimers();
 
-        const display = screen.getByLabelText(
-            t('profile.displayName'),
-        ) as HTMLInputElement;
-        fireEvent.change(display, { target: { value: 'Bob Xy' } });
+    const client = buildFakeClient();
+    render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
 
-        expect(screen.getByText('6 / 80')).toBeDefined();
+    const submit = screen.getByRole('button', { name: t('profile.save') });
+
+    await act(async () => {
+      fireEvent.submit(submit.closest('form') as HTMLFormElement);
+      // Let the micro-task queue drain so the resolved PATCH
+      // promise's `.then` handlers run before we advance timers.
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
-    it('displayName input carries maxLength=80', () => {
-        const client = buildFakeClient();
-        render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
+    expect(screen.getByText(t('profile.updateSuccess'))).toBeDefined();
 
-        const display = screen.getByLabelText(
-            t('profile.displayName'),
-        ) as HTMLInputElement;
-        expect(display.getAttribute('maxlength')).toBe('80');
+    await act(async () => {
+      vi.advanceTimersByTime(3_000);
     });
 
-    it('disables the submit button while the PATCH is pending', async () => {
-        // Never-resolving patch keeps the form in the `pending` state.
-        // Cast to `unknown` first because TS resolves the generic `patch`
-        // return to `Promise<never>` when the mock implementation never
-        // returns, which is incompatible with `ApiClient['patch']`.
-        const client = buildFakeClient({
-            patch: vi.fn(
-                () => new Promise(() => undefined),
-            ) as unknown as ApiClient['patch'],
-        });
-        render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
+    expect(screen.queryByText(t('profile.updateSuccess'))).toBeNull();
+  });
 
-        const submit = screen.getByRole('button', {
-            name: t('profile.save'),
-        }) as HTMLButtonElement;
-        expect(submit.disabled).toBe(false);
+  it('maps 422 problem.errors[] onto per-field alerts', async () => {
+    const client = buildFakeClient({
+      patch: vi.fn().mockRejectedValue(
+        new ApiError('validation_error', 422, {
+          type: 'about:blank',
+          title: 'validation_error',
+          status: 422,
+          code: 'validation_error',
+          errors: [
+            {
+              path: 'displayName',
+              message: 'Too long',
+            },
+          ],
+        }),
+      ) as unknown as ApiClient['patch'],
+    });
+    render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
 
-        await act(async () => {
-            fireEvent.submit(submit.closest('form') as HTMLFormElement);
-        });
+    const submit = screen.getByRole('button', { name: t('profile.save') });
 
-        expect(submit.disabled).toBe(true);
+    await act(async () => {
+      fireEvent.submit(submit.closest('form') as HTMLFormElement);
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
-    it('shows the success banner and hides it after 3 s', async () => {
-        vi.useFakeTimers();
-
-        const client = buildFakeClient();
-        render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
-
-        const submit = screen.getByRole('button', { name: t('profile.save') });
-
-        await act(async () => {
-            fireEvent.submit(submit.closest('form') as HTMLFormElement);
-            // Let the micro-task queue drain so the resolved PATCH
-            // promise's `.then` handlers run before we advance timers.
-            await Promise.resolve();
-            await Promise.resolve();
-        });
-
-        expect(screen.getByText(t('profile.updateSuccess'))).toBeDefined();
-
-        await act(async () => {
-            vi.advanceTimersByTime(3_000);
-        });
-
-        expect(screen.queryByText(t('profile.updateSuccess'))).toBeNull();
-    });
-
-    it('maps 422 problem.errors[] onto per-field alerts', async () => {
-        const client = buildFakeClient({
-            patch: vi.fn().mockRejectedValue(
-                new ApiError('validation_error', 422, {
-                    type: 'about:blank',
-                    title: 'validation_error',
-                    status: 422,
-                    code: 'validation_error',
-                    errors: [
-                        {
-                            path: 'displayName',
-                            message: 'Too long',
-                        },
-                    ],
-                }),
-            ) as unknown as ApiClient['patch'],
-        });
-        render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
-
-        const submit = screen.getByRole('button', { name: t('profile.save') });
-
-        await act(async () => {
-            fireEvent.submit(submit.closest('form') as HTMLFormElement);
-            await Promise.resolve();
-            await Promise.resolve();
-        });
-
-        const alert = screen.getByText('Too long');
-        expect(alert.getAttribute('role')).toBe('alert');
-    });
+    const alert = screen.getByText('Too long');
+    expect(alert.getAttribute('role')).toBe('alert');
+  });
 });

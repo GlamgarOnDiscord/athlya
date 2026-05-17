@@ -20,25 +20,25 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-    testDir: './',
-    timeout: 30_000,
-    expect: { timeout: 5_000 },
-    retries: process.env.CI ? 2 : 0,
-    // Start the Next.js app in the background. CI always gets a
-    // fresh server; local dev reuses whatever is already bound to
-    // :3000 to avoid the 10–20 s Next.js cold start on every run.
-    webServer: {
-        command: 'pnpm --filter @athlya/web dev',
-        url: 'http://localhost:3000',
-        reuseExistingServer: !process.env.CI,
-        timeout: 120_000,
-    },
-    use: {
-        baseURL: 'http://localhost:3000',
-        trace: 'on-first-retry',
-        // Headless everywhere — CI has no display, and the axe sweep
-        // does not benefit from a visible browser.
-        headless: true,
-    },
-    projects: [{ name: 'chromium', use: { channel: 'chromium' } }],
+  testDir: './',
+  timeout: 30_000,
+  expect: { timeout: 5_000 },
+  retries: process.env.CI ? 2 : 0,
+  // Start the Next.js app in the background. CI always gets a
+  // fresh server; local dev reuses whatever is already bound to
+  // :3000 to avoid the 10–20 s Next.js cold start on every run.
+  webServer: {
+    command: 'pnpm --filter @athlya/web dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
+  use: {
+    baseURL: 'http://localhost:3000',
+    trace: 'on-first-retry',
+    // Headless everywhere — CI has no display, and the axe sweep
+    // does not benefit from a visible browser.
+    headless: true,
+  },
+  projects: [{ name: 'chromium', use: { channel: 'chromium' } }],
 });

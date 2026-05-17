@@ -38,22 +38,9 @@
  * Related requirements: 2.1, 2.2, 25.5.
  */
 
-import {
-    SignJWT,
-    createLocalJWKSet,
-    exportJWK,
-    importPKCS8,
-    importSPKI,
-    jwtVerify,
-} from 'jose';
+import { SignJWT, createLocalJWKSet, exportJWK, importPKCS8, importSPKI, jwtVerify } from 'jose';
 
-import type {
-    JSONWebKeySet,
-    JWK,
-    JWTPayload,
-    JWTVerifyOptions,
-    KeyLike,
-} from 'jose';
+import type { JSONWebKeySet, JWK, JWTPayload, JWTVerifyOptions, KeyLike } from 'jose';
 
 /**
  * Signing algorithm pinned by this module. Both access and refresh
@@ -89,9 +76,9 @@ export const DEFAULT_ROTATION_GRACE_SEC = 24 * 60 * 60;
  * - `role` — user role within the studio (`member`, `coach`, `admin`).
  */
 export interface AccessClaims extends JWTPayload {
-    readonly sub: string;
-    readonly studio: string;
-    readonly role: 'member' | 'coach' | 'admin';
+  readonly sub: string;
+  readonly studio: string;
+  readonly role: 'member' | 'coach' | 'admin';
 }
 
 /**
@@ -101,8 +88,8 @@ export interface AccessClaims extends JWTPayload {
  * when the refresh is exchanged.
  */
 export interface RefreshClaims extends JWTPayload {
-    readonly sub: string;
-    readonly sid: string;
+  readonly sub: string;
+  readonly sid: string;
 }
 
 /**
@@ -121,11 +108,11 @@ export interface RefreshClaims extends JWTPayload {
  *   "no planned retirement".
  */
 export interface SigningKey {
-    readonly kid: string;
-    readonly privateKey: KeyLike;
-    readonly publicKey: KeyLike;
-    readonly notBefore?: Date;
-    readonly notAfter?: Date;
+  readonly kid: string;
+  readonly privateKey: KeyLike;
+  readonly publicKey: KeyLike;
+  readonly notBefore?: Date;
+  readonly notAfter?: Date;
 }
 
 /**
@@ -138,9 +125,9 @@ export interface SigningKey {
  * `Cache-Control` headers on the JWKS endpoint.
  */
 export interface PublicKeyEntry {
-    readonly kid: string;
-    readonly publicKey: JWK;
-    readonly notAfter?: Date;
+  readonly kid: string;
+  readonly publicKey: JWK;
+  readonly notAfter?: Date;
 }
 
 /**
@@ -153,42 +140,42 @@ export type Jwks = JSONWebKeySet;
  * Options for {@link signAccess}.
  */
 export interface SignAccessOptions {
-    readonly signingKey: SigningKey;
-    readonly ttlSec?: number;
-    readonly issuer?: string;
-    readonly audience?: string;
-    /**
-     * Injectable clock (seconds since epoch). Defaults to
-     * `Math.floor(Date.now() / 1000)`; tests override it.
-     */
-    readonly now?: () => number;
+  readonly signingKey: SigningKey;
+  readonly ttlSec?: number;
+  readonly issuer?: string;
+  readonly audience?: string;
+  /**
+   * Injectable clock (seconds since epoch). Defaults to
+   * `Math.floor(Date.now() / 1000)`; tests override it.
+   */
+  readonly now?: () => number;
 }
 
 /**
  * Options for {@link signRefresh}.
  */
 export interface SignRefreshOptions {
-    readonly signingKey: SigningKey;
-    readonly ttlSec?: number;
-    readonly issuer?: string;
-    readonly audience?: string;
-    readonly now?: () => number;
+  readonly signingKey: SigningKey;
+  readonly ttlSec?: number;
+  readonly issuer?: string;
+  readonly audience?: string;
+  readonly now?: () => number;
 }
 
 /**
  * Options for {@link verify}.
  */
 export interface VerifyOptions {
-    readonly issuer?: string;
-    readonly audience?: string;
-    /**
-     * Maximum clock skew accepted between signer and verifier. Defaults
-     * to 0 seconds — tight because both Workers and our clients use
-     * NTP-synced clocks.
-     */
-    readonly clockToleranceSec?: number;
-    /** Injectable clock for deterministic tests. */
-    readonly currentDate?: Date;
+  readonly issuer?: string;
+  readonly audience?: string;
+  /**
+   * Maximum clock skew accepted between signer and verifier. Defaults
+   * to 0 seconds — tight because both Workers and our clients use
+   * NTP-synced clocks.
+   */
+  readonly clockToleranceSec?: number;
+  /** Injectable clock for deterministic tests. */
+  readonly currentDate?: Date;
 }
 
 /**
@@ -197,7 +184,7 @@ export interface VerifyOptions {
  * consistently.
  */
 function defaultNow(): number {
-    return Math.floor(Date.now() / 1000);
+  return Math.floor(Date.now() / 1000);
 }
 
 /**
@@ -219,32 +206,29 @@ function defaultNow(): number {
  *
  * @throws `TypeError` on invalid claims or TTL.
  */
-export async function signAccess(
-    claims: AccessClaims,
-    opts: SignAccessOptions,
-): Promise<string> {
-    assertNonEmpty(claims.sub, 'claims.sub');
-    assertNonEmpty(claims.studio, 'claims.studio');
-    assertNonEmpty(claims.role, 'claims.role');
+export async function signAccess(claims: AccessClaims, opts: SignAccessOptions): Promise<string> {
+  assertNonEmpty(claims.sub, 'claims.sub');
+  assertNonEmpty(claims.studio, 'claims.studio');
+  assertNonEmpty(claims.role, 'claims.role');
 
-    const ttl = opts.ttlSec ?? DEFAULT_ACCESS_TTL_SEC;
-    assertPositiveInt(ttl, 'opts.ttlSec');
+  const ttl = opts.ttlSec ?? DEFAULT_ACCESS_TTL_SEC;
+  assertPositiveInt(ttl, 'opts.ttlSec');
 
-    const now = (opts.now ?? defaultNow)();
-    const signer = new SignJWT({ ...claims })
-        .setProtectedHeader({
-            alg: JWT_ALG,
-            typ: 'JWT',
-            kid: opts.signingKey.kid,
-        })
-        .setIssuedAt(now)
-        .setExpirationTime(now + ttl);
+  const now = (opts.now ?? defaultNow)();
+  const signer = new SignJWT({ ...claims })
+    .setProtectedHeader({
+      alg: JWT_ALG,
+      typ: 'JWT',
+      kid: opts.signingKey.kid,
+    })
+    .setIssuedAt(now)
+    .setExpirationTime(now + ttl);
 
-    if (opts.issuer !== undefined) signer.setIssuer(opts.issuer);
-    if (opts.audience !== undefined) signer.setAudience(opts.audience);
-    if (claims.sub) signer.setSubject(claims.sub);
+  if (opts.issuer !== undefined) signer.setIssuer(opts.issuer);
+  if (opts.audience !== undefined) signer.setAudience(opts.audience);
+  if (claims.sub) signer.setSubject(claims.sub);
 
-    return signer.sign(opts.signingKey.privateKey);
+  return signer.sign(opts.signingKey.privateKey);
 }
 
 /**
@@ -257,30 +241,30 @@ export async function signAccess(
  * rotated out.
  */
 export async function signRefresh(
-    claims: RefreshClaims,
-    opts: SignRefreshOptions,
+  claims: RefreshClaims,
+  opts: SignRefreshOptions,
 ): Promise<string> {
-    assertNonEmpty(claims.sub, 'claims.sub');
-    assertNonEmpty(claims.sid, 'claims.sid');
+  assertNonEmpty(claims.sub, 'claims.sub');
+  assertNonEmpty(claims.sid, 'claims.sid');
 
-    const ttl = opts.ttlSec ?? DEFAULT_REFRESH_TTL_SEC;
-    assertPositiveInt(ttl, 'opts.ttlSec');
+  const ttl = opts.ttlSec ?? DEFAULT_REFRESH_TTL_SEC;
+  assertPositiveInt(ttl, 'opts.ttlSec');
 
-    const now = (opts.now ?? defaultNow)();
-    const signer = new SignJWT({ ...claims })
-        .setProtectedHeader({
-            alg: JWT_ALG,
-            typ: 'JWT',
-            kid: opts.signingKey.kid,
-        })
-        .setIssuedAt(now)
-        .setExpirationTime(now + ttl)
-        .setSubject(claims.sub);
+  const now = (opts.now ?? defaultNow)();
+  const signer = new SignJWT({ ...claims })
+    .setProtectedHeader({
+      alg: JWT_ALG,
+      typ: 'JWT',
+      kid: opts.signingKey.kid,
+    })
+    .setIssuedAt(now)
+    .setExpirationTime(now + ttl)
+    .setSubject(claims.sub);
 
-    if (opts.issuer !== undefined) signer.setIssuer(opts.issuer);
-    if (opts.audience !== undefined) signer.setAudience(opts.audience);
+  if (opts.issuer !== undefined) signer.setIssuer(opts.issuer);
+  if (opts.audience !== undefined) signer.setAudience(opts.audience);
 
-    return signer.sign(opts.signingKey.privateKey);
+  return signer.sign(opts.signingKey.privateKey);
 }
 
 /**
@@ -309,21 +293,21 @@ export async function signRefresh(
  * payload structurally.
  */
 export async function verify<T extends JWTPayload = JWTPayload>(
-    token: string,
-    jwks: Jwks,
-    opts: VerifyOptions = {},
+  token: string,
+  jwks: Jwks,
+  opts: VerifyOptions = {},
 ): Promise<T> {
-    const keySet = createLocalJWKSet(jwks);
-    const verifyOpts: JWTVerifyOptions = {
-        algorithms: [JWT_ALG],
-        clockTolerance: opts.clockToleranceSec ?? 0,
-    };
-    if (opts.issuer !== undefined) verifyOpts.issuer = opts.issuer;
-    if (opts.audience !== undefined) verifyOpts.audience = opts.audience;
-    if (opts.currentDate !== undefined) verifyOpts.currentDate = opts.currentDate;
+  const keySet = createLocalJWKSet(jwks);
+  const verifyOpts: JWTVerifyOptions = {
+    algorithms: [JWT_ALG],
+    clockTolerance: opts.clockToleranceSec ?? 0,
+  };
+  if (opts.issuer !== undefined) verifyOpts.issuer = opts.issuer;
+  if (opts.audience !== undefined) verifyOpts.audience = opts.audience;
+  if (opts.currentDate !== undefined) verifyOpts.currentDate = opts.currentDate;
 
-    const { payload } = await jwtVerify(token, keySet, verifyOpts);
-    return payload as T;
+  const { payload } = await jwtVerify(token, keySet, verifyOpts);
+  return payload as T;
 }
 
 /**
@@ -353,23 +337,20 @@ export async function verify<T extends JWTPayload = JWTPayload>(
  *
  * @param now Optional current time; defaults to `new Date()`.
  */
-export function currentJwks(
-    keys: readonly PublicKeyEntry[],
-    now: Date = new Date(),
-): Jwks {
-    const active: JWK[] = [];
-    for (const entry of keys) {
-        if (entry.notAfter !== undefined && entry.notAfter.getTime() <= now.getTime()) {
-            continue;
-        }
-        active.push({
-            ...entry.publicKey,
-            kid: entry.kid,
-            alg: JWT_ALG,
-            use: 'sig',
-        });
+export function currentJwks(keys: readonly PublicKeyEntry[], now: Date = new Date()): Jwks {
+  const active: JWK[] = [];
+  for (const entry of keys) {
+    if (entry.notAfter !== undefined && entry.notAfter.getTime() <= now.getTime()) {
+      continue;
     }
-    return { keys: active };
+    active.push({
+      ...entry.publicKey,
+      kid: entry.kid,
+      alg: JWT_ALG,
+      use: 'sig',
+    });
+  }
+  return { keys: active };
 }
 
 /**
@@ -380,13 +361,13 @@ export function currentJwks(
  * also stamps the `kid`, `alg` and `use` fields.
  */
 export async function publicJwkOf(key: SigningKey): Promise<JWK> {
-    const raw = await exportJWK(key.publicKey);
-    return {
-        ...raw,
-        kid: key.kid,
-        alg: JWT_ALG,
-        use: 'sig',
-    };
+  const raw = await exportJWK(key.publicKey);
+  return {
+    ...raw,
+    kid: key.kid,
+    alg: JWT_ALG,
+    use: 'sig',
+  };
 }
 
 /**
@@ -401,8 +382,8 @@ export async function publicJwkOf(key: SigningKey): Promise<JWK> {
  * Secrets) and reconstructs it on every request.
  */
 export interface RotationState {
-    readonly current: SigningKey;
-    readonly previous?: SigningKey;
+  readonly current: SigningKey;
+  readonly previous?: SigningKey;
 }
 
 /**
@@ -413,11 +394,11 @@ export interface RotationState {
  *   3. Start serving `jwks` at `/.well-known/jwks.json`.
  */
 export interface RotationResult {
-    readonly current: SigningKey;
-    readonly previous: SigningKey;
-    readonly jwks: Jwks;
-    readonly rotatedAt: Date;
-    readonly graceExpiresAt: Date;
+  readonly current: SigningKey;
+  readonly previous: SigningKey;
+  readonly jwks: Jwks;
+  readonly rotatedAt: Date;
+  readonly graceExpiresAt: Date;
 }
 
 /**
@@ -442,50 +423,48 @@ export interface RotationResult {
  * @throws `TypeError` on invalid inputs.
  */
 export function rotateKeys(
-    previous: SigningKey,
-    next: SigningKey,
-    graceSec: number = DEFAULT_ROTATION_GRACE_SEC,
-    now: Date = new Date(),
+  previous: SigningKey,
+  next: SigningKey,
+  graceSec: number = DEFAULT_ROTATION_GRACE_SEC,
+  now: Date = new Date(),
 ): RotationResult {
-    if (previous.kid === next.kid) {
-        throw new TypeError(
-            'rotateKeys: previous and next keys must have different kids',
-        );
-    }
-    assertPositiveInt(graceSec, 'graceSec');
+  if (previous.kid === next.kid) {
+    throw new TypeError('rotateKeys: previous and next keys must have different kids');
+  }
+  assertPositiveInt(graceSec, 'graceSec');
 
-    const graceExpiresAt = new Date(now.getTime() + graceSec * 1000);
-    const demotedPrevious: SigningKey = {
-        kid: previous.kid,
-        privateKey: previous.privateKey,
-        publicKey: previous.publicKey,
-        notBefore: previous.notBefore ?? new Date(0),
-        notAfter: graceExpiresAt,
-    };
-    const promotedNext: SigningKey = {
-        kid: next.kid,
-        privateKey: next.privateKey,
-        publicKey: next.publicKey,
-        notBefore: now,
-        ...(next.notAfter !== undefined ? { notAfter: next.notAfter } : {}),
-    };
+  const graceExpiresAt = new Date(now.getTime() + graceSec * 1000);
+  const demotedPrevious: SigningKey = {
+    kid: previous.kid,
+    privateKey: previous.privateKey,
+    publicKey: previous.publicKey,
+    notBefore: previous.notBefore ?? new Date(0),
+    notAfter: graceExpiresAt,
+  };
+  const promotedNext: SigningKey = {
+    kid: next.kid,
+    privateKey: next.privateKey,
+    publicKey: next.publicKey,
+    notBefore: now,
+    ...(next.notAfter !== undefined ? { notAfter: next.notAfter } : {}),
+  };
 
-    // Build the JWKS projection synchronously. We can't call
-    // publicJwkOf here because it's async and this helper is pure; the
-    // caller should instead call currentJwks() later with the exported
-    // public JWKs. To preserve the task contract (rotateKeys returns a
-    // RotationResult), we build the JWKS from the public keys that the
-    // caller already has. That means the caller must pre-export the
-    // JWKs or rely on the asynchronous rotateKeysAsync variant.
-    const jwks: Jwks = { keys: [] };
+  // Build the JWKS projection synchronously. We can't call
+  // publicJwkOf here because it's async and this helper is pure; the
+  // caller should instead call currentJwks() later with the exported
+  // public JWKs. To preserve the task contract (rotateKeys returns a
+  // RotationResult), we build the JWKS from the public keys that the
+  // caller already has. That means the caller must pre-export the
+  // JWKs or rely on the asynchronous rotateKeysAsync variant.
+  const jwks: Jwks = { keys: [] };
 
-    return {
-        current: promotedNext,
-        previous: demotedPrevious,
-        jwks,
-        rotatedAt: now,
-        graceExpiresAt,
-    };
+  return {
+    current: promotedNext,
+    previous: demotedPrevious,
+    jwks,
+    rotatedAt: now,
+    graceExpiresAt,
+  };
 }
 
 /**
@@ -494,34 +473,32 @@ export function rotateKeys(
  * ready-to-serve JWKS rather than re-exporting the JWKs yourself.
  */
 export async function rotateKeysAsync(
-    previous: SigningKey,
-    next: SigningKey,
-    graceSec: number = DEFAULT_ROTATION_GRACE_SEC,
-    now: Date = new Date(),
+  previous: SigningKey,
+  next: SigningKey,
+  graceSec: number = DEFAULT_ROTATION_GRACE_SEC,
+  now: Date = new Date(),
 ): Promise<RotationResult> {
-    const result = rotateKeys(previous, next, graceSec, now);
-    const [currentJwk, previousJwk] = await Promise.all([
-        publicJwkOf(result.current),
-        publicJwkOf(result.previous),
-    ]);
-    const jwks = currentJwks(
-        [
-            {
-                kid: result.current.kid,
-                publicKey: currentJwk,
-                ...(result.current.notAfter !== undefined
-                    ? { notAfter: result.current.notAfter }
-                    : {}),
-            },
-            {
-                kid: result.previous.kid,
-                publicKey: previousJwk,
-                notAfter: result.graceExpiresAt,
-            },
-        ],
-        now,
-    );
-    return { ...result, jwks };
+  const result = rotateKeys(previous, next, graceSec, now);
+  const [currentJwk, previousJwk] = await Promise.all([
+    publicJwkOf(result.current),
+    publicJwkOf(result.previous),
+  ]);
+  const jwks = currentJwks(
+    [
+      {
+        kid: result.current.kid,
+        publicKey: currentJwk,
+        ...(result.current.notAfter !== undefined ? { notAfter: result.current.notAfter } : {}),
+      },
+      {
+        kid: result.previous.kid,
+        publicKey: previousJwk,
+        notAfter: result.graceExpiresAt,
+      },
+    ],
+    now,
+  );
+  return { ...result, jwks };
 }
 
 /**
@@ -536,16 +513,16 @@ export async function rotateKeysAsync(
  * - `kid` is a non-empty, URL-safe identifier.
  */
 export async function loadKeyPairFromPem(
-    privatePem: string,
-    publicPem: string,
-    kid: string,
+  privatePem: string,
+  publicPem: string,
+  kid: string,
 ): Promise<SigningKey> {
-    assertNonEmpty(kid, 'kid');
-    const [privateKey, publicKey] = await Promise.all([
-        importPKCS8(privatePem, JWT_ALG),
-        importSPKI(publicPem, JWT_ALG),
-    ]);
-    return { kid, privateKey, publicKey };
+  assertNonEmpty(kid, 'kid');
+  const [privateKey, publicKey] = await Promise.all([
+    importPKCS8(privatePem, JWT_ALG),
+    importSPKI(publicPem, JWT_ALG),
+  ]);
+  return { kid, privateKey, publicKey };
 }
 
 // ---------------------------------------------------------------------------
@@ -553,13 +530,13 @@ export async function loadKeyPairFromPem(
 // ---------------------------------------------------------------------------
 
 function assertNonEmpty(value: string, label: string): void {
-    if (typeof value !== 'string' || value.length === 0) {
-        throw new TypeError(`${label} must be a non-empty string`);
-    }
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new TypeError(`${label} must be a non-empty string`);
+  }
 }
 
 function assertPositiveInt(value: number, label: string): void {
-    if (!Number.isInteger(value) || value <= 0) {
-        throw new TypeError(`${label} must be a positive integer`);
-    }
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new TypeError(`${label} must be a positive integer`);
+  }
 }

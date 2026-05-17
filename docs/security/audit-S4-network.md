@@ -10,7 +10,7 @@ Périmètre : `apps/web`, `apps/studio`, `packages/api`, `packages/auth`, `packa
 
 ### TLS
 
-- TLS terminé par Cloudflare en bordure (zone `athlya.app`). La doc inline de `packages/api/src/middleware/security-headers.ts` (Req 25.1) indique explicitement que la version minimum (TLS 1.3) est configurée *côté dashboard Cloudflare*, pas dans le Worker.
+- TLS terminé par Cloudflare en bordure (zone `athlya.app`). La doc inline de `packages/api/src/middleware/security-headers.ts` (Req 25.1) indique explicitement que la version minimum (TLS 1.3) est configurée _côté dashboard Cloudflare_, pas dans le Worker.
 - **Géré par Cloudflare automatiquement** (non compté comme finding) : TLS 1.3, OCSP stapling, ALPN/HTTP-2, HTTP-3.
 - Aucune configuration TLS côté Workers (impossible : la TLS n'est pas exposée à l'isolate). Aucun cert pinning côté browser (non applicable). Côté mobile, hors périmètre de cet audit.
 - ⚠️ La min-TLS n'est pas asserted via IaC (Terraform/Wrangler). Une régression de la console Cloudflare ne déclencherait aucun test → finding S4-013 (LOW).
@@ -25,14 +25,14 @@ Périmètre : `apps/web`, `apps/studio`, `packages/api`, `packages/auth`, `packa
 
 ### Cookies (refresh token)
 
-| Attribut | `apps/web` (`athlya.refresh`) | `apps/studio` (`athlya.refresh.studio`) |
-|---|---|---|
-| `HttpOnly` | ✅ | ✅ |
-| `Secure` (prod) | ✅ (conditionnel sur `NODE_ENV === 'production'`) | ✅ |
-| `SameSite` | `Lax` | `Lax` |
-| `Path` | `/` | `/` |
-| `Domain` | non défini → host-only (correct) | non défini → host-only (correct) |
-| `Max-Age` | aligné sur `refreshTokenExpiresIn` (30 j par défaut) | idem |
+| Attribut        | `apps/web` (`athlya.refresh`)                        | `apps/studio` (`athlya.refresh.studio`) |
+| --------------- | ---------------------------------------------------- | --------------------------------------- |
+| `HttpOnly`      | ✅                                                   | ✅                                      |
+| `Secure` (prod) | ✅ (conditionnel sur `NODE_ENV === 'production'`)    | ✅                                      |
+| `SameSite`      | `Lax`                                                | `Lax`                                   |
+| `Path`          | `/`                                                  | `/`                                     |
+| `Domain`        | non défini → host-only (correct)                     | non défini → host-only (correct)        |
+| `Max-Age`       | aligné sur `refreshTokenExpiresIn` (30 j par défaut) | idem                                    |
 
 - ✅ Noms cookie distincts entre web et studio → pas de conflit de slot dans le même profil navigateur.
 - ✅ Pas d'attribut `Domain` → cookie host-only → un sous-domaine compromis ne peut pas voler le cookie d'un autre. Bon.
@@ -79,16 +79,17 @@ cors({
 ## Résumé exécutif
 
 | Sévérité | Findings |
-|---|---|
-| CRITICAL | 2 |
-| HIGH | 4 |
-| MEDIUM | 5 |
-| LOW | 4 |
-| INFO | 2 |
+| -------- | -------- |
+| CRITICAL | 2        |
+| HIGH     | 4        |
+| MEDIUM   | 5        |
+| LOW      | 4        |
+| INFO     | 2        |
 
 **Score posture transport / DDoS : 68 / 100**
 
 Détail :
+
 - TLS / HSTS / cookies / CSP : 88/100 (très bonne base, quelques détails de durcissement).
 - DDoS / amplification applicative : 55/100 (**rate-limit gateway non monté**, throttle login non câblé).
 - CORS : 80/100 (politique correcte mais pas validée au boot).
@@ -114,10 +115,15 @@ Détail :
 - **Mitigation** :
   ```ts
   // dans buildApp(), AVANT mountDomainRoutes() :
-  app.use('/v1/*', rateLimit({ /* defaults Req 14.3/14.4 */ }));
+  app.use(
+    '/v1/*',
+    rateLimit({
+      /* defaults Req 14.3/14.4 */
+    }),
+  );
   ```
   Idéalement après `jwtAuth` pour que les utilisateurs authentifiés tombent sur leur quota par-user, mais avant le routage métier.
-  Compléter avec une règle Cloudflare WAF "rate limit /v1/auth/* à 30 rps par IP" en defense-in-depth.
+  Compléter avec une règle Cloudflare WAF "rate limit /v1/auth/\* à 30 rps par IP" en defense-in-depth.
 - **Effort** : ~30 min (4-5 lignes de code + 1 test d'intégration).
 
 ---
@@ -158,7 +164,7 @@ Détail :
 - **Impact** : compromission de comptes dev, fuite de données de tests, latéralisation potentielle si les credentials dev sont aussi prod.
 - **Mitigation** : restreindre la branche dev à des origins explicites (`['http://localhost:3000','http://localhost:3001']`) :
   ```ts
-  const DEV_ORIGINS = new Set(['http://localhost:3000','http://localhost:3001']);
+  const DEV_ORIGINS = new Set(['http://localhost:3000', 'http://localhost:3001']);
   if (env === 'dev') return DEV_ORIGINS.has(origin ?? '') ? origin : '';
   ```
 - **Effort** : 5 min.
@@ -172,7 +178,7 @@ Détail :
 - **Description** : un utilisateur authentifié peut déclencher des events outbox via plusieurs chemins (`POST /v1/reservations` → `reservation.created`, `DELETE /v1/reservations/:id` → `reservation.cancelled`, `PATCH /v1/members/me/consents` → `consents.updated`, etc.). Chaque event :
   1. insère une ligne dans `outbox` (table Postgres),
   2. publie sur `EVENTS_QUEUE` (Cloudflare Queue, billed à $0.40/M).
-  Sans rate-limit gateway (cf. S4-001), un user authentifié peut, dans la limite du quota Cloudflare 500 rps/user (qui n'est pas appliqué en prod), faire grossir la table `outbox` et facturer les Queues à un rythme insoutenable.
+     Sans rate-limit gateway (cf. S4-001), un user authentifié peut, dans la limite du quota Cloudflare 500 rps/user (qui n'est pas appliqué en prod), faire grossir la table `outbox` et facturer les Queues à un rythme insoutenable.
 - **Scénario d'attaque** : un user créé un script qui appelle `POST /v1/reservations` + `DELETE /v1/reservations/:id` en boucle. Chaque cycle crée 2 events outbox. À 100 rps soutenus pendant 24h → 17 280 000 events outbox. Le drainer cron tourne à 1 batch/min × 100 rows = 144 000 rows/jour drainables. Le retard outbox explose, la Queue déborde → DLQ déborde → consumer downstream crash en cascade.
 - **Impact** :
   - Saturation table `outbox` (taille disque Neon).
@@ -261,7 +267,7 @@ Détail :
 
 - **Catégorie** : supply chain / MITM
 - **Localisation** : `apps/web/src/components/TurnstileWidget.tsx:88-100`, `apps/studio/src/components/TurnstileWidget.tsx:50-65`
-- **Description** : le widget injecte `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit">` sans attribut `integrity=` ni `crossorigin=anonymous`. Cloudflare est *trusted* mais SRI est la défense-in-depth contre une compromission du CDN.
+- **Description** : le widget injecte `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit">` sans attribut `integrity=` ni `crossorigin=anonymous`. Cloudflare est _trusted_ mais SRI est la défense-in-depth contre une compromission du CDN.
 - **Scénario d'attaque** : compromission du CDN Cloudflare Turnstile (très improbable mais non nul) → injection de JS malveillant exécuté avec les permissions de la page.
 - **Impact** : XSS sandboxé par CSP `'strict-dynamic'` (le script Turnstile a le nonce, donc tout ce qu'il injecte hérite de strict-dynamic), mais un script Turnstile compromise pourrait exfiltrer les credentials saisies dans le formulaire de login.
 - **Mitigation** : SRI sur les scripts immutables. Cloudflare Turnstile **n'expose pas** d'URL versionnée (le `v0/api.js` est mutable), donc SRI n'est pas applicable directement. Alternative : self-host le `api.js` derrière une URL versionnée + SRI hash, mais perd les updates auto. Documenter la décision (accepter le risque vs self-host).
@@ -332,14 +338,15 @@ Détail :
 - **Mitigation** : whitelist explicite du `Host` au top du middleware chain :
   ```ts
   app.use('*', async (c, next) => {
-      const host = c.req.header('host')?.toLowerCase();
-      const allowed = c.env.ENVIRONMENT === 'production'
+    const host = c.req.header('host')?.toLowerCase();
+    const allowed =
+      c.env.ENVIRONMENT === 'production'
         ? ['api.athlya.app']
         : c.env.ENVIRONMENT === 'staging'
-        ? ['staging.api.athlya.app']
-        : ['localhost:8787', '127.0.0.1:8787'];
-      if (!host || !allowed.includes(host)) return c.body(null, 421); // Misdirected Request
-      await next();
+          ? ['staging.api.athlya.app']
+          : ['localhost:8787', '127.0.0.1:8787'];
+    if (!host || !allowed.includes(host)) return c.body(null, 421); // Misdirected Request
+    await next();
   });
   ```
 - **Effort** : 15 min.
@@ -379,7 +386,7 @@ Détail :
 ## Validations positives (ne nécessitent pas d'action)
 
 - ✅ Login response opaque (`invalid_credentials` pour user-missing, soft-deleted, OAuth-only, wrong-password) avec dummy-bcrypt pour égaliser le timing (`packages/auth/src/service.ts:687-700`).
-- ✅ Refresh token rotation single-use (Req 2.2) — la route `/v1/auth/refresh` n'est *pas* idempotente (commentaire explicite dans `routes/auth.ts:158-162`).
+- ✅ Refresh token rotation single-use (Req 2.2) — la route `/v1/auth/refresh` n'est _pas_ idempotente (commentaire explicite dans `routes/auth.ts:158-162`).
 - ✅ HIBP fail-closed (Req 1.2) — register rejette si HIBP indisponible.
 - ✅ JWKS endpoint cache-control 600s, retourne 404 si non configuré (vs JWKS vide qui serait failure mode silencieux).
 - ✅ Turnstile token single-use (anti-replay), avec timeout 5s + fail-closed sur erreur réseau.

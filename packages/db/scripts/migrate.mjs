@@ -49,13 +49,13 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(HERE, '..', 'migrations');
 
 function requireEnv(name) {
-    const v = process.env[name];
-    if (v === undefined || v === '') {
-        throw new Error(
-            `migrate: env var ${name} is required. Set DATABASE_URL or pass it via shell env.`,
-        );
-    }
-    return v;
+  const v = process.env[name];
+  if (v === undefined || v === '') {
+    throw new Error(
+      `migrate: env var ${name} is required. Set DATABASE_URL or pass it via shell env.`,
+    );
+  }
+  return v;
 }
 
 /**
@@ -77,16 +77,15 @@ function requireEnv(name) {
  * naming convention used by the API package.
  */
 function pickMigrationConnectionString() {
-    const explicit =
-        process.env.MIGRATION_DATABASE_URL ?? process.env.MIGRATION_DB_URL;
-    if (explicit !== undefined && explicit !== '') {
-        return explicit;
-    }
-    return requireEnv('DATABASE_URL');
+  const explicit = process.env.MIGRATION_DATABASE_URL ?? process.env.MIGRATION_DB_URL;
+  if (explicit !== undefined && explicit !== '') {
+    return explicit;
+  }
+  return requireEnv('DATABASE_URL');
 }
 
 async function ensureMigrationsTable(sql) {
-    await sql.unsafe(`
+  await sql.unsafe(`
         CREATE TABLE IF NOT EXISTS _athlya_migrations (
             name text PRIMARY KEY,
             applied_at timestamptz NOT NULL DEFAULT now()
@@ -95,48 +94,48 @@ async function ensureMigrationsTable(sql) {
 }
 
 async function appliedSet(sql) {
-    const rows = await sql`SELECT name FROM _athlya_migrations`;
-    return new Set(rows.map((r) => r.name));
+  const rows = await sql`SELECT name FROM _athlya_migrations`;
+  return new Set(rows.map((r) => r.name));
 }
 
 function listMigrations() {
-    return readdirSync(MIGRATIONS_DIR)
-        .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
-        .sort((a, b) => a.localeCompare(b))
-        .map((name) => ({
-            name,
-            sql: readFileSync(join(MIGRATIONS_DIR, name), 'utf8'),
-        }));
+  return readdirSync(MIGRATIONS_DIR)
+    .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => ({
+      name,
+      sql: readFileSync(join(MIGRATIONS_DIR, name), 'utf8'),
+    }));
 }
 
 async function main() {
-    const connectionString = pickMigrationConnectionString();
-    const sql = postgres(connectionString, {
-        max: 1,
-        prepare: false,
-        onnotice: () => { }, // silence NOTICE chatter on idempotent runs
-    });
+  const connectionString = pickMigrationConnectionString();
+  const sql = postgres(connectionString, {
+    max: 1,
+    prepare: false,
+    onnotice: () => {}, // silence NOTICE chatter on idempotent runs
+  });
 
-    try {
-        await ensureMigrationsTable(sql);
-        const already = await appliedSet(sql);
+  try {
+    await ensureMigrationsTable(sql);
+    const already = await appliedSet(sql);
 
-        for (const { name, sql: body } of listMigrations()) {
-            if (already.has(name)) {
-                console.log(`[skip] ${name} (already applied)`);
-                continue;
-            }
-            console.log(`[apply] ${name} ...`);
-            await sql.begin(async (tx) => {
-                await tx.unsafe(body);
-                await tx`INSERT INTO _athlya_migrations (name) VALUES (${name})`;
-            });
-            console.log(`[ok]    ${name}`);
-        }
-        console.log('[done] all migrations applied');
-    } finally {
-        await sql.end({ timeout: 2 });
+    for (const { name, sql: body } of listMigrations()) {
+      if (already.has(name)) {
+        console.log(`[skip] ${name} (already applied)`);
+        continue;
+      }
+      console.log(`[apply] ${name} ...`);
+      await sql.begin(async (tx) => {
+        await tx.unsafe(body);
+        await tx`INSERT INTO _athlya_migrations (name) VALUES (${name})`;
+      });
+      console.log(`[ok]    ${name}`);
     }
+    console.log('[done] all migrations applied');
+  } finally {
+    await sql.end({ timeout: 2 });
+  }
 }
 
 await main();

@@ -24,16 +24,17 @@ import type { ReactElement } from 'react';
 export const metadata: Metadata = { title: 'Athlya — Réservez vos cours' };
 
 export default async function HomePage(): Promise<ReactElement> {
-    const locale = await getLocale();
-    const t = createTranslator(locale);
+  const locale = await getLocale();
+  const t = createTranslator(locale);
 
-    return (
-        <main id="main-content" className="mx-auto flex min-h-dvh max-w-3xl flex-col items-center justify-center gap-6 px-6 py-12">
-            <h1 className="text-4xl font-semibold">{t('web.home.title')}</h1>
-            <p className="text-center text-lg text-muted-foreground">
-                {t('web.home.tagline')}
-            </p>
-            <HomeActions />
-        </main>
-    );
+  return (
+    <main
+      id="main-content"
+      className="mx-auto flex min-h-dvh max-w-3xl flex-col items-center justify-center gap-6 px-6 py-12"
+    >
+      <h1 className="text-4xl font-semibold">{t('web.home.title')}</h1>
+      <p className="text-center text-lg text-muted-foreground">{t('web.home.tagline')}</p>
+      <HomeActions />
+    </main>
+  );
 }

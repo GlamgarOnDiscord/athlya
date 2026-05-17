@@ -35,38 +35,36 @@ import { studios } from './studios.js';
 import type { Consents } from '@athlya/shared/schemas';
 
 export const users = pgTable(
-    'users',
-    {
-        id: uuidPrimaryKey(),
-        studioId: uuid('studio_id')
-            .notNull()
-            .references(() => studios.id, { onDelete: 'cascade' }),
-        email: text('email').notNull(),
-        displayName: text('display_name').notNull(),
-        avatarUrl: text('avatar_url'),
-        role: userRoleEnum('role').notNull().default('member'),
-        /**
-         * Versioned consents record. Typed through `$type<Consents>()` so
-         * reads land on the strong type defined by `ConsentsSchema`
-         * without an intermediate cast. Writes still go through
-         * `ConsentsSchema.parse` to prevent shape drift.
-         */
-        consents: jsonb('consents').$type<Consents>().notNull(),
-        passwordHash: text('password_hash'),
-        createdAt: createdAt(),
-        deletedAt: deletedAt(),
-    },
-    (table) => [
-        uniqueIndex('users_email_unique').on(table.email),
-        /**
-         * Partial index on the active (non-deleted) slice. Matches the
-         * query shape "list active members in my studio" executed by
-         * admins / coaches (Requirement 3.5).
-         */
-        index('users_studio_active_idx')
-            .on(table.studioId)
-            .where(sqlIsNull('deleted_at')),
-    ],
+  'users',
+  {
+    id: uuidPrimaryKey(),
+    studioId: uuid('studio_id')
+      .notNull()
+      .references(() => studios.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    displayName: text('display_name').notNull(),
+    avatarUrl: text('avatar_url'),
+    role: userRoleEnum('role').notNull().default('member'),
+    /**
+     * Versioned consents record. Typed through `$type<Consents>()` so
+     * reads land on the strong type defined by `ConsentsSchema`
+     * without an intermediate cast. Writes still go through
+     * `ConsentsSchema.parse` to prevent shape drift.
+     */
+    consents: jsonb('consents').$type<Consents>().notNull(),
+    passwordHash: text('password_hash'),
+    createdAt: createdAt(),
+    deletedAt: deletedAt(),
+  },
+  (table) => [
+    uniqueIndex('users_email_unique').on(table.email),
+    /**
+     * Partial index on the active (non-deleted) slice. Matches the
+     * query shape "list active members in my studio" executed by
+     * admins / coaches (Requirement 3.5).
+     */
+    index('users_studio_active_idx').on(table.studioId).where(sqlIsNull('deleted_at')),
+  ],
 );
 
 export type UserRow = typeof users.$inferSelect;

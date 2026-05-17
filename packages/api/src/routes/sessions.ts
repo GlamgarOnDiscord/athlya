@@ -17,10 +17,7 @@
  *   • 14.1, 14.2, 20.1 — auth / validation / idempotency.
  */
 
-import {
-    ListSessionsQuerySchema,
-    LogSessionRequestSchema,
-} from '@athlya/shared/schemas/api';
+import { ListSessionsQuerySchema, LogSessionRequestSchema } from '@athlya/shared/schemas/api';
 import { Hono } from 'hono';
 
 import { jwtAuth } from '../middleware/auth.js';
@@ -31,11 +28,7 @@ import { idempotency, projectUserIdFromClaims, readValidated, traceOperation } f
 
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
-import type {
-    ListSessionsQuery,
-    LogSessionRequest,
-} from '@athlya/shared/schemas/api';
-
+import type { ListSessionsQuery, LogSessionRequest } from '@athlya/shared/schemas/api';
 
 /* ------------------------------------------------------------------ */
 /*  Deps                                                               */
@@ -43,13 +36,10 @@ import type {
 
 /** Dependencies injected into {@link buildSessionsRouter}. */
 export interface SessionsDeps {
-    logSession(userId: string, input: LogSessionRequest): Promise<unknown>;
-    listSessions(
-        userId: string,
-        range: ListSessionsQuery,
-    ): Promise<ReadonlyArray<unknown>>;
+  logSession(userId: string, input: LogSessionRequest): Promise<unknown>;
+  listSessions(userId: string, range: ListSessionsQuery): Promise<ReadonlyArray<unknown>>;
 
-    readonly idempotency?: IdempotencyMiddlewareDeps;
+  readonly idempotency?: IdempotencyMiddlewareDeps;
 }
 
 /* ------------------------------------------------------------------ */
@@ -57,58 +47,45 @@ export interface SessionsDeps {
 /* ------------------------------------------------------------------ */
 
 /** Build the `/v1/sessions/*` sub-router. */
-export function buildSessionsRouter(
-    deps: SessionsDeps,
-): Hono<HonoEnv> {
-    const router = new Hono<HonoEnv>();
-    const idem = deps.idempotency;
+export function buildSessionsRouter(deps: SessionsDeps): Hono<HonoEnv> {
+  const router = new Hono<HonoEnv>();
+  const idem = deps.idempotency;
 
-    // Every /v1/sessions route is authenticated.
-    router.use('*', jwtAuth());
+  // Every /v1/sessions route is authenticated.
+  router.use('*', jwtAuth());
 
-    // Sprint 12 / Slice 12.14 (Epic B4.4) — per-studio burst cap.
-    router.use(
-        '*',
-        studioRateLimit() as Parameters<typeof router.use>[1],
-    );
+  // Sprint 12 / Slice 12.14 (Epic B4.4) — per-studio burst cap.
+  router.use('*', studioRateLimit() as Parameters<typeof router.use>[1]);
 
-    /* ------------------------------ POST / ------------------------- */
-    router.post(
-        '/',
-        projectUserIdFromClaims(),
-        zValidator('json', LogSessionRequestSchema),
-        ...(idem ? [idempotency(idem)] : []),
-        async (c) => {
-            traceOperation(c, 'sessions.log');
-            const claims = c.get('authClaims');
-            if (claims === undefined) {
-                throw new Error(
-                    'authClaims unexpectedly missing after jwtAuth',
-                );
-            }
-            const body = readValidated<LogSessionRequest>(c, 'json');
-            const session = await deps.logSession(claims.userId, body);
-            return c.json(session as Record<string, unknown>, 201);
-        },
-    );
+  /* ------------------------------ POST / ------------------------- */
+  router.post(
+    '/',
+    projectUserIdFromClaims(),
+    zValidator('json', LogSessionRequestSchema),
+    ...(idem ? [idempotency(idem)] : []),
+    async (c) => {
+      traceOperation(c, 'sessions.log');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const body = readValidated<LogSessionRequest>(c, 'json');
+      const session = await deps.logSession(claims.userId, body);
+      return c.json(session as Record<string, unknown>, 201);
+    },
+  );
 
-    /* ------------------------------ GET /me ------------------------ */
-    router.get(
-        '/me',
-        zValidator('query', ListSessionsQuerySchema),
-        async (c) => {
-            traceOperation(c, 'sessions.list-mine');
-            const claims = c.get('authClaims');
-            if (claims === undefined) {
-                throw new Error(
-                    'authClaims unexpectedly missing after jwtAuth',
-                );
-            }
-            const query = readValidated<ListSessionsQuery>(c, 'query');
-            const items = await deps.listSessions(claims.userId, query);
-            return c.json({ items: [...items] as unknown[] }, 200);
-        },
-    );
+  /* ------------------------------ GET /me ------------------------ */
+  router.get('/me', zValidator('query', ListSessionsQuerySchema), async (c) => {
+    traceOperation(c, 'sessions.list-mine');
+    const claims = c.get('authClaims');
+    if (claims === undefined) {
+      throw new Error('authClaims unexpectedly missing after jwtAuth');
+    }
+    const query = readValidated<ListSessionsQuery>(c, 'query');
+    const items = await deps.listSessions(claims.userId, query);
+    return c.json({ items: [...items] as unknown[] }, 200);
+  });
 
-    return router;
+  return router;
 }

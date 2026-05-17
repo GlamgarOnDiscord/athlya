@@ -40,21 +40,18 @@ const PROBLEM_JSON = 'application/problem+json';
  * `idempotencyMiddleware(...)`.
  */
 export function projectUserIdFromClaims(): MiddlewareHandler<HonoEnv> {
-    return async (c, next) => {
-        const claims = c.get('authClaims');
-        if (claims !== undefined) {
-            // The Hono context slot key is deliberately a free-form
-            // string — `userId` is not declared on AthlyaVariables
-            // because no existing middleware writes it. The
-            // idempotency middleware reads it via `c.get('userId')`
-            // (see `middleware/idempotency.ts`).
-            (c as unknown as { set: (key: string, value: unknown) => void }).set(
-                'userId',
-                claims.userId,
-            );
-        }
-        await next();
-    };
+  return async (c, next) => {
+    const claims = c.get('authClaims');
+    if (claims !== undefined) {
+      // The Hono context slot key is deliberately a free-form
+      // string — `userId` is not declared on AthlyaVariables
+      // because no existing middleware writes it. The
+      // idempotency middleware reads it via `c.get('userId')`
+      // (see `middleware/idempotency.ts`).
+      (c as unknown as { set: (key: string, value: unknown) => void }).set('userId', claims.userId);
+    }
+    await next();
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -69,11 +66,11 @@ export function projectUserIdFromClaims(): MiddlewareHandler<HonoEnv> {
  * 9457 catalogue lift by task 8.5.
  */
 export interface ForbiddenProblem {
-    readonly type: 'about:blank';
-    readonly title: 'forbidden';
-    readonly status: 403;
-    readonly traceId: string;
-    readonly detail: string;
+  readonly type: 'about:blank';
+  readonly title: 'forbidden';
+  readonly status: 403;
+  readonly traceId: string;
+  readonly detail: string;
 }
 
 /**
@@ -83,16 +80,16 @@ export interface ForbiddenProblem {
  * `POST /v1/classes` (Req 6.5) and `GET /v1/members` (Req 3.5).
  */
 export function problem403(c: Context<HonoEnv>, detail: string): Response {
-    const body: ForbiddenProblem = {
-        type: 'about:blank',
-        title: 'forbidden',
-        status: 403,
-        traceId: c.get('traceId'),
-        detail,
-    };
-    return c.body(JSON.stringify(body), 403, {
-        'content-type': PROBLEM_JSON,
-    });
+  const body: ForbiddenProblem = {
+    type: 'about:blank',
+    title: 'forbidden',
+    status: 403,
+    traceId: c.get('traceId'),
+    detail,
+  };
+  return c.body(JSON.stringify(body), 403, {
+    'content-type': PROBLEM_JSON,
+  });
 }
 
 /**
@@ -105,20 +102,17 @@ export function problem403(c: Context<HonoEnv>, detail: string): Response {
  * silently letting the request through.
  */
 export function requireRole(
-    ...allowed: ReadonlyArray<AuthClaims['role']>
+  ...allowed: ReadonlyArray<AuthClaims['role']>
 ): MiddlewareHandler<HonoEnv> {
-    const set = new Set(allowed);
-    return async (c, next) => {
-        const claims = c.get('authClaims');
-        if (claims === undefined || !set.has(claims.role)) {
-            return problem403(
-                c,
-                `this endpoint requires one of: ${[...set].join(', ')}`,
-            );
-        }
-        await next();
-        return;
-    };
+  const set = new Set(allowed);
+  return async (c, next) => {
+    const claims = c.get('authClaims');
+    if (claims === undefined || !set.has(claims.role)) {
+      return problem403(c, `this endpoint requires one of: ${[...set].join(', ')}`);
+    }
+    await next();
+    return;
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -135,12 +129,9 @@ export function requireRole(
  * cast at the read site. Centralising the cast here keeps the route
  * handlers type-clean.
  */
-export function readValidated<T>(
-    c: Context<HonoEnv>,
-    target: ValidationTarget,
-): T {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    return (c as any).get(`validated:${target}`) as T;
+export function readValidated<T>(c: Context<HonoEnv>, target: ValidationTarget): T {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+  return (c as any).get(`validated:${target}`) as T;
 }
 
 /* ------------------------------------------------------------------ */
@@ -164,18 +155,14 @@ export function readValidated<T>(
  * single localised cast, keeping every route handler's chain clean
  * of casts.
  */
-export function idempotency(
-    deps: IdempotencyMiddlewareDeps,
-): MiddlewareHandler<HonoEnv> {
-    // `rawIdempotencyMiddleware` is typed against its own
-    // `IdempotencyEnv`; at runtime both environments share the same
-    // Hono bindings and the reads are identical — only the type
-    // parameter differs. Cast through `unknown` per TypeScript
-    // convention for narrow, intentional bridges between otherwise-
-    // compatible generic types.
-    return rawIdempotencyMiddleware(deps) as unknown as MiddlewareHandler<
-        HonoEnv
-    >;
+export function idempotency(deps: IdempotencyMiddlewareDeps): MiddlewareHandler<HonoEnv> {
+  // `rawIdempotencyMiddleware` is typed against its own
+  // `IdempotencyEnv`; at runtime both environments share the same
+  // Hono bindings and the reads are identical — only the type
+  // parameter differs. Cast through `unknown` per TypeScript
+  // convention for narrow, intentional bridges between otherwise-
+  // compatible generic types.
+  return rawIdempotencyMiddleware(deps) as unknown as MiddlewareHandler<HonoEnv>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -200,22 +187,22 @@ const UNKNOWN_IP_BUCKET = 'unknown';
  * misbehaving proxy cannot split a bucket.
  */
 export function deriveClientIp(
-    cfConnectingIp: string | undefined,
-    xForwardedFor: string | undefined,
+  cfConnectingIp: string | undefined,
+  xForwardedFor: string | undefined,
 ): string {
-    if (cfConnectingIp !== undefined) {
-        const trimmed = cfConnectingIp.trim();
-        if (trimmed.length > 0) {
-            return trimmed;
-        }
+  if (cfConnectingIp !== undefined) {
+    const trimmed = cfConnectingIp.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
     }
-    if (xForwardedFor !== undefined) {
-        const first = xForwardedFor.split(',')[0]?.trim();
-        if (first !== undefined && first.length > 0) {
-            return first;
-        }
+  }
+  if (xForwardedFor !== undefined) {
+    const first = xForwardedFor.split(',')[0]?.trim();
+    if (first !== undefined && first.length > 0) {
+      return first;
     }
-    return UNKNOWN_IP_BUCKET;
+  }
+  return UNKNOWN_IP_BUCKET;
 }
 
 /* ------------------------------------------------------------------ */
@@ -245,14 +232,13 @@ export function deriveClientIp(
  * which are safe for UUIDs and ISO-8601 timestamps).
  */
 export async function computeListEtag(fingerprint: string): Promise<string> {
-    const data = new TextEncoder().encode(fingerprint);
-    const hash = await crypto.subtle.digest('SHA-256', data);
-    const hex = Array.from(new Uint8Array(hash))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-    return `"${hex.slice(0, 16)}"`;
+  const data = new TextEncoder().encode(fingerprint);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hex = Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `"${hex.slice(0, 16)}"`;
 }
-
 
 /**
  * Sprint 12 / Slice 12.9 (Epic B7.3) — name the request span with a
@@ -276,25 +262,19 @@ export async function computeListEtag(fingerprint: string): Promise<string> {
  *         // …
  *     });
  */
-export function traceOperation(
-    c: Context<HonoEnv>,
-    operation: string,
-): void {
-    const span = c.get('span');
-    if (span === undefined) return;
-    if (typeof (span as { setName?: unknown }).setName === 'function') {
-        (span as { setName: (n: string) => void }).setName(operation);
-    }
-    if (typeof (span as { addEvent?: unknown }).addEvent === 'function') {
-        (
-            span as {
-                addEvent: (
-                    name: string,
-                    attrs?: Record<string, unknown>,
-                ) => void;
-            }
-        ).addEvent('breadcrumb.operation.start', { operation });
-    }
+export function traceOperation(c: Context<HonoEnv>, operation: string): void {
+  const span = c.get('span');
+  if (span === undefined) return;
+  if (typeof (span as { setName?: unknown }).setName === 'function') {
+    (span as { setName: (n: string) => void }).setName(operation);
+  }
+  if (typeof (span as { addEvent?: unknown }).addEvent === 'function') {
+    (
+      span as {
+        addEvent: (name: string, attrs?: Record<string, unknown>) => void;
+      }
+    ).addEvent('breadcrumb.operation.start', { operation });
+  }
 }
 
 /**
@@ -321,45 +301,39 @@ export function traceOperation(
  *     });
  */
 export function addBreadcrumb(
-    c: Context<HonoEnv>,
-    message: string,
-    data?: Record<string, unknown>,
+  c: Context<HonoEnv>,
+  message: string,
+  data?: Record<string, unknown>,
 ): void {
-    const span = c.get('span');
-    if (span === undefined) return;
-    if (typeof (span as { addEvent?: unknown }).addEvent !== 'function') {
-        return;
+  const span = c.get('span');
+  if (span === undefined) return;
+  if (typeof (span as { addEvent?: unknown }).addEvent !== 'function') {
+    return;
+  }
+  let safeData: Record<string, unknown> | undefined;
+  if (data !== undefined) {
+    try {
+      const serialised = JSON.stringify(data);
+      // Cap at 1024 bytes to keep one breadcrumb from blowing
+      // up the OTel envelope. Stripe's SDK uses 1500; we are
+      // tighter because Workers have a 1 MiB request budget.
+      if (serialised.length <= 1024) {
+        safeData = data;
+      } else {
+        safeData = {
+          truncated: true,
+          bytes: serialised.length,
+        };
+      }
+    } catch {
+      // Circular reference — skip the data altogether.
+      safeData = { unserialisable: true };
     }
-    let safeData: Record<string, unknown> | undefined;
-    if (data !== undefined) {
-        try {
-            const serialised = JSON.stringify(data);
-            // Cap at 1024 bytes to keep one breadcrumb from blowing
-            // up the OTel envelope. Stripe's SDK uses 1500; we are
-            // tighter because Workers have a 1 MiB request budget.
-            if (serialised.length <= 1024) {
-                safeData = data;
-            } else {
-                safeData = {
-                    truncated: true,
-                    bytes: serialised.length,
-                };
-            }
-        } catch {
-            // Circular reference — skip the data altogether.
-            safeData = { unserialisable: true };
-        }
+  }
+  const eventName = `breadcrumb.${message}`;
+  (
+    span as {
+      addEvent: (name: string, attrs?: Record<string, unknown>) => void;
     }
-    const eventName = `breadcrumb.${message}`;
-    (
-        span as {
-            addEvent: (
-                name: string,
-                attrs?: Record<string, unknown>,
-            ) => void;
-        }
-    ).addEvent(
-        eventName,
-        safeData !== undefined ? safeData : undefined,
-    );
+  ).addEvent(eventName, safeData !== undefined ? safeData : undefined);
 }

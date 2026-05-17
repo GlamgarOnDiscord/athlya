@@ -70,34 +70,34 @@ export const DEFAULT_QR_REPLAY_PREFIX = 'qr:replay';
  * across requests.
  */
 export function createRedisReplayStore(
-    redis: Redis,
-    prefix: string = DEFAULT_QR_REPLAY_PREFIX,
+  redis: Redis,
+  prefix: string = DEFAULT_QR_REPLAY_PREFIX,
 ): ReplayStore {
-    if (typeof prefix !== 'string' || prefix.length === 0) {
-        throw new TypeError('createRedisReplayStore: prefix must be a non-empty string');
-    }
+  if (typeof prefix !== 'string' || prefix.length === 0) {
+    throw new TypeError('createRedisReplayStore: prefix must be a non-empty string');
+  }
 
-    return {
-        async has(jti: string): Promise<boolean> {
-            assertJti(jti);
-            const existing = await redis.get<string | null>(`${prefix}:${jti}`);
-            return existing !== null && existing !== undefined;
-        },
-        async add(jti: string, ttlSec: number): Promise<void> {
-            assertJti(jti);
-            if (!Number.isFinite(ttlSec) || ttlSec <= 0) {
-                throw new RangeError(
-                    `createRedisReplayStore.add: ttlSec must be > 0, got ${String(ttlSec)}`,
-                );
-            }
-            const ex = Math.max(1, Math.floor(ttlSec));
-            await redis.set(`${prefix}:${jti}`, '1', { ex, nx: true });
-        },
-    };
+  return {
+    async has(jti: string): Promise<boolean> {
+      assertJti(jti);
+      const existing = await redis.get<string | null>(`${prefix}:${jti}`);
+      return existing !== null && existing !== undefined;
+    },
+    async add(jti: string, ttlSec: number): Promise<void> {
+      assertJti(jti);
+      if (!Number.isFinite(ttlSec) || ttlSec <= 0) {
+        throw new RangeError(
+          `createRedisReplayStore.add: ttlSec must be > 0, got ${String(ttlSec)}`,
+        );
+      }
+      const ex = Math.max(1, Math.floor(ttlSec));
+      await redis.set(`${prefix}:${jti}`, '1', { ex, nx: true });
+    },
+  };
 }
 
 function assertJti(jti: string): void {
-    if (typeof jti !== 'string' || jti.length === 0) {
-        throw new TypeError('jti must be a non-empty string');
-    }
+  if (typeof jti !== 'string' || jti.length === 0) {
+    throw new TypeError('jti must be a non-empty string');
+  }
 }

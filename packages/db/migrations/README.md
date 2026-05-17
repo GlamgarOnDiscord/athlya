@@ -6,13 +6,13 @@ Drizzle's snapshot state and must be committed alongside the SQL.
 
 ## Run order
 
-| Order | File                          | Purpose                                                                                                                                                                                                                                |
-| ----- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | `0000_init.sql`               | Enables `pgcrypto` + `citext`, creates every enum, table, foreign key and index, converts `users.email` to `citext`, installs the `audit_log_immutable()` trigger that blocks UPDATE / DELETE on `audit_log`. Matches Requirement 22.2. |
-| 2     | `0001_rls.sql`                | Enables Row-Level Security on every tenant-scoped table and creates the tenant / role-scoped policies. Matches Requirements 13.2, 13.3, 13.4, 13.6, 22.3 (task 2.3).                                                                   |
-| 3     | `0002_export_jobs.sql`        | Adds the `export_jobs` table for RGPD exports (task 5.3, Req 4.1–4.4) with its own RLS policy.                                                                                                                                          |
-| 4     | `0003_audit_anonymization.sql`| RGPD J+30 audit anonymization — creates `athlya_owner` / `athlya_cron` / `athlya_app` (NOLOGIN), the SECURITY DEFINER `anonymize_user_audit(uuid)` function, and rewrites the audit trigger to allow that one path (Req 5.3, 22.2).      |
-| 5     | `0004_rls_hardening.sql`      | Elevates `athlya_app` to LOGIN + grants application DML on every tenant-scoped table; restates `FORCE ROW LEVEL SECURITY` for self-containment (slice B2, Req 13.6, H1). The role password is provisioned **out of band** by the operator; the runbook lives in `docs/runbooks/db-role-switch.md`. |
+| Order | File                           | Purpose                                                                                                                                                                                                                                                                                            |
+| ----- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | `0000_init.sql`                | Enables `pgcrypto` + `citext`, creates every enum, table, foreign key and index, converts `users.email` to `citext`, installs the `audit_log_immutable()` trigger that blocks UPDATE / DELETE on `audit_log`. Matches Requirement 22.2.                                                            |
+| 2     | `0001_rls.sql`                 | Enables Row-Level Security on every tenant-scoped table and creates the tenant / role-scoped policies. Matches Requirements 13.2, 13.3, 13.4, 13.6, 22.3 (task 2.3).                                                                                                                               |
+| 3     | `0002_export_jobs.sql`         | Adds the `export_jobs` table for RGPD exports (task 5.3, Req 4.1–4.4) with its own RLS policy.                                                                                                                                                                                                     |
+| 4     | `0003_audit_anonymization.sql` | RGPD J+30 audit anonymization — creates `athlya_owner` / `athlya_cron` / `athlya_app` (NOLOGIN), the SECURITY DEFINER `anonymize_user_audit(uuid)` function, and rewrites the audit trigger to allow that one path (Req 5.3, 22.2).                                                                |
+| 5     | `0004_rls_hardening.sql`       | Elevates `athlya_app` to LOGIN + grants application DML on every tenant-scoped table; restates `FORCE ROW LEVEL SECURITY` for self-containment (slice B2, Req 13.6, H1). The role password is provisioned **out of band** by the operator; the runbook lives in `docs/runbooks/db-role-switch.md`. |
 
 New schema-shape migrations must be generated via `pnpm --filter
 @athlya/db exec drizzle-kit generate --name <descriptive-name>` from the
@@ -132,37 +132,37 @@ role provisioned out of band by the deployment pipeline.
 
 ### Policy catalogue
 
-| Table              | Policy                                   | Command     | Predicate (summarised)                                                                                                          | Requirement |
-| ------------------ | ---------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| `studios`          | `studios_read_own_tenant`                | SELECT      | `id = app_studio_id()`                                                                                                          | 13.6        |
-| `users`            | `users_read_own`                         | SELECT      | `id = app_user_id()`                                                                                                            | 13.2        |
-| `users`            | `users_read_same_studio`                 | SELECT      | `studio_id = app_studio_id() AND app_role() IN ('admin','coach')`                                                               | 13.2        |
-| `users`            | `users_update_own`                       | UPDATE      | `id = app_user_id()` (USING + WITH CHECK)                                                                                       | 3.x, 13.2   |
-| `users`            | `users_update_admin`                     | UPDATE      | `studio_id = app_studio_id() AND app_role() = 'admin'`                                                                          | 13.2        |
-| `classes`          | `classes_read_same_studio`               | SELECT      | `studio_id = app_studio_id()`                                                                                                   | 13.6        |
-| `classes`          | `classes_insert_admin`                   | INSERT      | `studio_id = app_studio_id() AND app_role() = 'admin'`                                                                          | 6.x, 13.6   |
-| `classes`          | `classes_update_admin`                   | UPDATE      | `studio_id = app_studio_id() AND app_role() = 'admin'`                                                                          | 6.5, 13.6   |
-| `classes`          | `classes_delete_admin`                   | DELETE      | `studio_id = app_studio_id() AND app_role() = 'admin'`                                                                          | 13.6        |
-| `reservations`     | `reservations_read_own`                  | SELECT      | `user_id = app_user_id()`                                                                                                       | 13.3        |
-| `reservations`     | `reservations_read_admin_same_studio`    | SELECT      | `app_role() IN ('admin','coach') AND EXISTS(classes.id = class_id AND classes.studio_id = app_studio_id())`                     | 13.3, 13.6  |
-| `reservations`     | `reservations_insert_own`                | INSERT      | `user_id = app_user_id()`                                                                                                       | 8.x, 13.3   |
-| `reservations`     | `reservations_update_own`                | UPDATE      | `user_id = app_user_id()` (USING + WITH CHECK)                                                                                  | 9.x, 13.3   |
-| `reservations`     | `reservations_update_admin`              | UPDATE      | `app_role() = 'admin' AND same-studio join on classes`                                                                          | 9.x, 13.6   |
-| `workout_sessions` | `workout_sessions_read_own`              | SELECT      | `user_id = app_user_id()`                                                                                                       | 13.3        |
-| `workout_sessions` | `workout_sessions_insert_own`            | INSERT      | `user_id = app_user_id()`                                                                                                       | 12.x        |
-| `workout_sessions` | `workout_sessions_update_own`            | UPDATE      | `user_id = app_user_id()` (USING + WITH CHECK)                                                                                  | 12.x        |
-| `workout_sessions` | `workout_sessions_delete_own`            | DELETE      | `user_id = app_user_id()`                                                                                                       | 5.x, 12.x   |
-| `audit_log`        | `audit_admin_only`                       | SELECT      | `app_role() = 'admin'`                                                                                                          | 13.4, 22.3  |
-| `audit_log`        | `audit_no_insert`                        | INSERT      | `false` (writes go through BYPASSRLS service role)                                                                              | 22.2        |
-| `audit_log`        | `audit_no_update`                        | UPDATE      | `false` (belt-and-braces around the trigger)                                                                                    | 22.2        |
-| `audit_log`        | `audit_no_delete`                        | DELETE      | `false` (belt-and-braces around the trigger)                                                                                    | 22.2        |
-| `outbox`           | `outbox_admin_only`                      | SELECT      | `app_role() = 'admin'`                                                                                                          | 16.x, 22.3  |
-| `idempotency_keys` | `idempotency_keys_read_own`              | SELECT      | `user_id = app_user_id()`                                                                                                       | 20.x        |
-| `idempotency_keys` | `idempotency_keys_insert_own`            | INSERT      | `user_id = app_user_id()`                                                                                                       | 20.x        |
-| `idempotency_keys` | `idempotency_keys_delete_own`            | DELETE      | `user_id = app_user_id()`                                                                                                       | 20.x        |
-| `push_tokens`      | `push_tokens_read_own`                   | SELECT      | `user_id = app_user_id()`                                                                                                       | 17.x        |
-| `push_tokens`      | `push_tokens_insert_own`                 | INSERT      | `user_id = app_user_id()`                                                                                                       | 17.x        |
-| `push_tokens`      | `push_tokens_delete_own`                 | DELETE      | `user_id = app_user_id()`                                                                                                       | 5.x, 17.x   |
+| Table              | Policy                                | Command | Predicate (summarised)                                                                                      | Requirement |
+| ------------------ | ------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------- | ----------- |
+| `studios`          | `studios_read_own_tenant`             | SELECT  | `id = app_studio_id()`                                                                                      | 13.6        |
+| `users`            | `users_read_own`                      | SELECT  | `id = app_user_id()`                                                                                        | 13.2        |
+| `users`            | `users_read_same_studio`              | SELECT  | `studio_id = app_studio_id() AND app_role() IN ('admin','coach')`                                           | 13.2        |
+| `users`            | `users_update_own`                    | UPDATE  | `id = app_user_id()` (USING + WITH CHECK)                                                                   | 3.x, 13.2   |
+| `users`            | `users_update_admin`                  | UPDATE  | `studio_id = app_studio_id() AND app_role() = 'admin'`                                                      | 13.2        |
+| `classes`          | `classes_read_same_studio`            | SELECT  | `studio_id = app_studio_id()`                                                                               | 13.6        |
+| `classes`          | `classes_insert_admin`                | INSERT  | `studio_id = app_studio_id() AND app_role() = 'admin'`                                                      | 6.x, 13.6   |
+| `classes`          | `classes_update_admin`                | UPDATE  | `studio_id = app_studio_id() AND app_role() = 'admin'`                                                      | 6.5, 13.6   |
+| `classes`          | `classes_delete_admin`                | DELETE  | `studio_id = app_studio_id() AND app_role() = 'admin'`                                                      | 13.6        |
+| `reservations`     | `reservations_read_own`               | SELECT  | `user_id = app_user_id()`                                                                                   | 13.3        |
+| `reservations`     | `reservations_read_admin_same_studio` | SELECT  | `app_role() IN ('admin','coach') AND EXISTS(classes.id = class_id AND classes.studio_id = app_studio_id())` | 13.3, 13.6  |
+| `reservations`     | `reservations_insert_own`             | INSERT  | `user_id = app_user_id()`                                                                                   | 8.x, 13.3   |
+| `reservations`     | `reservations_update_own`             | UPDATE  | `user_id = app_user_id()` (USING + WITH CHECK)                                                              | 9.x, 13.3   |
+| `reservations`     | `reservations_update_admin`           | UPDATE  | `app_role() = 'admin' AND same-studio join on classes`                                                      | 9.x, 13.6   |
+| `workout_sessions` | `workout_sessions_read_own`           | SELECT  | `user_id = app_user_id()`                                                                                   | 13.3        |
+| `workout_sessions` | `workout_sessions_insert_own`         | INSERT  | `user_id = app_user_id()`                                                                                   | 12.x        |
+| `workout_sessions` | `workout_sessions_update_own`         | UPDATE  | `user_id = app_user_id()` (USING + WITH CHECK)                                                              | 12.x        |
+| `workout_sessions` | `workout_sessions_delete_own`         | DELETE  | `user_id = app_user_id()`                                                                                   | 5.x, 12.x   |
+| `audit_log`        | `audit_admin_only`                    | SELECT  | `app_role() = 'admin'`                                                                                      | 13.4, 22.3  |
+| `audit_log`        | `audit_no_insert`                     | INSERT  | `false` (writes go through BYPASSRLS service role)                                                          | 22.2        |
+| `audit_log`        | `audit_no_update`                     | UPDATE  | `false` (belt-and-braces around the trigger)                                                                | 22.2        |
+| `audit_log`        | `audit_no_delete`                     | DELETE  | `false` (belt-and-braces around the trigger)                                                                | 22.2        |
+| `outbox`           | `outbox_admin_only`                   | SELECT  | `app_role() = 'admin'`                                                                                      | 16.x, 22.3  |
+| `idempotency_keys` | `idempotency_keys_read_own`           | SELECT  | `user_id = app_user_id()`                                                                                   | 20.x        |
+| `idempotency_keys` | `idempotency_keys_insert_own`         | INSERT  | `user_id = app_user_id()`                                                                                   | 20.x        |
+| `idempotency_keys` | `idempotency_keys_delete_own`         | DELETE  | `user_id = app_user_id()`                                                                                   | 20.x        |
+| `push_tokens`      | `push_tokens_read_own`                | SELECT  | `user_id = app_user_id()`                                                                                   | 17.x        |
+| `push_tokens`      | `push_tokens_insert_own`              | INSERT  | `user_id = app_user_id()`                                                                                   | 17.x        |
+| `push_tokens`      | `push_tokens_delete_own`              | DELETE  | `user_id = app_user_id()`                                                                                   | 5.x, 17.x   |
 
 ### Deliberate omissions
 

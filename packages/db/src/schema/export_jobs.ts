@@ -37,53 +37,53 @@ import { exportJobStatusEnum } from './enums.js';
 import { users } from './users.js';
 
 export const exportJobs = pgTable(
-    'export_jobs',
-    {
-        id: uuidPrimaryKey(),
-        userId: uuid('user_id')
-            .notNull()
-            .references(() => users.id, { onDelete: 'cascade' }),
-        status: exportJobStatusEnum('status').notNull().default('pending'),
-        /**
-         * `requested_at` is the wall-clock timestamp the user's request
-         * entered the system. Used by the 48-hour SLO dashboard
-         * (Requirement 4.3) and by the dedup query to pick the most
-         * recent pending/running row when several exist.
-         */
-        requestedAt: timestamp('requested_at', { withTimezone: true, mode: 'date' })
-            .notNull()
-            .defaultNow(),
-        startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }),
-        completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
-        /**
-         * Short human-readable reason stamped on the `failed` path.
-         * `null` while the job is still pending / running / completed.
-         */
-        error: text('error'),
-        /**
-         * Signed R2 URL issued once the archive is ready. Consumers
-         * MUST re-check {@link downloadExpiresAt} before handing the
-         * URL to the user — the 72 h TTL is the authoritative window,
-         * even when the URL string is technically still well-formed.
-         */
-        downloadUrl: text('download_url'),
-        downloadExpiresAt: timestamp('download_expires_at', {
-            withTimezone: true,
-            mode: 'date',
-        }),
-        createdAt: createdAt(),
-    },
-    (table) => [
-        /**
-         * Dedup lookup: "does this user have an active export in
-         * flight?". Partial index on the `pending` / `running` slice
-         * keeps the index tiny (completed/failed rows dominate the
-         * table after a few weeks).
-         */
-        index('export_jobs_user_active_idx')
-            .on(table.userId, table.requestedAt)
-            .where(sql`status in ('pending', 'running')`),
-    ],
+  'export_jobs',
+  {
+    id: uuidPrimaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: exportJobStatusEnum('status').notNull().default('pending'),
+    /**
+     * `requested_at` is the wall-clock timestamp the user's request
+     * entered the system. Used by the 48-hour SLO dashboard
+     * (Requirement 4.3) and by the dedup query to pick the most
+     * recent pending/running row when several exist.
+     */
+    requestedAt: timestamp('requested_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }),
+    completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
+    /**
+     * Short human-readable reason stamped on the `failed` path.
+     * `null` while the job is still pending / running / completed.
+     */
+    error: text('error'),
+    /**
+     * Signed R2 URL issued once the archive is ready. Consumers
+     * MUST re-check {@link downloadExpiresAt} before handing the
+     * URL to the user — the 72 h TTL is the authoritative window,
+     * even when the URL string is technically still well-formed.
+     */
+    downloadUrl: text('download_url'),
+    downloadExpiresAt: timestamp('download_expires_at', {
+      withTimezone: true,
+      mode: 'date',
+    }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    /**
+     * Dedup lookup: "does this user have an active export in
+     * flight?". Partial index on the `pending` / `running` slice
+     * keeps the index tiny (completed/failed rows dominate the
+     * table after a few weeks).
+     */
+    index('export_jobs_user_active_idx')
+      .on(table.userId, table.requestedAt)
+      .where(sql`status in ('pending', 'running')`),
+  ],
 );
 
 export type ExportJobRow = typeof exportJobs.$inferSelect;

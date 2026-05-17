@@ -13,27 +13,27 @@ import athlya from '@athlya/eslint-config';
  * build.
  */
 export default [
-    {
-        ignores: ['dist/**', '.turbo/**', 'coverage/**', '*.tsbuildinfo', 'scripts/**'],
+  {
+    ignores: ['dist/**', '.turbo/**', 'coverage/**', '*.tsbuildinfo', 'scripts/**'],
+  },
+  ...athlya,
+  {
+    files: ['tests/**/*.ts', 'src/**/*.test.ts', 'vitest.config.ts'],
+    languageOptions: {
+      parserOptions: {
+        // The base config enables `projectService: true` for
+        // typescript-eslint. That auto-discovery only looks at
+        // the nearest `tsconfig.json`, which here covers only
+        // non-test files under `src/` — test files (both the
+        // `tests/` tree and co-located `src/**/*.test.ts`) live
+        // outside that project on purpose. Switch to the
+        // classic `project` mode for test-tree files and point
+        // it at the test-specific tsconfig so type-aware rules
+        // keep working.
+        projectService: false,
+        project: ['./tsconfig.tests.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
-    ...athlya,
-    {
-        files: ['tests/**/*.ts', 'src/**/*.test.ts', 'vitest.config.ts'],
-        languageOptions: {
-            parserOptions: {
-                // The base config enables `projectService: true` for
-                // typescript-eslint. That auto-discovery only looks at
-                // the nearest `tsconfig.json`, which here covers only
-                // non-test files under `src/` — test files (both the
-                // `tests/` tree and co-located `src/**/*.test.ts`) live
-                // outside that project on purpose. Switch to the
-                // classic `project` mode for test-tree files and point
-                // it at the test-specific tsconfig so type-aware rules
-                // keep working.
-                projectService: false,
-                project: ['./tsconfig.tests.json'],
-                tsconfigRootDir: import.meta.dirname,
-            },
-        },
-    },
+  },
 ];

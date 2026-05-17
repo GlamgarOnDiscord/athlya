@@ -1,80 +1,80 @@
 {
-    "name": "@athlya/reservations",
-    "version": "0.0.0",
-    "private": true,
-    "type": "module",
-    "description": "Reservations domain primitives for Athlya — state-machine guard, booking + cancellation flows, QR check-in integration",
-    "license": "AGPL-3.0-only",
-    "engines": {
-        "node": ">=20"
+  "name": "@athlya/reservations",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reservations domain primitives for Athlya — state-machine guard, booking + cancellation flows, QR check-in integration",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     },
-    "sideEffects": false,
-    "exports": {
-        ".": {
-            "types": "./src/index.ts",
-            "default": "./src/index.ts"
-        },
-        "./state-machine": {
-            "types": "./src/state-machine.ts",
-            "default": "./src/state-machine.ts"
-        },
-        "./list": {
-            "types": "./src/list.ts",
-            "default": "./src/list.ts"
-        },
-        "./counter": {
-            "types": "./src/counter.ts",
-            "default": "./src/counter.ts"
-        },
-        "./checkin": {
-            "types": "./src/checkin.ts",
-            "default": "./src/checkin.ts"
-        },
-        "./cancel": {
-            "types": "./src/cancel.ts",
-            "default": "./src/cancel.ts"
-        },
-        "./book": {
-            "types": "./src/book.ts",
-            "default": "./src/book.ts"
-        },
-        "./create": {
-            "types": "./src/create.ts",
-            "default": "./src/create.ts"
-        },
-        "./update": {
-            "types": "./src/update.ts",
-            "default": "./src/update.ts"
-        }
+    "./state-machine": {
+      "types": "./src/state-machine.ts",
+      "default": "./src/state-machine.ts"
     },
-    "files": [
-        "src",
-        "dist"
-    ],
-    "scripts": {
-        "build": "tsc -p tsconfig.build.json",
-        "lint": "eslint .",
-        "typecheck": "tsc --noEmit -p tsconfig.json",
-        "test": "vitest run",
-        "clean": "rimraf dist .turbo *.tsbuildinfo"
+    "./list": {
+      "types": "./src/list.ts",
+      "default": "./src/list.ts"
     },
-    "dependencies": {
-        "@athlya/db": "workspace:*",
-        "@athlya/shared": "workspace:*",
-        "@upstash/redis": "^1.35.6"
+    "./counter": {
+      "types": "./src/counter.ts",
+      "default": "./src/counter.ts"
     },
-    "devDependencies": {
-        "@athlya/eslint-config": "workspace:*",
-        "@athlya/tsconfig": "workspace:*",
-        "@fast-check/vitest": "^0.4.1",
-        "@testcontainers/postgresql": "^11.0.0",
-        "@types/node": "^20.19.9",
-        "drizzle-orm": "^0.45.2",
-        "eslint": "^9.39.1",
-        "fast-check": "^3.23.2",
-        "postgres": "^3.4.5",
-        "rimraf": "^6.0.1",
-        "typescript": "^5.9.3",
-        "vitest": "^3.2.4"
+    "./checkin": {
+      "types": "./src/checkin.ts",
+      "default": "./src/checkin.ts"
+    },
+    "./cancel": {
+      "types": "./src/cancel.ts",
+      "default": "./src/cancel.ts"
+    },
+    "./book": {
+      "types": "./src/book.ts",
+      "default": "./src/book.ts"
+    },
+    "./create": {
+      "types": "./src/create.ts",
+      "default": "./src/create.ts"
+    },
+    "./update": {
+      "types": "./src/update.ts",
+      "default": "./src/update.ts"
     }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "clean": "rimraf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@athlya/db": "workspace:*",
+    "@athlya/shared": "workspace:*",
+    "@upstash/redis": "^1.35.6"
+  },
+  "devDependencies": {
+    "@athlya/eslint-config": "workspace:*",
+    "@athlya/tsconfig": "workspace:*",
+    "@fast-check/vitest": "^0.3.0",
+    "@testcontainers/postgresql": "^11.0.0",
+    "@types/node": "^20.19.9",
+    "drizzle-orm": "^0.45.2",
+    "eslint": "^9.39.1",
+    "fast-check": "^3.23.2",
+    "postgres": "^3.4.5",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
 }

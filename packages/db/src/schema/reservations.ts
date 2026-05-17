@@ -27,29 +27,29 @@ import { reservationStatusEnum } from './enums.js';
 import { users } from './users.js';
 
 export const reservations = pgTable(
-    'reservations',
-    {
-        id: uuidPrimaryKey(),
-        classId: uuid('class_id')
-            .notNull()
-            .references(() => classes.id, { onDelete: 'cascade' }),
-        userId: uuid('user_id')
-            .notNull()
-            .references(() => users.id, { onDelete: 'cascade' }),
-        status: reservationStatusEnum('status').notNull(),
-        createdAt: createdAt(),
-        cancelledAt: timestamp('cancelled_at', { withTimezone: true, mode: 'date' }),
-        checkedInAt: timestamp('checked_in_at', { withTimezone: true, mode: 'date' }),
-    },
-    (table) => [
-        /**
-         * The anti-double-booking invariant. Enforced in the database so
-         * that even a buggy caller cannot violate it — see Requirement
-         * 8.4 and the `UniqueViolation` branch of Algorithm 1 in the
-         * design document.
-         */
-        uniqueIndex('reservations_class_user_unique').on(table.classId, table.userId),
-    ],
+  'reservations',
+  {
+    id: uuidPrimaryKey(),
+    classId: uuid('class_id')
+      .notNull()
+      .references(() => classes.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: reservationStatusEnum('status').notNull(),
+    createdAt: createdAt(),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true, mode: 'date' }),
+    checkedInAt: timestamp('checked_in_at', { withTimezone: true, mode: 'date' }),
+  },
+  (table) => [
+    /**
+     * The anti-double-booking invariant. Enforced in the database so
+     * that even a buggy caller cannot violate it — see Requirement
+     * 8.4 and the `UniqueViolation` branch of Algorithm 1 in the
+     * design document.
+     */
+    uniqueIndex('reservations_class_user_unique').on(table.classId, table.userId),
+  ],
 );
 
 export type ReservationRow = typeof reservations.$inferSelect;

@@ -12,10 +12,10 @@ import { t as translate } from '@athlya/shared/i18n';
 import type { Locale, TranslationKeys } from '@athlya/shared/i18n';
 
 export type Translator = (
-    key: TranslationKeys,
-    params?: Readonly<Record<string, string | number>>,
+  key: TranslationKeys,
+  params?: Readonly<Record<string, string | number>>,
 ) => string;
 
 export function createTranslator(locale: Locale): Translator {
-    return (key, params) => translate(key, locale, params);
+  return (key, params) => translate(key, locale, params);
 }

@@ -13,10 +13,10 @@ Un N+1 est défini ici comme : **N appels round-trip _séquentiels_ vers une dé
 ```ts
 const rows = await deps.classRepo.findInRange(studioId, range);
 const remainings = await Promise.all(
-    rows.map(async (row) => {
-        const remote = await deps.counter.getRemaining(row.id);
-        return remote ?? row.capacity;
-    }),
+  rows.map(async (row) => {
+    const remote = await deps.counter.getRemaining(row.id);
+    return remote ?? row.capacity;
+  }),
 );
 ```
 
@@ -73,6 +73,7 @@ return db.transaction(async (tx) => {
 ### 5. `cancelReservation` (Req 9.1) — `packages/reservations/src/cancel.ts`
 
 Une seule transaction :
+
 - 1 UPDATE sur la reservation cancellée.
 - 1 SELECT FOR UPDATE sur la prochaine waitlistée éligible (FIFO promotion).
 - 1 UPDATE pour la promouvoir si elle existe.
@@ -86,8 +87,8 @@ Une seule transaction :
 ```ts
 const events = await claimBatch(db, BATCH_SIZE);
 for (const event of events) {
-    await queue.send(event);
-    await markPublished(db, event.id);
+  await queue.send(event);
+  await markPublished(db, event.id);
 }
 ```
 

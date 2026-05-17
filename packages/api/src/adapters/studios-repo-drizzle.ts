@@ -36,25 +36,25 @@ import type { AthlyaDbAny } from '@athlya/db/client';
  * the database.
  */
 export interface StudioView {
-    readonly id: string;
-    readonly slug: string;
-    readonly name: string;
-    readonly brandColor: string;
-    /** Always `null` until the `brand_logo` column ships. */
-    readonly brandLogo: string | null;
+  readonly id: string;
+  readonly slug: string;
+  readonly name: string;
+  readonly brandColor: string;
+  /** Always `null` until the `brand_logo` column ships. */
+  readonly brandLogo: string | null;
 }
 
 /** Patch shape accepted by {@link StudioRepo.updateById}. */
 export interface StudioPatch {
-    readonly name?: string;
-    readonly brandColor?: string;
-    readonly brandLogo?: string | null;
+  readonly name?: string;
+  readonly brandColor?: string;
+  readonly brandLogo?: string | null;
 }
 
 /** Read / write contract consumed by the studios router and tests. */
 export interface StudioRepo {
-    getById(id: string): Promise<StudioView | null>;
-    updateById(id: string, patch: StudioPatch): Promise<StudioView | null>;
+  getById(id: string): Promise<StudioView | null>;
+  updateById(id: string, patch: StudioPatch): Promise<StudioView | null>;
 }
 
 /**
@@ -62,66 +62,64 @@ export interface StudioRepo {
  * stateless (HTTP driver), so the closure is just over `db`.
  */
 export function createDrizzleStudioRepo(db: AthlyaDbAny): StudioRepo {
-    return {
-        async getById(id) {
-            const rows = await withConnectionRetry(() =>
-                db
-                    .select()
-                    .from(studios)
-                    .where(and(eq(studios.id, id), isNull(studios.deletedAt)))
-                    .limit(1),
-            );
-            const row = rows[0];
-            return row === undefined ? null : toStudioView(row);
-        },
+  return {
+    async getById(id) {
+      const rows = await withConnectionRetry(() =>
+        db
+          .select()
+          .from(studios)
+          .where(and(eq(studios.id, id), isNull(studios.deletedAt)))
+          .limit(1),
+      );
+      const row = rows[0];
+      return row === undefined ? null : toStudioView(row);
+    },
 
-        async updateById(id, patch) {
-            const set: Partial<typeof studios.$inferInsert> = {};
-            if (patch.name !== undefined) set.name = patch.name;
-            if (patch.brandColor !== undefined) {
-                set.brandColor = patch.brandColor;
-            }
-            // `brandLogo` is intentionally NOT mapped onto a column
-            // until the schema adds `brand_logo`. We accept the patch
-            // field at the API boundary so older clients do not break,
-            // and the response always reports `brandLogo: null` until
-            // the column lands.
-            if (Object.keys(set).length === 0) {
-                // No actionable column changed — fall back to a read so
-                // the response still echoes the current row. Avoids an
-                // empty UPDATE that would silently bump no rows yet
-                // touch the WAL.
-                const rows = await withConnectionRetry(() =>
-                    db
-                        .select()
-                        .from(studios)
-                        .where(
-                            and(eq(studios.id, id), isNull(studios.deletedAt)),
-                        )
-                        .limit(1),
-                );
-                const row = rows[0];
-                return row === undefined ? null : toStudioView(row);
-            }
-            const [row] = await withConnectionRetry(() =>
-                db
-                    .update(studios)
-                    .set(set)
-                    .where(and(eq(studios.id, id), isNull(studios.deletedAt)))
-                    .returning(),
-            );
-            return row === undefined ? null : toStudioView(row);
-        },
-    };
+    async updateById(id, patch) {
+      const set: Partial<typeof studios.$inferInsert> = {};
+      if (patch.name !== undefined) set.name = patch.name;
+      if (patch.brandColor !== undefined) {
+        set.brandColor = patch.brandColor;
+      }
+      // `brandLogo` is intentionally NOT mapped onto a column
+      // until the schema adds `brand_logo`. We accept the patch
+      // field at the API boundary so older clients do not break,
+      // and the response always reports `brandLogo: null` until
+      // the column lands.
+      if (Object.keys(set).length === 0) {
+        // No actionable column changed — fall back to a read so
+        // the response still echoes the current row. Avoids an
+        // empty UPDATE that would silently bump no rows yet
+        // touch the WAL.
+        const rows = await withConnectionRetry(() =>
+          db
+            .select()
+            .from(studios)
+            .where(and(eq(studios.id, id), isNull(studios.deletedAt)))
+            .limit(1),
+        );
+        const row = rows[0];
+        return row === undefined ? null : toStudioView(row);
+      }
+      const [row] = await withConnectionRetry(() =>
+        db
+          .update(studios)
+          .set(set)
+          .where(and(eq(studios.id, id), isNull(studios.deletedAt)))
+          .returning(),
+      );
+      return row === undefined ? null : toStudioView(row);
+    },
+  };
 }
 
 function toStudioView(row: typeof studios.$inferSelect): StudioView {
-    return {
-        id: row.id,
-        slug: row.slug,
-        name: row.name,
-        brandColor: row.brandColor,
-        // `brand_logo` not yet in the schema — see file-level comment.
-        brandLogo: null,
-    };
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    brandColor: row.brandColor,
+    // `brand_logo` not yet in the schema — see file-level comment.
+    brandLogo: null,
+  };
 }

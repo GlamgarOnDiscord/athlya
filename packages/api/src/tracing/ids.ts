@@ -59,8 +59,7 @@
  * can reason about the exact shape we accept without reverse-
  * engineering it from the functions below.
  */
-export const TRACEPARENT_RE =
-    /^\s*[0-9a-f]{2}-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}\s*$/u;
+export const TRACEPARENT_RE = /^\s*[0-9a-f]{2}-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}\s*$/u;
 
 /**
  * Parsed `traceparent` pair, returned by {@link extractTraceparent}
@@ -70,8 +69,8 @@ export const TRACEPARENT_RE =
  * emit a child span on the same trace.
  */
 export interface TraceparentFields {
-    readonly traceId: string;
-    readonly parentSpanId: string;
+  readonly traceId: string;
+  readonly parentSpanId: string;
 }
 
 /**
@@ -84,20 +83,20 @@ export interface TraceparentFields {
  * must never fail the request.
  */
 export function extractTraceparent(header: string | null): TraceparentFields | null {
-    if (header === null) {
-        return null;
-    }
-    const match = TRACEPARENT_RE.exec(header);
-    if (match === null) {
-        return null;
-    }
-    // Capture groups 1 and 2 are guaranteed non-null by the regex
-    // shape above; the null-assertions keep TypeScript honest under
-    // `noUncheckedIndexedAccess`.
-    return {
-        traceId: match[1]!,
-        parentSpanId: match[2]!,
-    };
+  if (header === null) {
+    return null;
+  }
+  const match = TRACEPARENT_RE.exec(header);
+  if (match === null) {
+    return null;
+  }
+  // Capture groups 1 and 2 are guaranteed non-null by the regex
+  // shape above; the null-assertions keep TypeScript honest under
+  // `noUncheckedIndexedAccess`.
+  return {
+    traceId: match[1]!,
+    parentSpanId: match[2]!,
+  };
 }
 
 /**
@@ -109,7 +108,7 @@ export function extractTraceparent(header: string | null): TraceparentFields | n
  * OTel span construction.
  */
 export function extractTraceparentId(header: string | null): string | null {
-    return extractTraceparent(header)?.traceId ?? null;
+  return extractTraceparent(header)?.traceId ?? null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -132,19 +131,16 @@ export function extractTraceparentId(header: string | null): string | null {
  * carry `crypto.randomUUID`.
  */
 export function newTraceId(): string {
-    if (
-        typeof crypto !== 'undefined' &&
-        typeof crypto.randomUUID === 'function'
-    ) {
-        return crypto.randomUUID();
-    }
-    const bytes = new Uint8Array(16);
-    fillRandom(bytes);
-    // RFC 4122 §4.4 — set version (4) and variant (10) bits.
-    bytes[6] = (bytes[6]! & 0x0f) | 0x40;
-    bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-    const hex = bytesToHex(bytes);
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  fillRandom(bytes);
+  // RFC 4122 §4.4 — set version (4) and variant (10) bits.
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytesToHex(bytes);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -162,9 +158,9 @@ export function newTraceId(): string {
  * exporter emit non-unique trace-ids under load.
  */
 export function newTraceIdHex(): string {
-    const bytes = new Uint8Array(16);
-    fillRandom(bytes);
-    return bytesToHex(bytes);
+  const bytes = new Uint8Array(16);
+  fillRandom(bytes);
+  return bytesToHex(bytes);
 }
 
 /**
@@ -175,9 +171,9 @@ export function newTraceIdHex(): string {
  * same reason as {@link newTraceIdHex}.
  */
 export function newSpanId(): string {
-    const bytes = new Uint8Array(8);
-    fillRandom(bytes);
-    return bytesToHex(bytes);
+  const bytes = new Uint8Array(8);
+  fillRandom(bytes);
+  return bytesToHex(bytes);
 }
 
 /* ------------------------------------------------------------------ */
@@ -192,27 +188,24 @@ export function newSpanId(): string {
  * is annotated so production deployments never land on it silently.
  */
 function fillRandom(buffer: Uint8Array): void {
-    if (
-        typeof crypto !== 'undefined' &&
-        typeof crypto.getRandomValues === 'function'
-    ) {
-        crypto.getRandomValues(buffer);
-        return;
-    }
-    // Defensive fallback — never taken on Workers. `Math.random` is
-    // NOT cryptographically secure; we keep the fallback so the
-    // helper is importable from any JS runtime, but production
-    // isolates will always enter the branch above.
-    for (let i = 0; i < buffer.length; i += 1) {
-        buffer[i] = Math.floor(Math.random() * 256);
-    }
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(buffer);
+    return;
+  }
+  // Defensive fallback — never taken on Workers. `Math.random` is
+  // NOT cryptographically secure; we keep the fallback so the
+  // helper is importable from any JS runtime, but production
+  // isolates will always enter the branch above.
+  for (let i = 0; i < buffer.length; i += 1) {
+    buffer[i] = Math.floor(Math.random() * 256);
+  }
 }
 
 /** Lowercase hex encoding of the bytes. Stable across runtimes. */
 function bytesToHex(bytes: Uint8Array): string {
-    let out = '';
-    for (let i = 0; i < bytes.length; i += 1) {
-        out += bytes[i]!.toString(16).padStart(2, '0');
-    }
-    return out;
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    out += bytes[i]!.toString(16).padStart(2, '0');
+  }
+  return out;
 }

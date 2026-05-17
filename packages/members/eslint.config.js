@@ -9,8 +9,8 @@ import athlya from '@athlya/eslint-config';
  * ignoring build output.
  */
 export default [
-    {
-        ignores: ['dist/**', '.turbo/**', 'coverage/**', '*.tsbuildinfo'],
-    },
-    ...athlya,
+  {
+    ignores: ['dist/**', '.turbo/**', 'coverage/**', '*.tsbuildinfo'],
+  },
+  ...athlya,
 ];

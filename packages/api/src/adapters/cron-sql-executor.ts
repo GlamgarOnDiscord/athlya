@@ -40,22 +40,16 @@ import { createNeonHttpSql } from '@athlya/db';
  *  {@link import('../maintenance/rgpd-purge.js').SqlExecutor} and the
  *  selectRows surface required by `audit-anonymize.ts`. */
 export interface CronSqlExecutor {
-    /**
-     * Execute a write/DDL statement. Returns the affected row count
-     * (Neon HTTP exposes `rowCount` on every response).
-     */
-    execute(
-        query: string,
-        params: readonly unknown[],
-    ): Promise<number>;
-    /**
-     * Execute a read statement and return the rows. Generic on the
-     * row shape so the caller can narrow without a runtime cast.
-     */
-    selectRows<T>(
-        query: string,
-        params: readonly unknown[],
-    ): Promise<T[]>;
+  /**
+   * Execute a write/DDL statement. Returns the affected row count
+   * (Neon HTTP exposes `rowCount` on every response).
+   */
+  execute(query: string, params: readonly unknown[]): Promise<number>;
+  /**
+   * Execute a read statement and return the rows. Generic on the
+   * row shape so the caller can narrow without a runtime cast.
+   */
+  selectRows<T>(query: string, params: readonly unknown[]): Promise<T[]>;
 }
 
 /**
@@ -63,34 +57,27 @@ export interface CronSqlExecutor {
  * `null` when the input is empty / undefined so the caller can
  * `if (executor === null) return earlyExit;`.
  */
-export function buildCronSqlExecutor(
-    connectionString: string | undefined,
-): CronSqlExecutor | null {
-    if (
-        connectionString === undefined ||
-        connectionString.length === 0
-    ) {
-        return null;
-    }
+export function buildCronSqlExecutor(connectionString: string | undefined): CronSqlExecutor | null {
+  if (connectionString === undefined || connectionString.length === 0) {
+    return null;
+  }
 
-    const sql = createNeonHttpSql(connectionString);
+  const sql = createNeonHttpSql(connectionString);
 
-    return {
-        async execute(query, params) {
-            // `sql(query, params)` returns the row array directly
-            // for SELECT, and an array-with-rowCount-property for
-            // write statements. Narrow defensively.
-            const result = (await sql(query, params)) as unknown as {
-                readonly rowCount?: number;
-                readonly length?: number;
-            };
-            return typeof result.rowCount === 'number'
-                ? result.rowCount
-                : (result.length ?? 0);
-        },
-        async selectRows<T>(query: string, params: readonly unknown[]): Promise<T[]> {
-            const result = (await sql(query, params)) as unknown as T[];
-            return result;
-        },
-    };
+  return {
+    async execute(query, params) {
+      // `sql(query, params)` returns the row array directly
+      // for SELECT, and an array-with-rowCount-property for
+      // write statements. Narrow defensively.
+      const result = (await sql(query, params)) as {
+        readonly rowCount?: number;
+        readonly length?: number;
+      };
+      return typeof result.rowCount === 'number' ? result.rowCount : (result.length ?? 0);
+    },
+    async selectRows<T>(query: string, params: readonly unknown[]): Promise<T[]> {
+      const result = (await sql(query, params)) as T[];
+      return result;
+    },
+  };
 }

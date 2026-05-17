@@ -16,12 +16,7 @@
  */
 'use client';
 
-import {
-    createContext,
-    use,
-    type ReactElement,
-    type ReactNode,
-} from 'react';
+import { createContext, use, type ReactElement, type ReactNode } from 'react';
 
 import type { Locale } from '@athlya/shared/i18n';
 
@@ -33,8 +28,8 @@ import type { Locale } from '@athlya/shared/i18n';
 const LocaleContext = createContext<Locale | null>(null);
 
 export interface LocaleProviderProps {
-    readonly locale: Locale;
-    readonly children: ReactNode;
+  readonly locale: Locale;
+  readonly children: ReactNode;
 }
 
 /**
@@ -42,7 +37,7 @@ export interface LocaleProviderProps {
  * mounted exactly once, near the root of the tree (see `app/layout.tsx`).
  */
 export function LocaleProvider({ locale, children }: LocaleProviderProps): ReactElement {
-    return <LocaleContext.Provider value={locale}>{children}</LocaleContext.Provider>;
+  return <LocaleContext.Provider value={locale}>{children}</LocaleContext.Provider>;
 }
 
 /**
@@ -53,9 +48,9 @@ export function LocaleProvider({ locale, children }: LocaleProviderProps): React
  * broken render tree in development.
  */
 export function useLocale(): Locale {
-    const value = use(LocaleContext);
-    if (value === null) {
-        throw new Error('useLocale must be called within a <LocaleProvider>');
-    }
-    return value;
+  const value = use(LocaleContext);
+  if (value === null) {
+    throw new Error('useLocale must be called within a <LocaleProvider>');
+  }
+  return value;
 }

@@ -51,7 +51,7 @@ const LIST_BATCH_SIZE = 100;
  * future "list all avatars" admin job can reuse the convention.
  */
 export function avatarPrefix(userId: string): string {
-    return `avatars/${userId}/`;
+  return `avatars/${userId}/`;
 }
 
 /**
@@ -60,48 +60,48 @@ export function avatarPrefix(userId: string): string {
  * warning and resolves without I/O (mode dégradé).
  */
 export function createR2AvatarStore(
-    bucket: R2Bucket | undefined,
-    options: { readonly env?: string } = {},
+  bucket: R2Bucket | undefined,
+  options: { readonly env?: string } = {},
 ): AvatarStore {
-    return {
-        async deleteAvatar(userId) {
-            if (bucket === undefined) {
-                console.warn(
-                    '[avatar-store-r2] AVATARS_BUCKET binding missing — skipping avatar purge (mode dégradé)',
-                    {
-                        userId,
-                        env: options.env ?? 'unknown',
-                    },
-                );
-                return;
-            }
+  return {
+    async deleteAvatar(userId) {
+      if (bucket === undefined) {
+        console.warn(
+          '[avatar-store-r2] AVATARS_BUCKET binding missing — skipping avatar purge (mode dégradé)',
+          {
+            userId,
+            env: options.env ?? 'unknown',
+          },
+        );
+        return;
+      }
 
-            // Enumerate every object under `avatars/{userId}/` and
-            // delete in bounded batches. R2 `delete` accepts an
-            // array — one round trip per batch is sufficient even
-            // for the pathological case (single user with hundreds
-            // of avatar variants).
-            const prefix = avatarPrefix(userId);
-            let cursor: string | undefined;
-            do {
-                const listing = await bucket.list({
-                    prefix,
-                    limit: LIST_BATCH_SIZE,
-                    ...(cursor === undefined ? {} : { cursor }),
-                });
-                if (listing.objects.length > 0) {
-                    const keys = listing.objects.map((o) => o.key);
-                    await bucket.delete(keys);
-                }
-                // R2's `truncated` discriminator narrows the shape:
-                // when `true`, `cursor` is present; when `false`, the
-                // listing is complete and we exit the loop.
-                if (listing.truncated) {
-                    cursor = listing.cursor;
-                } else {
-                    cursor = undefined;
-                }
-            } while (cursor !== undefined);
-        },
-    };
+      // Enumerate every object under `avatars/{userId}/` and
+      // delete in bounded batches. R2 `delete` accepts an
+      // array — one round trip per batch is sufficient even
+      // for the pathological case (single user with hundreds
+      // of avatar variants).
+      const prefix = avatarPrefix(userId);
+      let cursor: string | undefined;
+      do {
+        const listing = await bucket.list({
+          prefix,
+          limit: LIST_BATCH_SIZE,
+          ...(cursor === undefined ? {} : { cursor }),
+        });
+        if (listing.objects.length > 0) {
+          const keys = listing.objects.map((o) => o.key);
+          await bucket.delete(keys);
+        }
+        // R2's `truncated` discriminator narrows the shape:
+        // when `true`, `cursor` is present; when `false`, the
+        // listing is complete and we exit the loop.
+        if (listing.truncated) {
+          cursor = listing.cursor;
+        } else {
+          cursor = undefined;
+        }
+      } while (cursor !== undefined);
+    },
+  };
 }

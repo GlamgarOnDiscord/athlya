@@ -32,18 +32,18 @@
  * distinguishing "our problem" from driver-level exceptions.
  */
 export class DbError extends Error {
-    /**
-     * Short, stable identifier suitable for the Problem Details `type`
-     * field and for observability tags. Kept separate from the human
-     * message because the message may be localized or redacted.
-     */
-    public readonly code: string;
+  /**
+   * Short, stable identifier suitable for the Problem Details `type`
+   * field and for observability tags. Kept separate from the human
+   * message because the message may be localized or redacted.
+   */
+  public readonly code: string;
 
-    public constructor(code: string, message: string, options?: { cause?: unknown }) {
-        super(message, options);
-        this.name = 'DbError';
-        this.code = code;
-    }
+  public constructor(code: string, message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'DbError';
+    this.code = code;
+  }
 }
 
 /**
@@ -54,10 +54,10 @@ export class DbError extends Error {
  * resources is not disclosed (Requirement 13.5).
  */
 export class NotFoundError extends DbError {
-    public constructor(detail = 'resource not found') {
-        super('not_found', detail);
-        this.name = 'NotFoundError';
-    }
+  public constructor(detail = 'resource not found') {
+    super('not_found', detail);
+    this.name = 'NotFoundError';
+  }
 }
 
 /**
@@ -70,17 +70,17 @@ export class NotFoundError extends DbError {
  * `DbError` rather than silently dropping rows.
  */
 export function notFoundIfEmpty<T>(rows: readonly T[], detail?: string): T {
-    if (rows.length === 0) {
-        throw new NotFoundError(detail);
-    }
-    if (rows.length > 1) {
-        throw new DbError(
-            'unexpected_multiple_rows',
-            `expected at most one row, got ${String(rows.length)}`,
-        );
-    }
-    // Safe: we just checked length === 1.
-    return rows[0] as T;
+  if (rows.length === 0) {
+    throw new NotFoundError(detail);
+  }
+  if (rows.length > 1) {
+    throw new DbError(
+      'unexpected_multiple_rows',
+      `expected at most one row, got ${String(rows.length)}`,
+    );
+  }
+  // Safe: we just checked length === 1.
+  return rows[0] as T;
 }
 
 /* ------------------------------------------------------------------ */
@@ -95,16 +95,16 @@ export function notFoundIfEmpty<T>(rows: readonly T[], detail?: string): T {
  * class 40 (Transaction Rollback).
  */
 const PG_SQLSTATE = {
-    /** unique_violation — duplicate key value violates UNIQUE. */
-    UNIQUE_VIOLATION: '23505',
-    /** foreign_key_violation — INSERT/UPDATE breaks an FK. */
-    FOREIGN_KEY_VIOLATION: '23503',
-    /** check_violation — INSERT/UPDATE breaks a CHECK constraint. */
-    CHECK_VIOLATION: '23514',
-    /** serialization_failure — could not serialize access due to concurrent update. */
-    SERIALIZATION_FAILURE: '40001',
-    /** deadlock_detected — deadlock detected, transaction was rolled back. */
-    DEADLOCK_DETECTED: '40P01',
+  /** unique_violation — duplicate key value violates UNIQUE. */
+  UNIQUE_VIOLATION: '23505',
+  /** foreign_key_violation — INSERT/UPDATE breaks an FK. */
+  FOREIGN_KEY_VIOLATION: '23503',
+  /** check_violation — INSERT/UPDATE breaks a CHECK constraint. */
+  CHECK_VIOLATION: '23514',
+  /** serialization_failure — could not serialize access due to concurrent update. */
+  SERIALIZATION_FAILURE: '40001',
+  /** deadlock_detected — deadlock detected, transaction was rolled back. */
+  DEADLOCK_DETECTED: '40P01',
 } as const;
 
 /**
@@ -121,19 +121,19 @@ const PG_SQLSTATE = {
  * cause infinite recursion.
  */
 function hasPostgresCode(err: unknown, sqlstate: string): boolean {
-    const seen = new Set<unknown>();
-    let cursor: unknown = err;
-    while (cursor !== undefined && cursor !== null) {
-        if (typeof cursor !== 'object') return false;
-        if (seen.has(cursor)) return false;
-        seen.add(cursor);
+  const seen = new Set<unknown>();
+  let cursor: unknown = err;
+  while (cursor !== undefined && cursor !== null) {
+    if (typeof cursor !== 'object') return false;
+    if (seen.has(cursor)) return false;
+    seen.add(cursor);
 
-        if ((cursor as { code?: unknown }).code === sqlstate) {
-            return true;
-        }
-        cursor = (cursor as { cause?: unknown }).cause;
+    if ((cursor as { code?: unknown }).code === sqlstate) {
+      return true;
     }
-    return false;
+    cursor = (cursor as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 /**
@@ -147,7 +147,7 @@ function hasPostgresCode(err: unknown, sqlstate: string): boolean {
  * `auth-user-repo-drizzle.ts` and `reservations-write-drizzle.ts`.
  */
 export function isPostgresUniqueViolation(err: unknown): boolean {
-    return hasPostgresCode(err, PG_SQLSTATE.UNIQUE_VIOLATION);
+  return hasPostgresCode(err, PG_SQLSTATE.UNIQUE_VIOLATION);
 }
 
 /**
@@ -156,7 +156,7 @@ export function isPostgresUniqueViolation(err: unknown): boolean {
  * reservation whose `class_id` no longer exists).
  */
 export function isPostgresForeignKeyViolation(err: unknown): boolean {
-    return hasPostgresCode(err, PG_SQLSTATE.FOREIGN_KEY_VIOLATION);
+  return hasPostgresCode(err, PG_SQLSTATE.FOREIGN_KEY_VIOLATION);
 }
 
 /**
@@ -165,7 +165,7 @@ export function isPostgresForeignKeyViolation(err: unknown): boolean {
  * — a 23514 surfaces as a "drift" between the two layers.
  */
 export function isPostgresCheckViolation(err: unknown): boolean {
-    return hasPostgresCode(err, PG_SQLSTATE.CHECK_VIOLATION);
+  return hasPostgresCode(err, PG_SQLSTATE.CHECK_VIOLATION);
 }
 
 /**
@@ -175,7 +175,7 @@ export function isPostgresCheckViolation(err: unknown): boolean {
  * pattern shipped in `withConnectionRetry`).
  */
 export function isPostgresSerializationFailure(err: unknown): boolean {
-    return hasPostgresCode(err, PG_SQLSTATE.SERIALIZATION_FAILURE);
+  return hasPostgresCode(err, PG_SQLSTATE.SERIALIZATION_FAILURE);
 }
 
 /**
@@ -183,5 +183,5 @@ export function isPostgresSerializationFailure(err: unknown): boolean {
  * disposition as `isPostgresSerializationFailure`.
  */
 export function isPostgresDeadlockDetected(err: unknown): boolean {
-    return hasPostgresCode(err, PG_SQLSTATE.DEADLOCK_DETECTED);
+  return hasPostgresCode(err, PG_SQLSTATE.DEADLOCK_DETECTED);
 }

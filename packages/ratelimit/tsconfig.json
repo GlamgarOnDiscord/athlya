@@ -1,34 +1,23 @@
 {
-    // Editor / IDE / typecheck project for the whole package.
-    //
-    // Scope:
-    //   - `src/` ships the runtime code.
-    //   - `tests/` hosts both unit tests (`sliding-window.test.ts`)
-    //     and the property-based suite under `tests/properties/`.
-    //   - `vitest.config.ts` sits at the package root.
-    //
-    // The sibling `tsconfig.build.json` excludes tests from the `build`
-    // artefact; this file intentionally includes them so ESLint's
-    // `parserOptions.projectService` can resolve every file it lints,
-    // and so `typecheck` exercises the tests too.
-    "extends": "@athlya/tsconfig/node.json",
-    "compilerOptions": {
-        "rootDir": ".",
-        "outDir": "dist",
-        "noEmit": true,
-        "types": [
-            "node"
-        ]
-    },
-    "include": [
-        "src",
-        "tests",
-        "vitest.config.ts"
-    ],
-    "exclude": [
-        "node_modules",
-        "dist",
-        ".turbo",
-        "coverage"
-    ]
+  // Editor / IDE / typecheck project for the whole package.
+  //
+  // Scope:
+  //   - `src/` ships the runtime code.
+  //   - `tests/` hosts both unit tests (`sliding-window.test.ts`)
+  //     and the property-based suite under `tests/properties/`.
+  //   - `vitest.config.ts` sits at the package root.
+  //
+  // The sibling `tsconfig.build.json` excludes tests from the `build`
+  // artefact; this file intentionally includes them so ESLint's
+  // `parserOptions.projectService` can resolve every file it lints,
+  // and so `typecheck` exercises the tests too.
+  "extends": "@athlya/tsconfig/node.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src", "tests", "vitest.config.ts"],
+  "exclude": ["node_modules", "dist", ".turbo", "coverage"]
 }

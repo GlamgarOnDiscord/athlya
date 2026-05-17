@@ -39,7 +39,7 @@ export const DEFAULT_UUID_SQL = sql`gen_random_uuid()`;
  * Callers get UUID v7 values once 2.2 swaps the default expression.
  */
 export function uuidPrimaryKey(name: string = 'id') {
-    return uuid(name).primaryKey().default(DEFAULT_UUID_SQL);
+  return uuid(name).primaryKey().default(DEFAULT_UUID_SQL);
 }
 
 /**
@@ -50,9 +50,7 @@ export function uuidPrimaryKey(name: string = 'id') {
  * UTC offsets rather than `timestamp without time zone`.
  */
 export function createdAt(name: string = 'created_at') {
-    return timestamp(name, { withTimezone: true, mode: 'date' })
-        .notNull()
-        .defaultNow();
+  return timestamp(name, { withTimezone: true, mode: 'date' }).notNull().defaultNow();
 }
 
 /**
@@ -64,7 +62,7 @@ export function createdAt(name: string = 'created_at') {
  * after 30 days a background job hard-deletes the row.
  */
 export function deletedAt(name: string = 'deleted_at') {
-    return timestamp(name, { withTimezone: true, mode: 'date' });
+  return timestamp(name, { withTimezone: true, mode: 'date' });
 }
 
 /**
@@ -77,6 +75,5 @@ export function deletedAt(name: string = 'deleted_at') {
  * analysis.
  */
 export function sqlIsNull(column: string): SQL {
-    return sql.raw(`"${column}" IS NULL`);
+  return sql.raw(`"${column}" IS NULL`);
 }
-

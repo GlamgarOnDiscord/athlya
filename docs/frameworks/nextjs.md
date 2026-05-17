@@ -1,16 +1,16 @@
 # Next.js 16 — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Utilisé** | ^16.2.6 |
-| **Latest** | 16.2.6 (dernière) |
-| **React** | ^19.2.0 |
-| **Node.js requis** | 20.9.0+ (Node 18 supprimé) |
-| **TypeScript requis** | 5.1.0+ |
+|                       | Value                      |
+| --------------------- | -------------------------- |
+| **Utilisé**           | ^16.2.6                    |
+| **Latest**            | 16.2.6 (dernière)          |
+| **React**             | ^19.2.0                    |
+| **Node.js requis**    | 20.9.0+ (Node 18 supprimé) |
+| **TypeScript requis** | 5.1.0+                     |
 
 ---
 
@@ -36,11 +36,11 @@ pnpm why next   # doit afficher 16.2.6+
 
 ### Performance mesurée
 
-| Métrique | Amélioration |
-|---|---|
-| Démarrage dev | +400% |
-| Rendu | +50% |
-| Désérialisation Server Components | +350% |
+| Métrique                          | Amélioration |
+| --------------------------------- | ------------ |
+| Démarrage dev                     | +400%        |
+| Rendu                             | +50%         |
+| Désérialisation Server Components | +350%        |
 
 ### Cache Components — Stable (plus expérimental)
 
@@ -49,7 +49,7 @@ Le modèle de cache déclaratif est désormais stable :
 ```ts
 // next.config.ts
 export default {
-    cacheComponents: true, // active PPR (Partial Prerendering)
+  cacheComponents: true, // active PPR (Partial Prerendering)
 };
 ```
 
@@ -59,13 +59,14 @@ export default {
 import { cacheLife } from 'next/cache';
 
 export default async function ClassSchedulePage() {
-    cacheLife('hours'); // ou 'days', 'weeks', 'infinity'
-    const classes = await fetchClasses();
-    return <ClassList classes={classes} />;
+  cacheLife('hours'); // ou 'days', 'weeks', 'infinity'
+  const classes = await fetchClasses();
+  return <ClassList classes={classes} />;
 }
 ```
 
 Invalider le cache :
+
 ```ts
 import { revalidateTag, updateTag } from 'next/cache';
 
@@ -77,6 +78,7 @@ updateTag('classes', 'classes-studio-abc');
 ```
 
 Usage Athlya :
+
 - Pages publiques (landing) : `cacheLife('days')`
 - Planning des cours par studio : `cacheLife('hours')` + `revalidateTag` après création/modification
 
@@ -98,6 +100,7 @@ Permet l'introspection du build, des routes, des Server Components par des agent
 ### Turbopack — Stable et défaut
 
 Turbopack est désormais le bundler de production **stable et par défaut** (plus expérimental) :
+
 - 2-5x plus rapide que webpack
 - 10x plus rapide pour Fast Refresh
 - SRI (Subresource Integrity) support
@@ -113,13 +116,13 @@ Les props `params` et `searchParams` sont maintenant des Promises :
 ```tsx
 // AVANT (Next.js 14)
 export default function Page({ params }: { params: { id: string } }) {
-    return <div>{params.id}</div>;
+  return <div>{params.id}</div>;
 }
 
 // APRÈS (Next.js 15+, 16)
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = await params;
-    return <div>{id}</div>;
+  const { id } = await params;
+  return <div>{id}</div>;
 }
 ```
 
@@ -161,7 +164,7 @@ CSP dynamique dans le proxy, headers statiques dans la config. Correct.
 ### `transpilePackages`
 
 ```ts
-transpilePackages: ['@athlya/shared']
+transpilePackages: ['@athlya/shared'];
 ```
 
 Requis pour les packages workspace qui exportent du TypeScript brut.
@@ -170,16 +173,16 @@ Requis pour les packages workspace qui exportent du TypeScript brut.
 
 ## Dépréciations Next.js 16
 
-| Déprécié | Remplacement | Statut projet |
-|---|---|---|
-| `middleware.ts` | `proxy.ts` | ✓ migré |
-| `images.domains` | `images.remotePatterns` | Vérifier |
-| `revalidateTag(tag)` (1 arg) | `revalidateTag(tag, type)` | Vérifier |
-| `unstable_cache` | `'use cache'` directive | Non utilisé ✓ |
-| `next/legacy/image` | `next/image` | Non utilisé ✓ |
-| Pages Router | App Router | Non utilisé ✓ |
-| `next lint` | `eslint` direct | Mettre à jour scripts |
-| AMP | Supprimé | Non utilisé ✓ |
+| Déprécié                     | Remplacement               | Statut projet         |
+| ---------------------------- | -------------------------- | --------------------- |
+| `middleware.ts`              | `proxy.ts`                 | ✓ migré               |
+| `images.domains`             | `images.remotePatterns`    | Vérifier              |
+| `revalidateTag(tag)` (1 arg) | `revalidateTag(tag, type)` | Vérifier              |
+| `unstable_cache`             | `'use cache'` directive    | Non utilisé ✓         |
+| `next/legacy/image`          | `next/image`               | Non utilisé ✓         |
+| Pages Router                 | App Router                 | Non utilisé ✓         |
+| `next lint`                  | `eslint` direct            | Mettre à jour scripts |
+| AMP                          | Supprimé                   | Non utilisé ✓         |
 
 ---
 
@@ -191,7 +194,7 @@ Requis pour les packages workspace qui exportent du TypeScript brut.
 import 'server-only';
 
 export async function getMember(userId: string) {
-    // auth check + fetch + DTO (pas la row brute)
+  // auth check + fetch + DTO (pas la row brute)
 }
 ```
 

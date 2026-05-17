@@ -24,21 +24,16 @@
 
 import { z } from 'zod';
 
+import { ClassSchema, ExerciseSchema, ReservationSchema, UserSchema } from './domain.js';
 import {
-    ClassSchema,
-    ExerciseSchema,
-    ReservationSchema,
-    UserSchema,
-} from './domain.js';
-import {
-    ClassIdSchema,
-    HexColorSchema,
-    IsoDateTimeSchema,
-    ReservationIdSchema,
-    SlugSchema,
-    StudioIdSchema,
-    UserIdSchema,
-    UuidSchema,
+  ClassIdSchema,
+  HexColorSchema,
+  IsoDateTimeSchema,
+  ReservationIdSchema,
+  SlugSchema,
+  StudioIdSchema,
+  UserIdSchema,
+  UuidSchema,
 } from './primitives.js';
 
 /* ------------------------------------------------------------------ */
@@ -51,12 +46,12 @@ import {
  * individual item.
  */
 export const PaginatedResponseSchema = <T extends z.ZodType>(item: T) =>
-    z
-        .object({
-            items: z.array(item),
-            nextCursor: z.string().nullable(),
-        })
-        .strict();
+  z
+    .object({
+      items: z.array(item),
+      nextCursor: z.string().nullable(),
+    })
+    .strict();
 
 /**
  * Maximum window that class / session browsing endpoints accept, in
@@ -70,20 +65,22 @@ const MAX_RANGE_MS = 90 * 24 * 60 * 60 * 1000;
  * surface `range_inverted` / `range_too_large` Problem Details codes
  * without re-parsing the text.
  */
-const refineDateRange = <T extends z.ZodObject<{ from: typeof IsoDateTimeSchema; to: typeof IsoDateTimeSchema }>>(
-    schema: T,
+const refineDateRange = <
+  T extends z.ZodObject<{ from: typeof IsoDateTimeSchema; to: typeof IsoDateTimeSchema }>,
+>(
+  schema: T,
 ) =>
-    schema
-        .refine((v) => Date.parse(v.to) > Date.parse(v.from), {
-            message: 'to must be strictly after from',
-            path: ['to'],
-            params: { code: 'range_inverted' },
-        })
-        .refine((v) => Date.parse(v.to) - Date.parse(v.from) <= MAX_RANGE_MS, {
-            message: 'date range must not exceed 90 days',
-            path: ['to'],
-            params: { code: 'range_too_large' },
-        });
+  schema
+    .refine((v) => Date.parse(v.to) > Date.parse(v.from), {
+      message: 'to must be strictly after from',
+      path: ['to'],
+      params: { code: 'range_inverted' },
+    })
+    .refine((v) => Date.parse(v.to) - Date.parse(v.from) <= MAX_RANGE_MS, {
+      message: 'date range must not exceed 90 days',
+      path: ['to'],
+      params: { code: 'range_too_large' },
+    });
 
 /* ------------------------------------------------------------------ */
 /*  auth — /v1/auth/*                                                  */
@@ -96,12 +93,12 @@ const refineDateRange = <T extends z.ZodObject<{ from: typeof IsoDateTimeSchema;
  * `updatedAt` wall-clock timestamp (Requirement 3.3).
  */
 export const ConsentsInputSchema = z
-    .object({
-        marketing: z.boolean(),
-        analytics: z.boolean(),
-        thirdParty: z.boolean(),
-    })
-    .strict();
+  .object({
+    marketing: z.boolean(),
+    analytics: z.boolean(),
+    thirdParty: z.boolean(),
+  })
+  .strict();
 
 export type ConsentsInput = z.infer<typeof ConsentsInputSchema>;
 
@@ -115,18 +112,18 @@ export type ConsentsInput = z.infer<typeof ConsentsInputSchema>;
  * Requirement 1.1 + OWASP Password Storage Cheatsheet.
  */
 export const RegisterRequestSchema = z
-    .object({
-        email: z
-            .string()
-            .email()
-            .max(254)
-            .transform((v) => v.toLowerCase()),
-        password: z.string().min(8).max(72),
-        displayName: z.string().trim().min(1).max(80),
-        studioSlug: SlugSchema,
-        consents: ConsentsInputSchema,
-    })
-    .strict();
+  .object({
+    email: z
+      .string()
+      .email()
+      .max(254)
+      .transform((v) => v.toLowerCase()),
+    password: z.string().min(8).max(72),
+    displayName: z.string().trim().min(1).max(80),
+    studioSlug: SlugSchema,
+    consents: ConsentsInputSchema,
+  })
+  .strict();
 
 export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
 
@@ -135,15 +132,15 @@ export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
  * to match bcrypt's hard input limit (see `RegisterRequestSchema`).
  */
 export const LoginRequestSchema = z
-    .object({
-        email: z
-            .string()
-            .email()
-            .max(254)
-            .transform((v) => v.toLowerCase()),
-        password: z.string().min(1).max(72),
-    })
-    .strict();
+  .object({
+    email: z
+      .string()
+      .email()
+      .max(254)
+      .transform((v) => v.toLowerCase()),
+    password: z.string().min(1).max(72),
+  })
+  .strict();
 
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 
@@ -153,11 +150,11 @@ export type LoginRequest = z.infer<typeof LoginRequestSchema>;
  * account linking happens.
  */
 export const OAuthLoginRequestSchema = z
-    .object({
-        provider: z.enum(['apple', 'google']),
-        idToken: z.string().min(1),
-    })
-    .strict();
+  .object({
+    provider: z.enum(['apple', 'google']),
+    idToken: z.string().min(1),
+  })
+  .strict();
 
 export type OAuthLoginRequest = z.infer<typeof OAuthLoginRequestSchema>;
 
@@ -165,10 +162,10 @@ export type OAuthLoginRequest = z.infer<typeof OAuthLoginRequestSchema>;
  * `POST /v1/auth/refresh`. Requirement 2 / 25.5 (RS256 + kid rotation).
  */
 export const RefreshRequestSchema = z
-    .object({
-        refreshToken: z.string().min(1),
-    })
-    .strict();
+  .object({
+    refreshToken: z.string().min(1),
+  })
+  .strict();
 
 export type RefreshRequest = z.infer<typeof RefreshRequestSchema>;
 
@@ -178,14 +175,14 @@ export type RefreshRequest = z.infer<typeof RefreshRequestSchema>;
  * silent-refresh timer without re-parsing JWTs.
  */
 export const SessionResponseSchema = z
-    .object({
-        user: UserSchema,
-        accessToken: z.string().min(1),
-        refreshToken: z.string().min(1),
-        accessTokenExpiresIn: z.number().int().positive(),
-        refreshTokenExpiresIn: z.number().int().positive(),
-    })
-    .strict();
+  .object({
+    user: UserSchema,
+    accessToken: z.string().min(1),
+    refreshToken: z.string().min(1),
+    accessTokenExpiresIn: z.number().int().positive(),
+    refreshTokenExpiresIn: z.number().int().positive(),
+  })
+  .strict();
 
 export type SessionResponse = z.infer<typeof SessionResponseSchema>;
 
@@ -199,14 +196,14 @@ export type SessionResponse = z.infer<typeof SessionResponseSchema>;
  * round-trip on an empty payload.
  */
 export const UpdateProfileRequestSchema = UserSchema.pick({
-    displayName: true,
-    avatarUrl: true,
+  displayName: true,
+  avatarUrl: true,
 })
-    .partial()
-    .strict()
-    .refine((v) => v.displayName !== undefined || v.avatarUrl !== undefined, {
-        message: 'must patch at least one of { displayName, avatarUrl }',
-    });
+  .partial()
+  .strict()
+  .refine((v) => v.displayName !== undefined || v.avatarUrl !== undefined, {
+    message: 'must patch at least one of { displayName, avatarUrl }',
+  });
 
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequestSchema>;
 
@@ -221,10 +218,10 @@ export type UpdateConsentsRequest = z.infer<typeof UpdateConsentsRequestSchema>;
  * `POST /v1/members/me/export` → 202 with a job id (Requirement 4.1).
  */
 export const ExportJobResponseSchema = z
-    .object({
-        jobId: UuidSchema,
-    })
-    .strict();
+  .object({
+    jobId: UuidSchema,
+  })
+  .strict();
 
 export type ExportJobResponse = z.infer<typeof ExportJobResponseSchema>;
 
@@ -244,12 +241,12 @@ export type MembersPageResponse = z.infer<typeof MembersPageResponseSchema>;
  * malformed intervals.
  */
 export const ListClassesQuerySchema = refineDateRange(
-    z
-        .object({
-            from: IsoDateTimeSchema,
-            to: IsoDateTimeSchema,
-        })
-        .strict(),
+  z
+    .object({
+      from: IsoDateTimeSchema,
+      to: IsoDateTimeSchema,
+    })
+    .strict(),
 );
 
 export type ListClassesQuery = z.infer<typeof ListClassesQuerySchema>;
@@ -259,14 +256,14 @@ export type ListClassesQuery = z.infer<typeof ListClassesQuerySchema>;
  * legal (e.g. open-gym hours). Requirement 6.1–6.4.
  */
 export const CreateClassRequestSchema = z
-    .object({
-        title: z.string().trim().min(1).max(200),
-        startsAt: IsoDateTimeSchema,
-        durationMin: z.number().int().min(5).max(480),
-        capacity: z.number().int().min(1).max(500),
-        coachId: UserIdSchema.optional(),
-    })
-    .strict();
+  .object({
+    title: z.string().trim().min(1).max(200),
+    startsAt: IsoDateTimeSchema,
+    durationMin: z.number().int().min(5).max(480),
+    capacity: z.number().int().min(1).max(500),
+    coachId: UserIdSchema.optional(),
+  })
+  .strict();
 
 export type CreateClassRequest = z.infer<typeof CreateClassRequestSchema>;
 
@@ -276,24 +273,24 @@ export type CreateClassRequest = z.infer<typeof CreateClassRequestSchema>;
  * present.
  */
 export const UpdateClassRequestSchema = z
-    .object({
-        title: z.string().trim().min(1).max(200).optional(),
-        startsAt: IsoDateTimeSchema.optional(),
-        durationMin: z.number().int().min(5).max(480).optional(),
-        capacity: z.number().int().min(1).max(500).optional(),
-        coachId: UserIdSchema.nullable().optional(),
-        version: z.number().int().nonnegative(),
-    })
-    .strict()
-    .refine(
-        (v) =>
-            v.title !== undefined ||
-            v.startsAt !== undefined ||
-            v.durationMin !== undefined ||
-            v.capacity !== undefined ||
-            v.coachId !== undefined,
-        { message: 'must patch at least one mutable field' },
-    );
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    startsAt: IsoDateTimeSchema.optional(),
+    durationMin: z.number().int().min(5).max(480).optional(),
+    capacity: z.number().int().min(1).max(500).optional(),
+    coachId: UserIdSchema.nullable().optional(),
+    version: z.number().int().nonnegative(),
+  })
+  .strict()
+  .refine(
+    (v) =>
+      v.title !== undefined ||
+      v.startsAt !== undefined ||
+      v.durationMin !== undefined ||
+      v.capacity !== undefined ||
+      v.coachId !== undefined,
+    { message: 'must patch at least one mutable field' },
+  );
 
 export type UpdateClassRequest = z.infer<typeof UpdateClassRequestSchema>;
 
@@ -303,16 +300,16 @@ export type UpdateClassRequest = z.infer<typeof UpdateClassRequestSchema>;
  * validation intact and adds the Redis-backed counter on top.
  */
 export const ClassWithRemainingSchema = ClassSchema.extend({
-    remaining: z.number().int().nonnegative(),
+  remaining: z.number().int().nonnegative(),
 });
 
 export type ClassWithRemaining = z.infer<typeof ClassWithRemainingSchema>;
 
 export const ClassListResponseSchema = z
-    .object({
-        items: z.array(ClassWithRemainingSchema),
-    })
-    .strict();
+  .object({
+    items: z.array(ClassWithRemainingSchema),
+  })
+  .strict();
 
 export type ClassListResponse = z.infer<typeof ClassListResponseSchema>;
 
@@ -326,10 +323,10 @@ export type ClassListResponse = z.infer<typeof ClassListResponseSchema>;
  * gateway middleware, not by this body schema.
  */
 export const BookingRequestSchema = z
-    .object({
-        classId: ClassIdSchema,
-    })
-    .strict();
+  .object({
+    classId: ClassIdSchema,
+  })
+  .strict();
 
 export type BookingRequest = z.infer<typeof BookingRequestSchema>;
 
@@ -341,19 +338,19 @@ export type BookingRequest = z.infer<typeof BookingRequestSchema>;
  * position).
  */
 export const BookingResponseSchema = z.discriminatedUnion('status', [
-    z
-        .object({
-            status: z.literal('confirmed'),
-            reservation: ReservationSchema,
-        })
-        .strict(),
-    z
-        .object({
-            status: z.literal('waitlist'),
-            reservation: ReservationSchema,
-            position: z.number().int().positive(),
-        })
-        .strict(),
+  z
+    .object({
+      status: z.literal('confirmed'),
+      reservation: ReservationSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal('waitlist'),
+      reservation: ReservationSchema,
+      position: z.number().int().positive(),
+    })
+    .strict(),
 ]);
 
 export type BookingResponse = z.infer<typeof BookingResponseSchema>;
@@ -362,10 +359,10 @@ export type BookingResponse = z.infer<typeof BookingResponseSchema>;
  * Path parameters for `POST /v1/reservations/{reservationId}/cancel`.
  */
 export const CancelReservationParamsSchema = z
-    .object({
-        reservationId: ReservationIdSchema,
-    })
-    .strict();
+  .object({
+    reservationId: ReservationIdSchema,
+  })
+  .strict();
 
 export type CancelReservationParams = z.infer<typeof CancelReservationParamsSchema>;
 
@@ -379,10 +376,10 @@ export type CancelReservationParams = z.infer<typeof CancelReservationParamsSche
  * before any DB lookup (Requirement 11.2, 11.3, 11.5).
  */
 export const CheckInRequestSchema = z
-    .object({
-        qrToken: z.string().min(1),
-    })
-    .strict();
+  .object({
+    qrToken: z.string().min(1),
+  })
+  .strict();
 
 export type CheckInRequest = z.infer<typeof CheckInRequestSchema>;
 
@@ -392,18 +389,18 @@ export type CheckInRequest = z.infer<typeof CheckInRequestSchema>;
  * second round-trip.
  */
 export const CheckInResponseSchema = z
-    .object({
-        success: z.literal(true),
-        reservationId: ReservationIdSchema,
-        member: z
-            .object({
-                id: UserIdSchema,
-                displayName: z.string(),
-                avatarUrl: z.url().nullable(),
-            })
-            .strict(),
-    })
-    .strict();
+  .object({
+    success: z.literal(true),
+    reservationId: ReservationIdSchema,
+    member: z
+      .object({
+        id: UserIdSchema,
+        displayName: z.string(),
+        avatarUrl: z.url().nullable(),
+      })
+      .strict(),
+  })
+  .strict();
 
 export type CheckInResponse = z.infer<typeof CheckInResponseSchema>;
 
@@ -416,14 +413,14 @@ export type CheckInResponse = z.infer<typeof CheckInResponseSchema>;
  * outside a partner studio (Requirement 12.1).
  */
 export const LogSessionRequestSchema = z
-    .object({
-        startedAt: IsoDateTimeSchema,
-        durationMin: z.number().int().positive().optional(),
-        exercises: z.array(ExerciseSchema).max(50),
-        notes: z.string().max(2000).optional(),
-        studioId: StudioIdSchema.optional(),
-    })
-    .strict();
+  .object({
+    startedAt: IsoDateTimeSchema,
+    durationMin: z.number().int().positive().optional(),
+    exercises: z.array(ExerciseSchema).max(50),
+    notes: z.string().max(2000).optional(),
+    studioId: StudioIdSchema.optional(),
+  })
+  .strict();
 
 export type LogSessionRequest = z.infer<typeof LogSessionRequestSchema>;
 
@@ -431,12 +428,12 @@ export type LogSessionRequest = z.infer<typeof LogSessionRequestSchema>;
  * `GET /v1/sessions?from=&to=` query. Same 90-day cap as class browsing.
  */
 export const ListSessionsQuerySchema = refineDateRange(
-    z
-        .object({
-            from: IsoDateTimeSchema,
-            to: IsoDateTimeSchema,
-        })
-        .strict(),
+  z
+    .object({
+      from: IsoDateTimeSchema,
+      to: IsoDateTimeSchema,
+    })
+    .strict(),
 );
 
 export type ListSessionsQuery = z.infer<typeof ListSessionsQuerySchema>;
@@ -463,14 +460,14 @@ export type ListSessionsQuery = z.infer<typeof ListSessionsQuerySchema>;
  *     adds the column.
  */
 export const StudioMeResponseSchema = z
-    .object({
-        id: UuidSchema,
-        slug: SlugSchema,
-        name: z.string().min(1).max(120),
-        brandColor: HexColorSchema,
-        brandLogo: z.url().nullable().optional(),
-    })
-    .strict();
+  .object({
+    id: UuidSchema,
+    slug: SlugSchema,
+    name: z.string().min(1).max(120),
+    brandColor: HexColorSchema,
+    brandLogo: z.url().nullable().optional(),
+  })
+  .strict();
 
 export type StudioMeResponse = z.infer<typeof StudioMeResponseSchema>;
 
@@ -489,19 +486,15 @@ export type StudioMeResponse = z.infer<typeof StudioMeResponseSchema>;
  * regex shape, not the perceptual contrast.
  */
 export const UpdateStudioRequestSchema = z
-    .object({
-        name: z.string().trim().min(1).max(120).optional(),
-        brandColor: HexColorSchema.optional(),
-        brandLogo: z.url().nullable().optional(),
-    })
-    .strict()
-    .refine(
-        (v) =>
-            v.name !== undefined ||
-            v.brandColor !== undefined ||
-            v.brandLogo !== undefined,
-        { message: 'must patch at least one of { name, brandColor, brandLogo }' },
-    );
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    brandColor: HexColorSchema.optional(),
+    brandLogo: z.url().nullable().optional(),
+  })
+  .strict()
+  .refine((v) => v.name !== undefined || v.brandColor !== undefined || v.brandLogo !== undefined, {
+    message: 'must patch at least one of { name, brandColor, brandLogo }',
+  });
 
 export type UpdateStudioRequest = z.infer<typeof UpdateStudioRequestSchema>;
 
@@ -517,10 +510,10 @@ export type UpdateStudioRequest = z.infer<typeof UpdateStudioRequestSchema>;
  * `pro` (and any future paid tier) reaches Stripe.
  */
 export const CheckoutRequestSchema = z
-    .object({
-        plan: z.enum(['pro']),
-    })
-    .strict();
+  .object({
+    plan: z.enum(['pro']),
+  })
+  .strict();
 
 export type CheckoutRequest = z.infer<typeof CheckoutRequestSchema>;
 
@@ -529,10 +522,10 @@ export type CheckoutRequest = z.infer<typeof CheckoutRequestSchema>;
  * forward the user to `checkoutUrl` for Stripe Hosted Checkout.
  */
 export const CheckoutResponseSchema = z
-    .object({
-        checkoutUrl: z.url(),
-    })
-    .strict();
+  .object({
+    checkoutUrl: z.url(),
+  })
+  .strict();
 
 export type CheckoutResponse = z.infer<typeof CheckoutResponseSchema>;
 
@@ -546,35 +539,35 @@ export type CheckoutResponse = z.infer<typeof CheckoutResponseSchema>;
  * `docs/runbooks/billing.md`).
  */
 export const ListInvoicesQuerySchema = z
-    .object({
-        cursor: z.string().min(1).optional(),
-        limit: z.coerce.number().int().min(1).max(100).optional(),
-    })
-    .strict();
+  .object({
+    cursor: z.string().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+  })
+  .strict();
 
 export type ListInvoicesQuery = z.infer<typeof ListInvoicesQuerySchema>;
 
 /** Single invoice projection. Mirrors the subset Stripe returns. */
 export const InvoiceItemSchema = z
-    .object({
-        id: z.string().min(1),
-        number: z.string().nullable(),
-        status: z.enum(['draft', 'open', 'paid', 'uncollectible', 'void']),
-        amountDue: z.number().int().nonnegative(),
-        currency: z.string().length(3),
-        createdAt: IsoDateTimeSchema,
-        hostedInvoiceUrl: z.url().nullable(),
-    })
-    .strict();
+  .object({
+    id: z.string().min(1),
+    number: z.string().nullable(),
+    status: z.enum(['draft', 'open', 'paid', 'uncollectible', 'void']),
+    amountDue: z.number().int().nonnegative(),
+    currency: z.string().length(3),
+    createdAt: IsoDateTimeSchema,
+    hostedInvoiceUrl: z.url().nullable(),
+  })
+  .strict();
 
 export type InvoiceItem = z.infer<typeof InvoiceItemSchema>;
 
 /** `GET /v1/billing/invoices` response shape. */
 export const InvoicesPageSchema = z
-    .object({
-        items: z.array(InvoiceItemSchema),
-        nextCursor: z.string().nullable(),
-    })
-    .strict();
+  .object({
+    items: z.array(InvoiceItemSchema),
+    nextCursor: z.string().nullable(),
+  })
+  .strict();
 
 export type InvoicesPage = z.infer<typeof InvoicesPageSchema>;

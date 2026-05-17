@@ -1,15 +1,15 @@
 # Cloudflare Workers — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Wrangler** | ^4.0.0 (resolved ~4.91.0) |
+|                               | Value                                    |
+| ----------------------------- | ---------------------------------------- |
+| **Wrangler**                  | ^4.0.0 (resolved ~4.91.0)                |
 | **@cloudflare/workers-types** | ^4.20241218.0 (resolves to 4.20260509.1) |
-| **Compatibility date** | 2025-10-30 |
-| **Compat flags** | `nodejs_compat` |
+| **Compatibility date**        | 2025-10-30                               |
+| **Compat flags**              | `nodejs_compat`                          |
 
 ---
 
@@ -17,11 +17,11 @@
 
 The project uses `compatibility_date = "2025-10-30"`. Cloudflare releases new runtime features behind compatibility flags. Recent additions behind newer dates:
 
-| Date | Feature |
-|---|---|
+| Date       | Feature                                                    |
+| ---------- | ---------------------------------------------------------- |
 | 2025-11-15 | Improved `nodejs_compat` — better `net`, `tls`, `dns` APIs |
-| 2026-01-01 | WebSocket Hibernation API improvements |
-| 2026-03-01 | `console.log` structured output (JSON-friendly) |
+| 2026-01-01 | WebSocket Hibernation API improvements                     |
+| 2026-03-01 | `console.log` structured output (JSON-friendly)            |
 
 **Recommendation**: Bump to `2026-03-01`. Run `wrangler dev` locally and `wrangler deploy --env staging` to verify no regressions before deploying to production.
 
@@ -61,8 +61,8 @@ caching.disabled = false
 ```ts
 // packages/db/src/client.ts
 const client = postgres(env.HYPERDRIVE.connectionString, {
-    max: 5,      // smaller pool — Hyperdrive handles pooling
-    prepare: false,
+  max: 5, // smaller pool — Hyperdrive handles pooling
+  prepare: false,
 });
 ```
 
@@ -73,6 +73,7 @@ Add when Neon cold starts are observed in production metrics.
 ## Missing: Durable Objects
 
 No Durable Objects configured. For current architecture (stateless Workers + Redis + Postgres), this is correct. Consider for future real-time features:
+
 - Live class capacity updates (WebSocket rooms)
 - Collaborative schedule editing
 
@@ -101,12 +102,12 @@ wrangler deploy --dry-run --env staging 2>&1 | grep "Bundle size"
 
 ## Performance
 
-| Factor | Value |
-|---|---|
-| Cold start | ~5ms (V8 isolates) |
-| Smart Placement | Reduces latency to EU data stores |
-| Module-scope caching | Redis, Postgres clients per-isolate |
-| `ctx.waitUntil()` | Used for fire-and-forget (Sentry, outbox drain) |
+| Factor               | Value                                           |
+| -------------------- | ----------------------------------------------- |
+| Cold start           | ~5ms (V8 isolates)                              |
+| Smart Placement      | Reduces latency to EU data stores               |
+| Module-scope caching | Redis, Postgres clients per-isolate             |
+| `ctx.waitUntil()`    | Used for fire-and-forget (Sentry, outbox drain) |
 
 ---
 

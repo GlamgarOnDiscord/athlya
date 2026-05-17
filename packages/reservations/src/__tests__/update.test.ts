@@ -24,16 +24,15 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 
 import {
-    updateClass,
-    UpdateClassError,
-    type ClassCounter,
-    type ClassRepo,
-    type UpdateClassDeps,
-    type UpdateClassFields,
+  updateClass,
+  UpdateClassError,
+  type ClassCounter,
+  type ClassRepo,
+  type UpdateClassDeps,
+  type UpdateClassFields,
 } from '../update.js';
 
 import type { ClassRow } from '@athlya/db/schema';
-
 
 /* ------------------------------------------------------------------ */
 /*  Fixtures                                                           */
@@ -50,16 +49,16 @@ const COACH_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ad';
  * `packages/db/src/schema/classes.ts`).
  */
 const BASE_ROW: ClassRow = {
-    id: CLASS_ID,
-    studioId: STUDIO_ID,
-    coachId: COACH_ID,
-    title: 'HIIT morning',
-    startsAt: new Date('2026-03-01T09:00:00.000Z'),
-    durationMin: 45,
-    capacity: 20,
-    version: 3,
-    createdAt: new Date('2026-01-01T00:00:00.000Z'),
-    deletedAt: null,
+  id: CLASS_ID,
+  studioId: STUDIO_ID,
+  coachId: COACH_ID,
+  title: 'HIIT morning',
+  startsAt: new Date('2026-03-01T09:00:00.000Z'),
+  durationMin: 45,
+  capacity: 20,
+  version: 3,
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  deletedAt: null,
 };
 
 /**
@@ -69,27 +68,27 @@ const BASE_ROW: ClassRow = {
  * `deps.classRepo`.
  */
 function buildDeps(): {
-    deps: UpdateClassDeps;
-    findById: Mock<ClassRepo['findById']>;
-    updateClassOptimistic: Mock<ClassRepo['updateClassOptimistic']>;
-    reset: Mock<ClassCounter['reset']>;
+  deps: UpdateClassDeps;
+  findById: Mock<ClassRepo['findById']>;
+  updateClassOptimistic: Mock<ClassRepo['updateClassOptimistic']>;
+  reset: Mock<ClassCounter['reset']>;
 } {
-    const findById = vi.fn<ClassRepo['findById']>();
-    const updateClassOptimistic = vi.fn<ClassRepo['updateClassOptimistic']>();
-    const reset = vi.fn<ClassCounter['reset']>();
+  const findById = vi.fn<ClassRepo['findById']>();
+  const updateClassOptimistic = vi.fn<ClassRepo['updateClassOptimistic']>();
+  const reset = vi.fn<ClassCounter['reset']>();
 
-    const classRepo: ClassRepo = {
-        findById,
-        updateClassOptimistic,
-    };
-    const counter: ClassCounter = { reset };
+  const classRepo: ClassRepo = {
+    findById,
+    updateClassOptimistic,
+  };
+  const counter: ClassCounter = { reset };
 
-    return {
-        deps: { classRepo, counter },
-        findById,
-        updateClassOptimistic,
-        reset,
-    };
+  return {
+    deps: { classRepo, counter },
+    findById,
+    updateClassOptimistic,
+    reset,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -97,43 +96,40 @@ function buildDeps(): {
 /* ------------------------------------------------------------------ */
 
 describe('updateClass — role gate', () => {
-    it('rejects a member with forbidden, without touching the repo or validating the payload', async () => {
-        const { deps, findById, updateClassOptimistic, reset } = buildDeps();
+  it('rejects a member with forbidden, without touching the repo or validating the payload', async () => {
+    const { deps, findById, updateClassOptimistic, reset } = buildDeps();
 
-        const err = await updateClass(
-            CLASS_ID,
-            // Deliberately *invalid* payload: if the role gate were
-            // ever bypassed, validation would fail first and we'd see
-            // `validation_failed` instead of `forbidden`. Asserting
-            // `forbidden` here therefore proves the gate runs first.
-            { capacity: -999 },
-            'member',
-            deps,
-        ).catch((e: unknown) => e);
+    const err = await updateClass(
+      CLASS_ID,
+      // Deliberately *invalid* payload: if the role gate were
+      // ever bypassed, validation would fail first and we'd see
+      // `validation_failed` instead of `forbidden`. Asserting
+      // `forbidden` here therefore proves the gate runs first.
+      { capacity: -999 },
+      'member',
+      deps,
+    ).catch((e: unknown) => e);
 
-        expect(err).toBeInstanceOf(UpdateClassError);
-        expect((err as UpdateClassError).code).toBe('forbidden');
-        expect(findById).not.toHaveBeenCalled();
-        expect(updateClassOptimistic).not.toHaveBeenCalled();
-        expect(reset).not.toHaveBeenCalled();
-    });
+    expect(err).toBeInstanceOf(UpdateClassError);
+    expect((err as UpdateClassError).code).toBe('forbidden');
+    expect(findById).not.toHaveBeenCalled();
+    expect(updateClassOptimistic).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
+  });
 
-    it('rejects a coach with forbidden (coaches may read but not edit classes)', async () => {
-        const { deps, findById, updateClassOptimistic, reset } = buildDeps();
+  it('rejects a coach with forbidden (coaches may read but not edit classes)', async () => {
+    const { deps, findById, updateClassOptimistic, reset } = buildDeps();
 
-        const err = await updateClass(
-            CLASS_ID,
-            { version: 3, title: 'Updated' },
-            'coach',
-            deps,
-        ).catch((e: unknown) => e);
+    const err = await updateClass(CLASS_ID, { version: 3, title: 'Updated' }, 'coach', deps).catch(
+      (e: unknown) => e,
+    );
 
-        expect(err).toBeInstanceOf(UpdateClassError);
-        expect((err as UpdateClassError).code).toBe('forbidden');
-        expect(findById).not.toHaveBeenCalled();
-        expect(updateClassOptimistic).not.toHaveBeenCalled();
-        expect(reset).not.toHaveBeenCalled();
-    });
+    expect(err).toBeInstanceOf(UpdateClassError);
+    expect((err as UpdateClassError).code).toBe('forbidden');
+    expect(findById).not.toHaveBeenCalled();
+    expect(updateClassOptimistic).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -141,74 +137,60 @@ describe('updateClass — role gate', () => {
 /* ------------------------------------------------------------------ */
 
 describe('updateClass — happy path', () => {
-    it('runs the optimistic UPDATE and returns the new row when version matches', async () => {
-        const {
-            deps,
-            findById,
-            updateClassOptimistic,
-            reset,
-        } = buildDeps();
+  it('runs the optimistic UPDATE and returns the new row when version matches', async () => {
+    const { deps, findById, updateClassOptimistic, reset } = buildDeps();
 
-        findById.mockResolvedValueOnce(BASE_ROW);
-        const updatedRow: ClassRow = {
-            ...BASE_ROW,
-            title: 'HIIT morning (renamed)',
-            version: BASE_ROW.version + 1,
-        };
-        updateClassOptimistic.mockResolvedValueOnce(updatedRow);
+    findById.mockResolvedValueOnce(BASE_ROW);
+    const updatedRow: ClassRow = {
+      ...BASE_ROW,
+      title: 'HIIT morning (renamed)',
+      version: BASE_ROW.version + 1,
+    };
+    updateClassOptimistic.mockResolvedValueOnce(updatedRow);
 
-        const result = await updateClass(
-            CLASS_ID,
-            { version: 3, title: 'HIIT morning (renamed)' },
-            'admin',
-            deps,
-        );
+    const result = await updateClass(
+      CLASS_ID,
+      { version: 3, title: 'HIIT morning (renamed)' },
+      'admin',
+      deps,
+    );
 
-        expect(result).toEqual(updatedRow);
-        expect(findById).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+    expect(result).toEqual(updatedRow);
+    expect(findById).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
 
-        // The repo was called with the `version` stripped off — the
-        // guard is a separate argument, never a patch column.
-        const expectedFields: UpdateClassFields = {
-            title: 'HIIT morning (renamed)',
-        };
-        expect(updateClassOptimistic).toHaveBeenCalledExactlyOnceWith(
-            CLASS_ID,
-            expectedFields,
-            3,
-        );
+    // The repo was called with the `version` stripped off — the
+    // guard is a separate argument, never a patch column.
+    const expectedFields: UpdateClassFields = {
+      title: 'HIIT morning (renamed)',
+    };
+    expect(updateClassOptimistic).toHaveBeenCalledExactlyOnceWith(CLASS_ID, expectedFields, 3);
 
-        // Capacity was not in the patch, so the Redis counter is left
-        // alone. Requirement 6.7 only asks to "recompute Redis counter
-        // if capacity changed".
-        expect(reset).not.toHaveBeenCalled();
+    // Capacity was not in the patch, so the Redis counter is left
+    // alone. Requirement 6.7 only asks to "recompute Redis counter
+    // if capacity changed".
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it('skips counter.reset when capacity is echoed unchanged', async () => {
+    const { deps, findById, updateClassOptimistic, reset } = buildDeps();
+
+    findById.mockResolvedValueOnce(BASE_ROW);
+    updateClassOptimistic.mockResolvedValueOnce({
+      ...BASE_ROW,
+      version: BASE_ROW.version + 1,
     });
 
-    it('skips counter.reset when capacity is echoed unchanged', async () => {
-        const {
-            deps,
-            findById,
-            updateClassOptimistic,
-            reset,
-        } = buildDeps();
+    await updateClass(
+      CLASS_ID,
+      // Capacity is present but equal to the existing value —
+      // the service must treat this as a no-op for the counter.
+      { version: 3, capacity: BASE_ROW.capacity, title: 'Rebranded' },
+      'admin',
+      deps,
+    );
 
-        findById.mockResolvedValueOnce(BASE_ROW);
-        updateClassOptimistic.mockResolvedValueOnce({
-            ...BASE_ROW,
-            version: BASE_ROW.version + 1,
-        });
-
-        await updateClass(
-            CLASS_ID,
-            // Capacity is present but equal to the existing value —
-            // the service must treat this as a no-op for the counter.
-            { version: 3, capacity: BASE_ROW.capacity, title: 'Rebranded' },
-            'admin',
-            deps,
-        );
-
-        expect(reset).not.toHaveBeenCalled();
-    });
+    expect(reset).not.toHaveBeenCalled();
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -216,39 +198,34 @@ describe('updateClass — happy path', () => {
 /* ------------------------------------------------------------------ */
 
 describe('updateClass — optimistic-lock conflict', () => {
-    it('surfaces `conflict` when the repo reports 0 rows affected', async () => {
-        const {
-            deps,
-            findById,
-            updateClassOptimistic,
-            reset,
-        } = buildDeps();
+  it('surfaces `conflict` when the repo reports 0 rows affected', async () => {
+    const { deps, findById, updateClassOptimistic, reset } = buildDeps();
 
-        findById.mockResolvedValueOnce(BASE_ROW);
-        // Simulate the DB returning 0 affected rows because the
-        // caller's `expectedVersion` was stale.
-        updateClassOptimistic.mockResolvedValueOnce(null);
+    findById.mockResolvedValueOnce(BASE_ROW);
+    // Simulate the DB returning 0 affected rows because the
+    // caller's `expectedVersion` was stale.
+    updateClassOptimistic.mockResolvedValueOnce(null);
 
-        const err = await updateClass(
-            CLASS_ID,
-            // Caller echoes version 2 while the row is at 3.
-            { version: 2, title: 'Stale write' },
-            'admin',
-            deps,
-        ).catch((e: unknown) => e);
+    const err = await updateClass(
+      CLASS_ID,
+      // Caller echoes version 2 while the row is at 3.
+      { version: 2, title: 'Stale write' },
+      'admin',
+      deps,
+    ).catch((e: unknown) => e);
 
-        expect(err).toBeInstanceOf(UpdateClassError);
-        expect((err as UpdateClassError).code).toBe('conflict');
+    expect(err).toBeInstanceOf(UpdateClassError);
+    expect((err as UpdateClassError).code).toBe('conflict');
 
-        // The repo was still called — we need the UPDATE attempt to
-        // prove the conflict. Only the Redis side-effect is skipped.
-        expect(updateClassOptimistic).toHaveBeenCalledExactlyOnceWith(
-            CLASS_ID,
-            { title: 'Stale write' },
-            2,
-        );
-        expect(reset).not.toHaveBeenCalled();
-    });
+    // The repo was still called — we need the UPDATE attempt to
+    // prove the conflict. Only the Redis side-effect is skipped.
+    expect(updateClassOptimistic).toHaveBeenCalledExactlyOnceWith(
+      CLASS_ID,
+      { title: 'Stale write' },
+      2,
+    );
+    expect(reset).not.toHaveBeenCalled();
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -256,58 +233,35 @@ describe('updateClass — optimistic-lock conflict', () => {
 /* ------------------------------------------------------------------ */
 
 describe('updateClass — capacity change', () => {
-    it('resets the Redis counter to the new capacity after a successful UPDATE', async () => {
-        const {
-            deps,
-            findById,
-            updateClassOptimistic,
-            reset,
-        } = buildDeps();
+  it('resets the Redis counter to the new capacity after a successful UPDATE', async () => {
+    const { deps, findById, updateClassOptimistic, reset } = buildDeps();
 
-        findById.mockResolvedValueOnce(BASE_ROW);
-        const NEW_CAPACITY = 30;
-        updateClassOptimistic.mockResolvedValueOnce({
-            ...BASE_ROW,
-            capacity: NEW_CAPACITY,
-            version: BASE_ROW.version + 1,
-        });
-
-        await updateClass(
-            CLASS_ID,
-            { version: 3, capacity: NEW_CAPACITY },
-            'admin',
-            deps,
-        );
-
-        expect(reset).toHaveBeenCalledExactlyOnceWith(
-            CLASS_ID,
-            NEW_CAPACITY,
-        );
+    findById.mockResolvedValueOnce(BASE_ROW);
+    const NEW_CAPACITY = 30;
+    updateClassOptimistic.mockResolvedValueOnce({
+      ...BASE_ROW,
+      capacity: NEW_CAPACITY,
+      version: BASE_ROW.version + 1,
     });
 
-    it('does not reset the counter when the DB UPDATE reports a conflict', async () => {
-        const {
-            deps,
-            findById,
-            updateClassOptimistic,
-            reset,
-        } = buildDeps();
+    await updateClass(CLASS_ID, { version: 3, capacity: NEW_CAPACITY }, 'admin', deps);
 
-        findById.mockResolvedValueOnce(BASE_ROW);
-        updateClassOptimistic.mockResolvedValueOnce(null);
+    expect(reset).toHaveBeenCalledExactlyOnceWith(CLASS_ID, NEW_CAPACITY);
+  });
 
-        await updateClass(
-            CLASS_ID,
-            { version: 2, capacity: 40 },
-            'admin',
-            deps,
-        ).catch(() => {
-            /* conflict is expected; swallowed here because the
-             * counter assertion below is the point of the test. */
-        });
+  it('does not reset the counter when the DB UPDATE reports a conflict', async () => {
+    const { deps, findById, updateClassOptimistic, reset } = buildDeps();
 
-        expect(reset).not.toHaveBeenCalled();
+    findById.mockResolvedValueOnce(BASE_ROW);
+    updateClassOptimistic.mockResolvedValueOnce(null);
+
+    await updateClass(CLASS_ID, { version: 2, capacity: 40 }, 'admin', deps).catch(() => {
+      /* conflict is expected; swallowed here because the
+       * counter assertion below is the point of the test. */
     });
+
+    expect(reset).not.toHaveBeenCalled();
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -315,27 +269,19 @@ describe('updateClass — capacity change', () => {
 /* ------------------------------------------------------------------ */
 
 describe('updateClass — not found', () => {
-    it('surfaces `not_found` when the class does not exist and never calls UPDATE', async () => {
-        const {
-            deps,
-            findById,
-            updateClassOptimistic,
-            reset,
-        } = buildDeps();
+  it('surfaces `not_found` when the class does not exist and never calls UPDATE', async () => {
+    const { deps, findById, updateClassOptimistic, reset } = buildDeps();
 
-        findById.mockResolvedValueOnce(null);
+    findById.mockResolvedValueOnce(null);
 
-        const err = await updateClass(
-            CLASS_ID,
-            { version: 0, title: 'Any' },
-            'admin',
-            deps,
-        ).catch((e: unknown) => e);
+    const err = await updateClass(CLASS_ID, { version: 0, title: 'Any' }, 'admin', deps).catch(
+      (e: unknown) => e,
+    );
 
-        expect(err).toBeInstanceOf(UpdateClassError);
-        expect((err as UpdateClassError).code).toBe('not_found');
-        expect(findById).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
-        expect(updateClassOptimistic).not.toHaveBeenCalled();
-        expect(reset).not.toHaveBeenCalled();
-    });
+    expect(err).toBeInstanceOf(UpdateClassError);
+    expect((err as UpdateClassError).code).toBe('not_found');
+    expect(findById).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+    expect(updateClassOptimistic).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
+  });
 });

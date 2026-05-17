@@ -133,23 +133,23 @@ export type SpanAttributeValue = string | number | boolean;
  *     middleware; domain code should NOT call it directly.
  */
 export interface TraceSpan {
-    readonly traceId: string;
-    readonly spanId: string;
-    addAttribute(key: string, value: SpanAttributeValue): void;
-    addEvent(name: string, attributes?: Record<string, SpanAttributeValue>): void;
-    /**
-     * Sprint 12 / Slice 12.9 (Epic B7.3) — set the span name to
-     * a `<verb>.<domain>` flavour. Idempotent and last-write-wins;
-     * callers in domain handlers should invoke this once at the
-     * start of their handler so the OTel backend groups spans by
-     * business operation rather than by HTTP route template.
-     *
-     * Examples: `'auth.login'`, `'reservations.book'`,
-     * `'members.profile.update'`. The default
-     * `${method} ${route}` is used when this is not called.
-     */
-    setName(name: string): void;
-    end(): void;
+  readonly traceId: string;
+  readonly spanId: string;
+  addAttribute(key: string, value: SpanAttributeValue): void;
+  addEvent(name: string, attributes?: Record<string, SpanAttributeValue>): void;
+  /**
+   * Sprint 12 / Slice 12.9 (Epic B7.3) — set the span name to
+   * a `<verb>.<domain>` flavour. Idempotent and last-write-wins;
+   * callers in domain handlers should invoke this once at the
+   * start of their handler so the OTel backend groups spans by
+   * business operation rather than by HTTP route template.
+   *
+   * Examples: `'auth.login'`, `'reservations.book'`,
+   * `'members.profile.update'`. The default
+   * `${method} ${route}` is used when this is not called.
+   */
+  setName(name: string): void;
+  end(): void;
 }
 
 /**
@@ -165,48 +165,43 @@ export interface TraceSpan {
  * envelopes emitted by `onError`.
  */
 export interface TracingContext {
-    readonly env: AthlyaBindings;
-    readonly req: {
-        method: string;
-        url: string;
-        header(name: string): string | undefined;
-        /**
-         * Route template registered on the handler, e.g. `/v1/classes/:id`.
-         * Hono's `HonoRequest.routePath` matches this shape; the field
-         * may be the empty string or `'/'` on middleware-only
-         * requests — the middleware falls back to the pathname in
-         * those cases.
-         */
-        readonly routePath?: string;
-    };
-    readonly res: {
-        readonly status: number;
-    };
+  readonly env: AthlyaBindings;
+  readonly req: {
+    method: string;
+    url: string;
+    header(name: string): string | undefined;
     /**
-     * Optional Cloudflare `ExecutionContext`. When present we register
-     * the export fetch via `waitUntil`; when absent the export
-     * promise is fired and detached.
+     * Route template registered on the handler, e.g. `/v1/classes/:id`.
+     * Hono's `HonoRequest.routePath` matches this shape; the field
+     * may be the empty string or `'/'` on middleware-only
+     * requests — the middleware falls back to the pathname in
+     * those cases.
      */
-    readonly executionCtx?: { waitUntil(promise: Promise<unknown>): void };
+    readonly routePath?: string;
+  };
+  readonly res: {
+    readonly status: number;
+  };
+  /**
+   * Optional Cloudflare `ExecutionContext`. When present we register
+   * the export fetch via `waitUntil`; when absent the export
+   * promise is fired and detached.
+   */
+  readonly executionCtx?: { waitUntil(promise: Promise<unknown>): void };
 
-    get(key: 'traceId'): string;
-    get(key: 'logger'): StructuredLogger;
-    get(key: 'authClaims'):
-        | { userId: string; studioId: string; role: string }
-        | undefined;
-    get(key: 'span'): TraceSpan | undefined;
-    get(key: string): unknown;
+  get(key: 'traceId'): string;
+  get(key: 'logger'): StructuredLogger;
+  get(key: 'authClaims'): { userId: string; studioId: string; role: string } | undefined;
+  get(key: 'span'): TraceSpan | undefined;
+  get(key: string): unknown;
 
-    set(key: 'span', value: TraceSpan): void;
+  set(key: 'span', value: TraceSpan): void;
 
-    header(name: string, value: string): void;
+  header(name: string, value: string): void;
 }
 
 /** Hono-compatible middleware signature, typed minimally. */
-export type TracingMiddleware = (
-    c: TracingContext,
-    next: () => Promise<void>,
-) => Promise<void>;
+export type TracingMiddleware = (c: TracingContext, next: () => Promise<void>) => Promise<void>;
 
 /* ------------------------------------------------------------------ */
 /*  Options                                                            */
@@ -217,27 +212,27 @@ export type TracingMiddleware = (
  * falls back to production defaults.
  */
 export interface TracingOptions {
-    /**
-     * Service name emitted as the `service.name` resource attribute.
-     * Defaults to `'athlya-api'`. Axiom (and every OTLP backend) groups
-     * spans by this value on the APM dashboard.
-     */
-    serviceName?: string;
+  /**
+   * Service name emitted as the `service.name` resource attribute.
+   * Defaults to `'athlya-api'`. Axiom (and every OTLP backend) groups
+   * spans by this value on the APM dashboard.
+   */
+  serviceName?: string;
 
-    /**
-     * Override the wall-clock used for span start / end timestamps.
-     * Defaults to `Date.now()`. Tests inject a frozen clock so
-     * `startTimeUnixNano` / `endTimeUnixNano` assertions are
-     * reproducible.
-     */
-    now?: () => number;
+  /**
+   * Override the wall-clock used for span start / end timestamps.
+   * Defaults to `Date.now()`. Tests inject a frozen clock so
+   * `startTimeUnixNano` / `endTimeUnixNano` assertions are
+   * reproducible.
+   */
+  now?: () => number;
 
-    /**
-     * Inject the fetch implementation used to POST the OTLP envelope.
-     * Defaults to the global `fetch`. Tests pass a `vi.fn()` spy so
-     * no network I/O happens.
-     */
-    fetch?: typeof fetch;
+  /**
+   * Inject the fetch implementation used to POST the OTLP envelope.
+   * Defaults to the global `fetch`. Tests pass a `vi.fn()` spy so
+   * no network I/O happens.
+   */
+  fetch?: typeof fetch;
 }
 
 /* ------------------------------------------------------------------ */
@@ -245,8 +240,8 @@ export interface TracingOptions {
 /* ------------------------------------------------------------------ */
 
 interface OtlpAttributeKeyValue {
-    readonly key: string;
-    readonly value:
+  readonly key: string;
+  readonly value:
     | { readonly stringValue: string }
     | { readonly intValue: string }
     | { readonly doubleValue: number }
@@ -254,41 +249,38 @@ interface OtlpAttributeKeyValue {
 }
 
 interface OtlpEvent {
-    readonly timeUnixNano: string;
-    readonly name: string;
-    readonly attributes: readonly OtlpAttributeKeyValue[];
+  readonly timeUnixNano: string;
+  readonly name: string;
+  readonly attributes: readonly OtlpAttributeKeyValue[];
 }
 
 interface OtlpSpan {
-    readonly traceId: string;
-    readonly spanId: string;
-    readonly parentSpanId?: string;
-    readonly name: string;
-    readonly kind: typeof SPAN_KIND_SERVER;
-    readonly startTimeUnixNano: string;
-    readonly endTimeUnixNano: string;
-    readonly attributes: readonly OtlpAttributeKeyValue[];
-    readonly events: readonly OtlpEvent[];
-    readonly status: {
-        readonly code:
-        | typeof STATUS_CODE_UNSET
-        | typeof STATUS_CODE_OK
-        | typeof STATUS_CODE_ERROR;
-    };
+  readonly traceId: string;
+  readonly spanId: string;
+  readonly parentSpanId?: string;
+  readonly name: string;
+  readonly kind: typeof SPAN_KIND_SERVER;
+  readonly startTimeUnixNano: string;
+  readonly endTimeUnixNano: string;
+  readonly attributes: readonly OtlpAttributeKeyValue[];
+  readonly events: readonly OtlpEvent[];
+  readonly status: {
+    readonly code: typeof STATUS_CODE_UNSET | typeof STATUS_CODE_OK | typeof STATUS_CODE_ERROR;
+  };
 }
 
 interface OtlpScopeSpans {
-    readonly scope: { readonly name: string; readonly version: string };
-    readonly spans: readonly OtlpSpan[];
+  readonly scope: { readonly name: string; readonly version: string };
+  readonly spans: readonly OtlpSpan[];
 }
 
 interface OtlpResourceSpans {
-    readonly resource: { readonly attributes: readonly OtlpAttributeKeyValue[] };
-    readonly scopeSpans: readonly OtlpScopeSpans[];
+  readonly resource: { readonly attributes: readonly OtlpAttributeKeyValue[] };
+  readonly scopeSpans: readonly OtlpScopeSpans[];
 }
 
 interface OtlpEnvelope {
-    readonly resourceSpans: readonly OtlpResourceSpans[];
+  readonly resourceSpans: readonly OtlpResourceSpans[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -303,30 +295,28 @@ interface OtlpEnvelope {
  * signed int and JSON has no native int64) and `doubleValue` for
  * everything else. Booleans and strings map straight through.
  */
-function encodeAttributeValue(
-    value: SpanAttributeValue,
-): OtlpAttributeKeyValue['value'] {
-    switch (typeof value) {
-        case 'string':
-            return { stringValue: value };
-        case 'boolean':
-            return { boolValue: value };
-        case 'number':
-            if (Number.isInteger(value) && Number.isFinite(value)) {
-                return { intValue: value.toString(10) };
-            }
-            return { doubleValue: value };
-    }
+function encodeAttributeValue(value: SpanAttributeValue): OtlpAttributeKeyValue['value'] {
+  switch (typeof value) {
+    case 'string':
+      return { stringValue: value };
+    case 'boolean':
+      return { boolValue: value };
+    case 'number':
+      if (Number.isInteger(value) && Number.isFinite(value)) {
+        return { intValue: value.toString(10) };
+      }
+      return { doubleValue: value };
+  }
 }
 
 function encodeAttributes(
-    attrs: Readonly<Record<string, SpanAttributeValue>>,
+  attrs: Readonly<Record<string, SpanAttributeValue>>,
 ): readonly OtlpAttributeKeyValue[] {
-    const out: OtlpAttributeKeyValue[] = [];
-    for (const [key, value] of Object.entries(attrs)) {
-        out.push({ key, value: encodeAttributeValue(value) });
-    }
-    return out;
+  const out: OtlpAttributeKeyValue[] = [];
+  for (const [key, value] of Object.entries(attrs)) {
+    out.push({ key, value: encodeAttributeValue(value) });
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -348,23 +338,23 @@ function encodeAttributes(
  * cached resolver inside {@link tracing}.
  */
 export function parseOtelHeaders(raw: string | undefined): Record<string, string> {
-    if (raw === undefined || raw.length === 0) {
-        return {};
+  if (raw === undefined || raw.length === 0) {
+    return {};
+  }
+  const out: Record<string, string> = {};
+  for (const pair of raw.split(',')) {
+    const eq = pair.indexOf('=');
+    if (eq === -1) {
+      continue;
     }
-    const out: Record<string, string> = {};
-    for (const pair of raw.split(',')) {
-        const eq = pair.indexOf('=');
-        if (eq === -1) {
-            continue;
-        }
-        const key = pair.slice(0, eq).trim();
-        const value = pair.slice(eq + 1).trim();
-        if (key.length === 0) {
-            continue;
-        }
-        out[key] = value;
+    const key = pair.slice(0, eq).trim();
+    const value = pair.slice(eq + 1).trim();
+    if (key.length === 0) {
+      continue;
     }
-    return out;
+    out[key] = value;
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -378,25 +368,25 @@ export function parseOtelHeaders(raw: string | undefined): Record<string, string
  * field names.
  */
 interface SpanState {
-    readonly traceId: string;
-    readonly spanId: string;
-    readonly parentSpanId?: string;
+  readonly traceId: string;
+  readonly spanId: string;
+  readonly parentSpanId?: string;
+  name: string;
+  /**
+   * Sprint 12 / Slice 12.9 (Epic B7.3) — true when a domain
+   * handler called `span.setName(...)`. Stops the post-`next()`
+   * step from clobbering the override with `${method} ${route}`.
+   */
+  nameOverridden: boolean;
+  startTimeMs: number;
+  endTimeMs: number | null;
+  attributes: Record<string, SpanAttributeValue>;
+  events: Array<{
+    timeMs: number;
     name: string;
-    /**
-     * Sprint 12 / Slice 12.9 (Epic B7.3) — true when a domain
-     * handler called `span.setName(...)`. Stops the post-`next()`
-     * step from clobbering the override with `${method} ${route}`.
-     */
-    nameOverridden: boolean;
-    startTimeMs: number;
-    endTimeMs: number | null;
     attributes: Record<string, SpanAttributeValue>;
-    events: Array<{
-        timeMs: number;
-        name: string;
-        attributes: Record<string, SpanAttributeValue>;
-    }>;
-    ended: boolean;
+  }>;
+  ended: boolean;
 }
 
 /**
@@ -406,47 +396,44 @@ interface SpanState {
  * reflects the moment the middleware ran, not the moment `end()` is
  * called.
  */
-function createSpan(
-    state: SpanState,
-    now: () => number,
-): TraceSpan {
-    const span: TraceSpan = {
-        traceId: state.traceId,
-        spanId: state.spanId,
-        addAttribute(key, value) {
-            if (state.ended) return;
-            state.attributes[key] = value;
-        },
-        addEvent(name, attributes) {
-            if (state.ended) return;
-            state.events.push({
-                timeMs: now(),
-                name,
-                attributes: { ...(attributes ?? {}) },
-            });
-        },
-        setName(name) {
-            // Sprint 12 / Slice 12.9 (Epic B7.3) — allow domain
-            // handlers to override the default `${method} ${route}`
-            // span name with a `<verb>.<domain>` flavour
-            // (`auth.login`, `reservations.book`, …). The override
-            // sticks unless the span has already been finalised.
-            if (state.ended) return;
-            if (typeof name === 'string' && name.length > 0) {
-                state.name = name;
-                // Mark as explicitly set so the auto-derived
-                // `${method} ${route}` step at end of `next()` does
-                // NOT clobber the operator-provided value.
-                state.nameOverridden = true;
-            }
-        },
-        end() {
-            if (state.ended) return;
-            state.ended = true;
-            state.endTimeMs = now();
-        },
-    };
-    return span;
+function createSpan(state: SpanState, now: () => number): TraceSpan {
+  const span: TraceSpan = {
+    traceId: state.traceId,
+    spanId: state.spanId,
+    addAttribute(key, value) {
+      if (state.ended) return;
+      state.attributes[key] = value;
+    },
+    addEvent(name, attributes) {
+      if (state.ended) return;
+      state.events.push({
+        timeMs: now(),
+        name,
+        attributes: { ...(attributes ?? {}) },
+      });
+    },
+    setName(name) {
+      // Sprint 12 / Slice 12.9 (Epic B7.3) — allow domain
+      // handlers to override the default `${method} ${route}`
+      // span name with a `<verb>.<domain>` flavour
+      // (`auth.login`, `reservations.book`, …). The override
+      // sticks unless the span has already been finalised.
+      if (state.ended) return;
+      if (typeof name === 'string' && name.length > 0) {
+        state.name = name;
+        // Mark as explicitly set so the auto-derived
+        // `${method} ${route}` step at end of `next()` does
+        // NOT clobber the operator-provided value.
+        state.nameOverridden = true;
+      }
+    },
+    end() {
+      if (state.ended) return;
+      state.ended = true;
+      state.endTimeMs = now();
+    },
+  };
+  return span;
 }
 
 /**
@@ -458,9 +445,9 @@ function createSpan(
  * service's lifetime).
  */
 function msToNanoString(ms: number): string {
-    // Multiplying by 1e6 is safe for every ms value below
-    // Number.MAX_SAFE_INTEGER / 1e6 ≈ 9.0e9, i.e. ~2255 AD.
-    return `${Math.round(ms * 1e6).toString(10)}`;
+  // Multiplying by 1e6 is safe for every ms value below
+  // Number.MAX_SAFE_INTEGER / 1e6 ≈ 9.0e9, i.e. ~2255 AD.
+  return `${Math.round(ms * 1e6).toString(10)}`;
 }
 
 /**
@@ -476,56 +463,50 @@ function msToNanoString(ms: number): string {
  *   • `spans[].status.code` — `OK` when `http.status_code < 500`,
  *     `ERROR` at / above 500, `UNSET` when unknown.
  */
-function buildEnvelope(
-    state: SpanState,
-    serviceName: string,
-    environment: string,
-): OtlpEnvelope {
-    const statusCodeAttr = state.attributes['http.status_code'];
-    let statusCode: OtlpSpan['status']['code'] = STATUS_CODE_UNSET;
-    if (typeof statusCodeAttr === 'number') {
-        statusCode = statusCodeAttr >= 500 ? STATUS_CODE_ERROR : STATUS_CODE_OK;
-    }
+function buildEnvelope(state: SpanState, serviceName: string, environment: string): OtlpEnvelope {
+  const statusCodeAttr = state.attributes['http.status_code'];
+  let statusCode: OtlpSpan['status']['code'] = STATUS_CODE_UNSET;
+  if (typeof statusCodeAttr === 'number') {
+    statusCode = statusCodeAttr >= 500 ? STATUS_CODE_ERROR : STATUS_CODE_OK;
+  }
 
-    const endTimeMs = state.endTimeMs ?? state.startTimeMs;
+  const endTimeMs = state.endTimeMs ?? state.startTimeMs;
 
-    const span: OtlpSpan = {
-        traceId: state.traceId,
-        spanId: state.spanId,
-        ...(state.parentSpanId !== undefined
-            ? { parentSpanId: state.parentSpanId }
-            : {}),
-        name: state.name,
-        kind: SPAN_KIND_SERVER,
-        startTimeUnixNano: msToNanoString(state.startTimeMs),
-        endTimeUnixNano: msToNanoString(endTimeMs),
-        attributes: encodeAttributes(state.attributes),
-        events: state.events.map((e) => ({
-            timeUnixNano: msToNanoString(e.timeMs),
-            name: e.name,
-            attributes: encodeAttributes(e.attributes),
-        })),
-        status: { code: statusCode },
-    };
+  const span: OtlpSpan = {
+    traceId: state.traceId,
+    spanId: state.spanId,
+    ...(state.parentSpanId !== undefined ? { parentSpanId: state.parentSpanId } : {}),
+    name: state.name,
+    kind: SPAN_KIND_SERVER,
+    startTimeUnixNano: msToNanoString(state.startTimeMs),
+    endTimeUnixNano: msToNanoString(endTimeMs),
+    attributes: encodeAttributes(state.attributes),
+    events: state.events.map((e) => ({
+      timeUnixNano: msToNanoString(e.timeMs),
+      name: e.name,
+      attributes: encodeAttributes(e.attributes),
+    })),
+    status: { code: statusCode },
+  };
 
-    return {
-        resourceSpans: [
-            {
-                resource: {
-                    attributes: encodeAttributes({
-                        'service.name': serviceName,
-                        'deployment.environment': environment,
-                    }),
-                },
-                scopeSpans: [
-                    {
-                        scope: { name: SCOPE_NAME, version: SCOPE_VERSION },
-                        spans: [span],
-                    },
-                ],
-            },
+  return {
+    resourceSpans: [
+      {
+        resource: {
+          attributes: encodeAttributes({
+            'service.name': serviceName,
+            'deployment.environment': environment,
+          }),
+        },
+        scopeSpans: [
+          {
+            scope: { name: SCOPE_NAME, version: SCOPE_VERSION },
+            spans: [span],
+          },
         ],
-    };
+      },
+    ],
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -541,15 +522,15 @@ function buildEnvelope(
  * present.
  */
 function deriveRoute(c: TracingContext): string {
-    const routePath = c.req.routePath;
-    if (typeof routePath === 'string' && routePath.length > 0 && routePath !== '/') {
-        return routePath;
-    }
-    try {
-        return new URL(c.req.url).pathname;
-    } catch {
-        return '/';
-    }
+  const routePath = c.req.routePath;
+  if (typeof routePath === 'string' && routePath.length > 0 && routePath !== '/') {
+    return routePath;
+  }
+  try {
+    return new URL(c.req.url).pathname;
+  } catch {
+    return '/';
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -565,110 +546,106 @@ function deriveRoute(c: TracingContext): string {
  * the skeleton built by task 8.1.
  */
 export function tracing(options: TracingOptions = {}): TracingMiddleware {
-    const serviceName = options.serviceName ?? 'athlya-api';
-    const now = options.now ?? (() => Date.now());
-    const fetchImpl = options.fetch ?? globalThis.fetch;
+  const serviceName = options.serviceName ?? 'athlya-api';
+  const now = options.now ?? (() => Date.now());
+  const fetchImpl = options.fetch ?? globalThis.fetch;
 
-    return async (c, next) => {
-        // Step 1 — parse inbound traceparent.
-        const incoming = c.req.header('traceparent') ?? null;
-        const parsed = extractTraceparent(incoming);
-        const traceIdHex = parsed?.traceId ?? newTraceIdHex();
-        const state: SpanState = {
-            traceId: traceIdHex,
-            spanId: newSpanId(),
-            ...(parsed !== null ? { parentSpanId: parsed.parentSpanId } : {}),
-            name: `${c.req.method} ${deriveRoute(c)}`,
-            nameOverridden: false,
-            startTimeMs: now(),
-            endTimeMs: null,
-            attributes: {
-                'http.method': c.req.method,
-            },
-            events: [],
-            ended: false,
-        };
-
-        const span = createSpan(state, now);
-
-        // Step 2 — inject the writer so downstream middleware can
-        //          enrich the span. Name is refreshed after `next()`
-        //          returns because the route is only known on the
-        //          final matched handler.
-        c.set('span', span);
-
-        // Step 3 — run the downstream pipeline. We swallow no
-        //          errors here — `onError` in `worker.ts` owns the
-        //          error envelope. On throw we still want the span
-        //          exported, so the `finally` block runs.
-        try {
-            await next();
-        } finally {
-            // Step 4 — stamp automatic attributes. Route / status /
-            //           claims are only known after `next()` runs.
-            const route = deriveRoute(c);
-            // Sprint 12 / Slice 12.9 (B7.3) — only auto-derive the
-            // span name when the handler has NOT explicitly called
-            // `span.setName(...)`. The override carries the
-            // business-operation flavour (`auth.login`, …) which is
-            // what the OTel backend should group on.
-            if (!state.nameOverridden) {
-                state.name = `${c.req.method} ${route}`;
-            }
-            state.attributes['http.route'] = route;
-            state.attributes['http.status_code'] = c.res.status;
-
-            const claims = c.get('authClaims');
-            if (claims !== undefined) {
-                state.attributes['studio.id'] = claims.studioId;
-                state.attributes['user.id'] = claims.userId;
-            }
-
-            span.end();
-
-            // Step 5 — export. Swallowed on failure so a dead
-            //           OTel backend never crashes the request.
-            const endpoint = c.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-            if (typeof endpoint === 'string' && endpoint.length > 0) {
-                const envelope = buildEnvelope(
-                    state,
-                    serviceName,
-                    c.env.ENVIRONMENT,
-                );
-                const headers: Record<string, string> = {
-                    'content-type': 'application/json',
-                    ...parseOtelHeaders(c.env.OTEL_EXPORTER_OTLP_HEADERS),
-                };
-                const logger = c.get('logger');
-                const exportTask = fetchImpl(endpoint, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify(envelope),
-                })
-                    .then((res) => {
-                        if (!res.ok) {
-                            logger.warn('otel export non-2xx', {
-                                status: res.status,
-                                traceId: state.traceId,
-                            });
-                        }
-                    })
-                    .catch((err: unknown) => {
-                        logger.warn('otel export failed', {
-                            traceId: state.traceId,
-                            error: err instanceof Error ? err.message : String(err),
-                        });
-                    });
-                if (c.executionCtx !== undefined) {
-                    c.executionCtx.waitUntil(exportTask);
-                } else {
-                    // Detached — we must keep a reference to avoid
-                    // unhandled-rejection warnings in Node test
-                    // environments, but the promise itself is
-                    // fire-and-forget from the request's perspective.
-                    void exportTask;
-                }
-            }
-        }
+  return async (c, next) => {
+    // Step 1 — parse inbound traceparent.
+    const incoming = c.req.header('traceparent') ?? null;
+    const parsed = extractTraceparent(incoming);
+    const traceIdHex = parsed?.traceId ?? newTraceIdHex();
+    const state: SpanState = {
+      traceId: traceIdHex,
+      spanId: newSpanId(),
+      ...(parsed !== null ? { parentSpanId: parsed.parentSpanId } : {}),
+      name: `${c.req.method} ${deriveRoute(c)}`,
+      nameOverridden: false,
+      startTimeMs: now(),
+      endTimeMs: null,
+      attributes: {
+        'http.method': c.req.method,
+      },
+      events: [],
+      ended: false,
     };
+
+    const span = createSpan(state, now);
+
+    // Step 2 — inject the writer so downstream middleware can
+    //          enrich the span. Name is refreshed after `next()`
+    //          returns because the route is only known on the
+    //          final matched handler.
+    c.set('span', span);
+
+    // Step 3 — run the downstream pipeline. We swallow no
+    //          errors here — `onError` in `worker.ts` owns the
+    //          error envelope. On throw we still want the span
+    //          exported, so the `finally` block runs.
+    try {
+      await next();
+    } finally {
+      // Step 4 — stamp automatic attributes. Route / status /
+      //           claims are only known after `next()` runs.
+      const route = deriveRoute(c);
+      // Sprint 12 / Slice 12.9 (B7.3) — only auto-derive the
+      // span name when the handler has NOT explicitly called
+      // `span.setName(...)`. The override carries the
+      // business-operation flavour (`auth.login`, …) which is
+      // what the OTel backend should group on.
+      if (!state.nameOverridden) {
+        state.name = `${c.req.method} ${route}`;
+      }
+      state.attributes['http.route'] = route;
+      state.attributes['http.status_code'] = c.res.status;
+
+      const claims = c.get('authClaims');
+      if (claims !== undefined) {
+        state.attributes['studio.id'] = claims.studioId;
+        state.attributes['user.id'] = claims.userId;
+      }
+
+      span.end();
+
+      // Step 5 — export. Swallowed on failure so a dead
+      //           OTel backend never crashes the request.
+      const endpoint = c.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+      if (typeof endpoint === 'string' && endpoint.length > 0) {
+        const envelope = buildEnvelope(state, serviceName, c.env.ENVIRONMENT);
+        const headers: Record<string, string> = {
+          'content-type': 'application/json',
+          ...parseOtelHeaders(c.env.OTEL_EXPORTER_OTLP_HEADERS),
+        };
+        const logger = c.get('logger');
+        const exportTask = fetchImpl(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(envelope),
+        })
+          .then((res) => {
+            if (!res.ok) {
+              logger.warn('otel export non-2xx', {
+                status: res.status,
+                traceId: state.traceId,
+              });
+            }
+          })
+          .catch((err: unknown) => {
+            logger.warn('otel export failed', {
+              traceId: state.traceId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+        if (c.executionCtx !== undefined) {
+          c.executionCtx.waitUntil(exportTask);
+        } else {
+          // Detached — we must keep a reference to avoid
+          // unhandled-rejection warnings in Node test
+          // environments, but the promise itself is
+          // fire-and-forget from the request's perspective.
+          void exportTask;
+        }
+      }
+    }
+  };
 }

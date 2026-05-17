@@ -64,12 +64,7 @@ import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
 import { createLogger } from '../logging.js';
 
 import type { AthlyaBindings } from '../types.js';
-import type {
-    FlattenedJWSInput,
-    JWSHeaderParameters,
-    JWTPayload,
-    KeyLike,
-} from 'jose';
+import type { FlattenedJWSInput, JWSHeaderParameters, JWTPayload, KeyLike } from 'jose';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -101,9 +96,9 @@ const VALID_ROLES = new Set<AuthClaims['role']>(['member', 'admin', 'coach']);
  * attackers.
  */
 export interface AuthClaims {
-    userId: string;
-    studioId: string;
-    role: 'member' | 'admin' | 'coach';
+  userId: string;
+  studioId: string;
+  role: 'member' | 'admin' | 'coach';
 }
 
 /**
@@ -114,26 +109,22 @@ export interface AuthClaims {
  * full Hono pipeline for unit-level assertions.
  */
 export interface JwtAuthContext {
-    readonly env: AthlyaBindings;
-    readonly req: {
-        header(name: string): string | undefined;
-    };
-    get(key: 'traceId'): string;
-    get(key: 'logger' | 'authClaims' | 'startedAt'): unknown;
-    set(key: 'logger', value: ReturnType<typeof createLogger>): void;
-    set(key: 'authClaims', value: AuthClaims): void;
-    header(name: string, value: string): void;
-    body(
-        data: string,
-        status: 401,
-        headers: Record<string, string>,
-    ): Response;
+  readonly env: AthlyaBindings;
+  readonly req: {
+    header(name: string): string | undefined;
+  };
+  get(key: 'traceId'): string;
+  get(key: 'logger' | 'authClaims' | 'startedAt'): unknown;
+  set(key: 'logger', value: ReturnType<typeof createLogger>): void;
+  set(key: 'authClaims', value: AuthClaims): void;
+  header(name: string, value: string): void;
+  body(data: string, status: 401, headers: Record<string, string>): Response;
 }
 
 /** Hono-compatible middleware signature, typed minimally. */
 export type JwtAuthMiddleware = (
-    c: JwtAuthContext,
-    next: () => Promise<void>,
+  c: JwtAuthContext,
+  next: () => Promise<void>,
 ) => Promise<Response | void>;
 
 /* ------------------------------------------------------------------ */
@@ -163,8 +154,8 @@ const JWKS_COOLDOWN_MS = 30 * 1_000;
  * an in-memory key set so no network I/O happens.
  */
 export type JwksKeyResolver = (
-    protectedHeader?: JWSHeaderParameters,
-    token?: FlattenedJWSInput,
+  protectedHeader?: JWSHeaderParameters,
+  token?: FlattenedJWSInput,
 ) => Promise<KeyLike>;
 
 /**
@@ -189,16 +180,16 @@ const jwksGetters = new Map<string, JwksKeyResolver>();
  * incident, not an auth failure.
  */
 function getDefaultJwksResolver(url: string): JwksKeyResolver {
-    const cached = jwksGetters.get(url);
-    if (cached !== undefined) {
-        return cached;
-    }
-    const getter = createRemoteJWKSet(new URL(url), {
-        cacheMaxAge: JWKS_CACHE_MAX_AGE_MS,
-        cooldownDuration: JWKS_COOLDOWN_MS,
-    });
-    jwksGetters.set(url, getter);
-    return getter;
+  const cached = jwksGetters.get(url);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const getter = createRemoteJWKSet(new URL(url), {
+    cacheMaxAge: JWKS_CACHE_MAX_AGE_MS,
+    cooldownDuration: JWKS_COOLDOWN_MS,
+  });
+  jwksGetters.set(url, getter);
+  return getter;
 }
 
 /**
@@ -207,7 +198,7 @@ function getDefaultJwksResolver(url: string): JwksKeyResolver {
  * `__` prefix so it is obviously internal.
  */
 export function __resetJwksCacheForTests(): void {
-    jwksGetters.clear();
+  jwksGetters.clear();
 }
 
 /* ------------------------------------------------------------------ */
@@ -222,15 +213,15 @@ export function __resetJwksCacheForTests(): void {
  * shared helper, at which point this builder will be updated too.
  */
 interface ProblemDetails {
-    readonly type: string;
-    readonly title: string;
-    readonly status: 401;
-    readonly traceId: string;
+  readonly type: string;
+  readonly title: string;
+  readonly status: 401;
+  readonly traceId: string;
 }
 
 /** Build a Problem Details body with `title` as the short error code. */
 function problem(title: string, traceId: string): ProblemDetails {
-    return { type: 'about:blank', title, status: 401, traceId };
+  return { type: 'about:blank', title, status: 401, traceId };
 }
 
 /**
@@ -249,21 +240,17 @@ function problem(title: string, traceId: string): ProblemDetails {
  *   with "credentials expired".
  */
 function respond401(
-    c: JwtAuthContext,
-    code: 'missing_authorization' | 'invalid_token' | 'token_expired',
-    wwwAuthenticateError?: 'token_expired',
+  c: JwtAuthContext,
+  code: 'missing_authorization' | 'invalid_token' | 'token_expired',
+  wwwAuthenticateError?: 'token_expired',
 ): Response {
-    const headers: Record<string, string> = {
-        'content-type': PROBLEM_JSON,
-    };
-    if (wwwAuthenticateError !== undefined) {
-        headers['WWW-Authenticate'] = `Bearer error="${wwwAuthenticateError}"`;
-    }
-    return c.body(
-        JSON.stringify(problem(code, c.get('traceId'))),
-        401,
-        headers,
-    );
+  const headers: Record<string, string> = {
+    'content-type': PROBLEM_JSON,
+  };
+  if (wwwAuthenticateError !== undefined) {
+    headers['WWW-Authenticate'] = `Bearer error="${wwwAuthenticateError}"`;
+  }
+  return c.body(JSON.stringify(problem(code, c.get('traceId'))), 401, headers);
 }
 
 /* ------------------------------------------------------------------ */
@@ -278,21 +265,21 @@ function respond401(
  * so attackers cannot probe the expected claim set via 401 bodies.
  */
 function extractClaims(payload: JWTPayload): AuthClaims | null {
-    const sub = payload.sub;
-    const studio = payload['studio'];
-    const role = payload['role'];
+  const sub = payload.sub;
+  const studio = payload['studio'];
+  const role = payload['role'];
 
-    if (typeof sub !== 'string' || sub.length === 0) return null;
-    if (typeof studio !== 'string' || studio.length === 0) return null;
-    if (typeof role !== 'string') return null;
+  if (typeof sub !== 'string' || sub.length === 0) return null;
+  if (typeof studio !== 'string' || studio.length === 0) return null;
+  if (typeof role !== 'string') return null;
 
-    if (!VALID_ROLES.has(role as AuthClaims['role'])) return null;
+  if (!VALID_ROLES.has(role as AuthClaims['role'])) return null;
 
-    return {
-        userId: sub,
-        studioId: studio,
-        role: role as AuthClaims['role'],
-    };
+  return {
+    userId: sub,
+    studioId: studio,
+    role: role as AuthClaims['role'],
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -309,34 +296,34 @@ function extractClaims(payload: JWTPayload): AuthClaims | null {
  * pair is deployment-stable (not a secret, not per-tenant).
  */
 export interface JwtAuthOptions {
-    /**
-     * Expected `iss` claim. When set, tokens whose `iss` does not
-     * match are rejected with `invalid_token`. Default: unset (any
-     * `iss` accepted by `jose`'s default).
-     */
-    issuer?: string;
+  /**
+   * Expected `iss` claim. When set, tokens whose `iss` does not
+   * match are rejected with `invalid_token`. Default: unset (any
+   * `iss` accepted by `jose`'s default).
+   */
+  issuer?: string;
 
-    /**
-     * Expected `aud` claim. When set, tokens whose `aud` does not
-     * match are rejected with `invalid_token`. Default: unset.
-     */
-    audience?: string;
+  /**
+   * Expected `aud` claim. When set, tokens whose `aud` does not
+   * match are rejected with `invalid_token`. Default: unset.
+   */
+  audience?: string;
 
-    /**
-     * Clock skew tolerance in seconds. Default: 0 (tight). Useful in
-     * tests that freeze time via an injected clock.
-     */
-    clockToleranceSec?: number;
+  /**
+   * Clock skew tolerance in seconds. Default: 0 (tight). Useful in
+   * tests that freeze time via an injected clock.
+   */
+  clockToleranceSec?: number;
 
-    /**
-     * JWKS key resolver override. Defaults to a module-cached
-     * {@link createRemoteJWKSet} keyed on `env.JWT_JWKS_URL`. Tests
-     * inject a synchronous resolver backed by a local key set so the
-     * middleware never performs network I/O — the production path
-     * (`createRemoteJWKSet`) is covered by the `jose` test suite and
-     * by task 8.12's integration tests.
-     */
-    keyResolver?: JwksKeyResolver;
+  /**
+   * JWKS key resolver override. Defaults to a module-cached
+   * {@link createRemoteJWKSet} keyed on `env.JWT_JWKS_URL`. Tests
+   * inject a synchronous resolver backed by a local key set so the
+   * middleware never performs network I/O — the production path
+   * (`createRemoteJWKSet`) is covered by the `jose` test suite and
+   * by task 8.12's integration tests.
+   */
+  keyResolver?: JwksKeyResolver;
 }
 
 /**
@@ -370,87 +357,83 @@ export interface JwtAuthOptions {
  * the cross-service confused-deputy defence S2-005 calls for.
  */
 export function jwtAuth(options: JwtAuthOptions = {}): JwtAuthMiddleware {
-    return async (c, next) => {
-        const traceId = c.get('traceId');
+  return async (c, next) => {
+    const traceId = c.get('traceId');
 
-        // Step 1 — header presence.
-        const authz = c.req.header('Authorization');
-        if (authz === undefined || authz === null || authz.length === 0) {
-            return respond401(c, 'missing_authorization');
-        }
+    // Step 1 — header presence.
+    const authz = c.req.header('Authorization');
+    if (authz === undefined || authz === null || authz.length === 0) {
+      return respond401(c, 'missing_authorization');
+    }
 
-        // Step 2 — parse the Bearer envelope.
-        const match = BEARER_RE.exec(authz);
-        const token = match?.[1];
-        if (token === undefined) {
-            return respond401(c, 'invalid_token');
-        }
+    // Step 2 — parse the Bearer envelope.
+    const match = BEARER_RE.exec(authz);
+    const token = match?.[1];
+    if (token === undefined) {
+      return respond401(c, 'invalid_token');
+    }
 
-        // Slice 1.5 — derive iss/aud defaults from the live bindings
-        // when the caller did not pass explicit values. Reading at
-        // request-time (rather than middleware-build-time) keeps the
-        // factory env-agnostic, which matters for tests that build
-        // the middleware once and exercise it against multiple env
-        // overrides.
-        const expectedIssuer =
-            options.issuer ?? c.env.JWT_ISSUER ?? 'athlya';
-        const expectedAudience =
-            options.audience ??
-            c.env.JWT_AUDIENCE ??
-            `athlya-api-${c.env.ENVIRONMENT}`;
+    // Slice 1.5 — derive iss/aud defaults from the live bindings
+    // when the caller did not pass explicit values. Reading at
+    // request-time (rather than middleware-build-time) keeps the
+    // factory env-agnostic, which matters for tests that build
+    // the middleware once and exercise it against multiple env
+    // overrides.
+    const expectedIssuer = options.issuer ?? c.env.JWT_ISSUER ?? 'athlya';
+    const expectedAudience =
+      options.audience ?? c.env.JWT_AUDIENCE ?? `athlya-api-${c.env.ENVIRONMENT}`;
 
-        // Step 3 — verify against the cached JWKS.
-        const getKey =
-            options.keyResolver ?? getDefaultJwksResolver(c.env.JWT_JWKS_URL);
-        let payload: JWTPayload;
-        try {
-            const verifyOpts: Parameters<typeof jwtVerify>[2] = {
-                algorithms: [...ALLOWED_ALGORITHMS],
-                clockTolerance: options.clockToleranceSec ?? 0,
-                issuer: expectedIssuer,
-                audience: expectedAudience,
-            };
+    // Step 3 — verify against the cached JWKS.
+    const getKey = options.keyResolver ?? getDefaultJwksResolver(c.env.JWT_JWKS_URL);
+    let payload: JWTPayload;
+    try {
+      const verifyOpts: Parameters<typeof jwtVerify>[2] = {
+        algorithms: [...ALLOWED_ALGORITHMS],
+        clockTolerance: options.clockToleranceSec ?? 0,
+        issuer: expectedIssuer,
+        audience: expectedAudience,
+      };
 
-            const result = await jwtVerify(token, getKey, verifyOpts);
-            payload = result.payload;
-        } catch (err) {
-            // Expired tokens are the single case that gets its own
-            // wire-level error code + WWW-Authenticate challenge.
-            if (err instanceof joseErrors.JWTExpired) {
-                return respond401(c, 'token_expired', 'token_expired');
-            }
-            // Everything else (bad signature, wrong kid, wrong alg,
-            // malformed JWS, bad iss/aud) collapses to a single
-            // `invalid_token` code. The `jose` error's own `.code` is
-            // NOT exposed to the caller so attackers can't
-            // fingerprint the verification path.
-            return respond401(c, 'invalid_token');
-        }
+      const result = await jwtVerify(token, getKey, verifyOpts);
+      payload = result.payload;
+    } catch (err) {
+      // Expired tokens are the single case that gets its own
+      // wire-level error code + WWW-Authenticate challenge.
+      if (err instanceof joseErrors.JWTExpired) {
+        return respond401(c, 'token_expired', 'token_expired');
+      }
+      // Everything else (bad signature, wrong kid, wrong alg,
+      // malformed JWS, bad iss/aud) collapses to a single
+      // `invalid_token` code. The `jose` error's own `.code` is
+      // NOT exposed to the caller so attackers can't
+      // fingerprint the verification path.
+      return respond401(c, 'invalid_token');
+    }
 
-        // Step 4 — extract canonical claims.
-        const claims = extractClaims(payload);
-        if (claims === null) {
-            return respond401(c, 'invalid_token');
-        }
+    // Step 4 — extract canonical claims.
+    const claims = extractClaims(payload);
+    if (claims === null) {
+      return respond401(c, 'invalid_token');
+    }
 
-        // Step 5 — inject claims + re-scope the logger so every line
-        // after auth carries the authenticated identity. We rebuild
-        // the logger from scratch because `createLogger` does not
-        // expose a `child()` API — the base fields are captured in a
-        // closure and there is no merge path on the returned
-        // `StructuredLogger`. Rebuilding is cheap (one object spread).
-        c.set('authClaims', claims);
-        c.set(
-            'logger',
-            createLogger({
-                traceId,
-                env: c.env.ENVIRONMENT,
-                userId: claims.userId,
-                studioId: claims.studioId,
-            }),
-        );
+    // Step 5 — inject claims + re-scope the logger so every line
+    // after auth carries the authenticated identity. We rebuild
+    // the logger from scratch because `createLogger` does not
+    // expose a `child()` API — the base fields are captured in a
+    // closure and there is no merge path on the returned
+    // `StructuredLogger`. Rebuilding is cheap (one object spread).
+    c.set('authClaims', claims);
+    c.set(
+      'logger',
+      createLogger({
+        traceId,
+        env: c.env.ENVIRONMENT,
+        userId: claims.userId,
+        studioId: claims.studioId,
+      }),
+    );
 
-        await next();
-        return;
-    };
+    await next();
+    return;
+  };
 }

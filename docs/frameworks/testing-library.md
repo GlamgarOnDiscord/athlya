@@ -1,16 +1,16 @@
 # Testing Library — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **@testing-library/react** | ^16.1.0 (current) |
-| **@testing-library/jest-dom** | ^6.6.3 (current) |
-| **@testing-library/user-event** | Not installed |
-| **jsdom** | ^26.0.0 (current) |
-| **Scope** | apps/web only |
+|                                 | Value             |
+| ------------------------------- | ----------------- |
+| **@testing-library/react**      | ^16.1.0 (current) |
+| **@testing-library/jest-dom**   | ^6.6.3 (current)  |
+| **@testing-library/user-event** | Not installed     |
+| **jsdom**                       | ^26.0.0 (current) |
+| **Scope**                       | apps/web only     |
 
 ---
 
@@ -52,6 +52,7 @@ pnpm add -D @testing-library/user-event --filter @athlya/web
 ## Best Practices (Applied Correctly)
 
 The project follows Testing Library's query priority:
+
 1. `getByRole` — accessible elements
 2. `getByLabelText` — form fields
 3. `getByText` — visible text

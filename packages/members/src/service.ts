@@ -26,10 +26,7 @@
  * (Requirement 14.6).
  */
 
-import {
-    UpdateProfileRequestSchema,
-    type UpdateProfileRequest,
-} from '@athlya/shared/schemas/api';
+import { UpdateProfileRequestSchema, type UpdateProfileRequest } from '@athlya/shared/schemas/api';
 
 import type { Consents } from '@athlya/shared/schemas';
 
@@ -55,14 +52,14 @@ export type Role = 'member' | 'coach' | 'admin';
  * types from `@athlya/shared/ids` can re-brand at the API boundary.
  */
 export interface MemberProfile {
-    id: string;
-    studioId: string;
-    email: string;
-    displayName: string;
-    avatarUrl: string | null;
-    role: Role;
-    consents: Consents;
-    createdAt: string;
+  id: string;
+  studioId: string;
+  email: string;
+  displayName: string;
+  avatarUrl: string | null;
+  role: Role;
+  consents: Consents;
+  createdAt: string;
 }
 
 /**
@@ -70,8 +67,8 @@ export interface MemberProfile {
  * (Requirement 3.5). `nextCursor` is `null` on the last page.
  */
 export interface MembersPage {
-    items: MemberProfile[];
-    nextCursor: string | null;
+  items: MemberProfile[];
+  nextCursor: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -91,30 +88,24 @@ export interface MembersPage {
  * so that RLS (Requirement 13) is applied.
  */
 export interface MemberRepo {
-    /** Return the profile for `userId`, or `null` if unknown / soft-deleted. */
-    findProfile(userId: string): Promise<MemberProfile | null>;
+  /** Return the profile for `userId`, or `null` if unknown / soft-deleted. */
+  findProfile(userId: string): Promise<MemberProfile | null>;
 
-    /**
-     * Apply the whitelisted `patch` to the profile for `userId` and
-     * return the updated view. The caller has already validated `patch`
-     * through {@link UpdateProfileRequestSchema}; the repo must simply
-     * persist the supplied fields.
-     */
-    updateProfile(
-        userId: string,
-        patch: UpdateProfileRequest,
-    ): Promise<MemberProfile>;
+  /**
+   * Apply the whitelisted `patch` to the profile for `userId` and
+   * return the updated view. The caller has already validated `patch`
+   * through {@link UpdateProfileRequestSchema}; the repo must simply
+   * persist the supplied fields.
+   */
+  updateProfile(userId: string, patch: UpdateProfileRequest): Promise<MemberProfile>;
 
-    /**
-     * Return one page of the member list for the given studio. `cursor`
-     * is opaque to the service layer — the repo owns its format. The
-     * repo is responsible for enforcing the studio scope (the service
-     * only performs the role gate).
-     */
-    listByStudio(
-        studioId: string,
-        opts: { cursor?: string; limit: number },
-    ): Promise<MembersPage>;
+  /**
+   * Return one page of the member list for the given studio. `cursor`
+   * is opaque to the service layer — the repo owns its format. The
+   * repo is responsible for enforcing the studio scope (the service
+   * only performs the role gate).
+   */
+  listByStudio(studioId: string, opts: { cursor?: string; limit: number }): Promise<MembersPage>;
 }
 
 /**
@@ -125,9 +116,9 @@ export interface MemberRepo {
  * keep the service signature stable.
  */
 export interface MembersServiceDeps {
-    repo: MemberRepo;
-    /** Defaults to `Date.now`. Supplied explicitly in tests. */
-    now?: () => number;
+  repo: MemberRepo;
+  /** Defaults to `Date.now`. Supplied explicitly in tests. */
+  now?: () => number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -142,12 +133,12 @@ export interface MembersServiceDeps {
  * domain surfaced the Zod failure.
  */
 export interface MembersValidationIssue {
-    /** Dotted path to the offending field, e.g. `displayName`. */
-    readonly path: string;
-    /** Zod issue code (`invalid_type`, `too_small`, `too_big`, …). */
-    readonly code: string;
-    /** Human-readable message from the schema. */
-    readonly message: string;
+  /** Dotted path to the offending field, e.g. `displayName`. */
+  readonly path: string;
+  /** Zod issue code (`invalid_type`, `too_small`, `too_big`, …). */
+  readonly code: string;
+  /** Human-readable message from the schema. */
+  readonly message: string;
 }
 
 /**
@@ -164,19 +155,19 @@ export type MembersErrorCode = 'not_found' | 'validation_failed' | 'forbidden';
  * normalised Zod issue list.
  */
 export class MembersError extends Error {
-    public override readonly name = 'MembersError';
-    public readonly code: MembersErrorCode;
-    public readonly issues: ReadonlyArray<MembersValidationIssue> | undefined;
+  public override readonly name = 'MembersError';
+  public readonly code: MembersErrorCode;
+  public readonly issues: ReadonlyArray<MembersValidationIssue> | undefined;
 
-    public constructor(
-        code: MembersErrorCode,
-        message?: string,
-        issues?: ReadonlyArray<MembersValidationIssue>,
-    ) {
-        super(message ?? code);
-        this.code = code;
-        this.issues = issues;
-    }
+  public constructor(
+    code: MembersErrorCode,
+    message?: string,
+    issues?: ReadonlyArray<MembersValidationIssue>,
+  ) {
+    super(message ?? code);
+    this.code = code;
+    this.issues = issues;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -198,13 +189,13 @@ const MIN_LIST_LIMIT = 1;
  * clamping so float noise from a URL query parser can't sneak past.
  */
 function clampLimit(raw: number | undefined): number {
-    if (raw === undefined || !Number.isFinite(raw)) {
-        return DEFAULT_LIST_LIMIT;
-    }
-    const asInt = Math.trunc(raw);
-    if (asInt < MIN_LIST_LIMIT) return MIN_LIST_LIMIT;
-    if (asInt > MAX_LIST_LIMIT) return MAX_LIST_LIMIT;
-    return asInt;
+  if (raw === undefined || !Number.isFinite(raw)) {
+    return DEFAULT_LIST_LIMIT;
+  }
+  const asInt = Math.trunc(raw);
+  if (asInt < MIN_LIST_LIMIT) return MIN_LIST_LIMIT;
+  if (asInt > MAX_LIST_LIMIT) return MAX_LIST_LIMIT;
+  return asInt;
 }
 
 /* ------------------------------------------------------------------ */
@@ -221,15 +212,12 @@ function clampLimit(raw: number | undefined): number {
  *
  * Related requirements: 3.1.
  */
-export async function getProfile(
-    userId: string,
-    deps: MembersServiceDeps,
-): Promise<MemberProfile> {
-    const profile = await deps.repo.findProfile(userId);
-    if (profile === null) {
-        throw new MembersError('not_found', `profile not found: ${userId}`);
-    }
-    return profile;
+export async function getProfile(userId: string, deps: MembersServiceDeps): Promise<MemberProfile> {
+  const profile = await deps.repo.findProfile(userId);
+  if (profile === null) {
+    throw new MembersError('not_found', `profile not found: ${userId}`);
+  }
+  return profile;
 }
 
 /* ------------------------------------------------------------------ */
@@ -258,28 +246,26 @@ export async function getProfile(
  * that to HTTP 422 with an `application/problem+json` body.
  */
 export async function updateProfile(
-    userId: string,
-    patch: unknown,
-    deps: MembersServiceDeps,
+  userId: string,
+  patch: unknown,
+  deps: MembersServiceDeps,
 ): Promise<MemberProfile> {
-    const parsed = UpdateProfileRequestSchema.safeParse(patch);
-    if (!parsed.success) {
-        const issues: MembersValidationIssue[] = parsed.error.issues.map(
-            (issue) => ({
-                path: issue.path.map(String).join('.'),
-                code: issue.code,
-                message: issue.message,
-            }),
-        );
-        throw new MembersError(
-            'validation_failed',
-            `invalid profile patch: ${issues
-                .map((i) => `${i.path || '<root>'} ${i.message}`)
-                .join('; ')}`,
-            issues,
-        );
-    }
-    return deps.repo.updateProfile(userId, parsed.data);
+  const parsed = UpdateProfileRequestSchema.safeParse(patch);
+  if (!parsed.success) {
+    const issues: MembersValidationIssue[] = parsed.error.issues.map((issue) => ({
+      path: issue.path.map(String).join('.'),
+      code: issue.code,
+      message: issue.message,
+    }));
+    throw new MembersError(
+      'validation_failed',
+      `invalid profile patch: ${issues
+        .map((i) => `${i.path || '<root>'} ${i.message}`)
+        .join('; ')}`,
+      issues,
+    );
+  }
+  return deps.repo.updateProfile(userId, parsed.data);
 }
 
 /* ------------------------------------------------------------------ */
@@ -288,10 +274,10 @@ export async function updateProfile(
 
 /** Options accepted by {@link listMembersByStudio}. */
 export interface ListMembersOptions {
-    /** Opaque pagination cursor returned by a previous page. */
-    cursor?: string;
-    /** Desired page size; clamped to `[1, 100]`, defaults to 20. */
-    limit?: number;
+  /** Opaque pagination cursor returned by a previous page. */
+  cursor?: string;
+  /** Desired page size; clamped to `[1, 100]`, defaults to 20. */
+  limit?: number;
 }
 
 /**
@@ -305,19 +291,16 @@ export interface ListMembersOptions {
  * ultimate guarantee (Requirement 13) but defense in depth is cheap.
  */
 export async function listMembersByStudio(
-    studioId: string,
-    requesterRole: Role,
-    opts: ListMembersOptions,
-    deps: MembersServiceDeps,
+  studioId: string,
+  requesterRole: Role,
+  opts: ListMembersOptions,
+  deps: MembersServiceDeps,
 ): Promise<MembersPage> {
-    if (requesterRole !== 'admin' && requesterRole !== 'coach') {
-        throw new MembersError(
-            'forbidden',
-            `role '${requesterRole}' cannot list studio members`,
-        );
-    }
-    const limit = clampLimit(opts.limit);
-    const repoOpts: { cursor?: string; limit: number } =
-        opts.cursor === undefined ? { limit } : { cursor: opts.cursor, limit };
-    return deps.repo.listByStudio(studioId, repoOpts);
+  if (requesterRole !== 'admin' && requesterRole !== 'coach') {
+    throw new MembersError('forbidden', `role '${requesterRole}' cannot list studio members`);
+  }
+  const limit = clampLimit(opts.limit);
+  const repoOpts: { cursor?: string; limit: number } =
+    opts.cursor === undefined ? { limit } : { cursor: opts.cursor, limit };
+  return deps.repo.listByStudio(studioId, repoOpts);
 }

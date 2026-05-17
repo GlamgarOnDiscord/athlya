@@ -49,39 +49,39 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 import './globals.css';
-import { Geist } from "next/font/google";
+import { Geist } from 'next/font/google';
 
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 
 export const metadata: Metadata = {
+  title: 'Athlya',
+  description: 'Plateforme fitness open-source, multi-tenant, RGPD-first.',
+  openGraph: {
     title: 'Athlya',
     description: 'Plateforme fitness open-source, multi-tenant, RGPD-first.',
-    openGraph: {
-        title: 'Athlya',
-        description: 'Plateforme fitness open-source, multi-tenant, RGPD-first.',
-        type: 'website',
-        locale: 'fr_FR',
-    },
+    type: 'website',
+    locale: 'fr_FR',
+  },
 };
 
 export default async function RootLayout({
-    children,
+  children,
 }: {
-    readonly children: ReactNode;
+  readonly children: ReactNode;
 }): Promise<ReactNode> {
-    const locale = await getLocale();
+  const locale = await getLocale();
 
-    return (
-        <html lang={locale} suppressHydrationWarning className={cn("font-sans", geist.variable)}>
-            <body>
-                <LocaleProvider locale={locale}>
-                    <AuthProvider>
-                        <AppNav />
-                        {children}
-                        <Toaster richColors position="top-right" />
-                        {/* Sprint-7 SP7.1 (Vague 35) — finalises
+  return (
+    <html lang={locale} suppressHydrationWarning className={cn('font-sans', geist.variable)}>
+      <body>
+        <LocaleProvider locale={locale}>
+          <AuthProvider>
+            <AppNav />
+            {children}
+            <Toaster richColors position="top-right" />
+            {/* Sprint-7 SP7.1 (Vague 35) — finalises
                             S5-009. The banner self-renders only on
                             first visit / after the 13-month CNIL
                             window elapsed (see
@@ -94,12 +94,12 @@ export default async function RootLayout({
                             Sentry browser / PostHog land, the
                             consent gate is already wired and the
                             ePrivacy posture stays compliant. */}
-                        <CookieBanner />
-                    </AuthProvider>
-                </LocaleProvider>
-            </body>
-        </html>
-    );
+            <CookieBanner />
+          </AuthProvider>
+        </LocaleProvider>
+      </body>
+    </html>
+  );
 }
 
 // Expose the locale type so downstream tooling / tests can reuse the

@@ -54,29 +54,29 @@ export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
 /** Optional overrides accepted by {@link negotiateLocale}. */
 export interface NegotiateLocaleOptions {
-    /**
-     * Override the supported locale list. Defaults to
-     * {@link SUPPORTED_LOCALES}. Useful for tests and for downstream
-     * services that ship a different bundle set.
-     */
-    supported?: readonly string[];
+  /**
+   * Override the supported locale list. Defaults to
+   * {@link SUPPORTED_LOCALES}. Useful for tests and for downstream
+   * services that ship a different bundle set.
+   */
+  supported?: readonly string[];
 
-    /**
-     * Override the fallback locale used when the header is absent,
-     * malformed or lists no supported tag. Defaults to
-     * {@link DEFAULT_LOCALE}.
-     */
-    default?: Locale;
+  /**
+   * Override the fallback locale used when the header is absent,
+   * malformed or lists no supported tag. Defaults to
+   * {@link DEFAULT_LOCALE}.
+   */
+  default?: Locale;
 }
 
 /** Internal representation of one parsed Accept-Language entry. */
 interface ParsedEntry {
-    /** Lower-cased language tag, e.g. `'fr'`, `'en-us'`. */
-    tag: string;
-    /** Quality value in the closed interval [0, 1]. Defaults to 1. */
-    q: number;
-    /** Source position — used as a stable tie-breaker on equal `q`. */
-    order: number;
+  /** Lower-cased language tag, e.g. `'fr'`, `'en-us'`. */
+  tag: string;
+  /** Quality value in the closed interval [0, 1]. Defaults to 1. */
+  q: number;
+  /** Source position — used as a stable tie-breaker on equal `q`. */
+  order: number;
 }
 
 /**
@@ -85,51 +85,51 @@ interface ParsedEntry {
  * cannot be read are silently dropped. Never throws.
  */
 function parseAcceptLanguage(header: string): ParsedEntry[] {
-    const out: ParsedEntry[] = [];
-    const entries = header.split(',');
+  const out: ParsedEntry[] = [];
+  const entries = header.split(',');
 
-    for (let i = 0; i < entries.length; i++) {
-        const rawEntry = entries[i];
-        if (rawEntry === undefined) continue;
-        const entry = rawEntry.trim();
-        if (entry === '') continue;
+  for (let i = 0; i < entries.length; i++) {
+    const rawEntry = entries[i];
+    if (rawEntry === undefined) continue;
+    const entry = rawEntry.trim();
+    if (entry === '') continue;
 
-        const parts = entry.split(';');
-        const firstPart = parts[0];
-        if (firstPart === undefined) continue;
-        const tag = firstPart.trim().toLowerCase();
-        if (tag === '' || tag === '*') continue;
+    const parts = entry.split(';');
+    const firstPart = parts[0];
+    if (firstPart === undefined) continue;
+    const tag = firstPart.trim().toLowerCase();
+    if (tag === '' || tag === '*') continue;
 
-        // Default q=1 per RFC 7231 §5.3.1. A malformed q= value
-        // (e.g. `q=abc`) is treated leniently: we keep the default
-        // rather than discarding the entry, so a single typo does not
-        // silently drop an otherwise-acceptable language preference.
-        let q = 1;
-        for (let j = 1; j < parts.length; j++) {
-            const rawParam = parts[j];
-            if (rawParam === undefined) continue;
-            const param = rawParam.trim();
-            // Parameter keys are case-insensitive per the grammar, so
-            // `q=` and `Q=` both mark a quality value.
-            if (param.length < 2) continue;
-            const keyChar = param.charAt(0);
-            if ((keyChar !== 'q' && keyChar !== 'Q') || param.charAt(1) !== '=') {
-                continue;
-            }
-            const qStr = param.slice(2).trim();
-            const parsedQ = Number.parseFloat(qStr);
-            if (Number.isFinite(parsedQ)) {
-                // Clamp to the valid [0, 1] interval; out-of-range
-                // values are a spec violation but we keep the intent
-                // (positive → acceptable, non-positive → rejected).
-                q = Math.min(1, Math.max(0, parsedQ));
-            }
-        }
-
-        out.push({ tag, q, order: i });
+    // Default q=1 per RFC 7231 §5.3.1. A malformed q= value
+    // (e.g. `q=abc`) is treated leniently: we keep the default
+    // rather than discarding the entry, so a single typo does not
+    // silently drop an otherwise-acceptable language preference.
+    let q = 1;
+    for (let j = 1; j < parts.length; j++) {
+      const rawParam = parts[j];
+      if (rawParam === undefined) continue;
+      const param = rawParam.trim();
+      // Parameter keys are case-insensitive per the grammar, so
+      // `q=` and `Q=` both mark a quality value.
+      if (param.length < 2) continue;
+      const keyChar = param.charAt(0);
+      if ((keyChar !== 'q' && keyChar !== 'Q') || param.charAt(1) !== '=') {
+        continue;
+      }
+      const qStr = param.slice(2).trim();
+      const parsedQ = Number.parseFloat(qStr);
+      if (Number.isFinite(parsedQ)) {
+        // Clamp to the valid [0, 1] interval; out-of-range
+        // values are a spec violation but we keep the intent
+        // (positive → acceptable, non-positive → rejected).
+        q = Math.min(1, Math.max(0, parsedQ));
+      }
     }
 
-    return out;
+    out.push({ tag, q, order: i });
+  }
+
+  return out;
 }
 
 /**
@@ -152,61 +152,61 @@ function parseAcceptLanguage(header: string): ParsedEntry[] {
  * the caller is responsible for narrowing the result.
  */
 export function negotiateLocale(
-    header: string | null | undefined,
-    options?: NegotiateLocaleOptions,
+  header: string | null | undefined,
+  options?: NegotiateLocaleOptions,
 ): Locale {
-    const supported = options?.supported ?? SUPPORTED_LOCALES;
-    const fallback = options?.default ?? DEFAULT_LOCALE;
+  const supported = options?.supported ?? SUPPORTED_LOCALES;
+  const fallback = options?.default ?? DEFAULT_LOCALE;
 
-    if (header === null || header === undefined) return fallback;
-    const trimmed = header.trim();
-    if (trimmed === '' || trimmed === '*') return fallback;
+  if (header === null || header === undefined) return fallback;
+  const trimmed = header.trim();
+  if (trimmed === '' || trimmed === '*') return fallback;
 
-    const parsed = parseAcceptLanguage(trimmed);
-    if (parsed.length === 0) return fallback;
+  const parsed = parseAcceptLanguage(trimmed);
+  if (parsed.length === 0) return fallback;
 
-    // Sort by q descending; ties broken by original source order
-    // (stable). `Array.prototype.sort` is stable since ES2019, so the
-    // explicit `order` comparison is mostly defensive — it keeps the
-    // intent legible and makes the tie-breaker independent of the
-    // engine's sort implementation.
-    parsed.sort((a, b) => {
-        if (a.q !== b.q) return b.q - a.q;
-        return a.order - b.order;
-    });
+  // Sort by q descending; ties broken by original source order
+  // (stable). `Array.prototype.sort` is stable since ES2019, so the
+  // explicit `order` comparison is mostly defensive — it keeps the
+  // intent legible and makes the tie-breaker independent of the
+  // engine's sort implementation.
+  parsed.sort((a, b) => {
+    if (a.q !== b.q) return b.q - a.q;
+    return a.order - b.order;
+  });
 
-    // Pre-lower the supported list once so the hot loop below does
-    // one `indexOf` per candidate instead of one per character.
-    const supportedLower = supported.map((s) => s.toLowerCase());
+  // Pre-lower the supported list once so the hot loop below does
+  // one `indexOf` per candidate instead of one per character.
+  const supportedLower = supported.map((s) => s.toLowerCase());
 
-    for (const { tag, q } of parsed) {
-        // `q=0` is the RFC-defined way to say "not acceptable" — we
-        // must skip such entries even if the tag is in the supported
-        // list.
-        if (q <= 0) continue;
+  for (const { tag, q } of parsed) {
+    // `q=0` is the RFC-defined way to say "not acceptable" — we
+    // must skip such entries even if the tag is in the supported
+    // list.
+    if (q <= 0) continue;
 
-        // Exact match wins over prefix match.
-        const exactIndex = supportedLower.indexOf(tag);
-        if (exactIndex >= 0) {
-            const hit = supported[exactIndex];
-            if (hit !== undefined) return hit as Locale;
-        }
-
-        // Prefix match: strip any region / script / extension subtag
-        // and retry. `fr-CA`, `fr-Latn-CA`, `zh-Hant-TW` all collapse
-        // to their primary language subtag here.
-        const dashIndex = tag.indexOf('-');
-        if (dashIndex > 0) {
-            const primary = tag.slice(0, dashIndex);
-            const primaryIndex = supportedLower.indexOf(primary);
-            if (primaryIndex >= 0) {
-                const hit = supported[primaryIndex];
-                if (hit !== undefined) return hit as Locale;
-            }
-        }
+    // Exact match wins over prefix match.
+    const exactIndex = supportedLower.indexOf(tag);
+    if (exactIndex >= 0) {
+      const hit = supported[exactIndex];
+      if (hit !== undefined) return hit as Locale;
     }
 
-    return fallback;
+    // Prefix match: strip any region / script / extension subtag
+    // and retry. `fr-CA`, `fr-Latn-CA`, `zh-Hant-TW` all collapse
+    // to their primary language subtag here.
+    const dashIndex = tag.indexOf('-');
+    if (dashIndex > 0) {
+      const primary = tag.slice(0, dashIndex);
+      const primaryIndex = supportedLower.indexOf(primary);
+      if (primaryIndex >= 0) {
+        const hit = supported[primaryIndex];
+        if (hit !== undefined) return hit as Locale;
+      }
+    }
+  }
+
+  return fallback;
 }
 
 /**
@@ -220,5 +220,5 @@ export function negotiateLocale(
  * string across modules.
  */
 export function formatProblemDetailLocale(locale: Locale): string {
-    return `Locale: ${locale}`;
+  return `Locale: ${locale}`;
 }

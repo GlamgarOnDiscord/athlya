@@ -1,54 +1,39 @@
 {
-    // Editor / IDE / typecheck project for the whole package.
-    //
-    // Scope:
-    //   - `src/` ships the runtime code.
-    //   - `src/**/__tests__/**` and `src/**/*.test.ts` are the co-located
-    //     unit tests exercised by Vitest.
-    //   - `tests/` hosts the property-based suite (task 4.3+) and its
-    //     helpers.
-    //   - `vitest.config.ts` sits at the package root.
-    //
-    // The sibling `tsconfig.build.json` excludes tests from the `build`
-    // artefact; this file intentionally includes them so ESLint's
-    // `parserOptions.projectService` can resolve every file it lints,
-    // and so `typecheck` exercises the tests too.
-    //
-    // `types` pulls in both the Node environment (for Vitest / @types/node)
-    // and Cloudflare Workers bindings (Queue, KVNamespace, …) so
-    // `packages/api/src/types.ts` typechecks its `Queue<unknown>` binding
-    // without widening `lib` to `WebWorker` globally (doing so would add
-    // browser globals like `document` that have no business in a Worker
-    // typecheck).
-    "extends": "@athlya/tsconfig/node.json",
-    "compilerOptions": {
-        "rootDir": ".",
-        "outDir": "dist",
-        "noEmit": true,
-        // `WebWorker` lib adds the Web Crypto globals (`globalThis.crypto`,
-        // `TextEncoder`, `TextDecoder`) that `@athlya/auth`'s hibp and
-        // qr modules consume via `globalThis.crypto.subtle`. Cloudflare
-        // Workers provide Web Crypto natively, so the lib matches the
-        // runtime exactly; `@types/node` alone does not declare
-        // `globalThis.crypto` with the Web Crypto shape.
-        "lib": [
-            "ES2022",
-            "WebWorker"
-        ],
-        "types": [
-            "node",
-            "@cloudflare/workers-types"
-        ]
-    },
-    "include": [
-        "src",
-        "tests",
-        "vitest.config.ts"
-    ],
-    "exclude": [
-        "node_modules",
-        "dist",
-        ".turbo",
-        "coverage"
-    ]
+  // Editor / IDE / typecheck project for the whole package.
+  //
+  // Scope:
+  //   - `src/` ships the runtime code.
+  //   - `src/**/__tests__/**` and `src/**/*.test.ts` are the co-located
+  //     unit tests exercised by Vitest.
+  //   - `tests/` hosts the property-based suite (task 4.3+) and its
+  //     helpers.
+  //   - `vitest.config.ts` sits at the package root.
+  //
+  // The sibling `tsconfig.build.json` excludes tests from the `build`
+  // artefact; this file intentionally includes them so ESLint's
+  // `parserOptions.projectService` can resolve every file it lints,
+  // and so `typecheck` exercises the tests too.
+  //
+  // `types` pulls in both the Node environment (for Vitest / @types/node)
+  // and Cloudflare Workers bindings (Queue, KVNamespace, …) so
+  // `packages/api/src/types.ts` typechecks its `Queue<unknown>` binding
+  // without widening `lib` to `WebWorker` globally (doing so would add
+  // browser globals like `document` that have no business in a Worker
+  // typecheck).
+  "extends": "@athlya/tsconfig/node.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "noEmit": true,
+    // `WebWorker` lib adds the Web Crypto globals (`globalThis.crypto`,
+    // `TextEncoder`, `TextDecoder`) that `@athlya/auth`'s hibp and
+    // qr modules consume via `globalThis.crypto.subtle`. Cloudflare
+    // Workers provide Web Crypto natively, so the lib matches the
+    // runtime exactly; `@types/node` alone does not declare
+    // `globalThis.crypto` with the Web Crypto shape.
+    "lib": ["ES2022", "WebWorker"],
+    "types": ["node", "@cloudflare/workers-types"]
+  },
+  "include": ["src", "tests", "vitest.config.ts"],
+  "exclude": ["node_modules", "dist", ".turbo", "coverage"]
 }

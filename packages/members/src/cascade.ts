@@ -69,8 +69,7 @@ export type { Clock };
 export const ANONYMIZATION_DELAY_DAYS = 30;
 
 /** Same constant expressed in milliseconds for arithmetic convenience. */
-export const ANONYMIZATION_DELAY_MS =
-    ANONYMIZATION_DELAY_DAYS * 24 * 60 * 60 * 1000;
+export const ANONYMIZATION_DELAY_MS = ANONYMIZATION_DELAY_DAYS * 24 * 60 * 60 * 1000;
 
 /* ------------------------------------------------------------------ */
 /*  Ports                                                              */
@@ -103,20 +102,20 @@ export const ANONYMIZATION_DELAY_MS =
  * pgTAP suite under `packages/db`.
  */
 export interface DeletionRepo {
-    /** Hard-delete every `reservations` row owned by `userId`. */
-    deleteReservationsForUser(userId: string): Promise<number>;
-    /** Hard-delete every `workout_sessions` row owned by `userId`. */
-    deleteWorkoutSessionsForUser(userId: string): Promise<number>;
-    /** Hard-delete every `push_tokens` row owned by `userId`. */
-    deletePushTokensForUser(userId: string): Promise<number>;
-    /** Soft-delete the users row: `deleted_at = deletedAt`. Idempotent. */
-    markUserDeleted(userId: string, deletedAt: Date): Promise<void>;
-    /**
-     * Set `actor_id = NULL` on every `audit_log` row whose
-     * `actor_id = userId`, stripping PII from `metadata` in the same
-     * statement. Returns the count of rows actually anonymised.
-     */
-    anonymizeAuditRows(userId: string): Promise<number>;
+  /** Hard-delete every `reservations` row owned by `userId`. */
+  deleteReservationsForUser(userId: string): Promise<number>;
+  /** Hard-delete every `workout_sessions` row owned by `userId`. */
+  deleteWorkoutSessionsForUser(userId: string): Promise<number>;
+  /** Hard-delete every `push_tokens` row owned by `userId`. */
+  deletePushTokensForUser(userId: string): Promise<number>;
+  /** Soft-delete the users row: `deleted_at = deletedAt`. Idempotent. */
+  markUserDeleted(userId: string, deletedAt: Date): Promise<void>;
+  /**
+   * Set `actor_id = NULL` on every `audit_log` row whose
+   * `actor_id = userId`, stripping PII from `metadata` in the same
+   * statement. Returns the count of rows actually anonymised.
+   */
+  anonymizeAuditRows(userId: string): Promise<number>;
 }
 
 /**
@@ -128,12 +127,12 @@ export interface DeletionRepo {
  * must NOT abort the SQL cascade.
  */
 export interface AvatarStore {
-    /**
-     * Delete the avatar binary for `userId` from R2. Implementations
-     * SHOULD treat "object does not exist" as success (idempotent
-     * best-effort delete).
-     */
-    deleteAvatar(userId: string): Promise<void>;
+  /**
+   * Delete the avatar binary for `userId` from R2. Implementations
+   * SHOULD treat "object does not exist" as success (idempotent
+   * best-effort delete).
+   */
+  deleteAvatar(userId: string): Promise<void>;
 }
 
 /**
@@ -151,13 +150,13 @@ export interface AvatarStore {
  * by the consumer dispatcher).
  */
 export interface Scheduler {
-    /**
-     * Enqueue an anonymisation job for `userId` to run at `dueAt`.
-     * Idempotency is the scheduler's responsibility — publishers
-     * may retry after a transient failure without creating a
-     * duplicate job.
-     */
-    scheduleAnonymization(userId: string, dueAt: Date): Promise<void>;
+  /**
+   * Enqueue an anonymisation job for `userId` to run at `dueAt`.
+   * Idempotency is the scheduler's responsibility — publishers
+   * may retry after a transient failure without creating a
+   * duplicate job.
+   */
+  scheduleAnonymization(userId: string, dueAt: Date): Promise<void>;
 }
 
 /** Abstract clock so tests can freeze `now()`. Re-exported from
@@ -171,8 +170,8 @@ export interface Scheduler {
  * be shared across the package.
  */
 export interface Logger {
-    warn(msg: string, extra?: Record<string, unknown>): void;
-    error(msg: string, extra?: Record<string, unknown>): void;
+  warn(msg: string, extra?: Record<string, unknown>): void;
+  error(msg: string, extra?: Record<string, unknown>): void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -181,17 +180,17 @@ export interface Logger {
 
 /** Dependencies injected into {@link handleUserDeleted}. */
 export interface HandleUserDeletedDeps {
-    repo: DeletionRepo;
-    avatars: AvatarStore;
-    scheduler: Scheduler;
-    clock: Clock;
-    logger?: Logger;
+  repo: DeletionRepo;
+  avatars: AvatarStore;
+  scheduler: Scheduler;
+  clock: Clock;
+  logger?: Logger;
 }
 
 /** Dependencies injected into {@link anonymizeAuditLog}. */
 export interface AnonymizeAuditLogDeps {
-    repo: Pick<DeletionRepo, 'anonymizeAuditRows'>;
-    logger?: Logger;
+  repo: Pick<DeletionRepo, 'anonymizeAuditRows'>;
+  logger?: Logger;
 }
 
 /**
@@ -203,10 +202,10 @@ export interface AnonymizeAuditLogDeps {
  * phases through a single schema.
  */
 export interface CascadeCounts {
-    reservations: number;
-    sessions: number;
-    pushTokens: number;
-    auditAnonymized: number;
+  reservations: number;
+  sessions: number;
+  pushTokens: number;
+  auditAnonymized: number;
 }
 
 /**
@@ -218,16 +217,16 @@ export interface CascadeCounts {
  * it deterministically.
  */
 export type HandleUserDeletedResult = {
-    readonly kind: 'ok';
-    readonly counts: CascadeCounts;
-    readonly scheduledAnonymizationAt: string;
+  readonly kind: 'ok';
+  readonly counts: CascadeCounts;
+  readonly scheduledAnonymizationAt: string;
 };
 
 /** Discriminated result returned by {@link anonymizeAuditLog}. */
 export type AnonymizeAuditLogResult = {
-    readonly kind: 'ok';
-    readonly userId: string;
-    readonly anonymizedRows: number;
+  readonly kind: 'ok';
+  readonly userId: string;
+  readonly anonymizedRows: number;
 };
 
 /* ------------------------------------------------------------------ */
@@ -263,58 +262,55 @@ export type AnonymizeAuditLogResult = {
  * Requirements: 5.2, 5.3, 5.4.
  */
 export async function handleUserDeleted(
-    event: AuthUserDeletedEvent,
-    deps: HandleUserDeletedDeps,
+  event: AuthUserDeletedEvent,
+  deps: HandleUserDeletedDeps,
 ): Promise<HandleUserDeletedResult> {
-    const userId = event.payload.userId;
+  const userId = event.payload.userId;
 
-    // Step 1–3: cascade FK-joined rows. Order matters (see docblock).
-    const reservations = await deps.repo.deleteReservationsForUser(userId);
-    const sessions = await deps.repo.deleteWorkoutSessionsForUser(userId);
-    const pushTokens = await deps.repo.deletePushTokensForUser(userId);
+  // Step 1–3: cascade FK-joined rows. Order matters (see docblock).
+  const reservations = await deps.repo.deleteReservationsForUser(userId);
+  const sessions = await deps.repo.deleteWorkoutSessionsForUser(userId);
+  const pushTokens = await deps.repo.deletePushTokensForUser(userId);
 
-    // Step 4: stamp the tombstone on the users row. Idempotent; the
-    // Auth service normally set this already when emitting the event.
-    const now = new Date(deps.clock.now());
-    await deps.repo.markUserDeleted(userId, now);
+  // Step 4: stamp the tombstone on the users row. Idempotent; the
+  // Auth service normally set this already when emitting the event.
+  const now = new Date(deps.clock.now());
+  await deps.repo.markUserDeleted(userId, now);
 
-    // Step 5: best-effort R2 avatar purge. Transient blob-store
-    // failures must NOT block the SQL-side cascade completing —
-    // rerunning the cascade is cheap, but losing the SQL deletions
-    // because R2 hiccuped would leave the user in a half-deleted
-    // state for the next redelivery window.
-    try {
-        await deps.avatars.deleteAvatar(userId);
-    } catch (err) {
-        deps.logger?.warn('cascade: avatar purge failed; continuing', {
-            userId,
-            eventId: event.id,
-            error:
-                err instanceof Error
-                    ? { name: err.name, message: err.message }
-                    : String(err),
-        });
-    }
+  // Step 5: best-effort R2 avatar purge. Transient blob-store
+  // failures must NOT block the SQL-side cascade completing —
+  // rerunning the cascade is cheap, but losing the SQL deletions
+  // because R2 hiccuped would leave the user in a half-deleted
+  // state for the next redelivery window.
+  try {
+    await deps.avatars.deleteAvatar(userId);
+  } catch (err) {
+    deps.logger?.warn('cascade: avatar purge failed; continuing', {
+      userId,
+      eventId: event.id,
+      error: err instanceof Error ? { name: err.name, message: err.message } : String(err),
+    });
+  }
 
-    // Step 6: schedule the 30-day anonymisation job. Failures rethrow.
-    const dueAt = new Date(now.getTime() + ANONYMIZATION_DELAY_MS);
-    await deps.scheduler.scheduleAnonymization(userId, dueAt);
+  // Step 6: schedule the 30-day anonymisation job. Failures rethrow.
+  const dueAt = new Date(now.getTime() + ANONYMIZATION_DELAY_MS);
+  await deps.scheduler.scheduleAnonymization(userId, dueAt);
 
-    return {
-        kind: 'ok',
-        counts: {
-            reservations,
-            sessions,
-            pushTokens,
-            // The audit anonymisation runs 30 days from now; at
-            // cascade time no rows have been touched yet, so the
-            // field is stamped at 0. The eventual
-            // {@link AnonymizeAuditLogResult.anonymizedRows} is the
-            // count that matters for compliance reporting.
-            auditAnonymized: 0,
-        },
-        scheduledAnonymizationAt: dueAt.toISOString(),
-    };
+  return {
+    kind: 'ok',
+    counts: {
+      reservations,
+      sessions,
+      pushTokens,
+      // The audit anonymisation runs 30 days from now; at
+      // cascade time no rows have been touched yet, so the
+      // field is stamped at 0. The eventual
+      // {@link AnonymizeAuditLogResult.anonymizedRows} is the
+      // count that matters for compliance reporting.
+      auditAnonymized: 0,
+    },
+    scheduledAnonymizationAt: dueAt.toISOString(),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -343,13 +339,13 @@ export async function handleUserDeleted(
  * Requirement: 5.3.
  */
 export async function anonymizeAuditLog(
-    userId: string,
-    deps: AnonymizeAuditLogDeps,
+  userId: string,
+  deps: AnonymizeAuditLogDeps,
 ): Promise<AnonymizeAuditLogResult> {
-    const anonymizedRows = await deps.repo.anonymizeAuditRows(userId);
-    return {
-        kind: 'ok',
-        userId,
-        anonymizedRows,
-    };
+  const anonymizedRows = await deps.repo.anonymizeAuditRows(userId);
+  return {
+    kind: 'ok',
+    userId,
+    anonymizedRows,
+  };
 }

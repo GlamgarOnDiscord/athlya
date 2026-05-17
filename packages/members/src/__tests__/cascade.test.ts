@@ -21,15 +21,15 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 
 import {
-    ANONYMIZATION_DELAY_DAYS,
-    ANONYMIZATION_DELAY_MS,
-    anonymizeAuditLog,
-    handleUserDeleted,
-    type AvatarStore,
-    type Clock,
-    type DeletionRepo,
-    type Logger,
-    type Scheduler,
+  ANONYMIZATION_DELAY_DAYS,
+  ANONYMIZATION_DELAY_MS,
+  anonymizeAuditLog,
+  handleUserDeleted,
+  type AvatarStore,
+  type Clock,
+  type DeletionRepo,
+  type Logger,
+  type Scheduler,
 } from '../cascade.js';
 
 import type { AuthUserDeletedEvent } from '@athlya/shared/events';
@@ -52,15 +52,15 @@ const FROZEN_NOW = Date.parse('2026-02-01T10:00:00.000Z');
  * shape matches what the production consumer sees.
  */
 function buildEvent(): AuthUserDeletedEvent {
-    return {
-        id: EVENT_ID,
-        type: 'auth.user.deleted',
-        occurredAt: '2026-02-01T09:59:00.000Z',
-        studioId: STUDIO_ID as AuthUserDeletedEvent['studioId'],
-        payload: {
-            userId: USER_ID as AuthUserDeletedEvent['payload']['userId'],
-        },
-    };
+  return {
+    id: EVENT_ID,
+    type: 'auth.user.deleted',
+    occurredAt: '2026-02-01T09:59:00.000Z',
+    studioId: STUDIO_ID as AuthUserDeletedEvent['studioId'],
+    payload: {
+      userId: USER_ID as AuthUserDeletedEvent['payload']['userId'],
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -73,75 +73,69 @@ function buildEvent(): AuthUserDeletedEvent {
  * the behaviour under test.
  */
 function buildRepo(): {
-    repo: DeletionRepo;
-    deleteReservationsForUser: Mock<DeletionRepo['deleteReservationsForUser']>;
-    deleteWorkoutSessionsForUser: Mock<
-        DeletionRepo['deleteWorkoutSessionsForUser']
-    >;
-    deletePushTokensForUser: Mock<DeletionRepo['deletePushTokensForUser']>;
-    markUserDeleted: Mock<DeletionRepo['markUserDeleted']>;
-    anonymizeAuditRows: Mock<DeletionRepo['anonymizeAuditRows']>;
+  repo: DeletionRepo;
+  deleteReservationsForUser: Mock<DeletionRepo['deleteReservationsForUser']>;
+  deleteWorkoutSessionsForUser: Mock<DeletionRepo['deleteWorkoutSessionsForUser']>;
+  deletePushTokensForUser: Mock<DeletionRepo['deletePushTokensForUser']>;
+  markUserDeleted: Mock<DeletionRepo['markUserDeleted']>;
+  anonymizeAuditRows: Mock<DeletionRepo['anonymizeAuditRows']>;
 } {
-    const deleteReservationsForUser =
-        vi.fn<DeletionRepo['deleteReservationsForUser']>();
-    const deleteWorkoutSessionsForUser =
-        vi.fn<DeletionRepo['deleteWorkoutSessionsForUser']>();
-    const deletePushTokensForUser =
-        vi.fn<DeletionRepo['deletePushTokensForUser']>();
-    const markUserDeleted = vi.fn<DeletionRepo['markUserDeleted']>();
-    const anonymizeAuditRows = vi.fn<DeletionRepo['anonymizeAuditRows']>();
+  const deleteReservationsForUser = vi.fn<DeletionRepo['deleteReservationsForUser']>();
+  const deleteWorkoutSessionsForUser = vi.fn<DeletionRepo['deleteWorkoutSessionsForUser']>();
+  const deletePushTokensForUser = vi.fn<DeletionRepo['deletePushTokensForUser']>();
+  const markUserDeleted = vi.fn<DeletionRepo['markUserDeleted']>();
+  const anonymizeAuditRows = vi.fn<DeletionRepo['anonymizeAuditRows']>();
 
-    const repo: DeletionRepo = {
-        deleteReservationsForUser,
-        deleteWorkoutSessionsForUser,
-        deletePushTokensForUser,
-        markUserDeleted,
-        anonymizeAuditRows,
-    };
+  const repo: DeletionRepo = {
+    deleteReservationsForUser,
+    deleteWorkoutSessionsForUser,
+    deletePushTokensForUser,
+    markUserDeleted,
+    anonymizeAuditRows,
+  };
 
-    return {
-        repo,
-        deleteReservationsForUser,
-        deleteWorkoutSessionsForUser,
-        deletePushTokensForUser,
-        markUserDeleted,
-        anonymizeAuditRows,
-    };
+  return {
+    repo,
+    deleteReservationsForUser,
+    deleteWorkoutSessionsForUser,
+    deletePushTokensForUser,
+    markUserDeleted,
+    anonymizeAuditRows,
+  };
 }
 
 function buildAvatars(): {
-    avatars: AvatarStore;
-    deleteAvatar: Mock<AvatarStore['deleteAvatar']>;
+  avatars: AvatarStore;
+  deleteAvatar: Mock<AvatarStore['deleteAvatar']>;
 } {
-    const deleteAvatar = vi.fn<AvatarStore['deleteAvatar']>();
-    const avatars: AvatarStore = { deleteAvatar };
-    return { avatars, deleteAvatar };
+  const deleteAvatar = vi.fn<AvatarStore['deleteAvatar']>();
+  const avatars: AvatarStore = { deleteAvatar };
+  return { avatars, deleteAvatar };
 }
 
 function buildScheduler(): {
-    scheduler: Scheduler;
-    scheduleAnonymization: Mock<Scheduler['scheduleAnonymization']>;
+  scheduler: Scheduler;
+  scheduleAnonymization: Mock<Scheduler['scheduleAnonymization']>;
 } {
-    const scheduleAnonymization =
-        vi.fn<Scheduler['scheduleAnonymization']>();
-    const scheduler: Scheduler = { scheduleAnonymization };
-    return { scheduler, scheduleAnonymization };
+  const scheduleAnonymization = vi.fn<Scheduler['scheduleAnonymization']>();
+  const scheduler: Scheduler = { scheduleAnonymization };
+  return { scheduler, scheduleAnonymization };
 }
 
 /** Clock that always returns the same frozen instant. */
 function buildClock(now: number = FROZEN_NOW): Clock {
-    return { now: () => now };
+  return { now: () => now };
 }
 
 function buildLogger(): {
-    logger: Logger;
-    warn: Mock<Logger['warn']>;
-    error: Mock<Logger['error']>;
+  logger: Logger;
+  warn: Mock<Logger['warn']>;
+  error: Mock<Logger['error']>;
 } {
-    const warn = vi.fn<Logger['warn']>();
-    const error = vi.fn<Logger['error']>();
-    const logger: Logger = { warn, error };
-    return { logger, warn, error };
+  const warn = vi.fn<Logger['warn']>();
+  const error = vi.fn<Logger['error']>();
+  const logger: Logger = { warn, error };
+  return { logger, warn, error };
 }
 
 /* ------------------------------------------------------------------ */
@@ -149,10 +143,10 @@ function buildLogger(): {
 /* ------------------------------------------------------------------ */
 
 describe('cascade constants', () => {
-    it('computes the 30-day anonymisation delay in milliseconds (Requirement 5.3)', () => {
-        expect(ANONYMIZATION_DELAY_DAYS).toBe(30);
-        expect(ANONYMIZATION_DELAY_MS).toBe(30 * 24 * 60 * 60 * 1000);
-    });
+  it('computes the 30-day anonymisation delay in milliseconds (Requirement 5.3)', () => {
+    expect(ANONYMIZATION_DELAY_DAYS).toBe(30);
+    expect(ANONYMIZATION_DELAY_MS).toBe(30 * 24 * 60 * 60 * 1000);
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -160,132 +154,121 @@ describe('cascade constants', () => {
 /* ------------------------------------------------------------------ */
 
 describe('handleUserDeleted — happy path', () => {
-    it('cascade-deletes every table, purges the avatar, marks the user deleted, schedules anonymisation 30 days out, and returns counts', async () => {
-        const {
-            repo,
-            deleteReservationsForUser,
-            deleteWorkoutSessionsForUser,
-            deletePushTokensForUser,
-            markUserDeleted,
-        } = buildRepo();
-        const { avatars, deleteAvatar } = buildAvatars();
-        const { scheduler, scheduleAnonymization } = buildScheduler();
-        const { logger, warn, error } = buildLogger();
+  it('cascade-deletes every table, purges the avatar, marks the user deleted, schedules anonymisation 30 days out, and returns counts', async () => {
+    const {
+      repo,
+      deleteReservationsForUser,
+      deleteWorkoutSessionsForUser,
+      deletePushTokensForUser,
+      markUserDeleted,
+    } = buildRepo();
+    const { avatars, deleteAvatar } = buildAvatars();
+    const { scheduler, scheduleAnonymization } = buildScheduler();
+    const { logger, warn, error } = buildLogger();
 
-        deleteReservationsForUser.mockResolvedValueOnce(3);
-        deleteWorkoutSessionsForUser.mockResolvedValueOnce(7);
-        deletePushTokensForUser.mockResolvedValueOnce(2);
-        markUserDeleted.mockResolvedValueOnce(undefined);
-        deleteAvatar.mockResolvedValueOnce(undefined);
-        scheduleAnonymization.mockResolvedValueOnce(undefined);
+    deleteReservationsForUser.mockResolvedValueOnce(3);
+    deleteWorkoutSessionsForUser.mockResolvedValueOnce(7);
+    deletePushTokensForUser.mockResolvedValueOnce(2);
+    markUserDeleted.mockResolvedValueOnce(undefined);
+    deleteAvatar.mockResolvedValueOnce(undefined);
+    scheduleAnonymization.mockResolvedValueOnce(undefined);
 
-        const result = await handleUserDeleted(buildEvent(), {
-            repo,
-            avatars,
-            scheduler,
-            clock: buildClock(FROZEN_NOW),
-            logger,
-        });
-
-        // Result — counts match what each repo method reported, and
-        // the scheduled timestamp is exactly FROZEN_NOW + 30 days.
-        const expectedDueAt = new Date(
-            FROZEN_NOW + ANONYMIZATION_DELAY_MS,
-        ).toISOString();
-        expect(result).toEqual({
-            kind: 'ok',
-            counts: {
-                reservations: 3,
-                sessions: 7,
-                pushTokens: 2,
-                auditAnonymized: 0,
-            },
-            scheduledAnonymizationAt: expectedDueAt,
-        });
-
-        // Every deletion repo method is called once with the userId.
-        expect(deleteReservationsForUser).toHaveBeenCalledExactlyOnceWith(
-            USER_ID,
-        );
-        expect(deleteWorkoutSessionsForUser).toHaveBeenCalledExactlyOnceWith(
-            USER_ID,
-        );
-        expect(deletePushTokensForUser).toHaveBeenCalledExactlyOnceWith(
-            USER_ID,
-        );
-
-        // markUserDeleted called exactly once with the frozen clock.
-        expect(markUserDeleted).toHaveBeenCalledTimes(1);
-        const [markArgs0, markArgs1] = markUserDeleted.mock.calls[0]!;
-        expect(markArgs0).toBe(USER_ID);
-        expect(markArgs1).toBeInstanceOf(Date);
-        expect(markArgs1.toISOString()).toBe(
-            new Date(FROZEN_NOW).toISOString(),
-        );
-
-        // Avatar purge was attempted exactly once.
-        expect(deleteAvatar).toHaveBeenCalledExactlyOnceWith(USER_ID);
-
-        // Scheduler called with userId + the absolute dueAt instant.
-        expect(scheduleAnonymization).toHaveBeenCalledTimes(1);
-        const [scheduleArgs0, scheduleArgs1] =
-            scheduleAnonymization.mock.calls[0]!;
-        expect(scheduleArgs0).toBe(USER_ID);
-        expect(scheduleArgs1).toBeInstanceOf(Date);
-        expect(scheduleArgs1.toISOString()).toBe(expectedDueAt);
-
-        // Nothing logged on the happy path.
-        expect(warn).not.toHaveBeenCalled();
-        expect(error).not.toHaveBeenCalled();
+    const result = await handleUserDeleted(buildEvent(), {
+      repo,
+      avatars,
+      scheduler,
+      clock: buildClock(FROZEN_NOW),
+      logger,
     });
 
-    it('calls each cascade step in the documented order: reservations → sessions → push tokens → markUserDeleted → avatar → scheduler', async () => {
-        const { repo, ...mocks } = buildRepo();
-        const { avatars, deleteAvatar } = buildAvatars();
-        const { scheduler, scheduleAnonymization } = buildScheduler();
-
-        const order: string[] = [];
-        mocks.deleteReservationsForUser.mockImplementationOnce(() => {
-            order.push('reservations');
-            return Promise.resolve(0);
-        });
-        mocks.deleteWorkoutSessionsForUser.mockImplementationOnce(() => {
-            order.push('sessions');
-            return Promise.resolve(0);
-        });
-        mocks.deletePushTokensForUser.mockImplementationOnce(() => {
-            order.push('pushTokens');
-            return Promise.resolve(0);
-        });
-        mocks.markUserDeleted.mockImplementationOnce(() => {
-            order.push('markUserDeleted');
-            return Promise.resolve();
-        });
-        deleteAvatar.mockImplementationOnce(() => {
-            order.push('avatar');
-            return Promise.resolve();
-        });
-        scheduleAnonymization.mockImplementationOnce(() => {
-            order.push('scheduler');
-            return Promise.resolve();
-        });
-
-        await handleUserDeleted(buildEvent(), {
-            repo,
-            avatars,
-            scheduler,
-            clock: buildClock(),
-        });
-
-        expect(order).toEqual([
-            'reservations',
-            'sessions',
-            'pushTokens',
-            'markUserDeleted',
-            'avatar',
-            'scheduler',
-        ]);
+    // Result — counts match what each repo method reported, and
+    // the scheduled timestamp is exactly FROZEN_NOW + 30 days.
+    const expectedDueAt = new Date(FROZEN_NOW + ANONYMIZATION_DELAY_MS).toISOString();
+    expect(result).toEqual({
+      kind: 'ok',
+      counts: {
+        reservations: 3,
+        sessions: 7,
+        pushTokens: 2,
+        auditAnonymized: 0,
+      },
+      scheduledAnonymizationAt: expectedDueAt,
     });
+
+    // Every deletion repo method is called once with the userId.
+    expect(deleteReservationsForUser).toHaveBeenCalledExactlyOnceWith(USER_ID);
+    expect(deleteWorkoutSessionsForUser).toHaveBeenCalledExactlyOnceWith(USER_ID);
+    expect(deletePushTokensForUser).toHaveBeenCalledExactlyOnceWith(USER_ID);
+
+    // markUserDeleted called exactly once with the frozen clock.
+    expect(markUserDeleted).toHaveBeenCalledTimes(1);
+    const [markArgs0, markArgs1] = markUserDeleted.mock.calls[0]!;
+    expect(markArgs0).toBe(USER_ID);
+    expect(markArgs1).toBeInstanceOf(Date);
+    expect(markArgs1.toISOString()).toBe(new Date(FROZEN_NOW).toISOString());
+
+    // Avatar purge was attempted exactly once.
+    expect(deleteAvatar).toHaveBeenCalledExactlyOnceWith(USER_ID);
+
+    // Scheduler called with userId + the absolute dueAt instant.
+    expect(scheduleAnonymization).toHaveBeenCalledTimes(1);
+    const [scheduleArgs0, scheduleArgs1] = scheduleAnonymization.mock.calls[0]!;
+    expect(scheduleArgs0).toBe(USER_ID);
+    expect(scheduleArgs1).toBeInstanceOf(Date);
+    expect(scheduleArgs1.toISOString()).toBe(expectedDueAt);
+
+    // Nothing logged on the happy path.
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('calls each cascade step in the documented order: reservations → sessions → push tokens → markUserDeleted → avatar → scheduler', async () => {
+    const { repo, ...mocks } = buildRepo();
+    const { avatars, deleteAvatar } = buildAvatars();
+    const { scheduler, scheduleAnonymization } = buildScheduler();
+
+    const order: string[] = [];
+    mocks.deleteReservationsForUser.mockImplementationOnce(() => {
+      order.push('reservations');
+      return Promise.resolve(0);
+    });
+    mocks.deleteWorkoutSessionsForUser.mockImplementationOnce(() => {
+      order.push('sessions');
+      return Promise.resolve(0);
+    });
+    mocks.deletePushTokensForUser.mockImplementationOnce(() => {
+      order.push('pushTokens');
+      return Promise.resolve(0);
+    });
+    mocks.markUserDeleted.mockImplementationOnce(() => {
+      order.push('markUserDeleted');
+      return Promise.resolve();
+    });
+    deleteAvatar.mockImplementationOnce(() => {
+      order.push('avatar');
+      return Promise.resolve();
+    });
+    scheduleAnonymization.mockImplementationOnce(() => {
+      order.push('scheduler');
+      return Promise.resolve();
+    });
+
+    await handleUserDeleted(buildEvent(), {
+      repo,
+      avatars,
+      scheduler,
+      clock: buildClock(),
+    });
+
+    expect(order).toEqual([
+      'reservations',
+      'sessions',
+      'pushTokens',
+      'markUserDeleted',
+      'avatar',
+      'scheduler',
+    ]);
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -293,65 +276,65 @@ describe('handleUserDeleted — happy path', () => {
 /* ------------------------------------------------------------------ */
 
 describe('handleUserDeleted — avatar purge failure', () => {
-    it('still deletes SQL rows, marks the user, schedules anonymisation, and logs a warning when R2 throws', async () => {
-        const {
-            repo,
-            deleteReservationsForUser,
-            deleteWorkoutSessionsForUser,
-            deletePushTokensForUser,
-            markUserDeleted,
-        } = buildRepo();
-        const { avatars, deleteAvatar } = buildAvatars();
-        const { scheduler, scheduleAnonymization } = buildScheduler();
-        const { logger, warn, error } = buildLogger();
+  it('still deletes SQL rows, marks the user, schedules anonymisation, and logs a warning when R2 throws', async () => {
+    const {
+      repo,
+      deleteReservationsForUser,
+      deleteWorkoutSessionsForUser,
+      deletePushTokensForUser,
+      markUserDeleted,
+    } = buildRepo();
+    const { avatars, deleteAvatar } = buildAvatars();
+    const { scheduler, scheduleAnonymization } = buildScheduler();
+    const { logger, warn, error } = buildLogger();
 
-        deleteReservationsForUser.mockResolvedValueOnce(1);
-        deleteWorkoutSessionsForUser.mockResolvedValueOnce(2);
-        deletePushTokensForUser.mockResolvedValueOnce(0);
-        markUserDeleted.mockResolvedValueOnce(undefined);
-        deleteAvatar.mockRejectedValueOnce(new Error('R2 unreachable'));
-        scheduleAnonymization.mockResolvedValueOnce(undefined);
+    deleteReservationsForUser.mockResolvedValueOnce(1);
+    deleteWorkoutSessionsForUser.mockResolvedValueOnce(2);
+    deletePushTokensForUser.mockResolvedValueOnce(0);
+    markUserDeleted.mockResolvedValueOnce(undefined);
+    deleteAvatar.mockRejectedValueOnce(new Error('R2 unreachable'));
+    scheduleAnonymization.mockResolvedValueOnce(undefined);
 
-        const result = await handleUserDeleted(buildEvent(), {
-            repo,
-            avatars,
-            scheduler,
-            clock: buildClock(FROZEN_NOW),
-            logger,
-        });
-
-        // Cascade completed successfully in spite of the R2 failure.
-        expect(result.kind).toBe('ok');
-        expect(result.counts).toEqual({
-            reservations: 1,
-            sessions: 2,
-            pushTokens: 0,
-            auditAnonymized: 0,
-        });
-
-        // SQL cascade ran end-to-end.
-        expect(deleteReservationsForUser).toHaveBeenCalledTimes(1);
-        expect(deleteWorkoutSessionsForUser).toHaveBeenCalledTimes(1);
-        expect(deletePushTokensForUser).toHaveBeenCalledTimes(1);
-        expect(markUserDeleted).toHaveBeenCalledTimes(1);
-
-        // Scheduler was still invoked — losing it would miss the
-        // legal 30-day retention deadline (Requirement 5.3).
-        expect(scheduleAnonymization).toHaveBeenCalledTimes(1);
-
-        // The R2 error is surfaced as a warn, not an error — the
-        // user-facing compliance invariant is satisfied by the SQL
-        // deletions + scheduler publish.
-        expect(warn).toHaveBeenCalledTimes(1);
-        const [warnMsg, warnExtra] = warn.mock.calls[0]!;
-        expect(warnMsg).toMatch(/avatar/i);
-        expect(warnExtra).toMatchObject({
-            userId: USER_ID,
-            eventId: EVENT_ID,
-            error: { name: 'Error', message: 'R2 unreachable' },
-        });
-        expect(error).not.toHaveBeenCalled();
+    const result = await handleUserDeleted(buildEvent(), {
+      repo,
+      avatars,
+      scheduler,
+      clock: buildClock(FROZEN_NOW),
+      logger,
     });
+
+    // Cascade completed successfully in spite of the R2 failure.
+    expect(result.kind).toBe('ok');
+    expect(result.counts).toEqual({
+      reservations: 1,
+      sessions: 2,
+      pushTokens: 0,
+      auditAnonymized: 0,
+    });
+
+    // SQL cascade ran end-to-end.
+    expect(deleteReservationsForUser).toHaveBeenCalledTimes(1);
+    expect(deleteWorkoutSessionsForUser).toHaveBeenCalledTimes(1);
+    expect(deletePushTokensForUser).toHaveBeenCalledTimes(1);
+    expect(markUserDeleted).toHaveBeenCalledTimes(1);
+
+    // Scheduler was still invoked — losing it would miss the
+    // legal 30-day retention deadline (Requirement 5.3).
+    expect(scheduleAnonymization).toHaveBeenCalledTimes(1);
+
+    // The R2 error is surfaced as a warn, not an error — the
+    // user-facing compliance invariant is satisfied by the SQL
+    // deletions + scheduler publish.
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [warnMsg, warnExtra] = warn.mock.calls[0]!;
+    expect(warnMsg).toMatch(/avatar/i);
+    expect(warnExtra).toMatchObject({
+      userId: USER_ID,
+      eventId: EVENT_ID,
+      error: { name: 'Error', message: 'R2 unreachable' },
+    });
+    expect(error).not.toHaveBeenCalled();
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -359,39 +342,37 @@ describe('handleUserDeleted — avatar purge failure', () => {
 /* ------------------------------------------------------------------ */
 
 describe('handleUserDeleted — scheduler failure', () => {
-    it('rethrows when scheduleAnonymization fails so the event bus redrives the cascade', async () => {
-        const { repo, ...mocks } = buildRepo();
-        const { avatars, deleteAvatar } = buildAvatars();
-        const { scheduler, scheduleAnonymization } = buildScheduler();
+  it('rethrows when scheduleAnonymization fails so the event bus redrives the cascade', async () => {
+    const { repo, ...mocks } = buildRepo();
+    const { avatars, deleteAvatar } = buildAvatars();
+    const { scheduler, scheduleAnonymization } = buildScheduler();
 
-        mocks.deleteReservationsForUser.mockResolvedValueOnce(0);
-        mocks.deleteWorkoutSessionsForUser.mockResolvedValueOnce(0);
-        mocks.deletePushTokensForUser.mockResolvedValueOnce(0);
-        mocks.markUserDeleted.mockResolvedValueOnce(undefined);
-        deleteAvatar.mockResolvedValueOnce(undefined);
-        scheduleAnonymization.mockRejectedValueOnce(
-            new Error('QStash unreachable'),
-        );
+    mocks.deleteReservationsForUser.mockResolvedValueOnce(0);
+    mocks.deleteWorkoutSessionsForUser.mockResolvedValueOnce(0);
+    mocks.deletePushTokensForUser.mockResolvedValueOnce(0);
+    mocks.markUserDeleted.mockResolvedValueOnce(undefined);
+    deleteAvatar.mockResolvedValueOnce(undefined);
+    scheduleAnonymization.mockRejectedValueOnce(new Error('QStash unreachable'));
 
-        const err = await handleUserDeleted(buildEvent(), {
-            repo,
-            avatars,
-            scheduler,
-            clock: buildClock(FROZEN_NOW),
-        }).catch((e: unknown) => e);
+    const err = await handleUserDeleted(buildEvent(), {
+      repo,
+      avatars,
+      scheduler,
+      clock: buildClock(FROZEN_NOW),
+    }).catch((e: unknown) => e);
 
-        expect(err).toBeInstanceOf(Error);
-        expect((err as Error).message).toBe('QStash unreachable');
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe('QStash unreachable');
 
-        // Every prior step still ran — the cascade is retryable,
-        // and on redelivery the deletions are no-ops (idempotent).
-        expect(mocks.deleteReservationsForUser).toHaveBeenCalledTimes(1);
-        expect(mocks.deleteWorkoutSessionsForUser).toHaveBeenCalledTimes(1);
-        expect(mocks.deletePushTokensForUser).toHaveBeenCalledTimes(1);
-        expect(mocks.markUserDeleted).toHaveBeenCalledTimes(1);
-        expect(deleteAvatar).toHaveBeenCalledTimes(1);
-        expect(scheduleAnonymization).toHaveBeenCalledTimes(1);
-    });
+    // Every prior step still ran — the cascade is retryable,
+    // and on redelivery the deletions are no-ops (idempotent).
+    expect(mocks.deleteReservationsForUser).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteWorkoutSessionsForUser).toHaveBeenCalledTimes(1);
+    expect(mocks.deletePushTokensForUser).toHaveBeenCalledTimes(1);
+    expect(mocks.markUserDeleted).toHaveBeenCalledTimes(1);
+    expect(deleteAvatar).toHaveBeenCalledTimes(1);
+    expect(scheduleAnonymization).toHaveBeenCalledTimes(1);
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -399,27 +380,27 @@ describe('handleUserDeleted — scheduler failure', () => {
 /* ------------------------------------------------------------------ */
 
 describe('handleUserDeleted — markUserDeleted', () => {
-    it('is called exactly once even if the repo returns zero deletions across every table', async () => {
-        const { repo, ...mocks } = buildRepo();
-        const { avatars, deleteAvatar } = buildAvatars();
-        const { scheduler, scheduleAnonymization } = buildScheduler();
+  it('is called exactly once even if the repo returns zero deletions across every table', async () => {
+    const { repo, ...mocks } = buildRepo();
+    const { avatars, deleteAvatar } = buildAvatars();
+    const { scheduler, scheduleAnonymization } = buildScheduler();
 
-        mocks.deleteReservationsForUser.mockResolvedValueOnce(0);
-        mocks.deleteWorkoutSessionsForUser.mockResolvedValueOnce(0);
-        mocks.deletePushTokensForUser.mockResolvedValueOnce(0);
-        mocks.markUserDeleted.mockResolvedValueOnce(undefined);
-        deleteAvatar.mockResolvedValueOnce(undefined);
-        scheduleAnonymization.mockResolvedValueOnce(undefined);
+    mocks.deleteReservationsForUser.mockResolvedValueOnce(0);
+    mocks.deleteWorkoutSessionsForUser.mockResolvedValueOnce(0);
+    mocks.deletePushTokensForUser.mockResolvedValueOnce(0);
+    mocks.markUserDeleted.mockResolvedValueOnce(undefined);
+    deleteAvatar.mockResolvedValueOnce(undefined);
+    scheduleAnonymization.mockResolvedValueOnce(undefined);
 
-        await handleUserDeleted(buildEvent(), {
-            repo,
-            avatars,
-            scheduler,
-            clock: buildClock(FROZEN_NOW),
-        });
-
-        expect(mocks.markUserDeleted).toHaveBeenCalledTimes(1);
+    await handleUserDeleted(buildEvent(), {
+      repo,
+      avatars,
+      scheduler,
+      clock: buildClock(FROZEN_NOW),
     });
+
+    expect(mocks.markUserDeleted).toHaveBeenCalledTimes(1);
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -427,59 +408,56 @@ describe('handleUserDeleted — markUserDeleted', () => {
 /* ------------------------------------------------------------------ */
 
 describe('anonymizeAuditLog', () => {
-    it('forwards userId to the repo and returns the reported row count', async () => {
-        const anonymizeAuditRows =
-            vi.fn<DeletionRepo['anonymizeAuditRows']>();
-        anonymizeAuditRows.mockResolvedValueOnce(42);
+  it('forwards userId to the repo and returns the reported row count', async () => {
+    const anonymizeAuditRows = vi.fn<DeletionRepo['anonymizeAuditRows']>();
+    anonymizeAuditRows.mockResolvedValueOnce(42);
 
-        const result = await anonymizeAuditLog(USER_ID, {
-            repo: { anonymizeAuditRows },
-        });
-
-        expect(result).toEqual({
-            kind: 'ok',
-            userId: USER_ID,
-            anonymizedRows: 42,
-        });
-        expect(anonymizeAuditRows).toHaveBeenCalledExactlyOnceWith(USER_ID);
+    const result = await anonymizeAuditLog(USER_ID, {
+      repo: { anonymizeAuditRows },
     });
 
-    it('is idempotent: a second invocation simply returns whatever the repo reports (typically 0)', async () => {
-        const anonymizeAuditRows =
-            vi.fn<DeletionRepo['anonymizeAuditRows']>();
-        // First call anonymises 17 rows; second call finds zero
-        // remaining rows matching actor_id = userId.
-        anonymizeAuditRows.mockResolvedValueOnce(17);
-        anonymizeAuditRows.mockResolvedValueOnce(0);
+    expect(result).toEqual({
+      kind: 'ok',
+      userId: USER_ID,
+      anonymizedRows: 42,
+    });
+    expect(anonymizeAuditRows).toHaveBeenCalledExactlyOnceWith(USER_ID);
+  });
 
-        const first = await anonymizeAuditLog(USER_ID, {
-            repo: { anonymizeAuditRows },
-        });
-        const second = await anonymizeAuditLog(USER_ID, {
-            repo: { anonymizeAuditRows },
-        });
+  it('is idempotent: a second invocation simply returns whatever the repo reports (typically 0)', async () => {
+    const anonymizeAuditRows = vi.fn<DeletionRepo['anonymizeAuditRows']>();
+    // First call anonymises 17 rows; second call finds zero
+    // remaining rows matching actor_id = userId.
+    anonymizeAuditRows.mockResolvedValueOnce(17);
+    anonymizeAuditRows.mockResolvedValueOnce(0);
 
-        expect(first.anonymizedRows).toBe(17);
-        expect(second.anonymizedRows).toBe(0);
-
-        // Both calls forwarded the same userId — the repo's
-        // SQL-level idempotency guarantee is what drives the zero
-        // count on the second pass.
-        expect(anonymizeAuditRows).toHaveBeenCalledTimes(2);
-        expect(anonymizeAuditRows.mock.calls[0]![0]).toBe(USER_ID);
-        expect(anonymizeAuditRows.mock.calls[1]![0]).toBe(USER_ID);
+    const first = await anonymizeAuditLog(USER_ID, {
+      repo: { anonymizeAuditRows },
+    });
+    const second = await anonymizeAuditLog(USER_ID, {
+      repo: { anonymizeAuditRows },
     });
 
-    it('propagates repo failures to the caller', async () => {
-        const anonymizeAuditRows =
-            vi.fn<DeletionRepo['anonymizeAuditRows']>();
-        anonymizeAuditRows.mockRejectedValueOnce(new Error('db down'));
+    expect(first.anonymizedRows).toBe(17);
+    expect(second.anonymizedRows).toBe(0);
 
-        const err = await anonymizeAuditLog(USER_ID, {
-            repo: { anonymizeAuditRows },
-        }).catch((e: unknown) => e);
+    // Both calls forwarded the same userId — the repo's
+    // SQL-level idempotency guarantee is what drives the zero
+    // count on the second pass.
+    expect(anonymizeAuditRows).toHaveBeenCalledTimes(2);
+    expect(anonymizeAuditRows.mock.calls[0]![0]).toBe(USER_ID);
+    expect(anonymizeAuditRows.mock.calls[1]![0]).toBe(USER_ID);
+  });
 
-        expect(err).toBeInstanceOf(Error);
-        expect((err as Error).message).toBe('db down');
-    });
+  it('propagates repo failures to the caller', async () => {
+    const anonymizeAuditRows = vi.fn<DeletionRepo['anonymizeAuditRows']>();
+    anonymizeAuditRows.mockRejectedValueOnce(new Error('db down'));
+
+    const err = await anonymizeAuditLog(USER_ID, {
+      repo: { anonymizeAuditRows },
+    }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe('db down');
+  });
 });

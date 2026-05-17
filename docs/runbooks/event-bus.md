@@ -258,9 +258,9 @@ Module : `packages/api/src/events/dedup.ts`.
 import { assertNotSeen } from './events/dedup.js';
 
 export async function onEvent(event: AthlyaEvent, env: Env) {
-    const fresh = await assertNotSeen(env.redis, event.id);
-    if (!fresh) return;            // déjà traité, skip silencieux
-    await applySideEffect(event);
+  const fresh = await assertNotSeen(env.redis, event.id);
+  if (!fresh) return; // déjà traité, skip silencieux
+  await applySideEffect(event);
 }
 ```
 
@@ -296,13 +296,13 @@ seules, pas de janitor à câbler.
 Slice B6.4 — quels events critiques sont déjà couverts par quels
 tests ?
 
-| Event                          | Producer test                                  | Drain test                                                   | Consumer dedup test            |
-|--------------------------------|------------------------------------------------|--------------------------------------------------------------|--------------------------------|
-| `reservation.created`          | `publish.test.ts` (envelope valide)            | `drain-worker.test.ts` § "claims N rows" (event #1)           | `dedup.test.ts` (générique)    |
-| `reservation.cancelled`        | `gateway.integration.test.ts` (E2E)            | `drain-worker.test.ts` § "claims N rows" (event #2)           | `dedup.test.ts` (générique)    |
-| `reservation.promoted`         | `gateway.integration.test.ts` (waitlist FIFO)  | `drain-worker.test.ts` § "claims N rows" (event #3)           | `dedup.test.ts` (générique)    |
-| `members.export.requested`    | `packages/members/src/__tests__/export.test.ts` | couvert par le path générique (drain est event-type-blind)   | `dedup.test.ts` (générique)    |
-| `members.export.completed`    | `packages/members/src/__tests__/export.test.ts` | couvert par le path générique (drain est event-type-blind)   | `dedup.test.ts` (générique)    |
+| Event                      | Producer test                                   | Drain test                                                 | Consumer dedup test         |
+| -------------------------- | ----------------------------------------------- | ---------------------------------------------------------- | --------------------------- |
+| `reservation.created`      | `publish.test.ts` (envelope valide)             | `drain-worker.test.ts` § "claims N rows" (event #1)        | `dedup.test.ts` (générique) |
+| `reservation.cancelled`    | `gateway.integration.test.ts` (E2E)             | `drain-worker.test.ts` § "claims N rows" (event #2)        | `dedup.test.ts` (générique) |
+| `reservation.promoted`     | `gateway.integration.test.ts` (waitlist FIFO)   | `drain-worker.test.ts` § "claims N rows" (event #3)        | `dedup.test.ts` (générique) |
+| `members.export.requested` | `packages/members/src/__tests__/export.test.ts` | couvert par le path générique (drain est event-type-blind) | `dedup.test.ts` (générique) |
+| `members.export.completed` | `packages/members/src/__tests__/export.test.ts` | couvert par le path générique (drain est event-type-blind) | `dedup.test.ts` (générique) |
 
 **Décision B6.4** : pas de test integration outbox→drain→consumer
 end-to-end ajouté. Justifications :

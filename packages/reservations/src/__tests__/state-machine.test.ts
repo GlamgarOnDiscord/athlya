@@ -22,11 +22,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    InvalidTransitionError,
-    LEGAL_TRANSITIONS,
-    assertCanTransition,
-    canTransition,
-    type ReservationStatus,
+  InvalidTransitionError,
+  LEGAL_TRANSITIONS,
+  assertCanTransition,
+  canTransition,
+  type ReservationStatus,
 } from '../state-machine.js';
 
 /**
@@ -35,10 +35,10 @@ import {
  * module.
  */
 const STATUSES: readonly ReservationStatus[] = [
-    'confirmed',
-    'waitlist',
-    'cancelled',
-    'no_show',
+  'confirmed',
+  'waitlist',
+  'cancelled',
+  'no_show',
 ] as const;
 
 /**
@@ -48,138 +48,136 @@ const STATUSES: readonly ReservationStatus[] = [
  * correspond exactly to the four edges in {@link LEGAL_TRANSITIONS}.
  */
 const EXPECTED: Readonly<Record<ReservationStatus, Readonly<Record<ReservationStatus, boolean>>>> =
-{
+  {
     confirmed: {
-        confirmed: true,
-        waitlist: false,
-        cancelled: true,
-        no_show: true,
+      confirmed: true,
+      waitlist: false,
+      cancelled: true,
+      no_show: true,
     },
     waitlist: {
-        confirmed: true,
-        waitlist: true,
-        cancelled: true,
-        no_show: false,
+      confirmed: true,
+      waitlist: true,
+      cancelled: true,
+      no_show: false,
     },
     cancelled: {
-        confirmed: false,
-        waitlist: false,
-        cancelled: true,
-        no_show: false,
+      confirmed: false,
+      waitlist: false,
+      cancelled: true,
+      no_show: false,
     },
     no_show: {
-        confirmed: false,
-        waitlist: false,
-        cancelled: false,
-        no_show: true,
+      confirmed: false,
+      waitlist: false,
+      cancelled: false,
+      no_show: true,
     },
-};
+  };
 
 describe('canTransition', () => {
-    it('matches the hand-coded truth table for all 16 ordered pairs (Req 10.1, 10.2)', () => {
-        for (const from of STATUSES) {
-            for (const to of STATUSES) {
-                const expected = EXPECTED[from][to];
-                expect(canTransition(from, to)).toBe(expected);
-            }
-        }
-    });
+  it('matches the hand-coded truth table for all 16 ordered pairs (Req 10.1, 10.2)', () => {
+    for (const from of STATUSES) {
+      for (const to of STATUSES) {
+        const expected = EXPECTED[from][to];
+        expect(canTransition(from, to)).toBe(expected);
+      }
+    }
+  });
 
-    it('returns true for every x → x no-op transition (Req 10.2)', () => {
-        for (const s of STATUSES) {
-            expect(canTransition(s, s)).toBe(true);
-        }
-    });
+  it('returns true for every x → x no-op transition (Req 10.2)', () => {
+    for (const s of STATUSES) {
+      expect(canTransition(s, s)).toBe(true);
+    }
+  });
 
-    it('returns false for cancelled → confirmed (Req 10.4)', () => {
-        expect(canTransition('cancelled', 'confirmed')).toBe(false);
-    });
+  it('returns false for cancelled → confirmed (Req 10.4)', () => {
+    expect(canTransition('cancelled', 'confirmed')).toBe(false);
+  });
 
-    it('returns false for every transition out of cancelled except the no-op (Req 10.4)', () => {
-        for (const to of STATUSES) {
-            const expected = to === 'cancelled';
-            expect(canTransition('cancelled', to)).toBe(expected);
-        }
-    });
+  it('returns false for every transition out of cancelled except the no-op (Req 10.4)', () => {
+    for (const to of STATUSES) {
+      const expected = to === 'cancelled';
+      expect(canTransition('cancelled', to)).toBe(expected);
+    }
+  });
 
-    it('accepts every edge enumerated in LEGAL_TRANSITIONS (Req 10.1, 10.5)', () => {
-        for (const [from, to] of LEGAL_TRANSITIONS) {
-            expect(canTransition(from, to)).toBe(true);
-        }
-    });
+  it('accepts every edge enumerated in LEGAL_TRANSITIONS (Req 10.1, 10.5)', () => {
+    for (const [from, to] of LEGAL_TRANSITIONS) {
+      expect(canTransition(from, to)).toBe(true);
+    }
+  });
 
-    it('contains exactly the four edges required by Req 10.1', () => {
-        // Defensive: if someone adds or removes an edge in the source
-        // file without updating the requirement, this fails loudly.
-        expect(LEGAL_TRANSITIONS).toHaveLength(4);
-        const serialised = LEGAL_TRANSITIONS.map(([a, b]) => `${a}->${b}`).sort();
-        expect(serialised).toStrictEqual(
-            [
-                'confirmed->cancelled',
-                'confirmed->no_show',
-                'waitlist->cancelled',
-                'waitlist->confirmed',
-            ].sort(),
-        );
-    });
+  it('contains exactly the four edges required by Req 10.1', () => {
+    // Defensive: if someone adds or removes an edge in the source
+    // file without updating the requirement, this fails loudly.
+    expect(LEGAL_TRANSITIONS).toHaveLength(4);
+    const serialised = LEGAL_TRANSITIONS.map(([a, b]) => `${a}->${b}`).sort();
+    expect(serialised).toStrictEqual(
+      [
+        'confirmed->cancelled',
+        'confirmed->no_show',
+        'waitlist->cancelled',
+        'waitlist->confirmed',
+      ].sort(),
+    );
+  });
 });
 
 describe('assertCanTransition', () => {
-    it('returns void on every legal transition (non-identity)', () => {
-        for (const [from, to] of LEGAL_TRANSITIONS) {
-            expect(() => {
-                assertCanTransition(from, to);
-            }).not.toThrow();
-        }
-    });
+  it('returns void on every legal transition (non-identity)', () => {
+    for (const [from, to] of LEGAL_TRANSITIONS) {
+      expect(() => {
+        assertCanTransition(from, to);
+      }).not.toThrow();
+    }
+  });
 
-    it('returns void on every same-state no-op (Req 10.2)', () => {
-        for (const s of STATUSES) {
-            expect(() => {
-                assertCanTransition(s, s);
-            }).not.toThrow();
-        }
-    });
+  it('returns void on every same-state no-op (Req 10.2)', () => {
+    for (const s of STATUSES) {
+      expect(() => {
+        assertCanTransition(s, s);
+      }).not.toThrow();
+    }
+  });
 
-    it('throws InvalidTransitionError with code "invalid_transition" on cancelled → confirmed (Req 10.3, 10.4)', () => {
+  it('throws InvalidTransitionError with code "invalid_transition" on cancelled → confirmed (Req 10.3, 10.4)', () => {
+    let caught: unknown;
+    try {
+      assertCanTransition('cancelled', 'confirmed');
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(InvalidTransitionError);
+    expect(caught).toBeInstanceOf(Error);
+    if (caught instanceof InvalidTransitionError) {
+      expect(caught.code).toBe('invalid_transition');
+      expect(caught.from).toBe('cancelled');
+      expect(caught.to).toBe('confirmed');
+      expect(caught.name).toBe('InvalidTransitionError');
+      expect(caught.message).toContain('cancelled');
+      expect(caught.message).toContain('confirmed');
+    }
+  });
+
+  it('throws InvalidTransitionError for every illegal ordered pair (Req 10.3)', () => {
+    for (const from of STATUSES) {
+      for (const to of STATUSES) {
+        if (EXPECTED[from][to]) continue;
         let caught: unknown;
         try {
-            assertCanTransition('cancelled', 'confirmed');
+          assertCanTransition(from, to);
         } catch (err) {
-            caught = err;
+          caught = err;
         }
-
-        expect(caught).toBeInstanceOf(InvalidTransitionError);
-        expect(caught).toBeInstanceOf(Error);
+        expect(caught, `expected throw on ${from} -> ${to}`).toBeInstanceOf(InvalidTransitionError);
         if (caught instanceof InvalidTransitionError) {
-            expect(caught.code).toBe('invalid_transition');
-            expect(caught.from).toBe('cancelled');
-            expect(caught.to).toBe('confirmed');
-            expect(caught.name).toBe('InvalidTransitionError');
-            expect(caught.message).toContain('cancelled');
-            expect(caught.message).toContain('confirmed');
+          expect(caught.code).toBe('invalid_transition');
+          expect(caught.from).toBe(from);
+          expect(caught.to).toBe(to);
         }
-    });
-
-    it('throws InvalidTransitionError for every illegal ordered pair (Req 10.3)', () => {
-        for (const from of STATUSES) {
-            for (const to of STATUSES) {
-                if (EXPECTED[from][to]) continue;
-                let caught: unknown;
-                try {
-                    assertCanTransition(from, to);
-                } catch (err) {
-                    caught = err;
-                }
-                expect(caught, `expected throw on ${from} -> ${to}`).toBeInstanceOf(
-                    InvalidTransitionError,
-                );
-                if (caught instanceof InvalidTransitionError) {
-                    expect(caught.code).toBe('invalid_transition');
-                    expect(caught.from).toBe(from);
-                    expect(caught.to).toBe(to);
-                }
-            }
-        }
-    });
+      }
+    }
+  });
 });

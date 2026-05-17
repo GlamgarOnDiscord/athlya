@@ -82,197 +82,197 @@ export type AthlyaEnvironment = 'dev' | 'staging' | 'production';
  * requires at boot".
  */
 export interface AthlyaBindings {
-    /** Named environment the Worker was deployed to. */
-    readonly ENVIRONMENT: AthlyaEnvironment;
+  /** Named environment the Worker was deployed to. */
+  readonly ENVIRONMENT: AthlyaEnvironment;
 
-    /**
-     * Producer binding declared in `wrangler.toml` (task 9.4).
-     * Domain services publish through this via `@athlya/api/events/publish`.
-     */
-    readonly EVENTS_QUEUE: Queue<unknown>;
+  /**
+   * Producer binding declared in `wrangler.toml` (task 9.4).
+   * Domain services publish through this via `@athlya/api/events/publish`.
+   */
+  readonly EVENTS_QUEUE: Queue<unknown>;
 
-    /**
-     * Producer binding for the dead-letter queue (`athlya-events-dlq`,
-     * hardening task H2). Currently unused — the DLQ drain handler in
-     * `src/events/drain-dlq.ts` tracks observed messages in Redis and
-     * never re-publishes to the DLQ itself. The binding is kept in
-     * the surface so future workflows (e.g. "quarantine this event")
-     * have a named port without another `wrangler.toml` edit.
-     */
-    readonly EVENTS_DLQ: Queue<unknown>;
+  /**
+   * Producer binding for the dead-letter queue (`athlya-events-dlq`,
+   * hardening task H2). Currently unused — the DLQ drain handler in
+   * `src/events/drain-dlq.ts` tracks observed messages in Redis and
+   * never re-publishes to the DLQ itself. The binding is kept in
+   * the surface so future workflows (e.g. "quarantine this event")
+   * have a named port without another `wrangler.toml` edit.
+   */
+  readonly EVENTS_DLQ: Queue<unknown>;
 
-    /**
-     * Postgres connection string. Injected as a secret by CI; the
-     * dev value is loaded from `.dev.vars` (git-ignored).
-     *
-     * Slice B2 (Req H1) — once the production cutover lands, this
-     * URL points to the `athlya_app` role (NOBYPASSRLS). Until the
-     * cutover, both `DB_URL` and {@link MIGRATION_DB_URL} fall back
-     * to the BYPASSRLS owner role, which is non-disruptive (RLS
-     * policies are skipped just like before B2).
-     */
-    readonly DB_URL: string;
+  /**
+   * Postgres connection string. Injected as a secret by CI; the
+   * dev value is loaded from `.dev.vars` (git-ignored).
+   *
+   * Slice B2 (Req H1) — once the production cutover lands, this
+   * URL points to the `athlya_app` role (NOBYPASSRLS). Until the
+   * cutover, both `DB_URL` and {@link MIGRATION_DB_URL} fall back
+   * to the BYPASSRLS owner role, which is non-disruptive (RLS
+   * policies are skipped just like before B2).
+   */
+  readonly DB_URL: string;
 
-    /**
-     * Privileged Postgres connection string used **only** by the
-     * migration runner (`packages/db/scripts/migrate.mjs`). Points
-     * to the BYPASSRLS owner role (`neondb_owner` on Neon) so DDL
-     * + role/grant management succeed.
-     *
-     * Optional at the type level — when absent, the migration script
-     * falls back to {@link DB_URL}. **Never** read this binding from
-     * the runtime API code; it would defeat the RLS hardening.
-     */
-    readonly MIGRATION_DB_URL?: string;
+  /**
+   * Privileged Postgres connection string used **only** by the
+   * migration runner (`packages/db/scripts/migrate.mjs`). Points
+   * to the BYPASSRLS owner role (`neondb_owner` on Neon) so DDL
+   * + role/grant management succeed.
+   *
+   * Optional at the type level — when absent, the migration script
+   * falls back to {@link DB_URL}. **Never** read this binding from
+   * the runtime API code; it would defeat the RLS hardening.
+   */
+  readonly MIGRATION_DB_URL?: string;
 
-    /**
-     * Strict CORS allow-list — exactly ONE origin in staging/production
-     * (the matching member-facing or studio frontend). Optional in
-     * `dev` where the worker hard-codes a localhost whitelist
-     * (`http://localhost:{3000,3001}` + `127.0.0.1` variants).
-     *
-     * **Required in staging/production**: `buildApp` mounts a sentinel
-     * middleware that refuses every request with a 500
-     * `configuration_error` Problem Details body when this binding is
-     * empty in those environments (Slice 1.2-A — Sprint-1 SP1.3, audit
-     * finding S4-014). The fail-loud pattern matches `TURNSTILE_SECRET`:
-     * a missing secret outside dev surfaces a clean 500 instead of
-     * silently breaking cross-origin requests with no signal in the
-     * Worker logs.
-     *
-     * Provisioned via:
-     *   `wrangler secret put CORS_ORIGIN --env <staging|production>`
-     *
-     * Format: a single fully-qualified origin, no trailing slash, no
-     * path. Example: `https://app.athlya.app`.
-     */
-    readonly CORS_ORIGIN?: string;
+  /**
+   * Strict CORS allow-list — exactly ONE origin in staging/production
+   * (the matching member-facing or studio frontend). Optional in
+   * `dev` where the worker hard-codes a localhost whitelist
+   * (`http://localhost:{3000,3001}` + `127.0.0.1` variants).
+   *
+   * **Required in staging/production**: `buildApp` mounts a sentinel
+   * middleware that refuses every request with a 500
+   * `configuration_error` Problem Details body when this binding is
+   * empty in those environments (Slice 1.2-A — Sprint-1 SP1.3, audit
+   * finding S4-014). The fail-loud pattern matches `TURNSTILE_SECRET`:
+   * a missing secret outside dev surfaces a clean 500 instead of
+   * silently breaking cross-origin requests with no signal in the
+   * Worker logs.
+   *
+   * Provisioned via:
+   *   `wrangler secret put CORS_ORIGIN --env <staging|production>`
+   *
+   * Format: a single fully-qualified origin, no trailing slash, no
+   * path. Example: `https://app.athlya.app`.
+   */
+  readonly CORS_ORIGIN?: string;
 
-    /** Upstash Redis REST URL. */
-    readonly REDIS_URL: string;
+  /** Upstash Redis REST URL. */
+  readonly REDIS_URL: string;
 
-    /** Upstash Redis REST token. Secret — never committed. */
-    readonly REDIS_TOKEN: string;
+  /** Upstash Redis REST token. Secret — never committed. */
+  readonly REDIS_TOKEN: string;
 
-    /**
-     * JWKS endpoint of the identity provider (Clerk / Auth.js).
-     * Task 8.2 caches the keys returned by this URL.
-     */
-    readonly JWT_JWKS_URL: string;
+  /**
+   * JWKS endpoint of the identity provider (Clerk / Auth.js).
+   * Task 8.2 caches the keys returned by this URL.
+   */
+  readonly JWT_JWKS_URL: string;
 
-    /**
-     * Sentry DSN. Optional — the observability middleware (task 14.x)
-     * checks for `undefined` and silently skips initialisation when
-     * absent.
-     */
-    readonly SENTRY_DSN?: string;
+  /**
+   * Sentry DSN. Optional — the observability middleware (task 14.x)
+   * checks for `undefined` and silently skips initialisation when
+   * absent.
+   */
+  readonly SENTRY_DSN?: string;
 
-    /**
-     * Expected `iss` claim on every Bearer JWT — Slice 1.5 (Sprint 1
-     * — SP1.6, audit finding S2-005). Plumbed straight into
-     * `jose.jwtVerify({ issuer })` by `worker.ts` so a token issued
-     * by another Athlya service (or any third party that ever shares
-     * our JWKS) cannot land on the gateway.
-     *
-     * Optional at the type level so test fixtures can omit it; the
-     * gateway falls back to `'athlya'` when unset. The default value
-     * matches the Auth service's `iss` claim convention.
-     */
-    readonly JWT_ISSUER?: string;
+  /**
+   * Expected `iss` claim on every Bearer JWT — Slice 1.5 (Sprint 1
+   * — SP1.6, audit finding S2-005). Plumbed straight into
+   * `jose.jwtVerify({ issuer })` by `worker.ts` so a token issued
+   * by another Athlya service (or any third party that ever shares
+   * our JWKS) cannot land on the gateway.
+   *
+   * Optional at the type level so test fixtures can omit it; the
+   * gateway falls back to `'athlya'` when unset. The default value
+   * matches the Auth service's `iss` claim convention.
+   */
+  readonly JWT_ISSUER?: string;
 
-    /**
-     * Expected `aud` claim on every Bearer JWT — Slice 1.5 (Sprint 1
-     * — SP1.6, audit finding S2-005). Same plumbing as
-     * {@link JWT_ISSUER} but for the audience side of the
-     * cross-service confused-deputy defence.
-     *
-     * Optional at the type level. The gateway derives a sane
-     * default from {@link ENVIRONMENT} when unset:
-     *
-     *   - `dev`        → `athlya-api-dev`
-     *   - `staging`    → `athlya-api-staging`
-     *   - `production` → `athlya-api-production`
-     *
-     * Production deploys are expected to set this binding explicitly
-     * to override the convention.
-     */
-    readonly JWT_AUDIENCE?: string;
+  /**
+   * Expected `aud` claim on every Bearer JWT — Slice 1.5 (Sprint 1
+   * — SP1.6, audit finding S2-005). Same plumbing as
+   * {@link JWT_ISSUER} but for the audience side of the
+   * cross-service confused-deputy defence.
+   *
+   * Optional at the type level. The gateway derives a sane
+   * default from {@link ENVIRONMENT} when unset:
+   *
+   *   - `dev`        → `athlya-api-dev`
+   *   - `staging`    → `athlya-api-staging`
+   *   - `production` → `athlya-api-production`
+   *
+   * Production deploys are expected to set this binding explicitly
+   * to override the convention.
+   */
+  readonly JWT_AUDIENCE?: string;
 
-    /**
-     * Semver-ish identifier of the currently deployed build. CI sets
-     * this on `wrangler deploy`; tests and local dev use the
-     * `wrangler.toml` default.
-     */
-    readonly VERSION: string;
+  /**
+   * Semver-ish identifier of the currently deployed build. CI sets
+   * this on `wrangler deploy`; tests and local dev use the
+   * `wrangler.toml` default.
+   */
+  readonly VERSION: string;
 
-    /**
-     * OTLP/HTTP endpoint the OTel middleware (task 8.6) POSTs
-     * `ResourceSpans` envelopes to. Optional — when absent the
-     * middleware records spans in memory but skips the export,
-     * matching local-dev / test expectations.
-     *
-     * For Axiom (default target), this is
-     *   `https://api.axiom.co/v1/traces`.
-     */
-    readonly OTEL_EXPORTER_OTLP_ENDPOINT?: string;
+  /**
+   * OTLP/HTTP endpoint the OTel middleware (task 8.6) POSTs
+   * `ResourceSpans` envelopes to. Optional — when absent the
+   * middleware records spans in memory but skips the export,
+   * matching local-dev / test expectations.
+   *
+   * For Axiom (default target), this is
+   *   `https://api.axiom.co/v1/traces`.
+   */
+  readonly OTEL_EXPORTER_OTLP_ENDPOINT?: string;
 
-    /**
-     * Extra headers injected on every OTLP export call, formatted as
-     * `key1=value1,key2=value2` per the OpenTelemetry environment
-     * convention. Axiom authenticates with
-     * `Authorization=Bearer <token>,X-Axiom-Dataset=athlya-api`;
-     * the token is a secret set via `wrangler secret put
-     * OTEL_EXPORTER_OTLP_HEADERS` and MUST NOT land in
-     * `wrangler.toml`. Optional for the same reason as the endpoint.
-     */
-    readonly OTEL_EXPORTER_OTLP_HEADERS?: string;
+  /**
+   * Extra headers injected on every OTLP export call, formatted as
+   * `key1=value1,key2=value2` per the OpenTelemetry environment
+   * convention. Axiom authenticates with
+   * `Authorization=Bearer <token>,X-Axiom-Dataset=athlya-api`;
+   * the token is a secret set via `wrangler secret put
+   * OTEL_EXPORTER_OTLP_HEADERS` and MUST NOT land in
+   * `wrangler.toml`. Optional for the same reason as the endpoint.
+   */
+  readonly OTEL_EXPORTER_OTLP_HEADERS?: string;
 
-    /**
-     * Cloudflare Turnstile server-side secret (task 8.9). Consumed by
-     * the `turnstile()` middleware when it POSTs to the siteverify
-     * endpoint. Set via `wrangler secret put TURNSTILE_SECRET` per
-     * environment.
-     *
-     * Optional at the type level because the middleware supports a
-     * dev-only bypass: when `ENVIRONMENT === 'dev'` and no secret is
-     * set, the middleware logs a warning and calls `next()` without
-     * verification. In `staging` / `production`, a missing secret is
-     * treated as a misconfiguration and yields HTTP 500 —
-     * the missing-secret signal is loud, not silent.
-     */
-    readonly TURNSTILE_SECRET?: string;
+  /**
+   * Cloudflare Turnstile server-side secret (task 8.9). Consumed by
+   * the `turnstile()` middleware when it POSTs to the siteverify
+   * endpoint. Set via `wrangler secret put TURNSTILE_SECRET` per
+   * environment.
+   *
+   * Optional at the type level because the middleware supports a
+   * dev-only bypass: when `ENVIRONMENT === 'dev'` and no secret is
+   * set, the middleware logs a warning and calls `next()` without
+   * verification. In `staging` / `production`, a missing secret is
+   * treated as a misconfiguration and yields HTTP 500 —
+   * the missing-secret signal is loud, not silent.
+   */
+  readonly TURNSTILE_SECRET?: string;
 
-    /**
-     * Cloudflare R2 bucket binding holding member avatar binaries
-     * (Slice 1.3 — Sprint 1, finding S5-002). Consumed by
-     * {@link import('@athlya/members').AvatarStore} via
-     * `adapters/avatar-store-r2.ts` during the RGPD Article 17
-     * cascade.
-     *
-     * **Optional** at the type level — until the bucket is
-     * provisioned via `wrangler r2 bucket create athlya-avatars-{env}`,
-     * the cascade falls back to a degraded-mode no-op (logs a warn,
-     * does not throw) so the SQL-side compliance window keeps
-     * closing on schedule. See `avatar-store-r2.ts` for the full
-     * fallback rationale.
-     */
-    readonly AVATARS_BUCKET?: R2Bucket;
+  /**
+   * Cloudflare R2 bucket binding holding member avatar binaries
+   * (Slice 1.3 — Sprint 1, finding S5-002). Consumed by
+   * {@link import('@athlya/members').AvatarStore} via
+   * `adapters/avatar-store-r2.ts` during the RGPD Article 17
+   * cascade.
+   *
+   * **Optional** at the type level — until the bucket is
+   * provisioned via `wrangler r2 bucket create athlya-avatars-{env}`,
+   * the cascade falls back to a degraded-mode no-op (logs a warn,
+   * does not throw) so the SQL-side compliance window keeps
+   * closing on schedule. See `avatar-store-r2.ts` for the full
+   * fallback rationale.
+   */
+  readonly AVATARS_BUCKET?: R2Bucket;
 
-    /**
-     * Cloudflare R2 bucket binding holding RGPD data-export ZIP
-     * archives (Slice 1.3 — Sprint 1, finding S5-001). Consumed by
-     * the {@link import('@athlya/members').BlobStore} adapter via
-     * `adapters/export-deps.ts` to upload the assembled archive
-     * before signing a 72-hour download URL.
-     *
-     * **Optional** at the type level — until the bucket is
-     * provisioned via `wrangler r2 bucket create athlya-exports-{env}`,
-     * the export consumer marks the job `failed` with reason
-     * `exports_bucket_missing` so the user-facing surface surfaces a
-     * clear error instead of looping forever. See `export-deps.ts`
-     * for the full fallback rationale.
-     */
-    readonly EXPORTS_BUCKET?: R2Bucket;
+  /**
+   * Cloudflare R2 bucket binding holding RGPD data-export ZIP
+   * archives (Slice 1.3 — Sprint 1, finding S5-001). Consumed by
+   * the {@link import('@athlya/members').BlobStore} adapter via
+   * `adapters/export-deps.ts` to upload the assembled archive
+   * before signing a 72-hour download URL.
+   *
+   * **Optional** at the type level — until the bucket is
+   * provisioned via `wrangler r2 bucket create athlya-exports-{env}`,
+   * the export consumer marks the job `failed` with reason
+   * `exports_bucket_missing` so the user-facing surface surfaces a
+   * clear error instead of looping forever. See `export-deps.ts`
+   * for the full fallback rationale.
+   */
+  readonly EXPORTS_BUCKET?: R2Bucket;
 }
 
 /* ------------------------------------------------------------------ */
@@ -295,90 +295,90 @@ export interface AthlyaBindings {
  * introduced it so the provenance of the fields stays traceable.
  */
 export interface AthlyaVariables {
-    /**
-     * 32-hex W3C trace id for the current request. Extracted from the
-     * inbound `traceparent` header when present (RFC-compliant) or
-     * generated fresh as a UUID v4 when absent. Surfaces in every
-     * log line and on the `/health` response.
-     */
-    traceId: string;
+  /**
+   * 32-hex W3C trace id for the current request. Extracted from the
+   * inbound `traceparent` header when present (RFC-compliant) or
+   * generated fresh as a UUID v4 when absent. Surfaces in every
+   * log line and on the `/health` response.
+   */
+  traceId: string;
 
-    /**
-     * Request-scoped structured logger pre-filled with `traceId` +
-     * `env`. Callers should prefer this over creating a fresh logger
-     * so every log line in a request is correlatable.
-     */
-    logger: StructuredLogger;
+  /**
+   * Request-scoped structured logger pre-filled with `traceId` +
+   * `env`. Callers should prefer this over creating a fresh logger
+   * so every log line in a request is correlatable.
+   */
+  logger: StructuredLogger;
 
-    /**
-     * `Date.now()` timestamp of when the request entered the Worker.
-     * The serve-log middleware uses it to compute `durationMs`
-     * (Req 30.4).
-     */
-    startedAt: number;
+  /**
+   * `Date.now()` timestamp of when the request entered the Worker.
+   * The serve-log middleware uses it to compute `durationMs`
+   * (Req 30.4).
+   */
+  startedAt: number;
 
-    /**
-     * Populated by the auth middleware (task 8.2). `undefined` on
-     * public routes — domain handlers behind `jwtAuth()` can assume
-     * it is set.
-     *
-     * Shape matches the verified JWT's canonical claims:
-     *   - `userId`  ← `sub`
-     *   - `studioId` ← `studio`
-     *   - `role`    ← `role` (closed union, rejected at verify time if
-     *                        any other value sneaks into the token)
-     */
-    authClaims?: {
-        userId: string;
-        studioId: string;
-        role: 'member' | 'admin' | 'coach';
-    };
+  /**
+   * Populated by the auth middleware (task 8.2). `undefined` on
+   * public routes — domain handlers behind `jwtAuth()` can assume
+   * it is set.
+   *
+   * Shape matches the verified JWT's canonical claims:
+   *   - `userId`  ← `sub`
+   *   - `studioId` ← `studio`
+   *   - `role`    ← `role` (closed union, rejected at verify time if
+   *                        any other value sneaks into the token)
+   */
+  authClaims?: {
+    userId: string;
+    studioId: string;
+    role: 'member' | 'admin' | 'coach';
+  };
 
-    /**
-     * Per-request OpenTelemetry span (task 8.6). Populated by the
-     * `tracing()` middleware before any domain middleware runs so
-     * downstream code can call
-     *
-     *   c.get('span')?.addAttribute('studio.id', studioId);
-     *   c.get('span')?.addEvent('reservation.confirmed', { id });
-     *
-     * without branching on the middleware being mounted. Absent only
-     * when the middleware has not been wired — in the default
-     * gateway skeleton built by `worker.ts`, it is always set.
-     */
-    span?: TraceSpan;
+  /**
+   * Per-request OpenTelemetry span (task 8.6). Populated by the
+   * `tracing()` middleware before any domain middleware runs so
+   * downstream code can call
+   *
+   *   c.get('span')?.addAttribute('studio.id', studioId);
+   *   c.get('span')?.addEvent('reservation.confirmed', { id });
+   *
+   * without branching on the middleware being mounted. Absent only
+   * when the middleware has not been wired — in the default
+   * gateway skeleton built by `worker.ts`, it is always set.
+   */
+  span?: TraceSpan;
 
-    /**
-     * Tenant slug resolved from the request `Host` header or the
-     * `/s/<slug>/...` path prefix by the `tenantResolverMiddleware()`
-     * (Slice 1.4 — Sprint 1 — SP1.5, audit finding S2-007). The
-     * pure resolver runs unconditionally as one of the first
-     * middlewares in `worker.ts`; this field is set whenever the
-     * resolver returned a `'subdomain'` or `'path'` source.
-     *
-     * `undefined` when the request targets the apex host
-     * (`api.athlya.app`), an IP literal, or a dev hostname — those
-     * cases are legitimate (mobile API on apex, dev / staging) and
-     * the cross-check defers to the JWT claim alone.
-     *
-     * Do NOT use this field for tenant-scoped data filtering: that
-     * remains the exclusive responsibility of the JWT `studio` claim
-     * (`authClaims.studioId`) and the RLS policies fed by
-     * `withTenant`. The slug is informational only — it is consumed
-     * by the cross-check guard to refuse host-vs-claim mismatches
-     * (Req 13.2).
-     */
-    tenantSlug?: string;
+  /**
+   * Tenant slug resolved from the request `Host` header or the
+   * `/s/<slug>/...` path prefix by the `tenantResolverMiddleware()`
+   * (Slice 1.4 — Sprint 1 — SP1.5, audit finding S2-007). The
+   * pure resolver runs unconditionally as one of the first
+   * middlewares in `worker.ts`; this field is set whenever the
+   * resolver returned a `'subdomain'` or `'path'` source.
+   *
+   * `undefined` when the request targets the apex host
+   * (`api.athlya.app`), an IP literal, or a dev hostname — those
+   * cases are legitimate (mobile API on apex, dev / staging) and
+   * the cross-check defers to the JWT claim alone.
+   *
+   * Do NOT use this field for tenant-scoped data filtering: that
+   * remains the exclusive responsibility of the JWT `studio` claim
+   * (`authClaims.studioId`) and the RLS policies fed by
+   * `withTenant`. The slug is informational only — it is consumed
+   * by the cross-check guard to refuse host-vs-claim mismatches
+   * (Req 13.2).
+   */
+  tenantSlug?: string;
 
-    /**
-     * Origin of the resolved tenant — mirrors the discriminator on
-     * `TenantResolution` from `middleware/tenant-resolver.ts`.
-     * `'none'` is recorded explicitly (rather than `undefined`) when
-     * the resolver ran but found no tenant, so observability can
-     * distinguish "resolver did not run" from "request targets the
-     * apex". Set in lock-step with {@link tenantSlug}.
-     */
-    tenantSource?: 'subdomain' | 'path' | 'none';
+  /**
+   * Origin of the resolved tenant — mirrors the discriminator on
+   * `TenantResolution` from `middleware/tenant-resolver.ts`.
+   * `'none'` is recorded explicitly (rather than `undefined`) when
+   * the resolver ran but found no tenant, so observability can
+   * distinguish "resolver did not run" from "request targets the
+   * apex". Set in lock-step with {@link tenantSlug}.
+   */
+  tenantSource?: 'subdomain' | 'path' | 'none';
 }
 
 /* ------------------------------------------------------------------ */
@@ -391,6 +391,6 @@ export interface AthlyaVariables {
  * stay short.
  */
 export interface HonoEnv {
-    Bindings: AthlyaBindings;
-    Variables: AthlyaVariables;
+  Bindings: AthlyaBindings;
+  Variables: AthlyaVariables;
 }

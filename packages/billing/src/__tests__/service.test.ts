@@ -28,15 +28,15 @@ import { describe, expect, it, vi, type Mock } from 'vitest';
 import { ZodError } from 'zod';
 
 import {
-    createCheckoutSession,
-    type CheckoutSession,
-    type CreateCheckoutSessionDeps,
-    type CreateCheckoutSessionInput,
-    type StripeClient,
-    type StudioBilling,
-    type StudioBillingRepo,
-    type UserBillingContext,
-    type UserLookupRepo,
+  createCheckoutSession,
+  type CheckoutSession,
+  type CreateCheckoutSessionDeps,
+  type CreateCheckoutSessionInput,
+  type StripeClient,
+  type StudioBilling,
+  type StudioBillingRepo,
+  type UserBillingContext,
+  type UserLookupRepo,
 } from '../service.js';
 
 /* ------------------------------------------------------------------ */
@@ -53,21 +53,21 @@ const SUCCESS_URL = 'https://app.athlya.test/billing/success';
 const CANCEL_URL = 'https://app.athlya.test/billing/cancel';
 
 const BASE_USER: UserBillingContext = {
-    userId: USER_ID,
-    email: 'member@example.com',
-    studioId: STUDIO_ID,
+  userId: USER_ID,
+  email: 'member@example.com',
+  studioId: STUDIO_ID,
 };
 
 const BASE_BILLING: StudioBilling = {
-    studioId: STUDIO_ID,
-    stripeAccountId: STRIPE_ACCOUNT_ID,
+  studioId: STUDIO_ID,
+  stripeAccountId: STRIPE_ACCOUNT_ID,
 };
 
 const BASE_INPUT: CreateCheckoutSessionInput = {
-    userId: USER_ID,
-    priceId: PRICE_ID,
-    successUrl: SUCCESS_URL,
-    cancelUrl: CANCEL_URL,
+  userId: USER_ID,
+  priceId: PRICE_ID,
+  successUrl: SUCCESS_URL,
+  cancelUrl: CANCEL_URL,
 };
 
 /* ------------------------------------------------------------------ */
@@ -75,52 +75,47 @@ const BASE_INPUT: CreateCheckoutSessionInput = {
 /* ------------------------------------------------------------------ */
 
 interface DepsHandles {
-    readonly getUser: Mock<UserLookupRepo['getUser']>;
-    readonly getBilling: Mock<StudioBillingRepo['getBilling']>;
-    readonly createStripeSession: Mock<StripeClient['createCheckoutSession']>;
-    readonly deps: CreateCheckoutSessionDeps;
+  readonly getUser: Mock<UserLookupRepo['getUser']>;
+  readonly getBilling: Mock<StudioBillingRepo['getBilling']>;
+  readonly createStripeSession: Mock<StripeClient['createCheckoutSession']>;
+  readonly deps: CreateCheckoutSessionDeps;
 }
 
 function buildDeps(
-    options: {
-        user?: UserBillingContext | null;
-        billing?: StudioBilling | null;
-        session?: CheckoutSession;
-        sessionError?: Error;
-    } = {},
+  options: {
+    user?: UserBillingContext | null;
+    billing?: StudioBilling | null;
+    session?: CheckoutSession;
+    sessionError?: Error;
+  } = {},
 ): DepsHandles {
-    const user = options.user === undefined ? BASE_USER : options.user;
-    const billing =
-        options.billing === undefined ? BASE_BILLING : options.billing;
-    const session: CheckoutSession = options.session ?? {
-        id: SESSION_ID,
-        url: SESSION_URL,
-    };
+  const user = options.user === undefined ? BASE_USER : options.user;
+  const billing = options.billing === undefined ? BASE_BILLING : options.billing;
+  const session: CheckoutSession = options.session ?? {
+    id: SESSION_ID,
+    url: SESSION_URL,
+  };
 
-    const getUser = vi
-        .fn<UserLookupRepo['getUser']>()
-        .mockResolvedValue(user);
-    const getBilling = vi
-        .fn<StudioBillingRepo['getBilling']>()
-        .mockResolvedValue(billing);
+  const getUser = vi.fn<UserLookupRepo['getUser']>().mockResolvedValue(user);
+  const getBilling = vi.fn<StudioBillingRepo['getBilling']>().mockResolvedValue(billing);
 
-    const createStripeSession = vi.fn<StripeClient['createCheckoutSession']>();
-    if (options.sessionError !== undefined) {
-        createStripeSession.mockRejectedValue(options.sessionError);
-    } else {
-        createStripeSession.mockResolvedValue(session);
-    }
+  const createStripeSession = vi.fn<StripeClient['createCheckoutSession']>();
+  if (options.sessionError !== undefined) {
+    createStripeSession.mockRejectedValue(options.sessionError);
+  } else {
+    createStripeSession.mockResolvedValue(session);
+  }
 
-    return {
-        getUser,
-        getBilling,
-        createStripeSession,
-        deps: {
-            users: { getUser },
-            billing: { getBilling },
-            stripe: { createCheckoutSession: createStripeSession },
-        },
-    };
+  return {
+    getUser,
+    getBilling,
+    createStripeSession,
+    deps: {
+      users: { getUser },
+      billing: { getBilling },
+      stripe: { createCheckoutSession: createStripeSession },
+    },
+  };
 }
 
 /* ================================================================== */
@@ -128,36 +123,36 @@ function buildDeps(
 /* ================================================================== */
 
 describe('createCheckoutSession — happy path', () => {
-    it('creates a session scoped to the studio Stripe account', async () => {
-        const { getUser, getBilling, createStripeSession, deps } = buildDeps();
+  it('creates a session scoped to the studio Stripe account', async () => {
+    const { getUser, getBilling, createStripeSession, deps } = buildDeps();
 
-        const result = await createCheckoutSession(BASE_INPUT, deps);
+    const result = await createCheckoutSession(BASE_INPUT, deps);
 
-        expect(result).toEqual({
-            kind: 'ok',
-            sessionId: SESSION_ID,
-            url: SESSION_URL,
-        });
-
-        // Repos were consulted in order.
-        expect(getUser).toHaveBeenCalledExactlyOnceWith(USER_ID);
-        expect(getBilling).toHaveBeenCalledExactlyOnceWith(STUDIO_ID);
-
-        // Stripe was called once with the full params — Connect
-        // account id, customer email pre-fill, and metadata carrying
-        // both correlation keys the webhook will need.
-        expect(createStripeSession).toHaveBeenCalledExactlyOnceWith({
-            priceId: PRICE_ID,
-            successUrl: SUCCESS_URL,
-            cancelUrl: CANCEL_URL,
-            customerEmail: 'member@example.com',
-            metadata: {
-                userId: USER_ID,
-                studioId: STUDIO_ID,
-            },
-            stripeAccount: STRIPE_ACCOUNT_ID,
-        });
+    expect(result).toEqual({
+      kind: 'ok',
+      sessionId: SESSION_ID,
+      url: SESSION_URL,
     });
+
+    // Repos were consulted in order.
+    expect(getUser).toHaveBeenCalledExactlyOnceWith(USER_ID);
+    expect(getBilling).toHaveBeenCalledExactlyOnceWith(STUDIO_ID);
+
+    // Stripe was called once with the full params — Connect
+    // account id, customer email pre-fill, and metadata carrying
+    // both correlation keys the webhook will need.
+    expect(createStripeSession).toHaveBeenCalledExactlyOnceWith({
+      priceId: PRICE_ID,
+      successUrl: SUCCESS_URL,
+      cancelUrl: CANCEL_URL,
+      customerEmail: 'member@example.com',
+      metadata: {
+        userId: USER_ID,
+        studioId: STUDIO_ID,
+      },
+      stripeAccount: STRIPE_ACCOUNT_ID,
+    });
+  });
 });
 
 /* ================================================================== */
@@ -165,20 +160,20 @@ describe('createCheckoutSession — happy path', () => {
 /* ================================================================== */
 
 describe('createCheckoutSession — user_not_found', () => {
-    it('short-circuits and does NOT call Stripe when the user is missing', async () => {
-        const { getBilling, createStripeSession, deps } = buildDeps({
-            user: null,
-        });
-
-        const result = await createCheckoutSession(BASE_INPUT, deps);
-
-        expect(result).toEqual({ kind: 'user_not_found' });
-
-        // Billing lookup and Stripe are both skipped to avoid a
-        // useless outbound call for an unknown user id.
-        expect(getBilling).not.toHaveBeenCalled();
-        expect(createStripeSession).not.toHaveBeenCalled();
+  it('short-circuits and does NOT call Stripe when the user is missing', async () => {
+    const { getBilling, createStripeSession, deps } = buildDeps({
+      user: null,
     });
+
+    const result = await createCheckoutSession(BASE_INPUT, deps);
+
+    expect(result).toEqual({ kind: 'user_not_found' });
+
+    // Billing lookup and Stripe are both skipped to avoid a
+    // useless outbound call for an unknown user id.
+    expect(getBilling).not.toHaveBeenCalled();
+    expect(createStripeSession).not.toHaveBeenCalled();
+  });
 });
 
 /* ================================================================== */
@@ -186,25 +181,25 @@ describe('createCheckoutSession — user_not_found', () => {
 /* ================================================================== */
 
 describe('createCheckoutSession — billing_not_configured', () => {
-    it('returns billing_not_configured when the studio row is missing', async () => {
-        const { createStripeSession, deps } = buildDeps({ billing: null });
+  it('returns billing_not_configured when the studio row is missing', async () => {
+    const { createStripeSession, deps } = buildDeps({ billing: null });
 
-        const result = await createCheckoutSession(BASE_INPUT, deps);
+    const result = await createCheckoutSession(BASE_INPUT, deps);
 
-        expect(result).toEqual({ kind: 'billing_not_configured' });
-        expect(createStripeSession).not.toHaveBeenCalled();
+    expect(result).toEqual({ kind: 'billing_not_configured' });
+    expect(createStripeSession).not.toHaveBeenCalled();
+  });
+
+  it('returns billing_not_configured when stripeAccountId is null', async () => {
+    const { createStripeSession, deps } = buildDeps({
+      billing: { studioId: STUDIO_ID, stripeAccountId: null },
     });
 
-    it('returns billing_not_configured when stripeAccountId is null', async () => {
-        const { createStripeSession, deps } = buildDeps({
-            billing: { studioId: STUDIO_ID, stripeAccountId: null },
-        });
+    const result = await createCheckoutSession(BASE_INPUT, deps);
 
-        const result = await createCheckoutSession(BASE_INPUT, deps);
-
-        expect(result).toEqual({ kind: 'billing_not_configured' });
-        expect(createStripeSession).not.toHaveBeenCalled();
-    });
+    expect(result).toEqual({ kind: 'billing_not_configured' });
+    expect(createStripeSession).not.toHaveBeenCalled();
+  });
 });
 
 /* ================================================================== */
@@ -212,43 +207,37 @@ describe('createCheckoutSession — billing_not_configured', () => {
 /* ================================================================== */
 
 describe('createCheckoutSession — input validation', () => {
-    it('throws ZodError when successUrl is not HTTPS', async () => {
-        const { deps } = buildDeps();
+  it('throws ZodError when successUrl is not HTTPS', async () => {
+    const { deps } = buildDeps();
 
-        await expect(
-            createCheckoutSession(
-                { ...BASE_INPUT, successUrl: 'http://insecure.example/' },
-                deps,
-            ),
-        ).rejects.toBeInstanceOf(ZodError);
-    });
+    await expect(
+      createCheckoutSession({ ...BASE_INPUT, successUrl: 'http://insecure.example/' }, deps),
+    ).rejects.toBeInstanceOf(ZodError);
+  });
 
-    it('throws ZodError when cancelUrl is not HTTPS', async () => {
-        const { deps } = buildDeps();
+  it('throws ZodError when cancelUrl is not HTTPS', async () => {
+    const { deps } = buildDeps();
 
-        await expect(
-            createCheckoutSession(
-                { ...BASE_INPUT, cancelUrl: 'ftp://nope.example/' },
-                deps,
-            ),
-        ).rejects.toBeInstanceOf(ZodError);
-    });
+    await expect(
+      createCheckoutSession({ ...BASE_INPUT, cancelUrl: 'ftp://nope.example/' }, deps),
+    ).rejects.toBeInstanceOf(ZodError);
+  });
 
-    it('throws ZodError when priceId is empty', async () => {
-        const { deps } = buildDeps();
+  it('throws ZodError when priceId is empty', async () => {
+    const { deps } = buildDeps();
 
-        await expect(
-            createCheckoutSession({ ...BASE_INPUT, priceId: '' }, deps),
-        ).rejects.toBeInstanceOf(ZodError);
-    });
+    await expect(
+      createCheckoutSession({ ...BASE_INPUT, priceId: '' }, deps),
+    ).rejects.toBeInstanceOf(ZodError);
+  });
 
-    it('throws ZodError when userId is empty', async () => {
-        const { deps } = buildDeps();
+  it('throws ZodError when userId is empty', async () => {
+    const { deps } = buildDeps();
 
-        await expect(
-            createCheckoutSession({ ...BASE_INPUT, userId: '' }, deps),
-        ).rejects.toBeInstanceOf(ZodError);
-    });
+    await expect(createCheckoutSession({ ...BASE_INPUT, userId: '' }, deps)).rejects.toBeInstanceOf(
+      ZodError,
+    );
+  });
 });
 
 /* ================================================================== */
@@ -256,12 +245,10 @@ describe('createCheckoutSession — input validation', () => {
 /* ================================================================== */
 
 describe('createCheckoutSession — Stripe error propagation', () => {
-    it('propagates thrown Stripe errors (no swallowing)', async () => {
-        const stripeError = new Error('Stripe API down: 502');
-        const { deps } = buildDeps({ sessionError: stripeError });
+  it('propagates thrown Stripe errors (no swallowing)', async () => {
+    const stripeError = new Error('Stripe API down: 502');
+    const { deps } = buildDeps({ sessionError: stripeError });
 
-        await expect(
-            createCheckoutSession(BASE_INPUT, deps),
-        ).rejects.toBe(stripeError);
-    });
+    await expect(createCheckoutSession(BASE_INPUT, deps)).rejects.toBe(stripeError);
+  });
 });

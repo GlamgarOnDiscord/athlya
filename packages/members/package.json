@@ -1,63 +1,63 @@
 {
-    "name": "@athlya/members",
-    "version": "0.0.0",
-    "private": true,
-    "type": "module",
-    "description": "Members domain use cases for Athlya — profile read/update, consent history, RGPD export + deletion cascade, workout session logging",
-    "license": "AGPL-3.0-only",
-    "engines": {
-        "node": ">=20"
+  "name": "@athlya/members",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Members domain use cases for Athlya — profile read/update, consent history, RGPD export + deletion cascade, workout session logging",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     },
-    "sideEffects": false,
-    "exports": {
-        ".": {
-            "types": "./src/index.ts",
-            "default": "./src/index.ts"
-        },
-        "./service": {
-            "types": "./src/service.ts",
-            "default": "./src/service.ts"
-        },
-        "./consents": {
-            "types": "./src/consents.ts",
-            "default": "./src/consents.ts"
-        },
-        "./sessions": {
-            "types": "./src/sessions.ts",
-            "default": "./src/sessions.ts"
-        },
-        "./export": {
-            "types": "./src/export.ts",
-            "default": "./src/export.ts"
-        },
-        "./cascade": {
-            "types": "./src/cascade.ts",
-            "default": "./src/cascade.ts"
-        }
+    "./service": {
+      "types": "./src/service.ts",
+      "default": "./src/service.ts"
     },
-    "files": [
-        "src",
-        "dist"
-    ],
-    "scripts": {
-        "build": "tsc -p tsconfig.build.json",
-        "lint": "eslint .",
-        "typecheck": "tsc --noEmit -p tsconfig.json",
-        "test": "vitest run",
-        "clean": "rimraf dist .turbo *.tsbuildinfo"
+    "./consents": {
+      "types": "./src/consents.ts",
+      "default": "./src/consents.ts"
     },
-    "dependencies": {
-        "@athlya/shared": "workspace:*"
+    "./sessions": {
+      "types": "./src/sessions.ts",
+      "default": "./src/sessions.ts"
     },
-    "devDependencies": {
-        "@athlya/eslint-config": "workspace:*",
-        "@athlya/tsconfig": "workspace:*",
-        "@testcontainers/postgresql": "^11.0.0",
-        "@types/node": "^20.19.9",
-        "eslint": "^9.39.1",
-        "postgres": "^3.4.5",
-        "rimraf": "^6.0.1",
-        "typescript": "^5.9.3",
-        "vitest": "^3.2.4"
+    "./export": {
+      "types": "./src/export.ts",
+      "default": "./src/export.ts"
+    },
+    "./cascade": {
+      "types": "./src/cascade.ts",
+      "default": "./src/cascade.ts"
     }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "clean": "rimraf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@athlya/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@athlya/eslint-config": "workspace:*",
+    "@athlya/tsconfig": "workspace:*",
+    "@testcontainers/postgresql": "^11.0.0",
+    "@types/node": "^20.19.9",
+    "eslint": "^9.39.1",
+    "postgres": "^3.4.5",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
 }

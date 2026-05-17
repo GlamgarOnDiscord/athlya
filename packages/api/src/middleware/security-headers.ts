@@ -68,14 +68,13 @@ const DEFAULT_HSTS_MAX_AGE_SECONDS = 63_072_000;
  * fails loudly at the boundary instead of silently poisoning every
  * future request.
  */
-export const DEFAULT_SECURITY_HEADERS: Readonly<Record<string, string>> =
-    Object.freeze({
-        'Strict-Transport-Security': `max-age=${String(DEFAULT_HSTS_MAX_AGE_SECONDS)}; includeSubDomains; preload`,
-        'X-Frame-Options': 'DENY',
-        'Referrer-Policy': 'strict-origin',
-        'X-Content-Type-Options': 'nosniff',
-        'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-    });
+export const DEFAULT_SECURITY_HEADERS: Readonly<Record<string, string>> = Object.freeze({
+  'Strict-Transport-Security': `max-age=${String(DEFAULT_HSTS_MAX_AGE_SECONDS)}; includeSubDomains; preload`,
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin',
+  'X-Content-Type-Options': 'nosniff',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+});
 
 /**
  * Reserved header names — {@link SecurityHeadersOptions.extraHeaders}
@@ -86,7 +85,7 @@ export const DEFAULT_SECURITY_HEADERS: Readonly<Record<string, string>> =
  * load time so it can never drift out of sync.
  */
 const RESERVED_HEADER_NAMES: ReadonlySet<string> = new Set(
-    Object.keys(DEFAULT_SECURITY_HEADERS).map((k) => k.toLowerCase()),
+  Object.keys(DEFAULT_SECURITY_HEADERS).map((k) => k.toLowerCase()),
 );
 
 /* ------------------------------------------------------------------ */
@@ -102,63 +101,63 @@ const RESERVED_HEADER_NAMES: ReadonlySet<string> = new Set(
  * header — that invariant is documented in {@link buildSecurityHeaders}.
  */
 export interface SecurityHeadersOptions {
-    /**
-     * HSTS `max-age` directive in seconds.
-     *
-     * Defaults to {@link DEFAULT_HSTS_MAX_AGE_SECONDS} (2 years). Must
-     * be a non-negative finite integer; values below 0 are clamped to
-     * 0 by the builder (RFC 6797 §6.1.1).
-     */
-    hstsMaxAgeSeconds?: number;
+  /**
+   * HSTS `max-age` directive in seconds.
+   *
+   * Defaults to {@link DEFAULT_HSTS_MAX_AGE_SECONDS} (2 years). Must
+   * be a non-negative finite integer; values below 0 are clamped to
+   * 0 by the builder (RFC 6797 §6.1.1).
+   */
+  hstsMaxAgeSeconds?: number;
 
-    /**
-     * Whether to include the `includeSubDomains` HSTS directive.
-     * Defaults to `true`.
-     */
-    hstsIncludeSubDomains?: boolean;
+  /**
+   * Whether to include the `includeSubDomains` HSTS directive.
+   * Defaults to `true`.
+   */
+  hstsIncludeSubDomains?: boolean;
 
-    /**
-     * Whether to include the `preload` HSTS directive.
-     * Defaults to `true`. Only meaningful when
-     * {@link hstsIncludeSubDomains} is also `true` and `max-age` ≥
-     * 31,536,000 — those preconditions are the caller's responsibility.
-     */
-    hstsPreload?: boolean;
+  /**
+   * Whether to include the `preload` HSTS directive.
+   * Defaults to `true`. Only meaningful when
+   * {@link hstsIncludeSubDomains} is also `true` and `max-age` ≥
+   * 31,536,000 — those preconditions are the caller's responsibility.
+   */
+  hstsPreload?: boolean;
 
-    /**
-     * `X-Frame-Options` header value. Defaults to `'DENY'`.
-     *
-     * `SAMEORIGIN` is the only other RFC-legal value (the obsolete
-     * `ALLOW-FROM` is intentionally not exposed).
-     */
-    frameOptions?: 'DENY' | 'SAMEORIGIN';
+  /**
+   * `X-Frame-Options` header value. Defaults to `'DENY'`.
+   *
+   * `SAMEORIGIN` is the only other RFC-legal value (the obsolete
+   * `ALLOW-FROM` is intentionally not exposed).
+   */
+  frameOptions?: 'DENY' | 'SAMEORIGIN';
 
-    /**
-     * `Referrer-Policy` header value. Defaults to `'strict-origin'`.
-     *
-     * Typed as `string` rather than a closed union because the Fetch
-     * spec defines several legal values (e.g. `no-referrer`,
-     * `strict-origin-when-cross-origin`) and future additions should
-     * not require a code change here.
-     */
-    referrerPolicy?: string;
+  /**
+   * `Referrer-Policy` header value. Defaults to `'strict-origin'`.
+   *
+   * Typed as `string` rather than a closed union because the Fetch
+   * spec defines several legal values (e.g. `no-referrer`,
+   * `strict-origin-when-cross-origin`) and future additions should
+   * not require a code change here.
+   */
+  referrerPolicy?: string;
 
-    /**
-     * `Permissions-Policy` header value. Defaults to the value in
-     * {@link DEFAULT_SECURITY_HEADERS}.
-     */
-    permissionsPolicy?: string;
+  /**
+   * `Permissions-Policy` header value. Defaults to the value in
+   * {@link DEFAULT_SECURITY_HEADERS}.
+   */
+  permissionsPolicy?: string;
 
-    /**
-     * Extra headers to merge with the defaults. Entries whose key
-     * (case-insensitive) clashes with a reserved security header are
-     * dropped so callers cannot accidentally weaken the baseline.
-     *
-     * Intended for adding non-reserved headers such as
-     * `Content-Security-Policy` (task 10.1 owns the per-request nonce),
-     * `Report-To`, `Cross-Origin-Opener-Policy`, etc.
-     */
-    extraHeaders?: Record<string, string>;
+  /**
+   * Extra headers to merge with the defaults. Entries whose key
+   * (case-insensitive) clashes with a reserved security header are
+   * dropped so callers cannot accidentally weaken the baseline.
+   *
+   * Intended for adding non-reserved headers such as
+   * `Content-Security-Policy` (task 10.1 owns the per-request nonce),
+   * `Report-To`, `Cross-Origin-Opener-Policy`, etc.
+   */
+  extraHeaders?: Record<string, string>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -173,22 +172,19 @@ export interface SecurityHeadersOptions {
  * malformed header.
  */
 function buildHstsValue(options: SecurityHeadersOptions): string {
-    const rawMaxAge = options.hstsMaxAgeSeconds ?? DEFAULT_HSTS_MAX_AGE_SECONDS;
-    const maxAge =
-        Number.isFinite(rawMaxAge) && rawMaxAge >= 0
-            ? Math.floor(rawMaxAge)
-            : 0;
-    const includeSubDomains = options.hstsIncludeSubDomains ?? true;
-    const preload = options.hstsPreload ?? true;
+  const rawMaxAge = options.hstsMaxAgeSeconds ?? DEFAULT_HSTS_MAX_AGE_SECONDS;
+  const maxAge = Number.isFinite(rawMaxAge) && rawMaxAge >= 0 ? Math.floor(rawMaxAge) : 0;
+  const includeSubDomains = options.hstsIncludeSubDomains ?? true;
+  const preload = options.hstsPreload ?? true;
 
-    const parts: string[] = [`max-age=${String(maxAge)}`];
-    if (includeSubDomains) {
-        parts.push('includeSubDomains');
-    }
-    if (preload) {
-        parts.push('preload');
-    }
-    return parts.join('; ');
+  const parts: string[] = [`max-age=${String(maxAge)}`];
+  if (includeSubDomains) {
+    parts.push('includeSubDomains');
+  }
+  if (preload) {
+    parts.push('preload');
+  }
+  return parts.join('; ');
 }
 
 /**
@@ -204,41 +200,38 @@ function buildHstsValue(options: SecurityHeadersOptions): string {
  *     can be iterated with `Object.entries` and passed to
  *     `new Headers(...)`.
  */
-export function buildSecurityHeaders(
-    options: SecurityHeadersOptions = {},
-): Record<string, string> {
-    const frameOptions = options.frameOptions ?? 'DENY';
-    const referrerPolicy = options.referrerPolicy ?? 'strict-origin';
-    const permissionsPolicy =
-        options.permissionsPolicy ??
-        DEFAULT_SECURITY_HEADERS['Permissions-Policy'];
+export function buildSecurityHeaders(options: SecurityHeadersOptions = {}): Record<string, string> {
+  const frameOptions = options.frameOptions ?? 'DENY';
+  const referrerPolicy = options.referrerPolicy ?? 'strict-origin';
+  const permissionsPolicy =
+    options.permissionsPolicy ?? DEFAULT_SECURITY_HEADERS['Permissions-Policy'];
 
-    const headers: Record<string, string> = {
-        'Strict-Transport-Security': buildHstsValue(options),
-        'X-Frame-Options': frameOptions,
-        'Referrer-Policy': referrerPolicy,
-        'X-Content-Type-Options': 'nosniff',
-        // `permissionsPolicy` is guaranteed to be a string by the
-        // default above, but `exactOptionalPropertyTypes` makes the
-        // compiler re-check, so we coerce through `String()` to remain
-        // resilient to future `Permissions-Policy` type widening.
-        'Permissions-Policy': String(permissionsPolicy),
-    };
+  const headers: Record<string, string> = {
+    'Strict-Transport-Security': buildHstsValue(options),
+    'X-Frame-Options': frameOptions,
+    'Referrer-Policy': referrerPolicy,
+    'X-Content-Type-Options': 'nosniff',
+    // `permissionsPolicy` is guaranteed to be a string by the
+    // default above, but `exactOptionalPropertyTypes` makes the
+    // compiler re-check, so we coerce through `String()` to remain
+    // resilient to future `Permissions-Policy` type widening.
+    'Permissions-Policy': String(permissionsPolicy),
+  };
 
-    if (options.extraHeaders !== undefined) {
-        for (const [key, value] of Object.entries(options.extraHeaders)) {
-            if (RESERVED_HEADER_NAMES.has(key.toLowerCase())) {
-                // Silently drop: the reserved default wins. Logging a
-                // warning here would force a logger dependency on this
-                // otherwise pure module; callers that want to be told
-                // can sanity-check their own config ahead of time.
-                continue;
-            }
-            headers[key] = value;
-        }
+  if (options.extraHeaders !== undefined) {
+    for (const [key, value] of Object.entries(options.extraHeaders)) {
+      if (RESERVED_HEADER_NAMES.has(key.toLowerCase())) {
+        // Silently drop: the reserved default wins. Logging a
+        // warning here would force a logger dependency on this
+        // otherwise pure module; callers that want to be told
+        // can sanity-check their own config ahead of time.
+        continue;
+      }
+      headers[key] = value;
     }
+  }
 
-    return headers;
+  return headers;
 }
 
 /* ------------------------------------------------------------------ */
@@ -261,19 +254,19 @@ export function buildSecurityHeaders(
  * instance avoids every such footgun.
  */
 export function applySecurityHeaders(
-    response: Response,
-    headers: Record<string, string>,
+  response: Response,
+  headers: Record<string, string>,
 ): Response {
-    const cloned = response.clone();
-    const merged = new Headers(cloned.headers);
-    for (const [key, value] of Object.entries(headers)) {
-        merged.set(key, value);
-    }
-    return new Response(cloned.body, {
-        status: cloned.status,
-        statusText: cloned.statusText,
-        headers: merged,
-    });
+  const cloned = response.clone();
+  const merged = new Headers(cloned.headers);
+  for (const [key, value] of Object.entries(headers)) {
+    merged.set(key, value);
+  }
+  return new Response(cloned.body, {
+    status: cloned.status,
+    statusText: cloned.statusText,
+    headers: merged,
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -289,7 +282,7 @@ export function applySecurityHeaders(
  * any router whose outgoing response is collected in a header bag.
  */
 export interface SecurityHeadersContext {
-    header: (key: string, value: string) => void;
+  header: (key: string, value: string) => void;
 }
 
 /**
@@ -299,8 +292,8 @@ export interface SecurityHeadersContext {
  * `void | Response`; we just never short-circuit).
  */
 export type SecurityHeadersMiddleware = (
-    c: SecurityHeadersContext,
-    next: () => Promise<void>,
+  c: SecurityHeadersContext,
+  next: () => Promise<void>,
 ) => Promise<void>;
 
 /**
@@ -323,16 +316,14 @@ export type SecurityHeadersMiddleware = (
  * Problem Details, and we want the security headers present on that
  * error response too.
  */
-export function securityHeaders(
-    options: SecurityHeadersOptions = {},
-): SecurityHeadersMiddleware {
-    const headers = buildSecurityHeaders(options);
-    const entries = Object.entries(headers);
+export function securityHeaders(options: SecurityHeadersOptions = {}): SecurityHeadersMiddleware {
+  const headers = buildSecurityHeaders(options);
+  const entries = Object.entries(headers);
 
-    return async (c, next) => {
-        for (const [key, value] of entries) {
-            c.header(key, value);
-        }
-        await next();
-    };
+  return async (c, next) => {
+    for (const [key, value] of entries) {
+      c.header(key, value);
+    }
+    await next();
+  };
 }

@@ -62,16 +62,14 @@ import { createDrizzleExportJobStore } from './members-export-job-store-drizzle.
 
 import type { AthlyaBindings } from '../types.js';
 import type {
-    ArchiveBuilder,
-    BlobStore,
-    EventPublisher,
-    MemberDataSource,
-    RunExportJobDeps,
+  ArchiveBuilder,
+  BlobStore,
+  EventPublisher,
+  MemberDataSource,
+  RunExportJobDeps,
 } from '@athlya/members';
 import type { AthlyaEvent } from '@athlya/shared/events';
 import type { R2Bucket } from '@cloudflare/workers-types';
-
-
 
 /* ------------------------------------------------------------------ */
 /*  Stable error reasons                                               */
@@ -90,8 +88,7 @@ export const EXPORTS_BUCKET_MISSING_REASON = 'exports_bucket_missing';
  * ships. Replaces the previous "stuck in pending forever" state
  * with a clean failure surface (cf. audit S5-001 mitigation §1).
  */
-export const EXPORT_DATA_SOURCE_NOT_WIRED_REASON =
-    'export_data_source_not_wired';
+export const EXPORT_DATA_SOURCE_NOT_WIRED_REASON = 'export_data_source_not_wired';
 
 /* ------------------------------------------------------------------ */
 /*  R2 BlobStore                                                       */
@@ -108,50 +105,47 @@ export const EXPORT_DATA_SOURCE_NOT_WIRED_REASON =
  * For now, a clearly-typed `Error` makes the partial state
  * observable on the audit side.
  */
-function buildBlobStore(
-    bucket: R2Bucket | undefined,
-    env: AthlyaBindings,
-): BlobStore {
-    if (bucket === undefined) {
-        return {
-            put(key) {
-                console.warn(
-                    '[export-deps] EXPORTS_BUCKET binding missing — refusing to upload archive (mode dégradé)',
-                    {
-                        objectKey: key,
-                        env: env.ENVIRONMENT,
-                        reason: EXPORTS_BUCKET_MISSING_REASON,
-                    },
-                );
-                throw new Error(EXPORTS_BUCKET_MISSING_REASON);
-            },
-            signedUrl(key) {
-                console.warn(
-                    '[export-deps] EXPORTS_BUCKET binding missing — refusing to sign URL (mode dégradé)',
-                    {
-                        objectKey: key,
-                        env: env.ENVIRONMENT,
-                        reason: EXPORTS_BUCKET_MISSING_REASON,
-                    },
-                );
-                throw new Error(EXPORTS_BUCKET_MISSING_REASON);
-            },
-        };
-    }
-
+function buildBlobStore(bucket: R2Bucket | undefined, env: AthlyaBindings): BlobStore {
+  if (bucket === undefined) {
     return {
-        async put(key, bytes) {
-            await bucket.put(key, bytes);
-        },
-        signedUrl(_key, _expiresSec) {
-            // R2 signed-URL issuance lives outside the binding API
-            // (S3-style HMAC presign) and ships in the follow-up
-            // slice. Throwing keeps `runExportJob` honest: it will
-            // markFailed with this reason instead of stamping a
-            // bogus URL on a `completed` row.
-            throw new Error(EXPORT_DATA_SOURCE_NOT_WIRED_REASON);
-        },
+      put(key) {
+        console.warn(
+          '[export-deps] EXPORTS_BUCKET binding missing — refusing to upload archive (mode dégradé)',
+          {
+            objectKey: key,
+            env: env.ENVIRONMENT,
+            reason: EXPORTS_BUCKET_MISSING_REASON,
+          },
+        );
+        throw new Error(EXPORTS_BUCKET_MISSING_REASON);
+      },
+      signedUrl(key) {
+        console.warn(
+          '[export-deps] EXPORTS_BUCKET binding missing — refusing to sign URL (mode dégradé)',
+          {
+            objectKey: key,
+            env: env.ENVIRONMENT,
+            reason: EXPORTS_BUCKET_MISSING_REASON,
+          },
+        );
+        throw new Error(EXPORTS_BUCKET_MISSING_REASON);
+      },
     };
+  }
+
+  return {
+    async put(key, bytes) {
+      await bucket.put(key, bytes);
+    },
+    signedUrl(_key, _expiresSec) {
+      // R2 signed-URL issuance lives outside the binding API
+      // (S3-style HMAC presign) and ships in the follow-up
+      // slice. Throwing keeps `runExportJob` honest: it will
+      // markFailed with this reason instead of stamping a
+      // bogus URL on a `completed` row.
+      throw new Error(EXPORT_DATA_SOURCE_NOT_WIRED_REASON);
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -175,27 +169,27 @@ function buildBlobStore(
  * audit flagged as the CRITICAL S5-001.
  */
 function buildStubDataSource(): MemberDataSource {
-    const reason = EXPORT_DATA_SOURCE_NOT_WIRED_REASON;
-    return {
-        fetchProfile() {
-            throw new Error(reason);
-        },
-        fetchConsents() {
-            throw new Error(reason);
-        },
-        listReservations() {
-            throw new Error(reason);
-        },
-        listSessions() {
-            throw new Error(reason);
-        },
-        listCheckins() {
-            throw new Error(reason);
-        },
-        listInvoices() {
-            throw new Error(reason);
-        },
-    };
+  const reason = EXPORT_DATA_SOURCE_NOT_WIRED_REASON;
+  return {
+    fetchProfile() {
+      throw new Error(reason);
+    },
+    fetchConsents() {
+      throw new Error(reason);
+    },
+    listReservations() {
+      throw new Error(reason);
+    },
+    listSessions() {
+      throw new Error(reason);
+    },
+    listCheckins() {
+      throw new Error(reason);
+    },
+    listInvoices() {
+      throw new Error(reason);
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -210,11 +204,11 @@ function buildStubDataSource(): MemberDataSource {
  * ZIP archive.
  */
 function buildStubArchiveBuilder(): ArchiveBuilder {
-    return {
-        build() {
-            throw new Error(EXPORT_DATA_SOURCE_NOT_WIRED_REASON);
-        },
-    };
+  return {
+    build() {
+      throw new Error(EXPORT_DATA_SOURCE_NOT_WIRED_REASON);
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -228,22 +222,21 @@ function buildStubArchiveBuilder(): ArchiveBuilder {
  * best-effort with a structured warn log on failure.
  */
 function buildEventPublisher(env: AthlyaBindings): EventPublisher {
-    return {
-        async publish(event: AthlyaEvent) {
-            try {
-                await publish(event, undefined, {
-                    queue: env.EVENTS_QUEUE as unknown as Queue,
-                });
-            } catch (err) {
-                console.warn('[export-deps] publishEvent failed', {
-                    eventId: event.id,
-                    eventType: event.type,
-                    error:
-                        err instanceof Error ? err.message : String(err),
-                });
-            }
-        },
-    };
+  return {
+    async publish(event: AthlyaEvent) {
+      try {
+        await publish(event, undefined, {
+          queue: env.EVENTS_QUEUE as unknown as Queue,
+        });
+      } catch (err) {
+        console.warn('[export-deps] publishEvent failed', {
+          eventId: event.id,
+          eventType: event.type,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -264,28 +257,28 @@ function buildEventPublisher(env: AthlyaBindings): EventPublisher {
  * event.
  */
 export function buildExportDeps(env: AthlyaBindings): RunExportJobDeps {
-    const db = getOrCreateDbHttp(env.DB_URL);
-    const jobs = createDrizzleExportJobStore(db);
-    const blob = buildBlobStore(env.EXPORTS_BUCKET, env);
-    const data = buildStubDataSource();
-    const archive = buildStubArchiveBuilder();
-    const events = buildEventPublisher(env);
+  const db = getOrCreateDbHttp(env.DB_URL);
+  const jobs = createDrizzleExportJobStore(db);
+  const blob = buildBlobStore(env.EXPORTS_BUCKET, env);
+  const data = buildStubDataSource();
+  const archive = buildStubArchiveBuilder();
+  const events = buildEventPublisher(env);
 
-    return {
-        jobs,
-        data,
-        archive,
-        blob,
-        events,
-        clock: { now: () => Date.now() },
-        uuid: () => crypto.randomUUID(),
-        logger: {
-            warn: (msg, extra) => {
-                console.warn(`[export] ${msg}`, extra ?? {});
-            },
-            error: (msg, extra) => {
-                console.error(`[export] ${msg}`, extra ?? {});
-            },
-        },
-    };
+  return {
+    jobs,
+    data,
+    archive,
+    blob,
+    events,
+    clock: { now: () => Date.now() },
+    uuid: () => crypto.randomUUID(),
+    logger: {
+      warn: (msg, extra) => {
+        console.warn(`[export] ${msg}`, extra ?? {});
+      },
+      error: (msg, extra) => {
+        console.error(`[export] ${msg}`, extra ?? {});
+      },
+    },
+  };
 }

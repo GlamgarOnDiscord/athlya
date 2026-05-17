@@ -38,31 +38,24 @@
  */
 
 /** Coarse UA family bucket. */
-export type UaFamily =
-    | 'chrome'
-    | 'firefox'
-    | 'safari'
-    | 'edge'
-    | 'mobile'
-    | 'bot'
-    | 'other';
+export type UaFamily = 'chrome' | 'firefox' | 'safari' | 'edge' | 'mobile' | 'bot' | 'other';
 
 /** Snapshot of the last known login signal. */
 export interface LoginSignal {
-    readonly country: string;
-    readonly uaFamily: UaFamily;
+  readonly country: string;
+  readonly uaFamily: UaFamily;
 }
 
 /** Result of {@link detectLoginAnomaly}. */
 export interface LoginAnomaly {
-    /** Coarse UA family, current request. */
-    readonly uaFamily: UaFamily;
-    /** ISO-3166 alpha-2 country, current request. */
-    readonly country: string;
-    /** UA family of the previous login. `null` on first ever. */
-    readonly previousUaFamily: UaFamily | null;
-    /** Country of the previous login. `null` on first ever. */
-    readonly previousCountry: string | null;
+  /** Coarse UA family, current request. */
+  readonly uaFamily: UaFamily;
+  /** ISO-3166 alpha-2 country, current request. */
+  readonly country: string;
+  /** UA family of the previous login. `null` on first ever. */
+  readonly previousUaFamily: UaFamily | null;
+  /** Country of the previous login. `null` on first ever. */
+  readonly previousCountry: string | null;
 }
 
 /**
@@ -72,51 +65,46 @@ export interface LoginAnomaly {
  * contain "Safari", etc. We test the more specific tokens first.
  */
 export function classifyUserAgent(ua: string | undefined): UaFamily {
-    if (typeof ua !== 'string' || ua === '') return 'other';
-    const s = ua.toLowerCase();
+  if (typeof ua !== 'string' || ua === '') return 'other';
+  const s = ua.toLowerCase();
 
-    // Bot signatures first — overlap-free with browser checks.
-    if (
-        s.includes('bot') ||
-        s.includes('crawl') ||
-        s.includes('spider') ||
-        s.includes('curl/') ||
-        s.includes('wget/') ||
-        s.includes('python-requests') ||
-        s.includes('postman')
-    ) {
-        return 'bot';
-    }
+  // Bot signatures first — overlap-free with browser checks.
+  if (
+    s.includes('bot') ||
+    s.includes('crawl') ||
+    s.includes('spider') ||
+    s.includes('curl/') ||
+    s.includes('wget/') ||
+    s.includes('python-requests') ||
+    s.includes('postman')
+  ) {
+    return 'bot';
+  }
 
-    // Mobile detection BEFORE browser families — a mobile Chrome
-    // is best classified as `'mobile'` for anomaly purposes.
-    if (
-        s.includes('iphone') ||
-        s.includes('ipad') ||
-        s.includes('android') ||
-        s.includes('mobile')
-    ) {
-        return 'mobile';
-    }
+  // Mobile detection BEFORE browser families — a mobile Chrome
+  // is best classified as `'mobile'` for anomaly purposes.
+  if (s.includes('iphone') || s.includes('ipad') || s.includes('android') || s.includes('mobile')) {
+    return 'mobile';
+  }
 
-    // Edge BEFORE Chrome — Edge UAs contain `Chrome/` for compat.
-    if (s.includes('edg/') || s.includes('edge/')) return 'edge';
-    if (s.includes('firefox/')) return 'firefox';
-    // Chrome BEFORE Safari — Chrome UAs contain `Safari/`.
-    if (s.includes('chrome/')) return 'chrome';
-    if (s.includes('safari/')) return 'safari';
+  // Edge BEFORE Chrome — Edge UAs contain `Chrome/` for compat.
+  if (s.includes('edg/') || s.includes('edge/')) return 'edge';
+  if (s.includes('firefox/')) return 'firefox';
+  // Chrome BEFORE Safari — Chrome UAs contain `Safari/`.
+  if (s.includes('chrome/')) return 'chrome';
+  if (s.includes('safari/')) return 'safari';
 
-    return 'other';
+  return 'other';
 }
 
 /** Options accepted by {@link detectLoginAnomaly}. */
 export interface DetectLoginAnomalyInput {
-    /** Current request country (Cloudflare `CF-IPCountry`). */
-    readonly currentCountry: string | undefined;
-    /** Current request User-Agent. */
-    readonly currentUserAgent: string | undefined;
-    /** Last persisted signal — `null` on first login ever. */
-    readonly previous: LoginSignal | null;
+  /** Current request country (Cloudflare `CF-IPCountry`). */
+  readonly currentCountry: string | undefined;
+  /** Current request User-Agent. */
+  readonly currentUserAgent: string | undefined;
+  /** Last persisted signal — `null` on first login ever. */
+  readonly previous: LoginSignal | null;
 }
 
 /**
@@ -130,38 +118,36 @@ export interface DetectLoginAnomalyInput {
  *   - A {@link LoginAnomaly} record carrying both sides of the
  *     comparison when either dimension changed.
  */
-export function detectLoginAnomaly(
-    input: DetectLoginAnomalyInput,
-): LoginAnomaly | null {
-    const country = normaliseCountry(input.currentCountry);
-    const uaFamily = classifyUserAgent(input.currentUserAgent);
+export function detectLoginAnomaly(input: DetectLoginAnomalyInput): LoginAnomaly | null {
+  const country = normaliseCountry(input.currentCountry);
+  const uaFamily = classifyUserAgent(input.currentUserAgent);
 
-    // First login ever — no baseline. The caller stores the signal
-    // so the next call has something to compare against.
-    if (input.previous === null) {
-        return null;
-    }
+  // First login ever — no baseline. The caller stores the signal
+  // so the next call has something to compare against.
+  if (input.previous === null) {
+    return null;
+  }
 
-    // Skip detection when either side is the undetermined
-    // placeholder. `'XX'` is what Cloudflare emits when the IP is
-    // private, on a dev runtime, or in a country it cannot resolve.
-    // Treating that as a country change would generate noise on
-    // every staging deploy.
-    if (country === 'XX' || input.previous.country === 'XX') {
-        return null;
-    }
+  // Skip detection when either side is the undetermined
+  // placeholder. `'XX'` is what Cloudflare emits when the IP is
+  // private, on a dev runtime, or in a country it cannot resolve.
+  // Treating that as a country change would generate noise on
+  // every staging deploy.
+  if (country === 'XX' || input.previous.country === 'XX') {
+    return null;
+  }
 
-    const countryChanged = country !== input.previous.country;
-    const uaChanged = uaFamily !== input.previous.uaFamily;
+  const countryChanged = country !== input.previous.country;
+  const uaChanged = uaFamily !== input.previous.uaFamily;
 
-    if (!countryChanged && !uaChanged) return null;
+  if (!countryChanged && !uaChanged) return null;
 
-    return {
-        country,
-        uaFamily,
-        previousCountry: input.previous.country,
-        previousUaFamily: input.previous.uaFamily,
-    };
+  return {
+    country,
+    uaFamily,
+    previousCountry: input.previous.country,
+    previousUaFamily: input.previous.uaFamily,
+  };
 }
 
 /**
@@ -170,9 +156,9 @@ export function detectLoginAnomaly(
  * missing/malformed.
  */
 function normaliseCountry(value: string | undefined): string {
-    if (typeof value !== 'string') return 'XX';
-    const trimmed = value.trim().toUpperCase();
-    if (trimmed.length !== 2) return 'XX';
-    if (!/^[A-Z]{2}$/u.test(trimmed)) return 'XX';
-    return trimmed;
+  if (typeof value !== 'string') return 'XX';
+  const trimmed = value.trim().toUpperCase();
+  if (trimmed.length !== 2) return 'XX';
+  if (!/^[A-Z]{2}$/u.test(trimmed)) return 'XX';
+  return trimmed;
 }

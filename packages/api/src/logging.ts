@@ -55,20 +55,20 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
  * fresh type definition.
  */
 export interface LogFields {
-    traceId?: string;
-    method?: string;
-    path?: string;
-    status?: number;
-    durationMs?: number;
-    [key: string]: unknown;
+  traceId?: string;
+  method?: string;
+  path?: string;
+  status?: number;
+  durationMs?: number;
+  [key: string]: unknown;
 }
 
 /** Minimal logger surface. One method per {@link LogLevel}. */
 export interface StructuredLogger {
-    debug(msg: string, fields?: LogFields): void;
-    info(msg: string, fields?: LogFields): void;
-    warn(msg: string, fields?: LogFields): void;
-    error(msg: string, fields?: LogFields): void;
+  debug(msg: string, fields?: LogFields): void;
+  info(msg: string, fields?: LogFields): void;
+  warn(msg: string, fields?: LogFields): void;
+  error(msg: string, fields?: LogFields): void;
 }
 
 /**
@@ -77,11 +77,11 @@ export interface StructuredLogger {
  * can spread it (`redactKeys([...DEFAULT_REDACTED_KEYS, 'apiKey'])`).
  */
 export const DEFAULT_REDACTED_KEYS: readonly string[] = Object.freeze([
-    'password',
-    'token',
-    'authorization',
-    'stripeSignature',
-    'secret',
+  'password',
+  'token',
+  'authorization',
+  'stripeSignature',
+  'secret',
 ]);
 
 /** Placeholder value used to replace redacted field contents. */
@@ -95,15 +95,17 @@ const REDACTED_PLACEHOLDER = '[REDACTED]';
  * Matching is case-insensitive so `Authorization` and `authorization`
  * both get scrubbed — useful when fields come from raw HTTP headers.
  */
-export function redactKeys(keys: readonly string[] = DEFAULT_REDACTED_KEYS): (fields: LogFields) => LogFields {
-    const lowered = new Set(keys.map((k) => k.toLowerCase()));
-    return (fields) => {
-        const out: LogFields = {};
-        for (const [k, v] of Object.entries(fields)) {
-            out[k] = lowered.has(k.toLowerCase()) ? REDACTED_PLACEHOLDER : v;
-        }
-        return out;
-    };
+export function redactKeys(
+  keys: readonly string[] = DEFAULT_REDACTED_KEYS,
+): (fields: LogFields) => LogFields {
+  const lowered = new Set(keys.map((k) => k.toLowerCase()));
+  return (fields) => {
+    const out: LogFields = {};
+    for (const [k, v] of Object.entries(fields)) {
+      out[k] = lowered.has(k.toLowerCase()) ? REDACTED_PLACEHOLDER : v;
+    }
+    return out;
+  };
 }
 
 /**
@@ -137,65 +139,65 @@ export function redactKeys(keys: readonly string[] = DEFAULT_REDACTED_KEYS): (fi
  *   • `error` → `console.error`
  */
 export function createLogger(
-    base: { traceId?: string;[key: string]: unknown } = {},
+  base: { traceId?: string; [key: string]: unknown } = {},
 ): StructuredLogger {
-    const baseFields = { ...base };
-    // Pre-build the redactor once so each emit is allocation-free
-    // beyond the per-call fields traversal. The filter walks the
-    // entries shallowly — matching what `redactKeys` documents.
-    const redact = redactKeys(DEFAULT_REDACTED_KEYS);
+  const baseFields = { ...base };
+  // Pre-build the redactor once so each emit is allocation-free
+  // beyond the per-call fields traversal. The filter walks the
+  // entries shallowly — matching what `redactKeys` documents.
+  const redact = redactKeys(DEFAULT_REDACTED_KEYS);
 
-    function emit(level: LogLevel, msg: string, fields?: LogFields): void {
-        // Sprint-3 SP3.2 (S5-008): auto-redact the merged field map
-        // BEFORE serialisation. Both base + per-call entries flow
-        // through `redact` so a stale `createLogger({ token: ... })`
-        // call (defensive — nothing in the codebase does this today)
-        // also gets scrubbed.
-        const merged: LogFields = {
-            ...baseFields,
-            ...(fields ?? {}),
-        };
-        const redacted = redact(merged);
-        // `undefined` values are dropped by JSON.stringify, matching
-        // the documented behaviour ("undefined keys dropped"). We let
-        // the stringifier do that work rather than pre-filtering, which
-        // keeps the logger's hot path allocation-light.
-        const payload = {
-            timestamp: new Date().toISOString(),
-            level,
-            msg,
-            ...redacted,
-        };
+  function emit(level: LogLevel, msg: string, fields?: LogFields): void {
+    // Sprint-3 SP3.2 (S5-008): auto-redact the merged field map
+    // BEFORE serialisation. Both base + per-call entries flow
+    // through `redact` so a stale `createLogger({ token: ... })`
+    // call (defensive — nothing in the codebase does this today)
+    // also gets scrubbed.
+    const merged: LogFields = {
+      ...baseFields,
+      ...(fields ?? {}),
+    };
+    const redacted = redact(merged);
+    // `undefined` values are dropped by JSON.stringify, matching
+    // the documented behaviour ("undefined keys dropped"). We let
+    // the stringifier do that work rather than pre-filtering, which
+    // keeps the logger's hot path allocation-light.
+    const payload = {
+      timestamp: new Date().toISOString(),
+      level,
+      msg,
+      ...redacted,
+    };
 
-        const line = safeStringify(payload);
-        if (line === null) {
-            // safeStringify already logged the fallback error; nothing
-            // more to do — we must not throw from a log call.
-            return;
-        }
-
-        switch (level) {
-            case 'debug':
-                console.debug(line);
-                return;
-            case 'info':
-                console.log(line);
-                return;
-            case 'warn':
-                console.warn(line);
-                return;
-            case 'error':
-                console.error(line);
-                return;
-        }
+    const line = safeStringify(payload);
+    if (line === null) {
+      // safeStringify already logged the fallback error; nothing
+      // more to do — we must not throw from a log call.
+      return;
     }
 
-    return {
-        debug: (msg, fields) => emit('debug', msg, fields),
-        info: (msg, fields) => emit('info', msg, fields),
-        warn: (msg, fields) => emit('warn', msg, fields),
-        error: (msg, fields) => emit('error', msg, fields),
-    };
+    switch (level) {
+      case 'debug':
+        console.debug(line);
+        return;
+      case 'info':
+        console.log(line);
+        return;
+      case 'warn':
+        console.warn(line);
+        return;
+      case 'error':
+        console.error(line);
+        return;
+    }
+  }
+
+  return {
+    debug: (msg, fields) => emit('debug', msg, fields),
+    info: (msg, fields) => emit('info', msg, fields),
+    warn: (msg, fields) => emit('warn', msg, fields),
+    error: (msg, fields) => emit('error', msg, fields),
+  };
 }
 
 /**
@@ -206,28 +208,23 @@ export function createLogger(
  * dropped event is still visible to operators.
  */
 function safeStringify(value: unknown): string | null {
+  try {
+    return JSON.stringify(value);
+  } catch (err) {
+    // Last-ditch fallback: surface the failure on stderr so the
+    // loss is observable, then swallow so callers never see an
+    // exception from a log call.
     try {
-        return JSON.stringify(value);
-    } catch (err) {
-        // Last-ditch fallback: surface the failure on stderr so the
-        // loss is observable, then swallow so callers never see an
-        // exception from a log call.
-        try {
-            const description =
-                err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-            // Best-effort stringification of the offending payload for
-            // triage. `String(value)` returns `'[object Object]'` for
-            // plain records, which is not informative but is at least
-            // safe — it never throws.
-            console.error(
-                '[logger] JSON serialise failed',
-                description,
-                String(value),
-            );
-        } catch {
-            // If even console.error throws (it shouldn't, but we are
-            // defensive on edge runtimes), there is nothing more to do.
-        }
-        return null;
+      const description = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      // Best-effort stringification of the offending payload for
+      // triage. `String(value)` returns `'[object Object]'` for
+      // plain records, which is not informative but is at least
+      // safe — it never throws.
+      console.error('[logger] JSON serialise failed', description, String(value));
+    } catch {
+      // If even console.error throws (it shouldn't, but we are
+      // defensive on edge runtimes), there is nothing more to do.
     }
+    return null;
+  }
 }

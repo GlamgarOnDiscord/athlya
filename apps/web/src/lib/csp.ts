@@ -45,11 +45,11 @@
  * so the flag MUST stay `false` outside of `next dev`.
  */
 export interface CspOptions {
-    readonly nonce: string;
-    readonly apiUrl?: string;
-    readonly reportUri?: string;
-    readonly dev?: boolean;
-    readonly isDev?: boolean;
+  readonly nonce: string;
+  readonly apiUrl?: string;
+  readonly reportUri?: string;
+  readonly dev?: boolean;
+  readonly isDev?: boolean;
 }
 
 const TURNSTILE_ORIGIN = 'https://challenges.cloudflare.com';
@@ -72,82 +72,75 @@ export const CSP_REPORT_GROUP = 'athlya-csp';
  * response. Whitespace between directives is normalised so the output
  * matches whatever tests assert against.
  */
-export function generateCsp({
-    nonce,
-    apiUrl,
-    reportUri,
-    dev,
-    isDev,
-}: CspOptions): string {
-    if (nonce.length === 0) {
-        throw new TypeError('generateCsp: nonce must be a non-empty string');
-    }
+export function generateCsp({ nonce, apiUrl, reportUri, dev, isDev }: CspOptions): string {
+  if (nonce.length === 0) {
+    throw new TypeError('generateCsp: nonce must be a non-empty string');
+  }
 
-    const connectExtras = apiUrl !== undefined && apiUrl.length > 0 ? ` ${apiUrl}` : '';
+  const connectExtras = apiUrl !== undefined && apiUrl.length > 0 ? ` ${apiUrl}` : '';
 
-    // In development, React / Next.js inject runtime helpers that call
-    // `eval()` to rebuild cross-frame stack traces. Production builds
-    // never use `eval()`, so the relaxation is strictly scoped to
-    // `next dev`. The guard is a runtime flag (NOT a build-time
-    // constant) so `pnpm start` against a prod build emits a strict
-    // policy even on localhost.
-    const scriptSrcExtras = dev === true ? ` 'unsafe-eval'` : '';
+  // In development, React / Next.js inject runtime helpers that call
+  // `eval()` to rebuild cross-frame stack traces. Production builds
+  // never use `eval()`, so the relaxation is strictly scoped to
+  // `next dev`. The guard is a runtime flag (NOT a build-time
+  // constant) so `pnpm start` against a prod build emits a strict
+  // policy even on localhost.
+  const scriptSrcExtras = dev === true ? ` 'unsafe-eval'` : '';
 
-    // In development, Next.js dev tools and font loading inject inline
-    // styles without the nonce. CSP Level 2 ignores 'unsafe-inline' when
-    // a nonce is present, so we must drop the nonce entirely from
-    // style-src and rely solely on 'unsafe-inline' in dev.
-    const styleSrc = isDev === true
-        ? `style-src 'self' 'unsafe-inline'`
-        : `style-src 'self' 'nonce-${nonce}'`;
+  // In development, Next.js dev tools and font loading inject inline
+  // styles without the nonce. CSP Level 2 ignores 'unsafe-inline' when
+  // a nonce is present, so we must drop the nonce entirely from
+  // style-src and rely solely on 'unsafe-inline' in dev.
+  const styleSrc =
+    isDev === true ? `style-src 'self' 'unsafe-inline'` : `style-src 'self' 'nonce-${nonce}'`;
 
-    // Sprint-3 SP3.1 (Vague 31, audit finding S6-001) — production
-    // CSP keeps `style-src 'self' 'nonce-...'` strict (blocks inline
-    // <style> blocks that lack the nonce) but allows inline `style=""`
-    // attributes via `style-src-attr 'unsafe-inline'`. Without this
-    // directive, every `style={{ ... }}` JSX expression that React
-    // serialises as `style="..."` on the HTML attribute would be
-    // dropped by the browser in prod. The audit scanned the codebase
-    // and found two such usages in `BrandingPreview` (per-tenant
-    // branding pulls a hex colour from the studio config and applies
-    // it inline). Refactoring those to CSS variables is on the
-    // hardening backlog (S6-001 option 2) but not required to ship —
-    // `style-src-attr 'unsafe-inline'` is the option-1 mitigation
-    // recommended by the audit. The strict `style-src` directive
-    // still gates inline blocks, so an XSS that injects
-    // `<style>...</style>` is blocked.
-    //
-    // In dev we don't emit `style-src-attr` separately — the broad
-    // `style-src 'unsafe-inline'` already covers attribute styles.
-    const styleSrcAttr = isDev === true ? '' : `style-src-attr 'unsafe-inline'`;
+  // Sprint-3 SP3.1 (Vague 31, audit finding S6-001) — production
+  // CSP keeps `style-src 'self' 'nonce-...'` strict (blocks inline
+  // <style> blocks that lack the nonce) but allows inline `style=""`
+  // attributes via `style-src-attr 'unsafe-inline'`. Without this
+  // directive, every `style={{ ... }}` JSX expression that React
+  // serialises as `style="..."` on the HTML attribute would be
+  // dropped by the browser in prod. The audit scanned the codebase
+  // and found two such usages in `BrandingPreview` (per-tenant
+  // branding pulls a hex colour from the studio config and applies
+  // it inline). Refactoring those to CSS variables is on the
+  // hardening backlog (S6-001 option 2) but not required to ship —
+  // `style-src-attr 'unsafe-inline'` is the option-1 mitigation
+  // recommended by the audit. The strict `style-src` directive
+  // still gates inline blocks, so an XSS that injects
+  // `<style>...</style>` is blocked.
+  //
+  // In dev we don't emit `style-src-attr` separately — the broad
+  // `style-src 'unsafe-inline'` already covers attribute styles.
+  const styleSrcAttr = isDev === true ? '' : `style-src-attr 'unsafe-inline'`;
 
-    const directives: string[] = [
-        `default-src 'self'`,
-        `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${scriptSrcExtras} ${TURNSTILE_ORIGIN}`,
-        styleSrc,
-        ...(styleSrcAttr.length > 0 ? [styleSrcAttr] : []),
-        `img-src 'self' data: blob:`,
-        `font-src 'self' data:`,
-        `connect-src 'self'${connectExtras} ${TURNSTILE_ORIGIN}`,
-        `frame-src 'self' ${TURNSTILE_ORIGIN}`,
-        `object-src 'none'`,
-        `base-uri 'self'`,
-        `form-action 'self'`,
-        `frame-ancestors 'none'`,
-        `upgrade-insecure-requests`,
-    ];
+  const directives: string[] = [
+    `default-src 'self'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${scriptSrcExtras} ${TURNSTILE_ORIGIN}`,
+    styleSrc,
+    ...(styleSrcAttr.length > 0 ? [styleSrcAttr] : []),
+    `img-src 'self' data: blob:`,
+    `font-src 'self' data:`,
+    `connect-src 'self'${connectExtras} ${TURNSTILE_ORIGIN}`,
+    `frame-src 'self' ${TURNSTILE_ORIGIN}`,
+    `object-src 'none'`,
+    `base-uri 'self'`,
+    `form-action 'self'`,
+    `frame-ancestors 'none'`,
+    `upgrade-insecure-requests`,
+  ];
 
-    // Reporting directives are only emitted when an endpoint is
-    // configured. `report-to` is the modern directive (Reporting API);
-    // `report-uri` stays as a fallback for older browsers that still
-    // honour it. Both are safe to emit simultaneously — browsers pick
-    // the one they understand and ignore the other.
-    if (reportUri !== undefined && reportUri.length > 0) {
-        directives.push(`report-to ${CSP_REPORT_GROUP}`);
-        directives.push(`report-uri ${reportUri}`);
-    }
+  // Reporting directives are only emitted when an endpoint is
+  // configured. `report-to` is the modern directive (Reporting API);
+  // `report-uri` stays as a fallback for older browsers that still
+  // honour it. Both are safe to emit simultaneously — browsers pick
+  // the one they understand and ignore the other.
+  if (reportUri !== undefined && reportUri.length > 0) {
+    directives.push(`report-to ${CSP_REPORT_GROUP}`);
+    directives.push(`report-uri ${reportUri}`);
+  }
 
-    return directives.join('; ');
+  return directives.join('; ');
 }
 
 /**
@@ -161,10 +154,10 @@ export function generateCsp({
  * a changed endpoint propagates within a working day.
  */
 export function buildReportToHeader(reportUri: string | undefined): string | undefined {
-    if (reportUri === undefined || reportUri.length === 0) return undefined;
-    return JSON.stringify({
-        group: CSP_REPORT_GROUP,
-        max_age: 86_400,
-        endpoints: [{ url: reportUri }],
-    });
+  if (reportUri === undefined || reportUri.length === 0) return undefined;
+  return JSON.stringify({
+    group: CSP_REPORT_GROUP,
+    max_age: 86_400,
+    endpoints: [{ url: reportUri }],
+  });
 }

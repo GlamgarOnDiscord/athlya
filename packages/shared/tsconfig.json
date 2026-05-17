@@ -1,20 +1,10 @@
 {
-    "extends": "@athlya/tsconfig/base.json",
-    "compilerOptions": {
-        "rootDir": "src",
-        "outDir": "dist",
-        "types": [
-            "node"
-        ]
-    },
-    "include": [
-        "src"
-    ],
-    "exclude": [
-        "node_modules",
-        "dist",
-        ".turbo",
-        "coverage",
-        "src/**/*.test.ts"
-    ]
+  "extends": "@athlya/tsconfig/base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": ["node"]
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", ".turbo", "coverage", "src/**/*.test.ts"]
 }

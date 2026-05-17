@@ -29,17 +29,16 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 
 import {
-    CANCELLATION_WINDOW_MS,
-    cancelReservation,
-    type CancelCounter,
-    type CancelOutboxEvent,
-    type CancelRepo,
-    type CancelReservationInput,
-    type ClassForCancel,
+  CANCELLATION_WINDOW_MS,
+  cancelReservation,
+  type CancelCounter,
+  type CancelOutboxEvent,
+  type CancelRepo,
+  type CancelReservationInput,
+  type ClassForCancel,
 } from '../cancel.js';
 
 import type { ReservationRow } from '@athlya/db/schema';
-
 
 /* ------------------------------------------------------------------ */
 /*  Fixtures                                                           */
@@ -69,19 +68,17 @@ const TX_TOKEN = Symbol('tx');
  * `makeReservation` to exercise the `waitlist` and `cancelled`
  * branches.
  */
-function makeReservation(
-    overrides: Partial<ReservationRow> = {},
-): ReservationRow {
-    return {
-        id: RESERVATION_ID,
-        classId: CLASS_ID,
-        userId: USER_ID,
-        status: 'confirmed',
-        createdAt: new Date('2026-03-15T00:00:00.000Z'),
-        cancelledAt: null,
-        checkedInAt: null,
-        ...overrides,
-    };
+function makeReservation(overrides: Partial<ReservationRow> = {}): ReservationRow {
+  return {
+    id: RESERVATION_ID,
+    classId: CLASS_ID,
+    userId: USER_ID,
+    status: 'confirmed',
+    createdAt: new Date('2026-03-15T00:00:00.000Z'),
+    cancelledAt: null,
+    checkedInAt: null,
+    ...overrides,
+  };
 }
 
 /**
@@ -90,23 +87,23 @@ function makeReservation(
  * `findOldestWaitlistForClass`.
  */
 const WAITER_ROW: ReservationRow = {
-    id: WAITER_RESERVATION_ID,
-    classId: CLASS_ID,
-    userId: WAITER_USER_ID,
-    status: 'waitlist',
-    createdAt: new Date('2026-03-16T00:00:00.000Z'),
-    cancelledAt: null,
-    checkedInAt: null,
+  id: WAITER_RESERVATION_ID,
+  classId: CLASS_ID,
+  userId: WAITER_USER_ID,
+  status: 'waitlist',
+  createdAt: new Date('2026-03-16T00:00:00.000Z'),
+  cancelledAt: null,
+  checkedInAt: null,
 };
 
 /** Class projection used by every test. Overridable for the window test. */
 function makeClass(overrides: Partial<ClassForCancel> = {}): ClassForCancel {
-    // Default `startsAt` sits 4h in the future — safely outside the
-    // 2-hour cancellation cutoff, so the window guard accepts.
-    return {
-        startsAt: new Date(FROZEN_NOW + 4 * 60 * 60 * 1000),
-        ...overrides,
-    };
+  // Default `startsAt` sits 4h in the future — safely outside the
+  // 2-hour cancellation cutoff, so the window guard accepts.
+  return {
+    startsAt: new Date(FROZEN_NOW + 4 * 60 * 60 * 1000),
+    ...overrides,
+  };
 }
 
 /**
@@ -115,9 +112,9 @@ function makeClass(overrides: Partial<ClassForCancel> = {}): ClassForCancel {
  * outbox payloads without mocking `crypto.randomUUID`.
  */
 function makeEventIdFactory(): Mock<() => string> {
-    let i = 0;
-    const fn: () => string = () => `evt-${String(i++)}`;
-    return vi.fn<() => string>(fn);
+  let i = 0;
+  const fn: () => string = () => `evt-${String(i++)}`;
+  return vi.fn<() => string>(fn);
 }
 
 /* ------------------------------------------------------------------ */
@@ -125,14 +122,12 @@ function makeEventIdFactory(): Mock<() => string> {
 /* ------------------------------------------------------------------ */
 
 interface RepoMocks {
-    withTransaction: Mock;
-    findReservationForUpdate: Mock<CancelRepo['findReservationForUpdate']>;
-    findClassForUpdate: Mock<CancelRepo['findClassForUpdate']>;
-    updateReservationStatus: Mock<CancelRepo['updateReservationStatus']>;
-    findOldestWaitlistForClass: Mock<
-        CancelRepo['findOldestWaitlistForClass']
-    >;
-    insertOutbox: Mock<CancelRepo['insertOutbox']>;
+  withTransaction: Mock;
+  findReservationForUpdate: Mock<CancelRepo['findReservationForUpdate']>;
+  findClassForUpdate: Mock<CancelRepo['findClassForUpdate']>;
+  updateReservationStatus: Mock<CancelRepo['updateReservationStatus']>;
+  findOldestWaitlistForClass: Mock<CancelRepo['findOldestWaitlistForClass']>;
+  insertOutbox: Mock<CancelRepo['insertOutbox']>;
 }
 
 /**
@@ -148,53 +143,41 @@ interface RepoMocks {
  * single narrow cast at assembly time.
  */
 function buildRepo(): { repo: CancelRepo; mocks: RepoMocks } {
-    const withTransaction = vi.fn((fn: (tx: unknown) => Promise<unknown>) =>
-        fn(TX_TOKEN),
-    );
-    const findReservationForUpdate = vi.fn<
-        CancelRepo['findReservationForUpdate']
-    >();
-    const findClassForUpdate = vi.fn<CancelRepo['findClassForUpdate']>();
-    const updateReservationStatus = vi.fn<
-        CancelRepo['updateReservationStatus']
-    >();
-    const findOldestWaitlistForClass = vi.fn<
-        CancelRepo['findOldestWaitlistForClass']
-    >();
-    const insertOutbox = vi
-        .fn<CancelRepo['insertOutbox']>()
-        .mockResolvedValue(undefined);
+  const withTransaction = vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(TX_TOKEN));
+  const findReservationForUpdate = vi.fn<CancelRepo['findReservationForUpdate']>();
+  const findClassForUpdate = vi.fn<CancelRepo['findClassForUpdate']>();
+  const updateReservationStatus = vi.fn<CancelRepo['updateReservationStatus']>();
+  const findOldestWaitlistForClass = vi.fn<CancelRepo['findOldestWaitlistForClass']>();
+  const insertOutbox = vi.fn<CancelRepo['insertOutbox']>().mockResolvedValue(undefined);
 
-    const repo: CancelRepo = {
-        withTransaction: withTransaction as unknown as CancelRepo['withTransaction'],
-        findReservationForUpdate,
-        findClassForUpdate,
-        updateReservationStatus,
-        findOldestWaitlistForClass,
-        insertOutbox,
-    };
+  const repo: CancelRepo = {
+    withTransaction: withTransaction as unknown as CancelRepo['withTransaction'],
+    findReservationForUpdate,
+    findClassForUpdate,
+    updateReservationStatus,
+    findOldestWaitlistForClass,
+    insertOutbox,
+  };
 
-    return {
-        repo,
-        mocks: {
-            withTransaction,
-            findReservationForUpdate,
-            findClassForUpdate,
-            updateReservationStatus,
-            findOldestWaitlistForClass,
-            insertOutbox,
-        },
-    };
+  return {
+    repo,
+    mocks: {
+      withTransaction,
+      findReservationForUpdate,
+      findClassForUpdate,
+      updateReservationStatus,
+      findOldestWaitlistForClass,
+      insertOutbox,
+    },
+  };
 }
 
 function buildCounter(): {
-    counter: CancelCounter;
-    incrRemaining: Mock<CancelCounter['incrRemaining']>;
+  counter: CancelCounter;
+  incrRemaining: Mock<CancelCounter['incrRemaining']>;
 } {
-    const incrRemaining = vi
-        .fn<CancelCounter['incrRemaining']>()
-        .mockResolvedValue(undefined);
-    return { counter: { incrRemaining }, incrRemaining };
+  const incrRemaining = vi.fn<CancelCounter['incrRemaining']>().mockResolvedValue(undefined);
+  return { counter: { incrRemaining }, incrRemaining };
 }
 
 /**
@@ -202,31 +185,31 @@ function buildCounter(): {
  * needed for assertions.
  */
 function buildInput(
-    overrides: Partial<Pick<CancelReservationInput, 'reservationId' | 'userId' | 'clock'>> = {},
+  overrides: Partial<Pick<CancelReservationInput, 'reservationId' | 'userId' | 'clock'>> = {},
 ): {
-    input: CancelReservationInput;
-    mocks: RepoMocks;
-    incrRemaining: Mock<CancelCounter['incrRemaining']>;
-    newEventId: Mock<() => string>;
+  input: CancelReservationInput;
+  mocks: RepoMocks;
+  incrRemaining: Mock<CancelCounter['incrRemaining']>;
+  newEventId: Mock<() => string>;
 } {
-    const { repo, mocks } = buildRepo();
-    const { counter, incrRemaining } = buildCounter();
-    const newEventId = makeEventIdFactory();
+  const { repo, mocks } = buildRepo();
+  const { counter, incrRemaining } = buildCounter();
+  const newEventId = makeEventIdFactory();
 
-    return {
-        input: {
-            reservationId: RESERVATION_ID,
-            userId: USER_ID,
-            repo,
-            counter,
-            clock: () => FROZEN_NOW,
-            newEventId,
-            ...overrides,
-        },
-        mocks,
-        incrRemaining,
-        newEventId,
-    };
+  return {
+    input: {
+      reservationId: RESERVATION_ID,
+      userId: USER_ID,
+      repo,
+      counter,
+      clock: () => FROZEN_NOW,
+      newEventId,
+      ...overrides,
+    },
+    mocks,
+    incrRemaining,
+    newEventId,
+  };
 }
 
 /**
@@ -234,10 +217,8 @@ function buildInput(
  * in call order. Convenience helper — the mock's `.mock.calls` array
  * is a nested tuple that's cumbersome to destructure inline.
  */
-function collectOutboxEvents(
-    mock: Mock<CancelRepo['insertOutbox']>,
-): CancelOutboxEvent[] {
-    return mock.mock.calls.map(([, event]) => event);
+function collectOutboxEvents(mock: Mock<CancelRepo['insertOutbox']>): CancelOutboxEvent[] {
+  return mock.mock.calls.map(([, event]) => event);
 }
 
 /* ------------------------------------------------------------------ */
@@ -245,58 +226,58 @@ function collectOutboxEvents(
 /* ------------------------------------------------------------------ */
 
 describe('cancelReservation — not_found', () => {
-    it('returns not_found when the repo has no matching reservation', async () => {
-        const { input, mocks, incrRemaining } = buildInput();
+  it('returns not_found when the repo has no matching reservation', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
 
-        // Repo reports "nothing for (id, userId)" — whether the row
-        // truly doesn't exist or belongs to another user is opaque
-        // from here, which is exactly what Req 9 requires so cross-
-        // tenant probing stays impossible.
-        mocks.findReservationForUpdate.mockResolvedValueOnce(null);
+    // Repo reports "nothing for (id, userId)" — whether the row
+    // truly doesn't exist or belongs to another user is opaque
+    // from here, which is exactly what Req 9 requires so cross-
+    // tenant probing stays impossible.
+    mocks.findReservationForUpdate.mockResolvedValueOnce(null);
 
-        const result = await cancelReservation(input);
+    const result = await cancelReservation(input);
 
-        expect(result).toEqual({ code: 'not_found' });
+    expect(result).toEqual({ code: 'not_found' });
 
-        // Transaction was opened (the service *always* locks before
-        // checking existence so the repo's RLS filter runs under the
-        // right session variables).
-        expect(mocks.withTransaction).toHaveBeenCalledOnce();
-        expect(mocks.findReservationForUpdate).toHaveBeenCalledExactlyOnceWith(
-            TX_TOKEN,
-            RESERVATION_ID,
-            USER_ID,
-        );
-        // Nothing else is touched — no class read, no UPDATE, no
-        // waitlist scan, no outbox, no counter bump.
-        expect(mocks.findClassForUpdate).not.toHaveBeenCalled();
-        expect(mocks.updateReservationStatus).not.toHaveBeenCalled();
-        expect(mocks.findOldestWaitlistForClass).not.toHaveBeenCalled();
-        expect(mocks.insertOutbox).not.toHaveBeenCalled();
-        expect(incrRemaining).not.toHaveBeenCalled();
-    });
+    // Transaction was opened (the service *always* locks before
+    // checking existence so the repo's RLS filter runs under the
+    // right session variables).
+    expect(mocks.withTransaction).toHaveBeenCalledOnce();
+    expect(mocks.findReservationForUpdate).toHaveBeenCalledExactlyOnceWith(
+      TX_TOKEN,
+      RESERVATION_ID,
+      USER_ID,
+    );
+    // Nothing else is touched — no class read, no UPDATE, no
+    // waitlist scan, no outbox, no counter bump.
+    expect(mocks.findClassForUpdate).not.toHaveBeenCalled();
+    expect(mocks.updateReservationStatus).not.toHaveBeenCalled();
+    expect(mocks.findOldestWaitlistForClass).not.toHaveBeenCalled();
+    expect(mocks.insertOutbox).not.toHaveBeenCalled();
+    expect(incrRemaining).not.toHaveBeenCalled();
+  });
 
-    it('collapses a wrong-owner lookup into not_found (same repo call shape)', async () => {
-        // The repo is responsible for the `WHERE user_id = $2`
-        // filter, so a wrong-owner request reaches it as a regular
-        // `(reservationId, otherUserId)` lookup and comes back
-        // `null`. The service MUST surface `not_found`, not a
-        // distinct "forbidden" code — that is what prevents an
-        // attacker from using the cancellation endpoint as an
-        // existence oracle against another tenant.
-        const { input, mocks } = buildInput({ userId: OTHER_USER_ID });
+  it('collapses a wrong-owner lookup into not_found (same repo call shape)', async () => {
+    // The repo is responsible for the `WHERE user_id = $2`
+    // filter, so a wrong-owner request reaches it as a regular
+    // `(reservationId, otherUserId)` lookup and comes back
+    // `null`. The service MUST surface `not_found`, not a
+    // distinct "forbidden" code — that is what prevents an
+    // attacker from using the cancellation endpoint as an
+    // existence oracle against another tenant.
+    const { input, mocks } = buildInput({ userId: OTHER_USER_ID });
 
-        mocks.findReservationForUpdate.mockResolvedValueOnce(null);
+    mocks.findReservationForUpdate.mockResolvedValueOnce(null);
 
-        const result = await cancelReservation(input);
+    const result = await cancelReservation(input);
 
-        expect(result).toEqual({ code: 'not_found' });
-        expect(mocks.findReservationForUpdate).toHaveBeenCalledExactlyOnceWith(
-            TX_TOKEN,
-            RESERVATION_ID,
-            OTHER_USER_ID,
-        );
-    });
+    expect(result).toEqual({ code: 'not_found' });
+    expect(mocks.findReservationForUpdate).toHaveBeenCalledExactlyOnceWith(
+      TX_TOKEN,
+      RESERVATION_ID,
+      OTHER_USER_ID,
+    );
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -304,28 +285,28 @@ describe('cancelReservation — not_found', () => {
 /* ------------------------------------------------------------------ */
 
 describe('cancelReservation — invalid_transition', () => {
-    it('rejects a reservation whose status is already cancelled', async () => {
-        const { input, mocks, incrRemaining } = buildInput();
+  it('rejects a reservation whose status is already cancelled', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
 
-        mocks.findReservationForUpdate.mockResolvedValueOnce(
-            makeReservation({
-                status: 'cancelled',
-                cancelledAt: new Date(FROZEN_NOW - 60_000),
-            }),
-        );
-        mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
+    mocks.findReservationForUpdate.mockResolvedValueOnce(
+      makeReservation({
+        status: 'cancelled',
+        cancelledAt: new Date(FROZEN_NOW - 60_000),
+      }),
+    );
+    mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
 
-        const result = await cancelReservation(input);
+    const result = await cancelReservation(input);
 
-        expect(result).toEqual({ code: 'invalid_transition' });
+    expect(result).toEqual({ code: 'invalid_transition' });
 
-        // No UPDATE, no outbox, no counter bump — we never touch the
-        // row once we realise it's already in a terminal state.
-        expect(mocks.updateReservationStatus).not.toHaveBeenCalled();
-        expect(mocks.findOldestWaitlistForClass).not.toHaveBeenCalled();
-        expect(mocks.insertOutbox).not.toHaveBeenCalled();
-        expect(incrRemaining).not.toHaveBeenCalled();
-    });
+    // No UPDATE, no outbox, no counter bump — we never touch the
+    // row once we realise it's already in a terminal state.
+    expect(mocks.updateReservationStatus).not.toHaveBeenCalled();
+    expect(mocks.findOldestWaitlistForClass).not.toHaveBeenCalled();
+    expect(mocks.insertOutbox).not.toHaveBeenCalled();
+    expect(incrRemaining).not.toHaveBeenCalled();
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -333,56 +314,51 @@ describe('cancelReservation — invalid_transition', () => {
 /* ------------------------------------------------------------------ */
 
 describe('cancelReservation — cancellation_window_closed', () => {
-    it('rejects a cancellation requested less than 2 hours before startsAt', async () => {
-        const { input, mocks, incrRemaining } = buildInput();
+  it('rejects a cancellation requested less than 2 hours before startsAt', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
 
-        mocks.findReservationForUpdate.mockResolvedValueOnce(
-            makeReservation(),
-        );
-        // startsAt is 1 hour in the future — strictly inside the
-        // 2-hour cancellation cutoff, so the service must reject.
-        mocks.findClassForUpdate.mockResolvedValueOnce(
-            makeClass({ startsAt: new Date(FROZEN_NOW + 60 * 60 * 1000) }),
-        );
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation());
+    // startsAt is 1 hour in the future — strictly inside the
+    // 2-hour cancellation cutoff, so the service must reject.
+    mocks.findClassForUpdate.mockResolvedValueOnce(
+      makeClass({ startsAt: new Date(FROZEN_NOW + 60 * 60 * 1000) }),
+    );
 
-        const result = await cancelReservation(input);
+    const result = await cancelReservation(input);
 
-        expect(result).toEqual({ code: 'cancellation_window_closed' });
+    expect(result).toEqual({ code: 'cancellation_window_closed' });
 
-        // Counter not touched, no outbox written, no UPDATE issued —
-        // only the two SELECT FOR UPDATE reads happened, which the
-        // transaction will release on commit.
-        expect(mocks.updateReservationStatus).not.toHaveBeenCalled();
-        expect(mocks.findOldestWaitlistForClass).not.toHaveBeenCalled();
-        expect(mocks.insertOutbox).not.toHaveBeenCalled();
-        expect(incrRemaining).not.toHaveBeenCalled();
-    });
+    // Counter not touched, no outbox written, no UPDATE issued —
+    // only the two SELECT FOR UPDATE reads happened, which the
+    // transaction will release on commit.
+    expect(mocks.updateReservationStatus).not.toHaveBeenCalled();
+    expect(mocks.findOldestWaitlistForClass).not.toHaveBeenCalled();
+    expect(mocks.insertOutbox).not.toHaveBeenCalled();
+    expect(incrRemaining).not.toHaveBeenCalled();
+  });
 
-    it('accepts a cancellation at exactly startsAt − 2h (boundary inclusive on the user side)', async () => {
-        const { input, mocks, incrRemaining } = buildInput();
+  it('accepts a cancellation at exactly startsAt − 2h (boundary inclusive on the user side)', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
 
-        mocks.findReservationForUpdate.mockResolvedValueOnce(
-            makeReservation(),
-        );
-        // startsAt = now + 2h exactly. now == startsAt − 2h, which
-        // the design doc frames as "cancellation possible up to 2h
-        // before". Requirement 9.1 reads "at least 2 hours after
-        // now()" — boundary inclusive.
-        mocks.findClassForUpdate.mockResolvedValueOnce(
-            makeClass({ startsAt: new Date(FROZEN_NOW + CANCELLATION_WINDOW_MS) }),
-        );
-        // Waitlist absent → counter bump path.
-        mocks.findOldestWaitlistForClass.mockResolvedValueOnce(null);
-        mocks.updateReservationStatus.mockImplementationOnce(
-            async (_tx, id, status, at) =>
-                makeReservation({ id, status, cancelledAt: at }),
-        );
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation());
+    // startsAt = now + 2h exactly. now == startsAt − 2h, which
+    // the design doc frames as "cancellation possible up to 2h
+    // before". Requirement 9.1 reads "at least 2 hours after
+    // now()" — boundary inclusive.
+    mocks.findClassForUpdate.mockResolvedValueOnce(
+      makeClass({ startsAt: new Date(FROZEN_NOW + CANCELLATION_WINDOW_MS) }),
+    );
+    // Waitlist absent → counter bump path.
+    mocks.findOldestWaitlistForClass.mockResolvedValueOnce(null);
+    mocks.updateReservationStatus.mockImplementationOnce(async (_tx, id, status, at) =>
+      makeReservation({ id, status, cancelledAt: at }),
+    );
 
-        const result = await cancelReservation(input);
+    const result = await cancelReservation(input);
 
-        expect(result.code).toBe('ok');
-        expect(incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
-    });
+    expect(result.code).toBe('ok');
+    expect(incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -390,98 +366,104 @@ describe('cancelReservation — cancellation_window_closed', () => {
 /* ------------------------------------------------------------------ */
 
 describe('cancelReservation — confirmed with waitlist promotion', () => {
-    it('promotes the oldest waiter atomically and emits both cancelled + promoted events', async () => {
-        const { input, mocks, incrRemaining, newEventId } = buildInput();
+  it('promotes the oldest waiter atomically and emits both cancelled + promoted events', async () => {
+    const { input, mocks, incrRemaining, newEventId } = buildInput();
 
-        const reservation = makeReservation({ status: 'confirmed' });
-        mocks.findReservationForUpdate.mockResolvedValueOnce(reservation);
-        mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
-        mocks.findOldestWaitlistForClass.mockResolvedValueOnce(WAITER_ROW);
+    const reservation = makeReservation({ status: 'confirmed' });
+    mocks.findReservationForUpdate.mockResolvedValueOnce(reservation);
+    mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
+    mocks.findOldestWaitlistForClass.mockResolvedValueOnce(WAITER_ROW);
 
-        // First UPDATE call — stamps `cancelled`.
-        // Second UPDATE call — promotes the waiter to `confirmed`.
-        mocks.updateReservationStatus
-            .mockImplementationOnce(async (_tx, id, status, at) =>
-                makeReservation({ id, status, cancelledAt: at }),
-            )
-            .mockImplementationOnce(async (_tx, id, status) => ({
-                ...WAITER_ROW,
-                id,
-                status,
-            }));
+    // First UPDATE call — stamps `cancelled`.
+    // Second UPDATE call — promotes the waiter to `confirmed`.
+    mocks.updateReservationStatus
+      .mockImplementationOnce(async (_tx, id, status, at) =>
+        makeReservation({ id, status, cancelledAt: at }),
+      )
+      .mockImplementationOnce(async (_tx, id, status) => ({
+        ...WAITER_ROW,
+        id,
+        status,
+      }));
 
-        const result = await cancelReservation(input);
+    const result = await cancelReservation(input);
 
-        // ---- Shape of the success branch -----------------------
-        expect(result.code).toBe('ok');
-        if (result.code !== 'ok') throw new Error('unreachable');
-        expect(result.cancelled.id).toBe(RESERVATION_ID);
-        expect(result.cancelled.status).toBe('cancelled');
-        expect(result.cancelled.cancelledAt).toEqual(new Date(FROZEN_NOW));
-        expect(result.promoted).not.toBeNull();
-        expect(result.promoted?.id).toBe(WAITER_RESERVATION_ID);
-        expect(result.promoted?.status).toBe('confirmed');
+    // ---- Shape of the success branch -----------------------
+    expect(result.code).toBe('ok');
+    if (result.code !== 'ok') throw new Error('unreachable');
+    expect(result.cancelled.id).toBe(RESERVATION_ID);
+    expect(result.cancelled.status).toBe('cancelled');
+    expect(result.cancelled.cancelledAt).toEqual(new Date(FROZEN_NOW));
+    expect(result.promoted).not.toBeNull();
+    expect(result.promoted?.id).toBe(WAITER_RESERVATION_ID);
+    expect(result.promoted?.status).toBe('confirmed');
 
-        // ---- Counter stays untouched — the seat was re-consumed -
-        // by the promoted waiter, so `remaining` is unchanged
-        // (Req 9.3 note: "counter stays unchanged").
-        expect(incrRemaining).not.toHaveBeenCalled();
+    // ---- Counter stays untouched — the seat was re-consumed -
+    // by the promoted waiter, so `remaining` is unchanged
+    // (Req 9.3 note: "counter stays unchanged").
+    expect(incrRemaining).not.toHaveBeenCalled();
 
-        // ---- Two outbox events, both inside the transaction -----
-        expect(mocks.insertOutbox).toHaveBeenCalledTimes(2);
-        const events = collectOutboxEvents(mocks.insertOutbox);
+    // ---- Two outbox events, both inside the transaction -----
+    expect(mocks.insertOutbox).toHaveBeenCalledTimes(2);
+    const events = collectOutboxEvents(mocks.insertOutbox);
 
-        // Every insert received the same tx token — i.e. every
-        // outbox row is part of the same transaction as the writes
-        // (Req 16.3).
-        for (const [tx] of mocks.insertOutbox.mock.calls) {
-            expect(tx).toBe(TX_TOKEN);
-        }
+    // Every insert received the same tx token — i.e. every
+    // outbox row is part of the same transaction as the writes
+    // (Req 16.3).
+    for (const [tx] of mocks.insertOutbox.mock.calls) {
+      expect(tx).toBe(TX_TOKEN);
+    }
 
-        // Order: the promoted event lands *before* the cancelled
-        // event in the implementation (the promotion happens inside
-        // the `wasConfirmed` branch, the cancellation event is
-        // emitted last). The Notifications consumer dedups on
-        // `event.id` regardless of order, but asserting the wire
-        // shape here protects against accidental re-orderings that
-        // could starve the waitlist consumer.
-        expect(events[0]).toEqual({
-            eventId: 'evt-0',
-            eventType: 'reservation.promoted',
-            payload: {
-                reservationId: WAITER_RESERVATION_ID,
-                classId: CLASS_ID,
-                userId: WAITER_USER_ID,
-            },
-            occurredAt: new Date(FROZEN_NOW),
-        });
-        expect(events[1]).toEqual({
-            eventId: 'evt-1',
-            eventType: 'reservation.cancelled',
-            payload: {
-                reservationId: RESERVATION_ID,
-                classId: CLASS_ID,
-                userId: USER_ID,
-            },
-            occurredAt: new Date(FROZEN_NOW),
-        });
-
-        // Event-id factory called exactly twice — once per outbox
-        // row, no spurious calls.
-        expect(newEventId).toHaveBeenCalledTimes(2);
-
-        // ---- UPDATE ordering: cancel first, promote second ------
-        // so that the `UNIQUE(class_id, user_id)` constraint cannot
-        // fire on the promoted waiter (they already sat on that
-        // pair with `status = 'waitlist'`).
-        expect(mocks.updateReservationStatus).toHaveBeenCalledTimes(2);
-        expect(
-            mocks.updateReservationStatus.mock.calls[0],
-        ).toStrictEqual([TX_TOKEN, RESERVATION_ID, 'cancelled', new Date(FROZEN_NOW)]);
-        expect(
-            mocks.updateReservationStatus.mock.calls[1],
-        ).toStrictEqual([TX_TOKEN, WAITER_RESERVATION_ID, 'confirmed', new Date(FROZEN_NOW)]);
+    // Order: the promoted event lands *before* the cancelled
+    // event in the implementation (the promotion happens inside
+    // the `wasConfirmed` branch, the cancellation event is
+    // emitted last). The Notifications consumer dedups on
+    // `event.id` regardless of order, but asserting the wire
+    // shape here protects against accidental re-orderings that
+    // could starve the waitlist consumer.
+    expect(events[0]).toEqual({
+      eventId: 'evt-0',
+      eventType: 'reservation.promoted',
+      payload: {
+        reservationId: WAITER_RESERVATION_ID,
+        classId: CLASS_ID,
+        userId: WAITER_USER_ID,
+      },
+      occurredAt: new Date(FROZEN_NOW),
     });
+    expect(events[1]).toEqual({
+      eventId: 'evt-1',
+      eventType: 'reservation.cancelled',
+      payload: {
+        reservationId: RESERVATION_ID,
+        classId: CLASS_ID,
+        userId: USER_ID,
+      },
+      occurredAt: new Date(FROZEN_NOW),
+    });
+
+    // Event-id factory called exactly twice — once per outbox
+    // row, no spurious calls.
+    expect(newEventId).toHaveBeenCalledTimes(2);
+
+    // ---- UPDATE ordering: cancel first, promote second ------
+    // so that the `UNIQUE(class_id, user_id)` constraint cannot
+    // fire on the promoted waiter (they already sat on that
+    // pair with `status = 'waitlist'`).
+    expect(mocks.updateReservationStatus).toHaveBeenCalledTimes(2);
+    expect(mocks.updateReservationStatus.mock.calls[0]).toStrictEqual([
+      TX_TOKEN,
+      RESERVATION_ID,
+      'cancelled',
+      new Date(FROZEN_NOW),
+    ]);
+    expect(mocks.updateReservationStatus.mock.calls[1]).toStrictEqual([
+      TX_TOKEN,
+      WAITER_RESERVATION_ID,
+      'confirmed',
+      new Date(FROZEN_NOW),
+    ]);
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -489,61 +471,56 @@ describe('cancelReservation — confirmed with waitlist promotion', () => {
 /* ------------------------------------------------------------------ */
 
 describe('cancelReservation — confirmed with no waitlist', () => {
-    it('increments the Redis counter once and emits exactly one cancelled event', async () => {
-        const { input, mocks, incrRemaining, newEventId } = buildInput();
+  it('increments the Redis counter once and emits exactly one cancelled event', async () => {
+    const { input, mocks, incrRemaining, newEventId } = buildInput();
 
-        mocks.findReservationForUpdate.mockResolvedValueOnce(
-            makeReservation({ status: 'confirmed' }),
-        );
-        mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
-        // Empty waitlist — Req 9.4 applies.
-        mocks.findOldestWaitlistForClass.mockResolvedValueOnce(null);
-        mocks.updateReservationStatus.mockImplementationOnce(
-            async (_tx, id, status, at) =>
-                makeReservation({ id, status, cancelledAt: at }),
-        );
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation({ status: 'confirmed' }));
+    mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
+    // Empty waitlist — Req 9.4 applies.
+    mocks.findOldestWaitlistForClass.mockResolvedValueOnce(null);
+    mocks.updateReservationStatus.mockImplementationOnce(async (_tx, id, status, at) =>
+      makeReservation({ id, status, cancelledAt: at }),
+    );
 
-        const result = await cancelReservation(input);
+    const result = await cancelReservation(input);
 
-        expect(result.code).toBe('ok');
-        if (result.code !== 'ok') throw new Error('unreachable');
-        expect(result.cancelled.status).toBe('cancelled');
-        expect(result.promoted).toBeNull();
+    expect(result.code).toBe('ok');
+    if (result.code !== 'ok') throw new Error('unreachable');
+    expect(result.cancelled.status).toBe('cancelled');
+    expect(result.promoted).toBeNull();
 
-        // Counter bumped exactly once, after the transaction
-        // committed. A `mockResolvedValue(undefined)` for
-        // `withTransaction` means the test only asserts *that* the
-        // call happened — the ordering guarantee is documented in
-        // the service's JSDoc and covered by the `outbox-first`
-        // assertion on the promotion test above.
-        expect(incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+    // Counter bumped exactly once, after the transaction
+    // committed. A `mockResolvedValue(undefined)` for
+    // `withTransaction` means the test only asserts *that* the
+    // call happened — the ordering guarantee is documented in
+    // the service's JSDoc and covered by the `outbox-first`
+    // assertion on the promotion test above.
+    expect(incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
 
-        // One and only one outbox event — Req 9.5.
-        expect(mocks.insertOutbox).toHaveBeenCalledOnce();
-        const events = collectOutboxEvents(mocks.insertOutbox);
-        expect(events).toHaveLength(1);
-        expect(events[0]).toEqual({
-            eventId: 'evt-0',
-            eventType: 'reservation.cancelled',
-            payload: {
-                reservationId: RESERVATION_ID,
-                classId: CLASS_ID,
-                userId: USER_ID,
-            },
-            occurredAt: new Date(FROZEN_NOW),
-        });
-
-        // Event-id factory burned a single id.
-        expect(newEventId).toHaveBeenCalledOnce();
-
-        // Waitlist lookup ran exactly once — we need it to decide
-        // between the promotion and the INCR branch. Runs with
-        // `SKIP LOCKED` at the SQL layer; the service just relies
-        // on the repo's contract and asserts the call shape.
-        expect(
-            mocks.findOldestWaitlistForClass,
-        ).toHaveBeenCalledExactlyOnceWith(TX_TOKEN, CLASS_ID);
+    // One and only one outbox event — Req 9.5.
+    expect(mocks.insertOutbox).toHaveBeenCalledOnce();
+    const events = collectOutboxEvents(mocks.insertOutbox);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({
+      eventId: 'evt-0',
+      eventType: 'reservation.cancelled',
+      payload: {
+        reservationId: RESERVATION_ID,
+        classId: CLASS_ID,
+        userId: USER_ID,
+      },
+      occurredAt: new Date(FROZEN_NOW),
     });
+
+    // Event-id factory burned a single id.
+    expect(newEventId).toHaveBeenCalledOnce();
+
+    // Waitlist lookup ran exactly once — we need it to decide
+    // between the promotion and the INCR branch. Runs with
+    // `SKIP LOCKED` at the SQL layer; the service just relies
+    // on the repo's contract and asserts the call shape.
+    expect(mocks.findOldestWaitlistForClass).toHaveBeenCalledExactlyOnceWith(TX_TOKEN, CLASS_ID);
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -551,51 +528,48 @@ describe('cancelReservation — confirmed with no waitlist', () => {
 /* ------------------------------------------------------------------ */
 
 describe('cancelReservation — waitlist origin', () => {
-    it('cancels a waitlist reservation without promoting anyone and without bumping the counter', async () => {
-        const { input, mocks, incrRemaining } = buildInput();
+  it('cancels a waitlist reservation without promoting anyone and without bumping the counter', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
 
-        mocks.findReservationForUpdate.mockResolvedValueOnce(
-            makeReservation({ status: 'waitlist' }),
-        );
-        // Window is wide open — startsAt is 4h in the future by
-        // default. Tests that the guard works against `waitlist` as
-        // well as `confirmed`.
-        mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
-        mocks.updateReservationStatus.mockImplementationOnce(
-            async (_tx, id, status, at) =>
-                makeReservation({
-                    id,
-                    status,
-                    cancelledAt: at,
-                    // Retain the original waitlist status on the
-                    // returned row so the service can still stamp
-                    // `cancelled_at` — mirrors the UPDATE ... RETURNING
-                    // *` behaviour of the production repo.
-                }),
-        );
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation({ status: 'waitlist' }));
+    // Window is wide open — startsAt is 4h in the future by
+    // default. Tests that the guard works against `waitlist` as
+    // well as `confirmed`.
+    mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
+    mocks.updateReservationStatus.mockImplementationOnce(async (_tx, id, status, at) =>
+      makeReservation({
+        id,
+        status,
+        cancelledAt: at,
+        // Retain the original waitlist status on the
+        // returned row so the service can still stamp
+        // `cancelled_at` — mirrors the UPDATE ... RETURNING
+        // *` behaviour of the production repo.
+      }),
+    );
 
-        const result = await cancelReservation(input);
+    const result = await cancelReservation(input);
 
-        expect(result.code).toBe('ok');
-        if (result.code !== 'ok') throw new Error('unreachable');
-        expect(result.promoted).toBeNull();
+    expect(result.code).toBe('ok');
+    if (result.code !== 'ok') throw new Error('unreachable');
+    expect(result.promoted).toBeNull();
 
-        // Waitlist scan NEVER runs — the seat was never counted
-        // against capacity, so there's no slot to redistribute.
-        expect(mocks.findOldestWaitlistForClass).not.toHaveBeenCalled();
+    // Waitlist scan NEVER runs — the seat was never counted
+    // against capacity, so there's no slot to redistribute.
+    expect(mocks.findOldestWaitlistForClass).not.toHaveBeenCalled();
 
-        // Counter stays untouched (Req 9.4 speaks of a confirmed
-        // cancellation; waitlist cancellations don't change the
-        // seat count).
-        expect(incrRemaining).not.toHaveBeenCalled();
+    // Counter stays untouched (Req 9.4 speaks of a confirmed
+    // cancellation; waitlist cancellations don't change the
+    // seat count).
+    expect(incrRemaining).not.toHaveBeenCalled();
 
-        // One and only one outbox event — Req 9.5.
-        expect(mocks.insertOutbox).toHaveBeenCalledOnce();
-        const events = collectOutboxEvents(mocks.insertOutbox);
-        expect(events).toHaveLength(1);
-        const [onlyEvent] = events;
-        expect(onlyEvent?.eventType).toBe('reservation.cancelled');
-    });
+    // One and only one outbox event — Req 9.5.
+    expect(mocks.insertOutbox).toHaveBeenCalledOnce();
+    const events = collectOutboxEvents(mocks.insertOutbox);
+    expect(events).toHaveLength(1);
+    const [onlyEvent] = events;
+    expect(onlyEvent?.eventType).toBe('reservation.cancelled');
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -607,11 +581,11 @@ describe('cancelReservation — waitlist origin', () => {
 // future refactor that accidentally adds a second, service-side check
 // which would break the RLS single-source-of-truth property.
 describe('cancelReservation — does not read studioId directly', () => {
-    it('succeeds without a studioId being provided anywhere', async () => {
-        // STUDIO_ID is defined above but deliberately unused in the
-        // service call — this test just documents the intent.
-        expect(STUDIO_ID).toBeDefined();
-    });
+  it('succeeds without a studioId being provided anywhere', async () => {
+    // STUDIO_ID is defined above but deliberately unused in the
+    // service call — this test just documents the intent.
+    expect(STUDIO_ID).toBeDefined();
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -639,144 +613,134 @@ describe('cancelReservation — does not read studioId directly', () => {
  *     waitlist and never surface in the outbox.
  */
 describe('cancelReservation — Req 9.2 strict window boundary', () => {
-    it('rejects a cancellation one millisecond past startsAt − 2h (strict >)', async () => {
-        const { input, mocks, incrRemaining } = buildInput();
+  it('rejects a cancellation one millisecond past startsAt − 2h (strict >)', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
 
-        mocks.findReservationForUpdate.mockResolvedValueOnce(
-            makeReservation(),
-        );
-        // startsAt = now + (2h - 1ms). `cutoffMs = startsAt - 2h`
-        // evaluates to `now - 1ms`, so `now > cutoffMs` holds by
-        // exactly one millisecond and the guard MUST reject.
-        mocks.findClassForUpdate.mockResolvedValueOnce(
-            makeClass({
-                startsAt: new Date(FROZEN_NOW + CANCELLATION_WINDOW_MS - 1),
-            }),
-        );
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation());
+    // startsAt = now + (2h - 1ms). `cutoffMs = startsAt - 2h`
+    // evaluates to `now - 1ms`, so `now > cutoffMs` holds by
+    // exactly one millisecond and the guard MUST reject.
+    mocks.findClassForUpdate.mockResolvedValueOnce(
+      makeClass({
+        startsAt: new Date(FROZEN_NOW + CANCELLATION_WINDOW_MS - 1),
+      }),
+    );
 
-        const result = await cancelReservation(input);
+    const result = await cancelReservation(input);
 
-        expect(result).toEqual({ code: 'cancellation_window_closed' });
+    expect(result).toEqual({ code: 'cancellation_window_closed' });
 
-        // No writes, no outbox, no counter bump — only the two
-        // SELECT FOR UPDATE reads happened.
-        expect(mocks.updateReservationStatus).not.toHaveBeenCalled();
-        expect(mocks.findOldestWaitlistForClass).not.toHaveBeenCalled();
-        expect(mocks.insertOutbox).not.toHaveBeenCalled();
-        expect(incrRemaining).not.toHaveBeenCalled();
-    });
+    // No writes, no outbox, no counter bump — only the two
+    // SELECT FOR UPDATE reads happened.
+    expect(mocks.updateReservationStatus).not.toHaveBeenCalled();
+    expect(mocks.findOldestWaitlistForClass).not.toHaveBeenCalled();
+    expect(mocks.insertOutbox).not.toHaveBeenCalled();
+    expect(incrRemaining).not.toHaveBeenCalled();
+  });
 });
 
 describe('cancelReservation — Req 9.3 FIFO ordering', () => {
-    it('promotes the oldest of three concurrent waiters and leaves the other two alone', async () => {
-        const { input, mocks, incrRemaining, newEventId } = buildInput();
+  it('promotes the oldest of three concurrent waiters and leaves the other two alone', async () => {
+    const { input, mocks, incrRemaining, newEventId } = buildInput();
 
-        // Three waiters on the same class, created at T1 < T2 < T3.
-        // The production repo enforces
-        // `ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED`
-        // (see CancelRepo.findOldestWaitlistForClass contract), so
-        // the mock returns T1. T2 and T3 are declared here only to
-        // make the ordering intent explicit and to assert that the
-        // service never reaches past the first row.
-        const waiterT1: ReservationRow = {
-            ...WAITER_ROW,
-            id: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c901',
-            userId: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c911',
-            createdAt: new Date('2026-03-16T08:00:00.000Z'), // T1 — oldest
-        };
-        const waiterT2: ReservationRow = {
-            ...WAITER_ROW,
-            id: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c902',
-            userId: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c912',
-            createdAt: new Date('2026-03-16T09:00:00.000Z'), // T2
-        };
-        const waiterT3: ReservationRow = {
-            ...WAITER_ROW,
-            id: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c903',
-            userId: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c913',
-            createdAt: new Date('2026-03-16T10:00:00.000Z'), // T3
-        };
-        // Sanity: `findOldestWaitlistForClass` contract is "oldest
-        // row by created_at". Derive T1 from the fixtures in the
-        // same way the repo would.
-        const waiters = [waiterT3, waiterT1, waiterT2]; // intentionally unsorted
-        const oldest = [...waiters].sort(
-            (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
-        )[0];
-        expect(oldest?.id).toBe(waiterT1.id);
+    // Three waiters on the same class, created at T1 < T2 < T3.
+    // The production repo enforces
+    // `ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED`
+    // (see CancelRepo.findOldestWaitlistForClass contract), so
+    // the mock returns T1. T2 and T3 are declared here only to
+    // make the ordering intent explicit and to assert that the
+    // service never reaches past the first row.
+    const waiterT1: ReservationRow = {
+      ...WAITER_ROW,
+      id: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c901',
+      userId: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c911',
+      createdAt: new Date('2026-03-16T08:00:00.000Z'), // T1 — oldest
+    };
+    const waiterT2: ReservationRow = {
+      ...WAITER_ROW,
+      id: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c902',
+      userId: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c912',
+      createdAt: new Date('2026-03-16T09:00:00.000Z'), // T2
+    };
+    const waiterT3: ReservationRow = {
+      ...WAITER_ROW,
+      id: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c903',
+      userId: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c913',
+      createdAt: new Date('2026-03-16T10:00:00.000Z'), // T3
+    };
+    // Sanity: `findOldestWaitlistForClass` contract is "oldest
+    // row by created_at". Derive T1 from the fixtures in the
+    // same way the repo would.
+    const waiters = [waiterT3, waiterT1, waiterT2]; // intentionally unsorted
+    const oldest = [...waiters].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0];
+    expect(oldest?.id).toBe(waiterT1.id);
 
-        mocks.findReservationForUpdate.mockResolvedValueOnce(
-            makeReservation({ status: 'confirmed' }),
-        );
-        mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
-        // Repo returns T1 — it is the repo's job, not the service's,
-        // to pick the FIFO winner. The service simply trusts the
-        // contract and promotes whatever row the repo hands back.
-        mocks.findOldestWaitlistForClass.mockResolvedValueOnce(waiterT1);
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation({ status: 'confirmed' }));
+    mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
+    // Repo returns T1 — it is the repo's job, not the service's,
+    // to pick the FIFO winner. The service simply trusts the
+    // contract and promotes whatever row the repo hands back.
+    mocks.findOldestWaitlistForClass.mockResolvedValueOnce(waiterT1);
 
-        mocks.updateReservationStatus
-            // UPDATE #1 — stamp the cancelled reservation.
-            .mockImplementationOnce(async (_tx, id, status, at) =>
-                makeReservation({ id, status, cancelledAt: at }),
-            )
-            // UPDATE #2 — promote T1 to confirmed.
-            .mockImplementationOnce(async (_tx, id, status) => ({
-                ...waiterT1,
-                id,
-                status,
-            }));
+    mocks.updateReservationStatus
+      // UPDATE #1 — stamp the cancelled reservation.
+      .mockImplementationOnce(async (_tx, id, status, at) =>
+        makeReservation({ id, status, cancelledAt: at }),
+      )
+      // UPDATE #2 — promote T1 to confirmed.
+      .mockImplementationOnce(async (_tx, id, status) => ({
+        ...waiterT1,
+        id,
+        status,
+      }));
 
-        const result = await cancelReservation(input);
+    const result = await cancelReservation(input);
 
-        expect(result.code).toBe('ok');
-        if (result.code !== 'ok') throw new Error('unreachable');
+    expect(result.code).toBe('ok');
+    if (result.code !== 'ok') throw new Error('unreachable');
 
-        // Exactly T1 was promoted — not T2, not T3.
-        expect(result.promoted).not.toBeNull();
-        expect(result.promoted?.id).toBe(waiterT1.id);
-        expect(result.promoted?.userId).toBe(waiterT1.userId);
+    // Exactly T1 was promoted — not T2, not T3.
+    expect(result.promoted).not.toBeNull();
+    expect(result.promoted?.id).toBe(waiterT1.id);
+    expect(result.promoted?.userId).toBe(waiterT1.userId);
 
-        // Waitlist scan ran exactly once — the service never loops
-        // over the waitlist, so T2 and T3 stay untouched.
-        expect(
-            mocks.findOldestWaitlistForClass,
-        ).toHaveBeenCalledExactlyOnceWith(TX_TOKEN, CLASS_ID);
+    // Waitlist scan ran exactly once — the service never loops
+    // over the waitlist, so T2 and T3 stay untouched.
+    expect(mocks.findOldestWaitlistForClass).toHaveBeenCalledExactlyOnceWith(TX_TOKEN, CLASS_ID);
 
-        // Counter untouched — the freed seat was re-consumed by T1.
-        expect(incrRemaining).not.toHaveBeenCalled();
+    // Counter untouched — the freed seat was re-consumed by T1.
+    expect(incrRemaining).not.toHaveBeenCalled();
 
-        // Exactly two outbox events: one `promoted` for T1 and one
-        // `cancelled`. No `promoted` event for T2 or T3.
-        expect(mocks.insertOutbox).toHaveBeenCalledTimes(2);
-        const events = collectOutboxEvents(mocks.insertOutbox);
+    // Exactly two outbox events: one `promoted` for T1 and one
+    // `cancelled`. No `promoted` event for T2 or T3.
+    expect(mocks.insertOutbox).toHaveBeenCalledTimes(2);
+    const events = collectOutboxEvents(mocks.insertOutbox);
 
-        const promotedEvents = events.filter(
-            (e) => e.eventType === 'reservation.promoted',
-        );
-        expect(promotedEvents).toHaveLength(1);
-        expect(promotedEvents[0]?.payload).toEqual({
-            reservationId: waiterT1.id,
-            classId: CLASS_ID,
-            userId: waiterT1.userId,
-        });
-
-        // T2 and T3 must NOT appear anywhere in the emitted events.
-        for (const event of events) {
-            expect(event.payload.reservationId).not.toBe(waiterT2.id);
-            expect(event.payload.reservationId).not.toBe(waiterT3.id);
-            expect(event.payload.userId).not.toBe(waiterT2.userId);
-            expect(event.payload.userId).not.toBe(waiterT3.userId);
-        }
-
-        // UPDATE was called exactly twice — once for the cancel,
-        // once for the promotion. No stray writes on T2/T3.
-        expect(mocks.updateReservationStatus).toHaveBeenCalledTimes(2);
-        const promotionCall = mocks.updateReservationStatus.mock.calls[1];
-        expect(promotionCall?.[1]).toBe(waiterT1.id);
-        expect(promotionCall?.[2]).toBe('confirmed');
-
-        // Exactly two event ids were minted — no spurious calls on
-        // behalf of T2 or T3.
-        expect(newEventId).toHaveBeenCalledTimes(2);
+    const promotedEvents = events.filter((e) => e.eventType === 'reservation.promoted');
+    expect(promotedEvents).toHaveLength(1);
+    expect(promotedEvents[0]?.payload).toEqual({
+      reservationId: waiterT1.id,
+      classId: CLASS_ID,
+      userId: waiterT1.userId,
     });
+
+    // T2 and T3 must NOT appear anywhere in the emitted events.
+    for (const event of events) {
+      expect(event.payload.reservationId).not.toBe(waiterT2.id);
+      expect(event.payload.reservationId).not.toBe(waiterT3.id);
+      expect(event.payload.userId).not.toBe(waiterT2.userId);
+      expect(event.payload.userId).not.toBe(waiterT3.userId);
+    }
+
+    // UPDATE was called exactly twice — once for the cancel,
+    // once for the promotion. No stray writes on T2/T3.
+    expect(mocks.updateReservationStatus).toHaveBeenCalledTimes(2);
+    const promotionCall = mocks.updateReservationStatus.mock.calls[1];
+    expect(promotionCall?.[1]).toBe(waiterT1.id);
+    expect(promotionCall?.[2]).toBe('confirmed');
+
+    // Exactly two event ids were minted — no spurious calls on
+    // behalf of T2 or T3.
+    expect(newEventId).toHaveBeenCalledTimes(2);
+  });
 });

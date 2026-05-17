@@ -32,10 +32,7 @@
  * (Requirement 14.6).
  */
 
-import {
-    UpdateClassRequestSchema,
-    type UpdateClassRequest,
-} from '@athlya/shared/schemas/api';
+import { UpdateClassRequestSchema, type UpdateClassRequest } from '@athlya/shared/schemas/api';
 
 import type { ClassRow } from '@athlya/db/schema';
 
@@ -89,35 +86,35 @@ export type UpdateClassFields = Omit<UpdateClassPatch, 'version'>;
  * so that RLS (Requirement 13) is applied.
  */
 export interface ClassRepo {
-    /**
-     * Return the class row for `classId`, or `null` if unknown /
-     * soft-deleted. Used for the pre-flight existence check so the
-     * service can distinguish `not_found` (row is missing) from
-     * `conflict` (row exists but version is stale).
-     */
-    findById(classId: string): Promise<ClassRow | null>;
+  /**
+   * Return the class row for `classId`, or `null` if unknown /
+   * soft-deleted. Used for the pre-flight existence check so the
+   * service can distinguish `not_found` (row is missing) from
+   * `conflict` (row exists but version is stale).
+   */
+  findById(classId: string): Promise<ClassRow | null>;
 
-    /**
-     * Apply the mutable `patch` to the class identified by `classId`
-     * **only if** its current `version` column equals
-     * `expectedVersion`. Returns the updated row on success and
-     * `null` when the optimistic-lock guard failed (0 rows affected).
-     *
-     * Implementations MUST issue a single statement of the form
-     *
-     *     UPDATE classes
-     *     SET <patch>, version = version + 1
-     *     WHERE id = $1 AND version = $2
-     *     RETURNING *
-     *
-     * so the `version` bump (Requirement 6.7) and the guard are both
-     * enforced atomically by the database.
-     */
-    updateClassOptimistic(
-        classId: string,
-        patch: UpdateClassFields,
-        expectedVersion: number,
-    ): Promise<ClassRow | null>;
+  /**
+   * Apply the mutable `patch` to the class identified by `classId`
+   * **only if** its current `version` column equals
+   * `expectedVersion`. Returns the updated row on success and
+   * `null` when the optimistic-lock guard failed (0 rows affected).
+   *
+   * Implementations MUST issue a single statement of the form
+   *
+   *     UPDATE classes
+   *     SET <patch>, version = version + 1
+   *     WHERE id = $1 AND version = $2
+   *     RETURNING *
+   *
+   * so the `version` bump (Requirement 6.7) and the guard are both
+   * enforced atomically by the database.
+   */
+  updateClassOptimistic(
+    classId: string,
+    patch: UpdateClassFields,
+    expectedVersion: number,
+  ): Promise<ClassRow | null>;
 }
 
 /**
@@ -133,13 +130,13 @@ export interface ClassRepo {
  * this value".
  */
 export interface ClassCounter {
-    /**
-     * Overwrite the remaining-seats counter for `classId` to
-     * `capacity`. Called from {@link updateClass} only when the patch
-     * changed `capacity` (Requirement 6.7 — "recompute Redis counter
-     * if capacity changed").
-     */
-    reset(classId: string, capacity: number): Promise<void>;
+  /**
+   * Overwrite the remaining-seats counter for `classId` to
+   * `capacity`. Called from {@link updateClass} only when the patch
+   * changed `capacity` (Requirement 6.7 — "recompute Redis counter
+   * if capacity changed").
+   */
+  reset(classId: string, capacity: number): Promise<void>;
 }
 
 /**
@@ -150,10 +147,10 @@ export interface ClassCounter {
  * service signature stable.
  */
 export interface UpdateClassDeps {
-    classRepo: ClassRepo;
-    counter: ClassCounter;
-    /** Defaults to `Date.now`. Supplied explicitly in tests. */
-    now?: () => number;
+  classRepo: ClassRepo;
+  counter: ClassCounter;
+  /** Defaults to `Date.now`. Supplied explicitly in tests. */
+  now?: () => number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -168,12 +165,12 @@ export interface UpdateClassDeps {
  * Zod failure.
  */
 export interface UpdateClassValidationIssue {
-    /** Dotted path to the offending field, e.g. `capacity`. */
-    readonly path: string;
-    /** Zod issue code (`invalid_type`, `too_small`, `too_big`, …). */
-    readonly code: string;
-    /** Human-readable message from the schema. */
-    readonly message: string;
+  /** Dotted path to the offending field, e.g. `capacity`. */
+  readonly path: string;
+  /** Zod issue code (`invalid_type`, `too_small`, `too_big`, …). */
+  readonly code: string;
+  /** Human-readable message from the schema. */
+  readonly message: string;
 }
 
 /**
@@ -186,11 +183,7 @@ export interface UpdateClassValidationIssue {
  *   - `not_found`         → 404 (row missing, or cross-tenant via RLS).
  *   - `conflict`          → 409 (stale `version`, Requirement 6.6).
  */
-export type UpdateClassErrorCode =
-    | 'forbidden'
-    | 'validation_failed'
-    | 'not_found'
-    | 'conflict';
+export type UpdateClassErrorCode = 'forbidden' | 'validation_failed' | 'not_found' | 'conflict';
 
 /**
  * Typed error thrown by {@link updateClass}. The `code` field is
@@ -199,19 +192,19 @@ export type UpdateClassErrorCode =
  * normalised Zod issue list.
  */
 export class UpdateClassError extends Error {
-    public override readonly name = 'UpdateClassError';
-    public readonly code: UpdateClassErrorCode;
-    public readonly issues: ReadonlyArray<UpdateClassValidationIssue> | undefined;
+  public override readonly name = 'UpdateClassError';
+  public readonly code: UpdateClassErrorCode;
+  public readonly issues: ReadonlyArray<UpdateClassValidationIssue> | undefined;
 
-    public constructor(
-        code: UpdateClassErrorCode,
-        message?: string,
-        issues?: ReadonlyArray<UpdateClassValidationIssue>,
-    ) {
-        super(message ?? code);
-        this.code = code;
-        this.issues = issues;
-    }
+  public constructor(
+    code: UpdateClassErrorCode,
+    message?: string,
+    issues?: ReadonlyArray<UpdateClassValidationIssue>,
+  ) {
+    super(message ?? code);
+    this.code = code;
+    this.issues = issues;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -257,83 +250,66 @@ export class UpdateClassError extends Error {
  * Related requirements: 6.5, 6.6, 6.7.
  */
 export async function updateClass(
-    classId: string,
-    patch: unknown,
-    requesterRole: Role,
-    deps: UpdateClassDeps,
+  classId: string,
+  patch: unknown,
+  requesterRole: Role,
+  deps: UpdateClassDeps,
 ): Promise<ClassRow> {
-    // 1 — role gate, runs before validation so the caller can't force
-    //     us to spend CPU parsing a payload they aren't allowed to send.
-    if (requesterRole !== 'admin') {
-        throw new UpdateClassError(
-            'forbidden',
-            `role '${requesterRole}' cannot update classes`,
-        );
-    }
+  // 1 — role gate, runs before validation so the caller can't force
+  //     us to spend CPU parsing a payload they aren't allowed to send.
+  if (requesterRole !== 'admin') {
+    throw new UpdateClassError('forbidden', `role '${requesterRole}' cannot update classes`);
+  }
 
-    // 2 — schema validation. `.safeParse` keeps the error handling
-    //     local to this module instead of letting a raw ZodError
-    //     escape to the API layer.
-    const parsed = UpdateClassRequestSchema.safeParse(patch);
-    if (!parsed.success) {
-        const issues: UpdateClassValidationIssue[] = parsed.error.issues.map(
-            (issue) => ({
-                path: issue.path.map(String).join('.'),
-                code: issue.code,
-                message: issue.message,
-            }),
-        );
-        throw new UpdateClassError(
-            'validation_failed',
-            `invalid class patch: ${issues
-                .map((i) => `${i.path || '<root>'} ${i.message}`)
-                .join('; ')}`,
-            issues,
-        );
-    }
-
-    // Split the guarded `version` off from the mutable fields. The
-    // destructuring keeps the repo contract narrow: `version` is the
-    // optimistic-lock token, never a payload column.
-    const { version: expectedVersion, ...fields } = parsed.data;
-
-    // 3 — existence pre-flight. We could fold this into the UPDATE,
-    //     but the separate read lets us distinguish `not_found` (no
-    //     row at all) from `conflict` (row exists, version mismatch)
-    //     which the API caller genuinely needs to act on differently.
-    const existing = await deps.classRepo.findById(classId);
-    if (existing === null) {
-        throw new UpdateClassError(
-            'not_found',
-            `class not found: ${classId}`,
-        );
-    }
-
-    // 4 — optimistic UPDATE. The repo returns `null` when the DB
-    //     reports 0 rows affected, which we translate to `conflict`
-    //     (Requirement 6.6 — "0 rows affected → 409 Conflict").
-    const updated = await deps.classRepo.updateClassOptimistic(
-        classId,
-        fields,
-        expectedVersion,
+  // 2 — schema validation. `.safeParse` keeps the error handling
+  //     local to this module instead of letting a raw ZodError
+  //     escape to the API layer.
+  const parsed = UpdateClassRequestSchema.safeParse(patch);
+  if (!parsed.success) {
+    const issues: UpdateClassValidationIssue[] = parsed.error.issues.map((issue) => ({
+      path: issue.path.map(String).join('.'),
+      code: issue.code,
+      message: issue.message,
+    }));
+    throw new UpdateClassError(
+      'validation_failed',
+      `invalid class patch: ${issues.map((i) => `${i.path || '<root>'} ${i.message}`).join('; ')}`,
+      issues,
     );
-    if (updated === null) {
-        throw new UpdateClassError(
-            'conflict',
-            `class ${classId} has a newer version; expected ${expectedVersion}`,
-        );
-    }
+  }
 
-    // 5 — Redis counter reconciliation. Runs *after* the DB commit so
-    //     a Redis failure can never roll back a successful SQL write
-    //     (Requirement 6.7 recomputes "if capacity changed").
-    if (
-        fields.capacity !== undefined &&
-        fields.capacity !== existing.capacity
-    ) {
-        await deps.counter.reset(classId, fields.capacity);
-    }
+  // Split the guarded `version` off from the mutable fields. The
+  // destructuring keeps the repo contract narrow: `version` is the
+  // optimistic-lock token, never a payload column.
+  const { version: expectedVersion, ...fields } = parsed.data;
 
-    // 6 — return the updated row for the gateway to serialise.
-    return updated;
+  // 3 — existence pre-flight. We could fold this into the UPDATE,
+  //     but the separate read lets us distinguish `not_found` (no
+  //     row at all) from `conflict` (row exists, version mismatch)
+  //     which the API caller genuinely needs to act on differently.
+  const existing = await deps.classRepo.findById(classId);
+  if (existing === null) {
+    throw new UpdateClassError('not_found', `class not found: ${classId}`);
+  }
+
+  // 4 — optimistic UPDATE. The repo returns `null` when the DB
+  //     reports 0 rows affected, which we translate to `conflict`
+  //     (Requirement 6.6 — "0 rows affected → 409 Conflict").
+  const updated = await deps.classRepo.updateClassOptimistic(classId, fields, expectedVersion);
+  if (updated === null) {
+    throw new UpdateClassError(
+      'conflict',
+      `class ${classId} has a newer version; expected ${expectedVersion}`,
+    );
+  }
+
+  // 5 — Redis counter reconciliation. Runs *after* the DB commit so
+  //     a Redis failure can never roll back a successful SQL write
+  //     (Requirement 6.7 recomputes "if capacity changed").
+  if (fields.capacity !== undefined && fields.capacity !== existing.capacity) {
+    await deps.counter.reset(classId, fields.capacity);
+  }
+
+  // 6 — return the updated row for the gateway to serialise.
+  return updated;
 }

@@ -10,20 +10,20 @@
 import athlya from '@athlya/eslint-config';
 
 export default [
-    {
-        ignores: [
-            '**/node_modules/**',
-            '**/dist/**',
-            '**/build/**',
-            '**/.next/**',
-            '**/.turbo/**',
-            '**/coverage/**',
-            '**/*.tsbuildinfo',
-            // Config-only packages: nothing to lint yet.
-            'packages/tsconfig/**',
-            'packages/prettier-config/**',
-            'packages/eslint-config/**',
-        ],
-    },
-    ...athlya,
+  {
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/.next/**',
+      '**/.turbo/**',
+      '**/coverage/**',
+      '**/*.tsbuildinfo',
+      // Config-only packages: nothing to lint yet.
+      'packages/tsconfig/**',
+      'packages/prettier-config/**',
+      'packages/eslint-config/**',
+    ],
+  },
+  ...athlya,
 ];

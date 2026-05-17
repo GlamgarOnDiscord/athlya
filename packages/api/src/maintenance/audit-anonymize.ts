@@ -42,15 +42,15 @@
 
 /** Same minimal SQL executor surface used by `rgpd-purge.ts`. */
 export interface AuditAnonymizeSql {
-    /**
-     * Execute a SELECT query and return the rows. Implementations:
-     * a Drizzle `db.execute(sql).then(r => r.rows)` adaptor in
-     * production, an in-memory recorder in tests.
-     *
-     * `params` is positional; placeholder syntax is `$1`, `$2`, …
-     * to stay driver-agnostic.
-     */
-    selectRows<T>(query: string, params: readonly unknown[]): Promise<T[]>;
+  /**
+   * Execute a SELECT query and return the rows. Implementations:
+   * a Drizzle `db.execute(sql).then(r => r.rows)` adaptor in
+   * production, an in-memory recorder in tests.
+   *
+   * `params` is positional; placeholder syntax is `$1`, `$2`, …
+   * to stay driver-agnostic.
+   */
+  selectRows<T>(query: string, params: readonly unknown[]): Promise<T[]>;
 }
 
 /**
@@ -63,17 +63,17 @@ export interface AuditAnonymizeSql {
  * is a no-op when the rows are already anonymised.
  */
 export type AnonymizeOneFn = (userId: string) => Promise<{
-    readonly anonymizedRows: number;
+  readonly anonymizedRows: number;
 }>;
 
 export interface AuditAnonymizeDeps {
-    readonly executeSql: AuditAnonymizeSql;
-    readonly anonymizeOne: AnonymizeOneFn;
+  readonly executeSql: AuditAnonymizeSql;
+  readonly anonymizeOne: AnonymizeOneFn;
 }
 
 /** Optional clock for deterministic testing. */
 export interface AuditAnonymizeClock {
-    now(): Date;
+  now(): Date;
 }
 
 const realClock: AuditAnonymizeClock = { now: () => new Date() };
@@ -101,10 +101,10 @@ export const DEFAULT_USER_BATCH_LIMIT = 100;
  * captures every failure verbatim so on-call can dig.
  */
 export interface AuditAnonymizeResult {
-    readonly processed: number;
-    readonly succeeded: number;
-    readonly errors: { readonly userId: string; readonly error: string }[];
-    readonly anonymizedRowsTotal: number;
+  readonly processed: number;
+  readonly succeeded: number;
+  readonly errors: { readonly userId: string; readonly error: string }[];
+  readonly anonymizedRowsTotal: number;
 }
 
 /**
@@ -130,24 +130,24 @@ export interface AuditAnonymizeResult {
  * `await runAuditAnonymisationCycle(deps)` call.
  */
 export async function runAuditAnonymisationCycle(
-    deps: AuditAnonymizeDeps,
-    options: {
-        readonly graceDays?: number;
-        readonly batchLimit?: number;
-        readonly clock?: AuditAnonymizeClock;
-    } = {},
+  deps: AuditAnonymizeDeps,
+  options: {
+    readonly graceDays?: number;
+    readonly batchLimit?: number;
+    readonly clock?: AuditAnonymizeClock;
+  } = {},
 ): Promise<AuditAnonymizeResult> {
-    const days = options.graceDays ?? DEFAULT_ANONYMIZE_GRACE_DAYS;
-    const limit = options.batchLimit ?? DEFAULT_USER_BATCH_LIMIT;
-    const clock = options.clock ?? realClock;
-    const cutoff = new Date(clock.now().getTime() - days * 24 * 60 * 60 * 1000);
+  const days = options.graceDays ?? DEFAULT_ANONYMIZE_GRACE_DAYS;
+  const limit = options.batchLimit ?? DEFAULT_USER_BATCH_LIMIT;
+  const clock = options.clock ?? realClock;
+  const cutoff = new Date(clock.now().getTime() - days * 24 * 60 * 60 * 1000);
 
-    // Select eligible users. The `audit_anonymized_at` column is
-    // added in a follow-up migration (deferred — for now, the
-    // query treats `NULL` as "not yet processed" and existing
-    // builds without that column will need the migration shipped
-    // first). Until then this query is a no-op safety net.
-    const eligibleQuery = `
+  // Select eligible users. The `audit_anonymized_at` column is
+  // added in a follow-up migration (deferred — for now, the
+  // query treats `NULL` as "not yet processed" and existing
+  // builds without that column will need the migration shipped
+  // first). Until then this query is a no-op safety net.
+  const eligibleQuery = `
         SELECT id::text AS user_id
         FROM users
         WHERE deleted_at IS NOT NULL
@@ -157,39 +157,39 @@ export async function runAuditAnonymisationCycle(
         LIMIT $2
     `;
 
-    const eligible = await deps.executeSql.selectRows<{ user_id: string }>(
-        eligibleQuery,
-        [cutoff, limit],
-    );
+  const eligible = await deps.executeSql.selectRows<{ user_id: string }>(eligibleQuery, [
+    cutoff,
+    limit,
+  ]);
 
-    let succeeded = 0;
-    let anonymizedRowsTotal = 0;
-    const errors: { userId: string; error: string }[] = [];
+  let succeeded = 0;
+  let anonymizedRowsTotal = 0;
+  const errors: { userId: string; error: string }[] = [];
 
-    for (const row of eligible) {
-        try {
-            const result = await deps.anonymizeOne(row.user_id);
-            anonymizedRowsTotal += result.anonymizedRows;
-            succeeded += 1;
-            // Stamp the watermark so the next tick skips this user.
-            // The UPDATE is idempotent — re-running it on a
-            // already-stamped row is fine.
-            await deps.executeSql.selectRows(
-                `UPDATE users SET audit_anonymized_at = NOW() WHERE id = $1::uuid`,
-                [row.user_id],
-            );
-        } catch (err) {
-            errors.push({
-                userId: row.user_id,
-                error: err instanceof Error ? err.message : String(err),
-            });
-        }
+  for (const row of eligible) {
+    try {
+      const result = await deps.anonymizeOne(row.user_id);
+      anonymizedRowsTotal += result.anonymizedRows;
+      succeeded += 1;
+      // Stamp the watermark so the next tick skips this user.
+      // The UPDATE is idempotent — re-running it on a
+      // already-stamped row is fine.
+      await deps.executeSql.selectRows(
+        `UPDATE users SET audit_anonymized_at = NOW() WHERE id = $1::uuid`,
+        [row.user_id],
+      );
+    } catch (err) {
+      errors.push({
+        userId: row.user_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
+  }
 
-    return {
-        processed: eligible.length,
-        succeeded,
-        errors,
-        anonymizedRowsTotal,
-    };
+  return {
+    processed: eligible.length,
+    succeeded,
+    errors,
+    anonymizedRowsTotal,
+  };
 }

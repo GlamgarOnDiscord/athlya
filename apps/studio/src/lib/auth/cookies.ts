@@ -29,44 +29,42 @@ export const REFRESH_COOKIE_NAME = 'athlya.refresh.studio';
 export const REFRESH_COOKIE_PATH = '/api/auth';
 
 export interface SetRefreshCookieOptions {
-    readonly token: string;
-    readonly maxAgeSec: number;
-    readonly isProduction?: boolean;
+  readonly token: string;
+  readonly maxAgeSec: number;
+  readonly isProduction?: boolean;
 }
 
 export function buildRefreshCookie(opts: SetRefreshCookieOptions): string {
-    const { token, maxAgeSec } = opts;
-    const isProduction = opts.isProduction ?? true;
+  const { token, maxAgeSec } = opts;
+  const isProduction = opts.isProduction ?? true;
 
-    if (!Number.isFinite(maxAgeSec) || maxAgeSec < 0) {
-        throw new TypeError(
-            'buildRefreshCookie: maxAgeSec must be a non-negative finite number',
-        );
-    }
+  if (!Number.isFinite(maxAgeSec) || maxAgeSec < 0) {
+    throw new TypeError('buildRefreshCookie: maxAgeSec must be a non-negative finite number');
+  }
 
-    const parts: string[] = [
-        `${REFRESH_COOKIE_NAME}=${token}`,
-        `Path=${REFRESH_COOKIE_PATH}`,
-        `Max-Age=${Math.floor(maxAgeSec)}`,
-        'HttpOnly',
-        'SameSite=Lax',
-    ];
-    if (isProduction) {
-        parts.push('Secure');
-    }
-    return parts.join('; ');
+  const parts: string[] = [
+    `${REFRESH_COOKIE_NAME}=${token}`,
+    `Path=${REFRESH_COOKIE_PATH}`,
+    `Max-Age=${Math.floor(maxAgeSec)}`,
+    'HttpOnly',
+    'SameSite=Lax',
+  ];
+  if (isProduction) {
+    parts.push('Secure');
+  }
+  return parts.join('; ');
 }
 
 export function buildClearRefreshCookie(isProduction = true): string {
-    const parts: string[] = [
-        `${REFRESH_COOKIE_NAME}=`,
-        `Path=${REFRESH_COOKIE_PATH}`,
-        'Max-Age=0',
-        'HttpOnly',
-        'SameSite=Lax',
-    ];
-    if (isProduction) {
-        parts.push('Secure');
-    }
-    return parts.join('; ');
+  const parts: string[] = [
+    `${REFRESH_COOKIE_NAME}=`,
+    `Path=${REFRESH_COOKIE_PATH}`,
+    'Max-Age=0',
+    'HttpOnly',
+    'SameSite=Lax',
+  ];
+  if (isProduction) {
+    parts.push('Secure');
+  }
+  return parts.join('; ');
 }

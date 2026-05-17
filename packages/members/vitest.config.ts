@@ -25,36 +25,32 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-    test: {
-        // Covers the co-located unit suites AND the new integration
-        // tree under `tests/`. Both globs are required because each
-        // tree carries a distinct shape of assertions (pure-domain vs
-        // full-DB) and the package build pipeline excludes `tests/`
-        // from the published `dist/`.
-        include: [
-            'src/**/__tests__/**/*.test.ts',
-            'src/**/*.test.ts',
-            'tests/**/*.test.ts',
-        ],
+  test: {
+    // Covers the co-located unit suites AND the new integration
+    // tree under `tests/`. Both globs are required because each
+    // tree carries a distinct shape of assertions (pure-domain vs
+    // full-DB) and the package build pipeline excludes `tests/`
+    // from the published `dist/`.
+    include: ['src/**/__tests__/**/*.test.ts', 'src/**/*.test.ts', 'tests/**/*.test.ts'],
 
-        exclude: ['**/node_modules/**', '**/dist/**'],
+    exclude: ['**/node_modules/**', '**/dist/**'],
 
-        // Explicit imports from `vitest`; no globals. Matches the
-        // style used across the rest of the monorepo.
-        globals: false,
+    // Explicit imports from `vitest`; no globals. Matches the
+    // style used across the rest of the monorepo.
+    globals: false,
 
-        // Pure Node domain logic + Testcontainers — no DOM shim.
-        environment: 'node',
+    // Pure Node domain logic + Testcontainers — no DOM shim.
+    environment: 'node',
 
-        // Threads keep fast-check's RNG seeding deterministic across
-        // runs and don't interfere with the shared Testcontainers
-        // container spun up in a `beforeAll`.
-        pool: 'threads',
+    // Threads keep fast-check's RNG seeding deterministic across
+    // runs and don't interfere with the shared Testcontainers
+    // container spun up in a `beforeAll`.
+    pool: 'threads',
 
-        // Testcontainers-backed integration suite pays a container
-        // startup tax. 180 s accommodates the slowest CI runner we
-        // target without hiding genuine hangs.
-        testTimeout: 180_000,
-        hookTimeout: 180_000,
-    },
+    // Testcontainers-backed integration suite pays a container
+    // startup tax. 180 s accommodates the slowest CI runner we
+    // target without hiding genuine hangs.
+    testTimeout: 180_000,
+    hookTimeout: 180_000,
+  },
 });

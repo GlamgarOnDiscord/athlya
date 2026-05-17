@@ -16,24 +16,24 @@ import postgres from 'postgres';
 
 const name = process.argv[2];
 if (name === undefined || name === '') {
-    console.error('usage: mark-applied.mjs <migration-file-name>');
-    process.exit(1);
+  console.error('usage: mark-applied.mjs <migration-file-name>');
+  process.exit(1);
 }
 
 const connectionString = process.env.DATABASE_URL;
 if (connectionString === undefined || connectionString === '') {
-    console.error('DATABASE_URL is required');
-    process.exit(1);
+  console.error('DATABASE_URL is required');
+  process.exit(1);
 }
 
 const sql = postgres(connectionString, { max: 1, prepare: false });
 try {
-    await sql`
+  await sql`
         INSERT INTO _athlya_migrations (name)
         VALUES (${name})
         ON CONFLICT (name) DO NOTHING
     `;
-    console.log(`[marked] ${name}`);
+  console.log(`[marked] ${name}`);
 } finally {
-    await sql.end({ timeout: 2 });
+  await sql.end({ timeout: 2 });
 }

@@ -22,61 +22,59 @@
 import type { Page } from '@playwright/test';
 
 export async function loginWithStub(page: Page): Promise<void> {
-    // Intercept the login proxy and return a fake session.
-    await page.route('**/api/auth/login', async (route) => {
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({
-                accessToken: 'fake-access-token',
-                accessTokenExpiresIn: 900,
-                user: {
-                    id: 'user-1',
-                    email: 'test@athlya.app',
-                    displayName: 'Test',
-                },
-            }),
-        });
+  // Intercept the login proxy and return a fake session.
+  await page.route('**/api/auth/login', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        accessToken: 'fake-access-token',
+        accessTokenExpiresIn: 900,
+        user: {
+          id: 'user-1',
+          email: 'test@athlya.app',
+          displayName: 'Test',
+        },
+      }),
     });
+  });
 
-    // Stub the profile read so `/me` renders its populated state.
-    await page.route('**/v1/members/me', async (route) => {
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({
-                id: 'user-1',
-                email: 'test@athlya.app',
-                displayName: 'Test',
-                avatarUrl: null,
-                consents: {
-                    marketing: false,
-                    analytics: false,
-                    thirdParty: false,
-                    version: '2026-01',
-                    updatedAt: '2026-01-01T00:00:00.000Z',
-                },
-            }),
-        });
+  // Stub the profile read so `/me` renders its populated state.
+  await page.route('**/v1/members/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'user-1',
+        email: 'test@athlya.app',
+        displayName: 'Test',
+        avatarUrl: null,
+        consents: {
+          marketing: false,
+          analytics: false,
+          thirdParty: false,
+          version: '2026-01',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      }),
     });
+  });
 
-    // Stub the classes list so `/classes` renders the empty-state
-    // markup instead of a loading spinner when axe runs.
-    await page.route('**/v1/classes*', async (route) => {
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({ items: [] }),
-        });
+  // Stub the classes list so `/classes` renders the empty-state
+  // markup instead of a loading spinner when axe runs.
+  await page.route('**/v1/classes*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [] }),
     });
+  });
 
-    // Walk the real form so the client-side token store is
-    // populated exactly as a human login would populate it.
-    await page.goto('/login');
-    await page.getByLabel(/adresse e-mail|email/i).fill('test@athlya.app');
-    await page.getByLabel(/mot de passe|password/i).fill('Password1234');
-    await page
-        .getByRole('button', { name: /se connecter|sign in/i })
-        .click();
-    await page.waitForURL('/');
+  // Walk the real form so the client-side token store is
+  // populated exactly as a human login would populate it.
+  await page.goto('/login');
+  await page.getByLabel(/adresse e-mail|email/i).fill('test@athlya.app');
+  await page.getByLabel(/mot de passe|password/i).fill('Password1234');
+  await page.getByRole('button', { name: /se connecter|sign in/i }).click();
+  await page.waitForURL('/');
 }

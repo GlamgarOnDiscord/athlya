@@ -1,15 +1,15 @@
 # @upstash/redis — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^1.35.6 |
-| **Latest** | **1.38.0** |
+|             | Value                                                        |
+| ----------- | ------------------------------------------------------------ |
+| **Used**    | ^1.35.6                                                      |
+| **Latest**  | **1.38.0**                                                   |
 | **Purpose** | Rate limiting, QR replay store, login throttle, DLQ tracking |
-| **Runtime** | HTTP-based (no TCP, Workers-compatible) |
+| **Runtime** | HTTP-based (no TCP, Workers-compatible)                      |
 
 ---
 
@@ -44,13 +44,13 @@ If using Upstash with read replicas, test the rate limiter under load after upgr
 
 ## Usage in Project
 
-| Module | Redis Usage |
-|---|---|
-| `packages/ratelimit/src/sliding-window.ts` | Sorted set for sliding window rate limiting |
-| `packages/api/src/middleware/rate-limit.ts` | Global rate limit (100/s IP, 500/s user) |
-| `packages/auth/src/throttle.ts` | Login throttle (5/15min per IP+email) |
-| `packages/auth/src/replay-redis.ts` | QR check-in replay prevention (SET NX EX) |
-| `packages/api/src/events/drain-dlq.ts` | DLQ entry tracking |
+| Module                                      | Redis Usage                                 |
+| ------------------------------------------- | ------------------------------------------- |
+| `packages/ratelimit/src/sliding-window.ts`  | Sorted set for sliding window rate limiting |
+| `packages/api/src/middleware/rate-limit.ts` | Global rate limit (100/s IP, 500/s user)    |
+| `packages/auth/src/throttle.ts`             | Login throttle (5/15min per IP+email)       |
+| `packages/auth/src/replay-redis.ts`         | QR check-in replay prevention (SET NX EX)   |
+| `packages/api/src/events/drain-dlq.ts`      | DLQ entry tracking                          |
 
 ---
 

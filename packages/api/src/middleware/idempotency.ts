@@ -44,12 +44,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 export const DEFAULT_IDEMPOTENCY_TTL_SEC = 24 * 60 * 60;
 
 /** HTTP methods the middleware inspects. Read-only verbs pass through. */
-const DEFAULT_MUTATION_METHODS: ReadonlySet<string> = new Set([
-    'POST',
-    'PUT',
-    'PATCH',
-    'DELETE',
-]);
+const DEFAULT_MUTATION_METHODS: ReadonlySet<string> = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 /** Maximum accepted header length. Mirrors the DB helper's bound. */
 const KEY_MAX_LENGTH = 255;
@@ -59,23 +54,23 @@ const KEY_MAX_LENGTH = 255;
  * inject an Axiom/OTel-aware logger without forcing a dependency.
  */
 export interface IdempotencyLogger {
-    warn: (msg: string, extra?: Record<string, unknown>) => void;
-    error: (msg: string, extra?: Record<string, unknown>) => void;
+  warn: (msg: string, extra?: Record<string, unknown>) => void;
+  error: (msg: string, extra?: Record<string, unknown>) => void;
 }
 
 export interface IdempotencyMiddlewareDeps {
-    /**
-     * Drizzle handle — typically the app-scoped {@link AthlyaDb} client
-     * from `createDb()`. A {@link AthlyaTx} is accepted too so callers
-     * can share a transaction with a surrounding scope during tests.
-     */
-    readonly db: AthlyaDb | AthlyaTx;
-    /** Retention in seconds. Defaults to {@link DEFAULT_IDEMPOTENCY_TTL_SEC}. */
-    readonly ttlSec?: number;
-    /** HTTP methods considered mutations. Defaults to POST/PUT/PATCH/DELETE. */
-    readonly mutationMethods?: ReadonlySet<string>;
-    /** Swappable logger for warn/error paths. Defaults to `console`. */
-    readonly logger?: IdempotencyLogger;
+  /**
+   * Drizzle handle — typically the app-scoped {@link AthlyaDb} client
+   * from `createDb()`. A {@link AthlyaTx} is accepted too so callers
+   * can share a transaction with a surrounding scope during tests.
+   */
+  readonly db: AthlyaDb | AthlyaTx;
+  /** Retention in seconds. Defaults to {@link DEFAULT_IDEMPOTENCY_TTL_SEC}. */
+  readonly ttlSec?: number;
+  /** HTTP methods considered mutations. Defaults to POST/PUT/PATCH/DELETE. */
+  readonly mutationMethods?: ReadonlySet<string>;
+  /** Swappable logger for warn/error paths. Defaults to `console`. */
+  readonly logger?: IdempotencyLogger;
 }
 
 /**
@@ -86,9 +81,9 @@ export interface IdempotencyMiddlewareDeps {
  * `Env.Variables` is intersected at use-site.
  */
 export interface IdempotencyEnv {
-    Variables: {
-        userId: string;
-    };
+  Variables: {
+    userId: string;
+  };
 }
 
 /**
@@ -99,10 +94,10 @@ export interface IdempotencyEnv {
  * domain service.
  */
 interface IdempotencyProblem {
-    type: string;
-    title: string;
-    status: 400;
-    detail: string;
+  type: string;
+  title: string;
+  status: 400;
+  detail: string;
 }
 
 /**
@@ -126,115 +121,109 @@ interface IdempotencyProblem {
  *      user-visible response.
  */
 export function idempotencyMiddleware(
-    deps: IdempotencyMiddlewareDeps,
+  deps: IdempotencyMiddlewareDeps,
 ): MiddlewareHandler<IdempotencyEnv> {
-    const ttlSec = deps.ttlSec ?? DEFAULT_IDEMPOTENCY_TTL_SEC;
-    const methods = deps.mutationMethods ?? DEFAULT_MUTATION_METHODS;
-    const logger: IdempotencyLogger = deps.logger ?? {
-        warn: (msg, extra) => {
-            console.warn(`[idempotency] ${msg}`, extra ?? {});
+  const ttlSec = deps.ttlSec ?? DEFAULT_IDEMPOTENCY_TTL_SEC;
+  const methods = deps.mutationMethods ?? DEFAULT_MUTATION_METHODS;
+  const logger: IdempotencyLogger = deps.logger ?? {
+    warn: (msg, extra) => {
+      console.warn(`[idempotency] ${msg}`, extra ?? {});
+    },
+    error: (msg, extra) => {
+      console.error(`[idempotency] ${msg}`, extra ?? {});
+    },
+  };
+
+  return async (c, next) => {
+    const method = c.req.method.toUpperCase();
+    if (!methods.has(method)) {
+      await next();
+      return;
+    }
+
+    const rawKey = c.req.header('Idempotency-Key');
+    if (rawKey === undefined || rawKey === null) {
+      await next();
+      return;
+    }
+
+    // Trim a single leading/trailing whitespace run — the HTTP spec
+    // forbids it but header middleboxes occasionally add one and
+    // silently accepting a bogus key would split the cache.
+    const key = rawKey.trim();
+    if (key.length === 0 || key.length > KEY_MAX_LENGTH) {
+      return c.json<IdempotencyProblem>(
+        {
+          type: 'about:blank',
+          title: 'invalid_idempotency_key',
+          status: 400,
+          detail:
+            key.length === 0
+              ? 'Idempotency-Key must be a non-empty string'
+              : `Idempotency-Key must be ≤ ${String(KEY_MAX_LENGTH)} characters`,
         },
-        error: (msg, extra) => {
-            console.error(`[idempotency] ${msg}`, extra ?? {});
-        },
-    };
+        400,
+      );
+    }
 
-    return async (c, next) => {
-        const method = c.req.method.toUpperCase();
-        if (!methods.has(method)) {
-            await next();
-            return;
-        }
+    const userId = c.get('userId');
+    if (typeof userId !== 'string' || userId.length === 0) {
+      // Programmer error: the auth middleware should have set
+      // `userId` before this runs on a mutation route. Throwing
+      // bubbles up to the global error handler which will log to
+      // Sentry and respond 500 — much better than a silent 401
+      // stand-in, which would lie about the root cause.
+      throw new Error(
+        '[idempotency] userId missing from Hono context; ' +
+          'wire auth middleware before idempotencyMiddleware',
+      );
+    }
 
-        const rawKey = c.req.header('Idempotency-Key');
-        if (rawKey === undefined || rawKey === null) {
-            await next();
-            return;
-        }
+    // --- Lookup path (Req 20.1) -------------------------------------
+    let hit = null;
+    try {
+      hit = await lookup(deps.db, key, userId);
+    } catch (err) {
+      // A lookup failure must not mask the mutation — degrade to
+      // "miss" so the handler still runs. The operator learns
+      // about it through the log; repeated entries should trigger
+      // an Axiom alert.
+      logger.error('lookup failed', {
+        key,
+        userId,
+        error: errorToDetail(err),
+      });
+    }
 
-        // Trim a single leading/trailing whitespace run — the HTTP spec
-        // forbids it but header middleboxes occasionally add one and
-        // silently accepting a bogus key would split the cache.
-        const key = rawKey.trim();
-        if (key.length === 0 || key.length > KEY_MAX_LENGTH) {
-            return c.json<IdempotencyProblem>(
-                {
-                    type: 'about:blank',
-                    title: 'invalid_idempotency_key',
-                    status: 400,
-                    detail:
-                        key.length === 0
-                            ? 'Idempotency-Key must be a non-empty string'
-                            : `Idempotency-Key must be ≤ ${String(KEY_MAX_LENGTH)} characters`,
-                },
-                400,
-            );
-        }
+    if (hit !== null) {
+      return c.json(hit.response, statusCodeOf(hit.statusCode));
+    }
 
-        const userId = c.get('userId');
-        if (typeof userId !== 'string' || userId.length === 0) {
-            // Programmer error: the auth middleware should have set
-            // `userId` before this runs on a mutation route. Throwing
-            // bubbles up to the global error handler which will log to
-            // Sentry and respond 500 — much better than a silent 401
-            // stand-in, which would lie about the root cause.
-            throw new Error(
-                '[idempotency] userId missing from Hono context; ' +
-                'wire auth middleware before idempotencyMiddleware',
-            );
-        }
+    // --- Execute path ------------------------------------------------
+    await next();
 
-        // --- Lookup path (Req 20.1) -------------------------------------
-        let hit = null;
-        try {
-            hit = await lookup(deps.db, key, userId);
-        } catch (err) {
-            // A lookup failure must not mask the mutation — degrade to
-            // "miss" so the handler still runs. The operator learns
-            // about it through the log; repeated entries should trigger
-            // an Axiom alert.
-            logger.error('lookup failed', {
-                key,
-                userId,
-                error: errorToDetail(err),
-            });
-        }
+    const status = c.res.status;
+    if (!isCacheableStatus(status)) {
+      return;
+    }
 
-        if (hit !== null) {
-            return c.json(hit.response, statusCodeOf(hit.statusCode));
-        }
+    const body = await readJsonBody(c, logger);
+    if (body === null) {
+      return;
+    }
 
-        // --- Execute path ------------------------------------------------
-        await next();
-
-        const status = c.res.status;
-        if (!isCacheableStatus(status)) {
-            return;
-        }
-
-        const body = await readJsonBody(c, logger);
-        if (body === null) {
-            return;
-        }
-
-        try {
-            await store(
-                deps.db,
-                key,
-                userId,
-                { body, statusCode: status },
-                ttlSec,
-            );
-        } catch (err) {
-            logger.warn('store failed; continuing without cache', {
-                key,
-                userId,
-                status,
-                error: errorToDetail(err),
-            });
-        }
-        return;
-    };
+    try {
+      await store(deps.db, key, userId, { body, statusCode: status }, ttlSec);
+    } catch (err) {
+      logger.warn('store failed; continuing without cache', {
+        key,
+        userId,
+        status,
+        error: errorToDetail(err),
+      });
+    }
+    return;
+  };
 }
 
 /**
@@ -243,10 +232,8 @@ export function idempotencyMiddleware(
  * `validateResponse` in the helper), so any surviving number is safe
  * for `c.json`.
  */
-function statusCodeOf(
-    code: number,
-): Parameters<Context<IdempotencyEnv>['json']>[1] {
-    return code as Parameters<Context<IdempotencyEnv>['json']>[1];
+function statusCodeOf(code: number): Parameters<Context<IdempotencyEnv>['json']>[1] {
+  return code as Parameters<Context<IdempotencyEnv>['json']>[1];
 }
 
 /**
@@ -256,7 +243,7 @@ function statusCodeOf(
  *       same 409 body, which is what the mobile drain loop expects.
  */
 function isCacheableStatus(status: number): boolean {
-    return (status >= 200 && status < 300) || status === 409;
+  return (status >= 200 && status < 300) || status === 409;
 }
 
 /**
@@ -269,38 +256,38 @@ function isCacheableStatus(status: number): boolean {
  * reaches the client untouched.
  */
 async function readJsonBody(
-    c: Context<IdempotencyEnv>,
-    logger: IdempotencyLogger,
+  c: Context<IdempotencyEnv>,
+  logger: IdempotencyLogger,
 ): Promise<Record<string, unknown> | null> {
-    const res = c.res;
-    const contentType = res.headers.get('content-type');
-    if (contentType === null || !contentType.toLowerCase().includes('application/json')) {
-        logger.warn('response is not JSON; skipping idempotency store', {
-            contentType,
-            status: res.status,
-        });
-        return null;
-    }
+  const res = c.res;
+  const contentType = res.headers.get('content-type');
+  if (contentType === null || !contentType.toLowerCase().includes('application/json')) {
+    logger.warn('response is not JSON; skipping idempotency store', {
+      contentType,
+      status: res.status,
+    });
+    return null;
+  }
 
-    let parsed: unknown;
-    try {
-        parsed = await res.clone().json();
-    } catch (err) {
-        logger.warn('response body not valid JSON; skipping idempotency store', {
-            status: res.status,
-            error: errorToDetail(err),
-        });
-        return null;
-    }
+  let parsed: unknown;
+  try {
+    parsed = await res.clone().json();
+  } catch (err) {
+    logger.warn('response body not valid JSON; skipping idempotency store', {
+      status: res.status,
+      error: errorToDetail(err),
+    });
+    return null;
+  }
 
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        logger.warn('response body not a plain object; skipping idempotency store', {
-            status: res.status,
-        });
-        return null;
-    }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    logger.warn('response body not a plain object; skipping idempotency store', {
+      status: res.status,
+    });
+    return null;
+  }
 
-    return parsed as Record<string, unknown>;
+  return parsed as Record<string, unknown>;
 }
 
 /**
@@ -309,8 +296,8 @@ async function readJsonBody(
  * anything else to its `String()` representation.
  */
 function errorToDetail(err: unknown): { name?: string; message: string } {
-    if (err instanceof Error) {
-        return { name: err.name, message: err.message };
-    }
-    return { message: String(err) };
+  if (err instanceof Error) {
+    return { name: err.name, message: err.message };
+  }
+  return { message: String(err) };
 }

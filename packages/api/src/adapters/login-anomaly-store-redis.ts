@@ -33,61 +33,61 @@ export const LOGIN_ANOMALY_TTL_SEC = 90 * 24 * 60 * 60;
 
 /** Build a Redis-backed `loginAnomalyStore`. */
 export function createRedisLoginAnomalyStore(redis: Redis): {
-    getSignal(userId: string): Promise<LoginSignal | null>;
-    setSignal(userId: string, signal: LoginSignal): Promise<void>;
+  getSignal(userId: string): Promise<LoginSignal | null>;
+  setSignal(userId: string, signal: LoginSignal): Promise<void>;
 } {
-    return {
-        async getSignal(userId) {
-            const key = `${LOGIN_ANOMALY_KEY_PREFIX}:${userId}`;
-            const raw = await redis.get<string>(key);
-            if (raw === null || raw === undefined) return null;
-            // Upstash auto-deserialises JSON when the value was
-            // stored as such; we accept both string-shaped and
-            // object-shaped responses.
-            if (typeof raw === 'object') {
-                const obj = raw as { country?: unknown; uaFamily?: unknown };
-                if (
-                    typeof obj.country === 'string' &&
-                    typeof obj.uaFamily === 'string' &&
-                    isUaFamily(obj.uaFamily)
-                ) {
-                    return {
-                        country: obj.country,
-                        uaFamily: obj.uaFamily,
-                    };
-                }
-                return null;
-            }
-            try {
-                const parsed = JSON.parse(raw) as {
-                    country?: unknown;
-                    uaFamily?: unknown;
-                };
-                if (
-                    typeof parsed.country === 'string' &&
-                    typeof parsed.uaFamily === 'string' &&
-                    isUaFamily(parsed.uaFamily)
-                ) {
-                    return {
-                        country: parsed.country,
-                        uaFamily: parsed.uaFamily,
-                    };
-                }
-                return null;
-            } catch {
-                // Malformed JSON in Redis — treat as missing.
-                return null;
-            }
-        },
-        async setSignal(userId, signal) {
-            const key = `${LOGIN_ANOMALY_KEY_PREFIX}:${userId}`;
-            const value = JSON.stringify(signal);
-            // SET with EX TTL refreshes the expiry on every login,
-            // so the 90-day window slides forward instead of being
-            // anchored on first signal.
-            await redis.set(key, value, { ex: LOGIN_ANOMALY_TTL_SEC });
-        },
-    };
+  return {
+    async getSignal(userId) {
+      const key = `${LOGIN_ANOMALY_KEY_PREFIX}:${userId}`;
+      const raw = await redis.get<string>(key);
+      if (raw === null || raw === undefined) return null;
+      // Upstash auto-deserialises JSON when the value was
+      // stored as such; we accept both string-shaped and
+      // object-shaped responses.
+      if (typeof raw === 'object') {
+        const obj = raw as { country?: unknown; uaFamily?: unknown };
+        if (
+          typeof obj.country === 'string' &&
+          typeof obj.uaFamily === 'string' &&
+          isUaFamily(obj.uaFamily)
+        ) {
+          return {
+            country: obj.country,
+            uaFamily: obj.uaFamily,
+          };
+        }
+        return null;
+      }
+      try {
+        const parsed = JSON.parse(raw) as {
+          country?: unknown;
+          uaFamily?: unknown;
+        };
+        if (
+          typeof parsed.country === 'string' &&
+          typeof parsed.uaFamily === 'string' &&
+          isUaFamily(parsed.uaFamily)
+        ) {
+          return {
+            country: parsed.country,
+            uaFamily: parsed.uaFamily,
+          };
+        }
+        return null;
+      } catch {
+        // Malformed JSON in Redis — treat as missing.
+        return null;
+      }
+    },
+    async setSignal(userId, signal) {
+      const key = `${LOGIN_ANOMALY_KEY_PREFIX}:${userId}`;
+      const value = JSON.stringify(signal);
+      // SET with EX TTL refreshes the expiry on every login,
+      // so the 90-day window slides forward instead of being
+      // anchored on first signal.
+      await redis.set(key, value, { ex: LOGIN_ANOMALY_TTL_SEC });
+    },
+  };
 }
 
 /**
@@ -96,13 +96,13 @@ export function createRedisLoginAnomalyStore(redis: Redis): {
  * the canonical seven buckets.
  */
 function isUaFamily(value: string): value is LoginSignal['uaFamily'] {
-    return (
-        value === 'chrome' ||
-        value === 'firefox' ||
-        value === 'safari' ||
-        value === 'edge' ||
-        value === 'mobile' ||
-        value === 'bot' ||
-        value === 'other'
-    );
+  return (
+    value === 'chrome' ||
+    value === 'firefox' ||
+    value === 'safari' ||
+    value === 'edge' ||
+    value === 'mobile' ||
+    value === 'bot' ||
+    value === 'other'
+  );
 }

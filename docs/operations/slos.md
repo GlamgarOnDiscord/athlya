@@ -23,7 +23,8 @@ Au-delà de 500ms, l'utilisateur perçoit le formulaire comme cassé.
 jours.
 
 **Alerting** : alerte A3 (`docs/operations/axiom-alerts.md` — Sev2
-+ page on-call).
+
+- page on-call).
 
 ### S2 — Login p95 latency
 
@@ -89,6 +90,7 @@ Au-delà, l'expérience produit se dégrade.
 ## Procédure de mise à jour
 
 Modifier ce document **avant** de toucher les seuils dans Axiom :
+
 - Discussion équipe + product validation
 - PR review obligatoire (les SLOs sont des engagements
   produit/ingénierie)
@@ -107,9 +109,9 @@ queries APL associées (Slice 14.6).
 
 ## Histoire des SLOs
 
-| Version | Date | Auteur | Changement |
-|---|---|---|---|
-| 1.0 | 2026-05-15 | Sprint 14 / Slice 14.1 | Document initial |
+| Version | Date       | Auteur                 | Changement       |
+| ------- | ---------- | ---------------------- | ---------------- |
+| 1.0     | 2026-05-15 | Sprint 14 / Slice 14.1 | Document initial |
 
 ## Références
 

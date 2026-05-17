@@ -1,17 +1,17 @@
 # jose — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^5.9.6 |
-| **Latest v5** | 5.9.6 (last v5 patch) |
-| **Latest stable** | **6.2.3** (current, recommended) |
-| **v7 beta** | 7.0.0-beta.1 (do not use in prod) |
-| **Purpose** | JWT signing, verification, JWKS, key import/export |
-| **Runtime** | Edge-compatible (Web Crypto API) |
+|                   | Value                                              |
+| ----------------- | -------------------------------------------------- |
+| **Used**          | ^5.9.6                                             |
+| **Latest v5**     | 5.9.6 (last v5 patch)                              |
+| **Latest stable** | **6.2.3** (current, recommended)                   |
+| **v7 beta**       | 7.0.0-beta.1 (do not use in prod)                  |
+| **Purpose**       | JWT signing, verification, JWKS, key import/export |
+| **Runtime**       | Edge-compatible (Web Crypto API)                   |
 
 ---
 
@@ -26,13 +26,13 @@
 
 ### Breaking Changes v5 → v6
 
-| Change | Impact on Project |
-|---|---|
+| Change                                                      | Impact on Project                                        |
+| ----------------------------------------------------------- | -------------------------------------------------------- |
 | Base64url decoding returns `Uint8Array` instead of `Buffer` | Check any code that calls `.toString()` on decoded bytes |
-| `JWE` compression removed | Not used (project uses JWS only) — no impact |
-| `PBES2` requires explicit opt-in | Not used — no impact |
-| `node:` prefix on Node.js imports | Runtime-transparent on Workers |
-| `algorithms` option renamed → `allowedAlgorithms` | Update `jwtVerify()` calls |
+| `JWE` compression removed                                   | Not used (project uses JWS only) — no impact             |
+| `PBES2` requires explicit opt-in                            | Not used — no impact                                     |
+| `node:` prefix on Node.js imports                           | Runtime-transparent on Workers                           |
+| `algorithms` option renamed → `allowedAlgorithms`           | Update `jwtVerify()` calls                               |
 
 ### Migration
 
@@ -90,11 +90,11 @@ const { privateKey, publicKey } = await generateKeyPair('ML-DSA-44');
 import { SignJWT, createLocalJWKSet, exportJWK, importPKCS8, importSPKI, jwtVerify } from 'jose';
 ```
 
-| Token Type | Algorithm | TTL | Claims |
-|---|---|---|---|
-| Access token | RS256 | 15 min | sub, studio, role |
-| Refresh token | RS256 | 30 days | sub, sid |
-| QR check-in token | RS256 | 120s | sub, studio, kind, jti |
+| Token Type        | Algorithm | TTL     | Claims                 |
+| ----------------- | --------- | ------- | ---------------------- |
+| Access token      | RS256     | 15 min  | sub, studio, role      |
+| Refresh token     | RS256     | 30 days | sub, sid               |
+| QR check-in token | RS256     | 120s    | sub, studio, kind, jti |
 
 ### Key Rotation
 
@@ -117,11 +117,11 @@ Remote JWKS fetched from Apple/Google for ID token verification.
 
 ## Configuration
 
-| Setting | Value | Rationale |
-|---|---|---|
-| Algorithm | RS256 | Asymmetric, public key verifiable at edge |
-| Clock tolerance | 0 | Both signer and verifier share Cloudflare NTP |
-| Key size | 2048-bit RSA | NIST minimum for RS256 |
+| Setting         | Value        | Rationale                                     |
+| --------------- | ------------ | --------------------------------------------- |
+| Algorithm       | RS256        | Asymmetric, public key verifiable at edge     |
+| Clock tolerance | 0            | Both signer and verifier share Cloudflare NTP |
+| Key size        | 2048-bit RSA | NIST minimum for RS256                        |
 
 **Note on `clockTolerance: 0`**: jose docs recommend 30-60s for distributed systems. Zero tolerance is acceptable here because Workers infrastructure is NTP-synced. For the QR path (120s TTL), zero is explicitly desired.
 

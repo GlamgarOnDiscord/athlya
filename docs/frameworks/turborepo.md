@@ -1,16 +1,16 @@
 # Turborepo — Framework Audit
 
-*Last updated: 2026-05-14*
+_Last updated: 2026-05-14_
 
 ## Version Status
 
-| | Value |
-|---|---|
-| **Used** | ^2.9.12 |
-| **Latest stable** | 2.9.12 (current) |
-| **v3.0 RC** | Available — do not upgrade yet (breaking) |
-| **Purpose** | Build orchestration, caching, task pipelines |
-| **UI** | tui (terminal UI) |
+|                   | Value                                        |
+| ----------------- | -------------------------------------------- |
+| **Used**          | ^2.9.12                                      |
+| **Latest stable** | 2.9.12 (current)                             |
+| **v3.0 RC**       | Available — do not upgrade yet (breaking)    |
+| **Purpose**       | Build orchestration, caching, task pipelines |
+| **UI**            | tui (terminal UI)                            |
 
 ---
 
@@ -38,18 +38,18 @@ Turborepo 3.0 introduces breaking changes behind opt-in Future Flags. Adopting t
 
 ```json
 {
-    "experimentalFeatureFlags": {
-        "groupLogs": true
-    }
+  "experimentalFeatureFlags": {
+    "groupLogs": true
+  }
 }
 ```
 
 Available flags for 2.9.x:
 
-| Flag | What it does | Status |
-|---|---|---|
-| `groupLogs` | Groups terminal output per package, cleaner CI logs | Recommended |
-| `allowUnrelated` | Permits tasks in unrelated packages to run concurrently | Evaluate |
+| Flag             | What it does                                            | Status      |
+| ---------------- | ------------------------------------------------------- | ----------- |
+| `groupLogs`      | Groups terminal output per package, cleaner CI logs     | Recommended |
+| `allowUnrelated` | Permits tasks in unrelated packages to run concurrently | Evaluate    |
 
 Enable `groupLogs` — safe with no behavioral changes, just better output.
 
@@ -68,14 +68,14 @@ Enable `groupLogs` — safe with no behavioral changes, just better output.
 
 ### Task Pipeline
 
-| Task | Dependencies | Outputs | Notes |
-|---|---|---|---|
-| `build` | `^build` (topological) | `dist/**`, `build/**`, `.next/**` | Excludes test files from inputs |
-| `lint` | `^lint` | none | Not cacheable |
-| `test` | `^build` | `coverage/**` | Depends on built packages |
-| `typecheck` | `^build` | `*.tsbuildinfo` | Incremental TS info |
-| `clean` | (no cache) | — | Uncacheable |
-| `dev` | (no cache, persistent) | — | Long-running dev servers |
+| Task        | Dependencies           | Outputs                           | Notes                           |
+| ----------- | ---------------------- | --------------------------------- | ------------------------------- |
+| `build`     | `^build` (topological) | `dist/**`, `build/**`, `.next/**` | Excludes test files from inputs |
+| `lint`      | `^lint`                | none                              | Not cacheable                   |
+| `test`      | `^build`               | `coverage/**`                     | Depends on built packages       |
+| `typecheck` | `^build`               | `*.tsbuildinfo`                   | Incremental TS info             |
+| `clean`     | (no cache)             | —                                 | Uncacheable                     |
+| `dev`       | (no cache, persistent) | —                                 | Long-running dev servers        |
 
 ### Input Filtering
 
@@ -100,6 +100,7 @@ Build cache ignores test file changes — correct optimization.
 ### No Remote Caching
 
 No `remoteCache` configured. For solo developer this is fine. For team/CI use, consider:
+
 - Vercel Remote Cache (free for Vercel-hosted projects)
 - Self-hosted via `turbo-remote-cache` (Cloudflare Workers-compatible)
 

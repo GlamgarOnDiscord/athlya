@@ -26,14 +26,14 @@ type: API
 url: https://api.athlya.app/health
 method: GET
 locations:
-  - eu-west-1   # Frankfurt
-  - us-east-1   # Virginia
-  - ap-southeast-1  # Singapore
+  - eu-west-1 # Frankfurt
+  - us-east-1 # Virginia
+  - ap-southeast-1 # Singapore
 expected_status: 200
 expected_body_contains: '"status":"ok"'
 alert_channels:
   - slack-ops
-sla: 99.9%  # Sprint 14 baseline
+sla: 99.9% # Sprint 14 baseline
 ```
 
 #### CK2 — Readiness `/health/ready` (toutes 60s)
@@ -80,11 +80,11 @@ alert_channels:
 
 ```yaml
 name: Athlya Web login render
-type: Browser  # Checkly Playwright check
+type: Browser # Checkly Playwright check
 url: https://app.athlya.app/login
 expected_text:
-  - 'Connexion'  # FR title
-  - 'Mot de passe oublié'  # forgot-password link
+  - 'Connexion' # FR title
+  - 'Mot de passe oublié' # forgot-password link
 locations:
   - eu-west-1
 alert_channels:
@@ -96,11 +96,11 @@ alert_channels:
 Règle : 2/3 régions en fail consécutif → Slack ops alert + 5/6
 régions → page on-call.
 
-| Severity | Trigger | Action |
-|---|---|---|
-| Sev3 | 1 région fail | Slack #ops-athlya-alerts |
-| Sev2 | 2/3 régions fail | Slack + email on-call |
-| Sev1 | 3/3 régions fail OU readiness 503 sur 2+ régions | Page on-call PagerDuty |
+| Severity | Trigger                                          | Action                   |
+| -------- | ------------------------------------------------ | ------------------------ |
+| Sev3     | 1 région fail                                    | Slack #ops-athlya-alerts |
+| Sev2     | 2/3 régions fail                                 | Slack + email on-call    |
+| Sev1     | 3/3 régions fail OU readiness 503 sur 2+ régions | Page on-call PagerDuty   |
 
 Configuration manuelle dans l'UI Checkly. Slice future :
 Terraform Checkly provider pour versionner.
@@ -124,10 +124,11 @@ gratuitement (jusqu'à 100k events/mois sur free tier) :
    <body>
      {children}
      <Analytics />
-   </body>
+   </body>;
    ```
 
 Métriques recueillies :
+
 - LCP (Largest Contentful Paint)
 - FID (First Input Delay)
 - CLS (Cumulative Layout Shift)
@@ -135,6 +136,7 @@ Métriques recueillies :
 - TTFB (Time To First Byte)
 
 Cibles :
+
 - LCP < 2.5s p75
 - FID < 100ms p75
 - CLS < 0.1 p75
@@ -178,6 +180,7 @@ Health" (cf `docs/operations/axiom-queries.md`) :
 ### Cloudflare Analytics
 
 Le dashboard Cloudflare expose nativement :
+
 - Requests par jour
 - CPU-ms cumulés (basis du pricing Workers)
 - Bandwidth out (free) / in (paid au-delà du free tier)
@@ -211,13 +214,13 @@ côté leur app, OU usage abusif qui justifie un plan plus cher).
 
 ## Provisioning checklist
 
-| Item | Status | Owner |
-|---|---|---|
-| Compte Checkly free tier | ⏳ ops | DevOps |
-| 4 checks CK1-CK4 | ⏳ après création compte | DevOps |
-| Slack webhook ops | ⏳ | DevOps |
-| Vercel Analytics activation | ⏳ après push prod web | DevOps + Eng |
-| Axiom cost dashboard panel | ⏳ après data Axiom 30j | Eng |
+| Item                        | Status                   | Owner        |
+| --------------------------- | ------------------------ | ------------ |
+| Compte Checkly free tier    | ⏳ ops                   | DevOps       |
+| 4 checks CK1-CK4            | ⏳ après création compte | DevOps       |
+| Slack webhook ops           | ⏳                       | DevOps       |
+| Vercel Analytics activation | ⏳ après push prod web   | DevOps + Eng |
+| Axiom cost dashboard panel  | ⏳ après data Axiom 30j  | Eng          |
 
 ## Tests automatisés
 

@@ -63,7 +63,7 @@ import type { AthlyaEnvironment } from '../types.js';
 
 /** Cloudflare's canonical siteverify endpoint. Exported for tests. */
 export const CLOUDFLARE_SITEVERIFY_URL =
-    'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+  'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
 /** Problem Details content-type per RFC 9457. */
 const PROBLEM_JSON = 'application/problem+json';
@@ -84,8 +84,8 @@ const DEFAULT_TIMEOUT_MS = 5_000;
  * so this module has no runtime dependency on `logging.ts`.
  */
 export interface TurnstileLogger {
-    warn(msg: string, fields?: Record<string, unknown>): void;
-    error(msg: string, fields?: Record<string, unknown>): void;
+  warn(msg: string, fields?: Record<string, unknown>): void;
+  error(msg: string, fields?: Record<string, unknown>): void;
 }
 
 /**
@@ -94,13 +94,13 @@ export interface TurnstileLogger {
  * Turnstile secret and environment discriminator are required.
  */
 export interface TurnstileEnv {
-    readonly ENVIRONMENT: AthlyaEnvironment;
-    readonly TURNSTILE_SECRET?: string;
+  readonly ENVIRONMENT: AthlyaEnvironment;
+  readonly TURNSTILE_SECRET?: string;
 }
 
 /** Minimal request-header reader. Hono's `c.req.header(name)` matches. */
 export interface TurnstileRequest {
-    header(name: string): string | undefined;
+  header(name: string): string | undefined;
 }
 
 /**
@@ -111,15 +111,11 @@ export interface TurnstileRequest {
  * builder; the middleware only ever writes 403 / 500 through it.
  */
 export interface TurnstileContext {
-    readonly env: TurnstileEnv;
-    readonly req: TurnstileRequest;
-    get(key: 'traceId'): unknown;
-    get(key: 'logger'): unknown;
-    body(
-        data: string,
-        status: number,
-        headers: Record<string, string>,
-    ): Response;
+  readonly env: TurnstileEnv;
+  readonly req: TurnstileRequest;
+  get(key: 'traceId'): unknown;
+  get(key: 'logger'): unknown;
+  body(data: string, status: number, headers: Record<string, string>): Response;
 }
 
 /** Hono-compatible `next()` signature. */
@@ -131,8 +127,8 @@ export type TurnstileNext = () => Promise<void>;
  * through.
  */
 export type TurnstileMiddleware = (
-    c: TurnstileContext,
-    next: TurnstileNext,
+  c: TurnstileContext,
+  next: TurnstileNext,
 ) => Promise<Response | void>;
 
 /* ------------------------------------------------------------------ */
@@ -145,40 +141,40 @@ export type TurnstileMiddleware = (
  * `error-codes` is surfaced to the logger on failures.
  */
 interface SiteverifyResponse {
-    readonly success: boolean;
-    readonly ['error-codes']?: readonly string[];
-    readonly hostname?: string;
+  readonly success: boolean;
+  readonly ['error-codes']?: readonly string[];
+  readonly hostname?: string;
 }
 
 /** Options accepted by {@link turnstile}. Every field is optional. */
 export interface TurnstileOptions {
-    /**
-     * Pre-resolved Turnstile secret. When omitted, the middleware
-     * reads `c.env.TURNSTILE_SECRET` on every request.
-     */
-    readonly secret?: string;
+  /**
+   * Pre-resolved Turnstile secret. When omitted, the middleware
+   * reads `c.env.TURNSTILE_SECRET` on every request.
+   */
+  readonly secret?: string;
 
-    /**
-     * Override for the siteverify endpoint. Tests point this at a
-     * local HTTP server or a `vi.fn()`-backed `fetch` stub;
-     * production uses {@link CLOUDFLARE_SITEVERIFY_URL}.
-     */
-    readonly siteverifyUrl?: string;
+  /**
+   * Override for the siteverify endpoint. Tests point this at a
+   * local HTTP server or a `vi.fn()`-backed `fetch` stub;
+   * production uses {@link CLOUDFLARE_SITEVERIFY_URL}.
+   */
+  readonly siteverifyUrl?: string;
 
-    /**
-     * Injected `fetch`. Defaults to `globalThis.fetch`. Tests swap in
-     * a `vi.fn<typeof fetch>()` to record the outbound POST without
-     * hitting the network.
-     */
-    readonly fetch?: typeof fetch;
+  /**
+   * Injected `fetch`. Defaults to `globalThis.fetch`. Tests swap in
+   * a `vi.fn<typeof fetch>()` to record the outbound POST without
+   * hitting the network.
+   */
+  readonly fetch?: typeof fetch;
 
-    /**
-     * Timeout for the siteverify call in milliseconds. Default
-     * {@link DEFAULT_TIMEOUT_MS}. Expiring the timer aborts the
-     * outbound fetch and logs `turnstile verification timed out` at
-     * `warn` level.
-     */
-    readonly timeoutMs?: number;
+  /**
+   * Timeout for the siteverify call in milliseconds. Default
+   * {@link DEFAULT_TIMEOUT_MS}. Expiring the timer aborts the
+   * outbound fetch and logs `turnstile verification timed out` at
+   * `warn` level.
+   */
+  readonly timeoutMs?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -186,11 +182,11 @@ export interface TurnstileOptions {
 /* ------------------------------------------------------------------ */
 
 interface ProblemBody {
-    readonly type: string;
-    readonly title: string;
-    readonly status: number;
-    readonly traceId: string;
-    readonly code: string;
+  readonly type: string;
+  readonly title: string;
+  readonly status: number;
+  readonly traceId: string;
+  readonly code: string;
 }
 
 /**
@@ -199,16 +195,16 @@ interface ProblemBody {
  * paths pending task 8.5's full RFC 9457 catalogue lift.
  */
 function build403(c: TurnstileContext): Response {
-    const body: ProblemBody = {
-        type: 'about:blank',
-        title: 'Forbidden',
-        status: 403,
-        traceId: readTraceId(c),
-        code: 'bot_challenge_failed',
-    };
-    return c.body(JSON.stringify(body), 403, {
-        'content-type': PROBLEM_JSON,
-    });
+  const body: ProblemBody = {
+    type: 'about:blank',
+    title: 'Forbidden',
+    status: 403,
+    traceId: readTraceId(c),
+    code: 'bot_challenge_failed',
+  };
+  return c.body(JSON.stringify(body), 403, {
+    'content-type': PROBLEM_JSON,
+  });
 }
 
 /**
@@ -218,16 +214,16 @@ function build403(c: TurnstileContext): Response {
  * no user request is allowed past.
  */
 function build500ConfigError(c: TurnstileContext): Response {
-    const body: ProblemBody = {
-        type: 'about:blank',
-        title: 'Internal Server Error',
-        status: 500,
-        traceId: readTraceId(c),
-        code: 'configuration_error',
-    };
-    return c.body(JSON.stringify(body), 500, {
-        'content-type': PROBLEM_JSON,
-    });
+  const body: ProblemBody = {
+    type: 'about:blank',
+    title: 'Internal Server Error',
+    status: 500,
+    traceId: readTraceId(c),
+    code: 'configuration_error',
+  };
+  return c.body(JSON.stringify(body), 500, {
+    'content-type': PROBLEM_JSON,
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -241,8 +237,8 @@ function build500ConfigError(c: TurnstileContext): Response {
  * module usable outside Hono for scripts / tests.
  */
 function readTraceId(c: TurnstileContext): string {
-    const raw = c.get('traceId');
-    return typeof raw === 'string' && raw.length > 0 ? raw : 'unknown';
+  const raw = c.get('traceId');
+  return typeof raw === 'string' && raw.length > 0 ? raw : 'unknown';
 }
 
 /**
@@ -252,19 +248,14 @@ function readTraceId(c: TurnstileContext): string {
  * in the wrong place.
  */
 function readLogger(c: TurnstileContext): TurnstileLogger {
-    const raw = c.get('logger');
-    if (
-        raw !== null &&
-        typeof raw === 'object' &&
-        'warn' in raw &&
-        'error' in raw
-    ) {
-        return raw as TurnstileLogger;
-    }
-    return {
-        warn: () => undefined,
-        error: () => undefined,
-    };
+  const raw = c.get('logger');
+  if (raw !== null && typeof raw === 'object' && 'warn' in raw && 'error' in raw) {
+    return raw as TurnstileLogger;
+  }
+  return {
+    warn: () => undefined,
+    error: () => undefined,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -300,113 +291,108 @@ function readLogger(c: TurnstileContext): TurnstileLogger {
  * per Cloudflare's documentation, so caching would break the
  * anti-replay invariant.
  */
-export function turnstile(
-    options: TurnstileOptions = {},
-): TurnstileMiddleware {
-    const siteverifyUrl = options.siteverifyUrl ?? CLOUDFLARE_SITEVERIFY_URL;
-    const fetchImpl = options.fetch ?? fetch;
-    const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+export function turnstile(options: TurnstileOptions = {}): TurnstileMiddleware {
+  const siteverifyUrl = options.siteverifyUrl ?? CLOUDFLARE_SITEVERIFY_URL;
+  const fetchImpl = options.fetch ?? fetch;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-    return async (c, next) => {
-        const logger = readLogger(c);
-        const traceId = readTraceId(c);
+  return async (c, next) => {
+    const logger = readLogger(c);
+    const traceId = readTraceId(c);
 
-        // -------- Step 1: token presence --------
-        const token = c.req.header(TURNSTILE_TOKEN_HEADER);
-        if (token === undefined || token.trim().length === 0) {
-            logger.warn('turnstile token missing', { traceId });
-            return build403(c);
-        }
+    // -------- Step 1: token presence --------
+    const token = c.req.header(TURNSTILE_TOKEN_HEADER);
+    if (token === undefined || token.trim().length === 0) {
+      logger.warn('turnstile token missing', { traceId });
+      return build403(c);
+    }
 
-        // -------- Step 2: secret resolution --------
-        const secret = options.secret ?? c.env.TURNSTILE_SECRET;
-        if (secret === undefined || secret.length === 0) {
-            if (c.env.ENVIRONMENT === 'dev') {
-                logger.warn('turnstile bypassed in dev', { traceId });
-                await next();
-                return;
-            }
-            logger.error('turnstile secret missing', {
-                traceId,
-                environment: c.env.ENVIRONMENT,
-            });
-            return build500ConfigError(c);
-        }
-
-        // -------- Step 3: siteverify round-trip --------
-        const remoteIp = c.req.header('CF-Connecting-IP');
-
-        const form = new URLSearchParams();
-        form.set('secret', secret);
-        form.set('response', token.trim());
-        if (remoteIp !== undefined && remoteIp.trim().length > 0) {
-            form.set('remoteip', remoteIp.trim());
-        }
-
-        const controller = new AbortController();
-        const timeoutHandle = setTimeout(
-            () => controller.abort(),
-            timeoutMs,
-        );
-
-        let outcome: SiteverifyResponse;
-        try {
-            const res = await fetchImpl(siteverifyUrl, {
-                method: 'POST',
-                headers: {
-                    'content-type': 'application/x-www-form-urlencoded',
-                },
-                body: form.toString(),
-                signal: controller.signal,
-            });
-
-            if (!res.ok) {
-                logger.warn('turnstile verification rejected', {
-                    traceId,
-                    reason: 'non_2xx',
-                    upstreamStatus: res.status,
-                });
-                return build403(c);
-            }
-
-            outcome = (await res.json());
-        } catch (err) {
-            // AbortError surfaces as either DOMException or a
-            // generic Error with `name === 'AbortError'` depending
-            // on the runtime. Cover both.
-            const name =
-                err instanceof Error
-                    ? err.name
-                    : typeof err === 'object' && err !== null && 'name' in err
-                        ? String((err as { name?: unknown }).name)
-                        : '';
-            if (name === 'AbortError') {
-                logger.warn('turnstile verification timed out', {
-                    traceId,
-                    timeoutMs,
-                });
-                return build403(c);
-            }
-            logger.warn('turnstile verification network error', {
-                traceId,
-                error: err instanceof Error ? err.message : String(err),
-            });
-            return build403(c);
-        } finally {
-            clearTimeout(timeoutHandle);
-        }
-
-        // -------- Step 4: success / rejection --------
-        if (!outcome.success) {
-            logger.warn('turnstile verification rejected', {
-                traceId,
-                reason: 'failure',
-                errorCodes: outcome['error-codes'] ?? [],
-            });
-            return build403(c);
-        }
-
+    // -------- Step 2: secret resolution --------
+    const secret = options.secret ?? c.env.TURNSTILE_SECRET;
+    if (secret === undefined || secret.length === 0) {
+      if (c.env.ENVIRONMENT === 'dev') {
+        logger.warn('turnstile bypassed in dev', { traceId });
         await next();
         return;
-    };
+      }
+      logger.error('turnstile secret missing', {
+        traceId,
+        environment: c.env.ENVIRONMENT,
+      });
+      return build500ConfigError(c);
+    }
+
+    // -------- Step 3: siteverify round-trip --------
+    const remoteIp = c.req.header('CF-Connecting-IP');
+
+    const form = new URLSearchParams();
+    form.set('secret', secret);
+    form.set('response', token.trim());
+    if (remoteIp !== undefined && remoteIp.trim().length > 0) {
+      form.set('remoteip', remoteIp.trim());
+    }
+
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+
+    let outcome: SiteverifyResponse;
+    try {
+      const res = await fetchImpl(siteverifyUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: form.toString(),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        logger.warn('turnstile verification rejected', {
+          traceId,
+          reason: 'non_2xx',
+          upstreamStatus: res.status,
+        });
+        return build403(c);
+      }
+
+      outcome = await res.json();
+    } catch (err) {
+      // AbortError surfaces as either DOMException or a
+      // generic Error with `name === 'AbortError'` depending
+      // on the runtime. Cover both.
+      const name =
+        err instanceof Error
+          ? err.name
+          : typeof err === 'object' && err !== null && 'name' in err
+            ? String((err as { name?: unknown }).name)
+            : '';
+      if (name === 'AbortError') {
+        logger.warn('turnstile verification timed out', {
+          traceId,
+          timeoutMs,
+        });
+        return build403(c);
+      }
+      logger.warn('turnstile verification network error', {
+        traceId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return build403(c);
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
+
+    // -------- Step 4: success / rejection --------
+    if (!outcome.success) {
+      logger.warn('turnstile verification rejected', {
+        traceId,
+        reason: 'failure',
+        errorCodes: outcome['error-codes'] ?? [],
+      });
+      return build403(c);
+    }
+
+    await next();
+    return;
+  };
 }

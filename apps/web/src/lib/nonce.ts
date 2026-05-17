@@ -36,9 +36,9 @@ const NONCE_BYTE_LENGTH = 16;
  * back to a weak source.
  */
 export function generateNonce(): string {
-    const bytes = new Uint8Array(NONCE_BYTE_LENGTH);
-    crypto.getRandomValues(bytes);
-    return encodeBase64Url(bytes);
+  const bytes = new Uint8Array(NONCE_BYTE_LENGTH);
+  crypto.getRandomValues(bytes);
+  return encodeBase64Url(bytes);
 }
 
 /**
@@ -46,14 +46,13 @@ export function generateNonce(): string {
  * module stays runnable in Edge runtimes.
  */
 function encodeBase64Url(bytes: Uint8Array): string {
-    let binary = '';
-    for (const byte of bytes) {
-        binary += String.fromCharCode(byte);
-    }
-    // `btoa` is provided by the Web standard library across all supported
-    // runtimes (Workers, Edge, Node 20+).
-    const base64 = typeof btoa === 'function'
-        ? btoa(binary)
-        : Buffer.from(binary, 'binary').toString('base64');
-    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/u, '');
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  // `btoa` is provided by the Web standard library across all supported
+  // runtimes (Workers, Edge, Node 20+).
+  const base64 =
+    typeof btoa === 'function' ? btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/u, '');
 }

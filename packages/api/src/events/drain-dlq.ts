@@ -89,26 +89,26 @@ import type { MessageBatch, Queue } from '@cloudflare/workers-types';
  *   - `REDIS_TOKEN`   Upstash REST token. Secret.
  */
 export interface DlqBindings {
-    readonly EVENTS_DLQ: Queue<unknown>;
-    readonly EVENTS_QUEUE: Queue<unknown>;
-    readonly REDIS_URL: string;
-    readonly REDIS_TOKEN: string;
-    /**
-     * Sentry DSN. Optional — when absent (dev / preview without
-     * Sentry project), the alerting helper falls back to a
-     * console.error line and the rest of the drain runs unchanged
-     * (Req 30.3 — Sentry transport failures must never disrupt the
-     * primary path).
-     */
-    readonly SENTRY_DSN?: string;
-    /**
-     * Named environment, surfaced as the `env` tag on the Sentry
-     * event so on-call can filter dev / staging / production from a
-     * single project. Optional for the same reason as `SENTRY_DSN`.
-     */
-    readonly ENVIRONMENT?: AthlyaEnvironment;
-    /** Build identifier echoed as the Sentry `release`. Optional. */
-    readonly VERSION?: string;
+  readonly EVENTS_DLQ: Queue<unknown>;
+  readonly EVENTS_QUEUE: Queue<unknown>;
+  readonly REDIS_URL: string;
+  readonly REDIS_TOKEN: string;
+  /**
+   * Sentry DSN. Optional — when absent (dev / preview without
+   * Sentry project), the alerting helper falls back to a
+   * console.error line and the rest of the drain runs unchanged
+   * (Req 30.3 — Sentry transport failures must never disrupt the
+   * primary path).
+   */
+  readonly SENTRY_DSN?: string;
+  /**
+   * Named environment, surfaced as the `env` tag on the Sentry
+   * event so on-call can filter dev / staging / production from a
+   * single project. Optional for the same reason as `SENTRY_DSN`.
+   */
+  readonly ENVIRONMENT?: AthlyaEnvironment;
+  /** Build identifier echoed as the Sentry `release`. Optional. */
+  readonly VERSION?: string;
 }
 
 /**
@@ -120,67 +120,67 @@ export interface DlqBindings {
  * what is actually serialised.
  */
 export interface DlqEntry {
-    /**
-     * Cloudflare `Message.id`. Opaque 16+ byte identifier chosen by
-     * the queue runtime; we never parse it.
-     */
-    readonly id: string;
+  /**
+   * Cloudflare `Message.id`. Opaque 16+ byte identifier chosen by
+   * the queue runtime; we never parse it.
+   */
+  readonly id: string;
 
-    /** Epoch ms the id was first observed by this handler. */
-    readonly firstSeenAt: number;
+  /** Epoch ms the id was first observed by this handler. */
+  readonly firstSeenAt: number;
 
-    /** Epoch ms the id was most recently observed. */
-    readonly lastSeenAt: number;
+  /** Epoch ms the id was most recently observed. */
+  readonly lastSeenAt: number;
 
-    /**
-     * How many times this handler has observed the id. Bumped on
-     * every re-observation. Starts at 1 on insert.
-     *
-     * NOTE: this is NOT Cloudflare's own `Message.attempts` counter
-     * (which tracks deliveries on the primary queue before the DLQ
-     * hop). It is our tracker's own count of DLQ-side sightings.
-     */
-    readonly attempts: number;
+  /**
+   * How many times this handler has observed the id. Bumped on
+   * every re-observation. Starts at 1 on insert.
+   *
+   * NOTE: this is NOT Cloudflare's own `Message.attempts` counter
+   * (which tracks deliveries on the primary queue before the DLQ
+   * hop). It is our tracker's own count of DLQ-side sightings.
+   */
+  readonly attempts: number;
 
-    /**
-     * Original message payload as received from the DLQ. Opaque to
-     * this module: {@link dlqReplay} hands it straight to
-     * `EVENTS_QUEUE.send` without schema checks (the message already
-     * passed the producer's `parseEvent` once; re-validating here
-     * would silently swallow an event that a consumer fix might
-     * later be able to process).
-     */
-    readonly payload: unknown;
+  /**
+   * Original message payload as received from the DLQ. Opaque to
+   * this module: {@link dlqReplay} hands it straight to
+   * `EVENTS_QUEUE.send` without schema checks (the message already
+   * passed the producer's `parseEvent` once; re-validating here
+   * would silently swallow an event that a consumer fix might
+   * later be able to process).
+   */
+  readonly payload: unknown;
 
-    /**
-     * Best-effort capture of the consumer-side error that sent this
-     * message to the DLQ. Cloudflare does not surface the rejection
-     * reason to the consumer that processes the DLQ, so this field
-     * is currently always `null`. Kept in the schema so a future
-     * upstream improvement (or a producer-side failure-reason side-
-     * channel) can populate it without a breaking change.
-     */
-    readonly lastError: string | null;
+  /**
+   * Best-effort capture of the consumer-side error that sent this
+   * message to the DLQ. Cloudflare does not surface the rejection
+   * reason to the consumer that processes the DLQ, so this field
+   * is currently always `null`. Kept in the schema so a future
+   * upstream improvement (or a producer-side failure-reason side-
+   * channel) can populate it without a breaking change.
+   */
+  readonly lastError: string | null;
 }
 
 /** Summary returned by {@link handleDlqBatch}. */
 export interface DlqDrainResult {
-    /** Total messages consumed from the DLQ in this invocation. */
-    readonly observed: number;
+  /** Total messages consumed from the DLQ in this invocation. */
+  readonly observed: number;
 
-    /**
-     * How many of those messages produced a brand-new tracker entry.
-     * Re-observations of a previously tracked id count towards
-     * `observed` but NOT towards `tracked`.
-     */
-    readonly tracked: number;
+  /**
+   * How many of those messages produced a brand-new tracker entry.
+   * Re-observations of a previously tracked id count towards
+   * `observed` but NOT towards `tracked`.
+   */
+  readonly tracked: number;
 
-    /**
-     * Size of the `dlq:pending` sorted set AFTER this run. Surfacing
-     * this on every drain makes it trivial to alert on "DLQ tracker
-     * non-empty for > 5 min" from the structured log line.
-     */
-    readonly totalPending: number;
+  /**
+   * Size of the `dlq:pending` sorted set AFTER this run. Surfacing
+   * this on every drain makes it trivial to alert on "DLQ tracker
+   * non-empty for > 5 min" from the structured log line.
+   */
+  readonly totalPending: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -202,7 +202,7 @@ const MAX_STATS_ENTRIES = 100;
 
 /** Derive the per-entry Redis key from a message id. */
 function entryKey(id: string): string {
-    return `${ENTRY_PREFIX}${id}`;
+  return `${ENTRY_PREFIX}${id}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -218,14 +218,14 @@ function entryKey(id: string): string {
 const redisCache = new Map<string, Redis>();
 
 function getCachedRedis(env: Pick<DlqBindings, 'REDIS_URL' | 'REDIS_TOKEN'>): Redis {
-    const url = env.REDIS_URL;
-    const cached = redisCache.get(url);
-    if (cached !== undefined) {
-        return cached;
-    }
-    const client = new Redis({ url, token: env.REDIS_TOKEN });
-    redisCache.set(url, client);
-    return client;
+  const url = env.REDIS_URL;
+  const cached = redisCache.get(url);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const client = new Redis({ url, token: env.REDIS_TOKEN });
+  redisCache.set(url, client);
+  return client;
 }
 
 /**
@@ -234,7 +234,7 @@ function getCachedRedis(env: Pick<DlqBindings, 'REDIS_URL' | 'REDIS_TOKEN'>): Re
  * so it reads as internal at every call site.
  */
 export function __resetDlqRedisCache(): void {
-    redisCache.clear();
+  redisCache.clear();
 }
 
 /**
@@ -248,12 +248,12 @@ export function __resetDlqRedisCache(): void {
  * localised.
  */
 function resolveRedis(env: DlqBindings): Redis {
-    return getCachedRedis(env);
+  return getCachedRedis(env);
 }
 
 /** Test-only helper to pre-seed the cache with a fake client. */
 export function __setDlqRedisForTests(url: string, client: Redis): void {
-    redisCache.set(url, client);
+  redisCache.set(url, client);
 }
 
 /* ------------------------------------------------------------------ */
@@ -271,33 +271,33 @@ export function __setDlqRedisForTests(url: string, client: Redis): void {
 const sentryCache = new Map<string, SentryClient>();
 
 function sentryCacheKey(env: DlqBindings): string {
-    return `${env.ENVIRONMENT ?? ''}|${env.SENTRY_DSN ?? ''}|${env.VERSION ?? ''}`;
+  return `${env.ENVIRONMENT ?? ''}|${env.SENTRY_DSN ?? ''}|${env.VERSION ?? ''}`;
 }
 
 function resolveSentryClient(env: DlqBindings): SentryClient | null {
-    if (env.SENTRY_DSN === undefined || env.SENTRY_DSN.length === 0) {
-        return null;
-    }
-    const key = sentryCacheKey(env);
-    const cached = sentryCache.get(key);
-    if (cached !== undefined) return cached;
-    // Build the factory options conditionally so
-    // `exactOptionalPropertyTypes` is respected — we only set a
-    // property when its value is actually defined.
-    const opts: Parameters<typeof createSentryClient>[0] = {
-        environment: env.ENVIRONMENT ?? 'production',
-        dsn: env.SENTRY_DSN,
-        ...(env.VERSION !== undefined ? { release: env.VERSION } : {}),
-    };
-    const client = createSentryClient(opts);
-    sentryCache.set(key, client);
-    return client;
+  if (env.SENTRY_DSN === undefined || env.SENTRY_DSN.length === 0) {
+    return null;
+  }
+  const key = sentryCacheKey(env);
+  const cached = sentryCache.get(key);
+  if (cached !== undefined) return cached;
+  // Build the factory options conditionally so
+  // `exactOptionalPropertyTypes` is respected — we only set a
+  // property when its value is actually defined.
+  const opts: Parameters<typeof createSentryClient>[0] = {
+    environment: env.ENVIRONMENT ?? 'production',
+    dsn: env.SENTRY_DSN,
+    ...(env.VERSION !== undefined ? { release: env.VERSION } : {}),
+  };
+  const client = createSentryClient(opts);
+  sentryCache.set(key, client);
+  return client;
 }
 
 /** Test-only hook. Clears the Sentry client cache so tests can swap
  *  in fresh fakes without residue. */
 export function __resetDlqSentryCacheForTests(): void {
-    sentryCache.clear();
+  sentryCache.clear();
 }
 
 /**
@@ -323,66 +323,61 @@ export function __resetDlqSentryCacheForTests(): void {
  * POST has a chance to settle within the Worker's `waitUntil`
  * window.
  */
-async function alertOnDlqEntry(
-    entry: DlqEntry,
-    env: DlqBindings,
-): Promise<void> {
-    const client = resolveSentryClient(env);
-    // Best-effort decode of the embedded domain envelope so the
-    // alert tags carry `event.type` / `event.id` when available.
-    let eventType: string | undefined;
-    let eventId: string | undefined;
-    if (
-        entry.payload !== null &&
-        typeof entry.payload === 'object' &&
-        !Array.isArray(entry.payload)
-    ) {
-        const payload = entry.payload as Record<string, unknown>;
-        if (typeof payload['type'] === 'string') eventType = payload['type'];
-        if (typeof payload['id'] === 'string') eventId = payload['id'];
-    }
+async function alertOnDlqEntry(entry: DlqEntry, env: DlqBindings): Promise<void> {
+  const client = resolveSentryClient(env);
+  // Best-effort decode of the embedded domain envelope so the
+  // alert tags carry `event.type` / `event.id` when available.
+  let eventType: string | undefined;
+  let eventId: string | undefined;
+  if (
+    entry.payload !== null &&
+    typeof entry.payload === 'object' &&
+    !Array.isArray(entry.payload)
+  ) {
+    const payload = entry.payload as Record<string, unknown>;
+    if (typeof payload['type'] === 'string') eventType = payload['type'];
+    if (typeof payload['id'] === 'string') eventId = payload['id'];
+  }
 
-    const tags: Record<string, string> = {
-        queue: 'athlya-events-dlq',
-        messageId: entry.id,
-    };
-    if (eventType !== undefined) tags['eventType'] = eventType;
-    if (eventId !== undefined) tags['eventId'] = eventId;
+  const tags: Record<string, string> = {
+    queue: 'athlya-events-dlq',
+    messageId: entry.id,
+  };
+  if (eventType !== undefined) tags['eventType'] = eventType;
+  if (eventId !== undefined) tags['eventId'] = eventId;
 
-    if (client === null) {
-        // No DSN configured — fall back to a structured log line so
-        // operators still see the signal in `wrangler tail`.
-        console.error('[dlq] alert (no Sentry DSN configured)', {
-            messageId: entry.id,
-            eventType: eventType ?? null,
-            eventId: eventId ?? null,
-            attempts: entry.attempts,
-        });
-        return;
-    }
+  if (client === null) {
+    // No DSN configured — fall back to a structured log line so
+    // operators still see the signal in `wrangler tail`.
+    console.error('[dlq] alert (no Sentry DSN configured)', {
+      messageId: entry.id,
+      eventType: eventType ?? null,
+      eventId: eventId ?? null,
+      attempts: entry.attempts,
+    });
+    return;
+  }
 
-    try {
-        await client.captureException(
-            new Error(
-                `queue.dlq.entry: message ${entry.id} survived primary consumer retry budget`,
-            ),
-            {
-                tags,
-                extra: {
-                    attempts: entry.attempts,
-                    firstSeenAt: entry.firstSeenAt,
-                },
-            },
-        );
-    } catch (err) {
-        // Defence in depth — `captureException` already swallows
-        // its own errors per Req 30.3, but a misbehaving stub
-        // (tests, mocks) might still throw synchronously.
-        console.error('[dlq] sentry alert failed', {
-            messageId: entry.id,
-            error: err instanceof Error ? err.message : String(err),
-        });
-    }
+  try {
+    await client.captureException(
+      new Error(`queue.dlq.entry: message ${entry.id} survived primary consumer retry budget`),
+      {
+        tags,
+        extra: {
+          attempts: entry.attempts,
+          firstSeenAt: entry.firstSeenAt,
+        },
+      },
+    );
+  } catch (err) {
+    // Defence in depth — `captureException` already swallows
+    // its own errors per Req 30.3, but a misbehaving stub
+    // (tests, mocks) might still throw synchronously.
+    console.error('[dlq] sentry alert failed', {
+      messageId: entry.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -400,50 +395,50 @@ async function alertOnDlqEntry(
  * handle both.
  */
 function parseEntry(raw: unknown): DlqEntry | null {
-    if (raw === null || raw === undefined) return null;
+  if (raw === null || raw === undefined) return null;
 
-    let obj: unknown;
-    if (typeof raw === 'string') {
-        try {
-            obj = JSON.parse(raw);
-        } catch {
-            return null;
-        }
-    } else {
-        obj = raw;
+  let obj: unknown;
+  if (typeof raw === 'string') {
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      return null;
     }
+  } else {
+    obj = raw;
+  }
 
-    if (typeof obj !== 'object' || obj === null) return null;
+  if (typeof obj !== 'object' || obj === null) return null;
 
-    const record = obj as Record<string, unknown>;
-    const id = record['id'];
-    const firstSeenAt = record['firstSeenAt'];
-    const lastSeenAt = record['lastSeenAt'];
-    const attempts = record['attempts'];
-    const lastError = record['lastError'];
+  const record = obj as Record<string, unknown>;
+  const id = record['id'];
+  const firstSeenAt = record['firstSeenAt'];
+  const lastSeenAt = record['lastSeenAt'];
+  const attempts = record['attempts'];
+  const lastError = record['lastError'];
 
-    if (typeof id !== 'string' || id.length === 0) return null;
-    if (typeof firstSeenAt !== 'number' || !Number.isFinite(firstSeenAt)) return null;
-    if (typeof lastSeenAt !== 'number' || !Number.isFinite(lastSeenAt)) return null;
-    if (typeof attempts !== 'number' || !Number.isFinite(attempts) || attempts < 0) {
-        return null;
-    }
-    if (lastError !== null && typeof lastError !== 'string') return null;
+  if (typeof id !== 'string' || id.length === 0) return null;
+  if (typeof firstSeenAt !== 'number' || !Number.isFinite(firstSeenAt)) return null;
+  if (typeof lastSeenAt !== 'number' || !Number.isFinite(lastSeenAt)) return null;
+  if (typeof attempts !== 'number' || !Number.isFinite(attempts) || attempts < 0) {
+    return null;
+  }
+  if (lastError !== null && typeof lastError !== 'string') return null;
 
-    return {
-        id,
-        firstSeenAt,
-        lastSeenAt,
-        attempts,
-        payload: record['payload'],
-        lastError,
-    };
+  return {
+    id,
+    firstSeenAt,
+    lastSeenAt,
+    attempts,
+    payload: record['payload'],
+    lastError,
+  };
 }
 
 /** Serialise an entry for storage. Always emits a string so we do not
  * depend on the Upstash client's auto-serialisation heuristics. */
 function serialiseEntry(entry: DlqEntry): string {
-    return JSON.stringify(entry);
+  return JSON.stringify(entry);
 }
 
 /* ------------------------------------------------------------------ */
@@ -473,92 +468,92 @@ function serialiseEntry(entry: DlqEntry): string {
  * message as "unprocessable" and pages on-call.
  */
 export async function handleDlqBatch(
-    batch: MessageBatch<unknown>,
-    env: DlqBindings,
+  batch: MessageBatch<unknown>,
+  env: DlqBindings,
 ): Promise<DlqDrainResult> {
-    const redis = resolveRedis(env);
-    const now = Date.now();
+  const redis = resolveRedis(env);
+  const now = Date.now();
 
-    let tracked = 0;
+  let tracked = 0;
 
-    for (const msg of batch.messages) {
-        try {
-            const key = entryKey(msg.id);
-            const existing = parseEntry(await redis.get<string>(key));
+  for (const msg of batch.messages) {
+    try {
+      const key = entryKey(msg.id);
+      const existing = parseEntry(await redis.get<string>(key));
 
-            let entry: DlqEntry;
-            let isNew: boolean;
-            if (existing === null) {
-                entry = {
-                    id: msg.id,
-                    firstSeenAt: now,
-                    lastSeenAt: now,
-                    attempts: 1,
-                    payload: msg.body,
-                    lastError: null,
-                };
-                isNew = true;
-            } else {
-                entry = {
-                    ...existing,
-                    lastSeenAt: now,
-                    attempts: existing.attempts + 1,
-                    // Keep the original payload — the first copy we
-                    // observed is authoritative. Cloudflare
-                    // redeliveries can in principle carry different
-                    // bytes if the body is non-deterministic, but the
-                    // producer never mutates in place.
-                };
-                isNew = false;
-            }
+      let entry: DlqEntry;
+      let isNew: boolean;
+      if (existing === null) {
+        entry = {
+          id: msg.id,
+          firstSeenAt: now,
+          lastSeenAt: now,
+          attempts: 1,
+          payload: msg.body,
+          lastError: null,
+        };
+        isNew = true;
+      } else {
+        entry = {
+          ...existing,
+          lastSeenAt: now,
+          attempts: existing.attempts + 1,
+          // Keep the original payload — the first copy we
+          // observed is authoritative. Cloudflare
+          // redeliveries can in principle carry different
+          // bytes if the body is non-deterministic, but the
+          // producer never mutates in place.
+        };
+        isNew = false;
+      }
 
-            await redis.set(key, serialiseEntry(entry));
-            // ZADD is idempotent on an existing member (overwrites the
-            // score). We only add when the entry is new so the stored
-            // score stays pinned to `firstSeenAt` — re-observations
-            // must NOT bump an id back to the head of the queue.
-            if (isNew) {
-                await redis.zadd(PENDING_SET_KEY, {
-                    score: entry.firstSeenAt,
-                    member: msg.id,
-                });
-                tracked += 1;
-                // Slice B6.2 — fire one Sentry alert per freshly
-                // tracked entry. Re-observations are noisy by
-                // construction (same id redelivered) so we keep
-                // alerts to the first sighting only. The helper
-                // never throws.
-                await alertOnDlqEntry(entry, env);
-            }
+      await redis.set(key, serialiseEntry(entry));
+      // ZADD is idempotent on an existing member (overwrites the
+      // score). We only add when the entry is new so the stored
+      // score stays pinned to `firstSeenAt` — re-observations
+      // must NOT bump an id back to the head of the queue.
+      if (isNew) {
+        await redis.zadd(PENDING_SET_KEY, {
+          score: entry.firstSeenAt,
+          member: msg.id,
+        });
+        tracked += 1;
+        // Slice B6.2 — fire one Sentry alert per freshly
+        // tracked entry. Re-observations are noisy by
+        // construction (same id redelivered) so we keep
+        // alerts to the first sighting only. The helper
+        // never throws.
+        await alertOnDlqEntry(entry, env);
+      }
 
-            msg.ack();
-        } catch (err) {
-            // Deliberately do NOT re-throw: one poisoned message must
-            // not abort the whole batch. The unacked message gets
-            // retried by Cloudflare; after 3 retries it surfaces as a
-            // platform incident (DLQ-on-the-DLQ is not configured).
-            console.error('[dlq] failed to track message', {
-                messageId: msg.id,
-                error: err instanceof Error ? err.message : String(err),
-            });
-        }
+      msg.ack();
+    } catch (err) {
+      // Deliberately do NOT re-throw: one poisoned message must
+      // not abort the whole batch. The unacked message gets
+      // retried by Cloudflare; after 3 retries it surfaces as a
+      // platform incident (DLQ-on-the-DLQ is not configured).
+      console.error('[dlq] failed to track message', {
+        messageId: msg.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
+  }
 
-    // Final pending count — cheap, a single ZCARD round-trip, and it
-    // makes the structured log line downstream observable.
-    const totalPending = await redis.zcard(PENDING_SET_KEY);
+  // Final pending count — cheap, a single ZCARD round-trip, and it
+  // makes the structured log line downstream observable.
+  const totalPending = await redis.zcard(PENDING_SET_KEY);
 
-    console.log('[dlq] drain cycle complete', {
-        observed: batch.messages.length,
-        tracked,
-        totalPending,
-    });
+  console.log('[dlq] drain cycle complete', {
+    observed: batch.messages.length,
+    tracked,
+    totalPending,
+  });
 
-    return {
-        observed: batch.messages.length,
-        tracked,
-        totalPending,
-    };
+  return {
+    observed: batch.messages.length,
+    tracked,
+    totalPending,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -580,46 +575,46 @@ export async function handleDlqBatch(
  *                    member) is skipped.
  */
 export async function dlqStats(env: DlqBindings): Promise<{
-    pending: number;
-    oldestAgeMs: number | null;
-    entries: readonly DlqEntry[];
+  pending: number;
+  oldestAgeMs: number | null;
+  entries: readonly DlqEntry[];
 }> {
-    const redis = resolveRedis(env);
-    const now = Date.now();
+  const redis = resolveRedis(env);
+  const now = Date.now();
 
-    const pending = await redis.zcard(PENDING_SET_KEY);
+  const pending = await redis.zcard(PENDING_SET_KEY);
 
-    if (pending === 0) {
-        return { pending: 0, oldestAgeMs: null, entries: [] };
+  if (pending === 0) {
+    return { pending: 0, oldestAgeMs: null, entries: [] };
+  }
+
+  // ZRANGE 0..MAX-1 by index returns members in ascending score
+  // order — i.e. oldest first. Without WITHSCORES because we only
+  // need the member to look up the entry blob; the score is
+  // available via the entry's own `firstSeenAt` field.
+  const memberStop = Math.max(0, MAX_STATS_ENTRIES - 1);
+  const members = (await redis.zrange(PENDING_SET_KEY, 0, memberStop)) as unknown as string[];
+
+  const entries: DlqEntry[] = [];
+  let oldest: number | null = null;
+
+  for (const member of members) {
+    if (typeof member !== 'string' || member.length === 0) continue;
+    const entry = parseEntry(await redis.get<string>(entryKey(member)));
+    if (entry === null) continue;
+    entries.push(entry);
+    if (oldest === null || entry.firstSeenAt < oldest) {
+      oldest = entry.firstSeenAt;
     }
+  }
 
-    // ZRANGE 0..MAX-1 by index returns members in ascending score
-    // order — i.e. oldest first. Without WITHSCORES because we only
-    // need the member to look up the entry blob; the score is
-    // available via the entry's own `firstSeenAt` field.
-    const memberStop = Math.max(0, MAX_STATS_ENTRIES - 1);
-    const members = (await redis.zrange(PENDING_SET_KEY, 0, memberStop)) as unknown as string[];
+  const oldestAgeMs = oldest === null ? null : Math.max(0, now - oldest);
 
-    const entries: DlqEntry[] = [];
-    let oldest: number | null = null;
-
-    for (const member of members) {
-        if (typeof member !== 'string' || member.length === 0) continue;
-        const entry = parseEntry(await redis.get<string>(entryKey(member)));
-        if (entry === null) continue;
-        entries.push(entry);
-        if (oldest === null || entry.firstSeenAt < oldest) {
-            oldest = entry.firstSeenAt;
-        }
-    }
-
-    const oldestAgeMs = oldest === null ? null : Math.max(0, now - oldest);
-
-    return {
-        pending,
-        oldestAgeMs,
-        entries,
-    };
+  return {
+    pending,
+    oldestAgeMs,
+    entries,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -649,28 +644,28 @@ export async function dlqStats(env: DlqBindings): Promise<{
  * idempotent on replay.
  */
 export async function dlqReplay(
-    env: DlqBindings,
-    entryId: string,
+  env: DlqBindings,
+  entryId: string,
 ): Promise<{ replayed: boolean; reason?: string }> {
-    if (typeof entryId !== 'string' || entryId.length === 0) {
-        return { replayed: false, reason: 'not_found' };
-    }
+  if (typeof entryId !== 'string' || entryId.length === 0) {
+    return { replayed: false, reason: 'not_found' };
+  }
 
-    const redis = resolveRedis(env);
-    const entry = parseEntry(await redis.get<string>(entryKey(entryId)));
-    if (entry === null) {
-        return { replayed: false, reason: 'not_found' };
-    }
+  const redis = resolveRedis(env);
+  const entry = parseEntry(await redis.get<string>(entryKey(entryId)));
+  if (entry === null) {
+    return { replayed: false, reason: 'not_found' };
+  }
 
-    await env.EVENTS_QUEUE.send(entry.payload);
+  await env.EVENTS_QUEUE.send(entry.payload);
 
-    // Remove tracker state. Two separate calls — a pipeline here
-    // would be a micro-optimisation, but the extra round trip keeps
-    // the code obvious and the failure modes clean.
-    await redis.zrem(PENDING_SET_KEY, entryId);
-    await redis.del(entryKey(entryId));
+  // Remove tracker state. Two separate calls — a pipeline here
+  // would be a micro-optimisation, but the extra round trip keeps
+  // the code obvious and the failure modes clean.
+  await redis.zrem(PENDING_SET_KEY, entryId);
+  await redis.del(entryKey(entryId));
 
-    return { replayed: true };
+  return { replayed: true };
 }
 
 /* ------------------------------------------------------------------ */
@@ -689,15 +684,15 @@ export async function dlqReplay(
  * retry safely on transient network errors.
  */
 export async function dlqDiscard(
-    env: DlqBindings,
-    entryId: string,
+  env: DlqBindings,
+  entryId: string,
 ): Promise<{ discarded: boolean }> {
-    if (typeof entryId !== 'string' || entryId.length === 0) {
-        return { discarded: true };
-    }
-
-    const redis = resolveRedis(env);
-    await redis.zrem(PENDING_SET_KEY, entryId);
-    await redis.del(entryKey(entryId));
+  if (typeof entryId !== 'string' || entryId.length === 0) {
     return { discarded: true };
+  }
+
+  const redis = resolveRedis(env);
+  await redis.zrem(PENDING_SET_KEY, entryId);
+  await redis.del(entryKey(entryId));
+  return { discarded: true };
 }

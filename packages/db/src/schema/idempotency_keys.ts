@@ -21,40 +21,49 @@
  * Related requirements: 20.1, 20.2.
  */
 
-import { index, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { createdAt } from './_shared.js';
 import { users } from './users.js';
 
 export const idempotencyKeys = pgTable(
-    'idempotency_keys',
-    {
-        key: text('key').notNull(),
-        userId: uuid('user_id')
-            .notNull()
-            .references(() => users.id, { onDelete: 'cascade' }),
-        /**
-         * The serialised HTTP response (body + any headers worth
-         * replaying) associated with the original successful call.
-         */
-        response: jsonb('response').$type<Record<string, unknown>>().notNull(),
-        statusCode: integer('status_code').notNull(),
-        createdAt: createdAt(),
-        /**
-         * Hard TTL. The middleware treats rows past `expires_at` as
-         * non-existent even before the sweeper removes them, so clock
-         * skew between the sweeper and the gateway cannot serve stale
-         * data.
-         */
-        expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
-    },
-    (table) => [
-        primaryKey({
-            name: 'idempotency_keys_pk',
-            columns: [table.key, table.userId],
-        }),
-        index('idempotency_keys_expires_at_idx').on(table.expiresAt),
-    ],
+  'idempotency_keys',
+  {
+    key: text('key').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /**
+     * The serialised HTTP response (body + any headers worth
+     * replaying) associated with the original successful call.
+     */
+    response: jsonb('response').$type<Record<string, unknown>>().notNull(),
+    statusCode: integer('status_code').notNull(),
+    createdAt: createdAt(),
+    /**
+     * Hard TTL. The middleware treats rows past `expires_at` as
+     * non-existent even before the sweeper removes them, so clock
+     * skew between the sweeper and the gateway cannot serve stale
+     * data.
+     */
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'idempotency_keys_pk',
+      columns: [table.key, table.userId],
+    }),
+    index('idempotency_keys_expires_at_idx').on(table.expiresAt),
+  ],
 );
 
 export type IdempotencyKeyRow = typeof idempotencyKeys.$inferSelect;

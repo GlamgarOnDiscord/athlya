@@ -37,7 +37,6 @@ import type { HonoEnv } from '../types.js';
 import type { CheckInRequest } from '@athlya/shared/schemas/api';
 import type { Context } from 'hono';
 
-
 /* ------------------------------------------------------------------ */
 /*  Outcome                                                            */
 /* ------------------------------------------------------------------ */
@@ -49,28 +48,25 @@ import type { Context } from 'hono';
  * failure modes (`outside_window`, `no_reservation`).
  */
 export type CheckInFailReason =
-    | 'invalid_signature'
-    | 'token_expired'
-    | 'replay'
-    | 'wrong_studio'
-    | 'wrong_kind'
-    | 'malformed'
-    | 'outside_window'
-    | 'no_reservation';
+  | 'invalid_signature'
+  | 'token_expired'
+  | 'replay'
+  | 'wrong_studio'
+  | 'wrong_kind'
+  | 'malformed'
+  | 'outside_window'
+  | 'no_reservation';
 
 /** Discriminated result returned by {@link CheckinsDeps.checkIn}. */
 export type CheckInOutcome =
-    | { readonly kind: 'success'; readonly reservation: unknown; readonly member: unknown }
-    | { readonly kind: 'fail'; readonly reason: CheckInFailReason };
+  | { readonly kind: 'success'; readonly reservation: unknown; readonly member: unknown }
+  | { readonly kind: 'fail'; readonly reason: CheckInFailReason };
 
 /** Dependencies injected into {@link buildCheckinsRouter}. */
 export interface CheckinsDeps {
-    checkIn(
-        studioId: string,
-        input: CheckInRequest,
-    ): Promise<CheckInOutcome>;
+  checkIn(studioId: string, input: CheckInRequest): Promise<CheckInOutcome>;
 
-    readonly idempotency?: IdempotencyMiddlewareDeps;
+  readonly idempotency?: IdempotencyMiddlewareDeps;
 }
 
 /* ------------------------------------------------------------------ */
@@ -84,32 +80,29 @@ export interface CheckinsDeps {
  * check-in.
  */
 const TOKEN_FAILURE_REASONS = new Set<CheckInFailReason>([
-    'invalid_signature',
-    'token_expired',
-    'replay',
-    'wrong_studio',
-    'wrong_kind',
-    'malformed',
+  'invalid_signature',
+  'token_expired',
+  'replay',
+  'wrong_studio',
+  'wrong_kind',
+  'malformed',
 ]);
 
-function problemCheckinFail(
-    c: Context<HonoEnv>,
-    reason: CheckInFailReason,
-): Response {
-    const status: 401 | 422 = TOKEN_FAILURE_REASONS.has(reason) ? 401 : 422;
-    const title = status === 401 ? 'Unauthorized' : 'Unprocessable Entity';
-    return c.body(
-        JSON.stringify({
-            type: 'about:blank',
-            title,
-            status,
-            detail: `check-in rejected: ${reason}`,
-            code: reason,
-            traceId: c.get('traceId'),
-        }),
-        status,
-        { 'content-type': 'application/problem+json' },
-    );
+function problemCheckinFail(c: Context<HonoEnv>, reason: CheckInFailReason): Response {
+  const status: 401 | 422 = TOKEN_FAILURE_REASONS.has(reason) ? 401 : 422;
+  const title = status === 401 ? 'Unauthorized' : 'Unprocessable Entity';
+  return c.body(
+    JSON.stringify({
+      type: 'about:blank',
+      title,
+      status,
+      detail: `check-in rejected: ${reason}`,
+      code: reason,
+      traceId: c.get('traceId'),
+    }),
+    status,
+    { 'content-type': 'application/problem+json' },
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -118,46 +111,41 @@ function problemCheckinFail(
 
 /** Build the `/v1/checkins/*` sub-router. */
 export function buildCheckinsRouter(deps: CheckinsDeps): Hono<HonoEnv> {
-    const router = new Hono<HonoEnv>();
-    const idem = deps.idempotency;
+  const router = new Hono<HonoEnv>();
+  const idem = deps.idempotency;
 
-    router.use('*', jwtAuth());
+  router.use('*', jwtAuth());
 
-    // Sprint 12 / Slice 12.14 (Epic B4.4) — per-studio burst cap.
-    router.use(
-        '*',
-        studioRateLimit() as Parameters<typeof router.use>[1],
-    );
+  // Sprint 12 / Slice 12.14 (Epic B4.4) — per-studio burst cap.
+  router.use('*', studioRateLimit() as Parameters<typeof router.use>[1]);
 
-    router.post(
-        '/',
-        projectUserIdFromClaims(),
-        zValidator('json', CheckInRequestSchema),
-        ...(idem ? [idempotency(idem)] : []),
-        async (c) => {
-            traceOperation(c, 'checkins.check-in');
-            const claims = c.get('authClaims');
-            if (claims === undefined) {
-                throw new Error(
-                    'authClaims unexpectedly missing after jwtAuth',
-                );
-            }
-            const body = readValidated<CheckInRequest>(c, 'json');
-            const outcome = await deps.checkIn(claims.studioId, body);
+  router.post(
+    '/',
+    projectUserIdFromClaims(),
+    zValidator('json', CheckInRequestSchema),
+    ...(idem ? [idempotency(idem)] : []),
+    async (c) => {
+      traceOperation(c, 'checkins.check-in');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const body = readValidated<CheckInRequest>(c, 'json');
+      const outcome = await deps.checkIn(claims.studioId, body);
 
-            if (outcome.kind === 'success') {
-                return c.json(
-                    {
-                        success: true,
-                        reservation: outcome.reservation,
-                        member: outcome.member,
-                    },
-                    200,
-                );
-            }
-            return problemCheckinFail(c, outcome.reason);
-        },
-    );
+      if (outcome.kind === 'success') {
+        return c.json(
+          {
+            success: true,
+            reservation: outcome.reservation,
+            member: outcome.member,
+          },
+          200,
+        );
+      }
+      return problemCheckinFail(c, outcome.reason);
+    },
+  );
 
-    return router;
+  return router;
 }

@@ -42,8 +42,7 @@ import { DbError } from './errors.js';
 import type { AthlyaDb, AthlyaTx } from './client.js';
 
 /** RFC 4122 UUID v1–8 with variant bits. */
-const UUID_REGEX =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * Upper bound on the `Idempotency-Key` header length. The SQL column is
@@ -64,13 +63,10 @@ export const DEFAULT_IDEMPOTENCY_TTL_SEC = 24 * 60 * 60;
  * into this module.
  */
 export class InvalidIdempotencyInputError extends DbError {
-    public constructor(field: 'key' | 'userId' | 'response' | 'ttlSec', reason: string) {
-        super(
-            'invalid_idempotency_input',
-            `invalid idempotency input "${field}": ${reason}`,
-        );
-        this.name = 'InvalidIdempotencyInputError';
-    }
+  public constructor(field: 'key' | 'userId' | 'response' | 'ttlSec', reason: string) {
+    super('invalid_idempotency_input', `invalid idempotency input "${field}": ${reason}`);
+    this.name = 'InvalidIdempotencyInputError';
+  }
 }
 
 /**
@@ -80,10 +76,10 @@ export class InvalidIdempotencyInputError extends DbError {
  * the HTTP status from {@link statusCode}.
  */
 export interface IdempotencyEntry {
-    readonly response: Record<string, unknown>;
-    readonly statusCode: number;
-    readonly createdAt: Date;
-    readonly expiresAt: Date;
+  readonly response: Record<string, unknown>;
+  readonly statusCode: number;
+  readonly createdAt: Date;
+  readonly expiresAt: Date;
 }
 
 /**
@@ -105,11 +101,11 @@ export interface IdempotencyEntry {
  * tightened up between releases.
  */
 interface IdempotencyRowRaw {
-    response: Record<string, unknown>;
-    status_code: number;
-    created_at: Date;
-    expires_at: Date;
-    [key: string]: unknown;
+  response: Record<string, unknown>;
+  status_code: number;
+  created_at: Date;
+  expires_at: Date;
+  [key: string]: unknown;
 }
 
 /**
@@ -124,14 +120,14 @@ interface IdempotencyRowRaw {
  * clock is the single source of truth.
  */
 export async function lookup(
-    tx: AthlyaTx | AthlyaDb,
-    key: string,
-    userId: string,
+  tx: AthlyaTx | AthlyaDb,
+  key: string,
+  userId: string,
 ): Promise<IdempotencyEntry | null> {
-    validateKey(key);
-    validateUserId(userId);
+  validateKey(key);
+  validateUserId(userId);
 
-    const result = await tx.execute<IdempotencyRowRaw>(sql`
+  const result = await tx.execute<IdempotencyRowRaw>(sql`
         SELECT response, status_code, created_at, expires_at
           FROM idempotency_keys
          WHERE key = ${key}
@@ -140,20 +136,20 @@ export async function lookup(
          LIMIT 1
     `);
 
-    // drizzle-orm/postgres-js returns a `RowList` that extends the row
-    // array with driver metadata; we only care about indexed access.
-    const rows = result as unknown as readonly IdempotencyRowRaw[];
-    const row = rows[0];
-    if (!row) {
-        return null;
-    }
+  // drizzle-orm/postgres-js returns a `RowList` that extends the row
+  // array with driver metadata; we only care about indexed access.
+  const rows = result as unknown as readonly IdempotencyRowRaw[];
+  const row = rows[0];
+  if (!row) {
+    return null;
+  }
 
-    return {
-        response: row.response,
-        statusCode: row.status_code,
-        createdAt: row.created_at,
-        expiresAt: row.expires_at,
-    };
+  return {
+    response: row.response,
+    statusCode: row.status_code,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+  };
 }
 
 /**
@@ -172,20 +168,20 @@ export async function lookup(
  * parameterised and side-steps string concatenation into the SQL text.
  */
 export async function store(
-    tx: AthlyaTx | AthlyaDb,
-    key: string,
-    userId: string,
-    response: { readonly body: Record<string, unknown>; readonly statusCode: number },
-    ttlSec: number = DEFAULT_IDEMPOTENCY_TTL_SEC,
+  tx: AthlyaTx | AthlyaDb,
+  key: string,
+  userId: string,
+  response: { readonly body: Record<string, unknown>; readonly statusCode: number },
+  ttlSec: number = DEFAULT_IDEMPOTENCY_TTL_SEC,
 ): Promise<void> {
-    validateKey(key);
-    validateUserId(userId);
-    validateResponse(response);
-    validateTtl(ttlSec);
+  validateKey(key);
+  validateUserId(userId);
+  validateResponse(response);
+  validateTtl(ttlSec);
 
-    const serialisedBody = JSON.stringify(response.body);
+  const serialisedBody = JSON.stringify(response.body);
 
-    await tx.execute(sql`
+  await tx.execute(sql`
         INSERT INTO idempotency_keys (key, user_id, response, status_code, expires_at)
         VALUES (
             ${key},
@@ -199,56 +195,53 @@ export async function store(
 }
 
 function validateKey(key: string): void {
-    if (typeof key !== 'string' || key.length === 0) {
-        throw new InvalidIdempotencyInputError('key', 'must be a non-empty string');
-    }
-    if (key.length > KEY_MAX_LENGTH) {
-        throw new InvalidIdempotencyInputError(
-            'key',
-            `must be ≤ ${String(KEY_MAX_LENGTH)} characters`,
-        );
-    }
+  if (typeof key !== 'string' || key.length === 0) {
+    throw new InvalidIdempotencyInputError('key', 'must be a non-empty string');
+  }
+  if (key.length > KEY_MAX_LENGTH) {
+    throw new InvalidIdempotencyInputError('key', `must be ≤ ${String(KEY_MAX_LENGTH)} characters`);
+  }
 }
 
 function validateUserId(userId: string): void {
-    if (typeof userId !== 'string' || !UUID_REGEX.test(userId)) {
-        throw new InvalidIdempotencyInputError('userId', 'must be a UUID');
-    }
+  if (typeof userId !== 'string' || !UUID_REGEX.test(userId)) {
+    throw new InvalidIdempotencyInputError('userId', 'must be a UUID');
+  }
 }
 
 function validateResponse(response: {
-    readonly body: Record<string, unknown>;
-    readonly statusCode: number;
+  readonly body: Record<string, unknown>;
+  readonly statusCode: number;
 }): void {
-    if (response === null || typeof response !== 'object') {
-        throw new InvalidIdempotencyInputError('response', 'must be an object');
-    }
-    if (
-        typeof response.statusCode !== 'number' ||
-        !Number.isInteger(response.statusCode) ||
-        response.statusCode < 100 ||
-        response.statusCode > 599
-    ) {
-        throw new InvalidIdempotencyInputError(
-            'response',
-            `statusCode must be an integer in [100, 599], got ${String(response.statusCode)}`,
-        );
-    }
-    if (response.body === null || typeof response.body !== 'object') {
-        throw new InvalidIdempotencyInputError('response', 'body must be a plain object');
-    }
+  if (response === null || typeof response !== 'object') {
+    throw new InvalidIdempotencyInputError('response', 'must be an object');
+  }
+  if (
+    typeof response.statusCode !== 'number' ||
+    !Number.isInteger(response.statusCode) ||
+    response.statusCode < 100 ||
+    response.statusCode > 599
+  ) {
+    throw new InvalidIdempotencyInputError(
+      'response',
+      `statusCode must be an integer in [100, 599], got ${String(response.statusCode)}`,
+    );
+  }
+  if (response.body === null || typeof response.body !== 'object') {
+    throw new InvalidIdempotencyInputError('response', 'body must be a plain object');
+  }
 }
 
 function validateTtl(ttlSec: number): void {
-    if (
-        typeof ttlSec !== 'number' ||
-        !Number.isFinite(ttlSec) ||
-        !Number.isInteger(ttlSec) ||
-        ttlSec <= 0
-    ) {
-        throw new InvalidIdempotencyInputError(
-            'ttlSec',
-            `must be a positive integer, got ${String(ttlSec)}`,
-        );
-    }
+  if (
+    typeof ttlSec !== 'number' ||
+    !Number.isFinite(ttlSec) ||
+    !Number.isInteger(ttlSec) ||
+    ttlSec <= 0
+  ) {
+    throw new InvalidIdempotencyInputError(
+      'ttlSec',
+      `must be a positive integer, got ${String(ttlSec)}`,
+    );
+  }
 }

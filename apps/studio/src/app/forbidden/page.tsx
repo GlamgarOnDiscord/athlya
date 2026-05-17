@@ -19,18 +19,14 @@ import type { ReactElement } from 'react';
 export const metadata: Metadata = { title: 'Accès refusé — Athlya Studio' };
 
 export default async function ForbiddenPage(): Promise<ReactElement> {
-    const locale = await getLocale();
-    const t = createTranslator(locale);
+  const locale = await getLocale();
+  const t = createTranslator(locale);
 
-    return (
-        <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 px-6 py-12 text-center">
-            <h1 className="text-3xl font-semibold">
-                {t('studio.forbidden.title')}
-            </h1>
-            <p className="text-muted-foreground">
-                {t('studio.forbidden.body')}
-            </p>
-            <ForbiddenActions />
-        </main>
-    );
+  return (
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 px-6 py-12 text-center">
+      <h1 className="text-3xl font-semibold">{t('studio.forbidden.title')}</h1>
+      <p className="text-muted-foreground">{t('studio.forbidden.body')}</p>
+      <ForbiddenActions />
+    </main>
+  );
 }

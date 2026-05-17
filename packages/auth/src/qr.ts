@@ -61,12 +61,12 @@ export const QR_TTL_SEC = 120;
  * `iat` and `exp` are Unix seconds, matching the JWT spec.
  */
 export interface QRCheckinClaims extends JWTPayload {
-    readonly sub: string;
-    readonly studio: string;
-    readonly kind: 'checkin';
-    readonly iat: number;
-    readonly exp: number;
-    readonly jti: string;
+  readonly sub: string;
+  readonly studio: string;
+  readonly kind: 'checkin';
+  readonly iat: number;
+  readonly exp: number;
+  readonly jti: string;
 }
 
 /**
@@ -87,8 +87,8 @@ export interface QRCheckinClaims extends JWTPayload {
  * Redis adapter (network I/O) and the in-memory adapter (synchronous).
  */
 export interface ReplayStore {
-    has(jti: string): Promise<boolean>;
-    add(jti: string, ttlSec: number): Promise<void>;
+  has(jti: string): Promise<boolean>;
+  add(jti: string, ttlSec: number): Promise<void>;
 }
 
 /**
@@ -109,13 +109,13 @@ export type InvalidQRTokenReason = 'invalid_token';
  * `cause` property so logs retain the underlying stack.
  */
 export class InvalidQRTokenError extends Error {
-    public override readonly name = 'InvalidQRTokenError';
-    public readonly code: InvalidQRTokenReason;
+  public override readonly name = 'InvalidQRTokenError';
+  public readonly code: InvalidQRTokenReason;
 
-    public constructor(code: InvalidQRTokenReason, options?: { cause?: unknown }) {
-        super(`QR token rejected: ${code}`, options);
-        this.code = code;
-    }
+  public constructor(code: InvalidQRTokenReason, options?: { cause?: unknown }) {
+    super(`QR token rejected: ${code}`, options);
+    this.code = code;
+  }
 }
 
 /**
@@ -124,45 +124,45 @@ export class InvalidQRTokenError extends Error {
  * Requirement 11.5 maps this to HTTP 401 `replay`.
  */
 export class QRReplayError extends Error {
-    public override readonly name = 'QRReplayError';
-    public readonly code = 'replay' as const;
+  public override readonly name = 'QRReplayError';
+  public readonly code = 'replay' as const;
 
-    public constructor() {
-        super('QR token rejected: replay');
-    }
+  public constructor() {
+    super('QR token rejected: replay');
+  }
 }
 
 /**
  * Options accepted by {@link generateAccessQR}.
  */
 export interface GenerateAccessQROptions {
-    readonly signingKey: SigningKey;
-    /**
-     * Injectable clock (seconds since epoch). Defaults to
-     * `Math.floor(Date.now() / 1000)`; tests override it.
-     */
-    readonly now?: () => number;
-    /**
-     * Injectable `jti` source, default `crypto.randomUUID()`. Tests
-     * pin this to a deterministic UUID so they can assert replay
-     * rejection.
-     */
-    readonly jti?: () => string;
+  readonly signingKey: SigningKey;
+  /**
+   * Injectable clock (seconds since epoch). Defaults to
+   * `Math.floor(Date.now() / 1000)`; tests override it.
+   */
+  readonly now?: () => number;
+  /**
+   * Injectable `jti` source, default `crypto.randomUUID()`. Tests
+   * pin this to a deterministic UUID so they can assert replay
+   * rejection.
+   */
+  readonly jti?: () => string;
 }
 
 /**
  * Options accepted by {@link verifyAccessQR}.
  */
 export interface VerifyAccessQROptions {
-    readonly jwks: Jwks;
-    readonly replayStore: ReplayStore;
-    /**
-     * Injectable clock (seconds since epoch). Defaults to
-     * `Math.floor(Date.now() / 1000)`. Only used to compute the TTL
-     * passed to {@link ReplayStore.add}; the signature/exp checks use
-     * `jose`'s own clock with zero tolerance (see below).
-     */
-    readonly now?: () => number;
+  readonly jwks: Jwks;
+  readonly replayStore: ReplayStore;
+  /**
+   * Injectable clock (seconds since epoch). Defaults to
+   * `Math.floor(Date.now() / 1000)`. Only used to compute the TTL
+   * passed to {@link ReplayStore.add}; the signature/exp checks use
+   * `jose`'s own clock with zero tolerance (see below).
+   */
+  readonly now?: () => number;
 }
 
 /**
@@ -172,9 +172,9 @@ export interface VerifyAccessQROptions {
  * `checked_in_at = now()` (Requirement 11.6).
  */
 export interface VerifiedQRToken {
-    readonly userId: string;
-    readonly studioId: string;
-    readonly jti: string;
+  readonly userId: string;
+  readonly studioId: string;
+  readonly jti: string;
 }
 
 /**
@@ -182,7 +182,7 @@ export interface VerifiedQRToken {
  * same semantics and tests can override them uniformly.
  */
 function defaultNow(): number {
-    return Math.floor(Date.now() / 1000);
+  return Math.floor(Date.now() / 1000);
 }
 
 /**
@@ -206,39 +206,39 @@ function defaultNow(): number {
  * @throws `TypeError` on invalid inputs.
  */
 export async function generateAccessQR(
-    userId: string,
-    studioId: string,
-    opts: GenerateAccessQROptions,
+  userId: string,
+  studioId: string,
+  opts: GenerateAccessQROptions,
 ): Promise<string> {
-    assertNonEmpty(userId, 'userId');
-    assertNonEmpty(studioId, 'studioId');
+  assertNonEmpty(userId, 'userId');
+  assertNonEmpty(studioId, 'studioId');
 
-    const now = (opts.now ?? defaultNow)();
-    const iat = now;
-    const exp = now + QR_TTL_SEC;
-    const jti = (opts.jti ?? (() => crypto.randomUUID()))();
-    assertNonEmpty(jti, 'opts.jti()');
+  const now = (opts.now ?? defaultNow)();
+  const iat = now;
+  const exp = now + QR_TTL_SEC;
+  const jti = (opts.jti ?? (() => crypto.randomUUID()))();
+  assertNonEmpty(jti, 'opts.jti()');
 
-    const payload: QRCheckinClaims = {
-        sub: userId,
-        studio: studioId,
-        kind: 'checkin',
-        iat,
-        exp,
-        jti,
-    };
+  const payload: QRCheckinClaims = {
+    sub: userId,
+    studio: studioId,
+    kind: 'checkin',
+    iat,
+    exp,
+    jti,
+  };
 
-    return new SignJWT({ ...payload })
-        .setProtectedHeader({
-            alg: JWT_ALG,
-            typ: 'JWT',
-            kid: opts.signingKey.kid,
-        })
-        .setIssuedAt(iat)
-        .setExpirationTime(exp)
-        .setSubject(userId)
-        .setJti(jti)
-        .sign(opts.signingKey.privateKey);
+  return new SignJWT({ ...payload })
+    .setProtectedHeader({
+      alg: JWT_ALG,
+      typ: 'JWT',
+      kid: opts.signingKey.kid,
+    })
+    .setIssuedAt(iat)
+    .setExpirationTime(exp)
+    .setSubject(userId)
+    .setJti(jti)
+    .sign(opts.signingKey.privateKey);
 }
 
 /**
@@ -267,75 +267,73 @@ export async function generateAccessQR(
  * @throws {@link QRReplayError} if `jti` has already been consumed.
  */
 export async function verifyAccessQR(
-    token: string,
-    expectedStudioId: string,
-    opts: VerifyAccessQROptions,
+  token: string,
+  expectedStudioId: string,
+  opts: VerifyAccessQROptions,
 ): Promise<VerifiedQRToken> {
-    assertNonEmpty(expectedStudioId, 'expectedStudioId');
+  assertNonEmpty(expectedStudioId, 'expectedStudioId');
 
-    // Step 1 — signature + standard time window. jose handles `iat`,
-    // `exp`, and algorithm pinning; clockTolerance = 0 is required
-    // because the QR window is only 120 seconds and we don't want to
-    // tolerate any drift (Req 11.2).
-    let payload: JWTPayload;
-    try {
-        const keySet = createLocalJWKSet(opts.jwks);
-        const result = await jwtVerify(token, keySet, {
-            algorithms: [JWT_ALG],
-            clockTolerance: 0,
-            ...(opts.now !== undefined
-                ? { currentDate: new Date(opts.now() * 1000) }
-                : {}),
-        });
-        payload = result.payload;
-    } catch (cause) {
-        throw new InvalidQRTokenError('invalid_token', { cause });
-    }
+  // Step 1 — signature + standard time window. jose handles `iat`,
+  // `exp`, and algorithm pinning; clockTolerance = 0 is required
+  // because the QR window is only 120 seconds and we don't want to
+  // tolerate any drift (Req 11.2).
+  let payload: JWTPayload;
+  try {
+    const keySet = createLocalJWKSet(opts.jwks);
+    const result = await jwtVerify(token, keySet, {
+      algorithms: [JWT_ALG],
+      clockTolerance: 0,
+      ...(opts.now !== undefined ? { currentDate: new Date(opts.now() * 1000) } : {}),
+    });
+    payload = result.payload;
+  } catch (cause) {
+    throw new InvalidQRTokenError('invalid_token', { cause });
+  }
 
-    // Step 2 — `kind`. We deliberately compare against the literal
-    // string so a malicious payload with `kind: ['checkin']` or similar
-    // exotic shape falls through to the reject branch.
-    if (payload['kind'] !== 'checkin') {
-        throw new InvalidQRTokenError('invalid_token');
-    }
+  // Step 2 — `kind`. We deliberately compare against the literal
+  // string so a malicious payload with `kind: ['checkin']` or similar
+  // exotic shape falls through to the reject branch.
+  if (payload['kind'] !== 'checkin') {
+    throw new InvalidQRTokenError('invalid_token');
+  }
 
-    // Step 3 — studio scope.
-    if (payload['studio'] !== expectedStudioId) {
-        throw new InvalidQRTokenError('invalid_token');
-    }
+  // Step 3 — studio scope.
+  if (payload['studio'] !== expectedStudioId) {
+    throw new InvalidQRTokenError('invalid_token');
+  }
 
-    // Step 4 — replay. `jti` must be a syntactically-valid non-empty
-    // string before we consult the store: bogus types would otherwise
-    // short-circuit the replay set (an empty-string `jti` could be
-    // shared by many tokens).
-    const jti = payload.jti;
-    if (typeof jti !== 'string' || jti.length === 0) {
-        throw new InvalidQRTokenError('invalid_token');
-    }
+  // Step 4 — replay. `jti` must be a syntactically-valid non-empty
+  // string before we consult the store: bogus types would otherwise
+  // short-circuit the replay set (an empty-string `jti` could be
+  // shared by many tokens).
+  const jti = payload.jti;
+  if (typeof jti !== 'string' || jti.length === 0) {
+    throw new InvalidQRTokenError('invalid_token');
+  }
 
-    const seen = await opts.replayStore.has(jti);
-    if (seen) {
-        throw new QRReplayError();
-    }
+  const seen = await opts.replayStore.has(jti);
+  if (seen) {
+    throw new QRReplayError();
+  }
 
-    // Record the jti for its remaining lifetime. `exp` is guaranteed
-    // present by jose (it verified it above); we defensively guard
-    // against missing `exp` just to satisfy the type system.
-    const exp = typeof payload.exp === 'number' ? payload.exp : undefined;
-    const now = (opts.now ?? defaultNow)();
-    const remainingTtl = exp !== undefined ? exp - now : QR_TTL_SEC;
-    const ttlSec = Math.max(1, Math.floor(remainingTtl));
-    await opts.replayStore.add(jti, ttlSec);
+  // Record the jti for its remaining lifetime. `exp` is guaranteed
+  // present by jose (it verified it above); we defensively guard
+  // against missing `exp` just to satisfy the type system.
+  const exp = typeof payload.exp === 'number' ? payload.exp : undefined;
+  const now = (opts.now ?? defaultNow)();
+  const remainingTtl = exp !== undefined ? exp - now : QR_TTL_SEC;
+  const ttlSec = Math.max(1, Math.floor(remainingTtl));
+  await opts.replayStore.add(jti, ttlSec);
 
-    // Narrowed return — the caller only needs these three pieces of
-    // information, so we don't leak the rest of the JWT payload.
-    const userId = typeof payload.sub === 'string' ? payload.sub : '';
-    if (userId.length === 0) {
-        // sub is mandatory in our generator; missing sub is a malformed
-        // token. Same failure mode as step 4.
-        throw new InvalidQRTokenError('invalid_token');
-    }
-    return { userId, studioId: expectedStudioId, jti };
+  // Narrowed return — the caller only needs these three pieces of
+  // information, so we don't leak the rest of the JWT payload.
+  const userId = typeof payload.sub === 'string' ? payload.sub : '';
+  if (userId.length === 0) {
+    // sub is mandatory in our generator; missing sub is a malformed
+    // token. Same failure mode as step 4.
+    throw new InvalidQRTokenError('invalid_token');
+  }
+  return { userId, studioId: expectedStudioId, jti };
 }
 
 // ---------------------------------------------------------------------------
@@ -343,7 +341,7 @@ export async function verifyAccessQR(
 // ---------------------------------------------------------------------------
 
 function assertNonEmpty(value: string, label: string): void {
-    if (typeof value !== 'string' || value.length === 0) {
-        throw new TypeError(`${label} must be a non-empty string`);
-    }
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new TypeError(`${label} must be a non-empty string`);
+  }
 }

@@ -55,9 +55,9 @@
  */
 
 import {
-    MissingAuthClaimsError,
-    TenantResourceNotFoundError,
-    tenantErrorToProblem,
+  MissingAuthClaimsError,
+  TenantResourceNotFoundError,
+  tenantErrorToProblem,
 } from './tenant.js';
 import { ValidationError } from './validator.js';
 
@@ -113,9 +113,9 @@ export const PROBLEM_JSON_CONTENT_TYPE = 'application/problem+json';
  * is encoded as the empty string.
  */
 export interface ProblemFieldError {
-    readonly path: string;
-    readonly message: string;
-    readonly code: string;
+  readonly path: string;
+  readonly message: string;
+  readonly code: string;
 }
 
 /**
@@ -125,14 +125,14 @@ export interface ProblemFieldError {
  * and detect accidental mutation.
  */
 export interface ProblemDetailsBody {
-    readonly type: string;
-    readonly title: string;
-    readonly status: number;
-    readonly detail?: string;
-    readonly code?: string;
-    readonly traceId: string;
-    readonly instance?: string;
-    readonly errors?: readonly ProblemFieldError[];
+  readonly type: string;
+  readonly title: string;
+  readonly status: number;
+  readonly detail?: string;
+  readonly code?: string;
+  readonly traceId: string;
+  readonly instance?: string;
+  readonly errors?: readonly ProblemFieldError[];
 }
 
 /**
@@ -142,8 +142,8 @@ export interface ProblemDetailsBody {
  * `c.body(json, status, headers)` without de-structuring twice.
  */
 export interface ProblemResponse {
-    readonly status: number;
-    readonly body: ProblemDetailsBody;
+  readonly status: number;
+  readonly body: ProblemDetailsBody;
 }
 
 /* ------------------------------------------------------------------ */
@@ -159,8 +159,8 @@ export interface ProblemResponse {
  * dependency on `logging.ts` (the `import` below is type-only).
  */
 export interface ProblemLogger {
-    warn(msg: string, fields?: Record<string, unknown>): void;
-    error(msg: string, fields?: Record<string, unknown>): void;
+  warn(msg: string, fields?: Record<string, unknown>): void;
+  error(msg: string, fields?: Record<string, unknown>): void;
 }
 
 /**
@@ -179,12 +179,12 @@ export interface ProblemLogger {
  * Public routes (where `authClaims` is undefined) leave them out.
  */
 export interface ProblemContext {
-    readonly traceId: string;
-    readonly logger: ProblemLogger;
-    /** `userId` from `authClaims`. Logged on 5xx for triage. */
-    readonly userId?: string;
-    /** `studioId` from `authClaims`. Logged on 5xx for triage. */
-    readonly studioId?: string;
+  readonly traceId: string;
+  readonly logger: ProblemLogger;
+  /** `userId` from `authClaims`. Logged on 5xx for triage. */
+  readonly userId?: string;
+  /** `studioId` from `authClaims`. Logged on 5xx for triage. */
+  readonly studioId?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -206,15 +206,15 @@ export interface ProblemContext {
  * stays pure and easy to unit-test in isolation.
  */
 function formatZodPath(path: readonly PropertyKey[]): string {
-    if (path.length === 0) return '';
-    return path
-        .map((segment) => {
-            if (typeof segment === 'string') return segment;
-            if (typeof segment === 'number') return String(segment);
-            // Symbol fallback — `.toString()` yields `Symbol(description)`.
-            return segment.toString();
-        })
-        .join('.');
+  if (path.length === 0) return '';
+  return path
+    .map((segment) => {
+      if (typeof segment === 'string') return segment;
+      if (typeof segment === 'number') return String(segment);
+      // Symbol fallback — `.toString()` yields `Symbol(description)`.
+      return segment.toString();
+    })
+    .join('.');
 }
 
 /**
@@ -224,11 +224,11 @@ function formatZodPath(path: readonly PropertyKey[]): string {
  * surface small and stable.
  */
 function toFieldError(issue: ZodIssue): ProblemFieldError {
-    return {
-        path: formatZodPath(issue.path),
-        message: issue.message,
-        code: issue.code,
-    };
+  return {
+    path: formatZodPath(issue.path),
+    message: issue.message,
+    code: issue.code,
+  };
 }
 
 /**
@@ -238,19 +238,16 @@ function toFieldError(issue: ZodIssue): ProblemFieldError {
  * shape can be asserted directly from the unit tests without needing
  * to thread the full {@link ProblemContext} plumbing.
  */
-function validationBody(
-    err: ValidationError,
-    traceId: string,
-): ProblemDetailsBody {
-    return {
-        type: VALIDATION_TYPE,
-        title: 'Unprocessable Entity',
-        status: 422,
-        detail: `validation failed for ${err.target}`,
-        code: err.code,
-        traceId,
-        errors: err.issues.map(toFieldError),
-    };
+function validationBody(err: ValidationError, traceId: string): ProblemDetailsBody {
+  return {
+    type: VALIDATION_TYPE,
+    title: 'Unprocessable Entity',
+    status: 422,
+    detail: `validation failed for ${err.target}`,
+    code: err.code,
+    traceId,
+    errors: err.issues.map(toFieldError),
+  };
 }
 
 /**
@@ -265,18 +262,15 @@ function validationBody(
  * owned by `middleware/auth.ts` and only emitted for token-level
  * failures, not for "no credentials at all".
  */
-function missingAuthBody(
-    err: MissingAuthClaimsError,
-    traceId: string,
-): ProblemDetailsBody {
-    return {
-        type: UNAUTHENTICATED_TYPE,
-        title: 'Unauthorized',
-        status: 401,
-        detail: err.message,
-        code: err.code,
-        traceId,
-    };
+function missingAuthBody(err: MissingAuthClaimsError, traceId: string): ProblemDetailsBody {
+  return {
+    type: UNAUTHENTICATED_TYPE,
+    title: 'Unauthorized',
+    status: 401,
+    detail: err.message,
+    code: err.code,
+    traceId,
+  };
 }
 
 /**
@@ -293,37 +287,37 @@ function missingAuthBody(
  * coming from an unrelated thrown object.
  */
 function asAuthError(
-    err: unknown,
+  err: unknown,
 ): { readonly code: AuthErrorCode; readonly details: Readonly<Record<string, unknown>> } | null {
-    if (typeof err !== 'object' || err === null) return null;
-    const probe = err as {
-        readonly name?: unknown;
-        readonly code?: unknown;
-        readonly details?: unknown;
-    };
-    if (probe.name !== 'AuthError') return null;
-    if (typeof probe.code !== 'string') return null;
-    switch (probe.code) {
-        case 'password_breached':
-        case 'hibp_unavailable':
-        case 'studio_not_found':
-        case 'email_taken':
-        case 'invalid_credentials':
-        case 'token_invalid':
-        case 'token_expired':
-        case 'token_revoked':
-        case 'oauth_verification_failed':
-        case 'rate_limited':
-        case 'not_found':
-            break;
-        default:
-            return null;
-    }
-    const details =
-        typeof probe.details === 'object' && probe.details !== null
-            ? (probe.details as Readonly<Record<string, unknown>>)
-            : {};
-    return { code: probe.code, details };
+  if (typeof err !== 'object' || err === null) return null;
+  const probe = err as {
+    readonly name?: unknown;
+    readonly code?: unknown;
+    readonly details?: unknown;
+  };
+  if (probe.name !== 'AuthError') return null;
+  if (typeof probe.code !== 'string') return null;
+  switch (probe.code) {
+    case 'password_breached':
+    case 'hibp_unavailable':
+    case 'studio_not_found':
+    case 'email_taken':
+    case 'invalid_credentials':
+    case 'token_invalid':
+    case 'token_expired':
+    case 'token_revoked':
+    case 'oauth_verification_failed':
+    case 'rate_limited':
+    case 'not_found':
+      break;
+    default:
+      return null;
+  }
+  const details =
+    typeof probe.details === 'object' && probe.details !== null
+      ? (probe.details as Readonly<Record<string, unknown>>)
+      : {};
+  return { code: probe.code, details };
 }
 
 /**
@@ -332,54 +326,54 @@ function asAuthError(
  * lookup table; centralised here so the mapping has a single owner.
  */
 function authCodeToStatus(code: AuthErrorCode): {
-    readonly status: number;
-    readonly type: string;
-    readonly title: string;
+  readonly status: number;
+  readonly type: string;
+  readonly title: string;
 } {
-    switch (code) {
-        case 'password_breached':
-        case 'studio_not_found':
-        case 'email_taken':
-            return {
-                status: 422,
-                type: AUTH_SEMANTIC_TYPE,
-                title: 'Unprocessable Entity',
-            };
-        case 'hibp_unavailable':
-            // Sprint-3 SP3.2 (S2-009): HIBP transient outage maps
-            // to 503 — semantically a backend dependency failure
-            // rather than a user-input problem. Differentiates the
-            // wire-level signal from `password_breached` (422) so
-            // the client can render a "retry shortly" UI rather
-            // than asking the user to change their password.
-            return {
-                status: 503,
-                type: AUTH_SEMANTIC_TYPE,
-                title: 'Service Unavailable',
-            };
-        case 'invalid_credentials':
-        case 'token_invalid':
-        case 'token_expired':
-        case 'token_revoked':
-        case 'oauth_verification_failed':
-            return {
-                status: 401,
-                type: UNAUTHENTICATED_TYPE,
-                title: 'Unauthorized',
-            };
-        case 'rate_limited':
-            return {
-                status: 429,
-                type: RATE_LIMITED_TYPE,
-                title: 'Too Many Requests',
-            };
-        case 'not_found':
-            return {
-                status: 404,
-                type: NOT_FOUND_TYPE,
-                title: 'Not Found',
-            };
-    }
+  switch (code) {
+    case 'password_breached':
+    case 'studio_not_found':
+    case 'email_taken':
+      return {
+        status: 422,
+        type: AUTH_SEMANTIC_TYPE,
+        title: 'Unprocessable Entity',
+      };
+    case 'hibp_unavailable':
+      // Sprint-3 SP3.2 (S2-009): HIBP transient outage maps
+      // to 503 — semantically a backend dependency failure
+      // rather than a user-input problem. Differentiates the
+      // wire-level signal from `password_breached` (422) so
+      // the client can render a "retry shortly" UI rather
+      // than asking the user to change their password.
+      return {
+        status: 503,
+        type: AUTH_SEMANTIC_TYPE,
+        title: 'Service Unavailable',
+      };
+    case 'invalid_credentials':
+    case 'token_invalid':
+    case 'token_expired':
+    case 'token_revoked':
+    case 'oauth_verification_failed':
+      return {
+        status: 401,
+        type: UNAUTHENTICATED_TYPE,
+        title: 'Unauthorized',
+      };
+    case 'rate_limited':
+      return {
+        status: 429,
+        type: RATE_LIMITED_TYPE,
+        title: 'Too Many Requests',
+      };
+    case 'not_found':
+      return {
+        status: 404,
+        type: NOT_FOUND_TYPE,
+        title: 'Not Found',
+      };
+  }
 }
 
 /**
@@ -393,18 +387,15 @@ function authCodeToStatus(code: AuthErrorCode): {
  *   - Never copies an opaque `detail` string — the gateway keeps
  *     user-facing translation on the client side.
  */
-function authErrorBody(
-    code: AuthErrorCode,
-    traceId: string,
-): ProblemDetailsBody {
-    const { status, type, title } = authCodeToStatus(code);
-    return {
-        type,
-        title,
-        status,
-        code,
-        traceId,
-    };
+function authErrorBody(code: AuthErrorCode, traceId: string): ProblemDetailsBody {
+  const { status, type, title } = authCodeToStatus(code);
+  return {
+    type,
+    title,
+    status,
+    code,
+    traceId,
+  };
 }
 
 /**
@@ -415,12 +406,12 @@ function authErrorBody(
  * failure.
  */
 function internalServerErrorBody(traceId: string): ProblemDetailsBody {
-    return {
-        type: 'about:blank',
-        title: 'Internal Server Error',
-        status: 500,
-        traceId,
-    };
+  return {
+    type: 'about:blank',
+    title: 'Internal Server Error',
+    status: 500,
+    traceId,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -440,60 +431,52 @@ function internalServerErrorBody(traceId: string): ProblemDetailsBody {
  *           body never carries it. Operators need the message for
  *           triage and the log pipeline is trusted with it.
  */
-function logProblem(
-    err: unknown,
-    status: number,
-    ctx: ProblemContext,
-): void {
-    const name = err instanceof Error ? err.name : typeof err;
-    const code =
-        typeof err === 'object' && err !== null && 'code' in err
-            ? ((err as { code?: unknown }).code)
-            : undefined;
+function logProblem(err: unknown, status: number, ctx: ProblemContext): void {
+  const name = err instanceof Error ? err.name : typeof err;
+  const code =
+    typeof err === 'object' && err !== null && 'code' in err
+      ? (err as { code?: unknown }).code
+      : undefined;
 
-    if (status >= 500) {
-        const message = err instanceof Error ? err.message : String(err);
-        // Postgres / Drizzle errors have a `cause` chain that carries
-        // the real failure (ECONNRESET, connection terminated, etc.).
-        // `stack` is trimmed to ~500 chars so the log line stays
-        // small while keeping enough context for on-call triage.
-        const cause =
-            err instanceof Error && err.cause !== undefined
-                ? err.cause instanceof Error
-                    ? `${err.cause.name}: ${err.cause.message}`
-                    : typeof err.cause === 'string'
-                        ? err.cause
-                        : (JSON.stringify(err.cause) ?? '[unserializable]')
-                : undefined;
-        const stack =
-            err instanceof Error && err.stack !== undefined
-                ? err.stack.slice(0, 500)
-                : undefined;
-        ctx.logger.error('unhandled error', {
-            traceId: ctx.traceId,
-            ...(ctx.userId !== undefined ? { userId: ctx.userId } : {}),
-            ...(ctx.studioId !== undefined
-                ? { studioId: ctx.studioId }
-                : {}),
-            status,
-            errorName: name,
-            errorCode: code,
-            errorMessage: message,
-            ...(cause !== undefined ? { errorCause: cause } : {}),
-            ...(stack !== undefined ? { errorStack: stack } : {}),
-        });
-        return;
-    }
-
-    // 4xx: warn, no message.
-    ctx.logger.warn('handled error', {
-        traceId: ctx.traceId,
-        ...(ctx.userId !== undefined ? { userId: ctx.userId } : {}),
-        ...(ctx.studioId !== undefined ? { studioId: ctx.studioId } : {}),
-        status,
-        errorName: name,
-        errorCode: code,
+  if (status >= 500) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Postgres / Drizzle errors have a `cause` chain that carries
+    // the real failure (ECONNRESET, connection terminated, etc.).
+    // `stack` is trimmed to ~500 chars so the log line stays
+    // small while keeping enough context for on-call triage.
+    const cause =
+      err instanceof Error && err.cause !== undefined
+        ? err.cause instanceof Error
+          ? `${err.cause.name}: ${err.cause.message}`
+          : typeof err.cause === 'string'
+            ? err.cause
+            : (JSON.stringify(err.cause) ?? '[unserializable]')
+        : undefined;
+    const stack =
+      err instanceof Error && err.stack !== undefined ? err.stack.slice(0, 500) : undefined;
+    ctx.logger.error('unhandled error', {
+      traceId: ctx.traceId,
+      ...(ctx.userId !== undefined ? { userId: ctx.userId } : {}),
+      ...(ctx.studioId !== undefined ? { studioId: ctx.studioId } : {}),
+      status,
+      errorName: name,
+      errorCode: code,
+      errorMessage: message,
+      ...(cause !== undefined ? { errorCause: cause } : {}),
+      ...(stack !== undefined ? { errorStack: stack } : {}),
     });
+    return;
+  }
+
+  // 4xx: warn, no message.
+  ctx.logger.warn('handled error', {
+    traceId: ctx.traceId,
+    ...(ctx.userId !== undefined ? { userId: ctx.userId } : {}),
+    ...(ctx.studioId !== undefined ? { studioId: ctx.studioId } : {}),
+    status,
+    errorName: name,
+    errorCode: code,
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -516,56 +499,53 @@ function logProblem(
  *   5. Fallback — unknown `Error` or non-Error value — → 500 with a
  *      body that never leaks `err.message` / `err.stack`.
  */
-export function toProblemResponse(
-    err: unknown,
-    ctx: ProblemContext,
-): ProblemResponse {
-    // Branch 1 — validation.
-    if (err instanceof ValidationError) {
-        const body = validationBody(err, ctx.traceId);
-        logProblem(err, 422, ctx);
-        return { status: 422, body };
-    }
+export function toProblemResponse(err: unknown, ctx: ProblemContext): ProblemResponse {
+  // Branch 1 — validation.
+  if (err instanceof ValidationError) {
+    const body = validationBody(err, ctx.traceId);
+    logProblem(err, 422, ctx);
+    return { status: 422, body };
+  }
 
-    // Branch 2 — missing auth claims.
-    if (err instanceof MissingAuthClaimsError) {
-        const body = missingAuthBody(err, ctx.traceId);
-        logProblem(err, 401, ctx);
-        return { status: 401, body };
-    }
+  // Branch 2 — missing auth claims.
+  if (err instanceof MissingAuthClaimsError) {
+    const body = missingAuthBody(err, ctx.traceId);
+    logProblem(err, 401, ctx);
+    return { status: 401, body };
+  }
 
-    // Branch 3 — tenant not found. Reuse the helper from `tenant.ts`
-    // so a single owner controls the 404 shape. We merge in
-    // `traceId` here because `tenantErrorToProblem` is intentionally
-    // framework-free and does not know about the request scope.
-    if (err instanceof TenantResourceNotFoundError) {
-        const mapped = tenantErrorToProblem(err);
-        if (mapped !== null) {
-            const body: ProblemDetailsBody = {
-                ...mapped.body,
-                traceId: ctx.traceId,
-            };
-            logProblem(err, mapped.status, ctx);
-            return { status: mapped.status, body };
-        }
+  // Branch 3 — tenant not found. Reuse the helper from `tenant.ts`
+  // so a single owner controls the 404 shape. We merge in
+  // `traceId` here because `tenantErrorToProblem` is intentionally
+  // framework-free and does not know about the request scope.
+  if (err instanceof TenantResourceNotFoundError) {
+    const mapped = tenantErrorToProblem(err);
+    if (mapped !== null) {
+      const body: ProblemDetailsBody = {
+        ...mapped.body,
+        traceId: ctx.traceId,
+      };
+      logProblem(err, mapped.status, ctx);
+      return { status: mapped.status, body };
     }
+  }
 
-    // Branch 4 — service-layer `AuthError`. Duck-typed to avoid a
-    // compile-time dependency cycle on `@athlya/auth`. Maps the
-    // stable `code` field onto the HTTP status documented in the
-    // service module, so routes that `throw new AuthError(...)` end
-    // up with the right problem+json body automatically.
-    const authErr = asAuthError(err);
-    if (authErr !== null) {
-        const body = authErrorBody(authErr.code, ctx.traceId);
-        logProblem(err, body.status, ctx);
-        return { status: body.status, body };
-    }
+  // Branch 4 — service-layer `AuthError`. Duck-typed to avoid a
+  // compile-time dependency cycle on `@athlya/auth`. Maps the
+  // stable `code` field onto the HTTP status documented in the
+  // service module, so routes that `throw new AuthError(...)` end
+  // up with the right problem+json body automatically.
+  const authErr = asAuthError(err);
+  if (authErr !== null) {
+    const body = authErrorBody(authErr.code, ctx.traceId);
+    logProblem(err, body.status, ctx);
+    return { status: body.status, body };
+  }
 
-    // Branch 5 — fallback. Log with full message, return generic body.
-    const body = internalServerErrorBody(ctx.traceId);
-    logProblem(err, 500, ctx);
-    return { status: 500, body };
+  // Branch 5 — fallback. Log with full message, return generic body.
+  const body = internalServerErrorBody(ctx.traceId);
+  logProblem(err, 500, ctx);
+  return { status: 500, body };
 }
 
 /* ------------------------------------------------------------------ */
@@ -581,9 +561,7 @@ export function toProblemResponse(
  * full Hono generic soup.
  */
 export interface HonoLikeApp {
-    onError(
-        handler: (err: unknown, c: ErrorHandlerContext) => Response,
-    ): unknown;
+  onError(handler: (err: unknown, c: ErrorHandlerContext) => Response): unknown;
 }
 
 /**
@@ -599,20 +577,16 @@ export interface HonoLikeApp {
  * types are a TypeScript convenience, not a runtime constraint.
  */
 export interface ErrorHandlerContext {
-    get(key: 'traceId'): string;
-    get(key: 'logger'): ProblemLogger;
-    /**
-     * Sprint 12 / Slice 12.3 (Epic B7.1) — `authClaims` may be set
-     * by `jwtAuth` upstream; the error handler reads it (best
-     * effort) so 5xx log lines carry `userId` + `studioId` for
-     * triage. Public routes leave it undefined.
-     */
-    get(key: 'authClaims'): unknown;
-    body(
-        data: string,
-        status: number,
-        headers: Record<string, string>,
-    ): Response;
+  get(key: 'traceId'): string;
+  get(key: 'logger'): ProblemLogger;
+  /**
+   * Sprint 12 / Slice 12.3 (Epic B7.1) — `authClaims` may be set
+   * by `jwtAuth` upstream; the error handler reads it (best
+   * effort) so 5xx log lines carry `userId` + `studioId` for
+   * triage. Public routes leave it undefined.
+   */
+  get(key: 'authClaims'): unknown;
+  body(data: string, status: number, headers: Record<string, string>): Response;
 }
 
 /**
@@ -642,63 +616,63 @@ export interface ErrorHandlerContext {
  * intentional 404 contract.
  */
 export function registerErrorHandlers(
-    app: HonoLikeApp,
-    options: RegisterErrorHandlersOptions = {},
+  app: HonoLikeApp,
+  options: RegisterErrorHandlersOptions = {},
 ): void {
-    app.onError((err, c) => {
-        const traceId = c.get('traceId');
-        const logger = c.get('logger');
+  app.onError((err, c) => {
+    const traceId = c.get('traceId');
+    const logger = c.get('logger');
 
-        // Sprint 12 / Slice 12.3 (Epic B7.1) — best-effort extract
-        // userId + studioId from `authClaims` for the unhandled
-        // error log. Public routes leave the claims undefined; the
-        // log line just omits the fields rather than carrying empty
-        // strings.
-        const claims = c.get('authClaims');
-        let userId: string | undefined;
-        let studioId: string | undefined;
-        if (typeof claims === 'object' && claims !== null) {
-            const claimsObj = claims as Record<string, unknown>;
-            if (typeof claimsObj.userId === 'string') {
-                userId = claimsObj.userId;
-            }
-            if (typeof claimsObj.studioId === 'string') {
-                studioId = claimsObj.studioId;
-            }
-        }
+    // Sprint 12 / Slice 12.3 (Epic B7.1) — best-effort extract
+    // userId + studioId from `authClaims` for the unhandled
+    // error log. Public routes leave the claims undefined; the
+    // log line just omits the fields rather than carrying empty
+    // strings.
+    const claims = c.get('authClaims');
+    let userId: string | undefined;
+    let studioId: string | undefined;
+    if (typeof claims === 'object' && claims !== null) {
+      const claimsObj = claims as Record<string, unknown>;
+      if (typeof claimsObj.userId === 'string') {
+        userId = claimsObj.userId;
+      }
+      if (typeof claimsObj.studioId === 'string') {
+        studioId = claimsObj.studioId;
+      }
+    }
 
-        const { status, body } = toProblemResponse(err, {
-            traceId,
-            logger,
-            ...(userId !== undefined ? { userId } : {}),
-            ...(studioId !== undefined ? { studioId } : {}),
-        });
-
-        // Fire-and-forget Sentry capture for unhandled 500s. The
-        // hook receives the ORIGINAL error (not the sanitised body)
-        // so operators see the real stack trace in Sentry even
-        // though the secret-leak guard has scrubbed it from the
-        // wire. Errors inside the hook are swallowed — Req 30.3
-        // requires the primary response to continue regardless.
-        if (status >= 500 && options.onFiveHundred !== undefined) {
-            try {
-                // `c` at runtime is the full Hono `Context<HonoEnv>`
-                // — we forward it as `unknown` so the hook can cast
-                // to whatever shape it needs without this module
-                // having to import Hono types.
-                const result = options.onFiveHundred(err, c);
-                if (result !== undefined && typeof result.then === 'function') {
-                    result.catch(() => undefined);
-                }
-            } catch {
-                // Swallowed intentionally.
-            }
-        }
-
-        return c.body(JSON.stringify(body), status, {
-            'content-type': PROBLEM_JSON_CONTENT_TYPE,
-        });
+    const { status, body } = toProblemResponse(err, {
+      traceId,
+      logger,
+      ...(userId !== undefined ? { userId } : {}),
+      ...(studioId !== undefined ? { studioId } : {}),
     });
+
+    // Fire-and-forget Sentry capture for unhandled 500s. The
+    // hook receives the ORIGINAL error (not the sanitised body)
+    // so operators see the real stack trace in Sentry even
+    // though the secret-leak guard has scrubbed it from the
+    // wire. Errors inside the hook are swallowed — Req 30.3
+    // requires the primary response to continue regardless.
+    if (status >= 500 && options.onFiveHundred !== undefined) {
+      try {
+        // `c` at runtime is the full Hono `Context<HonoEnv>`
+        // — we forward it as `unknown` so the hook can cast
+        // to whatever shape it needs without this module
+        // having to import Hono types.
+        const result = options.onFiveHundred(err, c);
+        if (result !== undefined && typeof result.then === 'function') {
+          result.catch(() => undefined);
+        }
+      } catch {
+        // Swallowed intentionally.
+      }
+    }
+
+    return c.body(JSON.stringify(body), status, {
+      'content-type': PROBLEM_JSON_CONTENT_TYPE,
+    });
+  });
 }
 
 /**
@@ -711,8 +685,5 @@ export function registerErrorHandlers(
  * Promise; the caller does NOT await it (capture is best-effort).
  */
 export interface RegisterErrorHandlersOptions {
-    readonly onFiveHundred?: (
-        err: unknown,
-        c: unknown,
-    ) => void | Promise<void>;
+  readonly onFiveHundred?: (err: unknown, c: unknown) => void | Promise<void>;
 }

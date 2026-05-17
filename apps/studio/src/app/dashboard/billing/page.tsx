@@ -16,12 +16,7 @@
  *
  * @see Requirements 18.1-18.5 (Stripe billing).
  */
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { getLocale } from '../../../lib/i18n/getLocale';
 import { createTranslator } from '../../../lib/i18n/t';
@@ -34,32 +29,26 @@ import type { ReactElement } from 'react';
 export const metadata: Metadata = { title: 'Facturation — Athlya Studio' };
 
 export default async function BillingPage(): Promise<ReactElement> {
-    const locale = await getLocale();
-    const t = createTranslator(locale);
+  const locale = await getLocale();
+  const t = createTranslator(locale);
 
-    return (
-        <section className="flex flex-col gap-6">
-            <header>
-                <h1 className="text-3xl font-semibold">
-                    {t('studio.billing.title')}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                    {t('studio.billing.subtitle')}
-                </p>
-            </header>
+  return (
+    <section className="flex flex-col gap-6">
+      <header>
+        <h1 className="text-3xl font-semibold">{t('studio.billing.title')}</h1>
+        <p className="text-sm text-muted-foreground">{t('studio.billing.subtitle')}</p>
+      </header>
 
-            <BillingPlansClient />
+      <BillingPlansClient />
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>{t('studio.billing.invoices.title')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                        {t('studio.billing.invoices.empty')}
-                    </p>
-                </CardContent>
-            </Card>
-        </section>
-    );
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('studio.billing.invoices.title')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">{t('studio.billing.invoices.empty')}</p>
+        </CardContent>
+      </Card>
+    </section>
+  );
 }

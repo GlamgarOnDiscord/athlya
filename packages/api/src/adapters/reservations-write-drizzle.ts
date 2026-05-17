@@ -58,24 +58,17 @@ import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
-import type {
-    AthlyaDb,
-    AthlyaTx,
-} from '@athlya/db/client';
+import type { AthlyaDb, AthlyaTx } from '@athlya/db/client';
 import type { ReservationRow } from '@athlya/db/schema';
 import type {
-    BookingClassRow,
-    BookingEventPublisher,
-    BookingOutboxEvent,
-    BookingRepo,
-    BookingReservationRow,
-    BookingTx,
+  BookingClassRow,
+  BookingEventPublisher,
+  BookingOutboxEvent,
+  BookingRepo,
+  BookingReservationRow,
+  BookingTx,
 } from '@athlya/reservations';
-import type {
-    CancelOutboxEvent,
-    CancelRepo,
-    ClassForCancel,
-} from '@athlya/reservations/cancel';
+import type { CancelOutboxEvent, CancelRepo, ClassForCancel } from '@athlya/reservations/cancel';
 
 /* ------------------------------------------------------------------ */
 /*  BookingRepo                                                        */
@@ -87,106 +80,86 @@ import type {
  * `reservations-deps.ts` for the I/O-isolation rationale).
  */
 export function createDrizzleBookingRepo(db: AthlyaDb): BookingRepo {
-    return {
-        async findClass(classId): Promise<BookingClassRow | null> {
-            const rows = await withConnectionRetry(() =>
-                db
-                    .select({
-                        id: classes.id,
-                        studioId: classes.studioId,
-                        capacity: classes.capacity,
-                        startsAt: classes.startsAt,
-                        version: classes.version,
-                    })
-                    .from(classes)
-                    .where(
-                        and(
-                            eq(classes.id, classId),
-                            isNull(classes.deletedAt),
-                        ),
-                    )
-                    .limit(1),
-            );
-            return rows[0] ?? null;
-        },
+  return {
+    async findClass(classId): Promise<BookingClassRow | null> {
+      const rows = await withConnectionRetry(() =>
+        db
+          .select({
+            id: classes.id,
+            studioId: classes.studioId,
+            capacity: classes.capacity,
+            startsAt: classes.startsAt,
+            version: classes.version,
+          })
+          .from(classes)
+          .where(and(eq(classes.id, classId), isNull(classes.deletedAt)))
+          .limit(1),
+      );
+      return rows[0] ?? null;
+    },
 
-        async withTransaction<T>(
-            fn: (tx: BookingTx) => Promise<T>,
-        ): Promise<T> {
-            return db.transaction(async (tx) =>
-                fn(tx as unknown as BookingTx),
-            );
-        },
+    async withTransaction<T>(fn: (tx: BookingTx) => Promise<T>): Promise<T> {
+      return db.transaction(async (tx) => fn(tx as unknown as BookingTx));
+    },
 
-        async findExistingConfirmedOrWaitlistReservation(
-            tx,
-            classId,
-            userId,
-        ): Promise<BookingReservationRow | null> {
-            const drizzleTx = tx as unknown as AthlyaTx;
-            const rows = await drizzleTx
-                .select()
-                .from(reservations)
-                .where(
-                    and(
-                        eq(reservations.classId, classId),
-                        eq(reservations.userId, userId),
-                    ),
-                )
-                .limit(1);
-            return rows[0] ?? null;
-        },
+    async findExistingConfirmedOrWaitlistReservation(
+      tx,
+      classId,
+      userId,
+    ): Promise<BookingReservationRow | null> {
+      const drizzleTx = tx as unknown as AthlyaTx;
+      const rows = await drizzleTx
+        .select()
+        .from(reservations)
+        .where(and(eq(reservations.classId, classId), eq(reservations.userId, userId)))
+        .limit(1);
+      return rows[0] ?? null;
+    },
 
-        async insertReservation(tx, input): Promise<BookingReservationRow> {
-            const drizzleTx = tx as unknown as AthlyaTx;
-            try {
-                const [row] = await drizzleTx
-                    .insert(reservations)
-                    .values({
-                        classId: input.classId,
-                        userId: input.userId,
-                        status: input.status,
-                    })
-                    .returning();
-                if (row === undefined) {
-                    throw new Error(
-                        'insertReservation: Drizzle returned empty result',
-                    );
-                }
-                return row;
-            } catch (err) {
-                if (isPostgresUniqueViolation(err)) {
-                    // Re-throw as the domain sentinel so the book
-                    // service's `isUniqueViolation` matches.
-                    throw new UniqueViolationError();
-                }
-                throw err;
-            }
-        },
+    async insertReservation(tx, input): Promise<BookingReservationRow> {
+      const drizzleTx = tx as unknown as AthlyaTx;
+      try {
+        const [row] = await drizzleTx
+          .insert(reservations)
+          .values({
+            classId: input.classId,
+            userId: input.userId,
+            status: input.status,
+          })
+          .returning();
+        if (row === undefined) {
+          throw new Error('insertReservation: Drizzle returned empty result');
+        }
+        return row;
+      } catch (err) {
+        if (isPostgresUniqueViolation(err)) {
+          // Re-throw as the domain sentinel so the book
+          // service's `isUniqueViolation` matches.
+          throw new UniqueViolationError();
+        }
+        throw err;
+      }
+    },
 
-        async insertOutbox(tx, event): Promise<void> {
-            await insertOutboxRow(tx as unknown as AthlyaTx, event);
-        },
+    async insertOutbox(tx, event): Promise<void> {
+      await insertOutboxRow(tx as unknown as AthlyaTx, event);
+    },
 
-        async countWaitlistAhead(
-            tx,
-            classId,
-            reservationCreatedAt,
-        ): Promise<number> {
-            const drizzleTx = tx as unknown as AthlyaTx;
-            const result = await drizzleTx
-                .select({ count: sql<number>`count(*)::int` })
-                .from(reservations)
-                .where(
-                    and(
-                        eq(reservations.classId, classId),
-                        eq(reservations.status, 'waitlist'),
-                        lt(reservations.createdAt, reservationCreatedAt),
-                    ),
-                );
-            return Number(result[0]?.count ?? 0);
-        },
-    };
+    async countWaitlistAhead(tx, classId, reservationCreatedAt): Promise<number> {
+      const drizzleTx = tx as unknown as AthlyaTx;
+      const result = await drizzleTx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.classId, classId),
+            eq(reservations.status, 'waitlist'),
+            lt(reservations.createdAt, reservationCreatedAt),
+          ),
+        );
+      return Number(result[0]?.count ?? 0);
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -210,107 +183,73 @@ export function createDrizzleBookingRepo(db: AthlyaDb): BookingRepo {
  *     increments the Redis counter instead).
  */
 export function createDrizzleCancelRepo(db: AthlyaDb): CancelRepo {
-    return {
-        async withTransaction<T>(
-            fn: (tx: unknown) => Promise<T>,
-        ): Promise<T> {
-            return db.transaction(async (tx) => fn(tx));
-        },
+  return {
+    async withTransaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
+      return db.transaction(async (tx) => fn(tx));
+    },
 
-        async findReservationForUpdate(
-            tx,
-            reservationId,
-            userId,
-        ): Promise<ReservationRow | null> {
-            const drizzleTx = tx as unknown as AthlyaTx;
-            const rows = await drizzleTx
-                .select()
-                .from(reservations)
-                .where(
-                    and(
-                        eq(reservations.id, reservationId),
-                        eq(reservations.userId, userId),
-                    ),
-                )
-                .for('update')
-                .limit(1);
-            return rows[0] ?? null;
-        },
+    async findReservationForUpdate(tx, reservationId, userId): Promise<ReservationRow | null> {
+      const drizzleTx = tx as AthlyaTx;
+      const rows = await drizzleTx
+        .select()
+        .from(reservations)
+        .where(and(eq(reservations.id, reservationId), eq(reservations.userId, userId)))
+        .for('update')
+        .limit(1);
+      return rows[0] ?? null;
+    },
 
-        async findClassForUpdate(
-            tx,
-            classId,
-        ): Promise<ClassForCancel | null> {
-            const drizzleTx = tx as unknown as AthlyaTx;
-            const rows = await drizzleTx
-                .select({ startsAt: classes.startsAt })
-                .from(classes)
-                .where(
-                    and(
-                        eq(classes.id, classId),
-                        isNull(classes.deletedAt),
-                    ),
-                )
-                .for('update')
-                .limit(1);
-            return rows[0] ?? null;
-        },
+    async findClassForUpdate(tx, classId): Promise<ClassForCancel | null> {
+      const drizzleTx = tx as AthlyaTx;
+      const rows = await drizzleTx
+        .select({ startsAt: classes.startsAt })
+        .from(classes)
+        .where(and(eq(classes.id, classId), isNull(classes.deletedAt)))
+        .for('update')
+        .limit(1);
+      return rows[0] ?? null;
+    },
 
-        async updateReservationStatus(
-            tx,
-            reservationId,
-            status,
-            stampedAt,
-        ): Promise<ReservationRow> {
-            const drizzleTx = tx as unknown as AthlyaTx;
-            const set: Partial<typeof reservations.$inferInsert> = { status };
-            if (status === 'cancelled') {
-                set.cancelledAt = stampedAt;
-            }
-            const [row] = await drizzleTx
-                .update(reservations)
-                .set(set)
-                .where(eq(reservations.id, reservationId))
-                .returning();
-            if (row === undefined) {
-                throw new Error(
-                    `updateReservationStatus: reservation ${reservationId} not found`,
-                );
-            }
-            return row;
-        },
+    async updateReservationStatus(tx, reservationId, status, stampedAt): Promise<ReservationRow> {
+      const drizzleTx = tx as AthlyaTx;
+      const set: Partial<typeof reservations.$inferInsert> = { status };
+      if (status === 'cancelled') {
+        set.cancelledAt = stampedAt;
+      }
+      const [row] = await drizzleTx
+        .update(reservations)
+        .set(set)
+        .where(eq(reservations.id, reservationId))
+        .returning();
+      if (row === undefined) {
+        throw new Error(`updateReservationStatus: reservation ${reservationId} not found`);
+      }
+      return row;
+    },
 
-        async findOldestWaitlistForClass(
-            tx,
-            classId,
-        ): Promise<ReservationRow | null> {
-            const drizzleTx = tx as unknown as AthlyaTx;
-            // `SKIP LOCKED` is the critical flag for Algorithm 2 —
-            // see cancel.ts for the full invariant.
-            const rows = await drizzleTx
-                .select()
-                .from(reservations)
-                .where(
-                    and(
-                        eq(reservations.classId, classId),
-                        eq(reservations.status, 'waitlist'),
-                    ),
-                )
-                .orderBy(asc(reservations.createdAt))
-                .for('update', { skipLocked: true })
-                .limit(1);
-            return rows[0] ?? null;
-        },
+    async findOldestWaitlistForClass(tx, classId): Promise<ReservationRow | null> {
+      const drizzleTx = tx as AthlyaTx;
+      // `SKIP LOCKED` is the critical flag for Algorithm 2 —
+      // see cancel.ts for the full invariant.
+      const rows = await drizzleTx
+        .select()
+        .from(reservations)
+        .where(and(eq(reservations.classId, classId), eq(reservations.status, 'waitlist')))
+        .orderBy(asc(reservations.createdAt))
+        .for('update', { skipLocked: true })
+        .limit(1);
+      return rows[0] ?? null;
+    },
 
-        async insertOutbox(tx, event: CancelOutboxEvent): Promise<void> {
-            await insertOutboxRow(tx as unknown as AthlyaTx, {
-                eventId: event.eventId,
-                eventType: event.eventType,
-                payload: event.payload,
-                occurredAt: event.occurredAt,
-            });
-        },
-    };
+    async insertOutbox(tx, event: CancelOutboxEvent): Promise<void> {
+      await insertOutboxRow(tx as AthlyaTx, {
+        eventId: event.eventId,
+        eventType: event.eventType,
+        payload: event.payload,
+        occurredAt: event.occurredAt,
+      });
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -323,35 +262,35 @@ export function createDrizzleCancelRepo(db: AthlyaDb): CancelRepo {
  * per adapter assembly is fine.
  */
 export function createBookingEventPublisher(): BookingEventPublisher {
-    return {
-        buildReservationCreated(input): BookingOutboxEvent {
-            return {
-                eventId: crypto.randomUUID(),
-                eventType: 'reservation.created',
-                occurredAt: new Date(),
-                payload: {
-                    reservationId: input.reservationId,
-                    classId: input.classId,
-                    userId: input.userId,
-                    studioId: input.studioId,
-                },
-            };
+  return {
+    buildReservationCreated(input): BookingOutboxEvent {
+      return {
+        eventId: crypto.randomUUID(),
+        eventType: 'reservation.created',
+        occurredAt: new Date(),
+        payload: {
+          reservationId: input.reservationId,
+          classId: input.classId,
+          userId: input.userId,
+          studioId: input.studioId,
         },
-        buildReservationWaitlisted(input): BookingOutboxEvent {
-            return {
-                eventId: crypto.randomUUID(),
-                eventType: 'reservation.waitlisted',
-                occurredAt: new Date(),
-                payload: {
-                    reservationId: input.reservationId,
-                    classId: input.classId,
-                    userId: input.userId,
-                    studioId: input.studioId,
-                    position: input.position,
-                },
-            };
+      };
+    },
+    buildReservationWaitlisted(input): BookingOutboxEvent {
+      return {
+        eventId: crypto.randomUUID(),
+        eventType: 'reservation.waitlisted',
+        occurredAt: new Date(),
+        payload: {
+          reservationId: input.reservationId,
+          classId: input.classId,
+          userId: input.userId,
+          studioId: input.studioId,
+          position: input.position,
         },
-    };
+      };
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -369,18 +308,18 @@ export function createBookingEventPublisher(): BookingEventPublisher {
  * — Drizzle's `jsonb` column accepts any JSON-encodable value.
  */
 async function insertOutboxRow(
-    tx: AthlyaTx,
-    event: {
-        readonly eventId: string;
-        readonly eventType: string;
-        readonly payload: object;
-        readonly occurredAt: Date;
-    },
+  tx: AthlyaTx,
+  event: {
+    readonly eventId: string;
+    readonly eventType: string;
+    readonly payload: object;
+    readonly occurredAt: Date;
+  },
 ): Promise<void> {
-    await tx.insert(outbox).values({
-        eventId: event.eventId,
-        eventType: event.eventType,
-        payload: event.payload as Record<string, unknown>,
-        occurredAt: event.occurredAt,
-    });
+  await tx.insert(outbox).values({
+    eventId: event.eventId,
+    eventType: event.eventType,
+    payload: event.payload as Record<string, unknown>,
+    occurredAt: event.occurredAt,
+  });
 }

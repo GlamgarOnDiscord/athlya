@@ -32,22 +32,22 @@ import { Rate } from 'k6/metrics';
 const errorRate = new Rate('errors');
 
 export const options = {
-    scenarios: {
-        nominal_read: {
-            executor: 'constant-arrival-rate',
-            rate: 200,
-            timeUnit: '1s',
-            duration: '60s',
-            preAllocatedVUs: 50,
-            maxVUs: 200,
-        },
+  scenarios: {
+    nominal_read: {
+      executor: 'constant-arrival-rate',
+      rate: 200,
+      timeUnit: '1s',
+      duration: '60s',
+      preAllocatedVUs: 50,
+      maxVUs: 200,
     },
-    thresholds: {
-        // SLO S5 (informatif).
-        'http_req_duration{status:200,name:list_classes}': ['p(95)<100'],
-        'http_req_duration{status:304,name:list_classes}': ['p(95)<50'],
-        errors: ['rate<0.001'],
-    },
+  },
+  thresholds: {
+    // SLO S5 (informatif).
+    'http_req_duration{status:200,name:list_classes}': ['p(95)<100'],
+    'http_req_duration{status:304,name:list_classes}': ['p(95)<50'],
+    errors: ['rate<0.001'],
+  },
 };
 
 const BASE_URL = __ENV.K6_BASE_URL ?? 'http://localhost:8787';
@@ -61,37 +61,34 @@ const AUTH_TOKEN = __ENV.K6_AUTH_TOKEN ?? '';
 let cachedEtag = '';
 
 export default function () {
-    const headers = {
-        authorization: `Bearer ${AUTH_TOKEN}`,
-        accept: 'application/json',
-    };
-    if (cachedEtag !== '') {
-        headers['if-none-match'] = cachedEtag;
-    }
+  const headers = {
+    authorization: `Bearer ${AUTH_TOKEN}`,
+    accept: 'application/json',
+  };
+  if (cachedEtag !== '') {
+    headers['if-none-match'] = cachedEtag;
+  }
 
-    // Date range : the next 7 days. Realistic for a member
-    // checking what to book this week.
-    const now = new Date();
-    const from = now.toISOString();
-    const to = new Date(now.getTime() + 7 * 86_400_000).toISOString();
+  // Date range : the next 7 days. Realistic for a member
+  // checking what to book this week.
+  const now = new Date();
+  const from = now.toISOString();
+  const to = new Date(now.getTime() + 7 * 86_400_000).toISOString();
 
-    const res = http.get(
-        `${BASE_URL}/v1/classes?from=${from}&to=${to}`,
-        {
-            headers,
-            tags: { name: 'list_classes' },
-        },
-    );
+  const res = http.get(`${BASE_URL}/v1/classes?from=${from}&to=${to}`, {
+    headers,
+    tags: { name: 'list_classes' },
+  });
 
-    const ok = check(res, {
-        'status 200 or 304': (r) => r.status === 200 || r.status === 304,
-        'no 5xx': (r) => r.status < 500,
-    });
+  const ok = check(res, {
+    'status 200 or 304': (r) => r.status === 200 || r.status === 304,
+    'no 5xx': (r) => r.status < 500,
+  });
 
-    if (res.status === 200) {
-        cachedEtag = res.headers['Etag'] ?? cachedEtag;
-    }
+  if (res.status === 200) {
+    cachedEtag = res.headers['Etag'] ?? cachedEtag;
+  }
 
-    errorRate.add(ok ? 0 : 1);
-    sleep(0.025);
+  errorRate.add(ok ? 0 : 1);
+  sleep(0.025);
 }

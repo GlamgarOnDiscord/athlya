@@ -12,72 +12,64 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 
 /** @type {import('eslint').Linter.Config[]} */
 const config = [
-    {
-        ignores: [
-            '**/node_modules/**',
-            '**/.next/**',
-            '**/dist/**',
-            '**/coverage/**',
-            '**/.turbo/**',
-            '**/*.tsbuildinfo',
-            'next.config.ts',
-            'vitest.config.ts',
-            'scripts/**',
-        ],
+  {
+    ignores: [
+      '**/node_modules/**',
+      '**/.next/**',
+      '**/dist/**',
+      '**/coverage/**',
+      '**/.turbo/**',
+      '**/*.tsbuildinfo',
+      'next.config.ts',
+      'vitest.config.ts',
+      'scripts/**',
+    ],
+  },
+  ...next,
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
-    ...next,
-    {
-        files: ['**/*.ts', '**/*.tsx'],
-        languageOptions: {
-            parserOptions: {
-                projectService: true,
-                tsconfigRootDir: import.meta.dirname,
-            },
+    rules: {
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        {
+          prefer: 'type-imports',
+          fixStyle: 'separate-type-imports',
         },
-        rules: {
-            '@typescript-eslint/consistent-type-imports': [
-                'error',
-                {
-                    prefer: 'type-imports',
-                    fixStyle: 'separate-type-imports',
-                },
-            ],
-            '@typescript-eslint/no-misused-promises': [
-                'warn',
-                { checksVoidReturn: { attributes: false } },
-            ],
-        },
+      ],
+      '@typescript-eslint/no-misused-promises': [
+        'warn',
+        { checksVoidReturn: { attributes: false } },
+      ],
     },
-    {
-        files: ['**/*.{js,jsx,mjs,ts,tsx,mts,cts}'],
-        rules: {
-            'import/order': [
-                'warn',
-                {
-                    groups: [
-                        'builtin',
-                        'external',
-                        'internal',
-                        'parent',
-                        'sibling',
-                        'index',
-                        'type',
-                    ],
-                    'newlines-between': 'always',
-                    alphabetize: { order: 'asc', caseInsensitive: true },
-                },
-            ],
-            'import/no-duplicates': 'error',
+  },
+  {
+    files: ['**/*.{js,jsx,mjs,ts,tsx,mts,cts}'],
+    rules: {
+      'import/order': [
+        'warn',
+        {
+          groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index', 'type'],
+          'newlines-between': 'always',
+          alphabetize: { order: 'asc', caseInsensitive: true },
         },
+      ],
+      'import/no-duplicates': 'error',
     },
-    {
-        files: ['**/*.{ts,tsx}'],
-        rules: {
-            'react-hooks/refs': 'warn',
-            'react-hooks/set-state-in-effect': 'warn',
-        },
+  },
+  {
+    files: ['**/*.{ts,tsx}'],
+    rules: {
+      'react-hooks/refs': 'warn',
+      'react-hooks/set-state-in-effect': 'warn',
     },
-    eslintConfigPrettier,
+  },
+  eslintConfigPrettier,
 ];
 
 export default config;

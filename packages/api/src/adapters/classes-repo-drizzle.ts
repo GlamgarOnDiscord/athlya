@@ -27,20 +27,15 @@ import { withConnectionRetry } from './db-retry.js';
 import type { AthlyaDbAny } from '@athlya/db/client';
 import type { ClassRow } from '@athlya/db/schema';
 import type {
-    ClassRepo as ListClassesRepo,
-    ClassRow as ListClassesRow,
-    FindInRangeRange,
+  ClassRepo as ListClassesRepo,
+  ClassRow as ListClassesRow,
+  FindInRangeRange,
 } from '@athlya/reservations';
 import type {
-    ClassRepo as CreateClassRepo,
-    CreateClassRepoInput,
+  ClassRepo as CreateClassRepo,
+  CreateClassRepoInput,
 } from '@athlya/reservations/create';
-import type {
-    ClassRepo as UpdateClassRepo,
-    UpdateClassFields,
-} from '@athlya/reservations/update';
-
-
+import type { ClassRepo as UpdateClassRepo, UpdateClassFields } from '@athlya/reservations/update';
 
 /* ------------------------------------------------------------------ */
 /*  List repo (member-side calendar query)                             */
@@ -55,27 +50,24 @@ import type {
  * Soft-deleted classes are filtered out at the SQL level (Req 7.1).
  */
 export function createDrizzleListClassesRepo(db: AthlyaDbAny): ListClassesRepo {
-    return {
-        async findInRange(
-            studioId: string,
-            range: FindInRangeRange,
-        ): Promise<ListClassesRow[]> {
-            const rows = await withConnectionRetry(() =>
-                db
-                    .select()
-                    .from(classes)
-                    .where(
-                        and(
-                            eq(classes.studioId, studioId),
-                            isNull(classes.deletedAt),
-                            between(classes.startsAt, range.from, range.to),
-                        ),
-                    )
-                    .orderBy(asc(classes.startsAt)),
-            );
-            return rows.map(toListClassesRow);
-        },
-    };
+  return {
+    async findInRange(studioId: string, range: FindInRangeRange): Promise<ListClassesRow[]> {
+      const rows = await withConnectionRetry(() =>
+        db
+          .select()
+          .from(classes)
+          .where(
+            and(
+              eq(classes.studioId, studioId),
+              isNull(classes.deletedAt),
+              between(classes.startsAt, range.from, range.to),
+            ),
+          )
+          .orderBy(asc(classes.startsAt)),
+      );
+      return rows.map(toListClassesRow);
+    },
+  };
 }
 
 /**
@@ -86,17 +78,17 @@ export function createDrizzleListClassesRepo(db: AthlyaDbAny): ListClassesRepo {
  * silently leaking into the service.
  */
 function toListClassesRow(row: ClassRow): ListClassesRow {
-    return {
-        id: row.id,
-        studioId: row.studioId,
-        coachId: row.coachId,
-        title: row.title,
-        startsAt: row.startsAt,
-        durationMin: row.durationMin,
-        capacity: row.capacity,
-        version: row.version,
-        createdAt: row.createdAt,
-    };
+  return {
+    id: row.id,
+    studioId: row.studioId,
+    coachId: row.coachId,
+    title: row.title,
+    startsAt: row.startsAt,
+    durationMin: row.durationMin,
+    capacity: row.capacity,
+    version: row.version,
+    createdAt: row.createdAt,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -109,32 +101,28 @@ function toListClassesRow(row: ClassRow): ListClassesRow {
  * passes it explicitly, we forward it unchanged.
  */
 export function createDrizzleCreateClassRepo(db: AthlyaDbAny): CreateClassRepo {
-    return {
-        async createClass(input: CreateClassRepoInput): Promise<ClassRow> {
-            const [row] = await withConnectionRetry(() =>
-                db
-                    .insert(classes)
-                    .values({
-                        studioId: input.studioId,
-                        title: input.title,
-                        startsAt: new Date(input.startsAt),
-                        durationMin: input.durationMin,
-                        capacity: input.capacity,
-                        version: input.version,
-                        ...(input.coachId !== undefined
-                            ? { coachId: input.coachId }
-                            : {}),
-                    })
-                    .returning(),
-            );
-            if (row === undefined) {
-                throw new Error(
-                    'createClass: Drizzle returned an empty result set',
-                );
-            }
-            return row;
-        },
-    };
+  return {
+    async createClass(input: CreateClassRepoInput): Promise<ClassRow> {
+      const [row] = await withConnectionRetry(() =>
+        db
+          .insert(classes)
+          .values({
+            studioId: input.studioId,
+            title: input.title,
+            startsAt: new Date(input.startsAt),
+            durationMin: input.durationMin,
+            capacity: input.capacity,
+            version: input.version,
+            ...(input.coachId !== undefined ? { coachId: input.coachId } : {}),
+          })
+          .returning(),
+      );
+      if (row === undefined) {
+        throw new Error('createClass: Drizzle returned an empty result set');
+      }
+      return row;
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -164,109 +152,94 @@ export function createDrizzleCreateClassRepo(db: AthlyaDbAny): CreateClassRepo {
  * all `confirmed` and `waitlist` reservations for that class.
  */
 export function createDrizzleDeleteClassRepo(db: AthlyaDbAny) {
-    return {
-        async deleteClass(
-            studioId: string,
-            classId: string,
-        ): Promise<boolean> {
-            // Soft-delete the class row.
-            const rows = await withConnectionRetry(() =>
-                db
-                    .update(classes)
-                    .set({ deletedAt: new Date() })
-                    .where(
-                        and(
-                            eq(classes.id, classId),
-                            eq(classes.studioId, studioId),
-                            isNull(classes.deletedAt),
-                        ),
-                    )
-                    .returning(),
-            );
-            if (rows.length === 0) return false;
+  return {
+    async deleteClass(studioId: string, classId: string): Promise<boolean> {
+      // Soft-delete the class row.
+      const rows = await withConnectionRetry(() =>
+        db
+          .update(classes)
+          .set({ deletedAt: new Date() })
+          .where(
+            and(eq(classes.id, classId), eq(classes.studioId, studioId), isNull(classes.deletedAt)),
+          )
+          .returning(),
+      );
+      if (rows.length === 0) return false;
 
-            // Cancel active reservations.
-            await withConnectionRetry(async () => {
-                await db
-                    .update(reservations)
-                    .set({ status: 'cancelled', cancelledAt: new Date() })
-                    .where(
-                        and(
-                            eq(reservations.classId, classId),
-                            inArray(reservations.status, [
-                                'confirmed',
-                                'waitlist',
-                            ]),
-                        ),
-                    );
-            });
-            return true;
-        },
-    };
+      // Cancel active reservations.
+      await withConnectionRetry(async () => {
+        await db
+          .update(reservations)
+          .set({ status: 'cancelled', cancelledAt: new Date() })
+          .where(
+            and(
+              eq(reservations.classId, classId),
+              inArray(reservations.status, ['confirmed', 'waitlist']),
+            ),
+          );
+      });
+      return true;
+    },
+  };
 }
 
 export function createDrizzleUpdateClassRepo(db: AthlyaDbAny): UpdateClassRepo {
-    return {
-        async findById(classId: string): Promise<ClassRow | null> {
-            const rows = await withConnectionRetry(() =>
-                db
-                    .select()
-                    .from(classes)
-                    .where(
-                        and(
-                            eq(classes.id, classId),
-                            isNull(classes.deletedAt),
-                        ),
-                    )
-                    .limit(1),
-            );
-            return rows[0] ?? null;
-        },
+  return {
+    async findById(classId: string): Promise<ClassRow | null> {
+      const rows = await withConnectionRetry(() =>
+        db
+          .select()
+          .from(classes)
+          .where(and(eq(classes.id, classId), isNull(classes.deletedAt)))
+          .limit(1),
+      );
+      return rows[0] ?? null;
+    },
 
-        async updateClassOptimistic(
-            classId: string,
-            patch: UpdateClassFields,
-            expectedVersion: number,
-        ): Promise<ClassRow | null> {
-            // Build the SET clause from only the fields the caller
-            // supplied. `version` is always bumped by exactly 1
-            // (Req 6.7); we do not expose a way to set it
-            // explicitly because the service's contract is the
-            // optimistic-lock increment.
-            const columns: Partial<typeof classes.$inferInsert> = {
-                version: expectedVersion + 1,
-            };
-            if (patch.title !== undefined) {
-                columns.title = patch.title;
-            }
-            if (patch.startsAt !== undefined) {
-                columns.startsAt = new Date(patch.startsAt);
-            }
-            if (patch.durationMin !== undefined) {
-                columns.durationMin = patch.durationMin;
-            }
-            if (patch.capacity !== undefined) {
-                columns.capacity = patch.capacity;
-            }
-            if (patch.coachId !== undefined) {
-                // Zod allows `null` to clear the coach assignment.
-                columns.coachId = patch.coachId;
-            }
+    async updateClassOptimistic(
+      classId: string,
+      patch: UpdateClassFields,
+      expectedVersion: number,
+    ): Promise<ClassRow | null> {
+      // Build the SET clause from only the fields the caller
+      // supplied. `version` is always bumped by exactly 1
+      // (Req 6.7); we do not expose a way to set it
+      // explicitly because the service's contract is the
+      // optimistic-lock increment.
+      const columns: Partial<typeof classes.$inferInsert> = {
+        version: expectedVersion + 1,
+      };
+      if (patch.title !== undefined) {
+        columns.title = patch.title;
+      }
+      if (patch.startsAt !== undefined) {
+        columns.startsAt = new Date(patch.startsAt);
+      }
+      if (patch.durationMin !== undefined) {
+        columns.durationMin = patch.durationMin;
+      }
+      if (patch.capacity !== undefined) {
+        columns.capacity = patch.capacity;
+      }
+      if (patch.coachId !== undefined) {
+        // Zod allows `null` to clear the coach assignment.
+        columns.coachId = patch.coachId;
+      }
 
-            const [row] = await withConnectionRetry(() =>
-                db
-                    .update(classes)
-                    .set(columns)
-                    .where(
-                        and(
-                            eq(classes.id, classId),
-                            eq(classes.version, expectedVersion),
-                            isNull(classes.deletedAt),
-                        ),
-                    )
-                    .returning(),
-            );
-            return row ?? null;
-        },
-    };
+      const [row] = await withConnectionRetry(() =>
+        db
+          .update(classes)
+          .set(columns)
+          .where(
+            and(
+              eq(classes.id, classId),
+              eq(classes.version, expectedVersion),
+              isNull(classes.deletedAt),
+            ),
+          )
+          .returning(),
+      );
+      return row ?? null;
+    },
+  };
 }

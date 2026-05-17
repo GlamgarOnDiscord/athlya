@@ -34,17 +34,17 @@ import type { AuditLogWriter } from '@athlya/members';
  * Drizzle instance. Per-request in production.
  */
 export function createDrizzleAuditLogWriter(db: AthlyaDbAny): AuditLogWriter {
-    return {
-        async append(entry) {
-            await withConnectionRetry(async () => {
-                await db.insert(auditLog).values({
-                    actorId: entry.actorId,
-                    action: entry.action,
-                    targetType: entry.targetType,
-                    targetId: entry.targetId,
-                    metadata: entry.metadata,
-                });
-            });
-        },
-    };
+  return {
+    async append(entry) {
+      await withConnectionRetry(async () => {
+        await db.insert(auditLog).values({
+          actorId: entry.actorId,
+          action: entry.action,
+          targetType: entry.targetType,
+          targetId: entry.targetId,
+          metadata: entry.metadata,
+        });
+      });
+    },
+  };
 }

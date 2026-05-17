@@ -30,11 +30,7 @@
  * **PAS d'effet de bord**".
  */
 
-import {
-    handleStripeWebhook,
-    verifyStripeSignature,
-    type WebhookDeps,
-} from '@athlya/billing';
+import { handleStripeWebhook, verifyStripeSignature, type WebhookDeps } from '@athlya/billing';
 
 import type { BillingDeps } from '../routes/billing.js';
 import type { AthlyaBindings } from '../types.js';
@@ -46,8 +42,8 @@ import type { AthlyaBindings } from '../types.js';
  * secrets are provisioned.
  */
 interface StripeBindings {
-    readonly STRIPE_SECRET_KEY?: string;
-    readonly STRIPE_WEBHOOK_SECRET?: string;
+  readonly STRIPE_SECRET_KEY?: string;
+  readonly STRIPE_WEBHOOK_SECRET?: string;
 }
 
 /**
@@ -58,77 +54,64 @@ interface StripeBindings {
  * `wrangler secret put`) is observed without a Worker redeploy.
  */
 export function buildBillingDeps(env: AthlyaBindings): BillingDeps {
-    const stripeBindings = env as AthlyaBindings & StripeBindings;
+  const stripeBindings = env as AthlyaBindings & StripeBindings;
 
-    return {
-        createCheckoutSession(_input) {
-            const secretKey = stripeBindings.STRIPE_SECRET_KEY;
-            if (
-                secretKey === undefined ||
-                secretKey.length === 0 ||
-                env.ENVIRONMENT === 'dev'
-            ) {
-                // Mode dégradé. The dev environment also short-circuits
-                // here because we never want a developer's local key
-                // to accidentally mint a live Stripe session.
-                return Promise.resolve({ kind: 'not_configured' as const });
-            }
-            // Real Stripe wiring lands when STRIPE_SECRET_KEY ships in
-            // staging / production. Until then, the slice keeps the
-            // mode-dégradé branch — see `docs/runbooks/billing.md`
-            // for the cutover steps.
-            return Promise.resolve({ kind: 'not_configured' as const });
-        },
+  return {
+    createCheckoutSession(_input) {
+      const secretKey = stripeBindings.STRIPE_SECRET_KEY;
+      if (secretKey === undefined || secretKey.length === 0 || env.ENVIRONMENT === 'dev') {
+        // Mode dégradé. The dev environment also short-circuits
+        // here because we never want a developer's local key
+        // to accidentally mint a live Stripe session.
+        return Promise.resolve({ kind: 'not_configured' as const });
+      }
+      // Real Stripe wiring lands when STRIPE_SECRET_KEY ships in
+      // staging / production. Until then, the slice keeps the
+      // mode-dégradé branch — see `docs/runbooks/billing.md`
+      // for the cutover steps.
+      return Promise.resolve({ kind: 'not_configured' as const });
+    },
 
-        listInvoices(_studioId, _opts) {
-            // Mode dégradé until Stripe is provisioned: every studio
-            // sees an empty page. The dashboard renders a stable
-            // empty state instead of a 503 — consistent with how a
-            // brand-new tenant will look on day one in production.
-            return Promise.resolve({ items: [], nextCursor: null });
-        },
+    listInvoices(_studioId, _opts) {
+      // Mode dégradé until Stripe is provisioned: every studio
+      // sees an empty page. The dashboard renders a stable
+      // empty state instead of a 503 — consistent with how a
+      // brand-new tenant will look on day one in production.
+      return Promise.resolve({ items: [], nextCursor: null });
+    },
 
-        async handleWebhook({ rawPayload, signature }) {
-            const secret = stripeBindings.STRIPE_WEBHOOK_SECRET;
-            if (secret === undefined || secret.length === 0) {
-                console.warn(
-                    '[billing-deps] STRIPE_WEBHOOK_SECRET not configured — webhook accepted without verification (mode dégradé)',
-                    {
-                        env: env.ENVIRONMENT,
-                        payloadBytes: rawPayload.length,
-                    },
-                );
-                return { kind: 'not_configured' as const };
-            }
-            if (signature === null || signature.length === 0) {
-                return { kind: 'signature_invalid' as const };
-            }
+    async handleWebhook({ rawPayload, signature }) {
+      const secret = stripeBindings.STRIPE_WEBHOOK_SECRET;
+      if (secret === undefined || secret.length === 0) {
+        console.warn(
+          '[billing-deps] STRIPE_WEBHOOK_SECRET not configured — webhook accepted without verification (mode dégradé)',
+          {
+            env: env.ENVIRONMENT,
+            payloadBytes: rawPayload.length,
+          },
+        );
+        return { kind: 'not_configured' as const };
+      }
+      if (signature === null || signature.length === 0) {
+        return { kind: 'signature_invalid' as const };
+      }
 
-            // No-op audit / publish ports — slice B9 explicitly
-            // documents "PAS d'effet de bord". Every dispatch branch
-            // resolves cleanly; future slices will swap in real
-            // Drizzle + outbox-backed implementations.
-            const deps: WebhookDeps = {
-                verifySignature: (
-                    payload,
-                    sig,
-                    sec,
-                ) => verifyStripeSignature(payload, sig, sec),
-                appendAudit: () => Promise.resolve(undefined),
-                publish: () => Promise.resolve(undefined),
-                withTransaction: async (fn) => fn(),
-            };
+      // No-op audit / publish ports — slice B9 explicitly
+      // documents "PAS d'effet de bord". Every dispatch branch
+      // resolves cleanly; future slices will swap in real
+      // Drizzle + outbox-backed implementations.
+      const deps: WebhookDeps = {
+        verifySignature: (payload, sig, sec) => verifyStripeSignature(payload, sig, sec),
+        appendAudit: () => Promise.resolve(undefined),
+        publish: () => Promise.resolve(undefined),
+        withTransaction: async (fn) => fn(),
+      };
 
-            const outcome = await handleStripeWebhook(
-                rawPayload,
-                signature,
-                secret,
-                deps,
-            );
-            if (outcome.kind === 'signature_invalid') {
-                return { kind: 'signature_invalid' as const };
-            }
-            return { kind: 'ok' as const };
-        },
-    };
+      const outcome = await handleStripeWebhook(rawPayload, signature, secret, deps);
+      if (outcome.kind === 'signature_invalid') {
+        return { kind: 'signature_invalid' as const };
+      }
+      return { kind: 'ok' as const };
+    },
+  };
 }
