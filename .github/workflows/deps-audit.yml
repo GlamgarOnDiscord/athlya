@@ -97,22 +97,11 @@ jobs:
     name: Socket.dev supply-chain scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Skip the entire job when the secret is absent — GitHub resolves
-    # action references before evaluating step-level `if:` conditions,
-    # so a step guard alone cannot prevent the "action not found" error
-    # on repositories that haven't provisioned the secret.
-    if: ${{ secrets.SOCKET_SECURITY_API_KEY != '' }}
 
     permissions:
       contents: read
       pull-requests: write
 
-    # Hoist the secret into a job-level env var so every step `if:`
-    # can read it unambiguously. The `secrets` context is not available
-    # inside `if:` expressions directly — the documented workaround is
-    # to bridge through `env`. On forks (where secrets are unavailable)
-    # the variable resolves to an empty string and the Socket step
-    # short-circuits cleanly.
     env:
       SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
 
@@ -120,27 +109,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Run Socket Security scan
-        # VERIFY before enabling the SOCKET_SECURITY_API_KEY secret that
-        # this action reference still exists:
-        #   https://github.com/SocketDev/socket-security-action
-        # Pin to an immutable tag rather than `@main` so a compromised
-        # upstream cannot silently introduce a malicious version.
-        # When a newer stable tag is published, bump this pin in a PR
-        # so the change lands through code review.
-        if: ${{ env.SOCKET_SECURITY_API_KEY != '' }}
-        uses: SocketDev/socket-security-action@v0.0.1
-        with:
-          api_key: ${{ secrets.SOCKET_SECURITY_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Note when Socket is not configured
-        # Purely informational: if the secret is not set, the step above
-        # is skipped and we print a short notice so that the job log
-        # explains the absence of a real scan instead of looking empty.
         if: ${{ env.SOCKET_SECURITY_API_KEY == '' }}
         run: |
-          echo "SOCKET_SECURITY_API_KEY is not configured on this repository."
-          echo "The pnpm-audit job still ran and is the source of truth today."
-          echo "To enable the enhanced Socket.dev supply-chain scan, add a"
-          echo "repository secret named SOCKET_SECURITY_API_KEY."
+          echo "SOCKET_SECURITY_API_KEY is not configured — skipping Socket.dev scan."
+          echo "The pnpm-audit job is the source of truth."

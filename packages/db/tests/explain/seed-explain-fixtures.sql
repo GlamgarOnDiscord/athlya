@@ -107,7 +107,7 @@ SELECT
     END::reservation_status,
     NOW() - (gs || ' minutes')::interval * 5
 FROM generate_series(1, 10000) AS gs
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- 50 réservations waitlist sur la class principale (Q5).
 INSERT INTO reservations (id, class_id, user_id, status, created_at)
@@ -118,7 +118,7 @@ SELECT
     'waitlist'::reservation_status,
     NOW() - (gs || ' minutes')::interval * 2
 FROM generate_series(1, 50) AS gs
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- 100 réservations confirmed pour le user principal (Q4).
 INSERT INTO reservations (id, class_id, user_id, status, created_at)
@@ -129,7 +129,7 @@ SELECT
     'confirmed'::reservation_status,
     NOW() - (gs || ' hours')::interval * 1
 FROM generate_series(1, 100) AS gs
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------
 -- ANALYZE pour mettre à jour les stats du planner
