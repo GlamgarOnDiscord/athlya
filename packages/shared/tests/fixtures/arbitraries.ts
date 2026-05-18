@@ -297,8 +297,8 @@ export const auditLogArb: fc.Arbitrary<AuditLog> = fc.record({
   action: nonEmptyTrimmedString(120),
   targetType: fc.option(fc.string({ maxLength: 60 }), { nil: null }),
   targetId: fc.option(fc.string({ maxLength: 80 }), { nil: null }),
-  metadata: fc.dictionary(fc.string({ minLength: 1, maxLength: 40 }), fc.jsonValue(), {
-    maxKeys: 8,
-  }),
+  metadata: fc
+    .dictionary(fc.string({ minLength: 1, maxLength: 40 }), fc.jsonValue(), { maxKeys: 8 })
+    .map((v) => JSON.parse(JSON.stringify(v)) as Record<string, unknown>),
   createdAt: isoDateTimeArb,
 });
