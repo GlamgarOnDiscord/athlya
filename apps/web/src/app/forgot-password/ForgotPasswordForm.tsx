@@ -121,7 +121,9 @@ export function ForgotPasswordForm({ nonce }: ForgotPasswordFormProps): ReactEle
 
       <TurnstileWidget
         siteKey={siteKey}
-        onToken={(token) => { turnstileToken.current = token; }}
+        onToken={(token) => {
+          turnstileToken.current = token;
+        }}
         nonce={nonce}
         ref={turnstileRef}
       />
