@@ -266,7 +266,7 @@ export function RegisterForm({ nonce }: RegisterFormProps): ReactElement {
       <Button type="submit" disabled={pending || (siteKey !== undefined && turnstileToken === '')}>
         {pending ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Loader2 className="mr-2 size-4 animate-spin" />
             {t('common.loading')}
           </>
         ) : (

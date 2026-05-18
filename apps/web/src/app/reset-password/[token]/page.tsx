@@ -26,8 +26,7 @@ export default async function ResetPasswordPage({
 }: {
   params: Promise<{ token: string }>;
 }): Promise<ReactElement> {
-  const { token } = await params;
-  const h = await headers();
+  const [{ token }, h] = await Promise.all([params, headers()]);
   const nonce = h.get('x-nonce') ?? '';
   void nonce;
   void (await getLocale());
