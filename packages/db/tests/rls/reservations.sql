@@ -17,7 +17,7 @@ BEGIN;
 -- apply. The session role (postgres) is a superuser and therefore
 -- bypasses RLS; the enclosing ROLLBACK restores it at file end.
 SET LOCAL ROLE athlya_tenant_test;
-SELECT plan(11);
+SELECT plan(12);
 
 -- ---------- reservations_read_own (member) ----------
 

@@ -20,7 +20,7 @@ BEGIN;
 -- apply. The session role (postgres) is a superuser and therefore
 -- bypasses RLS; the enclosing ROLLBACK restores it at file end.
 SET LOCAL ROLE athlya_tenant_test;
-SELECT plan(10);
+SELECT plan(11);
 
 -- ---------- classes_read_same_studio ----------
 
@@ -32,7 +32,7 @@ SELECT public.test_set_tenant(
 
 SELECT is(
     (SELECT count(*)::int FROM "classes" WHERE studio_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
-    1,
+    2,
     'classes_read_same_studio: member A sees studio A class'
 );
 

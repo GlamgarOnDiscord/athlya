@@ -99,29 +99,21 @@ SELECT public.test_set_tenant(
 );
 
 -- Updating own row succeeds and RETURNING yields one row.
-SELECT is(
-    (WITH upd AS (
-        UPDATE "users" SET display_name = 'Member A (self-update)'
-        WHERE id = '11111111-1111-4111-8111-111111111111'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    1,
-    'users_update_own: member A can update their own row'
-);
+WITH upd AS (
+    UPDATE "users" SET display_name = 'Member A (self-update)'
+    WHERE id = '11111111-1111-4111-8111-111111111111'
+    RETURNING id
+)
+SELECT is(count(*)::int, 1, 'users_update_own: member A can update their own row') FROM upd;
 
 -- Updating a cross-tenant row silently affects zero rows because RLS
 -- strips member B out of the UPDATE's candidate set.
-SELECT is(
-    (WITH upd AS (
-        UPDATE "users" SET display_name = 'hacked'
-        WHERE id = '22222222-2222-4222-8222-222222222221'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    0,
-    'users_update_own: member A cannot UPDATE cross-tenant user (zero rows affected)'
-);
+WITH upd AS (
+    UPDATE "users" SET display_name = 'hacked'
+    WHERE id = '22222222-2222-4222-8222-222222222221'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'users_update_own: member A cannot UPDATE cross-tenant user (zero rows affected)') FROM upd;
 
 -- ---------- users_update_admin ----------
 
@@ -132,28 +124,20 @@ SELECT public.test_set_tenant(
 );
 
 -- Admin A can update any user in studio A (here: member_A2).
-SELECT is(
-    (WITH upd AS (
-        UPDATE "users" SET display_name = 'Renamed by admin A'
-        WHERE id = '11111111-1111-4111-8111-111111111112'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    1,
-    'users_update_admin: admin A can update a member of studio A'
-);
+WITH upd AS (
+    UPDATE "users" SET display_name = 'Renamed by admin A'
+    WHERE id = '11111111-1111-4111-8111-111111111112'
+    RETURNING id
+)
+SELECT is(count(*)::int, 1, 'users_update_admin: admin A can update a member of studio A') FROM upd;
 
 -- Admin A cannot update a user from studio B — RLS returns zero rows.
-SELECT is(
-    (WITH upd AS (
-        UPDATE "users" SET display_name = 'cross-tenant'
-        WHERE id = '22222222-2222-4222-8222-222222222221'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    0,
-    'users_update_admin: admin A cannot update user of studio B (zero rows affected)'
-);
+WITH upd AS (
+    UPDATE "users" SET display_name = 'cross-tenant'
+    WHERE id = '22222222-2222-4222-8222-222222222221'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'users_update_admin: admin A cannot update user of studio B (zero rows affected)') FROM upd;
 
 SELECT * FROM finish();
 ROLLBACK;
