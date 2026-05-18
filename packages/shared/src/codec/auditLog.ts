@@ -85,8 +85,11 @@ function toJSON(value: AuditLog): AuditLogWire {
     action: value.action,
     targetType: value.targetType,
     targetId: value.targetId,
-    // Pass metadata through unchanged — see the module-level JSDoc.
-    metadata: value.metadata,
+    // Normalize metadata through a JSON round-trip so that values
+    // without a JSON representation (-0, Infinity, NaN) are coerced
+    // to their serialized equivalents (0, null) before leaving the
+    // codec. This preserves the Req 21.3 round-trip guarantee.
+    metadata: JSON.parse(JSON.stringify(value.metadata)) as Record<string, unknown>,
     createdAt: value.createdAt,
   };
 }
