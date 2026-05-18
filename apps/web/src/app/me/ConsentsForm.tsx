@@ -119,7 +119,8 @@ export function ConsentsForm({ consents, client, t }: ConsentsFormProps): ReactE
   );
 
   const formattedUpdatedAt = useMemo(
-    () => new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(consents.updatedAt)),
+    () =>
+      new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(consents.updatedAt)),
     [locale, consents.updatedAt],
   );
 
@@ -133,9 +134,7 @@ export function ConsentsForm({ consents, client, t }: ConsentsFormProps): ReactE
         <dt className="font-medium">{t('consents.version')}</dt>
         <dd>{consents.version}</dd>
         <dt className="font-medium">{t('consents.updatedAt')}</dt>
-        <dd>
-          {formattedUpdatedAt}
-        </dd>
+        <dd>{formattedUpdatedAt}</dd>
       </dl>
 
       <form

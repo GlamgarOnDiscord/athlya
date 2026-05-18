@@ -1056,6 +1056,27 @@ _Score critique attendu après Epic C1 + C2_ : **7/10 → 8.0/10**
 
 ---
 
+### Epic Sprint-16 — Dette PR #18 (post-revert deps majors, mai 2026)
+
+Après le revert du bump groupé `vitest 4 + lighthouse 13 + react-hooks 7 + globals 17` (PR #18, mergée à `01d1e1f`), une dette technique a été identifiée hors scope du revert. Cette section la trace pour un closure progressive.
+
+- [x] SP16.1 Migration `0006_anonymize_audit_scalar_guard.sql` — guard `jsonb_typeof(metadata) = 'object'` autour des opérateurs `?` et `-` dans `anonymize_user_audit(uuid)`. Ferme la bombe latente SQLSTATE 22023 (`cannot delete from scalar`) qui aurait crashé le worker RGPD J+30 dès la première row dérivée à un metadata non-object. Inclut le `.down.sql` symétrique. Test pgTAP `audit_anonymization_scalar_guard.sql` (9 cas couvrant les 5 shapes scalaires + idempotence) staged sur disque mais **non câblé dans `pgtap.yml`** parce que 7 autres tests pgTAP existants (`users.sql`, `classes.sql`, `reservations.sql`, `workout_sessions.sql`, `audit_log.sql`, `push_tokens.sql`, `idempotency_keys.sql`) sont cassés sur master depuis Postgres 17 (pattern `(WITH upd AS (UPDATE ... RETURNING) SELECT ...)` rejeté en sous-expression). Le câblage CI viendra dans SP16.1b après la fix de ces 7 fichiers.
+- [x] SP16.1a Reformat `apps/web/src/app/forgot-password/ForgotPasswordForm.tsx` + `apps/web/src/app/me/ConsentsForm.tsx` avec prettier — 2 fichiers laissés non formatés par le commit `65a42c4` ("react-doctor findings"), bloquant le job `Lint, typecheck, and tests` sur master. Restaure le check vert.
+- [ ] SP16.1b Fix les 7 tests pgTAP cassés sur master par Postgres 17 (pattern `(WITH … UPDATE … RETURNING)` rejeté en sous-expression dans `users.sql`, `classes.sql`, `reservations.sql`, `workout_sessions.sql`, `audit_log.sql`, `push_tokens.sql`, `idempotency_keys.sql`) — déplacer les CTEs en top-level. Puis câbler `audit_anonymization_scalar_guard.sql` dans `.github/workflows/pgtap.yml`. Le job `pgTAP RLS suite` est rouge sur master depuis le bump Postgres 17, indépendamment de PR #18.
+- [ ] SP16.2 Re-bump `globals 16 → 17` en PR isolée (no-op runtime probable, vérifier `pnpm lint` reste vert).
+- [ ] SP16.3 Re-bump `eslint-plugin-react-hooks 5 → 7` en PR isolée. Major skip 6.x. La nouvelle règle `set-state-in-effect` flag déjà notre warning dans `CookieBanner.tsx:69:7` — quelques `eslint-disable-next-line` à attendre.
+- [ ] SP16.4 Re-bump `lighthouse 12 → 13` en PR isolée. La devDep directe `chrome-launcher` est déjà déclarée dans `apps/web/package.json` (slice issue du revert). Vérifier le changelog 13.x pour breaking changes API.
+- [ ] SP16.5 Re-bump `vitest 3 → 4` en PR finale. Le plus complexe : `@fast-check/vitest 0.4.1` + `@vitest/coverage-v8 4.x` à bumper en même temps (peer-deps). Restaurer `hookTimeout: 180_000` dans `packages/reservations/vitest.config.ts` (vitest 4 split timeouts). Conserver le workaround `JSON.parse(row.metadata)` du commit `6046b4e` (postgres-js + `prepare:false` retourne JSONB en string sous vitest 4).
+- [ ] SP16.6 Reprendre les 3 tests `describe.skip` listés dans `docs/runbooks/deps-revert-followups.md` :
+  - `bookClass — Property 1 (capacity invariant)` — `confirmedCount=0` même sur `(capacity=1, N=1)` sous Testcontainers.
+  - `bookClass — regression anchor (capacity=3, N=10)` — même cause.
+  - `cascade integration anonymisation (RGPD Property 4)` — race postgres-js + ALTER TABLE inside transaction.
+- [ ] SP16.7 Investiguer le flake `round-trip.property.test.ts` (seed `904295160`, `expected { id: '1', actorId: null, …(5) } to deeply equal …` — deux objets visuellement identiques). À reprendre avec `fast-check.run({ verbose: true })`.
+
+_Roadmap complète_ : `docs/runbooks/deps-revert-followups.md`.
+
+---
+
 ### Epic CN — Pratiques niveau Netflix/Stripe (cible 9/10)
 
 5 priorités hautes (~4 jours total) qui font 80 % de l'écart vers une équipe Série A.

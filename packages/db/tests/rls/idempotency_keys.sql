@@ -54,25 +54,17 @@ SELECT throws_ok(
 
 -- ---------- idempotency_keys_delete_own ----------
 
-SELECT is(
-    (WITH del AS (
-        DELETE FROM "idempotency_keys" WHERE key = 'key-seed-a' AND user_id = '11111111-1111-4111-8111-111111111111'
-        RETURNING key
-     )
-     SELECT count(*)::int FROM del),
-    1,
-    'idempotency_keys_delete_own: member A can DELETE own key'
-);
+WITH del AS (
+    DELETE FROM "idempotency_keys" WHERE key = 'key-seed-a' AND user_id = '11111111-1111-4111-8111-111111111111'
+    RETURNING key
+)
+SELECT is(count(*)::int, 1, 'idempotency_keys_delete_own: member A can DELETE own key') FROM del;
 
-SELECT is(
-    (WITH del AS (
-        DELETE FROM "idempotency_keys" WHERE key = 'key-seed-b' AND user_id = '22222222-2222-4222-8222-222222222221'
-        RETURNING key
-     )
-     SELECT count(*)::int FROM del),
-    0,
-    'idempotency_keys_delete_own: member A cannot DELETE member B key (zero rows)'
-);
+WITH del AS (
+    DELETE FROM "idempotency_keys" WHERE key = 'key-seed-b' AND user_id = '22222222-2222-4222-8222-222222222221'
+    RETURNING key
+)
+SELECT is(count(*)::int, 0, 'idempotency_keys_delete_own: member A cannot DELETE member B key (zero rows)') FROM del;
 
 SELECT * FROM finish();
 ROLLBACK;

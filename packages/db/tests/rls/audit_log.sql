@@ -113,27 +113,19 @@ SELECT public.test_set_tenant(
 
 -- `USING (false)` strips every row: 0 rows updated rather than a raise.
 -- We assert the "zero rows updated" outcome explicitly.
-SELECT is(
-    (WITH upd AS (
-        UPDATE "audit_log" SET action = 'tampered'
-        WHERE action = 'studio.created'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    0,
-    'audit_no_update (RLS): admin UPDATE of audit_log affects zero rows (USING false filters all)'
-);
+WITH upd AS (
+    UPDATE "audit_log" SET action = 'tampered'
+    WHERE action = 'studio.created'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'audit_no_update (RLS): admin UPDATE of audit_log affects zero rows (USING false filters all)') FROM upd;
 
 -- ---------- audit_no_delete via RLS ----------
 
-SELECT is(
-    (WITH del AS (
-        DELETE FROM "audit_log" WHERE action = 'studio.created' RETURNING id
-     )
-     SELECT count(*)::int FROM del),
-    0,
-    'audit_no_delete (RLS): admin DELETE of audit_log affects zero rows (USING false filters all)'
-);
+WITH del AS (
+    DELETE FROM "audit_log" WHERE action = 'studio.created' RETURNING id
+)
+SELECT is(count(*)::int, 0, 'audit_no_delete (RLS): admin DELETE of audit_log affects zero rows (USING false filters all)') FROM del;
 
 -- ---------- audit trigger: immutability under any privilege level ----------
 -- The `audit_log_immutable()` trigger installed in 0000_init.sql

@@ -54,25 +54,17 @@ SELECT throws_ok(
 
 -- ---------- push_tokens_delete_own ----------
 
-SELECT is(
-    (WITH del AS (
-        DELETE FROM "push_tokens" WHERE id = '99999999-9999-4999-8999-999999999901'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM del),
-    1,
-    'push_tokens_delete_own: member A can DELETE own token'
-);
+WITH del AS (
+    DELETE FROM "push_tokens" WHERE id = '99999999-9999-4999-8999-999999999901'
+    RETURNING id
+)
+SELECT is(count(*)::int, 1, 'push_tokens_delete_own: member A can DELETE own token') FROM del;
 
-SELECT is(
-    (WITH del AS (
-        DELETE FROM "push_tokens" WHERE id = '99999999-9999-4999-8999-999999999902'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM del),
-    0,
-    'push_tokens_delete_own: member A cannot DELETE member B token (zero rows affected)'
-);
+WITH del AS (
+    DELETE FROM "push_tokens" WHERE id = '99999999-9999-4999-8999-999999999902'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'push_tokens_delete_own: member A cannot DELETE member B token (zero rows affected)') FROM del;
 
 SELECT * FROM finish();
 ROLLBACK;
