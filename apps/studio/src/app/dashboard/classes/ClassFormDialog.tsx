@@ -268,7 +268,7 @@ export function ClassFormDialog({
             {t('common.cancel')}
           </Button>
           <Button type="submit" form="class-form" disabled={pending}>
-            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
             {mode.kind === 'create'
               ? t('studio.classes.dialog.createSubmit')
               : t('studio.classes.dialog.editSubmit')}

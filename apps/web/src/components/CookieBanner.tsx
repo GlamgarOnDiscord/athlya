@@ -114,10 +114,10 @@ export function CookieBanner() {
                 className="mt-0.5"
                 checked={draft.analytics}
                 onCheckedChange={(checked) =>
-                  setDraft({
-                    ...draft,
+                  setDraft((prev) => ({
+                    ...prev,
                     analytics: checked === true,
-                  })
+                  }))
                 }
               />
               <Label htmlFor="cookie-analytics" className="text-sm font-normal">
@@ -134,10 +134,10 @@ export function CookieBanner() {
                 className="mt-0.5"
                 checked={draft.errorTracking}
                 onCheckedChange={(checked) =>
-                  setDraft({
-                    ...draft,
+                  setDraft((prev) => ({
+                    ...prev,
                     errorTracking: checked === true,
-                  })
+                  }))
                 }
               />
               <Label htmlFor="cookie-error-tracking" className="text-sm font-normal">

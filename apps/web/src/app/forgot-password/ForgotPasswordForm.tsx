@@ -40,7 +40,7 @@ export function ForgotPasswordForm({ nonce }: ForgotPasswordFormProps): ReactEle
 
   const siteKey = getTurnstileSiteKey();
   const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
-  const [turnstileToken, setTurnstileToken] = useState<string>('');
+  const turnstileToken = useRef<string>('');
 
   const [email, setEmail] = useState('');
   const [state, setState] = useState<SubmitState>({ kind: 'idle' });
@@ -58,8 +58,8 @@ export function ForgotPasswordForm({ nonce }: ForgotPasswordFormProps): ReactEle
       const headers: Record<string, string> = {
         'content-type': 'application/json',
       };
-      if (turnstileToken !== '') {
-        headers['cf-turnstile-token'] = turnstileToken;
+      if (turnstileToken.current !== '') {
+        headers['cf-turnstile-token'] = turnstileToken.current;
       }
 
       const res = await fetch('/api/auth/password-reset/request', {
@@ -80,14 +80,14 @@ export function ForgotPasswordForm({ nonce }: ForgotPasswordFormProps): ReactEle
         message: body.title ?? body.code ?? t('auth.forgotPassword.errors.generic'),
       });
       turnstileRef.current?.reset();
-      setTurnstileToken('');
+      turnstileToken.current = '';
     } catch {
       setState({
         kind: 'error',
         message: t('errors.network'),
       });
       turnstileRef.current?.reset();
-      setTurnstileToken('');
+      turnstileToken.current = '';
     }
   };
 
@@ -121,7 +121,7 @@ export function ForgotPasswordForm({ nonce }: ForgotPasswordFormProps): ReactEle
 
       <TurnstileWidget
         siteKey={siteKey}
-        onToken={setTurnstileToken}
+        onToken={(token) => { turnstileToken.current = token; }}
         nonce={nonce}
         ref={turnstileRef}
       />

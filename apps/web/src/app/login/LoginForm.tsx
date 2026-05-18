@@ -179,7 +179,7 @@ export function LoginForm({ nonce }: LoginFormProps): ReactElement {
       >
         {form.pending ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Loader2 className="mr-2 size-4 animate-spin" />
             {t('common.loading')}
           </>
         ) : (

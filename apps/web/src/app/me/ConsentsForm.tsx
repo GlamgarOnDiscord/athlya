@@ -17,7 +17,7 @@
 'use client';
 
 import { UpdateConsentsRequestSchema } from '@athlya/shared/schemas/api';
-import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -118,6 +118,11 @@ export function ConsentsForm({ consents, client, t }: ConsentsFormProps): ReactE
     [form, client, t],
   );
 
+  const formattedUpdatedAt = useMemo(
+    () => new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(consents.updatedAt)),
+    [locale, consents.updatedAt],
+  );
+
   return (
     <section aria-labelledby="consents-heading" className="flex flex-col gap-4">
       <h2 id="consents-heading" className="text-xl font-semibold">
@@ -129,9 +134,7 @@ export function ConsentsForm({ consents, client, t }: ConsentsFormProps): ReactE
         <dd>{consents.version}</dd>
         <dt className="font-medium">{t('consents.updatedAt')}</dt>
         <dd>
-          {new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
-            new Date(consents.updatedAt),
-          )}
+          {formattedUpdatedAt}
         </dd>
       </dl>
 
