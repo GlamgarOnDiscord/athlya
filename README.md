@@ -24,7 +24,7 @@ Alternative auto-hébergeable à bsport, Mywellness et Mindbody pour les studios
 [![Vitest](https://img.shields.io/badge/Vitest-3-6e9f18?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/)
 [![fast-check](https://img.shields.io/badge/fast--check-PBT-8b5cf6?style=flat-square)](https://fast-check.dev/)
 
-[![Tests](https://img.shields.io/badge/tests-830%20✓-22c55e?style=flat-square)](#état-des-tests)
+[![Tests](https://img.shields.io/badge/tests-1260%20✓-22c55e?style=flat-square)](#état-des-tests)
 [![Couverture domaines](<https://img.shields.io/badge/tâches-246%2F294%20(83.7%25)-0ea5e9?style=flat-square>)](.kiro/specs/athlya-platform/tasks.md)
 [![PBT](https://img.shields.io/badge/property--based-8%2F9-8b5cf6?style=flat-square)](.kiro/specs/athlya-platform/PROGRESS.md)
 [![RGPD](https://img.shields.io/badge/RGPD-by%20design-22c55e?style=flat-square)](#vie-privée--rgpd)
@@ -272,19 +272,20 @@ Voir [`PROGRESS.md`](.kiro/specs/athlya-platform/PROGRESS.md) et [CHANGELOG.md](
 
 ## État des tests
 
-**~807 tests verts** répartis sur 10 packages.
+**~1 260 tests verts** répartis sur 10 packages.
 
 | Package                 | Tests                      | Notes                                                   |
 | ----------------------- | -------------------------- | ------------------------------------------------------- |
-| `@athlya/shared`        | 108/108                    | —                                                       |
-| `@athlya/db`            | 45/45 (+ 4 Docker-gated)   | 13 pgTAP audit anonymisation                            |
-| `@athlya/auth`          | 85/85                      | —                                                       |
+| `@athlya/shared`        | 146/146                    | dont 7 PBT round-trip (Req 21.3)                        |
+| `@athlya/db`            | 57/57 (+ 4 Docker-gated)   | pgTAP RLS + audit anonymisation                         |
+| `@athlya/auth`          | 123/123                    | —                                                       |
 | `@athlya/ratelimit`     | 7/7                        | nouveau package (H5)                                    |
-| `@athlya/api`           | **315/315**                | dont 16 chain tests + 23 DLQ + 15 circuit breaker + PBT |
-| `@athlya/members`       | 67/67 (+ 2 Docker-gated)   | —                                                       |
-| `@athlya/reservations`  | 113/113 (+ 2 Docker-gated) | dont PBT P1, P2, P3                                     |
+| `@athlya/api`           | **567/567**                | dont 16 chain tests + 23 DLQ + 15 circuit breaker + PBT |
+| `@athlya/members`       | 72/72 (+ 2 Docker-gated)   | —                                                       |
+| `@athlya/reservations`  | 111/111 (+ 2 Docker-gated) | dont PBT P1, P2, P3                                     |
 | `@athlya/notifications` | 58/58                      | —                                                       |
-| `@athlya/billing`       | 9/9                        | —                                                       |
+| `@athlya/billing`       | 30/30                      | —                                                       |
+| `@athlya/web`           | 89/89                      | —                                                       |
 
 ### Property-based tests (PBT, fast-check)
 
