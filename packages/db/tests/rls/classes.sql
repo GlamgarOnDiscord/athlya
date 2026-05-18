@@ -20,7 +20,7 @@ BEGIN;
 -- apply. The session role (postgres) is a superuser and therefore
 -- bypasses RLS; the enclosing ROLLBACK restores it at file end.
 SET LOCAL ROLE athlya_tenant_test;
-SELECT plan(10);
+SELECT plan(11);
 
 -- ---------- classes_read_same_studio ----------
 
@@ -32,7 +32,7 @@ SELECT public.test_set_tenant(
 
 SELECT is(
     (SELECT count(*)::int FROM "classes" WHERE studio_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
-    1,
+    2,
     'classes_read_same_studio: member A sees studio A class'
 );
 
@@ -89,29 +89,21 @@ SELECT throws_ok(
 
 -- ---------- classes_update_admin (success for admin) ----------
 
-SELECT is(
-    (WITH upd AS (
-        UPDATE "classes" SET title = 'Admin-renamed A'
-        WHERE id = 'cccccccc-cccc-4ccc-8ccc-ccccccccccca'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    1,
-    'classes_update_admin: admin A can UPDATE a class of studio A'
-);
+WITH upd AS (
+    UPDATE "classes" SET title = 'Admin-renamed A'
+    WHERE id = 'cccccccc-cccc-4ccc-8ccc-ccccccccccca'
+    RETURNING id
+)
+SELECT is(count(*)::int, 1, 'classes_update_admin: admin A can UPDATE a class of studio A') FROM upd;
 
 -- ---------- classes_update_admin (fail cross-tenant) ----------
 
-SELECT is(
-    (WITH upd AS (
-        UPDATE "classes" SET title = 'hacked'
-        WHERE id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccb'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    0,
-    'classes_update_admin: admin A cannot UPDATE studio B class (zero rows affected)'
-);
+WITH upd AS (
+    UPDATE "classes" SET title = 'hacked'
+    WHERE id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccb'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'classes_update_admin: admin A cannot UPDATE studio B class (zero rows affected)') FROM upd;
 
 -- ---------- classes_update_admin (member denied) ----------
 
@@ -121,16 +113,12 @@ SELECT public.test_set_tenant(
     'member'
 );
 
-SELECT is(
-    (WITH upd AS (
-        UPDATE "classes" SET title = 'member-renamed'
-        WHERE id = 'cccccccc-cccc-4ccc-8ccc-ccccccccccca'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    0,
-    'classes_update_admin: member A cannot UPDATE own-studio class (zero rows affected)'
-);
+WITH upd AS (
+    UPDATE "classes" SET title = 'member-renamed'
+    WHERE id = 'cccccccc-cccc-4ccc-8ccc-ccccccccccca'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'classes_update_admin: member A cannot UPDATE own-studio class (zero rows affected)') FROM upd;
 
 -- ---------- classes_delete_admin (admin success) ----------
 
@@ -146,27 +134,19 @@ SELECT public.test_set_tenant(
 INSERT INTO "classes" (id, studio_id, title, starts_at, duration_min, capacity)
 VALUES ('cccccccc-cccc-4ccc-8ccc-cccccccccc99', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Throwaway', '2030-06-02 09:00:00+00', 30, 5);
 
-SELECT is(
-    (WITH del AS (
-        DELETE FROM "classes" WHERE id = 'cccccccc-cccc-4ccc-8ccc-cccccccccc99'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM del),
-    1,
-    'classes_delete_admin: admin A can DELETE a class of studio A'
-);
+WITH del AS (
+    DELETE FROM "classes" WHERE id = 'cccccccc-cccc-4ccc-8ccc-cccccccccc99'
+    RETURNING id
+)
+SELECT is(count(*)::int, 1, 'classes_delete_admin: admin A can DELETE a class of studio A') FROM del;
 
 -- ---------- classes_delete_admin (cross-tenant) ----------
 
-SELECT is(
-    (WITH del AS (
-        DELETE FROM "classes" WHERE id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccb'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM del),
-    0,
-    'classes_delete_admin: admin A cannot DELETE studio B class (zero rows affected)'
-);
+WITH del AS (
+    DELETE FROM "classes" WHERE id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccb'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'classes_delete_admin: admin A cannot DELETE studio B class (zero rows affected)') FROM del;
 
 -- ---------- classes_delete_admin (member denied) ----------
 
@@ -176,15 +156,11 @@ SELECT public.test_set_tenant(
     'member'
 );
 
-SELECT is(
-    (WITH del AS (
-        DELETE FROM "classes" WHERE id = 'cccccccc-cccc-4ccc-8ccc-ccccccccccca'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM del),
-    0,
-    'classes_delete_admin: member A cannot DELETE own-studio class (zero rows affected)'
-);
+WITH del AS (
+    DELETE FROM "classes" WHERE id = 'cccccccc-cccc-4ccc-8ccc-ccccccccccca'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'classes_delete_admin: member A cannot DELETE own-studio class (zero rows affected)') FROM del;
 
 SELECT * FROM finish();
 ROLLBACK;

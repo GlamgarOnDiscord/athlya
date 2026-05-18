@@ -17,7 +17,7 @@ BEGIN;
 -- apply. The session role (postgres) is a superuser and therefore
 -- bypasses RLS; the enclosing ROLLBACK restores it at file end.
 SET LOCAL ROLE athlya_tenant_test;
-SELECT plan(11);
+SELECT plan(12);
 
 -- ---------- reservations_read_own (member) ----------
 
@@ -106,28 +106,20 @@ SELECT public.test_set_tenant(
     'member'
 );
 
-SELECT is(
-    (WITH upd AS (
-        UPDATE "reservations" SET status = 'cancelled', cancelled_at = now()
-        WHERE id = 'dddddddd-dddd-4ddd-8ddd-dddddddddd01'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    1,
-    'reservations_update_own: member A can cancel own reservation'
-);
+WITH upd AS (
+    UPDATE "reservations" SET status = 'cancelled', cancelled_at = now()
+    WHERE id = 'dddddddd-dddd-4ddd-8ddd-dddddddddd01'
+    RETURNING id
+)
+SELECT is(count(*)::int, 1, 'reservations_update_own: member A can cancel own reservation') FROM upd;
 
 -- Cross-tenant UPDATE strips row out: zero rows affected.
-SELECT is(
-    (WITH upd AS (
-        UPDATE "reservations" SET status = 'cancelled'
-        WHERE id = 'dddddddd-dddd-4ddd-8ddd-dddddddddd03'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    0,
-    'reservations_update_own: member A cannot UPDATE member B reservation (zero rows affected)'
-);
+WITH upd AS (
+    UPDATE "reservations" SET status = 'cancelled'
+    WHERE id = 'dddddddd-dddd-4ddd-8ddd-dddddddddd03'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'reservations_update_own: member A cannot UPDATE member B reservation (zero rows affected)') FROM upd;
 
 -- ---------- reservations_update_admin (same-studio success) ----------
 
@@ -137,29 +129,21 @@ SELECT public.test_set_tenant(
     'admin'
 );
 
-SELECT is(
-    (WITH upd AS (
-        UPDATE "reservations" SET status = 'cancelled'
-        WHERE id = 'dddddddd-dddd-4ddd-8ddd-dddddddddd02'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    1,
-    'reservations_update_admin: admin A can cancel a member-of-A reservation'
-);
+WITH upd AS (
+    UPDATE "reservations" SET status = 'cancelled'
+    WHERE id = 'dddddddd-dddd-4ddd-8ddd-dddddddddd02'
+    RETURNING id
+)
+SELECT is(count(*)::int, 1, 'reservations_update_admin: admin A can cancel a member-of-A reservation') FROM upd;
 
 -- ---------- reservations_update_admin (cross-tenant denied) ----------
 
-SELECT is(
-    (WITH upd AS (
-        UPDATE "reservations" SET status = 'cancelled'
-        WHERE id = 'dddddddd-dddd-4ddd-8ddd-dddddddddd03'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    0,
-    'reservations_update_admin: admin A cannot UPDATE studio-B reservation (zero rows affected)'
-);
+WITH upd AS (
+    UPDATE "reservations" SET status = 'cancelled'
+    WHERE id = 'dddddddd-dddd-4ddd-8ddd-dddddddddd03'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'reservations_update_admin: admin A cannot UPDATE studio-B reservation (zero rows affected)') FROM upd;
 
 -- ---------- defense in depth: member cannot SELECT cross-tenant ----------
 -- Even after all the mutations above, a cross-tenant SELECT stays empty.

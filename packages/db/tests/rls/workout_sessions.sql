@@ -16,7 +16,7 @@ BEGIN;
 -- apply. The session role (postgres) is a superuser and therefore
 -- bypasses RLS; the enclosing ROLLBACK restores it at file end.
 SET LOCAL ROLE athlya_tenant_test;
-SELECT plan(10);
+SELECT plan(11);
 
 -- ---------- workout_sessions_read_own ----------
 
@@ -75,27 +75,19 @@ SELECT throws_ok(
 
 -- ---------- workout_sessions_update_own ----------
 
-SELECT is(
-    (WITH upd AS (
-        UPDATE "workout_sessions" SET notes = 'self-edit'
-        WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    1,
-    'workout_sessions_update_own: member A can UPDATE own session'
-);
+WITH upd AS (
+    UPDATE "workout_sessions" SET notes = 'self-edit'
+    WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01'
+    RETURNING id
+)
+SELECT is(count(*)::int, 1, 'workout_sessions_update_own: member A can UPDATE own session') FROM upd;
 
-SELECT is(
-    (WITH upd AS (
-        UPDATE "workout_sessions" SET notes = 'hacked'
-        WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM upd),
-    0,
-    'workout_sessions_update_own: member A cannot UPDATE cross-tenant session (zero rows)'
-);
+WITH upd AS (
+    UPDATE "workout_sessions" SET notes = 'hacked'
+    WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'workout_sessions_update_own: member A cannot UPDATE cross-tenant session (zero rows)') FROM upd;
 
 -- Setting user_id to another user via UPDATE violates WITH CHECK.
 SELECT throws_ok(
@@ -108,27 +100,19 @@ SELECT throws_ok(
 
 -- ---------- workout_sessions_delete_own ----------
 
-SELECT is(
-    (WITH del AS (
-        DELETE FROM "workout_sessions"
-        WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM del),
-    1,
-    'workout_sessions_delete_own: member A can DELETE own session'
-);
+WITH del AS (
+    DELETE FROM "workout_sessions"
+    WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01'
+    RETURNING id
+)
+SELECT is(count(*)::int, 1, 'workout_sessions_delete_own: member A can DELETE own session') FROM del;
 
-SELECT is(
-    (WITH del AS (
-        DELETE FROM "workout_sessions"
-        WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM del),
-    0,
-    'workout_sessions_delete_own: member A cannot DELETE cross-tenant session (zero rows)'
-);
+WITH del AS (
+    DELETE FROM "workout_sessions"
+    WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'workout_sessions_delete_own: member A cannot DELETE cross-tenant session (zero rows)') FROM del;
 
 -- Even an admin cannot delete someone else's session through RLS.
 SELECT public.test_set_tenant(
@@ -137,16 +121,12 @@ SELECT public.test_set_tenant(
     'admin'
 );
 
-SELECT is(
-    (WITH del AS (
-        DELETE FROM "workout_sessions"
-        WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02'
-        RETURNING id
-     )
-     SELECT count(*)::int FROM del),
-    0,
-    'workout_sessions_delete_own: admin A cannot DELETE member-of-A session (owner-only policy)'
-);
+WITH del AS (
+    DELETE FROM "workout_sessions"
+    WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02'
+    RETURNING id
+)
+SELECT is(count(*)::int, 0, 'workout_sessions_delete_own: admin A cannot DELETE member-of-A session (owner-only policy)') FROM del;
 
 SELECT * FROM finish();
 ROLLBACK;
