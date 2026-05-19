@@ -1,14 +1,18 @@
 # Gitleaks configuration for the Athlya monorepo.
 #
-# The allowlist below excludes known false positives in test files that
-# intentionally use secret-looking strings to verify the secret-leak guard
-# (i.e. that error messages containing DB credentials never reach HTTP
-# response bodies). These strings are test fixtures, not real credentials.
+# `useDefault = true` keeps the full built-in rule set active while
+# allowing us to add file-level allowlists for known false positives.
 #
-# Each flagged line also carries a `// gitleaks:allow` inline comment as a
-# belt-and-suspenders measure independent of this file.
+# The allowlist below excludes test files that intentionally use
+# secret-looking strings to verify the secret-leak guard (i.e. that
+# error messages containing DB credentials never reach HTTP response
+# bodies). These strings are test fixtures, not real credentials.
+# Each flagged line also carries a `// gitleaks:allow` inline comment.
 
-[allowlist]
+[extend]
+useDefault = true
+
+[[allowlists]]
   description = "Test fixtures that deliberately look like secrets"
   paths = [
     '''packages/api/src/__tests__/problem-details\.test\.ts''',

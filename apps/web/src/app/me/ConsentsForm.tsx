@@ -82,7 +82,7 @@ export function ConsentsForm({ consents, client, t }: ConsentsFormProps): ReactE
       };
       const parsed = UpdateConsentsRequestSchema.safeParse(payload);
       if (!parsed.success) {
-        const next: Record<string, string> = {};
+        const next = Object.create(null) as Record<string, string>;
         for (const issue of parsed.error.issues) {
           const path = issue.path.join('.');
           if (next[path] === undefined) next[path] = issue.message;
@@ -103,7 +103,7 @@ export function ConsentsForm({ consents, client, t }: ConsentsFormProps): ReactE
           err.problem?.code === 'validation_error' &&
           err.problem.errors !== undefined
         ) {
-          const next: Record<string, string> = {};
+          const next = Object.create(null) as Record<string, string>;
           for (const e of err.problem.errors) {
             if (next[e.path] === undefined) next[e.path] = e.message;
           }

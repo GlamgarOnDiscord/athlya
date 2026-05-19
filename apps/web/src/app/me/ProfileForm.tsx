@@ -123,7 +123,7 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
 
       const parsed = UpdateProfileRequestSchema.safeParse(payload);
       if (!parsed.success) {
-        const next: Record<string, string> = {};
+        const next = Object.create(null) as Record<string, string>;
         for (const issue of parsed.error.issues) {
           const path = issue.path.join('.');
           if (next[path] === undefined) next[path] = issue.message;
@@ -144,7 +144,7 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
           err.problem?.code === 'validation_error' &&
           err.problem.errors !== undefined
         ) {
-          const next: Record<string, string> = {};
+          const next = Object.create(null) as Record<string, string>;
           for (const e of err.problem.errors) {
             if (next[e.path] === undefined) next[e.path] = e.message;
           }

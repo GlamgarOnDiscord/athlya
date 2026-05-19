@@ -517,17 +517,17 @@ describe('parseOtelHeaders', () => {
   });
 
   it('parses the OTel env convention: k1=v1,k2=v2', () => {
-    expect(parseOtelHeaders('x-api-key=secret,x-team=eu')).toEqual({
-      // gitleaks:allow
-      'x-api-key': 'secret', // gitleaks:allow
+    const raw = 'x-api-key=secret,x-team=eu'; // gitleaks:allow
+    expect(parseOtelHeaders(raw)).toEqual({
+      'x-api-key': 'secret',
       'x-team': 'eu',
     });
   });
 
   it('trims whitespace around keys and values', () => {
-    expect(parseOtelHeaders(' x-api-key = hunter2 , x-extra = v ')).toEqual({
-      // gitleaks:allow
-      'x-api-key': 'hunter2', // gitleaks:allow
+    const raw = ' x-api-key = hunter2 , x-extra = v '; // gitleaks:allow
+    expect(parseOtelHeaders(raw)).toEqual({
+      'x-api-key': 'hunter2',
       'x-extra': 'v',
     });
   });
