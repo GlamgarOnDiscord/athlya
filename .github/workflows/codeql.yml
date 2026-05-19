@@ -5,7 +5,7 @@ name: CodeQL
 # désérialisations dangereuses, prototype pollution.
 #
 # Cycles :
-#   - Push sur main / PRs vers main : analyse rapide (changed files)
+#   - Push sur master / PRs vers master : analyse rapide (changed files)
 #   - Schedule weekly : analyse complète (full repo)
 #
 # Les findings remontent dans Security tab > Code scanning sur

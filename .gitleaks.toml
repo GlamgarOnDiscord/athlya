@@ -1,0 +1,13 @@
+# Gitleaks configuration for the Athlya monorepo.
+#
+# The allowlist below excludes known false positives in test files that
+# intentionally use secret-looking strings to verify the secret-leak guard
+# (i.e. that error messages containing DB credentials never reach HTTP
+# response bodies). These strings are test fixtures, not real credentials.
+
+[allowlist]
+  description = "Test fixtures that deliberately look like secrets"
+  paths = [
+    "packages/api/src/__tests__/problem-details.test.ts",
+    "packages/api/src/__tests__/worker.test.ts",
+  ]
