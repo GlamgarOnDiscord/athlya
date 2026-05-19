@@ -12,10 +12,10 @@
 [extend]
 useDefault = true
 
-[[allowlists]]
+[allowlist]
   description = "Test fixtures that deliberately look like secrets"
   paths = [
-    '''packages/api/src/__tests__/problem-details\.test\.ts''',
-    '''packages/api/src/__tests__/worker\.test\.ts''',
-    '''packages/api/src/__tests__/otel\.test\.ts''',
+    '''problem-details\.test\.ts''',
+    '''worker\.test\.ts''',
+    '''otel\.test\.ts''',
   ]
