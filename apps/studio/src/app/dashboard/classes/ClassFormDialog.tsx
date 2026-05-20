@@ -136,7 +136,7 @@ export function ClassFormDialog({
       const editPayload = { ...payload, version: mode.cls.version };
       const parsed = UpdateClassRequestSchema.safeParse(editPayload);
       if (!parsed.success) {
-        const next: Record<string, string> = {};
+        const next = Object.create(null) as Record<string, string>;
         for (const issue of parsed.error.issues) {
           const path = issue.path.join('.');
           if (next[path] === undefined) next[path] = issue.message;
