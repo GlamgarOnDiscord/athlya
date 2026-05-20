@@ -67,3 +67,7 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: '/language:${{ matrix.language }}'
+          # SARIF upload requires GitHub Code Security (Team/Enterprise plan).
+          # On GitHub Free/Pro, private repos cannot upload to the Security tab.
+          # Analysis still runs and findings appear in job logs.
+          upload: false
