@@ -295,7 +295,7 @@ describe('error handler', () => {
 
   it('does not leak the thrown error message to the response body', async () => {
     const app = buildApp();
-    const secret = 'db-password=hunter2';
+    const secret = 'db-password=hunter2'; // gitleaks:allow
     app.get('/__boom', () => {
       throw new Error(secret);
     });

@@ -1,22 +1,10 @@
 name: CodeQL
 
-# Sprint 14 / Slice 14.3 (Epic CN.3.1) — SAST gratuit via CodeQL.
-# Détecte injections SQL, secrets hardcodés, eval/Function dynamiques,
-# désérialisations dangereuses, prototype pollution.
-#
-# Cycles :
-#   - Push sur main / PRs vers main : analyse rapide (changed files)
-#   - Schedule weekly : analyse complète (full repo)
-#
-# Les findings remontent dans Security tab > Code scanning sur
-# GitHub. Severity HIGH bloque la PR (configurable via Branch
-# Protection rules).
-
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
     paths:
       - '**/*.ts'
       - '**/*.tsx'
@@ -25,14 +13,12 @@ on:
       - '**/*.cjs'
       - '.github/workflows/codeql.yml'
   schedule:
-    # Run weekly on Mondays at 06:00 UTC — full scan for
-    # dependency-injected vulnerabilities that may not surface
-    # via diff analysis.
     - cron: '0 6 * * 1'
 
 permissions:
   contents: read
   security-events: write
+  actions: read
 
 jobs:
   analyze:
@@ -50,19 +36,15 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          # `security-extended` adds queries for prototype
-          # pollution, ReDoS, regex injection — relevant for an
-          # API-heavy codebase.
           queries: security-extended
 
-      # CodeQL handles JS/TS without an explicit build step (it
-      # parses sources directly). For a future Rust/Go module
-      # we'd add `autobuild` here.
-
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@v3
         with:
           category: '/language:${{ matrix.language }}'
+          # SARIF upload requires GitHub Code Security (Team/Enterprise).
+          # Findings are visible in job logs.
+          upload: false

@@ -341,7 +341,7 @@ export function parseOtelHeaders(raw: string | undefined): Record<string, string
   if (raw === undefined || raw.length === 0) {
     return {};
   }
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const pair of raw.split(',')) {
     const eq = pair.indexOf('=');
     if (eq === -1) {

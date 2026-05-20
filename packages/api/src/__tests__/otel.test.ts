@@ -418,7 +418,7 @@ describe('tracing — OTLP export', () => {
     const { c } = fakeContext({
       env: mockEnv({
         OTEL_EXPORTER_OTLP_ENDPOINT: 'https://api.axiom.co/v1/traces',
-        OTEL_EXPORTER_OTLP_HEADERS: 'x-api-key=secret-token,x-extra=v',
+        OTEL_EXPORTER_OTLP_HEADERS: 'x-api-key=secret-token,x-extra=v', // gitleaks:allow
       }),
     });
 
@@ -432,7 +432,7 @@ describe('tracing — OTLP export', () => {
     expect(url).toBe('https://api.axiom.co/v1/traces');
     expect(init.method).toBe('POST');
     expect(init.headers['content-type']).toBe('application/json');
-    expect(init.headers['x-api-key']).toBe('secret-token');
+    expect(init.headers['x-api-key']).toBe('secret-token'); // gitleaks:allow
     expect(init.headers['x-extra']).toBe('v');
     // Body parses as JSON — we do not re-assert the envelope
     // shape here (it is covered by the attribute tests above).
@@ -517,14 +517,16 @@ describe('parseOtelHeaders', () => {
   });
 
   it('parses the OTel env convention: k1=v1,k2=v2', () => {
-    expect(parseOtelHeaders('x-api-key=secret,x-team=eu')).toEqual({
+    const raw = 'x-api-key=secret,x-team=eu'; // gitleaks:allow
+    expect(parseOtelHeaders(raw)).toEqual({
       'x-api-key': 'secret',
       'x-team': 'eu',
     });
   });
 
   it('trims whitespace around keys and values', () => {
-    expect(parseOtelHeaders(' x-api-key = hunter2 , x-extra = v ')).toEqual({
+    const raw = ' x-api-key = hunter2 , x-extra = v '; // gitleaks:allow
+    expect(parseOtelHeaders(raw)).toEqual({
       'x-api-key': 'hunter2',
       'x-extra': 'v',
     });
