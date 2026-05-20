@@ -33,6 +33,7 @@ on:
 permissions:
   contents: read
   security-events: write
+  actions: read
 
 jobs:
   analyze:
@@ -66,7 +67,3 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: '/language:${{ matrix.language }}'
-          # SARIF upload requires GitHub Advanced Security (GHAS), which is
-          # not enabled on this private repo. Skip upload so the analysis
-          # result (findings visible in logs) does not block CI.
-          upload: false
