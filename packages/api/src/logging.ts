@@ -100,7 +100,7 @@ export function redactKeys(
 ): (fields: LogFields) => LogFields {
   const lowered = new Set(keys.map((k) => k.toLowerCase()));
   return (fields) => {
-    const out: LogFields = {};
+    const out: LogFields = Object.create(null) as LogFields;
     for (const [k, v] of Object.entries(fields)) {
       out[k] = lowered.has(k.toLowerCase()) ? REDACTED_PLACEHOLDER : v;
     }

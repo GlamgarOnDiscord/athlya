@@ -90,7 +90,7 @@ jobs:
         # gating production releases on them produces noisy false alarms.
         #
         # To temporarily tolerate an unpatched low-severity advisory that
-        # only affects devDependencies, see .github/README.md.
+        # only affects devDependencies, see .github/READ_ME.md.
         run: pnpm audit --prod --audit-level=high
 
   socket-security:

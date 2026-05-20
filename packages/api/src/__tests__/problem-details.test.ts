@@ -190,7 +190,7 @@ describe('toProblemResponse — generic Error fallback', () => {
   });
 
   it('does NOT leak err.message into the response body (secret-leak guard)', () => {
-    const secret = 'db password is hunter2';
+    const secret = 'db password is hunter2'; // gitleaks:allow
     const err = new Error(secret);
     const ctx = fakeCtx('trace-leak');
 

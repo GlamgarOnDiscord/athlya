@@ -1,0 +1,35 @@
+# Gitleaks configuration for the Athlya monorepo.
+#
+# `useDefault = true` keeps the full built-in rule set active while
+# allowing us to add file-level allowlists for known false positives.
+#
+# Allowlisted files are either:
+#   - Test fixtures that use secret-looking strings (fake keys, placeholder
+#     PEM blocks, opaque tokens) to exercise error handling or parsing logic.
+#   - Example / runbook files that show placeholder values prefixed with
+#     "TODO:" — never real credentials.
+
+[extend]
+useDefault = true
+
+[allowlist]
+  description = "Test fixtures and example files with placeholder secrets"
+  paths = [
+    # packages/api — DB-credential leak guard tests
+    '''problem-details\.test\.ts''',
+    '''worker\.test\.ts''',
+    # packages/api — OTel header parsing tests (fake x-api-key values)
+    '''otel\.test\.ts''',
+    # packages/api — JWT rotation route integration tests (fake PEM blobs)
+    '''jwt-rotate-routes\.test\.ts''',
+    # packages/api — Sentry envelope tests (fake DSN / sentry_key hex string)
+    '''sentry\.test\.ts''',
+    # packages/api — example dev vars (TODO-prefixed placeholder PEM keys)
+    '''\.dev\.vars\.example''',
+    # packages/db — idempotency tests (UUID used as an idempotency key)
+    '''idempotency\.test\.ts''',
+    # packages/reservations — check-in tests (opaque JWT-shaped stub token)
+    '''checkin\.test\.ts''',
+    # docs — runbook showing placeholder PEM blocks for the rotation procedure
+    '''rotate-jwt\.md''',
+  ]
