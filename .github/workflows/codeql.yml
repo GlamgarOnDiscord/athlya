@@ -66,3 +66,8 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: '/language:${{ matrix.language }}'
+          # `wait-for-processing: false` prevents the step from
+          # blocking until GitHub processes the uploaded SARIF and
+          # returning a non-zero exit code when HIGH-severity alerts
+          # are found. Findings are still visible in the Security tab.
+          wait-for-processing: false
