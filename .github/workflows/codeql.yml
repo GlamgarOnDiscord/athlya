@@ -50,7 +50,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           # `security-extended` adds queries for prototype
@@ -63,11 +63,6 @@ jobs:
       # we'd add `autobuild` here.
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@v3
         with:
           category: '/language:${{ matrix.language }}'
-          # Skip SARIF upload: diagnose whether failure is in the
-          # analysis phase or the upload/processing phase.
-          # TODO: restore upload once root cause is confirmed.
-          upload: false
-          wait-for-processing: false
