@@ -266,13 +266,7 @@ function buildRepo(client: Sql): DeletionRepo {
             `;
     },
     async anonymizeAuditRows(userId) {
-      // Three separate client.unsafe() calls rather than client.begin()
-      // + tx.unsafe(). postgres-js DDL inside client.begin() exhibits a
-      // race where ALTER TABLE DISABLE TRIGGER does not take effect for
-      // the subsequent DML within the same transaction object, causing
-      // the UPDATE to be rejected by the still-active trigger and rolled
-      // back silently. The three-call pattern matches truncateAll() above
-      // and is safe inside a dedicated Testcontainers container.
+      // postgres-js DDL inside client.begin() races — DISABLE TRIGGER doesn't take effect for subsequent DML in the same tx object.
       await client.unsafe('ALTER TABLE "audit_log" DISABLE TRIGGER audit_log_forbid_update');
       const updated = await client.unsafe<{ id: string }[]>(
         `UPDATE audit_log
@@ -593,7 +587,7 @@ afterAll(async () => {
 /*  Property 4 — RGPD cascade (full deletion)                          */
 /* ================================================================= */
 
-describe('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', () => {
+describe.skipIf(!dockerReady)('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', () => {
   it(
     'cascade-deletes every FK-joined row, schedules the 30-day anonymisation job, ' +
       'leaves other users untouched, and anonymises audit rows idempotently at J+30',

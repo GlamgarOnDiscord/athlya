@@ -1,15 +1,15 @@
 # Vitest — Framework Audit
 
-_Last updated: 2026-05-14_
+_Last updated: 2026-05-23_
 
 ## Version Status
 
-|                        | Value                                     |
-| ---------------------- | ----------------------------------------- |
-| **Used**               | ^3.2.4                                    |
-| **Latest stable**      | **4.1.0** (March 2026)                    |
-| **Gap**                | Major version behind — plan upgrade       |
-| **@fast-check/vitest** | ^0.3.0 → verify 4.x compat before upgrade |
+|                        | Value                  |
+| ---------------------- | ---------------------- |
+| **Used**               | ^4.0.0                 |
+| **Latest stable**      | 4.1.0 (March 2026)     |
+| **Gap**                | Current                |
+| **@fast-check/vitest** | ^0.4.1 (Vitest 4 compat confirmed) |
 
 ---
 
@@ -168,7 +168,7 @@ This runs tests in the actual Workers runtime (V8 isolates), not Node — catche
 - [x] React component tests with testing-library
 - [x] jsdom for browser-like environment
 - [x] `globals: false` (explicit imports)
-- [ ] **Upgrade Vitest 3.x → 4.x** (verify @fast-check/vitest compat first)
+- [x] **Upgrade Vitest 3.x → 4.x** (done SP16 — @fast-check/vitest@0.4.1 confirmed compat)
 - [ ] Add shared `vitest.workspace.ts` for consistent settings
 - [ ] Add coverage thresholds for CI
 - [ ] Evaluate `@cloudflare/vitest-pool-workers` for packages/api

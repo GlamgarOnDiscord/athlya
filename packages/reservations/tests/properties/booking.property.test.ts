@@ -751,19 +751,7 @@ const RUN_OPTS = { numRuns: 20, seed: 0xc0ffee01 } as const;
 // Property — only registered when Docker is reachable. The
 // describe.skipIf matches the RLS suite's pattern exactly.
 //
-// SKIP — confirmedCount = 0 after Promise.allSettled even for the
-// degenerate (capacity=1, N=1) case against a Testcontainers Postgres
-// 17 container running migrations 0000+0001 only. booking-idempotence
-// passes on the same container, ruling out container-startup issues.
-// Leading hypothesis: withTenant SET LOCAL app.* runs inside a
-// Drizzle transaction started by tenantClient (BYPASSRLS role), but
-// the SET LOCAL variables fall out of scope in a way that makes
-// findClass return null before the INSERT fires. Next step: add
-// console.log inside buildBookingRepo.findClass + insertReservation
-// to confirm whether findClass returns null. Tracked in SP16.6.
-// In-process coverage (src/__tests__/book.test.ts, 13 tests) stays
-// green — this test targets the seam between Drizzle, withTenant, and
-// the real Postgres schema.
+// SKIP (SP16.6) — confirmedCount stays 0; hypothesis: withTenant SET LOCAL falls out of scope inside the BYPASSRLS tenantClient transaction, causing findClass to return null.
 // ---------------------------------------------------------------------
 
 describe.skip('bookClass — Property 1 (capacity invariant)', () => {
