@@ -587,270 +587,273 @@ afterAll(async () => {
 /*  Property 4 — RGPD cascade (full deletion)                          */
 /* ================================================================= */
 
-describe.skipIf(!dockerReady)('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', () => {
-  it(
-    'cascade-deletes every FK-joined row, schedules the 30-day anonymisation job, ' +
-      'leaves other users untouched, and anonymises audit rows idempotently at J+30',
-    async () => {
-      if (!rootClient) {
-        throw new Error('rootClient not initialised');
-      }
-      const client = rootClient;
+describe.skipIf(!dockerReady)(
+  'handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)',
+  () => {
+    it(
+      'cascade-deletes every FK-joined row, schedules the 30-day anonymisation job, ' +
+        'leaves other users untouched, and anonymises audit rows idempotently at J+30',
+      async () => {
+        if (!rootClient) {
+          throw new Error('rootClient not initialised');
+        }
+        const client = rootClient;
 
-      // Arrange — clean slate + seed Alice & Bob's rows.
-      await truncateAll(client);
-      const { aliceAuditIds, bobAuditIds } = await seedScenario(client);
+        // Arrange — clean slate + seed Alice & Bob's rows.
+        await truncateAll(client);
+        const { aliceAuditIds, bobAuditIds } = await seedScenario(client);
 
-      const repo = buildRepo(client);
-      const { avatars, store: avatarStore } = buildAvatars({
-        [ALICE_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
-        [BOB_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
-      });
-      const { scheduler, jobs } = buildScheduler();
+        const repo = buildRepo(client);
+        const { avatars, store: avatarStore } = buildAvatars({
+          [ALICE_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
+          [BOB_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
+        });
+        const { scheduler, jobs } = buildScheduler();
 
-      // Act — run the cascade at TIME_0.
-      const result = await handleUserDeleted(buildEvent(ALICE_ID), {
-        repo,
-        avatars,
-        scheduler,
-        clock: buildClock(TIME_0_MS),
-      });
+        // Act — run the cascade at TIME_0.
+        const result = await handleUserDeleted(buildEvent(ALICE_ID), {
+          repo,
+          avatars,
+          scheduler,
+          clock: buildClock(TIME_0_MS),
+        });
 
-      /* --- Result contract --------------------------------- */
-      expect(result.kind).toBe('ok');
-      expect(result.counts).toEqual({
-        reservations: 3,
-        sessions: 2,
-        pushTokens: 4,
-        // Anonymisation happens 30 days later — audit rows
-        // are NOT touched during the cascade step itself.
-        auditAnonymized: 0,
-      });
-      const expectedDueAt = new Date(TIME_0_MS + THIRTY_DAYS_MS).toISOString();
-      expect(result.scheduledAnonymizationAt).toBe(expectedDueAt);
+        /* --- Result contract --------------------------------- */
+        expect(result.kind).toBe('ok');
+        expect(result.counts).toEqual({
+          reservations: 3,
+          sessions: 2,
+          pushTokens: 4,
+          // Anonymisation happens 30 days later — audit rows
+          // are NOT touched during the cascade step itself.
+          auditAnonymized: 0,
+        });
+        const expectedDueAt = new Date(TIME_0_MS + THIRTY_DAYS_MS).toISOString();
+        expect(result.scheduledAnonymizationAt).toBe(expectedDueAt);
 
-      /* --- SQL-side: Alice is gone ------------------------- */
-      const aliceReservations = await client<{ id: string }[]>`
+        /* --- SQL-side: Alice is gone ------------------------- */
+        const aliceReservations = await client<{ id: string }[]>`
                     SELECT id FROM reservations WHERE user_id = ${ALICE_ID}
                 `;
-      const aliceSessions = await client<{ id: string }[]>`
+        const aliceSessions = await client<{ id: string }[]>`
                     SELECT id FROM workout_sessions WHERE user_id = ${ALICE_ID}
                 `;
-      const alicePushTokens = await client<{ id: string }[]>`
+        const alicePushTokens = await client<{ id: string }[]>`
                     SELECT id FROM push_tokens WHERE user_id = ${ALICE_ID}
                 `;
-      expect(aliceReservations).toHaveLength(0);
-      expect(aliceSessions).toHaveLength(0);
-      expect(alicePushTokens).toHaveLength(0);
+        expect(aliceReservations).toHaveLength(0);
+        expect(aliceSessions).toHaveLength(0);
+        expect(alicePushTokens).toHaveLength(0);
 
-      /* --- users tombstone was stamped --------------------- */
-      const aliceRow = await client<{ deleted_at: Date | null }[]>`
+        /* --- users tombstone was stamped --------------------- */
+        const aliceRow = await client<{ deleted_at: Date | null }[]>`
                     SELECT deleted_at FROM users WHERE id = ${ALICE_ID}
                 `;
-      expect(aliceRow).toHaveLength(1);
-      expect(aliceRow[0]!.deleted_at).toBeInstanceOf(Date);
-      expect(aliceRow[0]!.deleted_at!.toISOString()).toBe(new Date(TIME_0_MS).toISOString());
+        expect(aliceRow).toHaveLength(1);
+        expect(aliceRow[0]!.deleted_at).toBeInstanceOf(Date);
+        expect(aliceRow[0]!.deleted_at!.toISOString()).toBe(new Date(TIME_0_MS).toISOString());
 
-      /* --- Avatar was purged from the R2 fake -------------- */
-      expect(avatarStore.has(ALICE_ID)).toBe(false);
-      // Bob's avatar is untouched.
-      expect(avatarStore.has(BOB_ID)).toBe(true);
+        /* --- Avatar was purged from the R2 fake -------------- */
+        expect(avatarStore.has(ALICE_ID)).toBe(false);
+        // Bob's avatar is untouched.
+        expect(avatarStore.has(BOB_ID)).toBe(true);
 
-      /* --- Scheduler recorded exactly one job -------------- */
-      expect(jobs).toHaveLength(1);
-      expect(jobs[0]!.userId).toBe(ALICE_ID);
-      expect(jobs[0]!.dueAt.toISOString()).toBe(expectedDueAt);
+        /* --- Scheduler recorded exactly one job -------------- */
+        expect(jobs).toHaveLength(1);
+        expect(jobs[0]!.userId).toBe(ALICE_ID);
+        expect(jobs[0]!.dueAt.toISOString()).toBe(expectedDueAt);
 
-      /* --- Audit rows still exist, not yet anonymised ------ */
-      const aliceAuditBefore = await client<
-        { actor_id: string | null; metadata: Record<string, unknown> }[]
-      >`
+        /* --- Audit rows still exist, not yet anonymised ------ */
+        const aliceAuditBefore = await client<
+          { actor_id: string | null; metadata: Record<string, unknown> }[]
+        >`
                     SELECT actor_id::text, metadata
                       FROM audit_log
                      WHERE id::text = ANY(${aliceAuditIds})
                      ORDER BY id
                 `;
-      expect(aliceAuditBefore).toHaveLength(aliceAuditIds.length);
-      for (const row of aliceAuditBefore) {
-        expect(row.actor_id).toBe(ALICE_ID);
-        const metadata =
-          typeof row.metadata === 'string'
-            ? (JSON.parse(row.metadata) as Record<string, unknown>)
-            : row.metadata;
-        expect(metadata).toHaveProperty('email');
-      }
+        expect(aliceAuditBefore).toHaveLength(aliceAuditIds.length);
+        for (const row of aliceAuditBefore) {
+          expect(row.actor_id).toBe(ALICE_ID);
+          const metadata =
+            typeof row.metadata === 'string'
+              ? (JSON.parse(row.metadata) as Record<string, unknown>)
+              : row.metadata;
+          expect(metadata).toHaveProperty('email');
+        }
 
-      /* --- Bob is UNTOUCHED across every table ------------- */
-      const bobReservations = await client<{ id: string }[]>`
+        /* --- Bob is UNTOUCHED across every table ------------- */
+        const bobReservations = await client<{ id: string }[]>`
                     SELECT id FROM reservations WHERE user_id = ${BOB_ID}
                 `;
-      const bobSessions = await client<{ id: string }[]>`
+        const bobSessions = await client<{ id: string }[]>`
                     SELECT id FROM workout_sessions WHERE user_id = ${BOB_ID}
                 `;
-      const bobPushTokens = await client<{ id: string }[]>`
+        const bobPushTokens = await client<{ id: string }[]>`
                     SELECT id FROM push_tokens WHERE user_id = ${BOB_ID}
                 `;
-      const bobRow = await client<{ deleted_at: Date | null }[]>`
+        const bobRow = await client<{ deleted_at: Date | null }[]>`
                     SELECT deleted_at FROM users WHERE id = ${BOB_ID}
                 `;
-      expect(bobReservations).toHaveLength(1);
-      expect(bobSessions).toHaveLength(1);
-      expect(bobPushTokens).toHaveLength(1);
-      expect(bobRow[0]!.deleted_at).toBeNull();
+        expect(bobReservations).toHaveLength(1);
+        expect(bobSessions).toHaveLength(1);
+        expect(bobPushTokens).toHaveLength(1);
+        expect(bobRow[0]!.deleted_at).toBeNull();
 
-      /* ============================================== */
-      /*  J + 30 days — QStash fires the anonymisation   */
-      /* ============================================== */
+        /* ============================================== */
+        /*  J + 30 days — QStash fires the anonymisation   */
+        /* ============================================== */
 
-      // Simulate the 30-day wait: we don't need to advance
-      // any wall-clock since `anonymizeAuditLog` does not
-      // read the clock — it just runs the SQL UPDATE.
-      const firstAnon = await anonymizeAuditLog(ALICE_ID, {
-        repo,
-      });
-      expect(firstAnon.kind).toBe('ok');
-      expect(firstAnon.userId).toBe(ALICE_ID);
-      // Should anonymise exactly the 5 audit rows we seeded
-      // for Alice.
-      expect(firstAnon.anonymizedRows).toBe(aliceAuditIds.length);
+        // Simulate the 30-day wait: we don't need to advance
+        // any wall-clock since `anonymizeAuditLog` does not
+        // read the clock — it just runs the SQL UPDATE.
+        const firstAnon = await anonymizeAuditLog(ALICE_ID, {
+          repo,
+        });
+        expect(firstAnon.kind).toBe('ok');
+        expect(firstAnon.userId).toBe(ALICE_ID);
+        // Should anonymise exactly the 5 audit rows we seeded
+        // for Alice.
+        expect(firstAnon.anonymizedRows).toBe(aliceAuditIds.length);
 
-      const aliceAuditAfter = await client<
-        { actor_id: string | null; metadata: Record<string, unknown> }[]
-      >`
+        const aliceAuditAfter = await client<
+          { actor_id: string | null; metadata: Record<string, unknown> }[]
+        >`
                     SELECT actor_id::text, metadata
                       FROM audit_log
                      WHERE id::text = ANY(${aliceAuditIds})
                      ORDER BY id
                 `;
-      expect(aliceAuditAfter).toHaveLength(aliceAuditIds.length);
-      for (const row of aliceAuditAfter) {
-        // Req 5.3: actor_id scrubbed to NULL.
-        expect(row.actor_id).toBeNull();
-        // PII keys stripped…
-        const metaAfter =
-          typeof row.metadata === 'string'
-            ? (JSON.parse(row.metadata) as Record<string, unknown>)
-            : row.metadata;
-        expect(metaAfter).not.toHaveProperty('email');
-        expect(metaAfter).not.toHaveProperty('displayName');
-        expect(metaAfter).not.toHaveProperty('ip');
-        expect(metaAfter).not.toHaveProperty('userAgent');
-      }
-      // …and non-PII keys survive on the rows that carried
-      // them. aliceAuditAfter is ordered by id, mirroring
-      // the INSERT order, so rows 0,1,2 retain `classId`.
-      const parseMeta = (v: Record<string, unknown>): Record<string, unknown> =>
-        typeof v === 'string' ? (JSON.parse(v) as Record<string, unknown>) : v;
-      expect(parseMeta(aliceAuditAfter[0]!.metadata)).toHaveProperty('classId');
-      expect(parseMeta(aliceAuditAfter[1]!.metadata)).toHaveProperty('classId');
-      expect(parseMeta(aliceAuditAfter[2]!.metadata)).toHaveProperty('classId');
+        expect(aliceAuditAfter).toHaveLength(aliceAuditIds.length);
+        for (const row of aliceAuditAfter) {
+          // Req 5.3: actor_id scrubbed to NULL.
+          expect(row.actor_id).toBeNull();
+          // PII keys stripped…
+          const metaAfter =
+            typeof row.metadata === 'string'
+              ? (JSON.parse(row.metadata) as Record<string, unknown>)
+              : row.metadata;
+          expect(metaAfter).not.toHaveProperty('email');
+          expect(metaAfter).not.toHaveProperty('displayName');
+          expect(metaAfter).not.toHaveProperty('ip');
+          expect(metaAfter).not.toHaveProperty('userAgent');
+        }
+        // …and non-PII keys survive on the rows that carried
+        // them. aliceAuditAfter is ordered by id, mirroring
+        // the INSERT order, so rows 0,1,2 retain `classId`.
+        const parseMeta = (v: Record<string, unknown>): Record<string, unknown> =>
+          typeof v === 'string' ? (JSON.parse(v) as Record<string, unknown>) : v;
+        expect(parseMeta(aliceAuditAfter[0]!.metadata)).toHaveProperty('classId');
+        expect(parseMeta(aliceAuditAfter[1]!.metadata)).toHaveProperty('classId');
+        expect(parseMeta(aliceAuditAfter[2]!.metadata)).toHaveProperty('classId');
 
-      /* --- Bob's audit rows are STILL intact --------------- */
-      const bobAuditAfter = await client<
-        { actor_id: string | null; metadata: Record<string, unknown> }[]
-      >`
+        /* --- Bob's audit rows are STILL intact --------------- */
+        const bobAuditAfter = await client<
+          { actor_id: string | null; metadata: Record<string, unknown> }[]
+        >`
                     SELECT actor_id::text, metadata
                       FROM audit_log
                      WHERE id::text = ANY(${bobAuditIds})
                      ORDER BY id
                 `;
-      expect(bobAuditAfter).toHaveLength(bobAuditIds.length);
-      for (const row of bobAuditAfter) {
-        expect(row.actor_id).toBe(BOB_ID);
-        const metaBob =
-          typeof row.metadata === 'string'
-            ? (JSON.parse(row.metadata) as Record<string, unknown>)
-            : row.metadata;
-        expect(metaBob).toHaveProperty('email');
-        expect(metaBob).toHaveProperty('displayName');
-      }
+        expect(bobAuditAfter).toHaveLength(bobAuditIds.length);
+        for (const row of bobAuditAfter) {
+          expect(row.actor_id).toBe(BOB_ID);
+          const metaBob =
+            typeof row.metadata === 'string'
+              ? (JSON.parse(row.metadata) as Record<string, unknown>)
+              : row.metadata;
+          expect(metaBob).toHaveProperty('email');
+          expect(metaBob).toHaveProperty('displayName');
+        }
 
-      /* --- Idempotency: 2nd call returns 0 ---------------- */
-      const secondAnon = await anonymizeAuditLog(ALICE_ID, {
-        repo,
-      });
-      expect(secondAnon.anonymizedRows).toBe(0);
+        /* --- Idempotency: 2nd call returns 0 ---------------- */
+        const secondAnon = await anonymizeAuditLog(ALICE_ID, {
+          repo,
+        });
+        expect(secondAnon.anonymizedRows).toBe(0);
 
-      /* --- Audit trigger is ACTIVE again -----------------
-       * Sanity check: the immutability invariant (Req 22.2)
-       * is restored after the anonymisation path returns.
-       * Attempting a plain UPDATE against audit_log must
-       * raise "audit_log is append-only".
-       */
-      const triggerErr = await client`
+        /* --- Audit trigger is ACTIVE again -----------------
+         * Sanity check: the immutability invariant (Req 22.2)
+         * is restored after the anonymisation path returns.
+         * Attempting a plain UPDATE against audit_log must
+         * raise "audit_log is append-only".
+         */
+        const triggerErr = await client`
                     UPDATE audit_log
                        SET metadata = metadata || '{"tampered": true}'::jsonb
                      WHERE id::text = ${bobAuditIds[0]!}
                 `.catch((e: unknown) => e);
-      expect(triggerErr).toBeInstanceOf(Error);
-      expect((triggerErr as Error).message).toMatch(/append-only/i);
-    },
-    180_000,
-  );
+        expect(triggerErr).toBeInstanceOf(Error);
+        expect((triggerErr as Error).message).toMatch(/append-only/i);
+      },
+      180_000,
+    );
 
-  it(
-    'scheduler failure rethrows so the event bus redrives — ' +
-      'but the SQL cascade has already completed (idempotent retry)',
-    async () => {
-      if (!rootClient) {
-        throw new Error('rootClient not initialised');
-      }
-      const client = rootClient;
+    it(
+      'scheduler failure rethrows so the event bus redrives — ' +
+        'but the SQL cascade has already completed (idempotent retry)',
+      async () => {
+        if (!rootClient) {
+          throw new Error('rootClient not initialised');
+        }
+        const client = rootClient;
 
-      await truncateAll(client);
-      await seedScenario(client);
+        await truncateAll(client);
+        await seedScenario(client);
 
-      const repo = buildRepo(client);
-      const { avatars, store: avatarStore } = buildAvatars({
-        [ALICE_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
-      });
-      // Scheduler ALWAYS fails — this is the failure mode
-      // the `cascade.ts` JSDoc calls out as "rethrows so
-      // the event bus redrives".
-      const scheduler: Scheduler = {
-        scheduleAnonymization() {
-          return Promise.reject(new Error('QStash unreachable'));
-        },
-      };
+        const repo = buildRepo(client);
+        const { avatars, store: avatarStore } = buildAvatars({
+          [ALICE_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
+        });
+        // Scheduler ALWAYS fails — this is the failure mode
+        // the `cascade.ts` JSDoc calls out as "rethrows so
+        // the event bus redrives".
+        const scheduler: Scheduler = {
+          scheduleAnonymization() {
+            return Promise.reject(new Error('QStash unreachable'));
+          },
+        };
 
-      const err = await handleUserDeleted(buildEvent(ALICE_ID), {
-        repo,
-        avatars,
-        scheduler,
-        clock: buildClock(TIME_0_MS),
-      }).catch((e: unknown) => e);
+        const err = await handleUserDeleted(buildEvent(ALICE_ID), {
+          repo,
+          avatars,
+          scheduler,
+          clock: buildClock(TIME_0_MS),
+        }).catch((e: unknown) => e);
 
-      expect(err).toBeInstanceOf(Error);
-      expect((err as Error).message).toBe('QStash unreachable');
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toBe('QStash unreachable');
 
-      // SQL cascade completed BEFORE the scheduler call —
-      // this is the invariant the redelivery contract rests
-      // on (re-running the cascade finds 0 rows to delete
-      // and is a no-op for the downstream tables).
-      const aliceReservations = await client<{ id: string }[]>`
+        // SQL cascade completed BEFORE the scheduler call —
+        // this is the invariant the redelivery contract rests
+        // on (re-running the cascade finds 0 rows to delete
+        // and is a no-op for the downstream tables).
+        const aliceReservations = await client<{ id: string }[]>`
                     SELECT id FROM reservations WHERE user_id = ${ALICE_ID}
                 `;
-      const aliceSessions = await client<{ id: string }[]>`
+        const aliceSessions = await client<{ id: string }[]>`
                     SELECT id FROM workout_sessions WHERE user_id = ${ALICE_ID}
                 `;
-      const alicePushTokens = await client<{ id: string }[]>`
+        const alicePushTokens = await client<{ id: string }[]>`
                     SELECT id FROM push_tokens WHERE user_id = ${ALICE_ID}
                 `;
-      const aliceRow = await client<{ deleted_at: Date | null }[]>`
+        const aliceRow = await client<{ deleted_at: Date | null }[]>`
                     SELECT deleted_at FROM users WHERE id = ${ALICE_ID}
                 `;
-      expect(aliceReservations).toHaveLength(0);
-      expect(aliceSessions).toHaveLength(0);
-      expect(alicePushTokens).toHaveLength(0);
-      expect(aliceRow[0]!.deleted_at).toBeInstanceOf(Date);
+        expect(aliceReservations).toHaveLength(0);
+        expect(aliceSessions).toHaveLength(0);
+        expect(alicePushTokens).toHaveLength(0);
+        expect(aliceRow[0]!.deleted_at).toBeInstanceOf(Date);
 
-      // Avatar is purged too — it sits BEFORE the scheduler
-      // call in the documented cascade order.
-      expect(avatarStore.has(ALICE_ID)).toBe(false);
-    },
-    180_000,
-  );
-});
+        // Avatar is purged too — it sits BEFORE the scheduler
+        // call in the documented cascade order.
+        expect(avatarStore.has(ALICE_ID)).toBe(false);
+      },
+      180_000,
+    );
+  },
+);
 
 /* ================================================================= */
 /*  Always-registered infra probe                                      */
