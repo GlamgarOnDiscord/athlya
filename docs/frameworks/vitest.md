@@ -4,11 +4,11 @@ _Last updated: 2026-05-23_
 
 ## Version Status
 
-|                        | Value                  |
-| ---------------------- | ---------------------- |
-| **Used**               | ^4.0.0                 |
-| **Latest stable**      | 4.1.0 (March 2026)     |
-| **Gap**                | Current                |
+|                        | Value                              |
+| ---------------------- | ---------------------------------- |
+| **Used**               | ^4.0.0                             |
+| **Latest stable**      | 4.1.0 (March 2026)                 |
+| **Gap**                | Current                            |
 | **@fast-check/vitest** | ^0.4.1 (Vitest 4 compat confirmed) |
 
 ---
