@@ -751,18 +751,19 @@ const RUN_OPTS = { numRuns: 20, seed: 0xc0ffee01 } as const;
 // Property — only registered when Docker is reachable. The
 // describe.skipIf matches the RLS suite's pattern exactly.
 //
-// **TEMPORARY SKIP** (chore/deps-major-updates revert) — both samples
-// in this describe block fail under CI with `confirmedCount = 0` even
-// for the degenerate `capacity=1, N=1` case, while the
-// `booking-idempotence.property.test.ts` suite right next to it passes
-// against the same Postgres container with the same migration set.
-// The fail looks like every `bookClass` call returns without inserting
-// a row into `reservations`, but the in-process control-flow tests
-// (`src/__tests__/book.test.ts`) are green and the seeded
-// `(class_id, user_id)` UNIQUE index is intact. Tracked separately —
-// this revert PR is intentionally narrow (vitest 3 + lighthouse 12 +
-// react-hooks 5 + globals 16 majors) and should not absorb a
-// schema-vs-test-fixture investigation.
+// SKIP — confirmedCount = 0 after Promise.allSettled even for the
+// degenerate (capacity=1, N=1) case against a Testcontainers Postgres
+// 17 container running migrations 0000+0001 only. booking-idempotence
+// passes on the same container, ruling out container-startup issues.
+// Leading hypothesis: withTenant SET LOCAL app.* runs inside a
+// Drizzle transaction started by tenantClient (BYPASSRLS role), but
+// the SET LOCAL variables fall out of scope in a way that makes
+// findClass return null before the INSERT fires. Next step: add
+// console.log inside buildBookingRepo.findClass + insertReservation
+// to confirm whether findClass returns null. Tracked in SP16.6.
+// In-process coverage (src/__tests__/book.test.ts, 13 tests) stays
+// green — this test targets the seam between Drizzle, withTenant, and
+// the real Postgres schema.
 // ---------------------------------------------------------------------
 
 describe.skip('bookClass — Property 1 (capacity invariant)', () => {

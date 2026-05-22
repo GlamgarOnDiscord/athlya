@@ -266,41 +266,28 @@ function buildRepo(client: Sql): DeletionRepo {
             `;
     },
     async anonymizeAuditRows(userId) {
-      // The migration-provided SECURITY DEFINER function
-      // `anonymize_user_audit(uuid)` from 0003 calls
-      // `metadata - 'email' - 'displayName' - 'ip' - 'userAgent'`
-      // unconditionally. Postgres' jsonb minus operator throws
-      // SQLSTATE 22023 ("cannot delete from scalar") when any row
-      // in the table holds a non-object metadata value, even rows
-      // that don't match the WHERE clause — the WHERE itself uses
-      // `metadata ? 'subjectUserId'` which also blows up on scalars.
-      // Production audit_log rows are always objects (the API only
-      // ever inserts JSON objects), but a robust integration test
-      // should not depend on every other test in the file leaving
-      // perfectly-shaped data behind. We therefore drive the
-      // anonymisation through a temporary `DISABLE TRIGGER` window
-      // and a scalar-guarded UPDATE, matching the shape the cron
-      // worker takes in production via the
-      // `anonymizeAuditViaTx` TypeScript primitive
-      // (`packages/api/src/maintenance/anonymize-audit-tx.ts`).
-      const rows = await client.begin(async (tx) => {
-        await tx.unsafe('ALTER TABLE "audit_log" DISABLE TRIGGER audit_log_forbid_update');
-        const updated = await tx.unsafe<{ id: string }[]>(
-          `UPDATE audit_log
-              SET actor_id = NULL,
-                  metadata = CASE
-                    WHEN jsonb_typeof(metadata) = 'object'
-                    THEN metadata - 'email' - 'displayName' - 'ip' - 'userAgent'
-                    ELSE metadata
-                  END
-            WHERE actor_id = $1
-            RETURNING id`,
-          [userId],
-        );
-        await tx.unsafe('ALTER TABLE "audit_log" ENABLE TRIGGER audit_log_forbid_update');
-        return updated;
-      });
-      return rows.length;
+      // Three separate client.unsafe() calls rather than client.begin()
+      // + tx.unsafe(). postgres-js DDL inside client.begin() exhibits a
+      // race where ALTER TABLE DISABLE TRIGGER does not take effect for
+      // the subsequent DML within the same transaction object, causing
+      // the UPDATE to be rejected by the still-active trigger and rolled
+      // back silently. The three-call pattern matches truncateAll() above
+      // and is safe inside a dedicated Testcontainers container.
+      await client.unsafe('ALTER TABLE "audit_log" DISABLE TRIGGER audit_log_forbid_update');
+      const updated = await client.unsafe<{ id: string }[]>(
+        `UPDATE audit_log
+            SET actor_id = NULL,
+                metadata = CASE
+                  WHEN jsonb_typeof(metadata) = 'object'
+                  THEN metadata - 'email' - 'displayName' - 'ip' - 'userAgent'
+                  ELSE metadata
+                END
+          WHERE actor_id = $1
+          RETURNING id`,
+        [userId],
+      );
+      await client.unsafe('ALTER TABLE "audit_log" ENABLE TRIGGER audit_log_forbid_update');
+      return updated.length;
     },
   };
 }
@@ -606,20 +593,7 @@ afterAll(async () => {
 /*  Property 4 — RGPD cascade (full deletion)                          */
 /* ================================================================= */
 
-// **TEMPORARY SKIP** (chore/deps-major-updates revert) — the
-// anonymisation step's UPDATE silently produces zero matched rows
-// under CI, even with the trigger temporarily disabled and even
-// without 0003's trigger rewrite in scope. This appears to be a
-// postgres-js + transactional `ALTER TABLE … DISABLE TRIGGER` race
-// specific to the testcontainers Postgres image, but the in-process
-// unit suite (src/__tests__/cascade.test.ts, 9 green tests) covers
-// the TypeScript control-flow of `handleUserDeleted` /
-// `anonymizeAuditLog`, and the SQL-level guarantees are verified
-// by the pgTAP suite at
-// `packages/db/tests/rls/audit_anonymization.sql`. This integration
-// test was probing the seam between the two; tracked separately so
-// the revert PR does not absorb the investigation.
-describe.skip('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', () => {
+describe('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', () => {
   it(
     'cascade-deletes every FK-joined row, schedules the 30-day anonymisation job, ' +
       'leaves other users untouched, and anonymises audit rows idempotently at J+30',
