@@ -113,7 +113,7 @@ Generate random timestamps and verify the window correctly expires old entries.
 - [x] Property tests for RLS (critical security invariant)
 - [x] Property tests for booking (critical business invariant)
 - [x] @fast-check/vitest integration for Vitest runner
-- [ ] **Evaluate upgrade to fast-check 4.x** (check @fast-check/vitest compat)
+- [ ] **Evaluate upgrade to fast-check 4.x** (check @fast-check/vitest compat — note: @fast-check/vitest@0.4.1 is now on Vitest 4, verify fast-check itself separately)
 - [ ] Add property tests for auth (JWT round-trip, rate-limit monotonicity)
 - [ ] Add property tests for rate limiter (sliding window correctness)
 - [ ] Add property tests for billing (idempotency under retries)

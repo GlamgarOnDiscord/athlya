@@ -1,6 +1,6 @@
 # ESLint Plugins — Framework Audit
 
-_Last updated: 2026-05-14_
+_Last updated: 2026-05-23_
 
 ## Versions
 
@@ -11,9 +11,9 @@ _Last updated: 2026-05-14_
 | eslint-plugin-import              | ^2.32.0 | 2.32.0     | Import ordering + no duplicates         |
 | eslint-plugin-unused-imports      | ^4.2.0  | 4.2.0      | Dead import removal                     |
 | eslint-plugin-react               | ^7.37.5 | 7.37.5     | React-specific rules                    |
-| eslint-plugin-react-hooks         | ^5.2.0  | 5.2.0      | Hooks rules (exhaustive deps)           |
+| eslint-plugin-react-hooks         | ^7.0.0  | 7.0.0      | Hooks rules (exhaustive deps)           |
 | eslint-config-prettier            | ^10.1.8 | 10.1.8     | Disable rules conflicting with Prettier |
-| globals                           | ^16.5.0 | 16.5.0     | Environment global declarations         |
+| globals                           | ^17.0.0 | 17.0.0     | Environment global declarations         |
 | eslint-import-resolver-typescript | ^4.4.4  | 4.4.4      | TS path resolution for import plugin    |
 
 ---
@@ -28,7 +28,7 @@ When upgrading ESLint to v10 (see `eslint.md`), verify plugin compatibility:
 | eslint-plugin-import ^2.32        | Yes (peer allows v10) | No change               |
 | eslint-plugin-unused-imports ^4.2 | Yes                   | No change               |
 | eslint-plugin-react ^7.37         | Yes                   | No change               |
-| eslint-plugin-react-hooks ^5.2    | Yes                   | No change               |
+| eslint-plugin-react-hooks ^7.0    | Yes                   | No change               |
 | eslint-config-prettier ^10.1      | Yes                   | No change               |
 
 **Upgrade `typescript-eslint` now** (independent of ESLint upgrade):
@@ -83,7 +83,7 @@ Migration: Enable new rules as `warn` first, then promote to `error` after fixin
 
 ## React Hooks Plugin — Verify Activation
 
-`eslint-plugin-react-hooks: ^5.2.0` is in devDependencies. Verify it is explicitly configured in `packages/eslint-config/src/react.js`:
+`eslint-plugin-react-hooks: ^7.0.0` is in devDependencies. Verify it is explicitly configured in `packages/eslint-config/src/react.js`:
 
 ```js
 // packages/eslint-config/src/react.js

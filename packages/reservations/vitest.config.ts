@@ -27,17 +27,11 @@ export default defineConfig({
     // Pure Node domain logic — no DOM shim required.
     environment: 'node',
 
-    // Threads keep fast-check's RNG seeding deterministic across
-    // runs; the worker pool does not interfere with seeded runs.
-    pool: 'threads',
-
     // Give fast-check enough room to shrink a large counter-example
     // without tripping the default 5 s timeout.
     testTimeout: 30_000,
 
-    // Vitest 4 splits hookTimeout from testTimeout (default: 10 s).
-    // Testcontainers beforeAll spends ~20-30 s on docker run + migrations
-    // on a warm daemon, up to 60 s on a cold CI runner.
+    // Vitest 4 splits hookTimeout from testTimeout; Testcontainers beforeAll needs up to 60 s cold.
     hookTimeout: 180_000,
   },
 });
