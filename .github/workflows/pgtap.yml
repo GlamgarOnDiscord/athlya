@@ -189,6 +189,7 @@ jobs:
             packages/db/tests/rls/workout_sessions.sql \
             packages/db/tests/rls/audit_log.sql \
             packages/db/tests/rls/audit_anonymization.sql \
+            packages/db/tests/rls/audit_anonymization_scalar_guard.sql \
             packages/db/tests/rls/push_tokens.sql \
             packages/db/tests/rls/idempotency_keys.sql \
             packages/db/tests/rls/outbox.sql
