@@ -266,22 +266,33 @@ function buildRepo(client: Sql): DeletionRepo {
             `;
     },
     async anonymizeAuditRows(userId) {
-      // postgres-js DDL inside client.begin() races — DISABLE TRIGGER doesn't take effect for subsequent DML in the same tx object.
-      await client.unsafe('ALTER TABLE "audit_log" DISABLE TRIGGER audit_log_forbid_update');
-      const updated = await client.unsafe<{ id: string }[]>(
-        `UPDATE audit_log
-            SET actor_id = NULL,
-                metadata = CASE
-                  WHEN jsonb_typeof(metadata) = 'object'
-                  THEN metadata - 'email' - 'displayName' - 'ip' - 'userAgent'
-                  ELSE metadata
-                END
-          WHERE actor_id = $1
-          RETURNING id`,
+      // Must match truncateAll() pattern: single client.unsafe() call so all
+      // three statements share the same session — separate calls risk pool
+      // routing DISABLE TRIGGER and UPDATE to different connections, causing
+      // the trigger to still be active on the UPDATE connection.
+      // UUID-only chars make string interpolation safe; ::uuid cast is the DB guard.
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+        throw new Error('anonymizeAuditRows: invalid userId format');
+      }
+      const [counted] = await client.unsafe<{ n: string }[]>(
+        `SELECT COUNT(*) AS n FROM audit_log WHERE actor_id = $1`,
         [userId],
       );
-      await client.unsafe('ALTER TABLE "audit_log" ENABLE TRIGGER audit_log_forbid_update');
-      return updated.length;
+      const count = Number(counted?.n ?? 0);
+      if (count === 0) return 0;
+      await client.unsafe(`
+        ALTER TABLE "audit_log" DISABLE TRIGGER audit_log_forbid_update;
+        UPDATE audit_log
+           SET actor_id = NULL,
+               metadata = CASE
+                 WHEN jsonb_typeof(metadata) = 'object'
+                 THEN metadata - 'email' - 'displayName' - 'ip' - 'userAgent'
+                 ELSE metadata
+               END
+         WHERE actor_id = '${userId}'::uuid;
+        ALTER TABLE "audit_log" ENABLE TRIGGER audit_log_forbid_update;
+      `);
+      return count;
     },
   };
 }
