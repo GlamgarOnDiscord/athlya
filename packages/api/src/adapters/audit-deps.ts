@@ -3,6 +3,6 @@ import type { AthlyaBindings } from '../types.js';
 
 export function buildAuditDeps(_env: AthlyaBindings): AuditDeps {
   return {
-    listAuditLog: async () => ({ items: [], nextCursor: null }),
+    listAuditLog: () => Promise.resolve({ items: [], nextCursor: null }),
   };
 }
