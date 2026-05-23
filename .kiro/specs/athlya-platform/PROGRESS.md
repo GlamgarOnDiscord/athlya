@@ -87,14 +87,14 @@ Suite complète (10 packages, Docker absent sur ce poste — `pnpm -r test` reto
 | `@athlya/db` | 45/45 (+ 4 Docker-gated) | 13 pgTAP audit anonymisation |
 | `@athlya/auth` | 85/85 | — |
 | `@athlya/ratelimit` | 7/7 | — |
-| `@athlya/api` | **383/383** ⏫ | +1 B2.5 #6 GET /v1/members admin Studio-A isolation |
+| `@athlya/api` | **387/387** ⏫ | +4 CN.9.1 GET /openapi.json (OpenAPI 3.1 spec, paths coverage, bearerAuth, no-auth access) |
 | `@athlya/members` | 67/67 (+ 2 Docker-gated) | — |
 | `@athlya/reservations` | 113/113 (+ 2 Docker-gated) | dont PBT P1, P2, P3 |
 | `@athlya/notifications` | 58/58 | — |
 | `@athlya/billing` | **30/30** ⏫ | +21 webhook (12 HMAC + 4 happy + 5 failure) |
 | `@athlya/web` | **74/74** ⏫ | Epic 10 livré : 10.1 (10), 10.2 (+23), 10.3 (+10), 10.4 (+11), 10.5 (+9), 10.6 (+11). 10.7/10.8 : couche E2E Playwright (axe WCAG 2.2 AA + register→book→cancel) exécutée en CI uniquement (Chromium absent du sandbox Windows) |
 
-**Total : ~997 tests verts** (+1 B2.5 #6 multi-tenant isolation GET /v1/members admin path). Suites Testcontainers (2.7, 5.6, 6.8) attendent Docker pour s'exécuter en CI. Playwright E2E (axe + flows) s'exécute dans `.github/workflows/axe.yml` avec job `a11y` + job `e2e-flows` parallèles.
+**Total : ~1001 tests verts** (+4 CN.9.1 OpenAPI 3.1 spec smoke tests). Suites Testcontainers (2.7, 5.6, 6.8) attendent Docker pour s'exécuter en CI. Playwright E2E (axe + flows) s'exécute dans `.github/workflows/axe.yml` avec job `a11y` + job `e2e-flows` parallèles.
 
 ## PBT validées (9/10)
 

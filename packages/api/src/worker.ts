@@ -71,6 +71,7 @@ import { registerErrorHandlers } from './middleware/problem-details.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { tenantClaimGuard, tenantResolverMiddleware } from './middleware/tenant-resolver.js';
+import { buildSpecApp } from './openapi/spec.js';
 import { requireRole } from './routes/helpers.js';
 import {
   buildDefaultDeps,
@@ -1053,6 +1054,14 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   // suppress the mount entirely (middleware-chain tests want the
   // chain without the /v1 surface).
   if (options.skipDomainRoutes !== true) {
+    // CN.9.1 — OpenAPI 3.1 spec served at /openapi.json. A
+    // dedicated OpenAPIHono instance generates the spec from the
+    // shared Zod schemas; only its /openapi.json handler is
+    // exposed on the main app to avoid the spec stubs shadowing
+    // the real domain routes.
+    const specApp = buildSpecApp();
+    app.get('/openapi.json', (c) => specApp.request('/openapi.json', undefined, c.env));
+
     if (options.deps !== undefined) {
       // Test path: a fully-built stub bundle was supplied.
       // Mount directly with the provided deps.
