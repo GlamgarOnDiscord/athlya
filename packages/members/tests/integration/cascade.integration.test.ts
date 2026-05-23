@@ -245,24 +245,12 @@ function buildRepo(client: Sql): DeletionRepo {
             `;
     },
     async anonymizeAuditRows(userId) {
-      // Delegate to the production SECURITY DEFINER function from migration 0003+0006.
-      // It runs as `athlya_owner`, satisfying the trigger's current_user check.
-      const diagBefore = await client.unsafe<{ id: string; typ: string; has_email: boolean }[]>(
-        `SELECT id::text, jsonb_typeof(metadata) AS typ, metadata ? 'email' AS has_email FROM audit_log WHERE actor_id = $1`,
-        [userId],
-      );
-      console.log('[diag] rows before anon:', JSON.stringify(diagBefore));
+      // Delegate to the SECURITY DEFINER function (0003+0006) — runs as
+      // `athlya_owner`, satisfying the trigger's current_user check.
       const [row] = await client.unsafe<{ n: number }[]>(`SELECT anonymize_user_audit($1) AS n`, [
         userId,
       ]);
-      const n = Number(row?.n ?? 0);
-      console.log('[diag] anonymize_user_audit returned:', n);
-      const diagAfter = await client.unsafe<{ id: string; typ: string; has_email: boolean }[]>(
-        `SELECT id::text, jsonb_typeof(metadata) AS typ, metadata ? 'email' AS has_email FROM audit_log WHERE id::text = ANY($1)`,
-        [diagBefore.map((r) => r.id)],
-      );
-      console.log('[diag] rows after anon:', JSON.stringify(diagAfter));
-      return n;
+      return Number(row?.n ?? 0);
     },
   };
 }
@@ -406,73 +394,71 @@ async function seedScenario(client: Sql): Promise<{
   // fields (`email`, `displayName`, `ip`, `userAgent`) plus one
   // non-PII key (`classId`) that MUST survive anonymisation to
   // demonstrate the jsonb "- key" operator targets only PII.
+  // Pass plain objects (not JSON.stringify'd strings) so postgres-js serialises
+  // them correctly for the ::jsonb cast — pre-stringified values get
+  // double-encoded, yielding jsonb_typeof = 'string' instead of 'object'.
   const aliceMeta = [
-    JSON.stringify({
+    {
       email: 'alice@athlya.test',
       displayName: 'Alice',
       ip: '203.0.113.7',
       userAgent: 'AthlyaMobile/1.2 (iPhone 15; iOS 17)',
       classId: CLASS_A1,
-    }),
-    JSON.stringify({
+    },
+    {
       email: 'alice@athlya.test',
       displayName: 'Alice',
       ip: '203.0.113.7',
       userAgent: 'AthlyaMobile/1.2 (iPhone 15; iOS 17)',
       classId: CLASS_A2,
-    }),
-    JSON.stringify({
+    },
+    {
       email: 'alice@athlya.test',
       displayName: 'Alice',
       ip: '203.0.113.8',
       userAgent: 'AthlyaWeb/1.0 (Firefox 120; macOS)',
       classId: CLASS_A3,
-    }),
-    JSON.stringify({
+    },
+    {
       email: 'alice@athlya.test',
       displayName: 'Alice',
       ip: '203.0.113.9',
       userAgent: 'AthlyaWeb/1.0 (Chrome 120; Windows)',
-    }),
-    JSON.stringify({
+    },
+    {
       email: 'alice@athlya.test',
       displayName: 'Alice',
       ip: '203.0.113.9',
       userAgent: 'AthlyaWeb/1.0 (Chrome 120; Windows)',
-    }),
+    },
   ];
   const bobMeta = [
-    JSON.stringify({
+    {
       email: 'bob@athlya.test',
       displayName: 'Bob',
       ip: '198.51.100.4',
       userAgent: 'AthlyaMobile/1.2 (Pixel 8; Android 14)',
       classId: CLASS_B1,
-    }),
-    JSON.stringify({
+    },
+    {
       email: 'bob@athlya.test',
       displayName: 'Bob',
       ip: '198.51.100.4',
       userAgent: 'AthlyaMobile/1.2 (Pixel 8; Android 14)',
-    }),
-    JSON.stringify({
+    },
+    {
       email: 'bob@athlya.test',
       displayName: 'Bob',
       ip: '198.51.100.5',
       userAgent: 'AthlyaWeb/1.0 (Safari 17; iPadOS)',
-    }),
-    JSON.stringify({
+    },
+    {
       email: 'bob@athlya.test',
       displayName: 'Bob',
       ip: '198.51.100.5',
       userAgent: 'AthlyaWeb/1.0 (Safari 17; iPadOS)',
-    }),
-    JSON.stringify({
-      email: 'bob@athlya.test',
-      displayName: 'Bob',
-      ip: '198.51.100.6',
-      userAgent: 'curl/8.5.0',
-    }),
+    },
+    { email: 'bob@athlya.test', displayName: 'Bob', ip: '198.51.100.6', userAgent: 'curl/8.5.0' },
   ];
 
   const aliceAuditRows = await client<{ id: string }[]>`
