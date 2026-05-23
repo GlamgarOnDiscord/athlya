@@ -463,20 +463,20 @@ async function seedScenario(client: Sql): Promise<{
 
   const aliceAuditRows = await client<{ id: string }[]>`
         INSERT INTO "audit_log" (actor_id, action, target_type, target_id, metadata) VALUES
-            (${ALICE_ID}, 'user.login',             'user',        ${ALICE_ID}, ${aliceMeta[0]!}::jsonb),
-            (${ALICE_ID}, 'reservation.created',    'reservation', ${CLASS_A1}, ${aliceMeta[1]!}::jsonb),
-            (${ALICE_ID}, 'reservation.cancelled',  'reservation', ${CLASS_A3}, ${aliceMeta[2]!}::jsonb),
-            (${ALICE_ID}, 'user.consents.updated',  'user',        ${ALICE_ID}, ${aliceMeta[3]!}::jsonb),
-            (${ALICE_ID}, 'user.profile.updated',   'user',        ${ALICE_ID}, ${aliceMeta[4]!}::jsonb)
+            (${ALICE_ID}, 'user.login',             'user',        ${ALICE_ID}, ${client.json(aliceMeta[0]!)}),
+            (${ALICE_ID}, 'reservation.created',    'reservation', ${CLASS_A1}, ${client.json(aliceMeta[1]!)}),
+            (${ALICE_ID}, 'reservation.cancelled',  'reservation', ${CLASS_A3}, ${client.json(aliceMeta[2]!)}),
+            (${ALICE_ID}, 'user.consents.updated',  'user',        ${ALICE_ID}, ${client.json(aliceMeta[3]!)}),
+            (${ALICE_ID}, 'user.profile.updated',   'user',        ${ALICE_ID}, ${client.json(aliceMeta[4]!)})
         RETURNING id::text
     `;
   const bobAuditRows = await client<{ id: string }[]>`
         INSERT INTO "audit_log" (actor_id, action, target_type, target_id, metadata) VALUES
-            (${BOB_ID}, 'user.login',             'user',        ${BOB_ID}, ${bobMeta[0]!}::jsonb),
-            (${BOB_ID}, 'reservation.created',    'reservation', ${CLASS_B1}, ${bobMeta[1]!}::jsonb),
-            (${BOB_ID}, 'user.consents.updated',  'user',        ${BOB_ID}, ${bobMeta[2]!}::jsonb),
-            (${BOB_ID}, 'user.profile.updated',   'user',        ${BOB_ID}, ${bobMeta[3]!}::jsonb),
-            (${BOB_ID}, 'user.login',             'user',        ${BOB_ID}, ${bobMeta[4]!}::jsonb)
+            (${BOB_ID}, 'user.login',             'user',        ${BOB_ID}, ${client.json(bobMeta[0]!)}),
+            (${BOB_ID}, 'reservation.created',    'reservation', ${CLASS_B1}, ${client.json(bobMeta[1]!)}),
+            (${BOB_ID}, 'user.consents.updated',  'user',        ${BOB_ID}, ${client.json(bobMeta[2]!)}),
+            (${BOB_ID}, 'user.profile.updated',   'user',        ${BOB_ID}, ${client.json(bobMeta[3]!)}),
+            (${BOB_ID}, 'user.login',             'user',        ${BOB_ID}, ${client.json(bobMeta[4]!)})
         RETURNING id::text
     `;
 
