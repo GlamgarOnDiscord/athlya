@@ -66,7 +66,7 @@
     "fast-check": "^3.23.2",
     "rimraf": "^6.0.1",
     "testcontainers": "^11.0.0",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "vitest": "^4.0.0"
   }
 }
