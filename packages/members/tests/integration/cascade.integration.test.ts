@@ -53,33 +53,12 @@
  *
  * audit_log immutability workaround
  * ---------------------------------
- * Migration `0000_init.sql` installs `audit_log_immutable()` triggers
- * on UPDATE and DELETE so the append-only invariant (Req 22.2) is
- * enforced at the database layer even against superusers. Requirement
- * 5.3 explicitly carves out ONE exception to that invariant: the
- * 30-day anonymisation pass is ALLOWED to `UPDATE audit_log` to
- * scrub PII. To relax the trigger strictly for the cascade path we
- * wrap `anonymizeAuditRows` in a "disable trigger → UPDATE → re-enable
- * trigger" sequence, all under a single `sql.begin` transaction on
- * the superuser client (which has OWNER rights on `audit_log` and can
- * therefore DISABLE its triggers). This is the narrowest possible
- * relaxation:
- *
- *   - Scope: only `actor_id = $userId` rows are updated — no other
- *     audit row is even visible to the UPDATE.
- *   - Duration: the DISABLE TRIGGER spans only the UPDATE statement;
- *     the very next step re-enables both triggers inside the same
- *     transaction, so if the UPDATE fails the ROLLBACK restores the
- *     table to its immutable state.
- *   - Authority: a dedicated superuser-role connection (`rootClient`)
- *     is used for this one call; application-role connections never
- *     see DISABLE TRIGGER privileges, so forgery or accidental
- *     mutation from a tenant-scoped path is structurally impossible.
- *
- * This mirrors the production intent documented in `cascade.ts`: the
- * anonymisation repo method is invoked by a QStash-triggered worker
- * that holds a dedicated service connection with BYPASSRLS + table
- * OWNER rights; it is NOT reachable from any tenant-scoped path.
+ * Migration 0003 rewrites `audit_log_immutable()` to allow mutations
+ * only when `current_user = 'athlya_owner'`. `anonymizeAuditRows`
+ * delegates to the SECURITY DEFINER function `anonymize_user_audit(uuid)`
+ * (0003+0006) which runs as `athlya_owner` and therefore satisfies the
+ * trigger check. All migrations 0000-0006 are applied in beforeAll so the
+ * function and its scalar guard are available.
  *
  * RLS posture
  * -----------
@@ -266,33 +245,12 @@ function buildRepo(client: Sql): DeletionRepo {
             `;
     },
     async anonymizeAuditRows(userId) {
-      // Must match truncateAll() pattern: single client.unsafe() call so all
-      // three statements share the same session — separate calls risk pool
-      // routing DISABLE TRIGGER and UPDATE to different connections, causing
-      // the trigger to still be active on the UPDATE connection.
-      // UUID-only chars make string interpolation safe; ::uuid cast is the DB guard.
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
-        throw new Error('anonymizeAuditRows: invalid userId format');
-      }
-      const [counted] = await client.unsafe<{ n: string }[]>(
-        `SELECT COUNT(*) AS n FROM audit_log WHERE actor_id = $1`,
-        [userId],
-      );
-      const count = Number(counted?.n ?? 0);
-      if (count === 0) return 0;
-      await client.unsafe(`
-        ALTER TABLE "audit_log" DISABLE TRIGGER audit_log_forbid_update;
-        UPDATE audit_log
-           SET actor_id = NULL,
-               metadata = CASE
-                 WHEN jsonb_typeof(metadata) = 'object'
-                 THEN metadata - 'email' - 'displayName' - 'ip' - 'userAgent'
-                 ELSE metadata
-               END
-         WHERE actor_id = '${userId}'::uuid;
-        ALTER TABLE "audit_log" ENABLE TRIGGER audit_log_forbid_update;
-      `);
-      return count;
+      // Delegate to the production SECURITY DEFINER function from migration 0003+0006.
+      // It runs as `athlya_owner`, satisfying the trigger's current_user check.
+      const [row] = await client.unsafe<{ n: number }[]>(`SELECT anonymize_user_audit($1) AS n`, [
+        userId,
+      ]);
+      return Number(row?.n ?? 0);
     },
   };
 }
@@ -564,26 +522,17 @@ beforeAll(async () => {
     prepare: false,
   });
 
-  // Apply only the migrations the cascade primitive actually needs.
-  // We deliberately stop at 0002 (export_jobs) and skip 0003 because:
-  //
-  //   * 0003 rewrites the `audit_log_immutable()` trigger so that it
-  //     ONLY allows mutations when `current_user = 'athlya_owner'`.
-  //     The test's DISABLE/ENABLE TRIGGER + scalar-guarded UPDATE
-  //     dance from the superuser session works against the original
-  //     0000 trigger but is silently overridden by 0003's rewrite,
-  //     which is owned by a role our superuser never assumes.
-  //   * The cascade primitive itself is type-tested at the port
-  //     boundary (`anonymizeAuditRows: (userId) => Promise<number>`)
-  //     so a different mutation strategy at the migration level does
-  //     not change the contract this integration test asserts.
-  //   * Production calls `anonymize_user_audit(uuid)` from 0003 via
-  //     `packages/api/src/maintenance/anonymize-audit-tx.ts`; that
-  //     wire is exercised by the pgTAP suite at
-  //     `packages/db/tests/rls/audit_anonymization.sql`.
+  // Apply all migrations so the test exercises the production function
+  // `anonymize_user_audit(uuid)` from 0003 (SECURITY DEFINER, runs as
+  // `athlya_owner` which satisfies the trigger's `current_user` check).
+  // 0006 adds the scalar guard needed to tolerate non-object metadata rows.
   await applyMigration(rootClient, readMigration('0000_init.sql'));
   await applyMigration(rootClient, readMigration('0001_rls.sql'));
   await applyMigration(rootClient, readMigration('0002_export_jobs.sql'));
+  await applyMigration(rootClient, readMigration('0003_audit_anonymization.sql'));
+  await applyMigration(rootClient, readMigration('0004_rls_hardening.sql'));
+  await applyMigration(rootClient, readMigration('0005_password_reset_audit_anonymize.sql'));
+  await applyMigration(rootClient, readMigration('0006_anonymize_audit_scalar_guard.sql'));
 }, 180_000);
 
 afterAll(async () => {
