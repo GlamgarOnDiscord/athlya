@@ -524,12 +524,12 @@ Use official CLI to create, init the project .. and recent package version and s
     - _Status_: shipped Slice 12.A (scaffolding + admin layout + dashboard landing + login + forbidden). Slice 12.B (classes CRUD), 12.C (members + branding), 12.D (billing) follow.
     - _Requirements: 25.3, 25.4_
 
-  - [ ] 12.2 Implement the class CRUD pages
+  - [x] 12.2 Implement the class CRUD pages
     - List, create, update, delete classes; pass `expectedVersion` on update and surface `409 Conflict`
     - Admin-only authorization guard on client routes and server mutations
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
 
-  - [ ] 12.3 Implement the members list page with pagination
+  - [x] 12.3 Implement the members list page with pagination
     - Paginated `/members` using a cursor; visible only to `admin` or `coach` roles
     - _Requirements: 3.5_
 
