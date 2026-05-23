@@ -59,10 +59,7 @@ export interface AuditPage {
 }
 
 export interface AuditDeps {
-  listAuditLog(
-    studioId: string,
-    opts: { cursor?: string; limit: number },
-  ): Promise<AuditPage>;
+  listAuditLog(studioId: string, opts: { cursor?: string; limit: number }): Promise<AuditPage>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -75,23 +72,18 @@ export function buildAuditRouter(deps: AuditDeps): Hono<HonoEnv> {
   router.use('*', jwtAuth());
   router.use('*', studioRateLimit() as Parameters<typeof router.use>[1]);
 
-  router.get(
-    '/',
-    requireRole('admin'),
-    zValidator('query', ListAuditQuerySchema),
-    async (c) => {
-      traceOperation(c, 'audit.list');
-      const claims = c.get('authClaims');
-      if (claims === undefined) {
-        throw new Error('authClaims unexpectedly missing after jwtAuth');
-      }
-      const query = readValidated<ListAuditQuery>(c, 'query');
-      const opts: { cursor?: string; limit: number } = { limit: query.limit ?? 20 };
-      if (query.cursor !== undefined) opts.cursor = query.cursor;
-      const page = await deps.listAuditLog(claims.studioId, opts);
-      return c.json(page, 200);
-    },
-  );
+  router.get('/', requireRole('admin'), zValidator('query', ListAuditQuerySchema), async (c) => {
+    traceOperation(c, 'audit.list');
+    const claims = c.get('authClaims');
+    if (claims === undefined) {
+      throw new Error('authClaims unexpectedly missing after jwtAuth');
+    }
+    const query = readValidated<ListAuditQuery>(c, 'query');
+    const opts: { cursor?: string; limit: number } = { limit: query.limit ?? 20 };
+    if (query.cursor !== undefined) opts.cursor = query.cursor;
+    const page = await deps.listAuditLog(claims.studioId, opts);
+    return c.json(page, 200);
+  });
 
   return router;
 }

@@ -42,7 +42,11 @@ interface CheckInErrorResponse {
 type KioskState =
   | { readonly kind: 'scanning' }
   | { readonly kind: 'submitting' }
-  | { readonly kind: 'success'; readonly member: CheckInSuccessResponse['member']; readonly countdown: number }
+  | {
+      readonly kind: 'success';
+      readonly member: CheckInSuccessResponse['member'];
+      readonly countdown: number;
+    }
   | { readonly kind: 'error'; readonly message: string };
 
 const SUCCESS_COUNTDOWN_SECONDS = 5;
@@ -194,18 +198,21 @@ function useCameraScanner({ videoRef, onDetected, enabled }: UseCameraScannerOpt
           rafRef.current = requestAnimationFrame(poll);
           return;
         }
-        detector.detect(video).then((barcodes) => {
-          if (cancelled || detectedRef.current) return;
-          const first = barcodes[0];
-          if (barcodes.length > 0 && first !== undefined && first.rawValue.length > 0) {
-            detectedRef.current = true;
-            onDetected(first.rawValue);
-          } else {
-            rafRef.current = requestAnimationFrame(poll);
-          }
-        }).catch(() => {
-          if (!cancelled) rafRef.current = requestAnimationFrame(poll);
-        });
+        detector
+          .detect(video)
+          .then((barcodes) => {
+            if (cancelled || detectedRef.current) return;
+            const first = barcodes[0];
+            if (barcodes.length > 0 && first !== undefined && first.rawValue.length > 0) {
+              detectedRef.current = true;
+              onDetected(first.rawValue);
+            } else {
+              rafRef.current = requestAnimationFrame(poll);
+            }
+          })
+          .catch(() => {
+            if (!cancelled) rafRef.current = requestAnimationFrame(poll);
+          });
       }
 
       rafRef.current = requestAnimationFrame(poll);

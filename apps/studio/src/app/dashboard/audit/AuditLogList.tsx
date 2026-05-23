@@ -164,7 +164,8 @@ interface AuditRowProps {
 }
 
 function AuditRow({ item, fmt, t }: AuditRowProps): ReactElement {
-  const actorDisplay = item.actorId !== null ? item.actorId.slice(0, 8) + '…' : t('studio.audit.actorLabel');
+  const actorDisplay =
+    item.actorId !== null ? item.actorId.slice(0, 8) + '…' : t('studio.audit.actorLabel');
   const targetDisplay =
     item.targetType !== null && item.targetId !== null
       ? `${item.targetType}:${item.targetId.slice(0, 8)}`
