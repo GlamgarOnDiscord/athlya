@@ -49,6 +49,8 @@ export default async function DashboardLayout({
               { href: '/dashboard/members', label: t('studio.nav.members') },
               { href: '/dashboard/branding', label: t('studio.nav.branding') },
               { href: '/dashboard/billing', label: t('studio.nav.billing') },
+              { href: '/dashboard/checkin', label: t('studio.nav.checkin') },
+              { href: '/dashboard/audit', label: t('studio.nav.audit') },
             ]}
           />
         </header>

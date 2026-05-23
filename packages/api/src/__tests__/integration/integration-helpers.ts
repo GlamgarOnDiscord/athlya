@@ -514,7 +514,11 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
     handleWebhook: vi.fn(async () => ({ kind: 'ok' as const })),
   };
 
-  return { auth, classes, reservations, sessions, checkins, members, studios, billing };
+  const audit = {
+    listAuditLog: vi.fn(async () => ({ items: [], nextCursor: null })),
+  };
+
+  return { auth, classes, reservations, sessions, checkins, members, studios, billing, audit };
 }
 
 /* ------------------------------------------------------------------ */

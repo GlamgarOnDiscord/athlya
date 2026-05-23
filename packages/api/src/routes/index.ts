@@ -40,12 +40,14 @@
  * passing middleware inline to the route handler.
  */
 
+import { buildAuditDeps } from '../adapters/audit-deps.js';
 import { buildAuthDeps } from '../adapters/auth-deps.js';
 import { buildBillingDeps } from '../adapters/billing-deps.js';
 import { buildMembersDeps } from '../adapters/members-deps.js';
 import { buildClassesDeps, buildReservationsDeps } from '../adapters/reservations-deps.js';
 import { buildStudiosDeps } from '../adapters/studios-deps.js';
 
+import { buildAuditRouter, type AuditDeps } from './audit.js';
 import { buildAuthRouter, type AuthDeps } from './auth.js';
 import { buildBillingRouter, type BillingDeps } from './billing.js';
 import { buildCheckinsRouter, type CheckinsDeps } from './checkins.js';
@@ -59,6 +61,7 @@ import type { AthlyaBindings, HonoEnv } from '../types.js';
 import type { Hono } from 'hono';
 
 export {
+  buildAuditRouter,
   buildAuthRouter,
   buildBillingRouter,
   buildCheckinsRouter,
@@ -69,6 +72,7 @@ export {
   buildStudiosRouter,
 };
 export type {
+  AuditDeps,
   AuthDeps,
   BillingDeps,
   CheckinsDeps,
@@ -90,6 +94,7 @@ export type {
  * {@link buildDefaultDeps}.
  */
 export interface DomainDeps {
+  readonly audit: AuditDeps;
   readonly auth: AuthDeps;
   readonly members: MembersDeps;
   readonly classes: ClassesDeps;
@@ -115,6 +120,7 @@ export interface DomainDeps {
  * @returns the same `app` instance, to allow chaining.
  */
 export function mountDomainRoutes(app: Hono<HonoEnv>, deps: DomainDeps): Hono<HonoEnv> {
+  app.route('/v1/audit', buildAuditRouter(deps.audit));
   app.route('/v1/auth', buildAuthRouter(deps.auth));
   app.route('/v1/members', buildMembersRouter(deps.members));
   app.route('/v1/classes', buildClassesRouter(deps.classes));
@@ -182,6 +188,9 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
   };
 
   return {
+    audit: {
+      listAuditLog: forward('audit', 'listAuditLog'),
+    },
     auth: {
       register: forward('auth', 'register'),
       login: forward('auth', 'login'),
@@ -371,5 +380,10 @@ export function buildDefaultDeps(env: AthlyaBindings): DomainDeps {
     // secrets are absent. No DB / Redis dependency, so the
     // `hasAuthSecrets` guard does not apply.
     billing: buildBillingDeps(env),
+    audit: hasMembersSecrets
+      ? buildAuditDeps(env)
+      : {
+          listAuditLog: () => notImplemented('audit.listAuditLog'),
+        },
   };
 }
