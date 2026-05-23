@@ -533,15 +533,15 @@ Use official CLI to create, init the project .. and recent package version and s
     - Paginated `/members` using a cursor; visible only to `admin` or `coach` roles
     - _Requirements: 3.5_
 
-  - [ ] 12.4 Implement the check-in kiosk page (staff scans QR)
+  - [x] 12.4 Implement the check-in kiosk page (staff scans QR)
     - Use camera via `getUserMedia`, decode QR, POST to `/v1/checkins`, display member name + photo on 200, `no_reservation` or `invalid_token` on failure
     - _Requirements: 11.2, 11.3, 11.4, 11.5, 11.6_
 
-  - [ ] 12.5 Implement the audit log viewer for admins
+  - [x] 12.5 Implement the audit log viewer for admins
     - Paginated read-only view of the studio's audit log
     - _Requirements: 22.3_
 
-  - [ ] 12.6 Run axe-core accessibility checks on admin pages
+  - [x] 12.6 Run axe-core accessibility checks on admin pages
     - _Requirements: 27.1, 27.2_
 
 ### Epic 12 — CI, OWASP, observability wiring (v0.1)

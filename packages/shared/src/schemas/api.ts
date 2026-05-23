@@ -571,3 +571,37 @@ export const InvoicesPageSchema = z
   .strict();
 
 export type InvoicesPage = z.infer<typeof InvoicesPageSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  audit — /v1/audit                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Single item returned by `GET /v1/audit` — task 12.5.
+ *
+ * `metadata` is omitted from the list response to cap payload size.
+ * The `id` is a BIGSERIAL serialised as a string (Req 21.1 — lossless
+ * above Number.MAX_SAFE_INTEGER).
+ */
+export const AuditListItemSchema = z
+  .object({
+    id: z.string().min(1),
+    actorId: z.string().uuid().nullable(),
+    action: z.string().min(1).max(120),
+    targetType: z.string().max(60).nullable(),
+    targetId: z.string().max(80).nullable(),
+    createdAt: IsoDateTimeSchema,
+  })
+  .strict();
+
+export type AuditListItem = z.infer<typeof AuditListItemSchema>;
+
+/** `GET /v1/audit` response — cursor-paginated, newest first. */
+export const AuditListResponseSchema = z
+  .object({
+    items: z.array(AuditListItemSchema),
+    nextCursor: z.string().nullable(),
+  })
+  .strict();
+
+export type AuditListResponse = z.infer<typeof AuditListResponseSchema>;

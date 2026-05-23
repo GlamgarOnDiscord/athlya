@@ -26,12 +26,16 @@ interface SectionLink {
     | 'studio.dashboard.classes.title'
     | 'studio.dashboard.members.title'
     | 'studio.dashboard.branding.title'
-    | 'studio.dashboard.billing.title';
+    | 'studio.dashboard.billing.title'
+    | 'studio.dashboard.checkin.title'
+    | 'studio.dashboard.audit.title';
   readonly bodyKey:
     | 'studio.dashboard.classes.body'
     | 'studio.dashboard.members.body'
     | 'studio.dashboard.branding.body'
-    | 'studio.dashboard.billing.body';
+    | 'studio.dashboard.billing.body'
+    | 'studio.dashboard.checkin.body'
+    | 'studio.dashboard.audit.body';
 }
 
 const SECTIONS: ReadonlyArray<SectionLink> = [
@@ -54,6 +58,16 @@ const SECTIONS: ReadonlyArray<SectionLink> = [
     href: '/dashboard/billing',
     titleKey: 'studio.dashboard.billing.title',
     bodyKey: 'studio.dashboard.billing.body',
+  },
+  {
+    href: '/dashboard/checkin',
+    titleKey: 'studio.dashboard.checkin.title',
+    bodyKey: 'studio.dashboard.checkin.body',
+  },
+  {
+    href: '/dashboard/audit',
+    titleKey: 'studio.dashboard.audit.title',
+    bodyKey: 'studio.dashboard.audit.body',
   },
 ];
 

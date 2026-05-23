@@ -72,6 +72,7 @@ export function buildStubDeps(
     checkins?: Partial<DomainDeps['checkins']>;
     studios?: Partial<DomainDeps['studios']>;
     billing?: Partial<DomainDeps['billing']>;
+    audit?: Partial<DomainDeps['audit']>;
   } = {},
 ): DomainDeps {
   return {
@@ -126,6 +127,10 @@ export function buildStubDeps(
       listInvoices: vi.fn(),
       handleWebhook: vi.fn(),
       ...overrides.billing,
+    },
+    audit: {
+      listAuditLog: vi.fn(),
+      ...overrides.audit,
     },
   };
 }

@@ -12,6 +12,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
+    "e2e:install": "playwright install chromium --with-deps",
+    "e2e": "playwright test --config e2e/playwright.config.ts e2e/axe.spec.ts",
     "clean": "rimraf .next .turbo *.tsbuildinfo"
   },
   "dependencies": {
@@ -49,6 +51,8 @@
     "rimraf": "^6.0.1",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.0"
+    "vitest": "^4.0.0",
+    "@axe-core/playwright": "^4.10.0",
+    "@playwright/test": "^1.60.0"
   }
 }

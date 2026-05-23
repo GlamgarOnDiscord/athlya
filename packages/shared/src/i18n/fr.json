@@ -230,7 +230,9 @@
       "classes": "Cours",
       "members": "Membres",
       "branding": "Identité",
-      "billing": "Facturation"
+      "billing": "Facturation",
+      "checkin": "Check-in",
+      "audit": "Audit"
     },
     "dashboard": {
       "title": "Tableau de bord",
@@ -250,6 +252,14 @@
       "billing": {
         "title": "Facturation",
         "body": "Abonnements Stripe, factures et statut de paiement."
+      },
+      "checkin": {
+        "title": "Check-in",
+        "body": "Scanner les QR codes membres à l'entrée du studio."
+      },
+      "audit": {
+        "title": "Journal d'audit",
+        "body": "Suivre toutes les actions admin effectuées dans votre studio."
       }
     },
     "forbidden": {
@@ -327,6 +337,39 @@
         "sampleButton": "Bouton d'exemple",
         "input": "Couleur (hex #RRGGBB)"
       }
+    },
+    "checkin": {
+      "title": "Borne de check-in",
+      "subtitle": "Scannez le QR code d'un membre pour valider sa réservation.",
+      "scanPrompt": "Pointez la caméra vers le QR code du membre.",
+      "manualLabel": "Token QR",
+      "manualPlaceholder": "Collez le token QR ici",
+      "manualSubmit": "Valider",
+      "success": "Bienvenue, {name} !",
+      "resetIn": "Réinitialisation dans {seconds}s…",
+      "noCameraFallback": "Caméra indisponible. Saisissez le token QR manuellement.",
+      "errors": {
+        "invalid_signature": "QR code invalide.",
+        "token_expired": "QR code expiré. Demandez au membre d'en générer un nouveau.",
+        "replay": "Ce QR code a déjà été utilisé.",
+        "wrong_studio": "Ce QR code appartient à un autre studio.",
+        "wrong_kind": "Type de token inattendu.",
+        "malformed": "QR code illisible.",
+        "outside_window": "La fenêtre de check-in est fermée pour ce cours.",
+        "no_reservation": "Aucune réservation trouvée pour ce membre.",
+        "generic": "Échec du check-in. Veuillez réessayer."
+      }
+    },
+    "audit": {
+      "title": "Journal d'audit",
+      "subtitle": "Toutes les actions admin de votre studio, les plus récentes en premier.",
+      "empty": "Aucun événement d'audit pour le moment.",
+      "loadMore": "Charger plus",
+      "count": "{n} événement(s) chargé(s)",
+      "actorLabel": "Acteur",
+      "actionLabel": "Action",
+      "targetLabel": "Cible",
+      "timestampLabel": "Date"
     },
     "billing": {
       "title": "Facturation",

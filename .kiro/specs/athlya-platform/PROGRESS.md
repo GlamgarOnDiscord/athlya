@@ -264,6 +264,28 @@ Livré hors-spec, workflow "brancher les secrets live + adapters Drizzle/Upstash
 ### Fix runtime — Slice 12.D-bis
 - `packages/api/src/adapters/reservations-deps.ts` : `BookingCounter` adapter avec `decrRemaining`/`incrRemaining` qui forwarde vers `RemainingCounter.decr`/`.incr`. Le `bookClass` branch utilisait directement `counter` (RemainingCounter shape), mais le service `bookClass` attend `BookingCounter` (decr/incr*Remaining). Cancel branch faisait déjà le mapping, book branch non. Fix une-ligne.
 
+### Tâches 12.4, 12.5, 12.6 — Check-in kiosk, Audit log, axe-core a11y ✅
+
+**12.4 — Check-in kiosk** (`apps/studio/src/app/dashboard/checkin/`):
+- `CheckinKiosk.tsx` : client component, BarcodeDetector + getUserMedia, state machine discriminée (`scanning → submitting → success | error`), countdown 5 s auto-reset, fallback manuel si caméra indisponible.
+- POST `/v1/checkins` avec header `Idempotency-Key` (UUID v4 par scan).
+- i18n : namespace `studio.checkin.*` en EN + FR (11 clés dont erreurs métier).
+
+**12.5 — Audit log viewer** (`apps/studio/src/app/dashboard/audit/`):
+- `AuditLogList.tsx` : client component, cursor pagination GET `/v1/audit?limit=20&cursor=<id>`, skeletons + état vide + "Load more".
+- `packages/api/src/routes/audit.ts` : router admin-only, `requireRole('admin')`, zValidator query, cursor pagination BIGSERIAL.
+- `packages/api/src/adapters/audit-deps.ts` : stub adapter (impl DB à câbler).
+- Wiring complet dans `routes/index.ts` (DomainDeps + lazy + default).
+- Schemas Zod dans `@athlya/shared` : `AuditListItemSchema`, `AuditListResponseSchema`.
+- OpenAPI spec + test `openapi-spec.test.ts` mis à jour (25 routes).
+
+**12.6 — axe-core a11y sweep studio**:
+- `apps/studio/e2e/playwright.config.ts` : port 3001, reuseExistingServer local.
+- `apps/studio/e2e/fixtures/auth.ts` : stub POST `/api/auth/refresh` → admin user + stubs tous les endpoints API (classes, members, studios, audit, billing, checkins).
+- `apps/studio/e2e/axe.spec.ts` : sweep WCAG 2.2 AA sur `/login` + 7 pages admin.
+- `.github/workflows/axe.yml` : job `studio-a11y` parallèle.
+- Tasks 12.4, 12.5, 12.6 marquées `[x]` dans `tasks.md`.
+
 ### Fix i18n — tâches 12.2 / 12.3 ✅
 - `packages/shared/src/i18n/en.json` + `fr.json` : ajout de la clé `studio.members.joinedAt` ("Joined" / "Inscrit le") manquante.
 - `apps/studio/src/app/dashboard/members/MembersAdminList.tsx` : remplacement du texte hardcodé `"Inscrit le"` par `{t('studio.members.joinedAt')}`.
