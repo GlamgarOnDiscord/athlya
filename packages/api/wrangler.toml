@@ -360,3 +360,64 @@ bucket_name = "athlya-avatars-production"
 [[env.production.r2_buckets]]
 binding = "EXPORTS_BUCKET"
 bucket_name = "athlya-exports-production"
+
+# ============================================================================
+# Preview environment (CN.7.2 — per-PR preview deployments)
+# ============================================================================
+#
+# One shared Worker (`athlya-api-preview`) is reused across all preview PRs.
+# The only binding that changes per PR is `DB_URL`, which is set as a secret
+# via `wrangler secret put DB_URL --env preview` immediately before each
+# deploy, pointing at the PR's ephemeral Neon branch.
+#
+# Queues + R2 are shared with staging — preview traffic is ephemeral and
+# low-volume so contamination of staging event/export/avatar stores is
+# acceptable. Redis is also the staging instance.
+#
+# Concurrency note: simultaneous PR deployments race on the DB_URL secret.
+# For a small team this is documented and accepted; see the runbook.
+#
+# Required secrets (set once or per-PR via workflow):
+#   wrangler secret put DB_URL          --env preview   # per-PR (Neon branch)
+#   wrangler secret put REDIS_URL       --env preview   # once (staging Redis)
+#   wrangler secret put REDIS_TOKEN     --env preview   # once (staging Redis)
+#   wrangler secret put JWT_JWKS_URL    --env preview   # once
+#
+# Required one-time provisioning (R2 buckets):
+#   wrangler r2 bucket create athlya-avatars-preview  --env preview
+#   wrangler r2 bucket create athlya-exports-preview  --env preview
+[env.preview]
+name = "athlya-api-preview"
+
+[env.preview.vars]
+ENVIRONMENT = "preview"
+VERSION = "0.0.0-preview"
+
+[[env.preview.queues.producers]]
+binding = "EVENTS_QUEUE"
+queue = "athlya-events-staging"
+
+[[env.preview.queues.producers]]
+binding = "EVENTS_DLQ"
+queue = "athlya-events-staging-dlq"
+
+[[env.preview.queues.consumers]]
+queue = "athlya-events-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-staging-dlq"
+
+[[env.preview.queues.consumers]]
+queue = "athlya-events-staging-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[env.preview.r2_buckets]]
+binding = "AVATARS_BUCKET"
+bucket_name = "athlya-avatars-preview"
+
+[[env.preview.r2_buckets]]
+binding = "EXPORTS_BUCKET"
+bucket_name = "athlya-exports-preview"
