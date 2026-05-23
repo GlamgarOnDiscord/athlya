@@ -247,10 +247,22 @@ function buildRepo(client: Sql): DeletionRepo {
     async anonymizeAuditRows(userId) {
       // Delegate to the production SECURITY DEFINER function from migration 0003+0006.
       // It runs as `athlya_owner`, satisfying the trigger's current_user check.
+      const diagBefore = await client.unsafe<{ id: string; typ: string; has_email: boolean }[]>(
+        `SELECT id::text, jsonb_typeof(metadata) AS typ, metadata ? 'email' AS has_email FROM audit_log WHERE actor_id = $1`,
+        [userId],
+      );
+      console.log('[diag] rows before anon:', JSON.stringify(diagBefore));
       const [row] = await client.unsafe<{ n: number }[]>(`SELECT anonymize_user_audit($1) AS n`, [
         userId,
       ]);
-      return Number(row?.n ?? 0);
+      const n = Number(row?.n ?? 0);
+      console.log('[diag] anonymize_user_audit returned:', n);
+      const diagAfter = await client.unsafe<{ id: string; typ: string; has_email: boolean }[]>(
+        `SELECT id::text, jsonb_typeof(metadata) AS typ, metadata ? 'email' AS has_email FROM audit_log WHERE id::text = ANY($1)`,
+        [diagBefore.map((r) => r.id)],
+      );
+      console.log('[diag] rows after anon:', JSON.stringify(diagAfter));
+      return n;
     },
   };
 }
