@@ -37,6 +37,7 @@ import {
   LoginRequestSchema,
   MembersPageResponseSchema,
   RefreshRequestSchema,
+  AuditListResponseSchema,
   RegisterRequestSchema,
   SessionResponseSchema,
   StudioMeResponseSchema,
@@ -753,6 +754,42 @@ const checkInRoute = createRoute({
 });
 
 /*
+ * audit — /v1/audit
+ */
+
+const listAuditRoute = createRoute({
+  method: 'get',
+  path: '/v1/audit',
+  tags: ['audit'],
+  summary: 'List studio audit log entries (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    query: z.object({
+      cursor: z.string().optional(),
+      limit: z.coerce.number().int().min(1).max(100).optional(),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Paginated audit log',
+      content: {
+        'application/json': {
+          schema: AuditListResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: 'Not authenticated',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    403: {
+      description: 'Insufficient role',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+  },
+});
+
+/*
  * billing — /v1/billing/*
  */
 
@@ -885,6 +922,9 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   // sessions
   app.openapi(logSessionRoute, stub);
   app.openapi(listSessionsRoute, stub);
+
+  // audit
+  app.openapi(listAuditRoute, stub);
 
   // checkins
   app.openapi(checkInRoute, stub);

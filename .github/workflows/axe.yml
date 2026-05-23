@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'apps/web/**'
+      - 'apps/studio/**'
       - 'packages/shared/**'
       - '.github/workflows/axe.yml'
   push:
@@ -112,3 +113,38 @@ jobs:
 
       - name: Run Playwright member-flow specs
         run: pnpm --filter @athlya/web exec playwright test --config e2e/playwright.config.ts e2e/flows
+
+  studio-a11y:
+    name: WCAG 2.2 AA axe sweep — studio admin app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for Playwright
+        run: pnpm --filter @athlya/studio e2e:install
+
+      - name: Build @athlya/shared (required by studio)
+        run: pnpm --filter @athlya/shared build
+
+      - name: Build @athlya/studio
+        run: pnpm --filter @athlya/studio build
+
+      - name: Run axe accessibility sweep
+        run: pnpm --filter @athlya/studio e2e

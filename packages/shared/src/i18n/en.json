@@ -230,7 +230,9 @@
       "classes": "Classes",
       "members": "Members",
       "branding": "Branding",
-      "billing": "Billing"
+      "billing": "Billing",
+      "checkin": "Check-in",
+      "audit": "Audit"
     },
     "dashboard": {
       "title": "Dashboard",
@@ -250,6 +252,14 @@
       "billing": {
         "title": "Billing",
         "body": "Stripe subscriptions, invoices and payment status."
+      },
+      "checkin": {
+        "title": "Check-in",
+        "body": "Scan member QR codes at the studio entrance."
+      },
+      "audit": {
+        "title": "Audit log",
+        "body": "Track all admin actions performed in your studio."
       }
     },
     "forbidden": {
@@ -327,6 +337,39 @@
         "sampleButton": "Sample button",
         "input": "Color (hex #RRGGBB)"
       }
+    },
+    "checkin": {
+      "title": "Check-in kiosk",
+      "subtitle": "Scan a member QR code to validate their reservation.",
+      "scanPrompt": "Point the camera at the member's QR code.",
+      "manualLabel": "QR token",
+      "manualPlaceholder": "Paste QR token here",
+      "manualSubmit": "Validate",
+      "success": "Welcome, {name}!",
+      "resetIn": "Resetting in {seconds}s…",
+      "noCameraFallback": "Camera unavailable. Enter the QR token manually.",
+      "errors": {
+        "invalid_signature": "Invalid QR code.",
+        "token_expired": "QR code expired. Ask the member to generate a new one.",
+        "replay": "This QR code has already been used.",
+        "wrong_studio": "This QR code belongs to a different studio.",
+        "wrong_kind": "Unexpected token type.",
+        "malformed": "Unreadable QR code.",
+        "outside_window": "Check-in window is closed for this class.",
+        "no_reservation": "No reservation found for this member.",
+        "generic": "Check-in failed. Please try again."
+      }
+    },
+    "audit": {
+      "title": "Audit log",
+      "subtitle": "All admin actions for your studio, newest first.",
+      "empty": "No audit events yet.",
+      "loadMore": "Load more",
+      "count": "{n} event(s) loaded",
+      "actorLabel": "Actor",
+      "actionLabel": "Action",
+      "targetLabel": "Target",
+      "timestampLabel": "Date"
     },
     "billing": {
       "title": "Billing",
