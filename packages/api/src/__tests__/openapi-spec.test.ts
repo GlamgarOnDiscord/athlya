@@ -107,8 +107,9 @@ describe('GET /openapi.json', () => {
     // bearerAuth may be inlined under components.securitySchemes or
     // top-level depending on @hono/zod-openapi version.
     const components = body['components'] as Record<string, unknown> | undefined;
-    const securitySchemes = (components?.['securitySchemes'] ??
-      body['securitySchemes']) as Record<string, unknown> | undefined;
+    const securitySchemes = (components?.['securitySchemes'] ?? body['securitySchemes']) as
+      | Record<string, unknown>
+      | undefined;
     expect(securitySchemes).toBeDefined();
     expect(securitySchemes?.['bearerAuth']).toBeDefined();
     const scheme = securitySchemes?.['bearerAuth'] as Record<string, unknown>;
@@ -121,5 +122,4 @@ describe('GET /openapi.json', () => {
     const res = await app.request('/openapi.json', { method: 'GET' }, mockEnv());
     expect(res.status).toBe(200);
   });
-
 });

@@ -581,7 +581,9 @@ const myReservationsRoute = createRoute({
       content: {
         'application/json': {
           schema: z.object({
-            items: z.array(z.object({ id: z.string().uuid(), classId: z.string().uuid(), status: z.string() })),
+            items: z.array(
+              z.object({ id: z.string().uuid(), classId: z.string().uuid(), status: z.string() }),
+            ),
             nextCursor: z.string().nullable(),
           }),
         },
@@ -700,7 +702,10 @@ const listSessionsRoute = createRoute({
       description: 'Session list',
       content: {
         'application/json': {
-          schema: z.object({ items: z.array(z.object({ id: z.string().uuid() })), nextCursor: z.string().nullable() }),
+          schema: z.object({
+            items: z.array(z.object({ id: z.string().uuid() })),
+            nextCursor: z.string().nullable(),
+          }),
         },
       },
     },
