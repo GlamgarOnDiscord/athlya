@@ -783,6 +783,29 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
    * `listMembersByStudio` filters by `studioId` to mirror the
    * post-RLS behaviour of the `users_read_same_studio` policy.
    */
+  it('GET /v1/members (Admin A, admin): Studio A users only — Bob absent', async () => {
+    const { app, tokens } = await makeTwoStudioApp();
+
+    const res = await app.request(
+      '/v1/members',
+      {
+        method: 'GET',
+        headers: { authorization: `Bearer ${tokens.adminA}` },
+      },
+      buildMockEnv(),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    const items = body.items as Array<{ id: string; studioId: string }>;
+    expect(items).toHaveLength(2);
+    expect(items.every((u) => u.studioId === STUDIO_A_ID)).toBe(true);
+    expect(items.some((u) => u.id === BOB_ID)).toBe(false);
+    const ids = items.map((u) => u.id);
+    expect(ids).toContain(ALICE_ID);
+    expect(ids).toContain(ADMIN_A_ID);
+  });
+
   /**
    * B9.1 â€” Req 13.2 / 13.5: `GET /v1/studios/me` returns the
    * caller's tenant root row only. Alice (Studio A) sees Studio A,
