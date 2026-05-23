@@ -59,7 +59,7 @@
     "@athlya/eslint-config": "workspace:*",
     "@athlya/tsconfig": "workspace:*",
     "@fast-check/vitest": "^0.4.1",
-    "@testcontainers/postgresql": "^11.0.0",
+    "@testcontainers/postgresql": "^12.0.0",
     "@types/node": "^20.19.9",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.39.1",
