@@ -123,7 +123,8 @@
     "clean": "rimraf dist .turbo *.tsbuildinfo",
     "dev": "wrangler dev",
     "deploy:staging": "wrangler deploy --env staging",
-    "deploy:production": "wrangler deploy --env production"
+    "deploy:production": "wrangler deploy --env production",
+    "generate:types": "openapi-typescript http://localhost:8787/openapi.json -o src/openapi/api-types.ts"
   },
   "dependencies": {
     "@athlya/auth": "workspace:*",
@@ -133,6 +134,7 @@
     "@athlya/ratelimit": "workspace:*",
     "@athlya/reservations": "workspace:*",
     "@athlya/shared": "workspace:*",
+    "@hono/zod-openapi": "^1.4.0",
     "@upstash/redis": "^1.35.6",
     "drizzle-orm": "^0.45.2",
     "jose": "^5.9.6",
@@ -154,6 +156,7 @@
     "eslint": "^9.39.1",
     "fast-check": "^3.23.2",
     "hono": "^4.12.22",
+    "openapi-typescript": "^7.13.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.0",
