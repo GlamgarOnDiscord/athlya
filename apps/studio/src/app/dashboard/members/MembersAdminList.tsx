@@ -110,7 +110,7 @@ export function MembersAdminList(): ReactElement {
             <TableHead>{t('studio.members.title')}</TableHead>
             <TableHead className="hidden sm:table-cell">Email</TableHead>
             <TableHead>{t('studio.members.role.member')}</TableHead>
-            <TableHead className="hidden md:table-cell">Inscrit le</TableHead>
+            <TableHead className="hidden md:table-cell">{t('studio.members.joinedAt')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

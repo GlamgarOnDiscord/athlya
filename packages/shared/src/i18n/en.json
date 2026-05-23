@@ -298,6 +298,7 @@
       "subtitle": "Directory of your studio's members.",
       "empty": "No members yet.",
       "count": "{n} member(s) loaded",
+      "joinedAt": "Joined",
       "loadMore": "Load more",
       "search": "Search members…",
       "role": {
