@@ -298,6 +298,7 @@
       "subtitle": "Annuaire des adhérents de votre studio.",
       "empty": "Aucun membre pour le moment.",
       "count": "{n} membre(s) chargé(s)",
+      "joinedAt": "Inscrit le",
       "loadMore": "Charger plus",
       "search": "Rechercher un membre…",
       "role": {

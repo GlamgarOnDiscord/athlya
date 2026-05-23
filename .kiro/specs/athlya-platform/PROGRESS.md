@@ -70,7 +70,7 @@ Insérée entre Epic 8 et Epic 10. Règle les 4 vrais bloquants identifiés dans
 ## Non démarré (~47 tâches)
 
 ### Epic 11 — Mobile Expo (13 tâches, dont **11.12 P5 FIFO drain**)
-### Epic 12 — Admin studio app (6 tâches)
+### Epic 12 — Admin studio app (4 tâches restantes — 12.2 et 12.3 livrées)
 ### Epic 14 — Checkpoint v0.1 MVP
 ### Epic 20 — Checkpoint v0.2
 ### Epics v0.3 (Epic 21–25, 8 tâches)
@@ -263,6 +263,11 @@ Livré hors-spec, workflow "brancher les secrets live + adapters Drizzle/Upstash
 
 ### Fix runtime — Slice 12.D-bis
 - `packages/api/src/adapters/reservations-deps.ts` : `BookingCounter` adapter avec `decrRemaining`/`incrRemaining` qui forwarde vers `RemainingCounter.decr`/`.incr`. Le `bookClass` branch utilisait directement `counter` (RemainingCounter shape), mais le service `bookClass` attend `BookingCounter` (decr/incr*Remaining). Cancel branch faisait déjà le mapping, book branch non. Fix une-ligne.
+
+### Fix i18n — tâches 12.2 / 12.3 ✅
+- `packages/shared/src/i18n/en.json` + `fr.json` : ajout de la clé `studio.members.joinedAt` ("Joined" / "Inscrit le") manquante.
+- `apps/studio/src/app/dashboard/members/MembersAdminList.tsx` : remplacement du texte hardcodé `"Inscrit le"` par `{t('studio.members.joinedAt')}`.
+- Tasks 12.2 et 12.3 marquées `[x]` dans `tasks.md`.
 
 ### Slice 12.B-bis — Studio Turnstile widget ports ✅
 - Files créés (3):
