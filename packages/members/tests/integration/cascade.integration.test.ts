@@ -397,7 +397,7 @@ async function seedScenario(client: Sql): Promise<{
   // Pass plain objects (not JSON.stringify'd strings) so postgres-js serialises
   // them correctly for the ::jsonb cast — pre-stringified values get
   // double-encoded, yielding jsonb_typeof = 'string' instead of 'object'.
-  const aliceMeta = [
+  const aliceMeta: Array<Record<string, string>> = [
     {
       email: 'alice@athlya.test',
       displayName: 'Alice',
@@ -432,7 +432,7 @@ async function seedScenario(client: Sql): Promise<{
       userAgent: 'AthlyaWeb/1.0 (Chrome 120; Windows)',
     },
   ];
-  const bobMeta = [
+  const bobMeta: Array<Record<string, string>> = [
     {
       email: 'bob@athlya.test',
       displayName: 'Bob',
