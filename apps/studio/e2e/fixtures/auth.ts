@@ -69,7 +69,11 @@ export async function loginAsAdmin(page: Page): Promise<void> {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ memberId: 'member-1', memberName: 'Test Member' }),
+      body: JSON.stringify({
+        success: true,
+        reservationId: 'res-1',
+        member: { id: 'member-1', displayName: 'Test Member', avatarUrl: null },
+      }),
     });
   });
 }

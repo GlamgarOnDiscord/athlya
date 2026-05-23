@@ -131,7 +131,7 @@ export function AuditLogList(): ReactElement {
           ) : null}
 
           {items.map((item) => (
-            <AuditRow key={item.id} item={item} fmt={fmt} t={t} />
+            <AuditRow key={item.id} item={item} fmt={fmt} />
           ))}
         </TableBody>
       </Table>
@@ -160,12 +160,10 @@ export function AuditLogList(): ReactElement {
 interface AuditRowProps {
   readonly item: AuditItem;
   readonly fmt: Intl.DateTimeFormat;
-  readonly t: ReturnType<typeof createTranslator>;
 }
 
-function AuditRow({ item, fmt, t }: AuditRowProps): ReactElement {
-  const actorDisplay =
-    item.actorId !== null ? item.actorId.slice(0, 8) + '…' : t('studio.audit.actorLabel');
+function AuditRow({ item, fmt }: AuditRowProps): ReactElement {
+  const actorDisplay = item.actorId !== null ? item.actorId.slice(0, 8) + '…' : '—';
   const targetDisplay =
     item.targetType !== null && item.targetId !== null
       ? `${item.targetType}:${item.targetId.slice(0, 8)}`

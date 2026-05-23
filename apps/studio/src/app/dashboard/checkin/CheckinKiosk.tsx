@@ -7,7 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 import { useApiClient } from '../../../lib/api/buildClient';
+import { ApiError } from '../../../lib/api/client';
 import { useAuth } from '../../../lib/auth/AuthContext';
+import { newIdempotencyKey } from '../../../lib/idempotency';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
 
@@ -33,10 +35,6 @@ interface CheckInSuccessResponse {
     readonly displayName: string;
     readonly avatarUrl: string | null;
   };
-}
-
-interface CheckInErrorResponse {
-  readonly code: CheckInFailCode;
 }
 
 type KioskState =
@@ -277,25 +275,20 @@ export function CheckinKiosk(): ReactElement {
   async function submitToken(qrToken: string): Promise<void> {
     setState({ kind: 'submitting' });
     try {
-      const idempotencyKey = `checkin-${qrToken.slice(-16)}-${Date.now()}`;
-      const response = await client.post<CheckInSuccessResponse | CheckInErrorResponse>(
+      const response = await client.post<CheckInSuccessResponse>(
         '/v1/checkins',
         { qrToken },
-        { headers: { 'Idempotency-Key': idempotencyKey } },
+        { headers: { 'Idempotency-Key': newIdempotencyKey() } },
       );
-
-      if ('success' in response && response.success === true) {
-        setState({
-          kind: 'success',
-          member: (response as CheckInSuccessResponse).member,
-          countdown: SUCCESS_COUNTDOWN_SECONDS,
-        });
-      } else {
-        const code = (response as CheckInErrorResponse).code;
-        setState({ kind: 'error', message: resolveErrorMessage(code, t) });
-      }
-    } catch {
-      setState({ kind: 'error', message: t('studio.checkin.errors.generic') });
+      setState({
+        kind: 'success',
+        member: response.member,
+        countdown: SUCCESS_COUNTDOWN_SECONDS,
+      });
+    } catch (err: unknown) {
+      const code =
+        err instanceof ApiError ? (err.problem?.code as CheckInFailCode | undefined) : undefined;
+      setState({ kind: 'error', message: resolveErrorMessage(code, t) });
     }
   }
 

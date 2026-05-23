@@ -6,7 +6,7 @@ export default defineConfig({
   expect: { timeout: 5_000 },
   retries: process.env.CI ? 2 : 0,
   webServer: {
-    command: 'pnpm --filter @athlya/studio dev',
+    command: 'pnpm --filter @athlya/studio start',
     url: 'http://localhost:3001',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

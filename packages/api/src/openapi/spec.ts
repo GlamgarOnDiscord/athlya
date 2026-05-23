@@ -37,6 +37,7 @@ import {
   LoginRequestSchema,
   MembersPageResponseSchema,
   RefreshRequestSchema,
+  AuditListResponseSchema,
   RegisterRequestSchema,
   SessionResponseSchema,
   StudioMeResponseSchema,
@@ -773,19 +774,7 @@ const listAuditRoute = createRoute({
       description: 'Paginated audit log',
       content: {
         'application/json': {
-          schema: z.object({
-            items: z.array(
-              z.object({
-                id: z.string(),
-                actorId: z.string().uuid().nullable(),
-                action: z.string(),
-                targetType: z.string().nullable(),
-                targetId: z.string().nullable(),
-                createdAt: z.string().datetime(),
-              }),
-            ),
-            nextCursor: z.string().nullable(),
-          }),
+          schema: AuditListResponseSchema,
         },
       },
     },
