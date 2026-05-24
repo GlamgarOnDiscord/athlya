@@ -34,13 +34,14 @@ jobs:
   # Deploy: runs on every push to an open PR
   # --------------------------------------------------------------------------
   deploy:
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && vars.NEON_PROJECT_ID != ''
     name: Deploy preview (PR #${{ github.event.pull_request.number }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: write
+      issues: write
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -98,8 +99,7 @@ jobs:
           DB_URL=$(echo "$BODY" | jq -r '.connection_uris[0].connection_uri // empty')
 
           if [ -z "$DB_URL" ]; then
-            echo "::error::Failed to obtain DB_URL from Neon API"
-            echo "$BODY"
+            echo "::error::Failed to obtain DB_URL from Neon API (response omitted to avoid leaking credentials)"
             exit 1
           fi
 
@@ -180,7 +180,7 @@ jobs:
   # Teardown: runs when a PR is closed (merged or abandoned)
   # --------------------------------------------------------------------------
   teardown:
-    if: github.event.action == 'closed'
+    if: github.event.action == 'closed' && vars.NEON_PROJECT_ID != ''
     name: Teardown preview (PR #${{ github.event.pull_request.number }})
     runs-on: ubuntu-latest
     timeout-minutes: 5

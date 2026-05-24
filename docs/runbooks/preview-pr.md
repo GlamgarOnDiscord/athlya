@@ -65,8 +65,10 @@ PR opened / commit pushed
 Create Neon branch "preview-pr-{N}"
        │
        ▼
-wrangler secret put DB_URL=<neon_branch_url> --env preview
-wrangler secret put REDIS_* / JWT_JWKS_URL / TURNSTILE_SECRET --env preview
+printf '%s' "<neon_branch_url>" | wrangler secret put DB_URL --env preview
+printf '%s' "<value>" | wrangler secret put REDIS_URL --env preview
+printf '%s' "<value>" | wrangler secret put JWT_JWKS_URL --env preview
+printf '%s' "<value>" | wrangler secret put TURNSTILE_SECRET --env preview
        │
        ▼
 wrangler versions upload --env preview --var VERSION=pr{N}-{SHA}
