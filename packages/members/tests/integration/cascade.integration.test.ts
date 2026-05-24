@@ -90,6 +90,7 @@ import {
 
 import type { AuthUserDeletedEvent } from '@athlya/shared/events';
 import type { Sql } from 'postgres';
+import type { PGlite } from '@electric-sql/pglite';
 
 /* ================================================================= */
 /*  Docker-daemon availability probe                                  */
@@ -123,6 +124,9 @@ let container: { stop: () => Promise<void> } | null = null;
 /** Superuser (BYPASSRLS + table owner) client. Used by the seed   */
 /** helpers and by every DeletionRepo adapter built in this suite. */
 let rootClient: Sql | null = null;
+
+/** PGlite instance — populated in beforeAll when Docker is unreachable (CN.9.3). */
+let pglite: PGlite | null = null;
 
 const ROOT_ROLE = 'postgres';
 
@@ -293,6 +297,139 @@ function buildScheduler(): {
 /** Frozen clock. Instances are cheap so each test makes its own. */
 function buildClock(now: number): Clock {
   return { now: () => now };
+}
+
+// -----------------------------------------------------------------
+// PGlite helpers (CN.9.3) — raw parameterized queries instead of
+// postgres-js template literals. pglite.query<T>(sql, params)
+// returns { rows: T[] }.
+// -----------------------------------------------------------------
+
+async function truncateAllPglite(pg: PGlite): Promise<void> {
+  await pg.exec(`
+    ALTER TABLE audit_log DISABLE TRIGGER audit_log_forbid_delete;
+    TRUNCATE TABLE
+        export_jobs,
+        push_tokens,
+        idempotency_keys,
+        outbox,
+        audit_log,
+        workout_sessions,
+        reservations,
+        classes,
+        users,
+        studios
+    RESTART IDENTITY CASCADE;
+    ALTER TABLE audit_log ENABLE TRIGGER audit_log_forbid_delete;
+  `);
+}
+
+async function seedScenarioPglite(pg: PGlite): Promise<{ aliceAuditIds: string[]; bobAuditIds: string[] }> {
+  const consents = JSON.stringify(DEFAULT_CONSENTS);
+
+  await pg.query(`INSERT INTO studios (id, slug, name, brand_color) VALUES ($1, 'alpha', 'Studio Alpha', '#0EA5E9'), ($2, 'bravo', 'Studio Bravo', '#F97316')`, [STUDIO_ALPHA_ID, STUDIO_BRAVO_ID]);
+  await pg.query(`INSERT INTO users (id, studio_id, email, display_name, role, consents) VALUES ($1, $2, 'alice@athlya.test', 'Alice', 'member', $3::jsonb), ($4, $5, 'bob@athlya.test', 'Bob', 'member', $3::jsonb)`, [ALICE_ID, STUDIO_ALPHA_ID, consents, BOB_ID, STUDIO_BRAVO_ID]);
+  await pg.query(
+    `INSERT INTO classes (id, studio_id, title, starts_at, duration_min, capacity, version) VALUES ($1, $2, 'Yoga Flow', '2026-03-01T09:00:00Z', 60, 20, 0), ($3, $2, 'HIIT', '2026-03-01T18:00:00Z', 45, 15, 0), ($4, $2, 'Pilates', '2026-03-02T09:00:00Z', 60, 18, 0), ($5, $6, 'Muay Thai', '2026-03-01T19:00:00Z', 60, 12, 0)`,
+    [CLASS_A1, STUDIO_ALPHA_ID, CLASS_A2, CLASS_A3, CLASS_B1, STUDIO_BRAVO_ID],
+  );
+  await pg.query(
+    `INSERT INTO reservations (class_id, user_id, status) VALUES ($1, $2, 'confirmed'), ($3, $2, 'waitlist'), ($4, $2, 'cancelled'), ($5, $6, 'confirmed')`,
+    [CLASS_A1, ALICE_ID, CLASS_A2, CLASS_A3, CLASS_B1, BOB_ID],
+  );
+  const emptyExercises = JSON.stringify([]);
+  await pg.query(
+    `INSERT INTO workout_sessions (user_id, studio_id, started_at, duration_min, exercises) VALUES ($1, $2, '2026-01-15T08:00:00Z', 60, $3::jsonb), ($1, $2, '2026-01-20T08:00:00Z', 45, $3::jsonb), ($4, $5, '2026-01-18T08:00:00Z', 60, $3::jsonb)`,
+    [ALICE_ID, STUDIO_ALPHA_ID, emptyExercises, BOB_ID, STUDIO_BRAVO_ID],
+  );
+  await pg.query(
+    `INSERT INTO push_tokens (user_id, platform, token) VALUES ($1, 'ios', 'ExpoPushToken[alice-ios-1]'), ($1, 'ios', 'ExpoPushToken[alice-ios-2]'), ($1, 'android', 'ExpoPushToken[alice-android-1]'), ($1, 'web', 'ExpoPushToken[alice-web-1]'), ($2, 'ios', 'ExpoPushToken[bob-ios-1]')`,
+    [ALICE_ID, BOB_ID],
+  );
+
+  const aliceMeta = [
+    { email: 'alice@athlya.test', displayName: 'Alice', ip: '203.0.113.7', userAgent: 'AthlyaMobile/1.2 (iPhone 15; iOS 17)', classId: CLASS_A1 },
+    { email: 'alice@athlya.test', displayName: 'Alice', ip: '203.0.113.7', userAgent: 'AthlyaMobile/1.2 (iPhone 15; iOS 17)', classId: CLASS_A2 },
+    { email: 'alice@athlya.test', displayName: 'Alice', ip: '203.0.113.8', userAgent: 'AthlyaWeb/1.0 (Firefox 120; macOS)', classId: CLASS_A3 },
+    { email: 'alice@athlya.test', displayName: 'Alice', ip: '203.0.113.9', userAgent: 'AthlyaWeb/1.0 (Chrome 120; Windows)' },
+    { email: 'alice@athlya.test', displayName: 'Alice', ip: '203.0.113.9', userAgent: 'AthlyaWeb/1.0 (Chrome 120; Windows)' },
+  ];
+  const bobMeta = [
+    { email: 'bob@athlya.test', displayName: 'Bob', ip: '198.51.100.4', userAgent: 'AthlyaMobile/1.2 (Pixel 8; Android 14)', classId: CLASS_B1 },
+    { email: 'bob@athlya.test', displayName: 'Bob', ip: '198.51.100.4', userAgent: 'AthlyaMobile/1.2 (Pixel 8; Android 14)' },
+    { email: 'bob@athlya.test', displayName: 'Bob', ip: '198.51.100.5', userAgent: 'AthlyaWeb/1.0 (Safari 17; iPadOS)' },
+    { email: 'bob@athlya.test', displayName: 'Bob', ip: '198.51.100.5', userAgent: 'AthlyaWeb/1.0 (Safari 17; iPadOS)' },
+    { email: 'bob@athlya.test', displayName: 'Bob', ip: '198.51.100.6', userAgent: 'curl/8.5.0' },
+  ];
+
+  const aliceActions = ['user.login', 'reservation.created', 'reservation.cancelled', 'user.consents.updated', 'user.profile.updated'];
+  const aliceTargets = [ALICE_ID, CLASS_A1, CLASS_A3, ALICE_ID, ALICE_ID];
+  const aliceAuditIds: string[] = [];
+  for (let i = 0; i < 5; i++) {
+    const r = await pg.query<{ id: string }>(
+      `INSERT INTO audit_log (actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'user', $3, $4::jsonb) RETURNING id::text`,
+      [ALICE_ID, aliceActions[i], aliceTargets[i], JSON.stringify(aliceMeta[i])],
+    );
+    aliceAuditIds.push(r.rows[0]!.id);
+  }
+
+  const bobActions = ['user.login', 'reservation.created', 'user.consents.updated', 'user.profile.updated', 'user.login'];
+  const bobTargets = [BOB_ID, CLASS_B1, BOB_ID, BOB_ID, BOB_ID];
+  const bobAuditIds: string[] = [];
+  for (let i = 0; i < 5; i++) {
+    const r = await pg.query<{ id: string }>(
+      `INSERT INTO audit_log (actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'user', $3, $4::jsonb) RETURNING id::text`,
+      [BOB_ID, bobActions[i], bobTargets[i], JSON.stringify(bobMeta[i])],
+    );
+    bobAuditIds.push(r.rows[0]!.id);
+  }
+
+  return { aliceAuditIds, bobAuditIds };
+}
+
+function buildRepoPglite(pg: PGlite): DeletionRepo {
+  return {
+    async deleteReservationsForUser(userId) {
+      const r = await pg.query<{ id: string }>(`DELETE FROM reservations WHERE user_id = $1 RETURNING id`, [userId]);
+      return r.rows.length;
+    },
+    async deleteWorkoutSessionsForUser(userId) {
+      const r = await pg.query<{ id: string }>(`DELETE FROM workout_sessions WHERE user_id = $1 RETURNING id`, [userId]);
+      return r.rows.length;
+    },
+    async deletePushTokensForUser(userId) {
+      const r = await pg.query<{ id: string }>(`DELETE FROM push_tokens WHERE user_id = $1 RETURNING id`, [userId]);
+      return r.rows.length;
+    },
+    async markUserDeleted(userId, deletedAt) {
+      await pg.query(`UPDATE users SET deleted_at = $1 WHERE id = $2`, [deletedAt, userId]);
+    },
+    async anonymizeAuditRows(userId) {
+      const r = await pg.query<{ n: number }>(`SELECT anonymize_user_audit($1) AS n`, [userId]);
+      return Number(r.rows[0]?.n ?? 0);
+    },
+  };
+}
+
+/**
+ * Unified query helper: routes to postgres-js `unsafe()` (Docker path)
+ * or PGlite `query()` (local path). Array parameters work for both
+ * backends when used with `= ANY($n)`.
+ */
+async function sqlQ<T = Record<string, unknown>>(
+  sqlStr: string,
+  params?: unknown[],
+): Promise<T[]> {
+  if (rootClient) {
+    // postgres-js unsafe() params type is narrow; cast through any for the unified helper.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return rootClient.unsafe<T[]>(sqlStr, (params ?? []) as any);
+  }
+  if (pglite) {
+    const r = await pglite.query<T>(sqlStr, params);
+    return r.rows;
+  }
+  throw new Error('no database client initialised');
 }
 
 /* ================================================================= */
@@ -492,10 +629,22 @@ async function seedScenario(client: Sql): Promise<{
 
 beforeAll(async () => {
   if (!dockerReady) {
-    console.warn(
-      '[cascade.integration] Docker daemon unreachable; RGPD cascade ' +
-        'integration suite skipped. Start Docker Desktop / dockerd to exercise it.',
-    );
+    // PGlite fallback (CN.9.3): real PostgreSQL WASM. Supports
+    // SECURITY DEFINER, PL/pgSQL triggers, and all migrations.
+    const { PGlite } = await import('@electric-sql/pglite');
+    const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto');
+    const { citext } = await import('@electric-sql/pglite/contrib/citext');
+    const pg = new PGlite({ extensions: { pgcrypto, citext } });
+
+    await pg.exec(readMigration('0000_init.sql'));
+    await pg.exec(readMigration('0001_rls.sql'));
+    await pg.exec(readMigration('0002_export_jobs.sql'));
+    await pg.exec(readMigration('0003_audit_anonymization.sql'));
+    await pg.exec(readMigration('0004_rls_hardening.sql'));
+    await pg.exec(readMigration('0005_password_reset_audit_anonymize.sql'));
+    await pg.exec(readMigration('0006_anonymize_audit_scalar_guard.sql'));
+
+    pglite = pg;
     return;
   }
 
@@ -536,6 +685,7 @@ beforeAll(async () => {
 afterAll(async () => {
   try {
     await rootClient?.end({ timeout: 5 });
+    await pglite?.close();
   } finally {
     await container?.stop();
   }
@@ -545,23 +695,23 @@ afterAll(async () => {
 /*  Property 4 — RGPD cascade (full deletion)                          */
 /* ================================================================= */
 
-describe.skipIf(!dockerReady)(
+describe(
   'handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)',
   () => {
     it(
       'cascade-deletes every FK-joined row, schedules the 30-day anonymisation job, ' +
         'leaves other users untouched, and anonymises audit rows idempotently at J+30',
       async () => {
-        if (!rootClient) {
+        if (!rootClient && !pglite) {
           throw new Error('rootClient not initialised');
         }
-        const client = rootClient;
+        const truncateFn = rootClient ? () => truncateAll(rootClient!) : () => truncateAllPglite(pglite!);
+        const seedFn = rootClient ? () => seedScenario(rootClient!) : () => seedScenarioPglite(pglite!);
+        const repo = rootClient ? buildRepo(rootClient) : buildRepoPglite(pglite!);
 
         // Arrange — clean slate + seed Alice & Bob's rows.
-        await truncateAll(client);
-        const { aliceAuditIds, bobAuditIds } = await seedScenario(client);
-
-        const repo = buildRepo(client);
+        await truncateFn();
+        const { aliceAuditIds, bobAuditIds } = await seedFn();
         const { avatars, store: avatarStore } = buildAvatars({
           [ALICE_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
           [BOB_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
@@ -590,23 +740,15 @@ describe.skipIf(!dockerReady)(
         expect(result.scheduledAnonymizationAt).toBe(expectedDueAt);
 
         /* --- SQL-side: Alice is gone ------------------------- */
-        const aliceReservations = await client<{ id: string }[]>`
-                    SELECT id FROM reservations WHERE user_id = ${ALICE_ID}
-                `;
-        const aliceSessions = await client<{ id: string }[]>`
-                    SELECT id FROM workout_sessions WHERE user_id = ${ALICE_ID}
-                `;
-        const alicePushTokens = await client<{ id: string }[]>`
-                    SELECT id FROM push_tokens WHERE user_id = ${ALICE_ID}
-                `;
+        const aliceReservations = await sqlQ<{ id: string }>(`SELECT id FROM reservations WHERE user_id = $1`, [ALICE_ID]);
+        const aliceSessions = await sqlQ<{ id: string }>(`SELECT id FROM workout_sessions WHERE user_id = $1`, [ALICE_ID]);
+        const alicePushTokens = await sqlQ<{ id: string }>(`SELECT id FROM push_tokens WHERE user_id = $1`, [ALICE_ID]);
         expect(aliceReservations).toHaveLength(0);
         expect(aliceSessions).toHaveLength(0);
         expect(alicePushTokens).toHaveLength(0);
 
         /* --- users tombstone was stamped --------------------- */
-        const aliceRow = await client<{ deleted_at: Date | null }[]>`
-                    SELECT deleted_at FROM users WHERE id = ${ALICE_ID}
-                `;
+        const aliceRow = await sqlQ<{ deleted_at: Date | null }>(`SELECT deleted_at FROM users WHERE id = $1`, [ALICE_ID]);
         expect(aliceRow).toHaveLength(1);
         expect(aliceRow[0]!.deleted_at).toBeInstanceOf(Date);
         expect(aliceRow[0]!.deleted_at!.toISOString()).toBe(new Date(TIME_0_MS).toISOString());
@@ -622,14 +764,10 @@ describe.skipIf(!dockerReady)(
         expect(jobs[0]!.dueAt.toISOString()).toBe(expectedDueAt);
 
         /* --- Audit rows still exist, not yet anonymised ------ */
-        const aliceAuditBefore = await client<
-          { actor_id: string | null; metadata: Record<string, unknown> }[]
-        >`
-                    SELECT actor_id::text, metadata
-                      FROM audit_log
-                     WHERE id::text = ANY(${aliceAuditIds})
-                     ORDER BY id
-                `;
+        const aliceAuditBefore = await sqlQ<{ actor_id: string | null; metadata: Record<string, unknown> }>(
+          `SELECT actor_id::text, metadata FROM audit_log WHERE id::text = ANY($1) ORDER BY id`,
+          [aliceAuditIds],
+        );
         expect(aliceAuditBefore).toHaveLength(aliceAuditIds.length);
         for (const row of aliceAuditBefore) {
           expect(row.actor_id).toBe(ALICE_ID);
@@ -641,18 +779,10 @@ describe.skipIf(!dockerReady)(
         }
 
         /* --- Bob is UNTOUCHED across every table ------------- */
-        const bobReservations = await client<{ id: string }[]>`
-                    SELECT id FROM reservations WHERE user_id = ${BOB_ID}
-                `;
-        const bobSessions = await client<{ id: string }[]>`
-                    SELECT id FROM workout_sessions WHERE user_id = ${BOB_ID}
-                `;
-        const bobPushTokens = await client<{ id: string }[]>`
-                    SELECT id FROM push_tokens WHERE user_id = ${BOB_ID}
-                `;
-        const bobRow = await client<{ deleted_at: Date | null }[]>`
-                    SELECT deleted_at FROM users WHERE id = ${BOB_ID}
-                `;
+        const bobReservations = await sqlQ<{ id: string }>(`SELECT id FROM reservations WHERE user_id = $1`, [BOB_ID]);
+        const bobSessions = await sqlQ<{ id: string }>(`SELECT id FROM workout_sessions WHERE user_id = $1`, [BOB_ID]);
+        const bobPushTokens = await sqlQ<{ id: string }>(`SELECT id FROM push_tokens WHERE user_id = $1`, [BOB_ID]);
+        const bobRow = await sqlQ<{ deleted_at: Date | null }>(`SELECT deleted_at FROM users WHERE id = $1`, [BOB_ID]);
         expect(bobReservations).toHaveLength(1);
         expect(bobSessions).toHaveLength(1);
         expect(bobPushTokens).toHaveLength(1);
@@ -674,14 +804,10 @@ describe.skipIf(!dockerReady)(
         // for Alice.
         expect(firstAnon.anonymizedRows).toBe(aliceAuditIds.length);
 
-        const aliceAuditAfter = await client<
-          { actor_id: string | null; metadata: Record<string, unknown> }[]
-        >`
-                    SELECT actor_id::text, metadata
-                      FROM audit_log
-                     WHERE id::text = ANY(${aliceAuditIds})
-                     ORDER BY id
-                `;
+        const aliceAuditAfter = await sqlQ<{ actor_id: string | null; metadata: Record<string, unknown> }>(
+          `SELECT actor_id::text, metadata FROM audit_log WHERE id::text = ANY($1) ORDER BY id`,
+          [aliceAuditIds],
+        );
         expect(aliceAuditAfter).toHaveLength(aliceAuditIds.length);
         for (const row of aliceAuditAfter) {
           // Req 5.3: actor_id scrubbed to NULL.
@@ -706,14 +832,10 @@ describe.skipIf(!dockerReady)(
         expect(parseMeta(aliceAuditAfter[2]!.metadata)).toHaveProperty('classId');
 
         /* --- Bob's audit rows are STILL intact --------------- */
-        const bobAuditAfter = await client<
-          { actor_id: string | null; metadata: Record<string, unknown> }[]
-        >`
-                    SELECT actor_id::text, metadata
-                      FROM audit_log
-                     WHERE id::text = ANY(${bobAuditIds})
-                     ORDER BY id
-                `;
+        const bobAuditAfter = await sqlQ<{ actor_id: string | null; metadata: Record<string, unknown> }>(
+          `SELECT actor_id::text, metadata FROM audit_log WHERE id::text = ANY($1) ORDER BY id`,
+          [bobAuditIds],
+        );
         expect(bobAuditAfter).toHaveLength(bobAuditIds.length);
         for (const row of bobAuditAfter) {
           expect(row.actor_id).toBe(BOB_ID);
@@ -737,11 +859,17 @@ describe.skipIf(!dockerReady)(
          * Attempting a plain UPDATE against audit_log must
          * raise "audit_log is append-only".
          */
-        const triggerErr = await client`
-                    UPDATE audit_log
-                       SET metadata = metadata || '{"tampered": true}'::jsonb
-                     WHERE id::text = ${bobAuditIds[0]!}
-                `.catch((e: unknown) => e);
+        const triggerErr = await (
+          rootClient
+            ? rootClient.unsafe(
+                `UPDATE audit_log SET metadata = metadata || '{"tampered": true}'::jsonb WHERE id::text = $1`,
+                [bobAuditIds[0]!],
+              )
+            : pglite!.query(
+                `UPDATE audit_log SET metadata = metadata || '{"tampered": true}'::jsonb WHERE id::text = $1`,
+                [bobAuditIds[0]!],
+              )
+        ).catch((e: unknown) => e);
         expect(triggerErr).toBeInstanceOf(Error);
         expect((triggerErr as Error).message).toMatch(/append-only/i);
       },
@@ -752,15 +880,14 @@ describe.skipIf(!dockerReady)(
       'scheduler failure rethrows so the event bus redrives — ' +
         'but the SQL cascade has already completed (idempotent retry)',
       async () => {
-        if (!rootClient) {
+        if (!rootClient && !pglite) {
           throw new Error('rootClient not initialised');
         }
-        const client = rootClient;
+        const truncateFn = rootClient ? () => truncateAll(rootClient!) : () => truncateAllPglite(pglite!);
+        const repo = rootClient ? buildRepo(rootClient) : buildRepoPglite(pglite!);
 
-        await truncateAll(client);
-        await seedScenario(client);
-
-        const repo = buildRepo(client);
+        await truncateFn();
+        await (rootClient ? seedScenario(rootClient) : seedScenarioPglite(pglite!));
         const { avatars, store: avatarStore } = buildAvatars({
           [ALICE_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
         });
@@ -787,18 +914,10 @@ describe.skipIf(!dockerReady)(
         // this is the invariant the redelivery contract rests
         // on (re-running the cascade finds 0 rows to delete
         // and is a no-op for the downstream tables).
-        const aliceReservations = await client<{ id: string }[]>`
-                    SELECT id FROM reservations WHERE user_id = ${ALICE_ID}
-                `;
-        const aliceSessions = await client<{ id: string }[]>`
-                    SELECT id FROM workout_sessions WHERE user_id = ${ALICE_ID}
-                `;
-        const alicePushTokens = await client<{ id: string }[]>`
-                    SELECT id FROM push_tokens WHERE user_id = ${ALICE_ID}
-                `;
-        const aliceRow = await client<{ deleted_at: Date | null }[]>`
-                    SELECT deleted_at FROM users WHERE id = ${ALICE_ID}
-                `;
+        const aliceReservations = await sqlQ<{ id: string }>(`SELECT id FROM reservations WHERE user_id = $1`, [ALICE_ID]);
+        const aliceSessions = await sqlQ<{ id: string }>(`SELECT id FROM workout_sessions WHERE user_id = $1`, [ALICE_ID]);
+        const alicePushTokens = await sqlQ<{ id: string }>(`SELECT id FROM push_tokens WHERE user_id = $1`, [ALICE_ID]);
+        const aliceRow = await sqlQ<{ deleted_at: Date | null }>(`SELECT deleted_at FROM users WHERE id = $1`, [ALICE_ID]);
         expect(aliceReservations).toHaveLength(0);
         expect(aliceSessions).toHaveLength(0);
         expect(alicePushTokens).toHaveLength(0);
