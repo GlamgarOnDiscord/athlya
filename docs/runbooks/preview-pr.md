@@ -15,23 +15,23 @@ The Neon branch is deleted when the PR closes.
 
 In **Settings → Secrets → Actions**, add:
 
-| Secret | Description |
-|--------|-------------|
-| `CLOUDFLARE_API_TOKEN` | CF API token with **Workers:Edit** scope |
-| `CLOUDFLARE_ACCOUNT_ID` | CF account ID (visible in the Cloudflare dashboard URL) |
-| `NEON_API_KEY` | Neon project API key (Project settings → API keys) |
-| `PREVIEW_REDIS_URL` | Upstash Redis URL — staging instance |
-| `PREVIEW_REDIS_TOKEN` | Upstash Redis token — staging instance |
-| `PREVIEW_JWT_JWKS_URL` | JWKS endpoint for preview JWT verification |
-| `PREVIEW_TURNSTILE_SECRET` | Cloudflare Turnstile secret (staging key is fine) |
+| Secret                     | Description                                             |
+| -------------------------- | ------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`     | CF API token with **Workers:Edit** scope                |
+| `CLOUDFLARE_ACCOUNT_ID`    | CF account ID (visible in the Cloudflare dashboard URL) |
+| `NEON_API_KEY`             | Neon project API key (Project settings → API keys)      |
+| `PREVIEW_REDIS_URL`        | Upstash Redis URL — staging instance                    |
+| `PREVIEW_REDIS_TOKEN`      | Upstash Redis token — staging instance                  |
+| `PREVIEW_JWT_JWKS_URL`     | JWKS endpoint for preview JWT verification              |
+| `PREVIEW_TURNSTILE_SECRET` | Cloudflare Turnstile secret (staging key is fine)       |
 
 ### 2. GitHub variables
 
 In **Settings → Variables → Actions**, add:
 
-| Variable | Example |
-|----------|---------|
-| `NEON_PROJECT_ID` | `proud-dream-12345678` (Neon dashboard → Project settings) |
+| Variable                       | Example                                                    |
+| ------------------------------ | ---------------------------------------------------------- |
+| `NEON_PROJECT_ID`              | `proud-dream-12345678` (Neon dashboard → Project settings) |
 | `CLOUDFLARE_WORKERS_SUBDOMAIN` | `athlya` (CF dashboard → Workers → your account subdomain) |
 
 ### 3. Provision R2 preview buckets
@@ -87,7 +87,7 @@ Delete Neon branch "preview-pr-{N}"
 **Concurrent PR deployments race on the `DB_URL` secret.**
 The `athlya-api-preview` Worker is a single shared environment. If two PRs deploy simultaneously, the last `wrangler secret put DB_URL` wins — both previews will point at the same Neon branch until the slower job completes.
 
-Mitigation for small teams: the `concurrency` group in the workflow serialises deployments *within* a single PR. Across PRs there is no lock. If the team works with many concurrent PRs, consider upgrading to per-PR Worker names (requires dynamic wrangler.toml generation).
+Mitigation for small teams: the `concurrency` group in the workflow serialises deployments _within_ a single PR. Across PRs there is no lock. If the team works with many concurrent PRs, consider upgrading to per-PR Worker names (requires dynamic wrangler.toml generation).
 
 **Preview uses staging Redis / queues / R2.**
 Events, exports and avatars written during preview testing land in the staging stores. This is intentional to keep setup simple. Clean up manually if needed:
