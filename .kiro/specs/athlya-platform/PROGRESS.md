@@ -264,6 +264,17 @@ Livré hors-spec, workflow "brancher les secrets live + adapters Drizzle/Upstash
 ### Fix runtime — Slice 12.D-bis
 - `packages/api/src/adapters/reservations-deps.ts` : `BookingCounter` adapter avec `decrRemaining`/`incrRemaining` qui forwarde vers `RemainingCounter.decr`/`.incr`. Le `bookClass` branch utilisait directement `counter` (RemainingCounter shape), mais le service `bookClass` attend `BookingCounter` (decr/incr*Remaining). Cancel branch faisait déjà le mapping, book branch non. Fix une-ligne.
 
+### CN.7.2 — Preview environments per PR ✅
+
+- **`.github/workflows/preview.yml`** : workflow complet `deploy` + `teardown`.
+  - `deploy` (opened/synchronize/reopened) : crée une Neon branch `preview-pr-{N}` via API → injecte `DB_URL` + secrets staging (Redis, JWT, Turnstile) via `wrangler secret put --env preview` → déploie avec `wrangler versions upload --env preview` → poste/met à jour un commentaire PR avec l'URL preview.
+  - `teardown` (closed) : supprime la Neon branch via API. Nettoyage idempotent (branch introuvable = no-op).
+  - Idempotent sur synchronize : si la branch Neon existe déjà (409), récupère l'URI existante.
+  - `concurrency` group par PR : les commits successifs annulent le deploy en cours pour ne servir que le dernier.
+- **`packages/api/wrangler.toml`** : ajout de `[env.preview]` — partage les queues/R2 staging, `DB_URL` isolé par PR.
+- **`docs/runbooks/preview-pr.md`** : runbook complet (setup secrets/variables GitHub, provisionnement R2/queues, flow, limitations connues, teardown manuel).
+- CN.7.2 marquée `[x]` dans `tasks.md`.
+
 ### Tâches 12.4, 12.5, 12.6 — Check-in kiosk, Audit log, axe-core a11y ✅
 
 **12.4 — Check-in kiosk** (`apps/studio/src/app/dashboard/checkin/`):
