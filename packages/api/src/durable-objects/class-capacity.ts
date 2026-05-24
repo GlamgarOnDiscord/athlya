@@ -17,8 +17,8 @@
  * CN.8.1 — Sprint 8 (real-time capacity).
  */
 
-import type { DurableObjectState, WebSocket as CFWebSocket } from '@cloudflare/workers-types';
 import type { AthlyaBindings } from '../types.js';
+import type { DurableObjectState, WebSocket as CFWebSocket } from '@cloudflare/workers-types';
 
 export class ClassCapacityDO {
   private readonly ctx: DurableObjectState;
@@ -38,7 +38,8 @@ export class ClassCapacityDO {
 
     const url = new URL(request.url);
     if (url.pathname.endsWith('/broadcast') && request.method === 'POST') {
-      const body = (await request.json()) as { remaining: number; classId: string };
+      const rawBody: unknown = await request.json();
+      const body = rawBody as { remaining: number; classId: string };
       const message = JSON.stringify({
         type: 'capacity_update',
         classId: body.classId,

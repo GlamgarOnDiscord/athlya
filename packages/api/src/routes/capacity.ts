@@ -42,10 +42,6 @@ export function buildCapacityRouter(): Hono<HonoEnv> {
     c.req.raw.headers.forEach((value: string, key: string) => {
       headers[key] = value;
     });
-    // CF Workers Response type differs structurally from the standard Response
-    // type used by Hono — the assertion bridges the two without changing
-    // runtime behaviour.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     return stub.fetch(c.req.url, { headers }) as unknown as Promise<Response>;
   });
 
