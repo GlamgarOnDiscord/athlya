@@ -175,9 +175,21 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
       const outcome = await deps.bookClass(claims.userId, body);
 
       if (outcome.kind === 'confirmed' || outcome.kind === 'waitlist') {
-        const remaining = await deps.getRemainingSeats(body.classId);
-        if (remaining !== null) {
-          c.executionCtx?.waitUntil(notifyCapacityChange(c.env, body.classId, remaining));
+        try {
+          c.executionCtx?.waitUntil(
+            (async () => {
+              try {
+                const remaining = await deps.getRemainingSeats(body.classId);
+                if (remaining !== null) {
+                  await notifyCapacityChange(c.env, body.classId, remaining);
+                }
+              } catch {
+                // Best-effort capacity notification.
+              }
+            })(),
+          );
+        } catch {
+          // No ExecutionContext in non-Cloudflare environments.
         }
       }
 
@@ -247,9 +259,19 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
       if (outcome.kind === 'cancelled' || outcome.kind === 'promoted') {
         const classId = (outcome.reservation as Record<string, unknown>)['classId'];
         if (typeof classId === 'string') {
-          const remaining = await deps.getRemainingSeats(classId);
-          if (remaining !== null) {
-            c.executionCtx?.waitUntil(notifyCapacityChange(c.env, classId, remaining));
+          try {
+            c.executionCtx?.waitUntil(
+              (async () => {
+                try {
+                  const remaining = await deps.getRemainingSeats(classId);
+                  if (remaining !== null) await notifyCapacityChange(c.env, classId, remaining);
+                } catch {
+                  // Best-effort capacity notification.
+                }
+              })(),
+            );
+          } catch {
+            // No ExecutionContext in non-Cloudflare environments.
           }
         }
       }

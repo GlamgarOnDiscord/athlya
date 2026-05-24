@@ -28,7 +28,7 @@ export class ClassCapacityDO {
   }
 
   async fetch(request: Request): Promise<Response> {
-    if (request.headers.get('Upgrade') === 'websocket') {
+    if (request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
       const pair = new WebSocketPair();
       const client = pair[0];
       const server = pair[1];

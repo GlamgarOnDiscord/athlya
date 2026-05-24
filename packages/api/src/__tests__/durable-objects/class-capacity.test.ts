@@ -18,7 +18,8 @@ import { ClassCapacityDO } from '../../durable-objects/class-capacity.js';
 /* ------------------------------------------------------------------ */
 
 beforeAll(() => {
-  if (typeof globalThis.WebSocketPair === 'undefined') {
+  const g = globalThis as Record<string, unknown>;
+  if (typeof g['WebSocketPair'] === 'undefined') {
     class MockWebSocket {
       send = vi.fn();
       close = vi.fn();
@@ -35,8 +36,7 @@ beforeAll(() => {
         this[1] = new MockWebSocket();
       }
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (globalThis as any).WebSocketPair = MockWebSocketPair;
+    g['WebSocketPair'] = MockWebSocketPair;
   }
 });
 

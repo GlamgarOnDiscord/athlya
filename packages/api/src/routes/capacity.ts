@@ -22,7 +22,7 @@ export function buildCapacityRouter(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   router.get('/:classId/capacity/ws', async (c) => {
-    if (c.req.header('Upgrade') !== 'websocket') {
+    if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket') {
       return c.json({ error: 'Expected WebSocket upgrade' }, 426);
     }
 
@@ -35,9 +35,18 @@ export function buildCapacityRouter(): Hono<HonoEnv> {
 
     const id = do_.idFromName(classId);
     const stub = do_.get(id);
-    return stub.fetch(c.req.url, {
-      headers: { Upgrade: 'websocket' },
-    }) as unknown as Promise<Response>;
+
+    // Forward all original headers (including Sec-WebSocket-Key, Sec-WebSocket-Version
+    // and any sub-protocol headers) so the DO can complete the WebSocket handshake.
+    const headers: Record<string, string> = {};
+    c.req.raw.headers.forEach((value: string, key: string) => {
+      headers[key] = value;
+    });
+    // CF Workers Response type differs structurally from the standard Response
+    // type used by Hono — the assertion bridges the two without changing
+    // runtime behaviour.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    return stub.fetch(c.req.url, { headers }) as unknown as Promise<Response>;
   });
 
   return router;
