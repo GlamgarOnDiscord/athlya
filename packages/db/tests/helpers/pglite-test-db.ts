@@ -1,8 +1,11 @@
-import { PGlite } from '@electric-sql/pglite';
-import { drizzle } from 'drizzle-orm/pglite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { PGlite } from '@electric-sql/pglite';
+import { citext } from '@electric-sql/pglite/contrib/citext';
+import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
+import { drizzle } from 'drizzle-orm/pglite';
 
 import * as schema from '../../src/schema/index.js';
 
@@ -25,8 +28,10 @@ export interface PgliteTestHandle {
 }
 
 /**
- * Spins up an in-memory PGlite instance, applies the requested
- * migrations in order, and wraps the result in a Drizzle handle.
+ * Spins up an in-memory PGlite instance with the `pgcrypto` and `citext`
+ * contrib extensions pre-loaded (required by migration 0000_init.sql),
+ * applies the requested migrations in order, and wraps the result in a
+ * Drizzle handle.
  *
  * PGlite's exec() accepts multi-statement SQL natively; the
  * -->  statement-breakpoint markers emitted by drizzle-kit are SQL
@@ -35,7 +40,7 @@ export interface PgliteTestHandle {
  * CN.9.3 - local test fallback (no Docker required).
  */
 export async function createPgliteTestDb(migrationNames: string[]): Promise<PgliteTestHandle> {
-  const pglite = new PGlite();
+  const pglite = new PGlite({ extensions: { pgcrypto, citext } });
 
   for (const name of migrationNames) {
     await pglite.exec(readPgliteMigration(name));

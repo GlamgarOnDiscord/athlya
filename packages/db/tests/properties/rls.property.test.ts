@@ -82,9 +82,9 @@ import {
   type IsolationScenario,
 } from './fixtures.js';
 
-import type { Sql } from 'postgres';
-import type { PGlite } from '@electric-sql/pglite';
 import type { PgliteAthlyaDb } from '../helpers/pglite-test-db.js';
+import type { PGlite } from '@electric-sql/pglite';
+import type { Sql } from 'postgres';
 
 // ---------------------------------------------------------------------
 // Docker-daemon availability probe
@@ -424,7 +424,7 @@ async function withTenantPglite<T>(
   fn: (tx: Parameters<Parameters<PgliteAthlyaDb['transaction']>[0]>[0]) => Promise<T>,
 ): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(sql`SET LOCAL ROLE athlya_tenant`);
+    await tx.execute(sql.raw(`SET LOCAL ROLE ${TENANT_ROLE}`));
     await tx.execute(sql`SELECT set_config('app.user_id', ${claims.userId}, true)`);
     await tx.execute(sql`SELECT set_config('app.studio_id', ${claims.studioId}, true)`);
     await tx.execute(sql`SELECT set_config('app.role', ${claims.role}, true)`);
@@ -584,9 +584,9 @@ function buildTenantUri(host: string, port: number): string {
 }
 
 // ---------------------------------------------------------------------
-// Property — only registered when Docker is reachable. On other
-// machines the describe block is marked `.skip` and the test file
-// still loads cleanly.
+// Property 7 — always registered. Uses Docker (Testcontainers) when
+// available; falls back to PGlite (in-memory PostgreSQL WASM) on machines
+// without Docker (e.g. Windows local dev).
 // ---------------------------------------------------------------------
 
 describe('withTenant — Property 7 (tenant isolation)', () => {
