@@ -388,11 +388,25 @@ async function seedScenarioPglite(pg: PGlite, s: IsolationScenario): Promise<voi
   );
   await pg.query(
     `INSERT INTO classes (id, studio_id, title, starts_at, duration_min, capacity, version) VALUES ($1, $2, $3, $4::timestamptz, $5, $6, 0)`,
-    [s.classA.id, s.classA.studioId, s.classA.title, s.classA.startsAt, s.classA.durationMin, s.classA.capacity],
+    [
+      s.classA.id,
+      s.classA.studioId,
+      s.classA.title,
+      s.classA.startsAt,
+      s.classA.durationMin,
+      s.classA.capacity,
+    ],
   );
   await pg.query(
     `INSERT INTO classes (id, studio_id, title, starts_at, duration_min, capacity, version) VALUES ($1, $2, $3, $4::timestamptz, $5, $6, 0)`,
-    [s.classB.id, s.classB.studioId, s.classB.title, s.classB.startsAt, s.classB.durationMin, s.classB.capacity],
+    [
+      s.classB.id,
+      s.classB.studioId,
+      s.classB.title,
+      s.classB.startsAt,
+      s.classB.durationMin,
+      s.classB.capacity,
+    ],
   );
   await pg.query(
     `INSERT INTO reservations (id, class_id, user_id, status) VALUES ($1, $2, $3, 'confirmed')`,
