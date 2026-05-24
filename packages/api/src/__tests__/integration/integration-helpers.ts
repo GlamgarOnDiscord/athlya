@@ -409,6 +409,7 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
       }
       return { items };
     }),
+    getRemainingSeats: vi.fn(async (_classId: string) => null),
   };
 
   if (options.idempotencyDb !== undefined) {

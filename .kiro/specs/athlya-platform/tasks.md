@@ -1140,7 +1140,7 @@ Post-launch, à itérer dans l'année.
 
 #### Architecture (post-Epic 14)
 
-- [ ] CN.8.1 Real-time avec Cloudflare Durable Objects — `ClassCapacityDO` par cours pour push WebSocket/SSE des updates de capacité aux clients connectés. Bornes check-in live.
+- [x] CN.8.1 Real-time avec Cloudflare Durable Objects — `ClassCapacityDO` par cours pour push WebSocket/SSE des updates de capacité aux clients connectés. Bornes check-in live.
 - [ ] CN.8.2 Recherche full-text — PostgreSQL `tsvector` + GIN index sur `classes.title + description + coach_name`. Migration vers Typesense si volumes le justifient.
 - [ ] CN.8.3 Read replica Neon EU — réduire latence DB pour les studios européens (15-20ms EU vs 80-120ms cross-Atlantic actuel).
 

@@ -1178,6 +1178,8 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
  */
 export const app = buildApp();
 
+export { ClassCapacityDO } from './durable-objects/class-capacity.js';
+
 /* ------------------------------------------------------------------ */
 /*  Worker default export                                              */
 /* ------------------------------------------------------------------ */

@@ -25,6 +25,7 @@ import { BookingRequestSchema, CancelReservationParamsSchema } from '@athlya/sha
 import { Hono } from 'hono';
 import { z } from 'zod';
 
+import { notifyCapacityChange } from '../durable-objects/notify.js';
 import { jwtAuth } from '../middleware/auth.js';
 import { concurrencyLimit } from '../middleware/concurrency-limit.js';
 import { studioRateLimit } from '../middleware/studio-rate-limit.js';
@@ -103,6 +104,7 @@ export interface ReservationsDeps {
     userId: string,
     query: ListMyReservationsQuery,
   ): Promise<{ items: ReadonlyArray<unknown> }>;
+  getRemainingSeats(classId: string): Promise<number | null>;
 
   readonly idempotency?: IdempotencyMiddlewareDeps;
 }
@@ -172,6 +174,25 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
       const body = readValidated<BookingRequest>(c, 'json');
       const outcome = await deps.bookClass(claims.userId, body);
 
+      if (outcome.kind === 'confirmed' || outcome.kind === 'waitlist') {
+        try {
+          c.executionCtx?.waitUntil(
+            (async () => {
+              try {
+                const remaining = await deps.getRemainingSeats(body.classId);
+                if (remaining !== null) {
+                  await notifyCapacityChange(c.env, body.classId, remaining);
+                }
+              } catch {
+                // Best-effort capacity notification.
+              }
+            })(),
+          );
+        } catch {
+          // No ExecutionContext in non-Cloudflare environments.
+        }
+      }
+
       switch (outcome.kind) {
         case 'confirmed':
           return c.json(
@@ -234,6 +255,27 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
       }
       const params = readValidated<CancelReservationParams>(c, 'param');
       const outcome = await deps.cancelReservation(claims.userId, params);
+
+      if (outcome.kind === 'cancelled' || outcome.kind === 'promoted') {
+        const classId = (outcome.reservation as Record<string, unknown>)['classId'];
+        if (typeof classId === 'string') {
+          try {
+            c.executionCtx?.waitUntil(
+              (async () => {
+                try {
+                  const remaining = await deps.getRemainingSeats(classId);
+                  if (remaining !== null) await notifyCapacityChange(c.env, classId, remaining);
+                } catch {
+                  // Best-effort capacity notification.
+                }
+              })(),
+            );
+          } catch {
+            // No ExecutionContext in non-Cloudflare environments.
+          }
+        }
+      }
+
       switch (outcome.kind) {
         case 'cancelled':
         case 'promoted':
