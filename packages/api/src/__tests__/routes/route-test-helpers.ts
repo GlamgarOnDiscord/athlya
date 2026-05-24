@@ -106,6 +106,7 @@ export function buildStubDeps(
       bookClass: vi.fn(),
       cancelReservation: vi.fn(),
       listMyReservations: vi.fn(),
+      getRemainingSeats: vi.fn(),
       ...overrides.reservations,
     },
     sessions: {

@@ -50,6 +50,7 @@ import { buildStudiosDeps } from '../adapters/studios-deps.js';
 import { buildAuditRouter, type AuditDeps } from './audit.js';
 import { buildAuthRouter, type AuthDeps } from './auth.js';
 import { buildBillingRouter, type BillingDeps } from './billing.js';
+import { buildCapacityRouter } from './capacity.js';
 import { buildCheckinsRouter, type CheckinsDeps } from './checkins.js';
 import { buildClassesRouter, type ClassesDeps } from './classes.js';
 import { buildMembersRouter, type MembersDeps } from './members.js';
@@ -64,6 +65,7 @@ export {
   buildAuditRouter,
   buildAuthRouter,
   buildBillingRouter,
+  buildCapacityRouter,
   buildCheckinsRouter,
   buildClassesRouter,
   buildMembersRouter,
@@ -123,6 +125,9 @@ export function mountDomainRoutes(app: Hono<HonoEnv>, deps: DomainDeps): Hono<Ho
   app.route('/v1/audit', buildAuditRouter(deps.audit));
   app.route('/v1/auth', buildAuthRouter(deps.auth));
   app.route('/v1/members', buildMembersRouter(deps.members));
+  // Capacity WebSocket must mount before the authenticated classes router
+  // so the public /v1/classes/:classId/capacity/ws path is matched first.
+  app.route('/v1/classes', buildCapacityRouter());
   app.route('/v1/classes', buildClassesRouter(deps.classes));
   app.route('/v1/reservations', buildReservationsRouter(deps.reservations));
   app.route('/v1/sessions', buildSessionsRouter(deps.sessions));
@@ -218,6 +223,7 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
       bookClass: forward('reservations', 'bookClass'),
       cancelReservation: forward('reservations', 'cancelReservation'),
       listMyReservations: forward('reservations', 'listMyReservations'),
+      getRemainingSeats: forward('reservations', 'getRemainingSeats'),
     },
     sessions: {
       logSession: forward('sessions', 'logSession'),
@@ -355,6 +361,7 @@ export function buildDefaultDeps(env: AthlyaBindings): DomainDeps {
         bookClass: () => notImplemented('reservations.bookClass'),
         cancelReservation: () => notImplemented('reservations.cancelReservation'),
         listMyReservations: () => notImplemented('reservations.listMyReservations'),
+        getRemainingSeats: () => notImplemented('reservations.getRemainingSeats'),
       };
 
   return {
