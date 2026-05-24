@@ -89,8 +89,8 @@ import {
 } from '../../src/cascade.js';
 
 import type { AuthUserDeletedEvent } from '@athlya/shared/events';
-import type { Sql } from 'postgres';
 import type { PGlite } from '@electric-sql/pglite';
+import type { Sql } from 'postgres';
 
 /* ================================================================= */
 /*  Docker-daemon availability probe                                  */
@@ -497,7 +497,7 @@ function buildRepoPglite(pg: PGlite): DeletionRepo {
 async function sqlQ<T = Record<string, unknown>>(sqlStr: string, params?: unknown[]): Promise<T[]> {
   if (rootClient) {
     // postgres-js unsafe() params type is narrow; cast through any for the unified helper.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
     return rootClient.unsafe<T[]>(sqlStr, (params ?? []) as any);
   }
   if (pglite) {
