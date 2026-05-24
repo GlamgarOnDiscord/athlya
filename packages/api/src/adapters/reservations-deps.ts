@@ -375,5 +375,11 @@ export function buildReservationsDeps(env: AthlyaBindings): ReservationsDeps {
           return { kind: 'window_closed' };
       }
     },
+
+    async getRemainingSeats(classId: string) {
+      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const counter = createRedisRemainingCounter(redis);
+      return counter.getRemaining(classId);
+    },
   };
 }

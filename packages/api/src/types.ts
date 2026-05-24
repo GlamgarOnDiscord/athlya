@@ -22,7 +22,7 @@
 
 import type { StructuredLogger } from './logging.js';
 import type { TraceSpan } from './middleware/otel.js';
-import type { Queue, R2Bucket } from '@cloudflare/workers-types';
+import type { DurableObjectNamespace, Queue, R2Bucket } from '@cloudflare/workers-types';
 
 /* ------------------------------------------------------------------ */
 /*  Environment discriminator                                          */
@@ -273,6 +273,18 @@ export interface AthlyaBindings {
    * for the full fallback rationale.
    */
   readonly EXPORTS_BUCKET?: R2Bucket;
+
+  /**
+   * Durable Object namespace for per-class WebSocket capacity fanout
+   * (CN.8.1 — Sprint 8). Each class gets its own DO instance keyed by
+   * `classId` via `idFromName`.
+   *
+   * **Optional** at the type level — when absent (local dev, preview
+   * without DO support) the notify helper and the capacity WS endpoint
+   * both degrade gracefully: notifications are silently skipped and
+   * the endpoint returns 503.
+   */
+  readonly CLASS_CAPACITY_DO?: DurableObjectNamespace;
 }
 
 /* ------------------------------------------------------------------ */
