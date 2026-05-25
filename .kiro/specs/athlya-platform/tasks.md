@@ -567,7 +567,7 @@ Use official CLI to create, init the project .. and recent package version and s
     - Log `{ timestamp, traceId, method, path, status, durationMs }` to stdout; Cloudflare collects logs into the observability pipeline
     - _Requirements: 30.4_
 
-- [ ] 14. Checkpoint — v0.1 MVP complete
+- [x] 14. Checkpoint — v0.1 MVP complete
   - Ensure all tests pass (unit, property, integration, pgTAP, axe-core, Playwright), ask the user if questions arise.
 
 ---
