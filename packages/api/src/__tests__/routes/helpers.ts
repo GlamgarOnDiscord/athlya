@@ -97,6 +97,7 @@ export function buildStubDeps(
     },
     classes: {
       listClasses: vi.fn(),
+      searchClasses: vi.fn(),
       createClass: vi.fn(),
       updateClass: vi.fn(),
       deleteClass: vi.fn(),

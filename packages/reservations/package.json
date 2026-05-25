@@ -45,6 +45,10 @@
     "./update": {
       "types": "./src/update.ts",
       "default": "./src/update.ts"
+    },
+    "./search": {
+      "types": "./src/search.ts",
+      "default": "./src/search.ts"
     }
   },
   "files": [

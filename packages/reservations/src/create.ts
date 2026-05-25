@@ -115,6 +115,7 @@ export class CreateClassError extends Error {
 export interface CreateClassRepoInput {
   readonly studioId: StudioId;
   readonly title: string;
+  readonly description?: string;
   readonly startsAt: string;
   readonly durationMin: number;
   readonly capacity: number;
@@ -255,6 +256,7 @@ export async function createClass(
     capacity: parsed.capacity,
     version: 0,
     ...(parsed.coachId !== undefined ? { coachId: parsed.coachId } : {}),
+    ...(parsed.description !== undefined ? { description: parsed.description } : {}),
   };
   const row = await deps.classRepo.createClass(repoInput);
 

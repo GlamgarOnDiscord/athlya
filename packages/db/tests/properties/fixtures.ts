@@ -245,7 +245,10 @@ export function scenarioIdsAllDistinct(s: IsolationScenario): boolean {
     s.reservationA.id,
     s.reservationB.id,
   ];
-  return new Set(ids).size === ids.length;
+  if (new Set(ids).size !== ids.length) return false;
+  // Slugs are derived from id.slice(0,8) so two distinct UUIDs can share
+  // the same prefix after fast-check shrinks — guard that separately.
+  return s.studioA.slug !== s.studioB.slug;
 }
 
 /** Versioned consents JSON payload — shape documented by `ConsentsSchema`. */

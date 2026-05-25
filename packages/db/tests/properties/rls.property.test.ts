@@ -500,6 +500,7 @@ beforeAll(async () => {
 
     await pg.exec(readMigration('0000_init.sql'));
     await pg.exec(readMigration('0001_rls.sql'));
+    await pg.exec(readMigration('0007_classes_fts.sql'));
 
     // Bootstrap the NOBYPASSRLS tenant role + grant the superuser the
     // right to switch into it via SET LOCAL ROLE inside transactions.
@@ -549,6 +550,7 @@ beforeAll(async () => {
   // Apply schema + RLS.
   await applyMigration(rootClient, readMigration('0000_init.sql'));
   await applyMigration(rootClient, readMigration('0001_rls.sql'));
+  await applyMigration(rootClient, readMigration('0007_classes_fts.sql'));
 
   // Create the NOBYPASSRLS tenant role + grants.
   await bootstrapTenantRole(rootClient);

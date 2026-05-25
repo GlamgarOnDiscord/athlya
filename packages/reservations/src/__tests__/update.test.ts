@@ -53,6 +53,7 @@ const BASE_ROW: ClassRow = {
   studioId: STUDIO_ID,
   coachId: COACH_ID,
   title: 'HIIT morning',
+  description: null,
   startsAt: new Date('2026-03-01T09:00:00.000Z'),
   durationMin: 45,
   capacity: 20,

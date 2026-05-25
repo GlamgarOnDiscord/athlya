@@ -74,6 +74,7 @@ function rowFor(input: CreateClassRepoInput): ClassRow {
     studioId: input.studioId,
     coachId: input.coachId !== undefined ? input.coachId : null,
     title: input.title,
+    description: null,
     startsAt: new Date(input.startsAt),
     durationMin: input.durationMin,
     capacity: input.capacity,
