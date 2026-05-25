@@ -215,6 +215,7 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
     },
     classes: {
       listClasses: forward('classes', 'listClasses'),
+      searchClasses: forward('classes', 'searchClasses'),
       createClass: forward('classes', 'createClass'),
       updateClass: forward('classes', 'updateClass'),
       deleteClass: forward('classes', 'deleteClass'),
@@ -351,6 +352,7 @@ export function buildDefaultDeps(env: AthlyaBindings): DomainDeps {
     ? buildClassesDeps(env)
     : {
         listClasses: () => notImplemented('reservations.listClasses'),
+        searchClasses: () => notImplemented('classes.searchClasses'),
         createClass: () => notImplemented('reservations.createClass'),
         updateClass: () => notImplemented('reservations.updateClass'),
         deleteClass: () => notImplemented('classes.deleteClass'),

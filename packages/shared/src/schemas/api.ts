@@ -252,12 +252,50 @@ export const ListClassesQuerySchema = refineDateRange(
 export type ListClassesQuery = z.infer<typeof ListClassesQuerySchema>;
 
 /**
+ * `GET /v1/classes/search?q=` query parameters. `q` is trimmed and capped at
+ * 200 chars so the tsvector query stays well within PostgreSQL's limits.
+ * `from` and `to` narrow the date window when present (same ISO-8601 shape as
+ * `ListClassesQuerySchema` but both are optional here).
+ *
+ * Requirement: CN.8.2.
+ */
+export const SearchClassesQuerySchema = z
+  .object({
+    q: z.string().trim().min(1).max(200),
+    from: IsoDateTimeSchema.optional(),
+    to: IsoDateTimeSchema.optional(),
+  })
+  .strict();
+
+export type SearchClassesQuery = z.infer<typeof SearchClassesQuerySchema>;
+
+/**
+ * One item returned by `GET /v1/classes/search`. Extends `ClassWithRemaining`
+ * with the optional `description` field introduced by migration 0007.
+ */
+export const ClassSearchResultSchema = ClassSchema.extend({
+  description: z.string().nullable(),
+  remaining: z.number().int().nonnegative(),
+});
+
+export type ClassSearchResult = z.infer<typeof ClassSearchResultSchema>;
+
+export const ClassSearchResponseSchema = z
+  .object({
+    items: z.array(ClassSearchResultSchema),
+  })
+  .strict();
+
+export type ClassSearchResponse = z.infer<typeof ClassSearchResponseSchema>;
+
+/**
  * `POST /v1/classes`. `coachId` is optional — classes without a coach are
  * legal (e.g. open-gym hours). Requirement 6.1–6.4.
  */
 export const CreateClassRequestSchema = z
   .object({
     title: z.string().trim().min(1).max(200),
+    description: z.string().trim().max(1000).optional(),
     startsAt: IsoDateTimeSchema,
     durationMin: z.number().int().min(5).max(480),
     capacity: z.number().int().min(1).max(500),
@@ -275,6 +313,7 @@ export type CreateClassRequest = z.infer<typeof CreateClassRequestSchema>;
 export const UpdateClassRequestSchema = z
   .object({
     title: z.string().trim().min(1).max(200).optional(),
+    description: z.string().trim().max(1000).nullable().optional(),
     startsAt: IsoDateTimeSchema.optional(),
     durationMin: z.number().int().min(5).max(480).optional(),
     capacity: z.number().int().min(1).max(500).optional(),
@@ -285,6 +324,7 @@ export const UpdateClassRequestSchema = z
   .refine(
     (v) =>
       v.title !== undefined ||
+      v.description !== undefined ||
       v.startsAt !== undefined ||
       v.durationMin !== undefined ||
       v.capacity !== undefined ||

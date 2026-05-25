@@ -65,6 +65,7 @@ import {
   createClass as svcCreateClass,
   bookClass as svcBookClass,
   createRedisRemainingCounter,
+  searchClasses as svcSearchClasses,
 } from '@athlya/reservations';
 import { cancelReservation as svcCancelReservation } from '@athlya/reservations/cancel';
 import { updateClass as svcUpdateClass } from '@athlya/reservations/update';
@@ -73,6 +74,7 @@ import {
   createDrizzleCreateClassRepo,
   createDrizzleDeleteClassRepo,
   createDrizzleListClassesRepo,
+  createDrizzleSearchClassesRepo,
   createDrizzleUpdateClassRepo,
 } from './classes-repo-drizzle.js';
 import {
@@ -93,10 +95,12 @@ import type { ReservationsDeps } from '../routes/reservations.js';
 import type { AthlyaBindings } from '../types.js';
 import type { ClassRow } from '@athlya/db/schema';
 import type { ClassListing } from '@athlya/reservations';
+import type { ClassSearchResult } from '@athlya/shared/schemas/api';
 import type { StudioId } from '@athlya/shared/ids';
 import type {
   CreateClassRequest,
   ListClassesQuery,
+  SearchClassesQuery,
   UpdateClassRequest,
 } from '@athlya/shared/schemas/api';
 
@@ -177,6 +181,27 @@ export function buildClassesDeps(env: AthlyaBindings): ClassesDeps {
       const counter = createRedisRemainingCounter(redis);
       const items = await svcListClasses(studioId, range, {
         classRepo,
+        counter,
+      });
+      return { items };
+    },
+
+    async searchClasses(
+      studioId: string,
+      query: SearchClassesQuery,
+    ): Promise<{ items: ClassSearchResult[] }> {
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const searchRepo = createDrizzleSearchClassesRepo(db);
+      const counter = createRedisRemainingCounter(redis);
+
+      const range =
+        query.from !== undefined && query.to !== undefined
+          ? { from: new Date(query.from), to: new Date(query.to) }
+          : undefined;
+
+      const items = await svcSearchClasses(studioId, query.q, range, {
+        searchRepo,
         counter,
       });
       return { items };

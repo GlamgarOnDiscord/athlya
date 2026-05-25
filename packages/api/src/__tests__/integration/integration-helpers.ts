@@ -325,6 +325,7 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
         return cls;
       },
     ),
+    searchClasses: vi.fn(async () => ({ items: [] })),
     updateClass: vi.fn(async () => ({ kind: 'not_found' as const })),
     deleteClass: vi.fn(async () => ({ kind: 'not_found' as const })),
   };

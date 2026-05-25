@@ -32,6 +32,7 @@ export const classes = pgTable(
       .references(() => studios.id, { onDelete: 'cascade' }),
     coachId: uuid('coach_id').references(() => users.id, { onDelete: 'set null' }),
     title: text('title').notNull(),
+    description: text('description'),
     /**
      * `starts_at` is stored as `timestamptz` with UTC normalisation.
      * The content service rejects past timestamps on creation
