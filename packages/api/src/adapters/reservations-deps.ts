@@ -95,9 +95,9 @@ import type { ReservationsDeps } from '../routes/reservations.js';
 import type { AthlyaBindings } from '../types.js';
 import type { ClassRow } from '@athlya/db/schema';
 import type { ClassListing } from '@athlya/reservations';
-import type { ClassSearchResult } from '@athlya/shared/schemas/api';
 import type { StudioId } from '@athlya/shared/ids';
 import type {
+  ClassSearchResult,
   CreateClassRequest,
   ListClassesQuery,
   SearchClassesQuery,
