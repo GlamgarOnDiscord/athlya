@@ -1,7 +1,7 @@
 # Athlya Platform — Progress & Remaining Work
 
-**Dernière mise à jour :** CN.9.3 livré — PGlite fallback pour tests locaux sans Docker (P4 RGPD cascade + P7 tenant isolation)
-**Tâches complétées :** Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.8.1, CN.9.3 — cases parents cochées
+**Dernière mise à jour :** CN.9.2 livré — Changesets + changelog auto (`@changesets/cli`, `.changeset/config.json`, workflow release.yml)
+**Tâches complétées :** Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.8.1, CN.9.2, CN.9.3 — cases parents cochées
 **Hardening tasks livrées :** 8 / 8 (H1 à H8)
 **Niveau 2 (live wiring) :** 12 / 13 items (voir section dédiée)
 
