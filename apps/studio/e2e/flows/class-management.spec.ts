@@ -20,7 +20,7 @@
  * registers a more specific handler *after* (LIFO precedence) that
  * intercepts POST and the post-creation GET.
  *
- * @see Requirements 14.1, 14.2, 14.3.
+ * @see Requirements 6.1 (class creation), 6.2, 6.3 (validation).
  */
 import { expect, test, type Request, type Route } from '@playwright/test';
 
@@ -69,7 +69,7 @@ test('admin creates a class → row appears in table (hermetic)', async ({ page 
 
   await page.goto('/dashboard/classes');
 
-  // Empty state must be visible before creation (Req 14.1).
+  // Empty state must be visible before creation.
   await expect(page.getByText(/no classes in this range|aucun cours/i)).toBeVisible();
 
   // Open the create dialog.
@@ -84,10 +84,10 @@ test('admin creates a class → row appears in table (hermetic)', async ({ page 
   // Submit — "Create" / "Créer".
   await page.getByRole('button', { name: /^create$|^créer$/i }).click();
 
-  // Dialog must close (Req 14.2).
+  // Dialog must close after successful POST (Req 6.1).
   await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5_000 });
 
-  // Class title must appear in the table (Req 14.3).
+  // Class title must appear in the table.
   await expect(page.getByText('Morning Yoga')).toBeVisible();
 
   // POST must have fired exactly once.
