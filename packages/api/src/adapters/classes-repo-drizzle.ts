@@ -121,6 +121,7 @@ export function createDrizzleCreateClassRepo(db: AthlyaDbAny): CreateClassRepo {
             capacity: input.capacity,
             version: input.version,
             ...(input.coachId !== undefined ? { coachId: input.coachId } : {}),
+            ...(input.description !== undefined ? { description: input.description } : {}),
           })
           .returning(),
       );
@@ -231,6 +232,10 @@ export function createDrizzleUpdateClassRepo(db: AthlyaDbAny): UpdateClassRepo {
       if (patch.coachId !== undefined) {
         // Zod allows `null` to clear the coach assignment.
         columns.coachId = patch.coachId;
+      }
+      if (patch.description !== undefined) {
+        // Zod allows `null` to clear the description.
+        columns.description = patch.description;
       }
 
       const [row] = await withConnectionRetry(() =>

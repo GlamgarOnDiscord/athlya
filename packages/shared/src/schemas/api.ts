@@ -254,8 +254,8 @@ export type ListClassesQuery = z.infer<typeof ListClassesQuerySchema>;
 /**
  * `GET /v1/classes/search?q=` query parameters. `q` is trimmed and capped at
  * 200 chars so the tsvector query stays well within PostgreSQL's limits.
- * `from` and `to` narrow the date window when present (same ISO-8601 shape as
- * `ListClassesQuerySchema` but both are optional here).
+ * `from` and `to` narrow the date window; they must be supplied together —
+ * providing only one will fail validation.
  *
  * Requirement: CN.8.2.
  */
@@ -265,13 +265,18 @@ export const SearchClassesQuerySchema = z
     from: IsoDateTimeSchema.optional(),
     to: IsoDateTimeSchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine((v) => (v.from === undefined) === (v.to === undefined), {
+    message: 'from and to must both be provided or both omitted',
+    path: ['from'],
+  });
 
 export type SearchClassesQuery = z.infer<typeof SearchClassesQuerySchema>;
 
 /**
- * One item returned by `GET /v1/classes/search`. Extends `ClassWithRemaining`
- * with the optional `description` field introduced by migration 0007.
+ * One item returned by `GET /v1/classes/search`. Extends `ClassSchema` with
+ * `description` (nullable text from migration 0007) and `remaining` (Redis
+ * remaining-seats counter, clamped to 0).
  */
 export const ClassSearchResultSchema = ClassSchema.extend({
   description: z.string().nullable(),

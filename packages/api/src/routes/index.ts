@@ -352,7 +352,7 @@ export function buildDefaultDeps(env: AthlyaBindings): DomainDeps {
     ? buildClassesDeps(env)
     : {
         listClasses: () => notImplemented('reservations.listClasses'),
-        searchClasses: () => notImplemented('classes.searchClasses'),
+        searchClasses: () => notImplemented('reservations.searchClasses'),
         createClass: () => notImplemented('reservations.createClass'),
         updateClass: () => notImplemented('reservations.updateClass'),
         deleteClass: () => notImplemented('classes.deleteClass'),
