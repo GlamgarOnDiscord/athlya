@@ -27,3 +27,10 @@ export type {
   CreateClassDeps,
 } from './create.js';
 export { CreateClassError, createClass } from './create.js';
+export type {
+  ClassSearchRow,
+  ClassSearchRange,
+  ClassSearchRepo,
+  SearchClassesDeps,
+} from './search.js';
+export { searchClasses } from './search.js';

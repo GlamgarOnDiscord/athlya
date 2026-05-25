@@ -130,4 +130,15 @@ describe('/v1/classes â€” unauthenticated requests', () => {
     const xTraceId = res.headers.get('x-trace-id');
     expect(body.traceId).toBe(xTraceId);
   });
+
+  it('GET /search without Authorization → 401 (auth runs before validator)', async () => {
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
+
+    const res = await app.request('/v1/classes/search?q=hiit', { method: 'GET' }, env());
+
+    expect(res.status).toBe(401);
+    expect(res.headers.get('content-type')).toBe('application/problem+json');
+    expect(deps.classes.searchClasses).not.toHaveBeenCalled();
+  });
 });

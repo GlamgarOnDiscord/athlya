@@ -9,6 +9,8 @@
  *   - {@link UpdateClassRepo}  — `findById` + `updateClassOptimistic`
  *     for admin-side `PATCH /v1/classes/:id` with optimistic locking
  *     on the `version` column.
+ *   - {@link ClassSearchRepo}  — `search` for the FTS endpoint
+ *     `GET /v1/classes/search` (CN.8.2, migration 0007).
  *
  * Same transactional posture as the other adapters: every query goes
  * through `withConnectionRetry` so Neon's free-tier suspend-resume
@@ -16,11 +18,11 @@
  * `deleted_at IS NULL` everywhere; a future slice will introduce a
  * soft-undelete flow when the need appears.
  *
- * @see Requirements 6.1, 6.5, 6.6, 6.7, 7.1.
+ * @see Requirements 6.1, 6.5, 6.6, 6.7, 7.1, CN.8.2.
  */
 
 import { classes, reservations } from '@athlya/db/schema';
-import { and, asc, between, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, between, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
@@ -35,6 +37,11 @@ import type {
   ClassRepo as CreateClassRepo,
   CreateClassRepoInput,
 } from '@athlya/reservations/create';
+import type {
+  ClassSearchRepo,
+  ClassSearchRow,
+  ClassSearchRange,
+} from '@athlya/reservations/search';
 import type { ClassRepo as UpdateClassRepo, UpdateClassFields } from '@athlya/reservations/update';
 
 /* ------------------------------------------------------------------ */
@@ -114,6 +121,7 @@ export function createDrizzleCreateClassRepo(db: AthlyaDbAny): CreateClassRepo {
             capacity: input.capacity,
             version: input.version,
             ...(input.coachId !== undefined ? { coachId: input.coachId } : {}),
+            ...(input.description !== undefined ? { description: input.description } : {}),
           })
           .returning(),
       );
@@ -225,6 +233,10 @@ export function createDrizzleUpdateClassRepo(db: AthlyaDbAny): UpdateClassRepo {
         // Zod allows `null` to clear the coach assignment.
         columns.coachId = patch.coachId;
       }
+      if (patch.description !== undefined) {
+        // Zod allows `null` to clear the description.
+        columns.description = patch.description;
+      }
 
       const [row] = await withConnectionRetry(() =>
         db
@@ -242,4 +254,76 @@ export function createDrizzleUpdateClassRepo(db: AthlyaDbAny): UpdateClassRepo {
       return row ?? null;
     },
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Search repo — GET /v1/classes/search (CN.8.2)                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Factory — produces a `ClassSearchRepo` bound to the supplied Drizzle
+ * instance. Queries the `search_vector` GIN index introduced by
+ * migration 0007 via `plainto_tsquery('simple', ?)`.
+ *
+ * Results are ordered by tsvector rank DESC, then `starts_at ASC` so
+ * the most relevant upcoming classes appear first.
+ *
+ * Soft-deleted classes and classes outside the optional date window are
+ * excluded at the SQL level.
+ */
+export function createDrizzleSearchClassesRepo(db: AthlyaDbAny): ClassSearchRepo {
+  /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment */
+  return {
+    async search(
+      studioId: string,
+      query: string,
+      range?: ClassSearchRange,
+    ): Promise<ClassSearchRow[]> {
+      const conditions = [
+        eq(classes.studioId, studioId),
+        isNull(classes.deletedAt),
+        sql`search_vector @@ plainto_tsquery('simple', ${query})`,
+        ...(range
+          ? [sql`${classes.startsAt} >= ${range.from}`, sql`${classes.startsAt} <= ${range.to}`]
+          : []),
+      ];
+
+      const rows = await withConnectionRetry(() =>
+        db
+          .select({
+            id: classes.id,
+            studioId: classes.studioId,
+            coachId: classes.coachId,
+            title: classes.title,
+            description: classes.description,
+            startsAt: classes.startsAt,
+            durationMin: classes.durationMin,
+            capacity: classes.capacity,
+            version: classes.version,
+            createdAt: classes.createdAt,
+          })
+          .from(classes)
+          .where(and(...conditions))
+          .orderBy(
+            sql`ts_rank(search_vector, plainto_tsquery('simple', ${query})) DESC`,
+            asc(classes.startsAt),
+          )
+          .limit(50),
+      );
+
+      return rows.map((row) => ({
+        id: row.id,
+        studioId: row.studioId,
+        coachId: row.coachId,
+        title: row.title,
+        description: row.description,
+        startsAt: row.startsAt,
+        durationMin: row.durationMin,
+        capacity: row.capacity,
+        version: row.version,
+        createdAt: row.createdAt,
+      }));
+    },
+  };
+  /* eslint-enable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment */
 }

@@ -1141,7 +1141,7 @@ Post-launch, à itérer dans l'année.
 #### Architecture (post-Epic 14)
 
 - [x] CN.8.1 Real-time avec Cloudflare Durable Objects — `ClassCapacityDO` par cours pour push WebSocket/SSE des updates de capacité aux clients connectés. Bornes check-in live.
-- [ ] CN.8.2 Recherche full-text — PostgreSQL `tsvector` + GIN index sur `classes.title + description + coach_name`. Migration vers Typesense si volumes le justifient.
+- [x] CN.8.2 Recherche full-text — migration 0007 : `description text` + `search_vector tsvector GENERATED ALWAYS AS (to_tsvector('simple', title || coalesce(description,''))) STORED` + GIN index `classes_search_idx`. Schéma Drizzle + `SearchClassesQuerySchema` / `ClassSearchResultSchema` dans `@athlya/shared`. Use case `searchClasses` dans `@athlya/reservations/search`. Route `GET /v1/classes/search?q=&from=&to=` avec `zValidator`. `description` ajouté dans `CreateClassRequestSchema` / `UpdateClassRequestSchema`. 5 tests unitaires.
 - [ ] CN.8.3 Read replica Neon EU — réduire latence DB pour les studios européens (15-20ms EU vs 80-120ms cross-Atlantic actuel).
 
 #### Developer experience

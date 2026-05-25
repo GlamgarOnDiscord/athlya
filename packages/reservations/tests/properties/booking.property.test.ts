@@ -705,6 +705,7 @@ beforeAll(async () => {
 
   await applyMigration(rootClient, readMigration('0000_init.sql'));
   await applyMigration(rootClient, readMigration('0001_rls.sql'));
+  await applyMigration(rootClient, readMigration('0007_classes_fts.sql'));
 
   await bootstrapBookingRole(rootClient);
 

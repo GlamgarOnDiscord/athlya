@@ -25,6 +25,7 @@
 import {
   CreateClassRequestSchema,
   ListClassesQuerySchema,
+  SearchClassesQuerySchema,
   UpdateClassRequestSchema,
 } from '@athlya/shared/schemas/api';
 import { Hono } from 'hono';
@@ -48,6 +49,7 @@ import type { HonoEnv } from '../types.js';
 import type {
   CreateClassRequest,
   ListClassesQuery,
+  SearchClassesQuery,
   UpdateClassRequest,
 } from '@athlya/shared/schemas/api';
 import type { Context } from 'hono';
@@ -88,6 +90,10 @@ export interface ClassesDeps {
   listClasses(
     studioId: string,
     range: ListClassesQuery,
+  ): Promise<{ items: ReadonlyArray<unknown> }>;
+  searchClasses(
+    studioId: string,
+    query: SearchClassesQuery,
   ): Promise<{ items: ReadonlyArray<unknown> }>;
   createClass(studioId: string, input: CreateClassRequest): Promise<unknown>;
   updateClass(
@@ -157,6 +163,18 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
 
   // Sprint 12 / Slice 12.14 (Epic B4.4) — per-studio burst cap.
   router.use('*', studioRateLimit() as Parameters<typeof router.use>[1]);
+
+  /* ------------------------------ GET /search -------------------- */
+  router.get('/search', zValidator('query', SearchClassesQuerySchema), async (c) => {
+    traceOperation(c, 'classes.search');
+    const claims = c.get('authClaims');
+    if (claims === undefined) {
+      throw new Error('authClaims unexpectedly missing after jwtAuth');
+    }
+    const query = readValidated<SearchClassesQuery>(c, 'query');
+    const result = await deps.searchClasses(claims.studioId, query);
+    return c.json({ items: result.items as unknown[] }, 200);
+  });
 
   /* ------------------------------ GET / -------------------------- */
   router.get('/', zValidator('query', ListClassesQuerySchema), async (c) => {
