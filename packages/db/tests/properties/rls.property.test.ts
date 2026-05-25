@@ -58,7 +58,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import fc from 'fast-check';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -73,6 +73,7 @@ import {
   type TenantClaims,
   type TenantRole,
 } from '../../src/index.js';
+import * as schema from '../../src/schema/index.js';
 
 import {
   DEFAULT_CONSENTS_JSON,
@@ -81,6 +82,8 @@ import {
   type IsolationScenario,
 } from './fixtures.js';
 
+import type { PgliteAthlyaDb } from '../helpers/pglite-test-db.js';
+import type { PGlite } from '@electric-sql/pglite';
 import type { Sql } from 'postgres';
 
 // ---------------------------------------------------------------------
@@ -131,6 +134,10 @@ let tenantDb: AthlyaDb | null = null;
 const ROOT_ROLE = 'postgres';
 const TENANT_ROLE = 'athlya_tenant';
 const TENANT_PASSWORD = 'tenant_test';
+
+// PGlite state — populated in beforeAll when Docker is unreachable (CN.9.3).
+let pgliteHandle: PGlite | null = null;
+let pgliteDb: PgliteAthlyaDb | null = null;
 
 // ---------------------------------------------------------------------
 // Migration application
@@ -337,16 +344,181 @@ async function queryIsolation(
   });
 }
 
+// -----------------------------------------------------------------
+// PGlite helpers — used when Docker is unreachable (CN.9.3).
+// A single superuser connection is sufficient because `SET LOCAL
+// ROLE athlya_tenant` inside each transaction drops BYPASSRLS for
+// the duration of that transaction, enforcing RLS exactly as the
+// two-connection Docker path does.
+// -----------------------------------------------------------------
+
+async function truncateAllPglite(pg: PGlite): Promise<void> {
+  await pg.exec(`
+    TRUNCATE TABLE
+        push_tokens,
+        idempotency_keys,
+        outbox,
+        audit_log,
+        workout_sessions,
+        reservations,
+        classes,
+        users,
+        studios
+    RESTART IDENTITY CASCADE
+  `);
+}
+
+async function seedScenarioPglite(pg: PGlite, s: IsolationScenario): Promise<void> {
+  const consents = JSON.stringify(DEFAULT_CONSENTS_JSON);
+  await pg.query(
+    `INSERT INTO studios (id, slug, name, brand_color) VALUES ($1, $2, $3, '#0EA5E9')`,
+    [s.studioA.id, s.studioA.slug, s.studioA.name],
+  );
+  await pg.query(
+    `INSERT INTO studios (id, slug, name, brand_color) VALUES ($1, $2, $3, '#F97316')`,
+    [s.studioB.id, s.studioB.slug, s.studioB.name],
+  );
+  await pg.query(
+    `INSERT INTO users (id, studio_id, email, display_name, role, consents) VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+    [s.userA.id, s.userA.studioId, s.userA.email, s.userA.displayName, s.userA.role, consents],
+  );
+  await pg.query(
+    `INSERT INTO users (id, studio_id, email, display_name, role, consents) VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+    [s.userB.id, s.userB.studioId, s.userB.email, s.userB.displayName, s.userB.role, consents],
+  );
+  await pg.query(
+    `INSERT INTO classes (id, studio_id, title, starts_at, duration_min, capacity, version) VALUES ($1, $2, $3, $4::timestamptz, $5, $6, 0)`,
+    [
+      s.classA.id,
+      s.classA.studioId,
+      s.classA.title,
+      s.classA.startsAt,
+      s.classA.durationMin,
+      s.classA.capacity,
+    ],
+  );
+  await pg.query(
+    `INSERT INTO classes (id, studio_id, title, starts_at, duration_min, capacity, version) VALUES ($1, $2, $3, $4::timestamptz, $5, $6, 0)`,
+    [
+      s.classB.id,
+      s.classB.studioId,
+      s.classB.title,
+      s.classB.startsAt,
+      s.classB.durationMin,
+      s.classB.capacity,
+    ],
+  );
+  await pg.query(
+    `INSERT INTO reservations (id, class_id, user_id, status) VALUES ($1, $2, $3, 'confirmed')`,
+    [s.reservationA.id, s.reservationA.classId, s.reservationA.userId],
+  );
+  await pg.query(
+    `INSERT INTO reservations (id, class_id, user_id, status) VALUES ($1, $2, $3, 'confirmed')`,
+    [s.reservationB.id, s.reservationB.classId, s.reservationB.userId],
+  );
+}
+
+async function withTenantPglite<T>(
+  db: PgliteAthlyaDb,
+  claims: TenantClaims,
+  fn: (tx: Parameters<Parameters<PgliteAthlyaDb['transaction']>[0]>[0]) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql.raw(`SET LOCAL ROLE ${TENANT_ROLE}`));
+    await tx.execute(sql`SELECT set_config('app.user_id', ${claims.userId}, true)`);
+    await tx.execute(sql`SELECT set_config('app.studio_id', ${claims.studioId}, true)`);
+    await tx.execute(sql`SELECT set_config('app.role', ${claims.role}, true)`);
+    return fn(tx);
+  });
+}
+
+async function queryIsolationPglite(
+  db: PgliteAthlyaDb,
+  s: IsolationScenario,
+  role: TenantRole,
+): Promise<IsolationResult> {
+  return withTenantPglite(db, { userId: s.userA.id, studioId: s.studioA.id, role }, async (tx) => {
+    const userBRows = await tx.select().from(users).where(eq(users.id, s.userB.id));
+    const classBRows = await tx.select().from(classes).where(eq(classes.id, s.classB.id));
+    const reservationBRows = await tx
+      .select()
+      .from(reservations)
+      .where(eq(reservations.id, s.reservationB.id));
+    const userASelfRows = await tx.select().from(users).where(eq(users.id, s.userA.id));
+    return {
+      userBVisible: userBRows.length > 0,
+      classBVisible: classBRows.length > 0,
+      reservationBVisible: reservationBRows.length > 0,
+      userASelfVisible: userASelfRows.length > 0,
+    };
+  });
+}
+
+interface TestInfra {
+  truncate(): Promise<void>;
+  seed(s: IsolationScenario): Promise<void>;
+  query(s: IsolationScenario, role: TenantRole): Promise<IsolationResult>;
+}
+
+function buildInfra(): TestInfra {
+  if (rootClient !== null && tenantDb !== null) {
+    const root = rootClient;
+    const db = tenantDb;
+    return {
+      truncate: () => truncateAll(root),
+      seed: (s) => seedScenario(root, s),
+      query: (s, role) => queryIsolation(db, s, role),
+    };
+  }
+  if (pgliteHandle !== null && pgliteDb !== null) {
+    const pg = pgliteHandle;
+    const db = pgliteDb;
+    return {
+      truncate: () => truncateAllPglite(pg),
+      seed: (s) => seedScenarioPglite(pg, s),
+      query: (s, role) => queryIsolationPglite(db, s, role),
+    };
+  }
+  throw new Error('test infrastructure not initialised');
+}
+
 // ---------------------------------------------------------------------
 // Vitest lifecycle
 // ---------------------------------------------------------------------
 
 beforeAll(async () => {
   if (!dockerReady) {
-    console.warn(
-      '[rls.property] Docker daemon unreachable; tenant-isolation property skipped. ' +
-        'Start Docker Desktop / the dockerd service to exercise this suite.',
-    );
+    // PGlite fallback (CN.9.3) — real PostgreSQL WASM; supports RLS,
+    // PL/pgSQL, set_config() and SET LOCAL ROLE so the tenant-isolation
+    // property runs without Docker on Windows / CI-light machines.
+    const { PGlite } = await import('@electric-sql/pglite');
+    const { drizzle: drizzlePglite } = await import('drizzle-orm/pglite');
+    const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto');
+    const { citext } = await import('@electric-sql/pglite/contrib/citext');
+
+    const pg = new PGlite({ extensions: { pgcrypto, citext } });
+
+    await pg.exec(readMigration('0000_init.sql'));
+    await pg.exec(readMigration('0001_rls.sql'));
+
+    // Bootstrap the NOBYPASSRLS tenant role + grant the superuser the
+    // right to switch into it via SET LOCAL ROLE inside transactions.
+    await pg.exec(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${TENANT_ROLE}') THEN
+          CREATE ROLE ${TENANT_ROLE} LOGIN PASSWORD '${TENANT_PASSWORD}' NOBYPASSRLS;
+        END IF;
+      END$$;
+      GRANT USAGE ON SCHEMA public TO ${TENANT_ROLE};
+      GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${TENANT_ROLE};
+      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${TENANT_ROLE};
+      GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO ${TENANT_ROLE};
+      GRANT ${TENANT_ROLE} TO postgres;
+    `);
+
+    pgliteHandle = pg;
+    pgliteDb = drizzlePglite(pg, { schema });
     return;
   }
 
@@ -393,6 +565,7 @@ afterAll(async () => {
   try {
     await tenantClient?.end({ timeout: 5 });
     await rootClient?.end({ timeout: 5 });
+    await pgliteHandle?.close();
   } finally {
     await container?.stop();
   }
@@ -411,46 +584,31 @@ function buildTenantUri(host: string, port: number): string {
 }
 
 // ---------------------------------------------------------------------
-// Property — only registered when Docker is reachable. On other
-// machines the describe block is marked `.skip` and the test file
-// still loads cleanly.
+// Property 7 — always registered. Uses Docker (Testcontainers) when
+// available; falls back to PGlite (in-memory PostgreSQL WASM) on machines
+// without Docker (e.g. Windows local dev).
 // ---------------------------------------------------------------------
 
-describe.skipIf(!dockerReady)('withTenant — Property 7 (tenant isolation)', () => {
+describe('withTenant — Property 7 (tenant isolation)', () => {
   const ROLES: readonly TenantRole[] = ['member', 'coach', 'admin'];
 
   for (const role of ROLES) {
     it(`cross-tenant reads return [] for role=${role} across users/classes/reservations`, async () => {
-      // Guard: beforeAll bails out early when docker isn't
-      // ready, but vitest still registers the test body.
-      // The describe.skipIf above filters those runs out, so
-      // in practice tenantDb is non-null here.
-      if (!rootClient || !tenantDb) {
-        throw new Error('test infrastructure not initialised');
-      }
-      const db = tenantDb;
-      const root = rootClient;
+      const infra = buildInfra();
 
       await fc.assert(
         fc.asyncProperty(isolationScenarioArb, async (scenario) => {
-          // Collision rejection — see fixtures.ts.
           fc.pre(scenarioIdsAllDistinct(scenario));
 
-          // Each run gets a clean slate. Truncate runs
-          // under the superuser client so RLS does not
-          // interfere.
-          await truncateAll(root);
-          await seedScenario(root, scenario);
+          await infra.truncate();
+          await infra.seed(scenario);
 
-          const result = await queryIsolation(db, scenario, role);
+          const result = await infra.query(scenario, role);
 
           return (
             result.userBVisible === false &&
             result.classBVisible === false &&
             result.reservationBVisible === false &&
-            // Regression anchor: user A MUST still see
-            // its own row. If this flips to false, the
-            // cross-tenant "empty" result is vacuous.
             result.userASelfVisible === true
           );
         }),
@@ -463,7 +621,7 @@ describe.skipIf(!dockerReady)('withTenant — Property 7 (tenant isolation)', ()
   // self-contained so a maintainer can eyeball a single legible
   // scenario before reading the property block above.
   it('admin of studio A cannot see any row owned by studio B', async () => {
-    if (!rootClient || !tenantDb) throw new Error('infra not initialised');
+    const infra = buildInfra();
     const scenario: IsolationScenario = {
       studioA: {
         id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -517,10 +675,10 @@ describe.skipIf(!dockerReady)('withTenant — Property 7 (tenant isolation)', ()
       },
     };
 
-    await truncateAll(rootClient);
-    await seedScenario(rootClient, scenario);
+    await infra.truncate();
+    await infra.seed(scenario);
 
-    const result = await queryIsolation(tenantDb, scenario, 'admin');
+    const result = await infra.query(scenario, 'admin');
 
     expect(result.userBVisible).toBe(false);
     expect(result.classBVisible).toBe(false);
