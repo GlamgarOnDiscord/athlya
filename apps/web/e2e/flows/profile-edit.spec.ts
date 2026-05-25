@@ -125,8 +125,9 @@ test('login → edit display name → success banner (hermetic)', async ({ page 
   // Edit the display name.
   await nameInput.fill('Alice Updated');
 
-  // Submit via the "Enregistrer les modifications" button.
-  await page.getByRole('button', { name: /enregistrer|save/i }).click();
+  // Submit via the "Enregistrer les modifications" button — use the full
+  // key text to avoid ambiguity with "Save my preferences" (ConsentsForm).
+  await page.getByRole('button', { name: /enregistrer les modifications|save changes/i }).click();
 
   // Success banner must appear (Req 3.4).
   await expect(page.getByText(/profil mis à jour|profile updated/i)).toBeVisible();
