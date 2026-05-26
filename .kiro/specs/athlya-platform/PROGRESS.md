@@ -1,8 +1,8 @@
 # Athlya Platform — Progress & Remaining Work
 
-**Dernière mise à jour :** GitHub issues triage livré — #47 #48 #49 #52 #53 #56 corrigés, #50 #51 #54 #55 fermés (faux positifs / design)
+**Dernière mise à jour :** Dependabot security triage livré — 8 alertes traitées (PR #58 mergée) : #3 ws + #7 uuid → pnpm scoped overrides `miniflare>ws@8.20.1` + `dockerode>uuid@11.1.1` ; #1 esbuild + #2 postcss → dismissed (faux positifs) ; #4/#5/#6/#8 → fixed automatiquement par les overrides lockfile
 **Tâches complétées :** Epic 14 (1/1), Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.8.1, CN.8.2, CN.9.2, CN.9.3 — cases parents cochées
-**Hardening tasks livrées :** 8 / 8 (H1 à H8) + 6 issues GitHub (#47–#53 #56)
+**Hardening tasks livrées :** 8 / 8 (H1 à H8) + 6 issues GitHub (#47–#53 #56) + 8 Dependabot alerts (PR #58)
 **Niveau 2 (live wiring) :** 12 / 13 items (voir section dédiée)
 
 ---
