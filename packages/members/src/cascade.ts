@@ -108,6 +108,13 @@ export interface DeletionRepo {
   deleteWorkoutSessionsForUser(userId: string): Promise<number>;
   /** Hard-delete every `push_tokens` row owned by `userId`. */
   deletePushTokensForUser(userId: string): Promise<number>;
+  /**
+   * Hard-delete every `idempotency_keys` row scoped to `userId`.
+   * Required by RGPD Article 17: the serialised HTTP response bodies
+   * stored in this table are personal data and must be erased on account
+   * deletion (issue #52).
+   */
+  deleteIdempotencyKeysForUser(userId: string): Promise<number>;
   /** Soft-delete the users row: `deleted_at = deletedAt`. Idempotent. */
   markUserDeleted(userId: string, deletedAt: Date): Promise<void>;
   /**
@@ -205,6 +212,7 @@ export interface CascadeCounts {
   reservations: number;
   sessions: number;
   pushTokens: number;
+  idempotencyKeys: number;
   auditAnonymized: number;
 }
 
@@ -272,6 +280,12 @@ export async function handleUserDeleted(
   const sessions = await deps.repo.deleteWorkoutSessionsForUser(userId);
   const pushTokens = await deps.repo.deletePushTokensForUser(userId);
 
+  // Step 3.5: purge idempotency cache entries. These rows hold serialised
+  // HTTP response bodies that are personal data under RGPD Article 17
+  // (issue #52). Rows have a 24-hour TTL anyway, but they must not survive
+  // an explicit erasure request.
+  const idempotencyKeys = await deps.repo.deleteIdempotencyKeysForUser(userId);
+
   // Step 4: stamp the tombstone on the users row. Idempotent; the
   // Auth service normally set this already when emitting the event.
   const now = new Date(deps.clock.now());
@@ -302,6 +316,7 @@ export async function handleUserDeleted(
       reservations,
       sessions,
       pushTokens,
+      idempotencyKeys,
       // The audit anonymisation runs 30 days from now; at
       // cascade time no rows have been touched yet, so the
       // field is stamped at 0. The eventual

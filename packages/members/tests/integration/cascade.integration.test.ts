@@ -241,6 +241,14 @@ function buildRepo(client: Sql): DeletionRepo {
             `;
       return rows.length;
     },
+    async deleteIdempotencyKeysForUser(userId) {
+      const rows = await client<{ key: string }[]>`
+                DELETE FROM idempotency_keys
+                 WHERE user_id = ${userId}
+                 RETURNING key
+            `;
+      return rows.length;
+    },
     async markUserDeleted(userId, deletedAt) {
       await client`
                 UPDATE users
@@ -475,6 +483,13 @@ function buildRepoPglite(pg: PGlite): DeletionRepo {
     async deletePushTokensForUser(userId) {
       const r = await pg.query<{ id: string }>(
         `DELETE FROM push_tokens WHERE user_id = $1 RETURNING id`,
+        [userId],
+      );
+      return r.rows.length;
+    },
+    async deleteIdempotencyKeysForUser(userId) {
+      const r = await pg.query<{ key: string }>(
+        `DELETE FROM idempotency_keys WHERE user_id = $1 RETURNING key`,
         [userId],
       );
       return r.rows.length;
@@ -809,6 +824,7 @@ describe('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', 
         reservations: 3,
         sessions: 2,
         pushTokens: 4,
+        idempotencyKeys: 0,
         // Anonymisation happens 30 days later — audit rows
         // are NOT touched during the cascade step itself.
         auditAnonymized: 0,

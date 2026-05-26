@@ -83,8 +83,11 @@ export function buildBillingDeps(env: AthlyaBindings): BillingDeps {
     async handleWebhook({ rawPayload, signature }) {
       const secret = stripeBindings.STRIPE_WEBHOOK_SECRET;
       if (secret === undefined || secret.length === 0) {
+        // In dev this resolves to 200 (Stripe stops retrying); in
+        // staging/production the router converts 'not_configured'
+        // into a 500 so the misconfiguration is loud and auditable.
         console.warn(
-          '[billing-deps] STRIPE_WEBHOOK_SECRET not configured — webhook accepted without verification (mode dégradé)',
+          '[billing-deps] STRIPE_WEBHOOK_SECRET not configured — returning not_configured (router will reject in non-dev)',
           {
             env: env.ENVIRONMENT,
             payloadBytes: rawPayload.length,
