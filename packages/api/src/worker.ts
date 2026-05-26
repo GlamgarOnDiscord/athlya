@@ -70,6 +70,7 @@ import { tracing } from './middleware/otel.js';
 import { registerErrorHandlers } from './middleware/problem-details.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import { securityHeaders } from './middleware/security-headers.js';
+import { turnstile } from './middleware/turnstile.js';
 import { tenantClaimGuard, tenantResolverMiddleware } from './middleware/tenant-resolver.js';
 import { buildSpecApp } from './openapi/spec.js';
 import { requireRole } from './routes/helpers.js';
@@ -587,6 +588,13 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
 
   app.use('/v1/*', guardLimiter('global', ipLimiter) as Parameters<typeof app.use>[1]);
   app.use('/v1/auth/*', guardLimiter('auth', authLimiter) as Parameters<typeof app.use>[1]);
+
+  // Req 26.1–26.3 — Turnstile bot-challenge on the two pre-auth mutation
+  // routes. The middleware reads TURNSTILE_SECRET from c.env; dev-mode
+  // missing-secret behaviour is a warn + pass-through (not a 500).
+  const turnstileMw = turnstile() as Parameters<typeof app.use>[1];
+  app.use('/v1/auth/register', turnstileMw);
+  app.use('/v1/auth/login', turnstileMw);
 
   // 5.5. Sprint 12 / Slice 12.2 (Epic B4.2) — per-mutation
   //      sliding-window rate limits. The global IP+user limits
@@ -1401,10 +1409,20 @@ export async function handleEventsBatch(
     try {
       switch (envelope.type) {
         case 'auth.user.deleted': {
-          // Cast at the boundary — the producer guarantees
-          // the payload shape via `parseEvent`, and the
-          // cascade primitive validates its own inputs at
-          // the SQL layer (zero rows matched ≠ error).
+          // Guard against a crafted DLQ replay injecting an
+          // arbitrary userId — a string UUID is the minimum
+          // shape we need before delegating to the cascade.
+          const rawUserId = (msg.body as Record<string, unknown>)?.['payload']?.['userId'];
+          if (
+            typeof rawUserId !== 'string' ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawUserId)
+          ) {
+            logger.warn('[worker] auth.user.deleted: invalid userId — acking without processing', {
+              messageId: msg.id,
+            });
+            msg.ack();
+            break;
+          }
           await handleUserDeleted(msg.body as AuthUserDeletedEvent, buildCascadeDeps(env));
           msg.ack();
           break;

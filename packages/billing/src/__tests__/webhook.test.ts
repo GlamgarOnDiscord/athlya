@@ -31,6 +31,7 @@ import {
   handleStripeWebhook,
   verifyStripeSignature,
   type StripeEvent,
+  type VerifyResult,
   type WebhookDeps,
 } from '../webhook.js';
 
@@ -121,77 +122,84 @@ describe('verifyStripeSignature', () => {
     const payload = samplePayload();
     const header = await mintHeader(payload, FIXED_EPOCH_SEC, WEBHOOK_SECRET);
 
-    const event = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
 
-    expect(event).not.toBeNull();
-    expect(event?.id).toBe('evt_test_1234567890');
-    expect(event?.type).toBe('checkout.session.completed');
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.event.id).toBe('evt_test_1234567890');
+    expect(result.ok && result.event.type).toBe('checkout.session.completed');
   });
 
-  it('returns null for a completely malformed header', async () => {
+  it('returns malformed_header for a completely malformed header', async () => {
     const payload = samplePayload();
-    const event = await verifyStripeSignature(payload, 'not-a-valid-header', WEBHOOK_SECRET, {
+    const result = await verifyStripeSignature(payload, 'not-a-valid-header', WEBHOOK_SECRET, {
       now: fixedNow(),
     });
-    expect(event).toBeNull();
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toBe('malformed_header');
   });
 
-  it('returns null when t= is missing', async () => {
+  it('returns malformed_header when t= is missing', async () => {
     const payload = samplePayload();
     const sig = await computeV1Signature(payload, FIXED_EPOCH_SEC, WEBHOOK_SECRET);
-    const event = await verifyStripeSignature(payload, `v1=${sig}`, WEBHOOK_SECRET, {
+    const result = await verifyStripeSignature(payload, `v1=${sig}`, WEBHOOK_SECRET, {
       now: fixedNow(),
     });
-    expect(event).toBeNull();
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toBe('malformed_header');
   });
 
-  it('returns null when no v1= signature is present', async () => {
+  it('returns malformed_header when no v1= signature is present', async () => {
     const payload = samplePayload();
-    const event = await verifyStripeSignature(
+    const result = await verifyStripeSignature(
       payload,
       `t=${String(FIXED_EPOCH_SEC)}`,
       WEBHOOK_SECRET,
       { now: fixedNow() },
     );
-    expect(event).toBeNull();
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toBe('malformed_header');
   });
 
-  it('returns null when the timestamp is stale (> 300 s in the past)', async () => {
+  it('returns timestamp_stale when the timestamp is stale (> 300 s in the past)', async () => {
     const payload = samplePayload();
     const stale = FIXED_EPOCH_SEC - (DEFAULT_TOLERANCE_SECONDS + 1);
     const header = await mintHeader(payload, stale, WEBHOOK_SECRET);
 
-    const event = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
-    expect(event).toBeNull();
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toBe('timestamp_stale');
   });
 
-  it('returns null when the timestamp is in the future (> 300 s ahead)', async () => {
+  it('returns timestamp_stale when the timestamp is in the future (> 300 s ahead)', async () => {
     const payload = samplePayload();
     const future = FIXED_EPOCH_SEC + (DEFAULT_TOLERANCE_SECONDS + 1);
     const header = await mintHeader(payload, future, WEBHOOK_SECRET);
 
-    const event = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
-    expect(event).toBeNull();
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toBe('timestamp_stale');
   });
 
-  it('returns null when the signature was minted with a different secret', async () => {
+  it('returns hmac_mismatch when the signature was minted with a different secret', async () => {
     const payload = samplePayload();
     const header = await mintHeader(payload, FIXED_EPOCH_SEC, WRONG_SECRET);
 
-    const event = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
-    expect(event).toBeNull();
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toBe('hmac_mismatch');
   });
 
-  it('returns null when the payload has been tampered with', async () => {
+  it('returns hmac_mismatch when the payload has been tampered with', async () => {
     // Sign payload A; submit payload B under A's signature.
     const payloadA = samplePayload({ id: 'evt_A' });
     const payloadB = samplePayload({ id: 'evt_B' });
     const header = await mintHeader(payloadA, FIXED_EPOCH_SEC, WEBHOOK_SECRET);
 
-    const event = await verifyStripeSignature(payloadB, header, WEBHOOK_SECRET, {
+    const result = await verifyStripeSignature(payloadB, header, WEBHOOK_SECRET, {
       now: fixedNow(),
     });
-    expect(event).toBeNull();
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toBe('hmac_mismatch');
   });
 
   it('accepts the header if ANY v1= signature matches (key rotation)', async () => {
@@ -201,16 +209,17 @@ describe('verifyStripeSignature', () => {
     // Two v1 entries; second one is valid.
     const header = `t=${String(FIXED_EPOCH_SEC)},v1=${badSig},v1=${goodSig}`;
 
-    const event = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
-    expect(event).not.toBeNull();
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
+    expect(result.ok).toBe(true);
   });
 
-  it('returns null when the payload is not valid JSON even if HMAC matches', async () => {
+  it('returns malformed_payload when the payload is not valid JSON even if HMAC matches', async () => {
     const payload = 'not-json-{{{';
     const header = await mintHeader(payload, FIXED_EPOCH_SEC, WEBHOOK_SECRET);
 
-    const event = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
-    expect(event).toBeNull();
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toBe('malformed_payload');
   });
 
   it('honours a custom toleranceSeconds override', async () => {
@@ -219,11 +228,11 @@ describe('verifyStripeSignature', () => {
     const stale = FIXED_EPOCH_SEC - 600;
     const header = await mintHeader(payload, stale, WEBHOOK_SECRET);
 
-    const event = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, {
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, {
       now: fixedNow(),
       toleranceSeconds: 1000,
     });
-    expect(event).not.toBeNull();
+    expect(result.ok).toBe(true);
   });
 
   it('uses the injected now() clock for tolerance decisions', async () => {
@@ -233,10 +242,10 @@ describe('verifyStripeSignature', () => {
     const stampedAt = FIXED_EPOCH_SEC - 600;
     const header = await mintHeader(payload, stampedAt, WEBHOOK_SECRET);
 
-    const event = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, {
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, {
       now: () => stampedAt * 1000,
     });
-    expect(event).not.toBeNull();
+    expect(result.ok).toBe(true);
   });
 });
 
@@ -275,9 +284,14 @@ function buildDeps(
     publishError?: Error;
   } = {},
 ): DepsHandles {
+  const verifyResult: VerifyResult =
+    options.event != null
+      ? { ok: true, event: options.event }
+      : { ok: false, reason: 'hmac_mismatch' };
+
   const verifySignature = vi
     .fn<WebhookDeps['verifySignature']>()
-    .mockResolvedValue(options.event ?? null);
+    .mockResolvedValue(verifyResult);
 
   const appendAudit = vi.fn<WebhookDeps['appendAudit']>();
   if (options.appendAuditError !== undefined) {

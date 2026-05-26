@@ -184,16 +184,34 @@ export interface WebhookPublishEnvelope {
 }
 
 /**
+ * Discriminated result of {@link verifyStripeSignature} and
+ * {@link WebhookDeps.verifySignature}.
+ *
+ *   - `{ ok: true, event }` — signature valid; event is ready for
+ *     dispatch.
+ *   - `{ ok: false, reason }` — verification failed; the specific
+ *     reason is propagated to the audit row so ops can distinguish
+ *     clock-drift (`timestamp_stale`), proxy misconfiguration
+ *     (`malformed_header`), and actual forgery attempts
+ *     (`hmac_mismatch`) in automated alerting (issue #56).
+ */
+export type VerifyResult =
+  | { readonly ok: true; readonly event: StripeEvent }
+  | { readonly ok: false; readonly reason: SignatureFailureReason };
+
+/**
  * Ports {@link handleStripeWebhook} delegates to. Every field is
  * injected so the handler is framework-free and trivially
  * unit-testable with `vi.fn()` doubles.
  *
  *   - `verifySignature` — verifies the `Stripe-Signature` header
  *                         against `rawPayload` using `webhookSecret`.
- *                         Returns the parsed Stripe event on success
- *                         or `null` on any failure. The default
- *                         wiring uses {@link verifyStripeSignature};
- *                         tests inject a deterministic stub.
+ *                         Returns a {@link VerifyResult}: `ok: true`
+ *                         with the parsed event on success, or
+ *                         `ok: false` with the structured failure
+ *                         reason on any error. The default wiring
+ *                         uses {@link verifyStripeSignature}; tests
+ *                         inject deterministic stubs.
  *   - `appendAudit`     — append a row to the audit log. MUST run
  *                         in the same DB transaction as any state
  *                         writes / publishes that accompany it;
@@ -214,7 +232,7 @@ export interface WebhookDeps {
     payload: string,
     signatureHeader: string,
     secret: string,
-  ) => Promise<StripeEvent | null>;
+  ) => Promise<VerifyResult>;
   readonly appendAudit: (entry: WebhookAuditEntry) => Promise<void>;
   readonly publish: (event: WebhookPublishEnvelope) => Promise<void>;
   readonly withTransaction: <T>(fn: () => Promise<T>) => Promise<T>;
@@ -375,20 +393,20 @@ export async function verifyStripeSignature(
   signatureHeader: string,
   secret: string,
   opts: VerifyStripeSignatureOptions = {},
-): Promise<StripeEvent | null> {
+): Promise<VerifyResult> {
   const now = opts.now ?? (() => Date.now());
   const toleranceSeconds = opts.toleranceSeconds ?? DEFAULT_TOLERANCE_SECONDS;
 
   // 1. Header parse.
   const parsed = parseStripeSignatureHeader(signatureHeader);
   if (parsed === null) {
-    return null;
+    return { ok: false, reason: 'malformed_header' };
   }
 
   // 2. Timestamp tolerance. `t` is epoch seconds; `now()` is ms.
   const nowSeconds = Math.floor(now() / 1000);
   if (Math.abs(nowSeconds - parsed.timestamp) > toleranceSeconds) {
-    return null;
+    return { ok: false, reason: 'timestamp_stale' };
   }
 
   // 3. HMAC-SHA256 verification.
@@ -406,7 +424,7 @@ export async function verifyStripeSignature(
     // An empty secret (or a host without Web Crypto) cannot
     // import. Treat as verification failure rather than throwing
     // so the caller's audit path fires.
-    return null;
+    return { ok: false, reason: 'hmac_mismatch' };
   }
 
   let anyMatch = false;
@@ -434,7 +452,7 @@ export async function verifyStripeSignature(
     }
   }
   if (!anyMatch) {
-    return null;
+    return { ok: false, reason: 'hmac_mismatch' };
   }
 
   // 4. JSON parse and shape check.
@@ -442,25 +460,24 @@ export async function verifyStripeSignature(
   try {
     raw = JSON.parse(payload);
   } catch {
-    return null;
+    return { ok: false, reason: 'malformed_payload' };
   }
   if (typeof raw !== 'object' || raw === null) {
-    return null;
+    return { ok: false, reason: 'malformed_payload' };
   }
   const obj = raw as Record<string, unknown>;
   const id = obj['id'];
   const type = obj['type'];
   if (typeof id !== 'string' || id.length === 0) {
-    return null;
+    return { ok: false, reason: 'malformed_payload' };
   }
   if (typeof type !== 'string' || type.length === 0) {
-    return null;
+    return { ok: false, reason: 'malformed_payload' };
   }
 
   return {
-    id,
-    type,
-    data: obj['data'],
+    ok: true,
+    event: { id, type, data: obj['data'] },
   };
 }
 
@@ -545,21 +562,21 @@ export async function handleStripeWebhook(
   webhookSecret: string,
   deps: WebhookDeps,
 ): Promise<WebhookOutcome> {
-  // Step 1 — verify signature. A `null` here triggers the audit path.
-  const event = await deps.verifySignature(rawPayload, signatureHeader, webhookSecret);
+  // Step 1 — verify signature. A failed result triggers the audit path.
+  const verifyResult = await deps.verifySignature(rawPayload, signatureHeader, webhookSecret);
 
-  if (event === null) {
+  if (!verifyResult.ok) {
     // Requirement 18.3 — reject + audit atomically. We keep the
     // audit inside a transaction so the wiring layer can combine
     // it with any additional state writes (not needed today) or
     // guarantee the commit ordering.
     //
-    // The reason is best-effort: we cannot re-run verification
-    // here (it already returned null); the specific cause has
-    // been discarded by the port. A richer port would propagate
-    // a structured reason — acceptable to defer until the port
-    // shape is upgraded.
-    const reason: SignatureFailureReason = 'hmac_mismatch';
+    // The structured reason distinguishes clock-drift
+    // (`timestamp_stale`), proxy misconfiguration
+    // (`malformed_header`), and actual forgery attempts
+    // (`hmac_mismatch`) so automated alerting can page
+    // appropriately (issue #56).
+    const reason = verifyResult.reason;
     const targetId = tryExtractEventId(rawPayload);
 
     await deps.withTransaction(async () => {
@@ -583,6 +600,7 @@ export async function handleStripeWebhook(
   }
 
   // Step 2 — dispatch by event type.
+  const { event } = verifyResult;
   const occurredAt = new Date().toISOString();
 
   switch (event.type) {

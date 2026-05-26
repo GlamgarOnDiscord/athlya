@@ -30,7 +30,14 @@
  * RGPD Article 17 cascade not wired). See `docs/security/audit-S5-rgpd.md`.
  */
 
-import { auditLog, pushTokens, reservations, users, workoutSessions } from '@athlya/db/schema';
+import {
+  auditLog,
+  idempotencyKeys,
+  pushTokens,
+  reservations,
+  users,
+  workoutSessions,
+} from '@athlya/db/schema';
 import { eq, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
@@ -67,6 +74,13 @@ export function createDrizzleDeletionRepo(db: AthlyaDbAny): DeletionRepo {
       // for a fully-erased user.
       const rows = await withConnectionRetry(() =>
         db.delete(pushTokens).where(eq(pushTokens.userId, userId)).returning(),
+      );
+      return rows.length;
+    },
+
+    async deleteIdempotencyKeysForUser(userId) {
+      const rows = await withConnectionRetry(() =>
+        db.delete(idempotencyKeys).where(eq(idempotencyKeys.userId, userId)).returning(),
       );
       return rows.length;
     },

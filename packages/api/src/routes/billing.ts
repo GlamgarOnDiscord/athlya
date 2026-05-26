@@ -240,12 +240,30 @@ export function buildBillingRouter(deps: BillingDeps): Hono<HonoEnv> {
 
     switch (outcome.kind) {
       case 'ok':
+        return c.body(null, 200);
       case 'not_configured':
-        // Both branches resolve to 200 so Stripe stops
-        // retrying. The mode-dégradé branch is logged at warn
-        // level by the deps layer; the audit row written for
-        // signature failures still goes through `'ok'` ↔ never
-        // because we tag those `'signature_invalid'` below.
+        // In dev, missing secret is acceptable — local runs rarely
+        // have Stripe configured. In staging/production a missing
+        // secret is a misconfiguration that must NOT silently accept
+        // every unauthenticated webhook payload (issue #48).
+        if (c.env.ENVIRONMENT !== 'dev') {
+          const logger = c.get('logger');
+          logger.error('STRIPE_WEBHOOK_SECRET not configured — rejecting webhook', {
+            code: 'configuration_error',
+          });
+          return c.body(
+            JSON.stringify({
+              type: 'about:blank',
+              title: 'Configuration Error',
+              status: 500,
+              detail: 'STRIPE_WEBHOOK_SECRET is not configured',
+              code: 'configuration_error',
+              traceId: c.get('traceId'),
+            }),
+            500,
+            { 'content-type': 'application/problem+json' },
+          );
+        }
         return c.body(null, 200);
       case 'signature_invalid':
         return problem400(c, 'invalid Stripe-Signature header');
