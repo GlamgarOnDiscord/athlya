@@ -77,12 +77,14 @@ function buildRepo(): {
   deleteReservationsForUser: Mock<DeletionRepo['deleteReservationsForUser']>;
   deleteWorkoutSessionsForUser: Mock<DeletionRepo['deleteWorkoutSessionsForUser']>;
   deletePushTokensForUser: Mock<DeletionRepo['deletePushTokensForUser']>;
+  deleteIdempotencyKeysForUser: Mock<DeletionRepo['deleteIdempotencyKeysForUser']>;
   markUserDeleted: Mock<DeletionRepo['markUserDeleted']>;
   anonymizeAuditRows: Mock<DeletionRepo['anonymizeAuditRows']>;
 } {
   const deleteReservationsForUser = vi.fn<DeletionRepo['deleteReservationsForUser']>();
   const deleteWorkoutSessionsForUser = vi.fn<DeletionRepo['deleteWorkoutSessionsForUser']>();
   const deletePushTokensForUser = vi.fn<DeletionRepo['deletePushTokensForUser']>();
+  const deleteIdempotencyKeysForUser = vi.fn<DeletionRepo['deleteIdempotencyKeysForUser']>();
   const markUserDeleted = vi.fn<DeletionRepo['markUserDeleted']>();
   const anonymizeAuditRows = vi.fn<DeletionRepo['anonymizeAuditRows']>();
 
@@ -90,6 +92,7 @@ function buildRepo(): {
     deleteReservationsForUser,
     deleteWorkoutSessionsForUser,
     deletePushTokensForUser,
+    deleteIdempotencyKeysForUser,
     markUserDeleted,
     anonymizeAuditRows,
   };
@@ -99,6 +102,7 @@ function buildRepo(): {
     deleteReservationsForUser,
     deleteWorkoutSessionsForUser,
     deletePushTokensForUser,
+    deleteIdempotencyKeysForUser,
     markUserDeleted,
     anonymizeAuditRows,
   };
@@ -160,6 +164,7 @@ describe('handleUserDeleted — happy path', () => {
       deleteReservationsForUser,
       deleteWorkoutSessionsForUser,
       deletePushTokensForUser,
+      deleteIdempotencyKeysForUser,
       markUserDeleted,
     } = buildRepo();
     const { avatars, deleteAvatar } = buildAvatars();
@@ -169,6 +174,7 @@ describe('handleUserDeleted — happy path', () => {
     deleteReservationsForUser.mockResolvedValueOnce(3);
     deleteWorkoutSessionsForUser.mockResolvedValueOnce(7);
     deletePushTokensForUser.mockResolvedValueOnce(2);
+    deleteIdempotencyKeysForUser.mockResolvedValueOnce(1);
     markUserDeleted.mockResolvedValueOnce(undefined);
     deleteAvatar.mockResolvedValueOnce(undefined);
     scheduleAnonymization.mockResolvedValueOnce(undefined);
@@ -190,6 +196,7 @@ describe('handleUserDeleted — happy path', () => {
         reservations: 3,
         sessions: 7,
         pushTokens: 2,
+        idempotencyKeys: 1,
         auditAnonymized: 0,
       },
       scheduledAnonymizationAt: expectedDueAt,
@@ -199,6 +206,7 @@ describe('handleUserDeleted — happy path', () => {
     expect(deleteReservationsForUser).toHaveBeenCalledExactlyOnceWith(USER_ID);
     expect(deleteWorkoutSessionsForUser).toHaveBeenCalledExactlyOnceWith(USER_ID);
     expect(deletePushTokensForUser).toHaveBeenCalledExactlyOnceWith(USER_ID);
+    expect(deleteIdempotencyKeysForUser).toHaveBeenCalledExactlyOnceWith(USER_ID);
 
     // markUserDeleted called exactly once with the frozen clock.
     expect(markUserDeleted).toHaveBeenCalledTimes(1);
@@ -222,7 +230,7 @@ describe('handleUserDeleted — happy path', () => {
     expect(error).not.toHaveBeenCalled();
   });
 
-  it('calls each cascade step in the documented order: reservations → sessions → push tokens → markUserDeleted → avatar → scheduler', async () => {
+  it('calls each cascade step in the documented order: reservations → sessions → push tokens → idempotencyKeys → markUserDeleted → avatar → scheduler', async () => {
     const { repo, ...mocks } = buildRepo();
     const { avatars, deleteAvatar } = buildAvatars();
     const { scheduler, scheduleAnonymization } = buildScheduler();
@@ -238,6 +246,10 @@ describe('handleUserDeleted — happy path', () => {
     });
     mocks.deletePushTokensForUser.mockImplementationOnce(() => {
       order.push('pushTokens');
+      return Promise.resolve(0);
+    });
+    mocks.deleteIdempotencyKeysForUser.mockImplementationOnce(() => {
+      order.push('idempotencyKeys');
       return Promise.resolve(0);
     });
     mocks.markUserDeleted.mockImplementationOnce(() => {
@@ -264,6 +276,7 @@ describe('handleUserDeleted — happy path', () => {
       'reservations',
       'sessions',
       'pushTokens',
+      'idempotencyKeys',
       'markUserDeleted',
       'avatar',
       'scheduler',
@@ -282,6 +295,7 @@ describe('handleUserDeleted — avatar purge failure', () => {
       deleteReservationsForUser,
       deleteWorkoutSessionsForUser,
       deletePushTokensForUser,
+      deleteIdempotencyKeysForUser,
       markUserDeleted,
     } = buildRepo();
     const { avatars, deleteAvatar } = buildAvatars();
@@ -291,6 +305,7 @@ describe('handleUserDeleted — avatar purge failure', () => {
     deleteReservationsForUser.mockResolvedValueOnce(1);
     deleteWorkoutSessionsForUser.mockResolvedValueOnce(2);
     deletePushTokensForUser.mockResolvedValueOnce(0);
+    deleteIdempotencyKeysForUser.mockResolvedValueOnce(0);
     markUserDeleted.mockResolvedValueOnce(undefined);
     deleteAvatar.mockRejectedValueOnce(new Error('R2 unreachable'));
     scheduleAnonymization.mockResolvedValueOnce(undefined);
@@ -309,6 +324,7 @@ describe('handleUserDeleted — avatar purge failure', () => {
       reservations: 1,
       sessions: 2,
       pushTokens: 0,
+      idempotencyKeys: 0,
       auditAnonymized: 0,
     });
 
@@ -350,6 +366,7 @@ describe('handleUserDeleted — scheduler failure', () => {
     mocks.deleteReservationsForUser.mockResolvedValueOnce(0);
     mocks.deleteWorkoutSessionsForUser.mockResolvedValueOnce(0);
     mocks.deletePushTokensForUser.mockResolvedValueOnce(0);
+    mocks.deleteIdempotencyKeysForUser.mockResolvedValueOnce(0);
     mocks.markUserDeleted.mockResolvedValueOnce(undefined);
     deleteAvatar.mockResolvedValueOnce(undefined);
     scheduleAnonymization.mockRejectedValueOnce(new Error('QStash unreachable'));
@@ -369,6 +386,7 @@ describe('handleUserDeleted — scheduler failure', () => {
     expect(mocks.deleteReservationsForUser).toHaveBeenCalledTimes(1);
     expect(mocks.deleteWorkoutSessionsForUser).toHaveBeenCalledTimes(1);
     expect(mocks.deletePushTokensForUser).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteIdempotencyKeysForUser).toHaveBeenCalledTimes(1);
     expect(mocks.markUserDeleted).toHaveBeenCalledTimes(1);
     expect(deleteAvatar).toHaveBeenCalledTimes(1);
     expect(scheduleAnonymization).toHaveBeenCalledTimes(1);
@@ -388,6 +406,7 @@ describe('handleUserDeleted — markUserDeleted', () => {
     mocks.deleteReservationsForUser.mockResolvedValueOnce(0);
     mocks.deleteWorkoutSessionsForUser.mockResolvedValueOnce(0);
     mocks.deletePushTokensForUser.mockResolvedValueOnce(0);
+    mocks.deleteIdempotencyKeysForUser.mockResolvedValueOnce(0);
     mocks.markUserDeleted.mockResolvedValueOnce(undefined);
     deleteAvatar.mockResolvedValueOnce(undefined);
     scheduleAnonymization.mockResolvedValueOnce(undefined);
