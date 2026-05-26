@@ -1,8 +1,8 @@
 # Athlya Platform — Progress & Remaining Work
 
-**Dernière mise à jour :** Epic 14 livré — Checkpoint v0.1 MVP complet (profile-edit E2E web + class-management E2E studio + studio-e2e-flows CI job)
+**Dernière mise à jour :** GitHub issues triage livré — #47 #48 #49 #52 #53 #56 corrigés, #50 #51 #54 #55 fermés (faux positifs / design)
 **Tâches complétées :** Epic 14 (1/1), Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.8.1, CN.8.2, CN.9.2, CN.9.3 — cases parents cochées
-**Hardening tasks livrées :** 8 / 8 (H1 à H8)
+**Hardening tasks livrées :** 8 / 8 (H1 à H8) + 6 issues GitHub (#47–#53 #56)
 **Niveau 2 (live wiring) :** 12 / 13 items (voir section dédiée)
 
 ---

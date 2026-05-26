@@ -1076,6 +1076,21 @@ _Roadmap complète_ : `docs/runbooks/deps-revert-followups.md`.
 
 ---
 
+### GitHub Issues Triage (PR #57, mai 2026)
+
+- [x] #47 Turnstile middleware monté sur `/v1/auth/register` et `/v1/auth/login` dans `worker.ts`
+- [x] #48 Webhook Stripe retourne 500 (non 200) quand `STRIPE_WEBHOOK_SECRET` absent hors dev — `billing.ts` + log `billing-deps.ts` mis à jour
+- [x] #49 Validation UUID dans le consumer `auth.user.deleted` — payload malformé acked sans traitement
+- [x] #52 Cascade RGPD Article 17 étend la purge aux `idempotency_keys` — interface + Drizzle adapter + tests cascade + tests intégration
+- [x] #53 Vérification SHA256 du binaire gitleaks dans `secret-scan.yml` avant extraction
+- [x] #56 `verifyStripeSignature` retourne `VerifyResult` union typé au lieu de `StripeEvent | null` — handler + 30 tests mis à jour
+- [x] #50 Fermé — faux positif : RLS + withTenant atténuent le risque cross-studio
+- [x] #51 Fermé — hors scope sprint : mutex distribué Redis non requis avec contrainte unique DB
+- [x] #54 Fermé — concern infra/pipeline, pas code applicatif
+- [x] #55 Fermé — design documenté : dedup par event.id dans le consumer dispatcher
+
+---
+
 ### Epic CN — Pratiques niveau Netflix/Stripe (cible 9/10)
 
 5 priorités hautes (~4 jours total) qui font 80 % de l'écart vers une équipe Série A.
