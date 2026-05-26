@@ -70,8 +70,8 @@ import { tracing } from './middleware/otel.js';
 import { registerErrorHandlers } from './middleware/problem-details.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import { securityHeaders } from './middleware/security-headers.js';
-import { turnstile } from './middleware/turnstile.js';
 import { tenantClaimGuard, tenantResolverMiddleware } from './middleware/tenant-resolver.js';
+import { turnstile } from './middleware/turnstile.js';
 import { buildSpecApp } from './openapi/spec.js';
 import { requireRole } from './routes/helpers.js';
 import {
@@ -1412,12 +1412,16 @@ export async function handleEventsBatch(
           // Guard against a crafted DLQ replay injecting an
           // arbitrary userId — a string UUID is the minimum
           // shape we need before delegating to the cascade.
-          const rawUserId = (msg.body as Record<string, unknown>)?.['payload']?.['userId'];
+          const envelopePayload =
+            typeof envelope['payload'] === 'object' && envelope['payload'] !== null
+              ? (envelope['payload'] as Record<string, unknown>)
+              : undefined;
+          const rawUserId: unknown = envelopePayload?.['userId'];
           if (
             typeof rawUserId !== 'string' ||
             !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawUserId)
           ) {
-            logger.warn('[worker] auth.user.deleted: invalid userId — acking without processing', {
+            console.warn('[worker] auth.user.deleted: invalid userId — acking without processing', {
               messageId: msg.id,
             });
             msg.ack();
