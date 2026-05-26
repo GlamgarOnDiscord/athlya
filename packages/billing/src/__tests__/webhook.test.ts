@@ -122,7 +122,9 @@ describe('verifyStripeSignature', () => {
     const payload = samplePayload();
     const header = await mintHeader(payload, FIXED_EPOCH_SEC, WEBHOOK_SECRET);
 
-    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, {
+      now: fixedNow(),
+    });
 
     expect(result.ok).toBe(true);
     expect(result.ok && result.event.id).toBe('evt_test_1234567890');
@@ -165,7 +167,9 @@ describe('verifyStripeSignature', () => {
     const stale = FIXED_EPOCH_SEC - (DEFAULT_TOLERANCE_SECONDS + 1);
     const header = await mintHeader(payload, stale, WEBHOOK_SECRET);
 
-    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, {
+      now: fixedNow(),
+    });
     expect(result.ok).toBe(false);
     expect(!result.ok && result.reason).toBe('timestamp_stale');
   });
@@ -175,7 +179,9 @@ describe('verifyStripeSignature', () => {
     const future = FIXED_EPOCH_SEC + (DEFAULT_TOLERANCE_SECONDS + 1);
     const header = await mintHeader(payload, future, WEBHOOK_SECRET);
 
-    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, {
+      now: fixedNow(),
+    });
     expect(result.ok).toBe(false);
     expect(!result.ok && result.reason).toBe('timestamp_stale');
   });
@@ -184,7 +190,9 @@ describe('verifyStripeSignature', () => {
     const payload = samplePayload();
     const header = await mintHeader(payload, FIXED_EPOCH_SEC, WRONG_SECRET);
 
-    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, {
+      now: fixedNow(),
+    });
     expect(result.ok).toBe(false);
     expect(!result.ok && result.reason).toBe('hmac_mismatch');
   });
@@ -209,7 +217,9 @@ describe('verifyStripeSignature', () => {
     // Two v1 entries; second one is valid.
     const header = `t=${String(FIXED_EPOCH_SEC)},v1=${badSig},v1=${goodSig}`;
 
-    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, {
+      now: fixedNow(),
+    });
     expect(result.ok).toBe(true);
   });
 
@@ -217,7 +227,9 @@ describe('verifyStripeSignature', () => {
     const payload = 'not-json-{{{';
     const header = await mintHeader(payload, FIXED_EPOCH_SEC, WEBHOOK_SECRET);
 
-    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, { now: fixedNow() });
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, {
+      now: fixedNow(),
+    });
     expect(result.ok).toBe(false);
     expect(!result.ok && result.reason).toBe('malformed_payload');
   });
@@ -289,9 +301,7 @@ function buildDeps(
       ? { ok: true, event: options.event }
       : { ok: false, reason: 'hmac_mismatch' };
 
-  const verifySignature = vi
-    .fn<WebhookDeps['verifySignature']>()
-    .mockResolvedValue(verifyResult);
+  const verifySignature = vi.fn<WebhookDeps['verifySignature']>().mockResolvedValue(verifyResult);
 
   const appendAudit = vi.fn<WebhookDeps['appendAudit']>();
   if (options.appendAuditError !== undefined) {
