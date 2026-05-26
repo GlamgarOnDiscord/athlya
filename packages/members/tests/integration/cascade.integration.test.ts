@@ -242,10 +242,10 @@ function buildRepo(client: Sql): DeletionRepo {
       return rows.length;
     },
     async deleteIdempotencyKeysForUser(userId) {
-      const rows = await client<{ id: string }[]>`
+      const rows = await client<{ key: string }[]>`
                 DELETE FROM idempotency_keys
                  WHERE user_id = ${userId}
-                 RETURNING id
+                 RETURNING key
             `;
       return rows.length;
     },
@@ -488,8 +488,8 @@ function buildRepoPglite(pg: PGlite): DeletionRepo {
       return r.rows.length;
     },
     async deleteIdempotencyKeysForUser(userId) {
-      const r = await pg.query<{ id: string }>(
-        `DELETE FROM idempotency_keys WHERE user_id = $1 RETURNING id`,
+      const r = await pg.query<{ key: string }>(
+        `DELETE FROM idempotency_keys WHERE user_id = $1 RETURNING key`,
         [userId],
       );
       return r.rows.length;
