@@ -367,23 +367,28 @@ function hexCharToNibble(code: number): number {
  *
  * Contract
  * --------
- * Returns the parsed Stripe event ({@link StripeEvent}) iff every
- * step below succeeds; returns `null` on any failure. The caller
- * turns `null` into a 400 outcome.
+ * Returns a {@link VerifyResult} discriminated union:
+ *
+ *   - `{ ok: true, event }` — every step succeeded; the caller
+ *     proceeds with the parsed event.
+ *   - `{ ok: false, reason }` — one step failed; reason is one of
+ *     `'malformed_header'`, `'timestamp_stale'`, `'hmac_mismatch'`,
+ *     or `'malformed_payload'`. The caller turns this into a 400.
  *
  *   1. **Header parse.** `t=<timestamp>,v1=<sig>[,v1=<sig2>…]` —
- *      any other shape returns `null`.
+ *      any other shape → `malformed_header`.
  *   2. **Timestamp tolerance.** `|now − t| ≤ toleranceSeconds`
  *      (default 300 s). The check is symmetric so a future-dated
- *      timestamp is rejected too.
+ *      timestamp is rejected too. Failure → `timestamp_stale`.
  *   3. **HMAC-SHA256.** Using `webhookSecret` as the key and
  *      `<timestamp>.<rawPayload>` as the message. Every `v1=` in
  *      the header is compared in turn; a single match counts as
  *      success. `crypto.subtle.verify` is specified as constant-time
  *      across every major runtime (Node 20, Workers, browsers).
+ *      Failure → `hmac_mismatch`.
  *   4. **JSON parse.** The raw payload is `JSON.parse`-d and the
  *      resulting object must carry `id: string` and `type: string`.
- *      Anything else returns `null`.
+ *      Anything else → `malformed_payload`.
  *
  * Thread-safety: the function allocates fresh buffers per call and
  * imports the HMAC key locally; no shared state.

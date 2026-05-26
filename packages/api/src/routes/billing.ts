@@ -149,6 +149,21 @@ function problem404(c: Context<HonoEnv>, detail: string): Response {
   );
 }
 
+function problem500(c: Context<HonoEnv>, detail: string, code: string): Response {
+  return c.body(
+    JSON.stringify({
+      type: 'about:blank',
+      title: 'Internal Server Error',
+      status: 500,
+      detail,
+      code,
+      traceId: c.get('traceId'),
+    }),
+    500,
+    { 'content-type': PROBLEM_JSON },
+  );
+}
+
 function problem400(c: Context<HonoEnv>, detail: string): Response {
   return c.body(
     JSON.stringify({
@@ -251,18 +266,7 @@ export function buildBillingRouter(deps: BillingDeps): Hono<HonoEnv> {
           logger.error('STRIPE_WEBHOOK_SECRET not configured — rejecting webhook', {
             code: 'configuration_error',
           });
-          return c.body(
-            JSON.stringify({
-              type: 'about:blank',
-              title: 'Configuration Error',
-              status: 500,
-              detail: 'STRIPE_WEBHOOK_SECRET is not configured',
-              code: 'configuration_error',
-              traceId: c.get('traceId'),
-            }),
-            500,
-            { 'content-type': 'application/problem+json' },
-          );
+          return problem500(c, 'STRIPE_WEBHOOK_SECRET is not configured', 'configuration_error');
         }
         return c.body(null, 200);
       case 'signature_invalid':
