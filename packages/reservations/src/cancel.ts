@@ -529,11 +529,7 @@ export async function cancelReservation(
   // cancellation never occupied a seat (counter unchanged).
   // Skip when promotion was blocked because PostgreSQL still sees
   // the class at capacity (Redis would otherwise advertise a free seat).
-  if (
-    outcome.wasConfirmed &&
-    outcome.promoted === null &&
-    !outcome.promotionBlockedByCapacity
-  ) {
+  if (outcome.wasConfirmed && outcome.promoted === null && !outcome.promotionBlockedByCapacity) {
     await counter.incrRemaining(outcome.classId);
   }
 

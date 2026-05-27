@@ -12,6 +12,8 @@
 CREATE OR REPLACE FUNCTION public.enforce_class_capacity()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   confirmed_count integer;
