@@ -54,7 +54,8 @@ Modules concernés (chemins relatifs au repo) :
 - Adapter cron : `packages/api/src/events/drain-scheduled.ts` —
   bridge `ScheduledEvent` ↔ `drainOutbox`, transaction par cycle.
 - Worker entrypoint : `packages/api/src/worker.ts` — câble `fetch`,
-  `scheduled` (drain) et `queue` (DLQ handler).
+  `scheduled` (drain) et `queue` (dispatch RGPD + notifications +
+  DLQ handler).
 - DLQ tracker : `packages/api/src/events/drain-dlq.ts`.
 - Dedup consumer : `packages/api/src/events/dedup.ts`.
 
@@ -303,6 +304,8 @@ tests ?
 | `reservation.promoted`     | `gateway.integration.test.ts` (waitlist FIFO)   | `drain-worker.test.ts` § "claims N rows" (event #3)        | `dedup.test.ts` (générique) |
 | `members.export.requested` | `packages/members/src/__tests__/export.test.ts` | couvert par le path générique (drain est event-type-blind) | `dedup.test.ts` (générique) |
 | `members.export.completed` | `packages/members/src/__tests__/export.test.ts` | couvert par le path générique (drain est event-type-blind) | `dedup.test.ts` (générique) |
+| `reservation.created` (queue dispatch) | `packages/api/src/__tests__/queue-cascade.test.ts` (route vers notifications) | n/a (dispatcher consumer side) | `packages/notifications/src/__tests__/consumer.test.ts` |
+| `billing.subscription.failed` (queue dispatch) | couvert par le même routeur consumer (`worker.ts`) | n/a (dispatcher consumer side) | `packages/notifications/src/__tests__/consumer.test.ts` |
 
 **Décision B6.4** : pas de test integration outbox→drain→consumer
 end-to-end ajouté. Justifications :

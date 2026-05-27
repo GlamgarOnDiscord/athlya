@@ -282,6 +282,9 @@ importers:
       '@athlya/members':
         specifier: workspace:*
         version: link:../members
+      '@athlya/notifications':
+        specifier: workspace:*
+        version: link:../notifications
       '@athlya/ratelimit':
         specifier: workspace:*
         version: link:../ratelimit
