@@ -49,7 +49,6 @@
  * rule literally.
  */
 
-import { isClassCapacityExceeded } from './book.js';
 import { canTransition, type ReservationStatus } from './state-machine.js';
 
 import type { ReservationRow } from '@athlya/db/schema';
@@ -194,6 +193,9 @@ export interface CancelRepo {
   ): Promise<ReservationRow>;
 
   findOldestWaitlistForClass(tx: unknown, classId: string): Promise<ReservationRow | null>;
+
+  /** True when another `confirmed` row can be committed for `classId`. */
+  classHasCapacityForConfirmed(tx: unknown, classId: string): Promise<boolean>;
 
   insertOutbox(tx: unknown, event: CancelOutboxEvent): Promise<void>;
 }
@@ -471,7 +473,8 @@ export async function cancelReservation(
     if (wasConfirmed) {
       const nextWaiter = await repo.findOldestWaitlistForClass(tx, reservation.classId);
       if (nextWaiter !== null) {
-        try {
+        const hasCapacity = await repo.classHasCapacityForConfirmed(tx, reservation.classId);
+        if (hasCapacity) {
           promoted = await repo.updateReservationStatus(tx, nextWaiter.id, 'confirmed', now);
           await repo.insertOutbox(tx, {
             eventId: newEventId(),
@@ -483,12 +486,8 @@ export async function cancelReservation(
             },
             occurredAt: now,
           });
-        } catch (err) {
-          if (isClassCapacityExceeded(err)) {
-            promotionBlockedByCapacity = true;
-          } else {
-            throw err;
-          }
+        } else {
+          promotionBlockedByCapacity = true;
         }
       }
     }

@@ -52,6 +52,6 @@ $$;
 DROP TRIGGER IF EXISTS reservations_enforce_capacity ON reservations;
 
 CREATE TRIGGER reservations_enforce_capacity
-  BEFORE INSERT OR UPDATE OF status ON reservations
+  BEFORE INSERT OR UPDATE OF status, class_id ON reservations
   FOR EACH ROW
   EXECUTE FUNCTION enforce_class_capacity();

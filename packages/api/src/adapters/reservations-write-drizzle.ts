@@ -251,6 +251,27 @@ export function createDrizzleCancelRepo(db: AthlyaDb): CancelRepo {
       return rows[0] ?? null;
     },
 
+    async classHasCapacityForConfirmed(tx, classId): Promise<boolean> {
+      const drizzleTx = tx as AthlyaTx;
+      const [row] = await drizzleTx
+        .select({
+          capacity: classes.capacity,
+          confirmed: sql<number>`(
+            SELECT count(*)::int
+              FROM ${reservations}
+             WHERE class_id = ${classId}
+               AND status = 'confirmed'
+          )`,
+        })
+        .from(classes)
+        .where(and(eq(classes.id, classId), isNull(classes.deletedAt)))
+        .limit(1);
+      if (row === undefined) {
+        return false;
+      }
+      return Number(row.confirmed) < row.capacity;
+    },
+
     async insertOutbox(tx, event: CancelOutboxEvent): Promise<void> {
       await insertOutboxRow(tx as AthlyaTx, {
         eventId: event.eventId,
