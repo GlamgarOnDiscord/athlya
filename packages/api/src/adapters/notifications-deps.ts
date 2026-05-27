@@ -250,4 +250,3 @@ export function buildNotificationsDeps(env: AthlyaBindings): HandleEventDeps {
     logger,
   };
 }
-
