@@ -6,12 +6,9 @@
 
 Lockfile resolves `hono@4.12.18` exactly. No action needed.
 
-### S2. bcrypt 72-byte password truncation
+### ~~S2. bcrypt 72-byte password truncation~~ RESOLVED (2026-05-27)
 
-**Risk**: Zod schema allows `.max(256)` (`packages/shared/src/schemas/api.ts:120`) but bcrypt truncates at 72 bytes. Characters 73-256 provide zero security.  
-**Files**: `packages/shared/src/schemas/api.ts:120`, `packages/auth/src/password.ts`  
-**Action**: Either cap Zod schema at `.max(72)`, or use `bcrypt(SHA256(password))` pattern, or document as accepted  
-**Source**: bcrypt specification, OWASP Password Storage Cheatsheet
+Zod `RegisterRequestSchema` / `LoginRequestSchema` cap `.max(72)` (`packages/shared/src/schemas/api.ts`). Web forms `maxLength={72}` (login, register, reset-password). Tests `packages/shared/tests/schemas.test.ts`. i18n `passwordLength` fr/en.
 
 ### ~~S3. Update `@cloudflare/workers-types`~~ VERIFIED OK
 
@@ -124,10 +121,9 @@ Lockfile resolves to `4.20260509.1` (latest). The `^4.20241218.0` range in packa
 
 ## Priority 5: Technical Debt (Low Priority)
 
-### D1. Login form `maxLength={256}` should match Zod schema
+### ~~D1. Login form maxLength vs Zod~~ RESOLVED (2026-05-27)
 
-**File**: `apps/web/src/app/login/LoginForm.tsx:119`  
-**Detail**: `maxLength={256}` is correct per current Zod schema but inconsistent with bcrypt's 72-byte limit. If S2 is resolved by capping at 72, update this too.
+`LoginForm`, `RegisterForm`, `ResetPasswordForm` use `maxLength={72}` on password fields (aligned with S2).
 
 ### D2. Login form uses `fetch` directly instead of API client
 

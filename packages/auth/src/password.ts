@@ -51,11 +51,9 @@ export class EmptyPasswordError extends Error {
  *
  * ### Preconditions
  *
- * - `password` is a non-empty string. bcrypt itself silently truncates
- *   input at 72 bytes (UTF-8), which is a known bcrypt property; we do
- *   not enforce length here because the API layer caps inputs upstream
- *   and rejecting here would break admin-reset flows that legitimately
- *   hash randomly generated long tokens.
+ * - `password` is a non-empty string. bcrypt silently truncates at
+ *   72 bytes (UTF-8). The API Zod schemas and web forms cap at 72
+ *   chars so user passwords never hit that boundary.
  *
  * ### Postconditions
  *

@@ -23,17 +23,9 @@ _Last updated: 2026-05-14_
 | Cost factor          | 12                         | Meets OWASP 2024 minimum                                |
 | Library              | bcryptjs ^3.0.2            | Pure JS, Workers-compatible                             |
 | Empty password check | Yes (throws)               | Good                                                    |
-| Max length           | Not enforced at hash level | bcrypt truncates at 72 bytes — API layer should enforce |
+| Max length           | Zod + forms `.max(72)`     | Resolved 2026-05-27 — wire cap before bcrypt |
 
-**Issue**: Zod schema (`RegisterRequestSchema`) allows `password.max(256)`, but bcrypt silently truncates at 72 bytes (UTF-8). Users entering a password > 72 bytes get a hash that only covers the first 72 bytes — the remaining chars provide zero additional security.
-
-`packages/auth/src/password.ts:54` explicitly documents this but defers to "the API layer caps inputs upstream", which is incorrect (the API layer caps at 256, not 72).
-
-**Recommendation**: Either:
-
-- Cap `.max(72)` in the Zod schema (breaking change for existing passwords > 72 chars, unlikely to exist yet)
-- Or pre-hash with SHA-256 before bcrypt (standard pattern: `bcrypt(SHA256(password))`) to use all 256 chars
-- Or document as accepted behavior (most real passwords are < 72 bytes)
+Zod `RegisterRequestSchema` / `LoginRequestSchema` and web password inputs cap at 72 characters so bcrypt silent truncation never applies to user passwords.
 
 ### HIBP Check (packages/auth/src/hibp.ts)
 
