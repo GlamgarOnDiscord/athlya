@@ -33,6 +33,10 @@
     "./outbox": {
       "types": "./src/outbox.ts",
       "default": "./src/outbox.ts"
+    },
+    "./stripe-webhook-events": {
+      "types": "./src/stripe-webhook-events.ts",
+      "default": "./src/stripe-webhook-events.ts"
     }
   },
   "files": [

@@ -22,15 +22,15 @@
  * the real `@athlya/billing` flow — the `createCheckoutSession`
  * service, `verifyStripeSignature` + `handleStripeWebhook` handler.
  *
- * The webhook stub uses no-op deps that never write audit / publish
- * — those tables (`audit_log`, the outbox) wire in via Epic 9 and
- * 16, neither of which is in the B9 scope. The webhook is currently
- * a passthrough (signature checked, body parsed, no side effect)
- * which matches the slice description: "log + retourner 200,
- * **PAS d'effet de bord**".
+ * Webhook path: signature verification + `stripe_webhook_events`
+ * idempotency (issue #69). Audit / bus publish remain no-op until
+ * Epic 9 wiring lands — duplicates still ack 200 without re-publish.
  */
 
 import { handleStripeWebhook, verifyStripeSignature, type WebhookDeps } from '@athlya/billing';
+import { claimStripeWebhookEvent } from '@athlya/db/stripe-webhook-events';
+
+import { getOrCreateWriteDb } from './deps-cache.js';
 
 import type { BillingDeps } from '../routes/billing.js';
 import type { AthlyaBindings } from '../types.js';
@@ -103,8 +103,10 @@ export function buildBillingDeps(env: AthlyaBindings): BillingDeps {
       // documents "PAS d'effet de bord". Every dispatch branch
       // resolves cleanly; future slices will swap in real
       // Drizzle + outbox-backed implementations.
+      const db = getOrCreateWriteDb(env);
       const deps: WebhookDeps = {
         verifySignature: (payload, sig, sec) => verifyStripeSignature(payload, sig, sec),
+        claimStripeEvent: (eventId, eventType) => claimStripeWebhookEvent(db, eventId, eventType),
         appendAudit: () => Promise.resolve(undefined),
         publish: () => Promise.resolve(undefined),
         withTransaction: async (fn) => fn(),

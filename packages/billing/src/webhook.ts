@@ -226,6 +226,9 @@ export type VerifyResult =
  *                         …); the wiring layer opens a DB tx and
  *                         commits it if the callback resolves or
  *                         rolls back if it throws.
+ *   - `claimStripeEvent`  — insert-once dedup on Stripe `event.id`
+ *                         (issue #69). Returns `true` when the event
+ *                         is new; `false` when already recorded.
  */
 export interface WebhookDeps {
   readonly verifySignature: (
@@ -233,6 +236,7 @@ export interface WebhookDeps {
     signatureHeader: string,
     secret: string,
   ) => Promise<VerifyResult>;
+  readonly claimStripeEvent: (eventId: string, eventType: string) => Promise<boolean>;
   readonly appendAudit: (entry: WebhookAuditEntry) => Promise<void>;
   readonly publish: (event: WebhookPublishEnvelope) => Promise<void>;
   readonly withTransaction: <T>(fn: () => Promise<T>) => Promise<T>;
@@ -604,8 +608,18 @@ export async function handleStripeWebhook(
     return { kind: 'signature_invalid', reason };
   }
 
-  // Step 2 — dispatch by event type.
+  // Step 2 — idempotent claim (issue #69).
   const { event } = verifyResult;
+  const isNew = await deps.claimStripeEvent(event.id, event.type);
+  if (!isNew) {
+    return {
+      kind: 'processed',
+      eventType: event.type,
+      eventId: event.id,
+    };
+  }
+
+  // Step 3 — dispatch by event type.
   const occurredAt = new Date().toISOString();
 
   switch (event.type) {
