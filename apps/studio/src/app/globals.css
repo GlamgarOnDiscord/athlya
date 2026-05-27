@@ -180,3 +180,12 @@ body {
     font-family: var(--font-sans);
   }
 }
+
+/* Branding preview — colours via CSSOM vars (CSP #75, no style="" attrs). */
+.brand-preview-swatch {
+  background-color: var(--brand-bg, var(--color-brand-primary));
+}
+.brand-preview-sample {
+  background-color: var(--brand-bg, var(--color-brand-primary));
+  color: var(--brand-fg, var(--color-brand-on-primary));
+}

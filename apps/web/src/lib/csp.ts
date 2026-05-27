@@ -94,21 +94,12 @@ export function generateCsp({ nonce, apiUrl, reportUri, dev, isDev }: CspOptions
   const styleSrc =
     isDev === true ? `style-src 'self' 'unsafe-inline'` : `style-src 'self' 'nonce-${nonce}'`;
 
-  // Sprint-3 SP3.1 (Vague 31, audit finding S6-001) — production
-  // CSP keeps `style-src 'self' 'nonce-...'` strict (blocks inline
-  // <style> blocks that lack the nonce) but allows inline `style=""`
-  // attributes via `style-src-attr 'unsafe-inline'`. Without this
-  // directive, every `style={{ ... }}` JSX expression that React
-  // serialises as `style="..."` on the HTML attribute would be
-  // dropped by the browser in prod. The audit scanned the codebase
-  // and found two such usages in `BrandingPreview` (per-tenant
-  // branding pulls a hex colour from the studio config and applies
-  // it inline). Refactoring those to CSS variables is on the
-  // hardening backlog (S6-001 option 2) but not required to ship —
-  // `style-src-attr 'unsafe-inline'` is the option-1 mitigation
-  // recommended by the audit. The strict `style-src` directive
-  // still gates inline blocks, so an XSS that injects
-  // `<style>...</style>` is blocked.
+  // Sprint-3 SP3.1 / issue #75 — app code uses CSS variables via the
+  // CSSOM (no `style=""` in Athlya components). `style-src-attr
+  // 'unsafe-inline'` remains required for third-party UI (sonner,
+  // @base-ui/react positioning, react-day-picker) that inject
+  // attribute styles at runtime. `style-src 'nonce-...'` still
+  // blocks unnonced `<style>` blocks.
   //
   // In dev we don't emit `style-src-attr` separately — the broad
   // `style-src 'unsafe-inline'` already covers attribute styles.

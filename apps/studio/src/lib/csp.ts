@@ -31,11 +31,8 @@ export function generateCsp({ nonce, apiUrl, reportUri, dev, isDev }: CspOptions
   const scriptSrcExtras = dev === true ? ` 'unsafe-eval'` : '';
   const styleSrc =
     isDev === true ? `style-src 'self' 'unsafe-inline'` : `style-src 'self' 'nonce-${nonce}'`;
-  // Sprint-3 SP3.1 (Vague 31, audit finding S6-001) — see
-  // `apps/web/src/lib/csp.ts` for the full rationale. Studio carries
-  // the same React inline-style attribute pattern (BrandingPreview
-  // shares the package), so the same `style-src-attr 'unsafe-inline'`
-  // mitigation applies. Strict inline-block gating preserved.
+  // Issue #75 — BrandingPreview uses CSSOM vars; `style-src-attr` kept
+  // for @base-ui / sonner (see `apps/web/src/lib/csp.ts`).
   const styleSrcAttr = isDev === true ? '' : `style-src-attr 'unsafe-inline'`;
 
   const directives: string[] = [

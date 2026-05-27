@@ -6,7 +6,7 @@ Tracking issue **#79**. Tous les CRITICAL/HIGH sont fermés code-side (Sprints 1
 
 | ID      | Sujet                                      | Statut   | Issue / slice        |
 | ------- | ------------------------------------------ | -------- | -------------------- |
-| S6-001  | CSP `style-src` vs React `style={{}}`      | ouvert   | #75                  |
+| S6-001  | CSP `style-src` vs React `style={{}}`      | partiel  | #75 — app code sans `style=""`; deps UI gardent `style-src-attr` |
 | S2-010  | Logout per-device                          | backlog  | —                    |
 | S4-009  | Outbox quota per-user                      | partiel  | rate limit global OK |
 | S4-010  | Canary / graduel deploy                    | doc      | #80                  |
