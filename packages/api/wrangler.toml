@@ -70,9 +70,9 @@ compatibility_flags = ["nodejs_compat"]
 # ----------------------------------------------------------------------------
 # Observability
 # ----------------------------------------------------------------------------
-# `head_sampling_rate = 1.0` keeps 100 % of Tail Worker / Logpush events
-# until sustained traffic arrives. Task 14.x will dial this down per
-# environment once OTel is wired.
+# `head_sampling_rate` dials Cloudflare Tail / Logpush volume per env.
+# OTLP export sampling is separate: `OTEL_SAMPLE_RATE` + `otel.ts`
+# (5xx always exported; `/health*` capped at 1 %).
 #
 # OTLP export target (hardening task H6)
 # --------------------------------------
@@ -94,6 +94,14 @@ compatibility_flags = ["nodejs_compat"]
 [observability]
 enabled = true
 head_sampling_rate = 1.0
+
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 0.5
+
+[env.production.observability]
+enabled = true
+head_sampling_rate = 0.1
 
 # ----------------------------------------------------------------------------
 # Shared vars (defaults for local `wrangler dev`)
@@ -301,6 +309,7 @@ route = { pattern = "staging.api.athlya.app/*", zone_name = "athlya.app" }
 [env.staging.vars]
 ENVIRONMENT = "staging"
 VERSION = "0.0.0-staging"
+OTEL_SAMPLE_RATE = "0.5"
 
 [env.staging.placement]
 # Smart placement co-locates the Worker with EU-resident data stores.
@@ -367,6 +376,7 @@ route = { pattern = "api.athlya.app/*", zone_name = "athlya.app" }
 [env.production.vars]
 ENVIRONMENT = "production"
 VERSION = "0.1.0"
+OTEL_SAMPLE_RATE = "0.1"
 
 [env.production.placement]
 mode = "smart"
