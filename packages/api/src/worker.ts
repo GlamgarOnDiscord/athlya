@@ -51,6 +51,12 @@
 
 import { handleUserDeleted, runExportJob } from '@athlya/members';
 import { HANDLED_EVENT_TYPES, handleEvent as handleNotificationEvent } from '@athlya/notifications';
+import {
+  parseEvent,
+  type AthlyaEvent,
+  type AuthUserDeletedEvent,
+  type MembersExportRequestedEvent,
+} from '@athlya/shared/events';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
@@ -88,12 +94,6 @@ import { extractTraceparentId, newTraceId } from './tracing/ids.js';
 import type { DlqBindings } from './events/drain-dlq.js';
 import type { ExecutionContext, ScheduledEnv, ScheduledEvent } from './events/drain-scheduled.js';
 import type { HonoEnv, AthlyaBindings } from './types.js';
-import type {
-  AthlyaEvent,
-  AuthUserDeletedEvent,
-  MembersExportRequestedEvent,
-} from '@athlya/shared/events';
-import { parseEvent } from '@athlya/shared/events';
 import type { MessageBatch } from '@cloudflare/workers-types';
 import type { Context } from 'hono';
 

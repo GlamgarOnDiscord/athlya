@@ -43,8 +43,8 @@
  * Validates: Findings S5-002 (RGPD Article 17 cascade dispatch).
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseEvent } from '@athlya/shared/events';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /* ------------------------------------------------------------------ */
 /*  Mocks                                                              */

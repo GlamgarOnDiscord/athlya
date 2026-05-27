@@ -130,7 +130,7 @@ function buildEmailSender(env: AthlyaBindings, logger: Logger): EmailSender {
     }
 
     return {
-      async send() {
+      send() {
         throw new Error('RESEND_API_KEY missing in non-dev env');
       },
     };
