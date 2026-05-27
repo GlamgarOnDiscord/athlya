@@ -51,9 +51,9 @@
  * @see Requirements 8.1–8.6, 9.1–9.5, 10.1–10.5, 16.3.
  */
 
-import { isPostgresUniqueViolation } from '@athlya/db/errors';
+import { isPostgresRaiseException, isPostgresUniqueViolation } from '@athlya/db/errors';
 import { classes, outbox, reservations } from '@athlya/db/schema';
-import { UniqueViolationError } from '@athlya/reservations';
+import { ClassCapacityExceededError, UniqueViolationError } from '@athlya/reservations';
 import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
@@ -137,6 +137,9 @@ export function createDrizzleBookingRepo(db: AthlyaDb): BookingRepo {
           // service's `isUniqueViolation` matches.
           throw new UniqueViolationError();
         }
+        if (isPostgresRaiseException(err, 'class_capacity_exceeded')) {
+          throw new ClassCapacityExceededError();
+        }
         throw err;
       }
     },
@@ -216,15 +219,22 @@ export function createDrizzleCancelRepo(db: AthlyaDb): CancelRepo {
       if (status === 'cancelled') {
         set.cancelledAt = stampedAt;
       }
-      const [row] = await drizzleTx
-        .update(reservations)
-        .set(set)
-        .where(eq(reservations.id, reservationId))
-        .returning();
-      if (row === undefined) {
-        throw new Error(`updateReservationStatus: reservation ${reservationId} not found`);
+      try {
+        const [row] = await drizzleTx
+          .update(reservations)
+          .set(set)
+          .where(eq(reservations.id, reservationId))
+          .returning();
+        if (row === undefined) {
+          throw new Error(`updateReservationStatus: reservation ${reservationId} not found`);
+        }
+        return row;
+      } catch (err) {
+        if (isPostgresRaiseException(err, 'class_capacity_exceeded')) {
+          throw new ClassCapacityExceededError();
+        }
+        throw err;
       }
-      return row;
     },
 
     async findOldestWaitlistForClass(tx, classId): Promise<ReservationRow | null> {
