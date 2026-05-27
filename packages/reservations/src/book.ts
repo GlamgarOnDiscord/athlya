@@ -130,6 +130,25 @@ export class UniqueViolationError extends Error {
 }
 
 /**
+ * Thrown when the PostgreSQL capacity guard rejects a `confirmed`
+ * insert/update because `count(confirmed) >= classes.capacity`.
+ */
+export class ClassCapacityExceededError extends Error {
+  public override readonly name = 'ClassCapacityExceededError';
+  public readonly code: 'CLASS_CAPACITY_EXCEEDED' = 'CLASS_CAPACITY_EXCEEDED' as const;
+
+  public constructor(message = 'class capacity exceeded') {
+    super(message);
+  }
+}
+
+export function isClassCapacityExceeded(err: unknown): boolean {
+  if (err instanceof ClassCapacityExceededError) return true;
+  if (typeof err !== 'object' || err === null) return false;
+  return (err as { code?: unknown }).code === 'CLASS_CAPACITY_EXCEEDED';
+}
+
+/**
  * Permissive unique-violation detector. Accepts:
  *
  *   - an `instanceof UniqueViolationError`, or
@@ -435,15 +454,17 @@ export interface BookClassInput {
  *      Commit returns `{ code: 'ok' }` with the inserted row and
  *      the `remaining` value seen from the DECR.
  *
- *   3. If the tx throws a {@link UniqueViolationError}: the user
+ *   3. If the tx throws a {@link ClassCapacityExceededError}: the
+ *      Redis counter was optimistic — compensate with INCR and fall
+ *      through to the waitlist branch (PostgreSQL is authoritative).
+ *   4. If the tx throws a {@link UniqueViolationError}: the user
  *      already holds a row. Compensating `INCR` (we over-claimed)
  *      and return the existing row as `already_booked`. No second
  *      outbox event.
- *
- *   4. If the tx throws anything else: compensating `INCR` and
+ *   5. If the tx throws anything else: compensating `INCR` and
  *      rethrow. The API gateway's handler turns this into a 5xx.
  *
- *   5. If `DECR < 0`: compensating `INCR` (we didn't actually
+ *   6. If `DECR < 0`: compensating `INCR` (we didn't actually
  *      consume a seat — the value was already at 0 or below), then
  *      enter the waitlist branch. A fresh transaction inserts with
  *      `status='waitlist'`, computes the 1-based position from
@@ -462,6 +483,37 @@ export interface BookClassInput {
  * guarantees at-most-once logical booking even under arbitrarily
  * aggressive retries.
  */
+async function completeWaitlistBooking(input: {
+  readonly classId: string;
+  readonly userId: string;
+  readonly studioId: string;
+  readonly repo: BookingRepo;
+  readonly publisher: BookingEventPublisher;
+}): Promise<Extract<BookResult, { code: 'waitlisted' }>> {
+  const { classId, userId, studioId, repo, publisher } = input;
+
+  const { reservation: waitlisted, position } = await repo.withTransaction(async (tx) => {
+    const row = await repo.insertReservation(tx, {
+      classId,
+      userId,
+      status: 'waitlist',
+    });
+    const ahead = await repo.countWaitlistAhead(tx, classId, row.createdAt);
+    const pos = ahead + 1;
+    const event = publisher.buildReservationWaitlisted({
+      reservationId: row.id,
+      classId,
+      userId,
+      studioId,
+      position: pos,
+    });
+    await repo.insertOutbox(tx, event);
+    return { reservation: row, position: pos };
+  });
+
+  return { code: 'waitlisted', reservation: waitlisted, position };
+}
+
 export async function bookClass(input: BookClassInput): Promise<BookResult> {
   const { classId, userId, studioId, repo, counter, publisher } = input;
   const now = (input.clock ?? Date.now)();
@@ -539,6 +591,11 @@ export async function bookClass(input: BookClassInput): Promise<BookResult> {
         return { code: 'already_booked', reservation: existing };
       }
 
+      if (isClassCapacityExceeded(err)) {
+        await counter.incrRemaining(classId);
+        return completeWaitlistBooking({ classId, userId, studioId, repo, publisher });
+      }
+
       // ---- Step 4: transient / unexpected error ------------------
       //
       // Any OTHER failure (DB outage, RLS rejection on insert,
@@ -559,24 +616,5 @@ export async function bookClass(input: BookClassInput): Promise<BookResult> {
   // Math.max(0, …)).
   await counter.incrRemaining(classId);
 
-  const { reservation: waitlisted, position } = await repo.withTransaction(async (tx) => {
-    const row = await repo.insertReservation(tx, {
-      classId,
-      userId,
-      status: 'waitlist',
-    });
-    const ahead = await repo.countWaitlistAhead(tx, classId, row.createdAt);
-    const pos = ahead + 1;
-    const event = publisher.buildReservationWaitlisted({
-      reservationId: row.id,
-      classId,
-      userId,
-      studioId,
-      position: pos,
-    });
-    await repo.insertOutbox(tx, event);
-    return { reservation: row, position: pos };
-  });
-
-  return { code: 'waitlisted', reservation: waitlisted, position };
+  return completeWaitlistBooking({ classId, userId, studioId, repo, publisher });
 }

@@ -105,6 +105,8 @@ const PG_SQLSTATE = {
   SERIALIZATION_FAILURE: '40001',
   /** deadlock_detected — deadlock detected, transaction was rolled back. */
   DEADLOCK_DETECTED: '40P01',
+  /** raise_exception — PL/pgSQL RAISE EXCEPTION (e.g. capacity guard). */
+  RAISE_EXCEPTION: 'P0001',
 } as const;
 
 /**
@@ -184,4 +186,34 @@ export function isPostgresSerializationFailure(err: unknown): boolean {
  */
 export function isPostgresDeadlockDetected(err: unknown): boolean {
   return hasPostgresCode(err, PG_SQLSTATE.DEADLOCK_DETECTED);
+}
+
+/**
+ * Detect Postgres SQLSTATE P0001 (raise_exception). Optionally require a
+ * substring match on the error message (walks `.cause` like
+ * {@link hasPostgresCode}).
+ */
+export function isPostgresRaiseException(err: unknown, messageIncludes?: string): boolean {
+  if (!hasPostgresCode(err, PG_SQLSTATE.RAISE_EXCEPTION)) {
+    return false;
+  }
+  if (messageIncludes === undefined) {
+    return true;
+  }
+
+  const needle = messageIncludes;
+  const seen = new Set<unknown>();
+  let cursor: unknown = err;
+  while (cursor !== undefined && cursor !== null) {
+    if (typeof cursor !== 'object') return false;
+    if (seen.has(cursor)) return false;
+    seen.add(cursor);
+
+    const msg = (cursor as { message?: unknown }).message;
+    if (typeof msg === 'string' && msg.includes(needle)) {
+      return true;
+    }
+    cursor = (cursor as { cause?: unknown }).cause;
+  }
+  return false;
 }

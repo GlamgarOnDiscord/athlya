@@ -186,6 +186,7 @@ jobs:
             packages/db/tests/rls/users.sql \
             packages/db/tests/rls/classes.sql \
             packages/db/tests/rls/reservations.sql \
+            packages/db/tests/rls/capacity_guard.sql \
             packages/db/tests/rls/workout_sessions.sql \
             packages/db/tests/rls/audit_log.sql \
             packages/db/tests/rls/audit_anonymization.sql \
