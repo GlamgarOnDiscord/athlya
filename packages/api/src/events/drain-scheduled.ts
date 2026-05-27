@@ -41,9 +41,10 @@
  * isolation for unit tests.
  */
 
-import { claimBatch, markPublished } from '@athlya/db/outbox';
+import { claimBatch, countPendingOutbox, markPublished } from '@athlya/db/outbox';
 
 import {
+  DEFAULT_BATCH_SIZE,
   drainOutbox,
   type ClaimedRow,
   type DrainResult,
@@ -53,6 +54,12 @@ import {
 } from './drain-worker.js';
 
 import type { AthlyaDb } from '@athlya/db/client';
+
+/** When pending exceeds this, the drain claims up to {@link ADAPTIVE_BATCH_SIZE}. */
+export const OUTBOX_BACKLOG_BATCH_THRESHOLD = 500;
+
+/** Adaptive batch size under backlog (Worker CPU budget cap). */
+export const ADAPTIVE_BATCH_SIZE = 200;
 
 /* ------------------------------------------------------------------ */
 /*  Minimal Cloudflare Workers shapes                                  */
@@ -171,8 +178,31 @@ export function createTxBackedStore(db: AthlyaDb): {
  * unified Worker entrypoint (e.g. `apps/api/src/worker.ts`) without
  * round-tripping through the default export.
  */
+export async function resolveDrainBatchSize(
+  db: AthlyaDb,
+  env: ScheduledEnv,
+): Promise<number> {
+  if (env.batchSize !== undefined) {
+    return env.batchSize;
+  }
+  const { pending } = await countPendingOutbox(db);
+  return pending > OUTBOX_BACKLOG_BATCH_THRESHOLD ? ADAPTIVE_BATCH_SIZE : DEFAULT_BATCH_SIZE;
+}
+
 export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult> {
   const db = await env.getDb();
+  const batchSize = await resolveDrainBatchSize(db, env);
+  const logger = env.logger;
+
+  if (logger !== undefined) {
+    const { pending, oldestOccurredAt } = await countPendingOutbox(db);
+    logger.info('outbox drain: pending snapshot', {
+      pending,
+      oldestOccurredAt: oldestOccurredAt?.toISOString() ?? null,
+      batchSize,
+      backlogThreshold: OUTBOX_BACKLOG_BATCH_THRESHOLD,
+    });
+  }
 
   // One transaction per drain cycle: holds the SELECT FOR UPDATE
   // SKIP LOCKED locks on claimed rows until every row has been
@@ -198,8 +228,8 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
     const opts: Parameters<typeof drainOutbox>[0] = {
       store,
       queue: env.EVENTS_QUEUE,
-      ...(env.batchSize !== undefined ? { batchSize: env.batchSize } : {}),
-      ...(env.logger !== undefined ? { logger: env.logger } : {}),
+      batchSize,
+      ...(logger !== undefined ? { logger } : {}),
     };
 
     return drainOutbox(opts);

@@ -84,6 +84,12 @@ export interface OutboxEvent {
   readonly occurredAt: Date;
 }
 
+/** Snapshot returned by {@link countPendingOutbox}. */
+export interface OutboxPendingSnapshot {
+  readonly pending: number;
+  readonly oldestOccurredAt: Date | null;
+}
+
 /** Claimed row returned by {@link claimBatch}. Shape mirrors the wire columns. */
 export interface ClaimedOutboxRow {
   readonly id: string;
@@ -217,6 +223,39 @@ export async function claimBatch(
  * single-row `UPDATE`, so the caller does not need to hold an open
  * transaction at this point.
  */
+/**
+ * Count unpublished outbox rows and the oldest pending `occurred_at`.
+ *
+ * Used by the drain worker (adaptive batch sizing) and the admin
+ * `/admin/outbox/stats` surface. Callers on the HTTP path should run
+ * this inside {@link withTenant} with `role = 'admin'` so RLS allows
+ * the read; the scheduled drain uses a BYPASSRLS service connection.
+ */
+export async function countPendingOutbox(db: AthlyaDb): Promise<OutboxPendingSnapshot> {
+  interface PendingCountRow {
+    pending: number;
+    oldest_occurred_at: Date | null;
+    [key: string]: unknown;
+  }
+
+  const result = await db.execute<PendingCountRow>(sql`
+        SELECT COUNT(*)::int AS pending,
+               MIN(occurred_at) AS oldest_occurred_at
+          FROM outbox
+         WHERE published_at IS NULL
+    `);
+
+  const row = (result as unknown as readonly PendingCountRow[])[0];
+  if (row === undefined) {
+    return { pending: 0, oldestOccurredAt: null };
+  }
+
+  return {
+    pending: row.pending,
+    oldestOccurredAt: row.oldest_occurred_at,
+  };
+}
+
 export async function markPublished(tx: AthlyaTx | AthlyaDb, id: string): Promise<void> {
   validateId(id);
 
