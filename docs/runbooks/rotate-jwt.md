@@ -52,6 +52,18 @@ Si `jwks.keys[]` a déjà 2 entrées, une rotation antérieure n'a pas
 
 ### Phase 2 — Préparer la rotation
 
+**Script (issue #77)** — même appel API, commandes wrangler pré-formatées :
+
+```bash
+export ATHLYA_ADMIN_TOKEN="$TOKEN"
+export ATHLYA_API_URL="https://api.athlya.app"   # ou staging.api.athlya.app
+export WRANGLER_ENV=production
+export ROTATION_JSON=./rotation.json             # optionnel, sensible — supprimer après
+node scripts/rotate-jwt-prepare.mjs
+```
+
+Manuel :
+
 ```bash
 curl -s -X POST https://api.athlya.app/v1/admin/jwt/rotate-prepare \
   -H "authorization: Bearer $TOKEN" \
