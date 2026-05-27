@@ -43,6 +43,7 @@ function buildFakeClient(overrides?: Partial<ApiClient>): ApiClient & {
     post: vi.fn(),
     patch: vi.fn().mockResolvedValue(undefined),
     del: vi.fn(),
+    put: vi.fn().mockResolvedValue(undefined),
   };
   return {
     ...defaults,

@@ -259,6 +259,20 @@ export interface AthlyaBindings {
   readonly AVATARS_BUCKET?: R2Bucket;
 
   /**
+   * Base URL for the public R2 avatar CDN (N2.13 — avatar upload).
+   *
+   * Examples:
+   *   - `https://avatars.athlya.app` (dedicated R2 custom domain)
+   *   - `https://api.athlya.app/v1/members/avatar` (Worker proxy)
+   *
+   * When absent, `PUT /v1/members/me/avatar` responds 503
+   * `avatar_upload_not_configured`. Optional until the R2 bucket and
+   * a public domain are provisioned — set via `wrangler.toml` under
+   * `[vars]` or `wrangler secret put AVATARS_PUBLIC_URL`.
+   */
+  readonly AVATARS_PUBLIC_URL?: string;
+
+  /**
    * Cloudflare R2 bucket binding holding RGPD data-export ZIP
    * archives (Slice 1.3 — Sprint 1, finding S5-001). Consumed by
    * the {@link import('@athlya/members').BlobStore} adapter via
