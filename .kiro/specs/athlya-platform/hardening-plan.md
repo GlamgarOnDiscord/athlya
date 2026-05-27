@@ -18,20 +18,22 @@
 - Test pgTAP : UPDATE direct refusé, appel de la fonction accepté, fonction produit bien `actor_id = NULL` + metadata stripped.
 - Update de Req 5.3 et 22.2 : ✅ fait (voir requirements.md).
 
-### H3. Circuit breaker — Option A assumée
+### H3. Circuit breaker — per-isolate assumé (issue #73)
 
-**Décision** : état per-isolate, documenté comme best-effort local.
+**Décision** : état per-isolate, documenté comme best-effort local. **Pas** de breaker Redis global (Option A issue #73 rejetée).
 
 Raison :
 - Les isolates Workers sont courts (éviction ~15 s idle). La dérive multi-isolates se corrige vite d'elle-même.
 - La valeur du breaker = "arrêter de taper un service mort pendant 60 s" reste préservée par-isolate.
 - La coordination globale d'une dépendance morte est déjà assurée par Cloudflare fast-fail + Hyperdrive + Upstash SLA.
-- Option B (Redis) ajouterait +5-10 ms sur chaque downstream call et contredirait le SLO p99 < 500 ms.
+- Redis-backed state ajouterait +5–10 ms sur chaque downstream call et contredirait le SLO p99 < 500 ms.
 
-**Livrables** :
-- Amendement JSDoc de `circuit-breaker.ts` : ajouter section "Semantics under Cloudflare Workers" expliquant la dérive per-isolate.
-- Un test supplémentaire : `describe('isolate independence')` qui instancie deux `CircuitBreaker` en parallèle et montre qu'ils n'interagissent pas (documente l'invariant actuel).
-- Pas de changement de code.
+**ADR** : `docs/security/circuit-breaker-adr.md`
+
+**Livrables** (faits) :
+- JSDoc « Semantics under Cloudflare Workers » dans `circuit-breaker.ts`.
+- Test `isolate independence (H3 invariant)` + property open short-circuit.
+- Pas de changement runtime supplémentaire.
 
 ### H6. Axiom au lieu de Baselime
 
