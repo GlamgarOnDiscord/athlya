@@ -52,6 +52,7 @@ Plateforme SaaS de gestion d'adhérents de salles de sport et de coachs : inscri
 | Resend Inc.     | Emails transactionnels                                                      | EU si activé                                 | DPA Resend                                                                                    |
 | Expo Inc.       | Push notifications mobile                                                   | US (Expo Push)                               | **Note S5-012** : transfert hors UE — clauses contractuelles types requises ou alternative EU |
 | Sentry          | Error tracking (DSN EU `*.de.sentry.io` — vérifié au boot Vague 33 / SP5.1) | EU (sentry.io DE)                            | DPA Sentry                                                                                    |
+| Axiom           | Traces / logs OTLP (`OTEL_EXPORTER_OTLP_*`)                                 | **À confirmer** (dataset EU recommandé)      | DPA Axiom — pas de PII en clair dans spans                                                    |
 
 **Action S5-012** : valider que la résidence EU est explicitement contractuelle pour Stripe (Stripe Atlas EU activé) et Resend, et documenter Expo Push comme transfert hors UE avec safeguards (SCC).
 
@@ -121,6 +122,36 @@ Voir "Mesures techniques" ci-dessus + roadmap audit Sprint 5+ (S2-006 forgot-pas
 - CTO / Resp. Tech : \***\*\_\_\_\_\*\*** Date : \***\*\_\_\*\***
 - Direction : **\*\*\*\***\_\_**\*\*\*\*** Date : \***\*\_\_\*\***
 
+## 8. Transferts hors UE / traitement edge (Art 44 RGPD) — issue #66
+
+### 8.1 Données au repos (UE)
+
+Neon, Upstash, R2, Queues et backups Neon sont provisionnés en régions EU (voir §2). C'est le périmètre couvert par la promesse produit « données hébergées en UE ».
+
+### 8.2 Compute Cloudflare Workers (transit / traitement)
+
+| Élément | Localisation | Garantie contractuelle |
+|---------|--------------|------------------------|
+| Smart Placement | PoP proche Redis/Neon ou client | Optimisation perf, **pas** pin `region_exclusive_eu` |
+| Requêtes HTTP (headers, JWT, traceId) | Edge global CF | Transit possible hors UE |
+| Logs OTLP → Axiom | Endpoint + dataset **à configurer en EU** | DPA Axiom + `OTEL_EXPORTER_OTLP_*` |
+| Sentry | DSN `*.de.sentry.io` (boot check SP5.1) | EU |
+
+**Décision documentée** : `docs/security/eu-data-residency-adr.md` — go Smart Placement MVP ; pin région Enterprise en réévaluation.
+
+### 8.3 Transferts tiers hors UE connus
+
+| Fournisseur | Données | Safeguard |
+|-------------|---------|-----------|
+| Expo Push | device tokens, payload notification | SCC / DPA Expo ; alternative EU à étudier (issue #86) |
+| Stripe (si compte US) | billing metadata | Stripe Atlas EU + SCC |
+
+### 8.4 Mesures de réduction
+
+- Minimiser PII dans logs (`auto-redact` middleware).
+- Ne pas logger corps JWT / email en clair.
+- Réévaluer `region_exclusive_eu` si contrat Workers Enterprise.
+
 ---
 
-_Vague 33 — Sprint-5 SP5.3 (audit findings S5-011 + S5-012). Template à compléter et valider avant prod. Mise à jour à chaque évolution majeure du traitement (Art 35§11)._
+_Vague 33 — Sprint-5 SP5.3 (audit findings S5-011 + S5-012). Template à compléter et valider avant prod. §8 ajouté issue #66. Mise à jour à chaque évolution majeure du traitement (Art 35§11)._
