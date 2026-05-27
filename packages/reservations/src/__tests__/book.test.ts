@@ -28,6 +28,7 @@ import { describe, expect, it, vi, type Mock } from 'vitest';
 
 import {
   bookClass,
+  ClassCapacityExceededError,
   UniqueViolationError,
   type BookClassInput,
   type BookingClassRow,
@@ -461,6 +462,34 @@ describe('bookClass — UniqueViolation on confirmed insert', () => {
 
     // Compensating INCR still happened — we must not leak seats.
     expect(d.incrRemaining).toHaveBeenCalledOnce();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  ClassCapacityExceeded — Req 8.3 (PostgreSQL guard)                 */
+/* ------------------------------------------------------------------ */
+
+describe('bookClass — ClassCapacityExceeded on confirmed insert', () => {
+  it('compensates with INCR and falls through to waitlist when PG rejects capacity', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemaining.mockResolvedValueOnce(3);
+    d.insertReservation
+      .mockRejectedValueOnce(new ClassCapacityExceededError())
+      .mockResolvedValueOnce(WAITLIST_ROW);
+    d.countWaitlistAhead.mockResolvedValueOnce(0);
+
+    const result = await invoke(d.deps);
+
+    expect(result).toEqual({
+      code: 'waitlisted',
+      reservation: WAITLIST_ROW,
+      position: 1,
+    });
+    expect(d.incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+    expect(d.buildCreated).not.toHaveBeenCalled();
+    expect(d.buildWaitlisted).toHaveBeenCalledOnce();
+    expect(d.insertOutbox).toHaveBeenCalledOnce();
   });
 });
 

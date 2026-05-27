@@ -28,6 +28,7 @@ import {
   isPostgresCheckViolation,
   isPostgresSerializationFailure,
   isPostgresDeadlockDetected,
+  isPostgresRaiseException,
 } from '../src/errors.js';
 
 describe('isPostgresUniqueViolation', () => {
@@ -99,5 +100,26 @@ describe('isPostgresSerializationFailure', () => {
 describe('isPostgresDeadlockDetected', () => {
   it('detects 40P01', () => {
     expect(isPostgresDeadlockDetected({ code: '40P01' })).toBe(true);
+  });
+});
+
+describe('isPostgresRaiseException', () => {
+  it('detects P0001 at the top level', () => {
+    expect(isPostgresRaiseException({ code: 'P0001' })).toBe(true);
+  });
+
+  it('matches message substring in the cause chain', () => {
+    const wrapper = new Error('Failed query: insert into reservations');
+    (wrapper as { cause: unknown }).cause = {
+      code: 'P0001',
+      message: 'class_capacity_exceeded',
+    };
+    expect(isPostgresRaiseException(wrapper, 'class_capacity_exceeded')).toBe(true);
+  });
+
+  it('returns false when message does not match', () => {
+    expect(
+      isPostgresRaiseException({ code: 'P0001', message: 'other' }, 'class_capacity_exceeded'),
+    ).toBe(false);
   });
 });

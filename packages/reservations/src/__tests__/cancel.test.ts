@@ -127,6 +127,7 @@ interface RepoMocks {
   findClassForUpdate: Mock<CancelRepo['findClassForUpdate']>;
   updateReservationStatus: Mock<CancelRepo['updateReservationStatus']>;
   findOldestWaitlistForClass: Mock<CancelRepo['findOldestWaitlistForClass']>;
+  classHasCapacityForConfirmed: Mock<CancelRepo['classHasCapacityForConfirmed']>;
   insertOutbox: Mock<CancelRepo['insertOutbox']>;
 }
 
@@ -148,6 +149,9 @@ function buildRepo(): { repo: CancelRepo; mocks: RepoMocks } {
   const findClassForUpdate = vi.fn<CancelRepo['findClassForUpdate']>();
   const updateReservationStatus = vi.fn<CancelRepo['updateReservationStatus']>();
   const findOldestWaitlistForClass = vi.fn<CancelRepo['findOldestWaitlistForClass']>();
+  const classHasCapacityForConfirmed = vi
+    .fn<CancelRepo['classHasCapacityForConfirmed']>()
+    .mockResolvedValue(true);
   const insertOutbox = vi.fn<CancelRepo['insertOutbox']>().mockResolvedValue(undefined);
 
   const repo: CancelRepo = {
@@ -156,6 +160,7 @@ function buildRepo(): { repo: CancelRepo; mocks: RepoMocks } {
     findClassForUpdate,
     updateReservationStatus,
     findOldestWaitlistForClass,
+    classHasCapacityForConfirmed,
     insertOutbox,
   };
 
@@ -167,6 +172,7 @@ function buildRepo(): { repo: CancelRepo; mocks: RepoMocks } {
       findClassForUpdate,
       updateReservationStatus,
       findOldestWaitlistForClass,
+      classHasCapacityForConfirmed,
       insertOutbox,
     },
   };
