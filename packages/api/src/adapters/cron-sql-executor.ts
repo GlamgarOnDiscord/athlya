@@ -17,7 +17,7 @@
  *
  * The wiring expects a separate connection string `CRON_DB_URL`
  * pointing at a role with `BYPASSRLS` (typically `athlya_cron`,
- * provisioned via migration `0008_app_role_force_rls.sql` or via
+ * provisioned via migration `0009_audit_cron_grants.sql` or via
  * Neon's compute endpoint admin).
  *
  * If `CRON_DB_URL` is missing the executor returns `null` so the

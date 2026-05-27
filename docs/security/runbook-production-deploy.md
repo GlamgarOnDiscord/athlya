@@ -182,9 +182,9 @@ curl -i -X POST https://api.athlya.app/v1/auth/login \
 # Attendu: 403 bot_challenge_failed
 ```
 
-## Phase 8 — Provisioning audit anonymize cron (S5-003 finalisation)
+## Phase 8 — Provisioning audit anonymize cron (S5-003 finalisation) — BLOQUANT
 
-**Cette phase peut être différée** mais doit être faite avant J+30 du premier soft-delete utilisateur :
+**Obligatoire avant le premier utilisateur réel** (et avant merge production) :
 
 ```bash
 # 1. Créer le rôle Postgres dédié
