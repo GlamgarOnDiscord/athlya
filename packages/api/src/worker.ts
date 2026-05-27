@@ -72,6 +72,11 @@ import { handleDlqBatch } from './events/drain-dlq.js';
 import { runScheduledDrain } from './events/drain-scheduled.js';
 import { createLogger } from './logging.js';
 import { anonymizeAuditLogViaSql } from './maintenance/anonymize-audit-tx.js';
+import {
+  isCronDbUrlConfigured,
+  logCronDbUrlMissing,
+  shouldRequireCronDbUrl,
+} from './maintenance/cron-db-config.js';
 import { runScheduledRgpdMaintenance } from './maintenance/scheduled-runner.js';
 import { jwtAuth } from './middleware/auth.js';
 import { tracing } from './middleware/otel.js';
@@ -971,14 +976,25 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       }
     }
 
-    const [dbProbe, redisProbe] = await Promise.all([probeDb(), probeRedis()]);
+    function probeCronConfig(): ProbeResult {
+      if (isCronDbUrlConfigured(env.CRON_DB_URL)) {
+        return { status: 'ok', latencyMs: 0 };
+      }
+      return { status: 'skipped', error: 'CRON_DB_URL missing' };
+    }
+
+    const [dbProbe, redisProbe, cronProbe] = await Promise.all([
+      probeDb(),
+      probeRedis(),
+      Promise.resolve(probeCronConfig()),
+    ]);
 
     // Dev: any `skipped` is acceptable (= no real binding wired).
     // Staging/prod: `skipped` is a configuration bug → not ready.
     const failed = (p: ProbeResult): boolean =>
       p.status === 'failed' || (!isDev && p.status === 'skipped');
 
-    const ready = !failed(dbProbe) && !failed(redisProbe);
+    const ready = !failed(dbProbe) && !failed(redisProbe) && !failed(cronProbe);
     const httpStatus = ready ? 200 : 503;
 
     return c.json(
@@ -990,6 +1006,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
         checks: {
           db: dbProbe,
           redis: redisProbe,
+          cron: cronProbe,
         },
       },
       httpStatus,
@@ -1248,16 +1265,16 @@ const worker = {
     // Sprint 13 / Slice 13.2 (SP6.5 + SP7.6 + SP8.3) — RGPD
     // maintenance cycle. Runs strictly after the outbox drain
     // so a backed-up event queue does not delay user
-    // anonymisation. The runner accepts a missing `CRON_DB_URL`
-    // gracefully — when the binding is absent (dev / staging
-    // first deploy), the cycle skips and logs a warning.
+    // anonymisation. Dev may omit `CRON_DB_URL`; staging/production
+    // log `configuration_error` when the binding is absent.
     //
     // The audit-anonymise pass is gated on `CRON_DB_URL`
     // pointing at a role with `BYPASSRLS` (the `users.role`
     // edits cross tenant boundaries). Production wiring uses
     // `athlya_cron` provisioned by migration `0008` (B10);
     // staging falls back to `neondb_owner`.
-    const cronExecutor = buildCronSqlExecutor((env as { CRON_DB_URL?: string }).CRON_DB_URL);
+    const athlyaEnv = env as AthlyaBindings & ScheduledEnv;
+    const cronExecutor = buildCronSqlExecutor(athlyaEnv.CRON_DB_URL);
     if (cronExecutor !== null) {
       const rgpdTask = runScheduledRgpdMaintenance({
         executeSql: cronExecutor,
@@ -1281,8 +1298,9 @@ const worker = {
         });
       });
       ctx.waitUntil(rgpdTask);
-    } else {
-      console.info('[worker] CRON_DB_URL missing — skipping RGPD maintenance cycle', {
+    } else if (shouldRequireCronDbUrl(athlyaEnv.ENVIRONMENT)) {
+      logCronDbUrlMissing({
+        environment: athlyaEnv.ENVIRONMENT,
         cron: event.cron,
         scheduledTime: event.scheduledTime,
       });
