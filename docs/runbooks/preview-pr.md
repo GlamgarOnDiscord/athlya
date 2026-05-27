@@ -3,9 +3,9 @@
 Each pull request automatically gets an isolated API preview:
 
 - **Neon branch** — a DB fork created from the project primary branch. Schema + seed data are copied; writes are fully isolated from staging/production.
-- **Cloudflare Worker** — the `athlya-api-preview` Worker is deployed with the PR's `DB_URL` secret pointing at the Neon branch. All other infrastructure (Redis, queues, R2) is shared with staging.
+- **Cloudflare Worker** — `athlya-api-pr-<N>` with secrets scoped to that Worker (including per-PR `DB_URL`). Redis, queues and R2 are shared with staging.
 
-The Neon branch is deleted when the PR closes.
+The Neon branch and Worker are deleted when the PR closes.
 
 ---
 
@@ -65,13 +65,14 @@ PR opened / commit pushed
 Create Neon branch "preview-pr-{N}"
        │
        ▼
-printf '%s' "<neon_branch_url>" | wrangler secret put DB_URL --env preview
-printf '%s' "<value>" | wrangler secret put REDIS_URL --env preview
-printf '%s' "<value>" | wrangler secret put JWT_JWKS_URL --env preview
-printf '%s' "<value>" | wrangler secret put TURNSTILE_SECRET --env preview
+wrangler secret put * --env preview --name athlya-api-pr-{N}
+  (DB_URL = Neon branch URI; Redis/JWT/Turnstile = staging preview secrets)
        │
        ▼
-wrangler versions upload --env preview --var VERSION=pr{N}-{SHA}
+wrangler versions upload --env preview --name athlya-api-pr-{N}
+       │
+       ▼
+https://athlya-api-pr-{N}.<subdomain>.workers.dev
        │
        ▼
 Post/update PR comment with preview URL + branch name
@@ -79,17 +80,15 @@ Post/update PR comment with preview URL + branch name
 PR closed (merged or abandoned)
        │
        ▼
+wrangler delete --name athlya-api-pr-{N}
 Delete Neon branch "preview-pr-{N}"
 ```
+
+Concurrent PRs are safe: each PR owns a dedicated Worker name and `DB_URL` secret namespace.
 
 ---
 
 ## Known limitations
-
-**Concurrent PR deployments race on the `DB_URL` secret.**
-The `athlya-api-preview` Worker is a single shared environment. If two PRs deploy simultaneously, the last `wrangler secret put DB_URL` wins — both previews will point at the same Neon branch until the slower job completes.
-
-Mitigation for small teams: the `concurrency` group in the workflow serialises deployments _within_ a single PR. Across PRs there is no lock. If the team works with many concurrent PRs, consider upgrading to per-PR Worker names (requires dynamic wrangler.toml generation).
 
 **Preview uses staging Redis / queues / R2.**
 Events, exports and avatars written during preview testing land in the staging stores. This is intentional to keep setup simple. Clean up manually if needed:
@@ -99,22 +98,25 @@ Events, exports and avatars written during preview testing land in the staging s
 wrangler r2 object list athlya-exports-preview --env preview
 ```
 
+**Legacy shared Worker `athlya-api-preview`.**
+Older PRs may have deployed to the shared Worker before per-PR isolation. Delete it manually if unused:
+
+```bash
+pnpm --filter @athlya/api exec wrangler delete --name athlya-api-preview --force
+```
+
 ---
 
 ## Manual teardown
 
-If the workflow fails to clean up a Neon branch:
+If the workflow fails to clean up:
 
 ```bash
+# Neon branch
 curl -sf "https://api.neon.tech/v1/projects/${NEON_PROJECT_ID}/branches" \
   -H "Authorization: Bearer ${NEON_API_KEY}" | \
   jq '.branches[] | select(.name | startswith("preview-pr-")) | {id, name}'
-```
 
-Then delete by ID:
-
-```bash
-curl -sf -X DELETE \
-  "https://api.neon.tech/v1/projects/${NEON_PROJECT_ID}/branches/${BRANCH_ID}" \
-  -H "Authorization: Bearer ${NEON_API_KEY}"
+# Worker
+pnpm --filter @athlya/api exec wrangler delete --name athlya-api-pr-<N> --force
 ```
