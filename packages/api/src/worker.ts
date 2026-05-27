@@ -711,7 +711,8 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
           'content-type': PROBLEM_JSON,
         });
       },
-    })(c as Context<HonoEnv>, next);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    })(c, next);
   });
 
   // 7. Tenant claim guard — Sprint 1 / Slice 1.4 (Sprint-1 SP1.5,
