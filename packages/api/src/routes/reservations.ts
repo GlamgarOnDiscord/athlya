@@ -39,6 +39,7 @@ import {
   traceOperation,
 } from './helpers.js';
 
+import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
 import type { BookingRequest, CancelReservationParams } from '@athlya/shared/schemas/api';
@@ -98,8 +99,8 @@ export type CancelOutcome =
   | { readonly kind: 'not_found' };
 
 export interface ReservationsDeps {
-  bookClass(userId: string, input: BookingRequest): Promise<BookingOutcome>;
-  cancelReservation(userId: string, params: CancelReservationParams): Promise<CancelOutcome>;
+  bookClass(claims: AuthClaims, input: BookingRequest): Promise<BookingOutcome>;
+  cancelReservation(claims: AuthClaims, params: CancelReservationParams): Promise<CancelOutcome>;
   listMyReservations(
     userId: string,
     query: ListMyReservationsQuery,
@@ -172,7 +173,7 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
         throw new Error('authClaims unexpectedly missing after jwtAuth');
       }
       const body = readValidated<BookingRequest>(c, 'json');
-      const outcome = await deps.bookClass(claims.userId, body);
+      const outcome = await deps.bookClass(claims, body);
 
       if (outcome.kind === 'confirmed' || outcome.kind === 'waitlist') {
         try {
@@ -254,7 +255,7 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
         throw new Error('authClaims unexpectedly missing after jwtAuth');
       }
       const params = readValidated<CancelReservationParams>(c, 'param');
-      const outcome = await deps.cancelReservation(claims.userId, params);
+      const outcome = await deps.cancelReservation(claims, params);
 
       if (outcome.kind === 'cancelled' || outcome.kind === 'promoted') {
         const classId = (outcome.reservation as Record<string, unknown>)['classId'];

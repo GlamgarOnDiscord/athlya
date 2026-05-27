@@ -260,12 +260,14 @@ async function makeTwoStudioApp(): Promise<{
   // `state.classes.has(classId)` and would happily let Bob book
   // a Studio-A class; this override is the slice B2 contract.
   deps.reservations.bookClass = vi.fn(
-    async (userId: string, input: { readonly classId: string }) => {
+    async (
+      claims: { readonly userId: string; readonly studioId: string },
+      input: { readonly classId: string },
+    ) => {
       const cls = state.classes.get(input.classId);
       if (cls === undefined) return { kind: 'not_found' as const };
-      const booker = state.users.get(userId);
-      if (booker === undefined || booker.studioId !== cls.studioId) {
-        // Cross-tenant booking attempt â€” same outcome as a
+      if (claims.studioId !== cls.studioId) {
+        // Cross-tenant booking attempt — same outcome as a
         // missing class (Req 13.5: never disclose existence).
         return { kind: 'not_found' as const };
       }
@@ -647,7 +649,10 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
     // invoked with Bob's userId (the route reached the deps) and
     // returned not_found â€” this rules out a route-layer 404
     // masking a tenant-scope bug deeper in the stack.
-    expect(deps.reservations.bookClass).toHaveBeenCalledWith(BOB_ID, { classId: CLASS_A_ID });
+    expect(deps.reservations.bookClass).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: BOB_ID, studioId: STUDIO_B_ID }),
+      { classId: CLASS_A_ID },
+    );
   });
 
   /**

@@ -332,11 +332,16 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
 
   /* --------------------- reservations --------------- */
   const reservations: DomainDeps['reservations'] = {
-    bookClass: vi.fn(async (userId: string, input: { readonly classId: string }) => {
+    bookClass: vi.fn(
+      async (
+        claims: { readonly userId: string; readonly studioId: string },
+        input: { readonly classId: string },
+      ) => {
       const cls = state.classes.get(input.classId);
-      if (cls === undefined) {
+      if (cls === undefined || cls.studioId !== claims.studioId) {
         return { kind: 'not_found' as const };
       }
+      const userId = claims.userId;
       const resId = makeUuid(2000 + state.reservationsById.size);
       const existing = state.reservationsByClass.get(input.classId) ?? [];
       const confirmedCount = existing.filter((r) => r.status === 'confirmed').length;
@@ -373,16 +378,21 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
         payload: { reservationId: resId, classId: input.classId, userId, position },
       });
       return { kind: 'waitlist' as const, reservation: r, position };
-    }),
-    cancelReservation: vi.fn(async (userId: string, params: { readonly reservationId: string }) => {
+    },
+    ),
+    cancelReservation: vi.fn(
+      async (
+        claims: { readonly userId: string },
+        params: { readonly reservationId: string },
+      ) => {
       const r = state.reservationsById.get(params.reservationId);
-      if (r === undefined || r.userId !== userId) {
+      if (r === undefined || r.userId !== claims.userId) {
         return { kind: 'not_found' as const };
       }
       r.status = 'cancelled';
       state.events.push({
         type: 'reservation.cancelled',
-        payload: { reservationId: r.id, classId: r.classId, userId },
+        payload: { reservationId: r.id, classId: r.classId, userId: claims.userId },
       });
       // Waitlist promotion: the first waitlisted reservation on the
       // same class flips to 'confirmed'.
