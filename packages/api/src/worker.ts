@@ -380,7 +380,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
         return origin === allowed ? origin : '';
       },
       allowHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'cf-turnstile-token'],
-      allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       credentials: true,
       maxAge: 86400,
     }),
