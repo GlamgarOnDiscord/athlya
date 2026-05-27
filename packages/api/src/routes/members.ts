@@ -7,6 +7,7 @@
  *   |--------|-------------------|--------------------------------------------------------------------|
  *   | GET    | /me               | jwtAuth → handler                                                  |
  *   | PATCH  | /me               | jwtAuth → projectUserId → zValidator(body) → idempotency → handler |
+ *   | PUT    | /me/avatar        | jwtAuth → handler (raw binary body)                                |
  *   | PATCH  | /me/consents      | jwtAuth → projectUserId → zValidator(body) → idempotency → handler |
  *   | POST   | /me/export        | jwtAuth → projectUserId → idempotency → handler (returns 202)      |
  *   | GET    | /                 | jwtAuth → requireRole('admin','coach') → zValidator(query) → handler |
@@ -15,6 +16,8 @@
  *   • 3.1  — `GET /me` returns the authenticated member's profile.
  *   • 3.2, 3.4 — `PATCH /me` whitelists `displayName`, `avatarUrl`;
  *                display name length bounded to [1, 80] by the schema.
+ *   • 3.2  — `PUT /me/avatar` uploads a new avatar to R2 and updates
+ *            `users.avatarUrl` (N2.13). Mode dégradé when bucket absent.
  *   • 3.3  — `PATCH /me/consents` stamps `version` + `updatedAt`
  *            server-side and appends to the audit log (Req 22.1).
  *   • 3.5  — `GET /` is admin/coach-only and returns a cursor-paginated
@@ -32,6 +35,11 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 
+import {
+  AVATAR_ALLOWED_TYPES,
+  AVATAR_MAX_BYTES,
+  AvatarUploadNotConfiguredError,
+} from '../adapters/avatar-upload-store-r2.js';
 import { jwtAuth } from '../middleware/auth.js';
 import { studioRateLimit } from '../middleware/studio-rate-limit.js';
 import { zValidator } from '../middleware/validator.js';
@@ -48,6 +56,7 @@ import {
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
 import type { UpdateConsentsRequest, UpdateProfileRequest } from '@athlya/shared/schemas/api';
+import type { Context } from 'hono';
 
 /* ------------------------------------------------------------------ */
 /*  Local query schemas                                                */
@@ -96,6 +105,18 @@ export type MemberProfileView = unknown;
 export interface MembersDeps {
   getProfile(userId: string): Promise<MemberProfileView>;
   updateProfile(userId: string, patch: UpdateProfileRequest): Promise<MemberProfileView>;
+  /**
+   * Upload a raw image body to R2 and persist the resulting public URL
+   * on the user's profile in one shot (N2.13).
+   *
+   * @throws {AvatarUploadNotConfiguredError} when the bucket or public
+   *   URL binding is not provisioned — the route handler maps this to 503.
+   */
+  uploadAvatar(
+    userId: string,
+    contentType: string,
+    body: ArrayBuffer,
+  ): Promise<{ avatarUrl: string }>;
   updateConsents(userId: string, input: UpdateConsentsRequest): Promise<unknown>;
   enqueueExport(userId: string): Promise<{ jobId: string }>;
   listMembersByStudio(
@@ -106,6 +127,39 @@ export interface MembersDeps {
 
   /** Dependency bundle forwarded to the idempotency middleware. */
   readonly idempotency?: IdempotencyMiddlewareDeps;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Problem Details helpers (avatar upload)                            */
+/* ------------------------------------------------------------------ */
+
+const PROBLEM_JSON = 'application/problem+json';
+
+function avatarProblem(
+  c: Context<HonoEnv>,
+  status: 400 | 413 | 415 | 503,
+  detail: string,
+  code: string,
+): Response {
+  return c.body(
+    JSON.stringify({
+      type: 'about:blank',
+      title:
+        status === 503
+          ? 'Service Unavailable'
+          : status === 415
+            ? 'Unsupported Media Type'
+            : status === 413
+              ? 'Content Too Large'
+              : 'Bad Request',
+      status,
+      detail,
+      code,
+      traceId: c.get('traceId'),
+    }),
+    status,
+    { 'content-type': PROBLEM_JSON },
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -152,6 +206,67 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
       return c.json(updated as Record<string, unknown>, 200);
     },
   );
+
+  /* ------------------------------ PUT /me/avatar ----------------- */
+  // Raw binary upload — no JSON body, no Zod validator, no idempotency.
+  // Content-Type header IS the format discriminator. The raw body is
+  // read via `c.req.raw.arrayBuffer()` to preserve byte integrity for
+  // the R2 `put` call.
+  router.put('/me/avatar', async (c) => {
+    traceOperation(c, 'members.upload-avatar');
+    const claims = c.get('authClaims');
+    if (claims === undefined) {
+      throw new Error('authClaims unexpectedly missing after jwtAuth');
+    }
+
+    const contentType = (c.req.header('content-type') ?? '').split(';')[0]?.trim() ?? '';
+    if (!AVATAR_ALLOWED_TYPES.has(contentType)) {
+      return avatarProblem(
+        c,
+        415,
+        'Content-Type must be image/jpeg, image/png, or image/webp',
+        'unsupported_media_type',
+      );
+    }
+
+    const contentLength = parseInt(c.req.header('content-length') ?? '0', 10);
+    if (!isNaN(contentLength) && contentLength > AVATAR_MAX_BYTES) {
+      return avatarProblem(
+        c,
+        413,
+        `Avatar must not exceed ${AVATAR_MAX_BYTES / (1024 * 1024)} MB`,
+        'avatar_too_large',
+      );
+    }
+
+    const body = await c.req.raw.arrayBuffer();
+    if (body.byteLength > AVATAR_MAX_BYTES) {
+      return avatarProblem(
+        c,
+        413,
+        `Avatar must not exceed ${AVATAR_MAX_BYTES / (1024 * 1024)} MB`,
+        'avatar_too_large',
+      );
+    }
+    if (body.byteLength === 0) {
+      return avatarProblem(c, 400, 'Body must not be empty', 'empty_body');
+    }
+
+    try {
+      const result = await deps.uploadAvatar(claims.userId, contentType, body);
+      return c.json(result, 200);
+    } catch (err) {
+      if (err instanceof AvatarUploadNotConfiguredError) {
+        return avatarProblem(
+          c,
+          503,
+          'Avatar storage is not configured for this environment',
+          'avatar_upload_not_configured',
+        );
+      }
+      throw err;
+    }
+  });
 
   /* ------------------------------ PATCH /me/consents ------------- */
   router.patch(

@@ -90,6 +90,7 @@ export function buildStubDeps(
     members: {
       getProfile: vi.fn(),
       updateProfile: vi.fn(),
+      uploadAvatar: vi.fn(),
       updateConsents: vi.fn(),
       enqueueExport: vi.fn(),
       listMembersByStudio: vi.fn(),

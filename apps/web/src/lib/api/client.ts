@@ -78,6 +78,14 @@ export interface ApiClient {
   post<T>(path: string, body: unknown, init?: RequestInit): Promise<T>;
   patch<T>(path: string, body: unknown, init?: RequestInit): Promise<T>;
   del<T>(path: string, init?: RequestInit): Promise<T>;
+  /**
+   * PUT with a raw `BodyInit` (File, ArrayBuffer, Blob…). Unlike
+   * `post`/`patch`, the body is NOT JSON-serialised — the caller is
+   * responsible for setting the correct `Content-Type` header via
+   * `init.headers`. Handles auth + the same 401-refresh-retry logic
+   * as the other methods.
+   */
+  put<T>(path: string, body: BodyInit | null, init?: RequestInit): Promise<T>;
 }
 
 export interface CreateApiClientOptions {
@@ -226,6 +234,46 @@ export function createApiClient(opts: CreateApiClientOptions): ApiClient {
     throw new ApiServerError(title, response.status, problem);
   }
 
+  async function putRaw<T>(path: string, body: BodyInit | null, init?: RequestInit): Promise<T> {
+    const url = buildUrl(opts.baseUrl, path);
+    const headers = new Headers(init?.headers);
+    const baseInit: RequestInit = {
+      ...init,
+      method: 'PUT',
+      headers,
+      ...(body !== null ? { body } : {}),
+    };
+
+    let response = await executeRaw(url, baseInit);
+
+    if (response.status === 401 && opts.onRefresh) {
+      const refreshed = await opts.onRefresh();
+      if (refreshed === null) {
+        const problem = await tryParseProblem(response);
+        throw new ApiAuthError('Authentication refresh failed', 401, problem);
+      }
+      response = await executeRaw(url, baseInit);
+    }
+
+    if (response.ok) {
+      if (response.status === 204) return undefined as T;
+      const contentType = response.headers.get('content-type') ?? '';
+      if (contentType.includes('json')) {
+        return (await response.json()) as T;
+      }
+      return (await response.text()) as unknown as T;
+    }
+
+    const problem = await tryParseProblem(response);
+    const title = problem?.title ?? response.statusText;
+
+    if (response.status === 401) throw new ApiAuthError(title, 401, problem);
+    if (response.status >= 400 && response.status < 500) {
+      throw new ApiError(title, response.status, problem);
+    }
+    throw new ApiServerError(title, response.status, problem);
+  }
+
   return {
     get: <T>(path: string, init?: RequestInit) => request<T>('GET', path, undefined, init),
     post: <T>(path: string, body: unknown, init?: RequestInit) =>
@@ -233,5 +281,7 @@ export function createApiClient(opts: CreateApiClientOptions): ApiClient {
     patch: <T>(path: string, body: unknown, init?: RequestInit) =>
       request<T>('PATCH', path, body, init),
     del: <T>(path: string, init?: RequestInit) => request<T>('DELETE', path, undefined, init),
+    put: <T>(path: string, body: BodyInit | null, init?: RequestInit) =>
+      putRaw<T>(path, body, init),
   };
 }

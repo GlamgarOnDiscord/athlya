@@ -43,39 +43,8 @@ export interface ProfileFormProps {
 /** Success banner TTL — matches the pattern used elsewhere in the app. */
 const SUCCESS_BANNER_MS = 3_000;
 
-/**
- * Max byte size accepted for a locally-picked avatar before we convert
- * it to a data URL. 256 KiB keeps the resulting PATCH body well under
- * the API gateway's default 1 MB request limit even after base64
- * inflation (≈ +33 %). Users with a larger image get a targeted
- * validation error rather than a silent 413 at the wire.
- */
-const AVATAR_MAX_BYTES = 256 * 1024;
-
-/**
- * Read a user-selected `File` as a `data:` URL suitable for the
- * `UpdateProfileRequestSchema.avatarUrl` field. `.url()` in Zod
- * accepts `data:` URLs because the underlying `URL` constructor
- * parses them — so the server round-trip keeps working with a
- * schema untouched.
- */
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== 'string') {
-        reject(new Error('FileReader returned non-string payload'));
-        return;
-      }
-      resolve(result);
-    };
-    reader.onerror = () => {
-      reject(reader.error ?? new Error('FileReader failed'));
-    };
-    reader.readAsDataURL(file);
-  });
-}
+/** Client-side pre-flight cap — mirrors `AVATAR_MAX_BYTES` on the API. */
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
 export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElement {
   interface ProfileFormState {
@@ -219,6 +188,7 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
             id="profile-avatar-file"
             type="file"
             accept="image/png, image/jpeg, image/webp"
+            disabled={form.pending}
             onChange={async (e) => {
               setForm((s) => {
                 const { avatarUrl: _omit, ...rest } = s.fieldErrors;
@@ -233,22 +203,28 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
                   fieldErrors: {
                     ...s.fieldErrors,
                     avatarUrl: t('profile.avatarTooLarge', {
-                      max: Math.floor(AVATAR_MAX_BYTES / 1024),
+                      max: Math.floor(AVATAR_MAX_BYTES / (1024 * 1024)),
                     }),
                   },
                 }));
                 e.target.value = '';
                 return;
               }
+              setForm((s) => ({ ...s, pending: true }));
               try {
-                const dataUrl = await readFileAsDataUrl(file);
-                setForm((s) => ({ ...s, avatarUrl: dataUrl }));
+                const result = await client.put<{ avatarUrl: string }>(
+                  '/v1/members/me/avatar',
+                  file,
+                  { headers: { 'Content-Type': file.type } },
+                );
+                setForm((s) => ({ ...s, avatarUrl: result.avatarUrl, pending: false }));
               } catch {
                 setForm((s) => ({
                   ...s,
+                  pending: false,
                   fieldErrors: {
                     ...s.fieldErrors,
-                    avatarUrl: t('profile.avatarReadError'),
+                    avatarUrl: t('profile.avatarUploadError'),
                   },
                 }));
               }
@@ -258,7 +234,7 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
           />
           <span id="profile-avatar-file-hint" className="text-xs text-muted-foreground">
             {t('profile.avatarHint', {
-              max: Math.floor(AVATAR_MAX_BYTES / 1024),
+              max: Math.floor(AVATAR_MAX_BYTES / (1024 * 1024)),
             })}
           </span>
           {form.avatarUrl !== '' ? (
