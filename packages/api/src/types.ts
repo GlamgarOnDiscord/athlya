@@ -318,6 +318,22 @@ export interface AthlyaBindings {
    * the endpoint returns 503.
    */
   readonly CLASS_CAPACITY_DO?: DurableObjectNamespace;
+
+  /**
+   * Postgres connection string for the RGPD maintenance cron role
+   * (`athlya_cron`). Used by `worker.scheduled()` for J+30 user
+   * anonymisation, outbox/export_jobs purge, and audit_log scrubbing.
+   *
+   * **Required in staging/production**: missing binding skips the
+   * maintenance cycle with a structured `configuration_error` log
+   * (issue #64) and makes `/health/ready` return 503. Dev may omit.
+   *
+   * Provisioned via:
+   *   `wrangler secret put CRON_DB_URL --env <staging|production>`
+   *
+   * Format: `postgresql://athlya_cron:...@host/athlya?sslmode=require`
+   */
+  readonly CRON_DB_URL?: string;
 }
 
 /* ------------------------------------------------------------------ */

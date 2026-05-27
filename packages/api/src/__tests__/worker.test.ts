@@ -423,6 +423,7 @@ describe('/health/ready readiness probe', () => {
         DB_URL: '',
         REDIS_URL: '',
         REDIS_TOKEN: '',
+        CRON_DB_URL: 'postgresql://athlya_cron@localhost/athlya',
       }),
     );
 
@@ -434,6 +435,30 @@ describe('/health/ready readiness probe', () => {
     expect(body.status).toBe('not_ready');
     expect(body.checks.db.status).toBe('skipped');
     expect(body.checks.redis.status).toBe('skipped');
+  });
+
+  it('returns 503 not_ready in production when CRON_DB_URL is missing', async () => {
+    const app = buildApp();
+    const res = await app.request(
+      '/health/ready',
+      { method: 'GET', headers: { host: 'api.athlya.app' } },
+      mockEnv({
+        ENVIRONMENT: 'production',
+        CORS_ORIGIN: 'https://app.athlya.app',
+        DB_URL: 'postgresql://example',
+        REDIS_URL: 'https://redis.example',
+        REDIS_TOKEN: 'token',
+      }),
+    );
+
+    expect(res.status).toBe(503);
+    const body = await res.json<{
+      status: string;
+      checks: { cron: { status: string; error?: string } };
+    }>();
+    expect(body.status).toBe('not_ready');
+    expect(body.checks.cron.status).toBe('skipped');
+    expect(body.checks.cron.error).toContain('CRON_DB_URL');
   });
 
   /**
