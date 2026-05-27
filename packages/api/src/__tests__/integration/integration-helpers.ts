@@ -332,77 +332,85 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
 
   /* --------------------- reservations --------------- */
   const reservations: DomainDeps['reservations'] = {
-    bookClass: vi.fn(async (userId: string, input: { readonly classId: string }) => {
-      const cls = state.classes.get(input.classId);
-      if (cls === undefined) {
-        return { kind: 'not_found' as const };
-      }
-      const resId = makeUuid(2000 + state.reservationsById.size);
-      const existing = state.reservationsByClass.get(input.classId) ?? [];
-      const confirmedCount = existing.filter((r) => r.status === 'confirmed').length;
-      if (confirmedCount < cls.capacity) {
+    bookClass: vi.fn(
+      async (
+        claims: { readonly userId: string; readonly studioId: string },
+        input: { readonly classId: string },
+      ) => {
+        const cls = state.classes.get(input.classId);
+        if (cls === undefined || cls.studioId !== claims.studioId) {
+          return { kind: 'not_found' as const };
+        }
+        const userId = claims.userId;
+        const resId = makeUuid(2000 + state.reservationsById.size);
+        const existing = state.reservationsByClass.get(input.classId) ?? [];
+        const confirmedCount = existing.filter((r) => r.status === 'confirmed').length;
+        if (confirmedCount < cls.capacity) {
+          const r: ReservationRecord = {
+            id: resId,
+            classId: input.classId,
+            userId,
+            status: 'confirmed',
+          };
+          existing.push(r);
+          state.reservationsById.set(resId, r);
+          state.reservationsByClass.set(input.classId, existing);
+          state.events.push({
+            type: 'reservation.created',
+            payload: { reservationId: resId, classId: input.classId, userId },
+          });
+          return { kind: 'confirmed' as const, reservation: r };
+        }
+        // Waitlist
+        const position = existing.filter((r) => r.status === 'waitlist').length + 1;
         const r: ReservationRecord = {
           id: resId,
           classId: input.classId,
           userId,
-          status: 'confirmed',
+          status: 'waitlist',
+          position,
         };
         existing.push(r);
         state.reservationsById.set(resId, r);
         state.reservationsByClass.set(input.classId, existing);
         state.events.push({
-          type: 'reservation.created',
-          payload: { reservationId: resId, classId: input.classId, userId },
+          type: 'reservation.waitlisted',
+          payload: { reservationId: resId, classId: input.classId, userId, position },
         });
-        return { kind: 'confirmed' as const, reservation: r };
-      }
-      // Waitlist
-      const position = existing.filter((r) => r.status === 'waitlist').length + 1;
-      const r: ReservationRecord = {
-        id: resId,
-        classId: input.classId,
-        userId,
-        status: 'waitlist',
-        position,
-      };
-      existing.push(r);
-      state.reservationsById.set(resId, r);
-      state.reservationsByClass.set(input.classId, existing);
-      state.events.push({
-        type: 'reservation.waitlisted',
-        payload: { reservationId: resId, classId: input.classId, userId, position },
-      });
-      return { kind: 'waitlist' as const, reservation: r, position };
-    }),
-    cancelReservation: vi.fn(async (userId: string, params: { readonly reservationId: string }) => {
-      const r = state.reservationsById.get(params.reservationId);
-      if (r === undefined || r.userId !== userId) {
-        return { kind: 'not_found' as const };
-      }
-      r.status = 'cancelled';
-      state.events.push({
-        type: 'reservation.cancelled',
-        payload: { reservationId: r.id, classId: r.classId, userId },
-      });
-      // Waitlist promotion: the first waitlisted reservation on the
-      // same class flips to 'confirmed'.
-      const siblings = state.reservationsByClass.get(r.classId) ?? [];
-      const nextWaitlisted = siblings.find((s) => s.status === 'waitlist');
-      if (nextWaitlisted !== undefined) {
-        nextWaitlisted.status = 'confirmed';
-        delete nextWaitlisted.position;
+        return { kind: 'waitlist' as const, reservation: r, position };
+      },
+    ),
+    cancelReservation: vi.fn(
+      async (claims: { readonly userId: string }, params: { readonly reservationId: string }) => {
+        const r = state.reservationsById.get(params.reservationId);
+        if (r === undefined || r.userId !== claims.userId) {
+          return { kind: 'not_found' as const };
+        }
+        r.status = 'cancelled';
         state.events.push({
-          type: 'reservation.promoted',
-          payload: {
-            reservationId: nextWaitlisted.id,
-            classId: r.classId,
-            userId: nextWaitlisted.userId,
-          },
+          type: 'reservation.cancelled',
+          payload: { reservationId: r.id, classId: r.classId, userId: claims.userId },
         });
-        return { kind: 'promoted' as const, reservation: r };
-      }
-      return { kind: 'cancelled' as const, reservation: r };
-    }),
+        // Waitlist promotion: the first waitlisted reservation on the
+        // same class flips to 'confirmed'.
+        const siblings = state.reservationsByClass.get(r.classId) ?? [];
+        const nextWaitlisted = siblings.find((s) => s.status === 'waitlist');
+        if (nextWaitlisted !== undefined) {
+          nextWaitlisted.status = 'confirmed';
+          delete nextWaitlisted.position;
+          state.events.push({
+            type: 'reservation.promoted',
+            payload: {
+              reservationId: nextWaitlisted.id,
+              classId: r.classId,
+              userId: nextWaitlisted.userId,
+            },
+          });
+          return { kind: 'promoted' as const, reservation: r };
+        }
+        return { kind: 'cancelled' as const, reservation: r };
+      },
+    ),
     listMyReservations: vi.fn(async (userId: string) => {
       const items: ReservationRecord[] = [];
       for (const r of state.reservationsById.values()) {

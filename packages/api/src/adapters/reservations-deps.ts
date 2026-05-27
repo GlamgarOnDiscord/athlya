@@ -36,30 +36,16 @@
  *     call. The extra TLS handshake is the unavoidable cost of
  *     interactive transactional semantics on this runtime.
  *
- * `withTenant(claims, fn)` is intentionally NOT wired here yet
- * because the HTTP driver does not support the interactive
- * `db.transaction(async tx => …)` form `withTenant` requires
- * (see `packages/db/src/client.ts`). Tenant scope is instead
- * enforced **at the query layer** by every adapter:
- *
- *   • Class reads filter on `classes.studio_id = claims.studioId`
- *     (`createDrizzleListClassesRepo`, `createDrizzleUpdateClassRepo`).
- *   • Reservation reads filter on `reservations.user_id =
- *     claims.userId` (`listMyReservations`,
- *     `cancelReservation` via `findReservationForUpdate`).
- *
- * The RLS policies on these tables (installed by `0001_rls.sql`,
- * FORCEd on `athlya_app` by `0004_rls_hardening.sql`) are the
- * defense-in-depth backstop: a missing `WHERE` clause would still
- * be blocked at the database level once `DB_URL` points to
- * `athlya_app` (Req H1, runbook
- * `docs/runbooks/db-role-switch.md`).
+ * Read paths on the HTTP driver still filter at the query layer
+ * (`studio_id` / `user_id`). Write paths (`bookClass`,
+ * `cancelReservation`) use postgres-js {@link withTenant} so RLS
+ * is active during interactive transactions (Req 13.1–13.6).
  *
  * @see Requirements 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 7.1, 7.2,
  *      7.3, 7.4, 8.1–8.6, 9.1–9.5, 10.1–10.5.
  */
 
-import { createDb, type AthlyaDb, type AthlyaDbHttp } from '@athlya/db/client';
+import { createDb, type AthlyaDb, type AthlyaDbHttp, type TenantClaims } from '@athlya/db/client';
 import {
   listClasses as svcListClasses,
   createClass as svcCreateClass,
@@ -90,6 +76,7 @@ import {
   createDrizzleCancelRepo,
 } from './reservations-write-drizzle.js';
 
+import type { AuthClaims } from '../middleware/auth.js';
 import type { ClassesDeps, DeleteClassOutcome, UpdateClassOutcome } from '../routes/classes.js';
 import type { ReservationsDeps } from '../routes/reservations.js';
 import type { AthlyaBindings } from '../types.js';
@@ -260,6 +247,14 @@ export function buildClassesDeps(env: AthlyaBindings): ClassesDeps {
  * typing keeps the API layer free of a runtime dep on
  * `@athlya/reservations/update`'s class object.
  */
+function toTenantClaims(claims: AuthClaims): TenantClaims {
+  return {
+    userId: claims.userId,
+    studioId: claims.studioId,
+    role: claims.role,
+  };
+}
+
 function extractUpdateErrorCode(err: unknown): string | null {
   if (typeof err !== 'object' || err === null) return null;
   const probe = err as { name?: unknown; code?: unknown };
@@ -295,34 +290,24 @@ export function buildReservationsDeps(env: AthlyaBindings): ReservationsDeps {
       return queryListMyReservations(userId, query, { db });
     },
 
-    async bookClass(userId, input) {
+    async bookClass(claims, input) {
       const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
 
       // Per-request postgres-js client — `bookClass` opens an
-      // interactive `withTransaction(async tx => …)` block
+      // interactive `withTenant` + `withTransaction` block
       // (Algorithm 1) which the HTTP driver does not support.
-      // The same handle services the `findClass` pre-flight
-      // (one extra SELECT) so we don't open two connections
-      // per booking attempt.
       const dbWrite = makeWriteDb(env.DB_URL);
-      const repo = createDrizzleBookingRepo(dbWrite);
+      const repo = createDrizzleBookingRepo(dbWrite, toTenantClaims(claims));
       const counter = createRedisRemainingCounter(redis);
       const publisher = createBookingEventPublisher();
 
-      // The class's `studio_id` is resolved via `repo.findClass`
-      // inside the service flow; the event envelopes however
-      // need the studio id up-front. We fetch the class once
-      // here to enrich the `studioId` field the service forwards
-      // to the publisher. `bookClass` does its own null check
-      // so a missing class simply falls through to the domain
-      // `class_not_found` branch.
-      const cls = await repo.findClass(input.classId);
-      const studioId = cls?.studioId ?? '';
-
+      // `svcBookClass` runs its own `findClass` pre-flight under RLS.
+      // Outbox envelopes use the caller's studio — any class visible
+      // to this tenant shares `claims.studioId` (cross-tenant → not_found).
       const result = await svcBookClass({
         classId: input.classId,
-        userId,
-        studioId,
+        userId: claims.userId,
+        studioId: claims.studioId,
         repo,
         // Adapt `RemainingCounter` (`decr`/`incr`) → the
         // narrower `BookingCounter` shape the service
@@ -361,18 +346,18 @@ export function buildReservationsDeps(env: AthlyaBindings): ReservationsDeps {
       }
     },
 
-    async cancelReservation(userId, params) {
+    async cancelReservation(claims, params) {
       // Per-request postgres-js client — Algorithm 2 needs an
-      // interactive transaction with `SELECT FOR UPDATE` and
-      // conditional waitlist promotion between statements.
+      // interactive `withTenant` transaction with `SELECT FOR UPDATE`
+      // and conditional waitlist promotion between statements.
       const dbWrite = makeWriteDb(env.DB_URL);
       const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
-      const repo = createDrizzleCancelRepo(dbWrite);
+      const repo = createDrizzleCancelRepo(dbWrite, toTenantClaims(claims));
       const counter = createRedisRemainingCounter(redis);
 
       const result = await svcCancelReservation({
         reservationId: params.reservationId,
-        userId,
+        userId: claims.userId,
         repo,
         counter: {
           incrRemaining: async (classId: string) => {

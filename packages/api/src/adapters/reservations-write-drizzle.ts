@@ -29,24 +29,10 @@
  *     reservation write — commit-together or rollback-together
  *     semantics (Req 16.3).
  *
- *   • No `withTenant` wrapping here: the gateway's `jwtAuth` +
- *     `projectUserIdFromClaims` already scope the caller to a single
- *     `userId`, and every read in the cancel path filters explicitly
- *     on `reservations.user_id = $userId` (see
- *     `findReservationForUpdate`) and `reservations.class_id = $classId`
- *     for the booking pre-flight. The booking insert relies on the
- *     `UNIQUE(class_id, user_id)` constraint to detect duplicates.
- *     The RLS policies on `reservations` /  `classes` installed in
- *     `0001_rls.sql` (FORCEd on `athlya_app` by `0004_rls_hardening.sql`)
- *     are the defense-in-depth backstop.
- *
- *     The interactive `db.transaction(async tx => …)` form used for
- *     `bookClass` and `cancelReservation` requires a postgres-js
- *     handle (the HTTP driver only supports static statement
- *     arrays); a future slice may move the transaction-internal
- *     `SET LOCAL app.user_id` injection here so RLS is fully active
- *     during the FOR UPDATE window. Until then, the application-
- *     layer `userId` filter is the primary check.
+ *   • Every read/write runs inside {@link withTenant} so the three
+ *     `app.*` session variables are set before RLS policies on
+ *     `classes` / `reservations` evaluate (Req 13.1–13.6). Application-
+ *     layer `WHERE` filters remain as defense-in-depth.
  *
  * @see Requirements 8.1–8.6, 9.1–9.5, 10.1–10.5, 16.3.
  */
@@ -58,7 +44,7 @@ import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
-import type { AthlyaDb, AthlyaTx } from '@athlya/db/client';
+import { withTenant, type AthlyaDb, type AthlyaTx, type TenantClaims } from '@athlya/db/client';
 import type { ReservationRow } from '@athlya/db/schema';
 import type {
   BookingClassRow,
@@ -79,27 +65,29 @@ import type { CancelOutboxEvent, CancelRepo, ClassForCancel } from '@athlya/rese
  * instance. Safe to rebuild per-request (see
  * `reservations-deps.ts` for the I/O-isolation rationale).
  */
-export function createDrizzleBookingRepo(db: AthlyaDb): BookingRepo {
+export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
   return {
     async findClass(classId): Promise<BookingClassRow | null> {
-      const rows = await withConnectionRetry(() =>
-        db
-          .select({
-            id: classes.id,
-            studioId: classes.studioId,
-            capacity: classes.capacity,
-            startsAt: classes.startsAt,
-            version: classes.version,
-          })
-          .from(classes)
-          .where(and(eq(classes.id, classId), isNull(classes.deletedAt)))
-          .limit(1),
+      return withConnectionRetry(() =>
+        withTenant(db, claims, async (tx) => {
+          const rows = await tx
+            .select({
+              id: classes.id,
+              studioId: classes.studioId,
+              capacity: classes.capacity,
+              startsAt: classes.startsAt,
+              version: classes.version,
+            })
+            .from(classes)
+            .where(and(eq(classes.id, classId), isNull(classes.deletedAt)))
+            .limit(1);
+          return rows[0] ?? null;
+        }),
       );
-      return rows[0] ?? null;
     },
 
     async withTransaction<T>(fn: (tx: BookingTx) => Promise<T>): Promise<T> {
-      return db.transaction(async (tx) => fn(tx as unknown as BookingTx));
+      return withTenant(db, claims, async (tx) => fn(tx as unknown as BookingTx));
     },
 
     async findExistingConfirmedOrWaitlistReservation(
@@ -185,10 +173,10 @@ export function createDrizzleBookingRepo(db: AthlyaDb): BookingRepo {
  *     different rows (one promotes, the other gets `null` and
  *     increments the Redis counter instead).
  */
-export function createDrizzleCancelRepo(db: AthlyaDb): CancelRepo {
+export function createDrizzleCancelRepo(db: AthlyaDb, claims: TenantClaims): CancelRepo {
   return {
     async withTransaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
-      return db.transaction(async (tx) => fn(tx));
+      return withTenant(db, claims, async (tx) => fn(tx));
     },
 
     async findReservationForUpdate(tx, reservationId, userId): Promise<ReservationRow | null> {
