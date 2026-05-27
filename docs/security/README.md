@@ -10,7 +10,7 @@ Documentation sécurité pour la plateforme Athlya. Tous les findings audit, spr
 | ------------ | ----- | ---------------- |
 | **CRITICAL** | 5     | **5/5** ✅       |
 | **HIGH**     | 14    | **14/14** ✅     |
-| **MEDIUM**   | 23    | 12/23            |
+| **MEDIUM**   | 23    | 12/23 — détail [`audit-backlog.md`](./audit-backlog.md) |
 | **LOW**      | 21    | 4/21             |
 | **INFO**     | 11    | 0/11             |
 
@@ -27,6 +27,7 @@ Documentation sécurité pour la plateforme Athlya. Tous les findings audit, spr
 - [`audit-S4-network.md`](./audit-S4-network.md) — Network, transport & DDoS
 - [`audit-S5-rgpd.md`](./audit-S5-rgpd.md) — RGPD / Data Privacy
 - [`audit-S6-frontend.md`](./audit-S6-frontend.md) — Frontend (web + studio)
+- [`audit-backlog.md`](./audit-backlog.md) — checklist MEDIUM/LOW/INFO résiduels (#79)
 
 ### Procédures ops
 
