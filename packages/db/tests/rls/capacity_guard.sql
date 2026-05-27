@@ -37,6 +37,7 @@ SELECT throws_ok(
   $$INSERT INTO reservations (class_id, user_id, status)
     VALUES ('cccccccc-cccc-4ccc-8ccc-cccccccc0099', '11111111-1111-4111-8111-111111111113', 'confirmed')$$,
   'P0001',
+  NULL,
   'third confirmed insert rejected when class is full'
 );
 
