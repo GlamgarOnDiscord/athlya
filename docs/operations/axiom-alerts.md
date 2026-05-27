@@ -284,4 +284,4 @@ Sampling côté Worker (`OTEL_SAMPLE_RATE`, défaut prod `0.1`) + health `1 %` +
 | staging    | 0.5         | 0.5            |
 | production | 0.1         | 0.1            |
 
-Alerte recommandée Axiom : ingest GB/jour > 80 % quota plan → Slack `#ops-athlya-alerts`.
+Alerte recommandée Axiom : ingest GB/jour > 80 % quota plan → Slack `#ops-athlya-alerts`. Coûts globaux : [`docs/runbooks/cost-monitoring.md`](../runbooks/cost-monitoring.md).
