@@ -81,6 +81,12 @@ wrangler secret put WEB_APP_URL --env production
 # Turnstile (anti-bot register/login)
 wrangler secret put TURNSTILE_SECRET --env production
 
+# Stripe (issue #69 — required before billing goes live)
+wrangler secret put STRIPE_SECRET_KEY --env production
+wrangler secret put STRIPE_WEBHOOK_SECRET --env production
+# Deploy gate: /v1/billing/webhook returns 500 if STRIPE_WEBHOOK_SECRET missing (non-dev).
+# See docs/runbooks/billing.md
+
 # OTel (Sprint 1 SP1.6 — observability)
 wrangler secret put OTEL_EXPORTER_OTLP_ENDPOINT --env production
 # Valeur: https://api.axiom.co/v1/traces  (ou autre OTLP/HTTP target)

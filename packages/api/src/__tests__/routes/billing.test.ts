@@ -13,6 +13,7 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { buildBillingDeps } from '../../adapters/billing-deps.js';
 import { __resetJwksCacheForTests } from '../../middleware/auth.js';
 import { buildApp } from '../../worker.js';
 
@@ -333,6 +334,30 @@ describe('POST /v1/billing/webhook', () => {
       rawPayload: '{"id":"evt_test","type":"customer.subscription.created"}',
       signature: 't=1,v1=abc',
     });
+  });
+
+  it('returns 500 in staging when STRIPE_WEBHOOK_SECRET is missing (fail-closed)', async () => {
+    const deps = buildStubDeps({
+      billing: buildBillingDeps(buildMockEnv({ ENVIRONMENT: 'staging' })),
+    });
+    const app = buildAppWithDeps(deps);
+
+    const res = await app.request(
+      '/v1/billing/webhook',
+      {
+        method: 'POST',
+        headers: {
+          host: 'staging.api.athlya.app',
+          'stripe-signature': 't=1,v1=abc',
+        },
+        body: '{"id":"evt_test","type":"customer.subscription.created"}',
+      },
+      buildMockEnv({ ENVIRONMENT: 'staging' }),
+    );
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('configuration_error');
   });
 
   it('returns 200 in mode dÃ©gradÃ© (not_configured) so Stripe stops retrying', async () => {
