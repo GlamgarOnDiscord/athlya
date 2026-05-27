@@ -46,12 +46,9 @@ Lockfile resolves to `4.20260509.1` (latest). The `^4.20241218.0` range in packa
 **Action**: Remove `Object.setPrototypeOf(this, new.target.prototype)` — native `extends Error` handles prototype chain with `target: "ES2022"`  
 **Source**: TypeScript ES2022 class compilation
 
-### C3. Resolve dual ESLint config in apps/web
+### ~~C3. Resolve dual ESLint config in apps/web~~ RESOLVED (2026-05-27)
 
-**Risk**: Confusion about which lint rules apply  
-**Files**: `apps/web/.eslintrc.json` + root `eslint.config.js`  
-**Action**: Check if `eslint-config-next` supports flat config; if yes, migrate. If no, document the coexistence.  
-**Source**: ESLint 9 flat config docs
+`apps/web/eslint.config.js` only (Next 16 flat preset). No `.eslintrc.json`. See header comment in that file.
 
 ---
 
