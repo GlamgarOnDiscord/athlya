@@ -412,6 +412,27 @@ describe('/health/ready readiness probe', () => {
    * a hard failure (configuration bug) so the probe returns 503.
    * Deploy automation reads the 503 and holds traffic.
    */
+  it('returns 503 not_ready in staging when DB_URL is missing', async () => {
+    const app = buildApp();
+    const res = await app.request(
+      '/health/ready',
+      { method: 'GET', headers: { host: 'staging.api.athlya.app' } },
+      mockEnv({
+        ENVIRONMENT: 'staging',
+        CORS_ORIGIN: 'https://app.staging.athlya.app',
+        DB_URL: '',
+        REDIS_URL: 'https://redis.example',
+        REDIS_TOKEN: 'token',
+        CRON_DB_URL: 'postgresql://athlya_cron@localhost/athlya',
+      }),
+    );
+
+    expect(res.status).toBe(503);
+    const body = await res.json<{ status: string; checks: { db: { status: string } } }>();
+    expect(body.status).toBe('not_ready');
+    expect(body.checks.db.status).toBe('skipped');
+  });
+
   it('returns 503 not_ready in production when DB_URL is missing', async () => {
     const app = buildApp();
     const res = await app.request(
