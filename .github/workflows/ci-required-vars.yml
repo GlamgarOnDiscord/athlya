@@ -1,0 +1,43 @@
+name: CI required vars (staging gates)
+
+# Issue #67 — fail loud on default branch when staging scan/load vars are unset.
+# Branch protection should also require: ci, integration-docker, pgtap (see docs).
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/ci-required-vars.yml'
+
+jobs:
+  check-staging-vars:
+    name: Verify K6 + ZAP repository variables
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Assert staging gate variables are configured
+        env:
+          K6_STAGING_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
+          ZAP_TARGET_URL: ${{ vars.ZAP_TARGET_URL }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${K6_STAGING_BASE_URL}" ]; then
+            echo "::error::vars.K6_STAGING_BASE_URL is empty — load-test.yml skips on every PR"
+            missing=1
+          fi
+          if [ -z "${ZAP_TARGET_URL}" ]; then
+            echo "::error::vars.ZAP_TARGET_URL is empty — zap-baseline.yml skips on every PR"
+            missing=1
+          fi
+          if [ "${missing}" -ne 0 ]; then
+            echo "Configure repository variables (Settings → Secrets and variables → Actions → Variables)."
+            echo "See .github/READ_ME.md and docs/runbooks/branch-protection.md"
+            exit 1
+          fi
+          echo "K6_STAGING_BASE_URL and ZAP_TARGET_URL are set."
