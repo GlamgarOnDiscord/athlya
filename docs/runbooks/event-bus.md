@@ -327,7 +327,25 @@ Si une régression survient sur une combinaison spécifique
 - `gateway.integration.test.ts` (chaîne register → book → cancel
   → événements observés sur `state.events`).
 
-## 6. Liens
+## 6. Topology future (ADR — issue #81)
+
+**État actuel (v0.1)** : un topic `athlya-events` + consumer unique dans `worker.ts` (`handleEventsBatch`). Suffisant sous ~1000 events/jour.
+
+**Cible** (volume notifications + billing en prod) :
+
+| Queue                         | Préfixe `event.type`        | Consumer        |
+| ----------------------------- | --------------------------- | --------------- |
+| `athlya-events-notifications` | `reservation.*`, notify     | notifications   |
+| `athlya-events-rgpd`          | `auth.user.deleted`, export | members         |
+| `athlya-events-billing`       | `billing.*`                 | billing         |
+
+**Migration** : dual-write → drain ancienne queue → retirer binding legacy. Dedup Redis `event.id` inchangé (TTL 24h).
+
+**Outbox** : router le drain par préfixe vers la queue cible (évolution schema optionnelle).
+
+Non implémenté — évite qu'un handler lent (export ZIP) retarde tout le batch partagé.
+
+## 7. Liens
 
 - `packages/api/src/events/publish.ts` — protocole publish.
 - `packages/api/src/events/drain-worker.ts` — drain pur.
