@@ -25,7 +25,8 @@ BEGIN
     INTO class_cap
     FROM classes
    WHERE id = NEW.class_id
-     AND deleted_at IS NULL;
+     AND deleted_at IS NULL
+     FOR UPDATE;
 
   IF class_cap IS NULL THEN
     RAISE EXCEPTION 'class_not_found' USING ERRCODE = 'P0001';

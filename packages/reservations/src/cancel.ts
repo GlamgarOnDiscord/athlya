@@ -326,6 +326,7 @@ type TxOutcome =
       readonly promoted: ReservationRow | null;
       readonly wasConfirmed: boolean;
       readonly classId: string;
+      readonly promotionBlockedByCapacity: boolean;
     }
   | CancelReservationFailure;
 
@@ -466,6 +467,7 @@ export async function cancelReservation(
     // (Req 9.3 speaks of "a confirmed reservation [that] is
     // successfully cancelled").
     let promoted: ReservationRow | null = null;
+    let promotionBlockedByCapacity = false;
     if (wasConfirmed) {
       const nextWaiter = await repo.findOldestWaitlistForClass(tx, reservation.classId);
       if (nextWaiter !== null) {
@@ -482,7 +484,9 @@ export async function cancelReservation(
             occurredAt: now,
           });
         } catch (err) {
-          if (!isClassCapacityExceeded(err)) {
+          if (isClassCapacityExceeded(err)) {
+            promotionBlockedByCapacity = true;
+          } else {
             throw err;
           }
         }
@@ -510,6 +514,7 @@ export async function cancelReservation(
       promoted,
       wasConfirmed,
       classId: reservation.classId,
+      promotionBlockedByCapacity,
     };
   });
 
@@ -522,7 +527,13 @@ export async function cancelReservation(
   // "confirmed without waitlist" branch; a promotion immediately
   // re-consumed the seat (counter unchanged), and a waitlist-origin
   // cancellation never occupied a seat (counter unchanged).
-  if (outcome.wasConfirmed && outcome.promoted === null) {
+  // Skip when promotion was blocked because PostgreSQL still sees
+  // the class at capacity (Redis would otherwise advertise a free seat).
+  if (
+    outcome.wasConfirmed &&
+    outcome.promoted === null &&
+    !outcome.promotionBlockedByCapacity
+  ) {
     await counter.incrRemaining(outcome.classId);
   }
 
