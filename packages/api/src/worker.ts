@@ -88,6 +88,7 @@ import type { ExecutionContext, ScheduledEnv, ScheduledEvent } from './events/dr
 import type { HonoEnv, AthlyaBindings } from './types.js';
 import type { AuthUserDeletedEvent, MembersExportRequestedEvent } from '@athlya/shared/events';
 import type { MessageBatch } from '@cloudflare/workers-types';
+import type { Context } from 'hono';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -379,7 +380,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
         return origin === allowed ? origin : '';
       },
       allowHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'cf-turnstile-token'],
-      allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       credentials: true,
       maxAge: 86400,
     }),
@@ -688,12 +689,17 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   //    /.well-known/*) are read-only and not exposed to user
   //    input. The 413 response is shaped as RFC 9457 Problem
   //    Details so the failure mode matches the rest of the API.
-  app.use(
-    '/v1/*',
-    bodyLimit({
+  // The avatar upload route (`PUT /v1/members/me/avatar`) accepts up to 5 MB
+  // and enforces its own size guard inside the handler. Exclude it from the
+  // 256 KiB global cap so the platform-level limit does not fire first.
+  app.use('/v1/*', async (c, next) => {
+    if (c.req.method === 'PUT' && c.req.path.endsWith('/members/me/avatar')) {
+      return next();
+    }
+    return bodyLimit({
       maxSize: 256 * 1024,
-      onError: (c) => {
-        const traceId = (c as { get: (k: string) => string | undefined }).get('traceId');
+      onError: (ctx: Context<HonoEnv>) => {
+        const traceId = ctx.get('traceId');
         const body = JSON.stringify({
           type: 'about:blank',
           title: 'Payload Too Large',
@@ -701,12 +707,13 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
           code: 'payload_too_large',
           traceId,
         });
-        return c.body(body, 413, {
+        return ctx.body(body, 413, {
           'content-type': PROBLEM_JSON,
         });
       },
-    }),
-  );
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    })(c, next);
+  });
 
   // 7. Tenant claim guard — Sprint 1 / Slice 1.4 (Sprint-1 SP1.5,
   //    audit finding S2-007). Refuses requests where the host- or
