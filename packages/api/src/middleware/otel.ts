@@ -105,6 +105,9 @@ const STATUS_CODE_UNSET = 0 as const;
 const STATUS_CODE_OK = 1 as const;
 const STATUS_CODE_ERROR = 2 as const;
 
+/** Max fraction of `/health*` requests exported when env rate is higher. */
+export const OTEL_HEALTH_SAMPLE_RATE = 0.01;
+
 /* ------------------------------------------------------------------ */
 /*  Public types                                                       */
 /* ------------------------------------------------------------------ */
@@ -211,6 +214,68 @@ export type TracingMiddleware = (c: TracingContext, next: () => Promise<void>) =
  * Options for {@link tracing}. All fields are optional — the factory
  * falls back to production defaults.
  */
+/**
+ * Resolve the OTLP export sample rate for the current deployment.
+ *
+ * `OTEL_SAMPLE_RATE` (0–1) overrides per-env defaults:
+ *   production → 0.1, staging → 0.5, dev → 1.0.
+ */
+export function resolveOtelSampleRate(
+  env: Pick<AthlyaBindings, 'ENVIRONMENT' | 'OTEL_SAMPLE_RATE'>,
+): number {
+  const raw = env.OTEL_SAMPLE_RATE;
+  if (typeof raw === 'string' && raw.length > 0) {
+    const parsed = Number.parseFloat(raw);
+    if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) {
+      return parsed;
+    }
+  }
+  switch (env.ENVIRONMENT) {
+    case 'production':
+      return 0.1;
+    case 'staging':
+      return 0.5;
+    default:
+      return 1;
+  }
+}
+
+function isHealthProbeRoute(route: string): boolean {
+  return route === '/health' || route === '/health/ready' || route.startsWith('/health/');
+}
+
+/**
+ * Decide whether to POST the OTLP envelope after the request completes.
+ *
+ *   • 5xx responses are always exported (tail sampling).
+ *   • `/health*` probes use `min(envRate, OTEL_HEALTH_SAMPLE_RATE)`.
+ *   • Other routes use `envRate` with uniform random sampling.
+ *
+ * Spans are still built in-memory either way so `traceId` logging is unchanged.
+ */
+export function shouldExportOtelTrace(opts: {
+  httpStatus: number;
+  route: string;
+  sampleRate: number;
+  rng?: () => number;
+}): boolean {
+  if (opts.httpStatus >= 500) {
+    return true;
+  }
+  const rng = opts.rng ?? Math.random;
+  let effectiveRate = opts.sampleRate;
+  if (isHealthProbeRoute(opts.route)) {
+    effectiveRate = Math.min(effectiveRate, OTEL_HEALTH_SAMPLE_RATE);
+  }
+  if (effectiveRate >= 1) {
+    return true;
+  }
+  if (effectiveRate <= 0) {
+    return false;
+  }
+  return rng() < effectiveRate;
+}
+
 export interface TracingOptions {
   /**
    * Service name emitted as the `service.name` resource attribute.
@@ -233,6 +298,11 @@ export interface TracingOptions {
    * no network I/O happens.
    */
   fetch?: typeof fetch;
+
+  /**
+   * RNG for probabilistic export (tests inject a deterministic value).
+   */
+  random?: () => number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -549,6 +619,7 @@ export function tracing(options: TracingOptions = {}): TracingMiddleware {
   const serviceName = options.serviceName ?? 'athlya-api';
   const now = options.now ?? (() => Date.now());
   const fetchImpl = options.fetch ?? globalThis.fetch;
+  const rng = options.random ?? Math.random;
 
   return async (c, next) => {
     // Step 1 — parse inbound traceparent.
@@ -610,7 +681,17 @@ export function tracing(options: TracingOptions = {}): TracingMiddleware {
       // Step 5 — export. Swallowed on failure so a dead
       //           OTel backend never crashes the request.
       const endpoint = c.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-      if (typeof endpoint === 'string' && endpoint.length > 0) {
+      const sampleRate = resolveOtelSampleRate(c.env);
+      const exportTrace =
+        typeof endpoint === 'string' &&
+        endpoint.length > 0 &&
+        shouldExportOtelTrace({
+          httpStatus: c.res.status,
+          route,
+          sampleRate,
+          rng,
+        });
+      if (exportTrace) {
         const envelope = buildEnvelope(state, serviceName, c.env.ENVIRONMENT);
         const headers: Record<string, string> = {
           'content-type': 'application/json',

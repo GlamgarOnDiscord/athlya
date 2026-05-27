@@ -27,7 +27,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createLogger } from '../logging.js';
 import {
+  OTEL_HEALTH_SAMPLE_RATE,
   parseOtelHeaders,
+  resolveOtelSampleRate,
+  shouldExportOtelTrace,
   tracing,
   type TraceSpan,
   type TracingContext,
@@ -349,10 +352,10 @@ describe('tracing — automatic attributes', () => {
     const fetchSpy = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     const { c } = fakeContext({
       env: mockEnv({ OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otel.example/v1/traces' }),
-      routePath: '/health',
+      routePath: '/v1/classes',
     });
 
-    await tracing({ fetch: fetchSpy })(c, vi.fn().mockResolvedValue(undefined));
+    await tracing({ fetch: fetchSpy, random: () => 0 })(c, vi.fn().mockResolvedValue(undefined));
 
     const [, init] = fetchSpy.mock.calls[0] as [string, { body: string }];
     const body = JSON.parse(init.body) as {
@@ -483,6 +486,39 @@ describe('tracing — OTLP export', () => {
     expect(fields.error).toBe('network down');
   });
 
+  it('always exports 5xx even when OTEL_SAMPLE_RATE is 0', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const { c } = fakeContext({
+      env: mockEnv({
+        ENVIRONMENT: 'production',
+        OTEL_SAMPLE_RATE: '0',
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otel.example/v1/traces',
+      }),
+      status: 503,
+    });
+
+    await tracing({ fetch: fetchSpy, random: () => 0.99 })(c, vi.fn().mockResolvedValue(undefined));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips export for 2xx when sample rate is 0', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const { c, variables } = fakeContext({
+      env: mockEnv({
+        ENVIRONMENT: 'production',
+        OTEL_SAMPLE_RATE: '0',
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otel.example/v1/traces',
+      }),
+      status: 200,
+    });
+
+    await tracing({ fetch: fetchSpy, random: () => 0.99 })(c, vi.fn().mockResolvedValue(undefined));
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(span(variables)).toBeDefined();
+  });
+
   it('swallows a non-2xx response and logs a warning', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(new Response('unauthorized', { status: 401 }));
     const warn = vi.fn();
@@ -509,6 +545,52 @@ describe('tracing — OTLP export', () => {
 /* ------------------------------------------------------------------ */
 /*  parseOtelHeaders                                                   */
 /* ------------------------------------------------------------------ */
+
+describe('resolveOtelSampleRate', () => {
+  it('defaults by ENVIRONMENT when OTEL_SAMPLE_RATE is unset', () => {
+    expect(resolveOtelSampleRate({ ENVIRONMENT: 'production' })).toBe(0.1);
+    expect(resolveOtelSampleRate({ ENVIRONMENT: 'staging' })).toBe(0.5);
+    expect(resolveOtelSampleRate({ ENVIRONMENT: 'dev' })).toBe(1);
+  });
+
+  it('honours OTEL_SAMPLE_RATE override', () => {
+    expect(
+      resolveOtelSampleRate({ ENVIRONMENT: 'production', OTEL_SAMPLE_RATE: '0.2' }),
+    ).toBe(0.2);
+  });
+});
+
+describe('shouldExportOtelTrace', () => {
+  it('always exports 5xx regardless of sample rate', () => {
+    expect(
+      shouldExportOtelTrace({
+        httpStatus: 500,
+        route: '/v1/classes',
+        sampleRate: 0,
+        rng: () => 0.99,
+      }),
+    ).toBe(true);
+  });
+
+  it('caps health probes at OTEL_HEALTH_SAMPLE_RATE', () => {
+    expect(
+      shouldExportOtelTrace({
+        httpStatus: 200,
+        route: '/health',
+        sampleRate: 1,
+        rng: () => 0,
+      }),
+    ).toBe(true);
+    expect(
+      shouldExportOtelTrace({
+        httpStatus: 200,
+        route: '/health',
+        sampleRate: 1,
+        rng: () => OTEL_HEALTH_SAMPLE_RATE,
+      }),
+    ).toBe(false);
+  });
+});
 
 describe('parseOtelHeaders', () => {
   it('returns an empty record for undefined and empty input', () => {

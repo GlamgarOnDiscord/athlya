@@ -273,3 +273,15 @@ latence des notifications, pas le user-visible flow.
 
 **Cooldown** : 2h.
 **Channel** : `#ops-athlya-alerts` (Slack only).
+
+## Budget ingest OTel (issue #83)
+
+Sampling côté Worker (`OTEL_SAMPLE_RATE`, défaut prod `0.1`) + health `1 %` + **5xx toujours exportés**. Cloudflare `head_sampling_rate` prod `0.1` réduit aussi les Tail events.
+
+| Env        | OTLP sample | CF head sample |
+| ---------- | ----------- | -------------- |
+| dev        | 1.0         | 1.0            |
+| staging    | 0.5         | 0.5            |
+| production | 0.1         | 0.1            |
+
+Alerte recommandée Axiom : ingest GB/jour > 80 % quota plan → Slack `#ops-athlya-alerts`.
