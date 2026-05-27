@@ -182,3 +182,7 @@ body {
     font-family: var(--font-sans);
   }
 }
+
+.class-card-capacity-bar {
+  transform: scaleX(var(--bar-scale, 0));
+}
