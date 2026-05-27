@@ -25,6 +25,18 @@ import type { TraceSpan } from './middleware/otel.js';
 import type { DurableObjectNamespace, Queue, R2Bucket } from '@cloudflare/workers-types';
 
 /* ------------------------------------------------------------------ */
+/*  Hyperdrive (write-path pooling)                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Minimal Hyperdrive binding surface — postgres-js wire URL for the
+ * booking/cancel write path. Matches Cloudflare's runtime binding.
+ */
+export interface AthlyaHyperdriveBinding {
+  readonly connectionString: string;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Environment discriminator                                          */
 /* ------------------------------------------------------------------ */
 
@@ -112,6 +124,16 @@ export interface AthlyaBindings {
    * policies are skipped just like before B2).
    */
   readonly DB_URL: string;
+
+  /**
+   * Cloudflare Hyperdrive binding for interactive write transactions
+   * (`bookClass`, `cancelReservation`). When present, the write-path
+   * postgres-js client is cached per isolate with a small pool; when
+   * absent, dev/preview fall back to direct `DB_URL` (one client per
+   * request). Provisioned via `[[env.*.hyperdrive]]` in
+   * `wrangler.toml` after dashboard setup (issue #62).
+   */
+  readonly HYPERDRIVE?: AthlyaHyperdriveBinding;
 
   /**
    * Privileged Postgres connection string used **only** by the

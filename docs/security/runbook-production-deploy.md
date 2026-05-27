@@ -42,6 +42,12 @@ wrangler secret put CORS_ORIGIN --env production
 # Connexions backend
 wrangler secret put DB_URL --env production
 # Valeur: postgresql://athlya_app:...@...neon.tech/athlya?sslmode=require
+
+# Hyperdrive (issue #62 — write path book/cancel)
+# 1. Dashboard Cloudflare → Hyperdrive → Create config (Neon EU, role athlya_app)
+# 2. Décommenter [[env.production.hyperdrive]] dans packages/api/wrangler.toml + coller l'id
+# 3. Re-déployer — /health/ready expose checks.hyperdrive
+
 wrangler secret put MIGRATION_DB_URL --env production
 # Valeur: postgresql://neondb_owner:... (utilisé UNIQUEMENT par le runner de migration)
 wrangler secret put REDIS_URL --env production

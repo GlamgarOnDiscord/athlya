@@ -25,6 +25,15 @@
 #   required strings, which makes boot fail loudly if a deployment forgot
 #   to set one.
 #
+# Hyperdrive (write path — issue #62)
+# -----------------------------------
+#   Booking/cancel interactive transactions use postgres-js over
+#   `HYPERDRIVE.connectionString` when bound; reads stay on Neon HTTP
+#   (`DB_URL` secret). Create one Hyperdrive config per env in the
+#   Cloudflare dashboard (Neon EU), then uncomment the matching block
+#   below before `deploy:staging` / `deploy:production`.
+#   Dev/preview omit Hyperdrive and fall back to direct `DB_URL`.
+#
 # EU-only placement
 # -----------------
 #   `[placement] mode = "smart"` opts the Worker into Cloudflare's Smart
@@ -329,6 +338,11 @@ bucket_name = "athlya-exports-staging"
 name = "CLASS_CAPACITY_DO"
 class_name = "ClassCapacityDO"
 
+# Uncomment after Cloudflare Hyperdrive config is created (Neon EU, athlya_app role):
+# [[env.staging.hyperdrive]]
+# binding = "HYPERDRIVE"
+# id = "<staging-hyperdrive-config-id>"
+
 # ============================================================================
 # Production environment
 # ============================================================================
@@ -387,6 +401,11 @@ bucket_name = "athlya-exports-production"
 [[env.production.durable_objects.bindings]]
 name = "CLASS_CAPACITY_DO"
 class_name = "ClassCapacityDO"
+
+# Uncomment after Cloudflare Hyperdrive config is created (Neon EU, athlya_app role):
+# [[env.production.hyperdrive]]
+# binding = "HYPERDRIVE"
+# id = "<production-hyperdrive-config-id>"
 
 # ============================================================================
 # Preview environment (CN.7.2 — per-PR preview deployments)

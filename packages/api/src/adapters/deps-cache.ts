@@ -32,8 +32,12 @@
  *      and the B1 file-level rationale block on caching strategy.
  */
 
-import { createDbHttp, type AthlyaDbHttp } from '@athlya/db/client';
+import { createDb, createDbHttp, type AthlyaDb, type AthlyaDbHttp } from '@athlya/db/client';
 import { Redis } from '@upstash/redis';
+
+import { resolvePostgresWriteUrl, usesHyperdriveWritePath } from './postgres-write-url.js';
+
+import type { AthlyaBindings } from '../types.js';
 
 /* ------------------------------------------------------------------ */
 /*  Module-scope caches                                                */
@@ -54,6 +58,20 @@ export const dbHttpCache = new Map<string, AthlyaDbHttp>();
  * URL+token tuple.
  */
 export const redisCache = new Map<string, Redis>();
+
+/**
+ * Cache of postgres-js write handles keyed on the resolved write URL.
+ * Only populated when {@link usesHyperdriveWritePath} is true — direct
+ * Neon TCP clients must stay per-request on Workers.
+ */
+export const writeDbCache = new Map<string, AthlyaDb>();
+
+function createWriteDb(connectionString: string, viaHyperdrive: boolean): AthlyaDb {
+  return createDb(connectionString, {
+    maxConnections: viaHyperdrive ? 3 : 1,
+    idleTimeoutSec: viaHyperdrive ? 30 : 5,
+  });
+}
 
 /* ------------------------------------------------------------------ */
 /*  Cache accessors                                                    */
@@ -90,6 +108,26 @@ export function getOrCreateRedis(url: string, token: string): Redis {
   return redis;
 }
 
+/**
+ * Write-path postgres-js handle for book/cancel. Hyperdrive bindings
+ * are cached per isolate; direct `DB_URL` builds a fresh client per call.
+ */
+export function getOrCreateWriteDb(env: AthlyaBindings): AthlyaDb {
+  const url = resolvePostgresWriteUrl(env);
+  const viaHyperdrive = usesHyperdriveWritePath(env);
+
+  if (!viaHyperdrive) {
+    return createWriteDb(url, false);
+  }
+
+  let db = writeDbCache.get(url);
+  if (db === undefined) {
+    db = createWriteDb(url, true);
+    writeDbCache.set(url, db);
+  }
+  return db;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Test seams                                                         */
 /* ------------------------------------------------------------------ */
@@ -108,6 +146,7 @@ export function getOrCreateRedis(url: string, token: string): Redis {
 export function resetAllDepsCachesForTests(): void {
   dbHttpCache.clear();
   redisCache.clear();
+  writeDbCache.clear();
 }
 
 /**

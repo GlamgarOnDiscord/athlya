@@ -28,13 +28,11 @@
  *
  *   • Write paths that open `db.transaction(async tx => …)` with
  *     `SELECT FOR UPDATE` + conditional logic — i.e. `bookClass`
- *     and `cancelReservation` — keep using the postgres-js
- *     {@link AthlyaDb} via {@link createDb}. That client holds a
- *     TCP socket and therefore CANNOT be cached across requests in
- *     a Cloudflare Worker (the runtime would raise "Cannot perform
- *     I/O on behalf of a different request"); we rebuild it per
- *     call. The extra TLS handshake is the unavoidable cost of
- *     interactive transactional semantics on this runtime.
+ *     and `cancelReservation` — use the postgres-js
+ *     {@link AthlyaDb} via {@link createDb}. Without Hyperdrive the
+ *     TCP client is rebuilt per request (Workers I/O scoping). With
+ *     {@link AthlyaBindings.HYPERDRIVE} the write client is cached
+ *     per isolate and pooled through Hyperdrive (issue #62).
  *
  * Read paths on the HTTP driver still filter at the query layer
  * (`studio_id` / `user_id`). Write paths (`bookClass`,
@@ -45,7 +43,7 @@
  *      7.3, 7.4, 8.1–8.6, 9.1–9.5, 10.1–10.5.
  */
 
-import { createDb, type AthlyaDb, type AthlyaDbHttp, type TenantClaims } from '@athlya/db/client';
+import { type AthlyaDbHttp, type TenantClaims } from '@athlya/db/client';
 import {
   listClasses as svcListClasses,
   createClass as svcCreateClass,
@@ -66,6 +64,7 @@ import {
 import {
   getOrCreateDbHttp,
   getOrCreateRedis,
+  getOrCreateWriteDb,
   primeDbHttpForTests,
   resetAllDepsCachesForTests,
 } from './deps-cache.js';
@@ -94,28 +93,6 @@ import type {
 /* ------------------------------------------------------------------ */
 /*  Per-isolate caches (HTTP DB + Redis) — shared via deps-cache       */
 /* ------------------------------------------------------------------ */
-
-/**
- * Per-request postgres-js Drizzle factory — used **only** by the
- * book / cancel paths that need an interactive transaction. Caching
- * this client across requests would trigger Cloudflare Workers'
- * "Cannot perform I/O on behalf of a different request" because the
- * `postgres` driver holds a TCP socket scoped to the request that
- * created it.
- *
- *   - `maxConnections: 1` — Workers are single-threaded per isolate;
- *     a larger pool would reserve Neon connections we cannot use
- *     concurrently and amplify the suspended-compute failure mode.
- *   - `idleTimeoutSec: 5` — release the socket as soon as the
- *     transaction commits so memory stays flat across back-to-back
- *     calls inside one isolate.
- */
-function makeWriteDb(connectionString: string): AthlyaDb {
-  return createDb(connectionString, {
-    maxConnections: 1,
-    idleTimeoutSec: 5,
-  });
-}
 
 /**
  * Test seam — drop every cached handle. Production code paths never
@@ -272,16 +249,9 @@ function extractUpdateErrorCode(err: unknown): string | null {
  * Read path:
  *   - `listMyReservations` → cached HTTP Drizzle handle.
  *
- * Write paths (interactive transactions, postgres-js per request):
- *   - `bookClass`         → Algorithm 1 (two-phase Redis DECR + SQL
- *                           insert with `UNIQUE(class_id, user_id)`
- *                           as the ultimate guard). The
- *                           `findClass` pre-flight runs against the
- *                           cached HTTP handle — it's a single read
- *                           and does not need the transaction.
- *   - `cancelReservation` → Algorithm 2 (`SELECT FOR UPDATE` on the
- *                           reservation + class rows, FIFO `SKIP
- *                           LOCKED` waitlist promotion).
+ * Write paths (interactive transactions, postgres-js):
+ *   - `bookClass` / `cancelReservation` → {@link getOrCreateWriteDb}
+ *     (Hyperdrive: cached per isolate; direct DB_URL: per request).
  */
 export function buildReservationsDeps(env: AthlyaBindings): ReservationsDeps {
   return {
@@ -293,10 +263,7 @@ export function buildReservationsDeps(env: AthlyaBindings): ReservationsDeps {
     async bookClass(claims, input) {
       const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
 
-      // Per-request postgres-js client — `bookClass` opens an
-      // interactive `withTenant` + `withTransaction` block
-      // (Algorithm 1) which the HTTP driver does not support.
-      const dbWrite = makeWriteDb(env.DB_URL);
+      const dbWrite = getOrCreateWriteDb(env);
       const repo = createDrizzleBookingRepo(dbWrite, toTenantClaims(claims));
       const counter = createRedisRemainingCounter(redis);
       const publisher = createBookingEventPublisher();
@@ -347,10 +314,7 @@ export function buildReservationsDeps(env: AthlyaBindings): ReservationsDeps {
     },
 
     async cancelReservation(claims, params) {
-      // Per-request postgres-js client — Algorithm 2 needs an
-      // interactive `withTenant` transaction with `SELECT FOR UPDATE`
-      // and conditional waitlist promotion between statements.
-      const dbWrite = makeWriteDb(env.DB_URL);
+      const dbWrite = getOrCreateWriteDb(env);
       const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
       const repo = createDrizzleCancelRepo(dbWrite, toTenantClaims(claims));
       const counter = createRedisRemainingCounter(redis);
