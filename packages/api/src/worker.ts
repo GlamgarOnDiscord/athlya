@@ -71,7 +71,6 @@ import { buildJwtRotateRouter } from './admin/jwt-rotate-routes.js';
 import { handleDlqBatch } from './events/drain-dlq.js';
 import { runScheduledDrain } from './events/drain-scheduled.js';
 import { createLogger } from './logging.js';
-import { anonymizeAuditLogViaSql } from './maintenance/anonymize-audit-tx.js';
 import {
   isCronDbUrlConfigured,
   logCronDbUrlMissing,
@@ -1269,10 +1268,8 @@ const worker = {
     // log `configuration_error` when the binding is absent.
     //
     // The audit-anonymise pass is gated on `CRON_DB_URL`
-    // pointing at a role with `BYPASSRLS` (the `users.role`
-    // edits cross tenant boundaries). Production wiring uses
-    // `athlya_cron` provisioned by migration `0008` (B10);
-    // staging falls back to `neondb_owner`.
+    // pointing at `athlya_cron` (BYPASSRLS + grants in migration
+    // `0009_audit_cron_grants.sql`). Dev may use `neondb_owner`.
     const athlyaEnv = env as AthlyaBindings & ScheduledEnv;
     const cronExecutor = buildCronSqlExecutor(athlyaEnv.CRON_DB_URL);
     if (cronExecutor !== null) {
@@ -1287,8 +1284,11 @@ const worker = {
         // soit en place — `neondb_owner` qui bypasse RLS
         // par défaut sur Neon.
         anonymizeOne: async (userId) => {
-          const anonymizedRows = await anonymizeAuditLogViaSql(cronExecutor, userId);
-          return { anonymizedRows };
+          const rows = await cronExecutor.selectRows<{ touched: number }>(
+            'SELECT anonymize_user_audit($1::uuid)::int AS touched',
+            [userId],
+          );
+          return { anonymizedRows: rows[0]?.touched ?? 0 };
         },
       }).catch((err: unknown) => {
         console.error('[worker] scheduled rgpd maintenance failed', {
