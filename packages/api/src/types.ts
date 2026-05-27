@@ -269,6 +269,13 @@ export interface AthlyaBindings {
   readonly OTEL_EXPORTER_OTLP_HEADERS?: string;
 
   /**
+   * OTLP export sample rate in `[0, 1]`. When unset, defaults by
+   * `ENVIRONMENT`: production `0.1`, staging `0.5`, dev `1.0`.
+   * 5xx responses are always exported; `/health*` uses at most `0.01`.
+   */
+  readonly OTEL_SAMPLE_RATE?: string;
+
+  /**
    * Cloudflare Turnstile server-side secret (task 8.9). Consumed by
    * the `turnstile()` middleware when it POSTs to the siteverify
    * endpoint. Set via `wrangler secret put TURNSTILE_SECRET` per
