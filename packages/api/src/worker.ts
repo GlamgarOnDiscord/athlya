@@ -50,6 +50,13 @@
  */
 
 import { handleUserDeleted, runExportJob } from '@athlya/members';
+import { HANDLED_EVENT_TYPES, handleEvent as handleNotificationEvent } from '@athlya/notifications';
+import {
+  parseEvent,
+  type AthlyaEvent,
+  type AuthUserDeletedEvent,
+  type MembersExportRequestedEvent,
+} from '@athlya/shared/events';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
@@ -57,6 +64,7 @@ import { cors } from 'hono/cors';
 import { buildCascadeDeps } from './adapters/cascade-deps.js';
 import { buildCronSqlExecutor } from './adapters/cron-sql-executor.js';
 import { buildExportDeps } from './adapters/export-deps.js';
+import { buildNotificationsDeps } from './adapters/notifications-deps.js';
 import { buildStudioSlugResolver } from './adapters/studio-slug-resolver.js';
 import { buildDlqRouter } from './admin/dlq-routes.js';
 import { buildJwtRotateRouter } from './admin/jwt-rotate-routes.js';
@@ -86,7 +94,6 @@ import { extractTraceparentId, newTraceId } from './tracing/ids.js';
 import type { DlqBindings } from './events/drain-dlq.js';
 import type { ExecutionContext, ScheduledEnv, ScheduledEvent } from './events/drain-scheduled.js';
 import type { HonoEnv, AthlyaBindings } from './types.js';
-import type { AuthUserDeletedEvent, MembersExportRequestedEvent } from '@athlya/shared/events';
 import type { MessageBatch } from '@cloudflare/workers-types';
 import type { Context } from 'hono';
 
@@ -1300,10 +1307,10 @@ const worker = {
    *      them via `console.error` so Tail Workers can alert.
    *
    *   2. Everything else (the main `athlya-events` queue and its
-   *      per-env equivalents) → RGPD consumers dispatch
-   *      (Slice 1.3 — Sprint 1 — SP1.4, audit findings S5-001 and
-   *      S5-002). Each message is parsed for `event.type` and
-   *      routed to the matching consumer:
+   *      per-env equivalents) → domain consumers dispatch
+   *      (Slice 1.3 — Sprint 1 — SP1.4, audit findings S5-001,
+   *      S5-002 + issue #60 notifications wiring). Each message is
+   *      parsed for `event.type` and routed to the matching consumer:
    *        • `auth.user.deleted` → `handleUserDeleted` cascade
    *          (Article 17 — purges reservations, workout_sessions,
    *          push_tokens, R2 avatar; schedules J+30 audit
@@ -1311,10 +1318,11 @@ const worker = {
    *        • `members.export.requested` → `runExportJob` (Article
    *          15/20 — assembles the ZIP archive, uploads to R2,
    *          stamps the export job `completed`).
-   *        • Any other event type is ack'd unconditionally — other
-   *          consumers (notifications, billing fan-out, …) will
-   *          add their branches without touching this dispatcher's
-   *          envelope. Unknown types must NOT be `retry`'d:
+   *        • `reservation.*` + `billing.subscription.failed`
+   *          → `@athlya/notifications/handleEvent` with Redis dedup
+   *          and Drizzle recipient lookup.
+   *        • Any other event type is ack'd unconditionally. Unknown
+   *          types must NOT be `retry`'d:
    *          Cloudflare's at-least-once redelivery would loop the
    *          message forever and eventually push it to the DLQ for
    *          no reason.
@@ -1385,6 +1393,8 @@ function readEventEnvelope(body: unknown): { type: string; id?: string; payload?
   };
 }
 
+const NOTIFICATION_EVENT_TYPES = new Set<string>(HANDLED_EVENT_TYPES);
+
 /**
  * Dispatch every message of a non-DLQ queue batch.
  *
@@ -1453,10 +1463,28 @@ export async function handleEventsBatch(
           break;
         }
         default: {
-          // Other consumers (notifications fan-out, billing
-          // analytics, future workflows) live elsewhere or
-          // ship in later slices; ack so the message does
-          // not accumulate redeliveries on the main queue.
+          if (NOTIFICATION_EVENT_TYPES.has(envelope.type)) {
+            let event: AthlyaEvent;
+            try {
+              event = parseEvent(msg.body);
+            } catch (err) {
+              console.warn('[worker] notifications event malformed, acking', {
+                queue: batch.queue,
+                messageId: msg.id,
+                eventType: envelope.type,
+                error: err instanceof Error ? err.message : String(err),
+              });
+              msg.ack();
+              break;
+            }
+            await handleNotificationEvent(event, buildNotificationsDeps(env));
+            msg.ack();
+            break;
+          }
+
+          // Unknown consumer type — ack so the message does not
+          // accumulate retries for an event family we do not handle
+          // on this worker.
           msg.ack();
           break;
         }

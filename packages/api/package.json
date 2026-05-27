@@ -131,6 +131,7 @@
     "@athlya/billing": "workspace:*",
     "@athlya/db": "workspace:*",
     "@athlya/members": "workspace:*",
+    "@athlya/notifications": "workspace:*",
     "@athlya/ratelimit": "workspace:*",
     "@athlya/reservations": "workspace:*",
     "@athlya/shared": "workspace:*",

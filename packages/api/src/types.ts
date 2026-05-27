@@ -168,6 +168,25 @@ export interface AthlyaBindings {
   readonly SENTRY_DSN?: string;
 
   /**
+   * Resend API key used by queue-side transactional notifications
+   * dispatch (`reservation.*`, `billing.subscription.failed`).
+   *
+   * Optional at the type level so local dev can run with the
+   * console-log fallback from `adapters/notifications-deps.ts`.
+   * Staging/production should set it via:
+   *   `wrangler secret put RESEND_API_KEY --env <env>`
+   */
+  readonly RESEND_API_KEY?: string;
+
+  /**
+   * Optional sender identity for Resend, e.g.
+   * `Athlya <noreply@athlya.app>`.
+   *
+   * When unset, adapters default to `Athlya <noreply@athlya.app>`.
+   */
+  readonly RESEND_FROM?: string;
+
+  /**
    * Expected `iss` claim on every Bearer JWT — Slice 1.5 (Sprint 1
    * — SP1.6, audit finding S2-005). Plumbed straight into
    * `jose.jwtVerify({ issuer })` by `worker.ts` so a token issued
