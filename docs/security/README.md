@@ -32,6 +32,7 @@ Documentation sécurité pour la plateforme Athlya. Tous les findings audit, spr
 
 - [`runbook-production-deploy.md`](./runbook-production-deploy.md) — Procédure déploiement initial production (provisionning bindings, secrets, R2, vérifications post-deploy, cron audit-anonymize, conformité)
 - [`runbook-breach-notification.md`](./runbook-breach-notification.md) — Procédure incident violation données (Art 33-34 RGPD, 7 étapes T+0 → T+1 semaine)
+- [`../runbooks/admin-access.md`](../runbooks/admin-access.md) — Cloudflare Access sur `/admin/*` (issue #74)
 
 ### Conformité
 
