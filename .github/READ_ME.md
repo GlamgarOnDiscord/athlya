@@ -4,19 +4,34 @@ This directory holds the GitHub automation for the Athlya monorepo. The default
 `ci.yml` workflow runs on every pull request and on pushes to `main` or any
 `release/*` branch. It installs dependencies with `pnpm --frozen-lockfile`, then
 runs Prettier, ESLint, `tsc --noEmit`, and the Vitest suites (unit + fast-check
-property tests) through Turborepo. Testcontainers-based suites skip cleanly on
-the default `ubuntu-latest` runner when Docker is unavailable; a dedicated
-Postgres-backed job (`pgtap.yml`) runs the RLS suite against a real Postgres 17
-service container whenever SQL migrations change.
+property tests) through Turborepo. **Unit / PGlite** paths run in `ci.yml`.
+**Docker-backed PBT** (P4 cascade, P7 tenant Docker path, reservations
+properties) run in `integration-docker.yml` on `ubuntu-latest` where the Docker
+daemon is available. SQL RLS assertions use `pgtap.yml` when migrations change.
 
 ## Workflow matrix
 
-| Workflow           | Task | Trigger                                               | Status      |
-| ------------------ | ---- | ----------------------------------------------------- | ----------- |
-| `ci.yml`           | 13.1 | PRs, push to `main` / `release/*`                     | implemented |
-| `zap-baseline.yml` | 13.2 | PRs (planned)                                         | planned     |
-| `deps-audit.yml`   | 13.3 | daily cron + PRs touching lockfiles + manual dispatch | implemented |
-| `pgtap.yml`        | 13.4 | PRs touching `packages/db` migrations or RLS tests    | implemented |
+| Workflow                 | Task | Trigger                                               | Status      |
+| ------------------------ | ---- | ----------------------------------------------------- | ----------- |
+| `ci.yml`                 | 13.1 | PRs, push to `master` / `release/*`                   | implemented |
+| `integration-docker.yml` | 13.1 | PRs/push touching db/members/reservations/api         | implemented |
+| `ci-required-vars.yml`   | 13.1 | Weekly + push `master` — K6/ZAP vars must be set      | implemented |
+| `zap-baseline.yml`       | 13.2 | PRs when `vars.ZAP_TARGET_URL` is set                 | implemented |
+| `load-test.yml`          | 13.2 | PRs when `vars.K6_STAGING_BASE_URL` is set            | implemented |
+| `deps-audit.yml`         | 13.3 | daily cron + PRs touching lockfiles + manual dispatch | implemented |
+| `pgtap.yml`              | 13.4 | PRs touching `packages/db` migrations or RLS tests    | implemented |
+
+### Staging gate variables (required on `master`)
+
+Configure under **Settings → Secrets and variables → Actions → Variables**:
+
+| Variable              | Required for                         |
+| --------------------- | ------------------------------------ |
+| `K6_STAGING_BASE_URL` | k6 load tests (`load-test.yml`)      |
+| `ZAP_TARGET_URL`      | OWASP ZAP baseline (`zap-baseline.yml`) |
+
+`ci-required-vars.yml` fails on `master` when either is empty. Branch protection
+checklist: `docs/runbooks/branch-protection.md`.
 
 Dependabot keeps npm and GitHub Actions dependencies up to date on a weekly
 cadence (`dependabot.yml`).

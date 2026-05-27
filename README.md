@@ -6,9 +6,11 @@
 
 Alternative auto-hébergeable à bsport, Mywellness et Mindbody pour les studios boutique, chaînes mid-size, coachs indépendants et communautés sportives.
 
-[![CI](https://img.shields.io/badge/CI-passing-22c55e?style=flat-square&logo=github-actions&logoColor=white)](.github/workflows/ci.yml)
-[![pgTAP RLS](https://img.shields.io/badge/pgTAP%20RLS-green-22c55e?style=flat-square&logo=postgresql&logoColor=white)](.github/workflows/pgtap.yml)
-[![OWASP ZAP](https://img.shields.io/badge/OWASP%20ZAP-baseline-0ea5e9?style=flat-square&logo=owasp&logoColor=white)](.github/workflows/zap-baseline.yml)
+[![CI unit](https://img.shields.io/badge/CI%20unit-lint%2Btests-22c55e?style=flat-square&logo=github-actions&logoColor=white)](.github/workflows/ci.yml)
+[![CI Docker PBT](https://img.shields.io/badge/CI%20Docker-PBT-22c55e?style=flat-square&logo=docker&logoColor=white)](.github/workflows/integration-docker.yml)
+[![pgTAP RLS](https://img.shields.io/badge/pgTAP%20RLS-SQL%20migrations-22c55e?style=flat-square&logo=postgresql&logoColor=white)](.github/workflows/pgtap.yml)
+[![OWASP ZAP](https://img.shields.io/badge/OWASP%20ZAP-staging%20var%20required-f59e0b?style=flat-square&logo=owasp&logoColor=white)](.github/workflows/zap-baseline.yml)
+[![k6 load](https://img.shields.io/badge/k6%20load-staging%20var%20required-f59e0b?style=flat-square&logo=k6&logoColor=white)](.github/workflows/load-test.yml)
 [![Deps audit](https://img.shields.io/badge/deps%20audit-daily-0ea5e9?style=flat-square&logo=npm&logoColor=white)](.github/workflows/deps-audit.yml)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-8b5cf6?style=flat-square)](#licence)
 
@@ -355,7 +357,7 @@ La DLQ `athlya-events-dlq` est drainée automatiquement par un worker consumer q
 
 ### Testcontainers — skip-on-Docker
 
-Les suites PBT qui valident P1 capacity, P4 RGPD cascade, P7 tenant isolation utilisent Testcontainers Postgres + Redis. Elles se skippent proprement sur les postes sans Docker (incluant Windows local) via `describe.skipIf(!dockerReady)`. Seul le workflow CI `.github/workflows/pgtap.yml` les exécute réellement — chaque PR qui touche une migration SQL les déclenche.
+Les suites PBT P4 (cascade RGPD), P7 (tenant isolation) et properties `reservations` utilisent Testcontainers quand Docker est disponible. En local sans Docker, P7 peut retomber sur PGlite ; P4/P1 se skippent via `describe.skipIf(!dockerReady)`. En CI : **`integration-docker.yml`** exécute les PBT Docker sur chaque PR touchant `packages/db|members|reservations|api` ; **`pgtap.yml`** couvre les assertions SQL RLS sur les migrations.
 
 ### Exporter OTel — hand-rolled (task 8.6)
 

@@ -1,0 +1,64 @@
+name: Integration (Docker / PBT)
+
+# Issue #67 — mandatory Testcontainers / property suites on Linux CI.
+# Complements `ci.yml` (unit + PGlite paths) with real Docker-backed PBT.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/db/**'
+      - 'packages/members/**'
+      - 'packages/reservations/**'
+      - 'packages/api/**'
+      - '.github/workflows/integration-docker.yml'
+  push:
+    branches:
+      - master
+    paths:
+      - 'packages/db/**'
+      - 'packages/members/**'
+      - 'packages/reservations/**'
+      - 'packages/api/**'
+      - '.github/workflows/integration-docker.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration-docker:
+    name: Property tests (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Verify Docker daemon
+        run: |
+          docker info --format '{{.ServerVersion}}'
+          echo "Docker OK — Testcontainers suites will execute (not skip)."
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: P7 — tenant isolation property (@athlya/db)
+        run: pnpm --filter @athlya/db exec vitest run tests/properties/rls.property.test.ts
+
+      - name: P4 — RGPD cascade integration (@athlya/members)
+        run: pnpm --filter @athlya/members exec vitest run tests/integration/cascade.integration.test.ts
+
+      - name: Reservations property suites (@athlya/reservations)
+        run: pnpm --filter @athlya/reservations exec vitest run tests/properties/
