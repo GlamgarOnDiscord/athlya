@@ -975,6 +975,32 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       }
     }
 
+    async function probeHyperdriveWrite(): Promise<ProbeResult> {
+      if (env.HYPERDRIVE === undefined) {
+        return { status: 'skipped', error: 'HYPERDRIVE not bound' };
+      }
+      const started = Date.now();
+      try {
+        const { pingDb } = await import('@athlya/db');
+        await Promise.race([
+          pingDb(env.HYPERDRIVE.connectionString),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('hyperdrive ping timeout')), 2000),
+          ),
+        ]);
+        return {
+          status: 'ok',
+          latencyMs: Date.now() - started,
+        };
+      } catch (err) {
+        return {
+          status: 'failed',
+          latencyMs: Date.now() - started,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+
     function probeCronConfig(): ProbeResult {
       if (isCronDbUrlConfigured(env.CRON_DB_URL)) {
         return { status: 'ok', latencyMs: 0 };
@@ -982,10 +1008,11 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       return { status: 'skipped', error: 'CRON_DB_URL missing' };
     }
 
-    const [dbProbe, redisProbe, cronProbe] = await Promise.all([
+    const [dbProbe, redisProbe, cronProbe, hyperdriveProbe] = await Promise.all([
       probeDb(),
       probeRedis(),
       Promise.resolve(probeCronConfig()),
+      probeHyperdriveWrite(),
     ]);
 
     // Dev: any `skipped` is acceptable (= no real binding wired).
@@ -993,7 +1020,8 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
     const failed = (p: ProbeResult): boolean =>
       p.status === 'failed' || (!isDev && p.status === 'skipped');
 
-    const ready = !failed(dbProbe) && !failed(redisProbe) && !failed(cronProbe);
+    const ready =
+      !failed(dbProbe) && !failed(redisProbe) && !failed(cronProbe) && !failed(hyperdriveProbe);
     const httpStatus = ready ? 200 : 503;
 
     return c.json(
@@ -1006,6 +1034,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
           db: dbProbe,
           redis: redisProbe,
           cron: cronProbe,
+          hyperdrive: hyperdriveProbe,
         },
       },
       httpStatus,

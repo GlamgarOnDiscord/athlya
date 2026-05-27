@@ -21,6 +21,7 @@ export {
   createDbHttp,
   createNeonHttpSql,
   pingDbHttp,
+  pingDb,
   withTenant,
   InvalidClaimsError,
   type AthlyaDb,
