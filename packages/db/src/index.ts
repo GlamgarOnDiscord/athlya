@@ -55,7 +55,9 @@ export {
   claimBatch,
   markPublished,
   markFailed,
+  countPendingOutbox,
   InvalidOutboxInputError,
   type OutboxEvent,
   type ClaimedOutboxRow,
+  type OutboxPendingSnapshot,
 } from './outbox.js';

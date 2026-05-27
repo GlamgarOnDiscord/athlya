@@ -67,6 +67,7 @@ import { buildExportDeps } from './adapters/export-deps.js';
 import { buildNotificationsDeps } from './adapters/notifications-deps.js';
 import { buildStudioSlugResolver } from './adapters/studio-slug-resolver.js';
 import { buildDlqRouter } from './admin/dlq-routes.js';
+import { buildOutboxRouter } from './admin/outbox-routes.js';
 import { buildJwtRotateRouter } from './admin/jwt-rotate-routes.js';
 import { handleDlqBatch } from './events/drain-dlq.js';
 import { runScheduledDrain } from './events/drain-scheduled.js';
@@ -1184,6 +1185,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   app.use('/admin/*', jwtAuth());
   app.use('/admin/*', requireRole('admin'));
   app.route('/', buildDlqRouter() as unknown as Hono<HonoEnv>);
+  app.route('/', buildOutboxRouter() as unknown as Hono<HonoEnv>);
 
   // Sprint 12 / Slice 12.13 (Epic B3.1) — JWT rotation admin
   // surface. Mounted under the same `/admin/*` chain so it
