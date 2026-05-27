@@ -36,7 +36,7 @@ jobs:
   deploy:
     if: github.event.action != 'closed' && vars.NEON_PROJECT_ID != ''
     name: Deploy preview (PR #${{ github.event.pull_request.number }})
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 15
     permissions:
       contents: read
@@ -182,7 +182,7 @@ jobs:
   teardown:
     if: github.event.action == 'closed' && vars.NEON_PROJECT_ID != ''
     name: Teardown preview (PR #${{ github.event.pull_request.number }})
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 5
 
     steps:

@@ -52,7 +52,7 @@ concurrency:
 jobs:
   zap:
     name: ZAP baseline scan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
 
     outputs:

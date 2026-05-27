@@ -12,7 +12,7 @@ concurrency:
 jobs:
   release:
     name: Version packages
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
 
     permissions:
       contents: write

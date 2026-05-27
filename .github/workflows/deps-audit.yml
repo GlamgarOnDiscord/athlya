@@ -40,7 +40,7 @@ concurrency:
 jobs:
   pnpm-audit:
     name: pnpm audit (lockfile)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
 
     # No secrets required — this job runs green on forks out of the box.
@@ -95,7 +95,7 @@ jobs:
 
   socket-security:
     name: Socket.dev supply-chain scan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
 
     permissions:

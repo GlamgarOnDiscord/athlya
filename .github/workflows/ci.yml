@@ -1,5 +1,7 @@
 name: CI
 
+# Self-hosted Linux runner (WSL2 + Docker). Setup: scripts/setup-self-hosted-runner.sh
+
 on:
   pull_request:
     branches:
@@ -16,7 +18,7 @@ concurrency:
 jobs:
   ci:
     name: Lint, typecheck, and tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 30
 
     # Turborepo remote cache — optional.

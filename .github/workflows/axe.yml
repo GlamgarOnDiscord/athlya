@@ -17,7 +17,7 @@ concurrency:
 jobs:
   a11y:
     name: WCAG 2.2 AA axe sweep + Lighthouse accessibility budget
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
 
     steps:
@@ -81,7 +81,7 @@ jobs:
 
   e2e-flows:
     name: Playwright E2E flows (register → book → cancel)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
 
     steps:
@@ -116,7 +116,7 @@ jobs:
 
   studio-a11y:
     name: WCAG 2.2 AA axe sweep — studio admin app
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
 
     steps:
@@ -151,7 +151,7 @@ jobs:
 
   studio-e2e-flows:
     name: Playwright E2E flows — studio admin app
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
 
     steps:

@@ -38,7 +38,7 @@ permissions:
 jobs:
   k6-book-class:
     name: book-class load test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     # Skip when secrets aren't provisioned (free tier without
     # staging URL setup). The job still runs in lint mode below.
     if: ${{ vars.K6_STAGING_BASE_URL != '' }}
@@ -74,7 +74,7 @@ jobs:
 
   k6-list-classes:
     name: list-classes load test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     if: ${{ vars.K6_STAGING_BASE_URL != '' }}
     timeout-minutes: 5
     steps:
@@ -99,7 +99,7 @@ jobs:
     # set. Catches a malformed k6 script before the next ops
     # provisioning step ships staging URLs.
     name: k6 syntax lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v6

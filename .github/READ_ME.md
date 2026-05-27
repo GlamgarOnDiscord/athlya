@@ -5,7 +5,8 @@ This directory holds the GitHub automation for the Athlya monorepo. The default
 `release/*` branch. It installs dependencies with `pnpm --frozen-lockfile`, then
 runs Prettier, ESLint, `tsc --noEmit`, and the Vitest suites (unit + fast-check
 property tests) through Turborepo. Testcontainers-based suites skip cleanly on
-the default `ubuntu-latest` runner when Docker is unavailable; a dedicated
+the self-hosted Linux runner (`[self-hosted, Linux, X64]` — see
+`scripts/setup-self-hosted-runner.sh`) when Docker is unavailable; a dedicated
 Postgres-backed job (`pgtap.yml`) runs the RLS suite against a real Postgres 17
 service container whenever SQL migrations change.
 

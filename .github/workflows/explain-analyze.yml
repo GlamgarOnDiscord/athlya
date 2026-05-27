@@ -39,7 +39,7 @@ permissions:
 jobs:
   explain:
     name: Run EXPLAIN ANALYZE on critical queries
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
 
     services:
