@@ -312,6 +312,27 @@ export async function pingDbHttp(connectionString: string): Promise<number> {
 }
 
 /**
+ * Probe Postgres over the wire protocol (postgres-js). Used by
+ * `/health/ready` to validate the Hyperdrive write path separately
+ * from the Neon HTTP read probe.
+ */
+export async function pingDb(connectionString: string): Promise<number> {
+  const client = postgres(connectionString, {
+    max: 1,
+    idle_timeout: 1,
+    prepare: false,
+    connect_timeout: 2,
+  });
+  const started = Date.now();
+  try {
+    await client`select 1`;
+    return Date.now() - started;
+  } finally {
+    await client.end({ timeout: 1 });
+  }
+}
+
+/**
  * Build a raw Neon HTTP SQL caller — bypass Drizzle entirely.
  *
  * Sprint 13 / Slice 13.2 — used by the cron handler in
