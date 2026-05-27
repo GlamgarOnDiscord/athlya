@@ -454,18 +454,17 @@ export interface BookClassInput {
  *      Commit returns `{ code: 'ok' }` with the inserted row and
  *      the `remaining` value seen from the DECR.
  *
- *   4. If the tx throws a {@link ClassCapacityExceededError}: the
+ *   3. If the tx throws a {@link ClassCapacityExceededError}: the
  *      Redis counter was optimistic — compensate with INCR and fall
  *      through to the waitlist branch (PostgreSQL is authoritative).
- *   5. If the tx throws a {@link UniqueViolationError}: the user
+ *   4. If the tx throws a {@link UniqueViolationError}: the user
  *      already holds a row. Compensating `INCR` (we over-claimed)
  *      and return the existing row as `already_booked`. No second
  *      outbox event.
- *
- *   4. If the tx throws anything else: compensating `INCR` and
+ *   5. If the tx throws anything else: compensating `INCR` and
  *      rethrow. The API gateway's handler turns this into a 5xx.
  *
- *   5. If `DECR < 0`: compensating `INCR` (we didn't actually
+ *   6. If `DECR < 0`: compensating `INCR` (we didn't actually
  *      consume a seat — the value was already at 0 or below), then
  *      enter the waitlist branch. A fresh transaction inserts with
  *      `status='waitlist'`, computes the 1-based position from
