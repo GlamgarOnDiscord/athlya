@@ -1,73 +1,44 @@
 ---
-name: Rapport de bug
-about: Signaler un comportement incorrect ou une erreur
-title: '[bug] '
+name: Bug
+about: Comportement incorrect ou erreur
+title: 'fix: '
 labels: bug, triage
 assignees: ''
 ---
 
 ## Résumé
 
-<!-- Une phrase courte décrivant le bug. -->
+<!-- Une phrase. -->
 
-## Comportement attendu
+## Comportement attendu vs observé
 
-<!-- Ce qui devrait se passer. -->
-
-## Comportement observé
-
-<!-- Ce qui se passe réellement. -->
+| | |
+|---|---|
+| **Attendu** | |
+| **Observé** | |
 
 ## Reproduction
 
-### Environnement
+**Package :** `@athlya/`
+**Environnement :** dev / staging / production / CI
+**Commit :** <!-- `git rev-parse --short HEAD` -->
 
-- **Package** : `@athlya/…` (api, auth, reservations, …)
-- **Version / commit** : <!-- `git rev-parse HEAD` ou version du package -->
-- **Environnement** : <!-- dev local, staging, production, CI -->
-- **Node** : <!-- `node --version` -->
-- **pnpm** : <!-- `pnpm --version` -->
-- **OS** : <!-- Windows 11 / macOS / Linux -->
-- **Docker disponible** : <!-- oui / non (impacte les suites Testcontainers) -->
-
-### Étapes
+Étapes :
 
 1.
 2.
 3.
 
-### Minimum reproducible example
+## Contexte technique
 
-<!-- Bloc de code, snippet de test, ou lien vers un gist. -->
-
-```ts
-// ...
-```
-
-## Trace / logs
-
-### Trace id
-
-<!-- Récupérer le header `x-trace-id` de la réponse si possible. -->
-
-`traceId`:
-
-### Logs Worker (Axiom / Wrangler Tail)
-
-<!-- Coller la ligne JSON structurée correspondante si disponible. -->
+**Trace ID** (`x-trace-id`) :
+**Status HTTP + body** :
 
 ```json
 
 ```
 
-### Sentry event (si 5xx)
-
-<!-- Lien vers l'event ou `event_id`. -->
-
-### Réponse HTTP (si API)
-
-- **Status** :
-- **Body** (si Problem Details) :
+**Log Worker (Axiom / Wrangler Tail)** :
 
 ```json
 
@@ -79,13 +50,21 @@ assignees: ''
 - [ ] Dégradation (workaround existe)
 - [ ] Cosmétique
 
-## Hypothèse / piste
+## Packages touchés
 
-<!-- Optionnel : si tu as une intuition sur la cause, la partager. -->
+- [ ] `@athlya/api`
+- [ ] `@athlya/auth`
+- [ ] `@athlya/db`
+- [ ] `@athlya/members`
+- [ ] `@athlya/reservations`
+- [ ] `@athlya/billing`
+- [ ] `@athlya/notifications`
+- [ ] `@athlya/shared`
+- [ ] `apps/web`
+- [ ] `apps/studio`
 
-## Checklist
+## Definition of done
 
-- [ ] J'ai vérifié que le bug n'est pas déjà ouvert dans les issues
-- [ ] J'ai testé avec la version la plus récente de `main`
-- [ ] J'ai fourni une reproduction minimale
-- [ ] Ce n'est PAS une vulnérabilité de sécurité (sinon → security@athlya.app, voir `SECURITY.md`)
+- [ ] Bug non reproductible sur master
+- [ ] Test de non-régression ajouté
+- [ ] Pas de régression sur la suite existante
