@@ -411,17 +411,14 @@ class_name = "ClassCapacityDO"
 # Preview environment (CN.7.2 — per-PR preview deployments)
 # ============================================================================
 #
-# One shared Worker (`athlya-api-preview`) is reused across all preview PRs.
-# The only binding that changes per PR is `DB_URL`, which is set as a secret
-# via `wrangler secret put DB_URL --env preview` immediately before each
-# deploy, pointing at the PR's ephemeral Neon branch.
+# CI deploys one Worker per PR: `athlya-api-pr-<N>` via `--name` in
+# `.github/workflows/preview.yml`. Each Worker has its own `DB_URL` secret
+# (Neon branch `preview-pr-<N>`). The `name` below is the wrangler default
+# for local/manual preview; production CI always overrides it.
 #
 # Queues + R2 are shared with staging — preview traffic is ephemeral and
 # low-volume so contamination of staging event/export/avatar stores is
 # acceptable. Redis is also the staging instance.
-#
-# Concurrency note: simultaneous PR deployments race on the DB_URL secret.
-# For a small team this is documented and accepted; see the runbook.
 #
 # Required secrets (set once or per-PR via workflow):
 #   wrangler secret put DB_URL             --env preview   # per-PR (Neon branch)
