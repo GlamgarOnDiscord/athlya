@@ -59,7 +59,6 @@ jobs:
         run: pnpm typecheck
 
       - name: Unit & property tests
-        # Testcontainers-based suites (db, members, reservations) auto-skip
-        # when Docker is unavailable on the runner. A dedicated pgTAP job
-        # with a Postgres service container lands in a separate workflow.
+        # Fast path: unit tests + PGlite-backed properties. Docker-backed PBT
+        # (P4/P7/reservations properties) runs in integration-docker.yml.
         run: pnpm test
