@@ -754,9 +754,9 @@ Chantier transversal "connecter l'app sur des secrets live Neon + Upstash + Clou
 - [x] N2.10 Landing auth-aware `HomeActions` + `loading.tsx` / `error.tsx` sur /me et /classes (Vagues 8 + 11)
 - [x] N2.11 Photo de profil via `<input type="file">` avec preview + cap 256 KiB (Vague 12)
 - [x] N2.12 Migration `postgres-js` → `@neondatabase/serverless` (livré Sprint 11 / Vague 41 — `createDbHttp` + cache module-scope dans `auth-deps.ts`/`members-deps.ts`/`reservations-deps.ts`. Cache DB+Redis ré-activé. Gain p95 ~1700ms → ~600ms confirmé en backlog B1.3.)
-- [x] N2.13 R2 avatars roadmap doc — `docs/architecture/r2-avatars.md` avec architecture cible + composants + effort estimé 5h cumulé + critères provisioning + migration script. Mise en œuvre = slice future quand justifiée par un trigger (256KiB cap atteint OU mobile Epic 11). Sprint 15 / Slice 15.3 livrée Vague 48.
+- [x] N2.13 R2 avatars — `PUT /v1/members/me/avatar` livré (PR #59). Adapter R2 (`avatar-upload-store-r2.ts`), stable key `avatars/{userId}/avatar`, mode dégradé 503, Content-Length pre-check, CORS PUT, 6 unit tests. Niveau 2 **complet 13/13**.
 
-**Tests cumulés Niveau 2 : 601/601 verts** (382 API + 137 shared + 82 web), zero régression.
+**Tests cumulés Niveau 2 : ~1015 tests verts** (+6 members-avatar unit tests), zero régression.
 
 
 ---
