@@ -81,6 +81,7 @@ import { jwtAuth } from './middleware/auth.js';
 import { tracing } from './middleware/otel.js';
 import { registerErrorHandlers } from './middleware/problem-details.js';
 import { rateLimit } from './middleware/rate-limit.js';
+import { guardRateLimiter } from './middleware/limiter-guard.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { tenantClaimGuard, tenantResolverMiddleware } from './middleware/tenant-resolver.js';
 import { turnstile } from './middleware/turnstile.js';
@@ -551,55 +552,47 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   //    gain. Staging and production keep the limiter active; the
   //    audit's findings are scoped to those environments.
   //
-  //    Fail-open policy: even on staging/prod, an unreachable
-  //    Upstash endpoint must not take the site down. The wrappers
-  //    below catch every error raised by the inner limiter BEFORE
-  //    it reaches `next()` (typically Upstash transport failures)
-  //    and proceed without enforcement. We use a `nextCalled` flag
-  //    to differentiate limiter-internal failures (fail-open) from
-  //    downstream handler failures (re-throw, caught by the
-  //    global mapper). Legitimate 429 denials still flow through
-  //    untouched — the wrapped middleware short-circuits with a
-  //    `Response` on deny, which we forward verbatim.
+  //    Fail-closed on mutations (issue #65): auth + per-route
+  //    mutation limiters return 503 when Upstash is unreachable.
+  //    The global IP limiter stays fail-open so read traffic
+  //    survives a Redis outage.
   const ipLimiter = rateLimit();
   const authLimiter = rateLimit({ ipLimit: 20, windowSec: 60 });
+  const isDevEnv = (env: AthlyaBindings) => env.ENVIRONMENT === 'dev';
 
-  const guardLimiter =
-    (scope: 'global' | 'auth', inner: ReturnType<typeof rateLimit>) =>
-    async (c: Parameters<typeof inner>[0], next: () => Promise<void>) => {
-      if ((c.env as AthlyaBindings).ENVIRONMENT === 'dev') {
+  const guardLimiter = (
+    scope: string,
+    inner: ReturnType<typeof rateLimit>,
+    policy: 'fail-open' | 'fail-closed',
+  ) =>
+    guardRateLimiter(scope, inner, policy, false) as unknown as (
+      c: Parameters<typeof inner>[0],
+      next: () => Promise<void>,
+    ) => Promise<Response | undefined>;
+
+  const guardLimiterWithDevBypass = (
+    scope: string,
+    inner: ReturnType<typeof rateLimit>,
+    policy: 'fail-open' | 'fail-closed',
+  ) => {
+    const guarded = guardLimiter(scope, inner, policy);
+    return async (c: Parameters<typeof inner>[0], next: () => Promise<void>) => {
+      if (isDevEnv(c.env as AthlyaBindings)) {
         await next();
         return undefined;
       }
-      let nextCalled = false;
-      const wrappedNext = async () => {
-        nextCalled = true;
-        await next();
-      };
-      try {
-        const result = await inner(c, wrappedNext);
-        if (result instanceof Response) return result;
-        return undefined;
-      } catch (err) {
-        if (nextCalled) {
-          // Error came from a downstream handler — let the
-          // global error mapper deal with it.
-          throw err;
-        }
-        const logger = (c as { get: (k: string) => { warn: (...args: unknown[]) => void } }).get(
-          'logger',
-        );
-        logger.warn('rate-limit unavailable, failing open', {
-          scope,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        await next();
-        return undefined;
-      }
+      return guarded(c, next);
     };
+  };
 
-  app.use('/v1/*', guardLimiter('global', ipLimiter) as Parameters<typeof app.use>[1]);
-  app.use('/v1/auth/*', guardLimiter('auth', authLimiter) as Parameters<typeof app.use>[1]);
+  app.use(
+    '/v1/*',
+    guardLimiterWithDevBypass('global', ipLimiter, 'fail-open') as Parameters<typeof app.use>[1],
+  );
+  app.use(
+    '/v1/auth/*',
+    guardLimiterWithDevBypass('auth', authLimiter, 'fail-closed') as Parameters<typeof app.use>[1],
+  );
 
   // Req 26.1–26.3 — Turnstile bot-challenge on the two pre-auth mutation
   // routes. The middleware reads TURNSTILE_SECRET from c.env; dev-mode
@@ -649,16 +642,12 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
     windowSec: 86400,
   });
 
-  // Method-aware wrapper. Reads `c.req.method` directly on the
-  // Hono context (which exposes it natively) and short-circuits
-  // to `next()` when the method does not match. Rides on top of
-  // `guardLimiter` so per-mutation limits inherit the same dev
-  // bypass + fail-open guards as the global and auth ones.
+  // `guardLimiter` — mutations fail-closed, reads fail-open (issue #65).
   const guardMutationLimiter = (
     method: 'POST' | 'PATCH' | 'DELETE',
     inner: ReturnType<typeof rateLimit>,
   ) => {
-    const guarded = guardLimiter('global', inner);
+    const guarded = guardLimiterWithDevBypass('mutation', inner, 'fail-closed');
     return async (c: { req: { method: string } }, next: () => Promise<void>) => {
       if (c.req.method !== method) {
         await next();

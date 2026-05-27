@@ -243,6 +243,15 @@ export function __resetRateLimitRedisCache(): void {
   redisCache.clear();
 }
 
+/**
+ * @internal Prime the per-isolate cache so integration tests with
+ * `REDIS_URL` pointing at `.invalid` still exercise limiters without
+ * network I/O.
+ */
+export function __primeRateLimitRedisForTests(url: string, redis: Redis): void {
+  redisCache.set(url, redis);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Key derivation                                                     */
 /* ------------------------------------------------------------------ */
