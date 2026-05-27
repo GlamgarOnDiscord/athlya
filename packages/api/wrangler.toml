@@ -45,7 +45,11 @@
 #   scope of task 8.1. Req 5.5 / 23.3 are satisfied here through the
 #   combination of EU-pinned dependencies (Redis, Postgres) and this
 #   smart-placement hint; the full region pin lands when the Workers plan
-#   upgrade ships.
+#   upgrade ships. ADR: docs/security/eu-data-residency-adr.md (issue #66).
+#
+#   Workers Enterprise — hard EU pin (not enabled on current plan):
+#   compatibility_flags = ["region_exclusive_eu"]
+#   Apply to [env.staging] and [env.production] after DPO sign-off.
 #
 # Queues
 # ------

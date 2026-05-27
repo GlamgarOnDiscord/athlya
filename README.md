@@ -408,7 +408,7 @@ L'intégrité de l'`audit_log` est garantie par **quatre lignes de défense** su
 
 ### Résidence EU
 
-Données hébergées exclusivement en UE : Neon Frankfurt, Cloudflare EU PoPs, Upstash EU, Resend EU (Req 5.5).
+Données **au repos** en UE (Neon Frankfurt, Upstash EU, R2/Queues compte EU). Compute Workers via Smart Placement (co-localisation perf, pas pin `region_exclusive_eu` — voir `docs/security/eu-data-residency-adr.md`, Req 5.5).
 
 ---
 
