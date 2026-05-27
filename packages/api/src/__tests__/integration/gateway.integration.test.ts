@@ -33,7 +33,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { __resetJwksCacheForTests } from '../../middleware/auth.js';
-import { __resetRateLimitRedisCache } from '../../middleware/rate-limit.js';
+import { __primeRateLimitRedisForTests, __resetRateLimitRedisCache } from '../../middleware/rate-limit.js';
 import { __resetTenantDbCache } from '../../middleware/tenant.js';
 
 import {
@@ -147,6 +147,7 @@ beforeEach(() => {
   // other through the worker-isolate pools.
   __resetJwksCacheForTests();
   __resetRateLimitRedisCache();
+  __primeRateLimitRedisForTests('https://test.upstash.invalid', asRedis(new FakeRedis()));
   __resetTenantDbCache();
 
   dbMocks.createDb.mockReset();
