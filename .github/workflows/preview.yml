@@ -2,7 +2,7 @@ name: Preview environments
 
 # Deploys an isolated API preview for every PR:
 #   • Neon branch  — fresh DB fork from the project primary branch.
-#   • Cloudflare Worker — `athlya-api-preview` with the PR's DB_URL secret.
+#   • Cloudflare Worker — `athlya-api-pr-<N>` (one Worker per PR, isolated DB_URL).
 #
 # Required GitHub secrets:
 #   CLOUDFLARE_API_TOKEN      — Workers:Edit permission
@@ -45,6 +45,7 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PREVIEW_WORKER_NAME: athlya-api-pr-${{ github.event.pull_request.number }}
 
     steps:
       - name: Checkout
@@ -112,21 +113,22 @@ jobs:
       - name: Set preview secrets
         run: |
           VERSION="pr${{ github.event.pull_request.number }}-${GITHUB_SHA:0:7}"
+          WRANGLER_NAME_FLAGS=(--env preview --name "${PREVIEW_WORKER_NAME}")
 
           printf '%s' "${{ steps.neon.outputs.db_url }}" | \
-            pnpm --filter @athlya/api exec wrangler secret put DB_URL --env preview
+            pnpm --filter @athlya/api exec wrangler secret put DB_URL "${WRANGLER_NAME_FLAGS[@]}"
 
           printf '%s' "${{ secrets.PREVIEW_REDIS_URL }}" | \
-            pnpm --filter @athlya/api exec wrangler secret put REDIS_URL --env preview
+            pnpm --filter @athlya/api exec wrangler secret put REDIS_URL "${WRANGLER_NAME_FLAGS[@]}"
 
           printf '%s' "${{ secrets.PREVIEW_REDIS_TOKEN }}" | \
-            pnpm --filter @athlya/api exec wrangler secret put REDIS_TOKEN --env preview
+            pnpm --filter @athlya/api exec wrangler secret put REDIS_TOKEN "${WRANGLER_NAME_FLAGS[@]}"
 
           printf '%s' "${{ secrets.PREVIEW_JWT_JWKS_URL }}" | \
-            pnpm --filter @athlya/api exec wrangler secret put JWT_JWKS_URL --env preview
+            pnpm --filter @athlya/api exec wrangler secret put JWT_JWKS_URL "${WRANGLER_NAME_FLAGS[@]}"
 
           printf '%s' "${{ secrets.PREVIEW_TURNSTILE_SECRET }}" | \
-            pnpm --filter @athlya/api exec wrangler secret put TURNSTILE_SECRET --env preview
+            pnpm --filter @athlya/api exec wrangler secret put TURNSTILE_SECRET "${WRANGLER_NAME_FLAGS[@]}"
 
       - name: Deploy Worker
         id: deploy
@@ -134,17 +136,14 @@ jobs:
           VERSION="pr${{ github.event.pull_request.number }}-${GITHUB_SHA:0:7}"
           DEPLOY_OUT=$(pnpm --filter @athlya/api exec wrangler versions upload \
             --env preview \
+            --name "${PREVIEW_WORKER_NAME}" \
             --var "VERSION=${VERSION}" \
             --message "PR #${{ github.event.pull_request.number }} — ${GITHUB_SHA:0:7}" \
             2>&1)
           echo "$DEPLOY_OUT"
 
-          # Extract the workers.dev URL emitted by wrangler.
-          PREVIEW_URL=$(echo "$DEPLOY_OUT" | grep -oE 'https://[^ ]+\.workers\.dev' | head -1)
-          if [ -z "$PREVIEW_URL" ]; then
-            # Fall back to the deterministic workers.dev URL for the env.
-            PREVIEW_URL="https://athlya-api-preview.${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}.workers.dev"
-          fi
+          # Deterministic per-PR workers.dev URL (no shared DB_URL secret race).
+          PREVIEW_URL="https://${PREVIEW_WORKER_NAME}.${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}.workers.dev"
           echo "preview_url=${PREVIEW_URL}" >> "$GITHUB_OUTPUT"
 
       - name: Comment on PR
@@ -157,10 +156,11 @@ jobs:
           | | |
           |---|---|
           | **Endpoint** | \`${{ steps.deploy.outputs.preview_url }}\` |
+          | **Worker** | \`athlya-api-pr-${{ github.event.pull_request.number }}\` |
           | **Neon branch** | \`${{ steps.neon.outputs.branch_name }}\` |
           | **Commit** | \`${GITHUB_SHA:0:7}\` |
 
-          > Preview shares staging Redis, queues and R2. The database is isolated (dedicated Neon branch).
+          > One Worker + Neon branch per PR (no DB_URL secret race). Redis, queues and R2 remain shared with staging.
           > The Neon branch is deleted automatically when this PR closes."
 
           # Update an existing preview comment rather than spamming new ones.
@@ -184,8 +184,37 @@ jobs:
     name: Teardown preview (PR #${{ github.event.pull_request.number }})
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PREVIEW_WORKER_NAME: athlya-api-pr-${{ github.event.pull_request.number }}
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Delete preview Worker
+        continue-on-error: true
+        run: |
+          pnpm --filter @athlya/api exec wrangler delete \
+            --name "${PREVIEW_WORKER_NAME}" \
+            --force
+          echo "Deleted Worker ${PREVIEW_WORKER_NAME} (or already absent)"
+
       - name: Delete Neon branch
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
