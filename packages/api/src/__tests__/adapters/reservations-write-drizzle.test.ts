@@ -23,18 +23,34 @@ const CLAIMS = {
 
 const fakeDb = { __brand: 'AthlyaDb' } as never;
 
+function makeSelectChain(rows: unknown[]) {
+  return {
+    from: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockResolvedValue(rows),
+      }),
+    }),
+  };
+}
+
+function makeTx(rows: unknown[] = []) {
+  return {
+    select: vi.fn().mockReturnValue(makeSelectChain(rows)),
+  };
+}
+
 beforeEach(() => {
   withTenantMock.mockReset();
   withTenantMock.mockImplementation(
-    async (_db: unknown, _claims: unknown, fn: (tx: unknown) => Promise<unknown>) =>
-      fn({ __brand: 'tx' }),
+    async (_db: unknown, _claims: unknown, fn: (tx: unknown) => Promise<unknown>) => fn(makeTx()),
   );
 });
 
 describe('createDrizzleBookingRepo', () => {
   it('scopes findClass through withTenant', async () => {
     const repo = createDrizzleBookingRepo(fakeDb, CLAIMS);
-    await expect(repo.findClass('00000000-0000-4000-8000-000000000099')).rejects.toThrow();
+    const result = await repo.findClass('00000000-0000-4000-8000-000000000099');
+    expect(result).toBeNull();
     expect(withTenantMock).toHaveBeenCalledWith(fakeDb, CLAIMS, expect.any(Function));
   });
 

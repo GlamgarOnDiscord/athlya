@@ -301,20 +301,13 @@ export function buildReservationsDeps(env: AthlyaBindings): ReservationsDeps {
       const counter = createRedisRemainingCounter(redis);
       const publisher = createBookingEventPublisher();
 
-      // The class's `studio_id` is resolved via `repo.findClass`
-      // inside the service flow; the event envelopes however
-      // need the studio id up-front. We fetch the class once
-      // here to enrich the `studioId` field the service forwards
-      // to the publisher. `bookClass` does its own null check
-      // so a missing class simply falls through to the domain
-      // `class_not_found` branch.
-      const cls = await repo.findClass(input.classId);
-      const studioId = cls?.studioId ?? '';
-
+      // `svcBookClass` runs its own `findClass` pre-flight under RLS.
+      // Outbox envelopes use the caller's studio — any class visible
+      // to this tenant shares `claims.studioId` (cross-tenant → not_found).
       const result = await svcBookClass({
         classId: input.classId,
         userId: claims.userId,
-        studioId,
+        studioId: claims.studioId,
         repo,
         // Adapt `RemainingCounter` (`decr`/`incr`) → the
         // narrower `BookingCounter` shape the service

@@ -68,9 +68,9 @@ import type { CancelOutboxEvent, CancelRepo, ClassForCancel } from '@athlya/rese
 export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
   return {
     async findClass(classId): Promise<BookingClassRow | null> {
-      return withTenant(db, claims, async (tx) => {
-        const rows = await withConnectionRetry(() =>
-          tx
+      return withConnectionRetry(() =>
+        withTenant(db, claims, async (tx) => {
+          const rows = await tx
             .select({
               id: classes.id,
               studioId: classes.studioId,
@@ -80,10 +80,10 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
             })
             .from(classes)
             .where(and(eq(classes.id, classId), isNull(classes.deletedAt)))
-            .limit(1),
-        );
-        return rows[0] ?? null;
-      });
+            .limit(1);
+          return rows[0] ?? null;
+        }),
+      );
     },
 
     async withTransaction<T>(fn: (tx: BookingTx) => Promise<T>): Promise<T> {
