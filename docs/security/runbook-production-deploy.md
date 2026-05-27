@@ -250,7 +250,7 @@ Avant ouverture publique :
 - [ ] Runbook breach (`docs/security/runbook-breach-notification.md`) communiqué à l'on-call
 - [ ] Registre traitement RGPD à jour
 - [ ] Contrats DPA signés avec tous les sous-traitants (Cloudflare, Neon, Upstash, Stripe, Resend, Expo, Sentry)
-- [ ] Notification Expo Push transfert hors-UE → SCC en place
+- [ ] Notification Expo Push transfert hors-UE → SCC en place ([`docs/compliance/expo-push-transfers.md`](../compliance/expo-push-transfers.md))
 
 ## Phase 10 — Long terme (post-prod)
 
