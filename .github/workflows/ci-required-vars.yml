@@ -7,11 +7,6 @@ on:
   schedule:
     - cron: '0 7 * * 1'
   workflow_dispatch:
-  push:
-    branches:
-      - master
-    paths:
-      - '.github/workflows/ci-required-vars.yml'
 
 jobs:
   check-staging-vars:
