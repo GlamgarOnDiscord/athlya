@@ -93,6 +93,7 @@ import type {
   AuthUserDeletedEvent,
   MembersExportRequestedEvent,
 } from '@athlya/shared/events';
+import { parseEvent } from '@athlya/shared/events';
 import type { MessageBatch } from '@cloudflare/workers-types';
 import type { Context } from 'hono';
 
@@ -1463,7 +1464,20 @@ export async function handleEventsBatch(
         }
         default: {
           if (NOTIFICATION_EVENT_TYPES.has(envelope.type)) {
-            await handleNotificationEvent(msg.body as AthlyaEvent, buildNotificationsDeps(env));
+            let event: AthlyaEvent;
+            try {
+              event = parseEvent(msg.body);
+            } catch (err) {
+              console.warn('[worker] notifications event malformed, acking', {
+                queue: batch.queue,
+                messageId: msg.id,
+                eventType: envelope.type,
+                error: err instanceof Error ? err.message : String(err),
+              });
+              msg.ack();
+              break;
+            }
+            await handleNotificationEvent(event, buildNotificationsDeps(env));
             msg.ack();
             break;
           }

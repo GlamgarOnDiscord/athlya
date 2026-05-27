@@ -44,6 +44,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parseEvent } from '@athlya/shared/events';
 
 /* ------------------------------------------------------------------ */
 /*  Mocks                                                              */
@@ -273,8 +274,8 @@ describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () =
   });
 
   it('routes reservation.created events to notifications consumer and acks', async () => {
-    const notificationEvent = {
-      id: 'evt-other-1',
+    const notificationEvent = parseEvent({
+      id: '00000000-0000-4000-a000-000000000010',
       type: 'reservation.created',
       occurredAt: '2026-05-15T10:00:00.000Z',
       studioId: '11111111-1111-4111-a111-111111111111',
@@ -283,7 +284,7 @@ describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () =
         classId: '22222222-2222-4222-a222-222222222222',
         userId: '33333333-3333-4333-a333-333333333333',
       },
-    };
+    });
     const msg = mockMessage('msg-notification', notificationEvent);
 
     await handleEventsBatch(mockBatch('athlya-events', [msg]), mockEnv());
@@ -292,6 +293,27 @@ describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () =
     expect(memberMocks.runExportJob).not.toHaveBeenCalled();
     expect(adapterMocks.buildNotificationsDeps).toHaveBeenCalledTimes(1);
     expect(notificationMocks.handleEvent).toHaveBeenCalledTimes(1);
+    expect(msg.ack).toHaveBeenCalledTimes(1);
+    expect(msg.retry).not.toHaveBeenCalled();
+  });
+
+  it('acks malformed notification payloads without retrying', async () => {
+    const malformed = {
+      id: 'not-a-uuid',
+      type: 'reservation.created',
+      occurredAt: '2026-05-15T10:00:00.000Z',
+      payload: {
+        reservationId: '11111111-1111-4111-a111-111111111111',
+        classId: '22222222-2222-4222-a222-222222222222',
+        userId: '33333333-3333-4333-a333-333333333333',
+      },
+    };
+    const msg = mockMessage('msg-bad-notification', malformed);
+
+    await handleEventsBatch(mockBatch('athlya-events', [msg]), mockEnv());
+
+    expect(notificationMocks.handleEvent).not.toHaveBeenCalled();
+    expect(adapterMocks.buildNotificationsDeps).not.toHaveBeenCalled();
     expect(msg.ack).toHaveBeenCalledTimes(1);
     expect(msg.retry).not.toHaveBeenCalled();
   });

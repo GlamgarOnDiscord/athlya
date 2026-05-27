@@ -25,9 +25,26 @@ if [[ -z "${PR_REF}" ]]; then
 fi
 
 if ! command -v gh >/dev/null 2>&1; then
-  echo "ERROR: gh CLI required" >&2
-  exit 2
+  for candidate in \
+    "/c/Program Files/GitHub CLI/gh.exe" \
+    "${LOCALAPPDATA}/Programs/GitHub CLI/gh.exe" \
+    "/mnt/c/Program Files/GitHub CLI/gh.exe"; do
+    if [[ -x "${candidate}" ]]; then
+      GH_BIN="${candidate}"
+      break
+    fi
+  done
+  if [[ -z "${GH_BIN:-}" ]]; then
+    echo "ERROR: gh CLI required (install: https://cli.github.com/)" >&2
+    exit 2
+  fi
+else
+  GH_BIN="gh"
 fi
+
+gh() {
+  "${GH_BIN}" "$@"
+}
 
 PR_NUMBER="$(gh pr view "${PR_REF}" --json number --jq '.number')"
 PR_URL="$(gh pr view "${PR_NUMBER}" --json url --jq '.url')"

@@ -10,9 +10,10 @@
  *
  *   - `dedup`       — Upstash Redis `SET key value NX EX ttl`.
  *   - `recipients`  — Drizzle read model (`users` + `push_tokens`).
- *   - `email`       — Resend transport (`RESEND_API_KEY`), with a
- *                     console fallback in dev/staging when the key is
- *                     absent.
+ *   - `email`       — Resend transport (`RESEND_API_KEY`). Dev-only
+ *                     no-op when the key is absent; staging/production
+ *                     throw so the queue retries instead of silently
+ *                     dropping transactional emails.
  *   - `push`        — Expo push endpoint (`exp.host`) with retry.
  *   - `logger`      — console-backed structured shim.
  *
@@ -115,14 +116,22 @@ function buildEmailSender(env: AthlyaBindings, logger: Logger): EmailSender {
       : 'Athlya <noreply@athlya.app>';
 
   if (apiKey === undefined || apiKey === '') {
+    if (env.ENVIRONMENT === 'dev') {
+      return {
+        send(message) {
+          logger.warn('notifications.email.resend_missing_key', {
+            env: env.ENVIRONMENT,
+            to: message.to,
+            subject: message.subject,
+          });
+          return Promise.resolve();
+        },
+      };
+    }
+
     return {
-      send(message) {
-        logger.warn('notifications.email.resend_missing_key', {
-          env: env.ENVIRONMENT,
-          to: message.to,
-          subject: message.subject,
-        });
-        return Promise.resolve();
+      async send() {
+        throw new Error('RESEND_API_KEY missing in non-dev env');
       },
     };
   }
