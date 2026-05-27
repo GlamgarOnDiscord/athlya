@@ -30,10 +30,11 @@ function asRedis(fake: FakeRedis): Redis {
 interface FakeContext {
   readonly authClaims?: { userId: string; studioId: string; role: string };
   readonly traceId?: string;
+  readonly env?: { ENVIRONMENT?: string };
 }
 
 function makeCtx(values: FakeContext = {}): {
-  env: { REDIS_URL?: string; REDIS_TOKEN?: string };
+  env: { REDIS_URL?: string; REDIS_TOKEN?: string; ENVIRONMENT?: string };
   get(key: string): unknown;
   body(data: string, status: number, headers: Record<string, string>): Response;
 } {
@@ -41,7 +42,11 @@ function makeCtx(values: FakeContext = {}): {
   if (values.authClaims) map.set('authClaims', values.authClaims);
   if (values.traceId !== undefined) map.set('traceId', values.traceId);
   return {
-    env: {},
+    env: {
+      REDIS_URL: 'https://example.upstash.io',
+      REDIS_TOKEN: 'token',
+      ...values.env,
+    },
     get(key: string): unknown {
       return map.get(key);
     },
@@ -213,19 +218,32 @@ describe('concurrencyLimit — over the cap', () => {
 /*  Fail-open                                                            */
 /* ------------------------------------------------------------------ */
 
-describe('concurrencyLimit — fail-open on Redis outage', () => {
-  it('passes through when INCR throws', async () => {
+describe('concurrencyLimit — Redis outage', () => {
+  it('fail-open in dev when INCR throws', async () => {
     const fake = new FakeRedis();
     vi.spyOn(fake, 'incr').mockRejectedValueOnce(new Error('ECONNREFUSED'));
     const middleware = concurrencyLimit({ redis: asRedis(fake) });
 
     const next = vi.fn(() => Promise.resolve());
-    await middleware(makeCtx({ authClaims: ALICE }), next);
+    await middleware(makeCtx({ authClaims: ALICE, env: { ENVIRONMENT: 'dev' } }), next);
 
-    // The middleware swallows the Redis error and lets the
-    // request continue — concurrency is defence in depth, not
-    // primary defence.
     expect(next).toHaveBeenCalledOnce();
+  });
+
+  it('fail-closed in staging when INCR throws', async () => {
+    const fake = new FakeRedis();
+    vi.spyOn(fake, 'incr').mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    const middleware = concurrencyLimit({ redis: asRedis(fake) });
+
+    const next = vi.fn(() => Promise.resolve());
+    const result = await middleware(
+      makeCtx({ authClaims: ALICE, env: { ENVIRONMENT: 'staging' } }),
+      next,
+    );
+
+    expect(next).not.toHaveBeenCalled();
+    expect(result).toBeInstanceOf(Response);
+    expect((result as Response).status).toBe(503);
   });
 });
 

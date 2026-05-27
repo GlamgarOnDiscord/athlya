@@ -34,13 +34,14 @@
  * through the IP-based rate limit instead. This middleware should
  * be mounted AFTER `jwtAuth()` so `authClaims.userId` is populated.
  *
- * Failure mode
+ * Failure mode (issue #65)
  * ------------
- * Fail-open by default. An Upstash hiccup must not lock users out
- * of the API; the sliding-window rate-limit (which has its own
- * fail-open) is the primary defence anyway. The concurrency cap is
- * defence in depth.
+ * Staging/production fail-closed when Redis is unreachable — the
+ * reservations write surface must not run unbounded. Dev stays
+ * fail-open for local iteration without Upstash.
  */
+
+import { buildDependencyUnavailableResponse } from './limiter-guard.js';
 
 import type { Redis } from '@upstash/redis';
 
@@ -197,24 +198,27 @@ export function concurrencyLimit(opts: ConcurrencyLimitOptions = {}): Concurrenc
     try {
       redis = injectedRedis ?? (await getCachedRedis(c.env));
     } catch {
-      // Misconfiguration (REDIS_URL missing). Fail-open —
-      // the sliding-window limiter is the primary defence.
-      await next();
-      return undefined;
+      if (env.ENVIRONMENT === 'dev') {
+        await next();
+        return undefined;
+      }
+      const traceId =
+        typeof c.get('traceId') === 'string' ? (c.get('traceId') as string) : 'unknown';
+      return buildDependencyUnavailableResponse(traceId);
     }
 
     const key = `${CONCURRENCY_BUCKET_PREFIX}:${userId}`;
     let count: number;
     try {
-      // Atomic increment. The post-increment value tells us
-      // immediately whether we are over the cap.
       count = await redis.incr(key);
     } catch {
-      // Upstash unreachable — fail-open. The sliding-window
-      // limiter (with its own fail-open) is the primary
-      // defence; the concurrency cap is defence in depth.
-      await next();
-      return undefined;
+      if (env.ENVIRONMENT === 'dev') {
+        await next();
+        return undefined;
+      }
+      const traceId =
+        typeof c.get('traceId') === 'string' ? (c.get('traceId') as string) : 'unknown';
+      return buildDependencyUnavailableResponse(traceId);
     }
 
     // Best-effort expire so an orphaned counter eventually self
