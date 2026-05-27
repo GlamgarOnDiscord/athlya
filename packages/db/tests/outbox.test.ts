@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   claimBatch,
+  countPendingOutbox,
   InvalidOutboxInputError,
   insertOutbox,
   markFailed,
@@ -175,6 +176,28 @@ describe('claimBatch', () => {
   it('rejects an oversized limit to protect against pathological drain loops', async () => {
     const { tx } = makeFakeTx();
     await expect(claimBatch(tx, 100_000)).rejects.toBeInstanceOf(InvalidOutboxInputError);
+  });
+});
+
+describe('countPendingOutbox', () => {
+  it('counts unpublished rows and returns the oldest occurred_at', async () => {
+    const { tx, enqueueResult } = makeFakeTx();
+    const oldest = new Date('2025-06-01T09:00:00.000Z');
+    enqueueResult([{ pending: 3, oldest_occurred_at: oldest }]);
+
+    const snapshot = await countPendingOutbox(tx);
+
+    expect(snapshot.pending).toBe(3);
+    expect(snapshot.oldestOccurredAt).toEqual(oldest);
+  });
+
+  it('returns zero pending when the table has no unpublished rows', async () => {
+    const { tx, enqueueResult } = makeFakeTx();
+    enqueueResult([{ pending: 0, oldest_occurred_at: null }]);
+
+    const snapshot = await countPendingOutbox(tx);
+
+    expect(snapshot).toEqual({ pending: 0, oldestOccurredAt: null });
   });
 });
 
