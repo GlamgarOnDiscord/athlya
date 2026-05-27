@@ -17,7 +17,7 @@ Optional but recommended when staging is live:
 | `load-test` jobs | `load-test.yml` | `vars.K6_STAGING_BASE_URL` + secrets |
 | `zap` job | `zap-baseline.yml` | `vars.ZAP_TARGET_URL` |
 
-Weekly `ci-required-vars.yml` fails on `master` if `K6_STAGING_BASE_URL` or `ZAP_TARGET_URL` are empty.
+Weekly `ci-required-vars.yml` (lundi 07:00 UTC) échoue si `K6_STAGING_BASE_URL` ou `ZAP_TARGET_URL` sont vides. Déclencher manuellement via **Actions → CI required vars → Run workflow** après configuration.
 
 ## Repository variables (Actions)
 
