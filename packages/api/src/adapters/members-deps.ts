@@ -42,6 +42,7 @@ import {
 
 import { publish, type Queue } from '../events/publish.js';
 
+import { createR2AvatarUploadStore } from './avatar-upload-store-r2.js';
 import {
   getOrCreateDbHttp,
   primeDbHttpForTests,
@@ -149,6 +150,19 @@ export function buildMembersDeps(env: AthlyaBindings): MembersDeps {
       const db = getOrCreateDbHttp(env.DB_URL);
       const repo = createDrizzleMemberRepo(db);
       return svcUpdateProfile(userId, patch, { repo });
+    },
+
+    async uploadAvatar(userId, contentType, body) {
+      const store = createR2AvatarUploadStore(
+        env.AVATARS_BUCKET,
+        env.AVATARS_PUBLIC_URL,
+        env.ENVIRONMENT,
+      );
+      const avatarUrl = await store.putAvatar(userId, contentType, body);
+      const db = getOrCreateDbHttp(env.DB_URL);
+      const repo = createDrizzleMemberRepo(db);
+      await svcUpdateProfile(userId, { avatarUrl }, { repo });
+      return { avatarUrl };
     },
 
     async updateConsents(userId: string, input: UpdateConsentsRequest) {

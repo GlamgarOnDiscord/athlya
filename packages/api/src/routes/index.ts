@@ -209,6 +209,7 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
     members: {
       getProfile: forward('members', 'getProfile'),
       updateProfile: forward('members', 'updateProfile'),
+      uploadAvatar: forward('members', 'uploadAvatar'),
       updateConsents: forward('members', 'updateConsents'),
       enqueueExport: forward('members', 'enqueueExport'),
       listMembersByStudio: forward('members', 'listMembersByStudio'),
@@ -337,6 +338,7 @@ export function buildDefaultDeps(env: AthlyaBindings): DomainDeps {
     : {
         getProfile: () => notImplemented('members.getProfile'),
         updateProfile: () => notImplemented('members.updateProfile'),
+        uploadAvatar: () => notImplemented('members.uploadAvatar'),
         updateConsents: () => notImplemented('members.updateConsents'),
         enqueueExport: () => notImplemented('members.enqueueExport'),
         listMembersByStudio: () => notImplemented('members.listMembersByStudio'),

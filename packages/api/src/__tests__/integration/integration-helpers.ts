@@ -452,6 +452,7 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
       return { id: u.userId, displayName: u.displayName, email: u.email };
     }),
     updateProfile: vi.fn(async () => ({})),
+    uploadAvatar: vi.fn(async () => ({ avatarUrl: 'https://avatars.athlya.app/test.jpg' })),
     updateConsents: vi.fn(async () => ({})),
     enqueueExport: vi.fn(async () => ({ jobId: makeUuid(9999) })),
     listMembersByStudio: vi.fn(async () => ({ items: [], nextCursor: null })),
