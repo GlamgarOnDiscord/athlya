@@ -327,6 +327,8 @@ La promesse "free tier solo" de l'analyse concurrentielle initiale n'est pas att
 
 > Au-delà de ~5 studios actifs ou ~500 membres : prévoir **150-250 €/mois**.
 
+Alerting et seuils par fournisseur : [`docs/runbooks/cost-monitoring.md`](docs/runbooks/cost-monitoring.md).
+
 Si la contrainte budgétaire est forte, plusieurs composants ont des chemins d'éjection vers du self-hosted sans coût récurrent — voir [Matrice fournisseurs](#matrice-fournisseurs).
 
 ---
