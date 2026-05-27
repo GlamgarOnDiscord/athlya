@@ -61,3 +61,4 @@ export {
   type ClaimedOutboxRow,
   type OutboxPendingSnapshot,
 } from './outbox.js';
+export { claimStripeWebhookEvent } from './stripe-webhook-events.js';

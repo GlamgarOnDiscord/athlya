@@ -267,6 +267,7 @@ describe('verifyStripeSignature', () => {
 
 interface DepsHandles {
   readonly verifySignature: Mock<WebhookDeps['verifySignature']>;
+  readonly claimStripeEvent: Mock<WebhookDeps['claimStripeEvent']>;
   readonly appendAudit: Mock<WebhookDeps['appendAudit']>;
   readonly publish: Mock<WebhookDeps['publish']>;
   /**
@@ -303,6 +304,8 @@ function buildDeps(
 
   const verifySignature = vi.fn<WebhookDeps['verifySignature']>().mockResolvedValue(verifyResult);
 
+  const claimStripeEvent = vi.fn<WebhookDeps['claimStripeEvent']>().mockResolvedValue(true);
+
   const appendAudit = vi.fn<WebhookDeps['appendAudit']>();
   if (options.appendAuditError !== undefined) {
     appendAudit.mockRejectedValue(options.appendAuditError);
@@ -325,11 +328,13 @@ function buildDeps(
 
   return {
     verifySignature,
+    claimStripeEvent,
     appendAudit,
     publish,
     withTransaction,
     deps: {
       verifySignature,
+      claimStripeEvent,
       appendAudit,
       publish,
       // Narrow the mock back to the generic `WebhookDeps`
@@ -431,6 +436,26 @@ describe('handleStripeWebhook — happy paths', () => {
     expect(envelope?.type).toBe('billing.subscription.failed');
     expect(envelope?.payload['invoice']).toBe(stripeEvent.data);
     expect(handles.appendAudit).not.toHaveBeenCalled();
+  });
+
+  it('returns processed without publishing when claimStripeEvent reports a duplicate', async () => {
+    const stripeEvent: StripeEvent = {
+      id: 'evt_dup_1',
+      type: 'checkout.session.completed',
+      data: { object: { id: 'cs_dup' } },
+    };
+    const handles = buildDeps({ event: stripeEvent });
+    handles.claimStripeEvent.mockResolvedValue(false);
+
+    const outcome = await handleStripeWebhook('<raw>', 'sig', WEBHOOK_SECRET, handles.deps);
+
+    expect(outcome).toEqual({
+      kind: 'processed',
+      eventType: 'checkout.session.completed',
+      eventId: 'evt_dup_1',
+    });
+    expect(handles.publish).not.toHaveBeenCalled();
+    expect(handles.withTransaction).not.toHaveBeenCalled();
   });
 
   it('returns unknown_event_type for unhandled events and does not publish / audit', async () => {
