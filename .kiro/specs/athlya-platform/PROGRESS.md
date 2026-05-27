@@ -1,9 +1,9 @@
 # Athlya Platform — Progress & Remaining Work
 
-**Dernière mise à jour :** Dependabot security triage livré — 8 alertes traitées (PR #58 mergée) : #3 ws + #7 uuid → pnpm scoped overrides `miniflare>ws@8.20.1` + `dockerode>uuid@11.1.1` ; #1 esbuild + #2 postcss → dismissed (faux positifs) ; #4/#5/#6/#8 → fixed automatiquement par les overrides lockfile
+**Dernière mise à jour :** N2.13 R2 avatar upload livré — `PUT /v1/members/me/avatar` (PR #59 mergée) : R2 bucket adapter, stable key `avatars/{userId}/avatar`, `AvatarUploadNotConfiguredError` (mode dégradé 503), Content-Length pre-check, CORS `PUT` method, 6 unit tests.
 **Tâches complétées :** Epic 14 (1/1), Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.8.1, CN.8.2, CN.9.2, CN.9.3 — cases parents cochées
 **Hardening tasks livrées :** 8 / 8 (H1 à H8) + 6 issues GitHub (#47–#53 #56) + 8 Dependabot alerts (PR #58)
-**Niveau 2 (live wiring) :** 12 / 13 items (voir section dédiée)
+**Niveau 2 (live wiring) :** 13 / 13 items ✅ COMPLET (voir section dédiée)
 
 ---
 
@@ -184,9 +184,7 @@ Livré hors-spec, workflow "brancher les secrets live + adapters Drizzle/Upstash
 
 ## Restant pour Niveau 2 complet
 
-1. **Adapter transactionnel book/cancel Epic 6** — ~300 lignes, 2 fichiers (BookingRepo + CancelRepo Drizzle). Délivre `POST /v1/reservations` + `DELETE /v1/reservations/:id` + FIFO waitlist + outbox events.
-2. **Migration `postgres-js` → `@neondatabase/serverless`** (driver HTTP stateless) — permettrait de ré-activer un cache DB par isolate sans violer l'I/O isolation Workers. Latence -50/100ms par request.
-3. **Upload R2 pour avatars** — remplacer le `data:` URL inline par un presigned R2 upload. Slice dédiée (API signer + consumer + CORS).
+✅ **Niveau 2 complet** — tous les 13 items livrés.
 
 ---
 
@@ -303,6 +301,7 @@ Livré hors-spec, workflow "brancher les secrets live + adapters Drizzle/Upstash
 - Tasks 12.2 et 12.3 marquées `[x]` dans `tasks.md`.
 
 ### Slice 12.B-bis — Studio Turnstile widget ports ✅
+
 - Files créés (3):
   - `apps/studio/src/types/turnstile.d.ts` — global ambient declaration (mirror web).
   - `apps/studio/src/components/TurnstileWidget.tsx` — widget complet (refresh-expired auto, error/expired/timeout callbacks, reset handle).
@@ -310,6 +309,14 @@ Livré hors-spec, workflow "brancher les secrets live + adapters Drizzle/Upstash
 - LoginForm patché pour wirer le widget avec consume-token-before-fetch + reset après échec + button disabled tant que pas de token frais.
 - Page login pass `nonce` depuis `headers().get('x-nonce')`.
 
+
+### N2.13 — R2 avatar upload ✅ (PR #59)
+- `packages/api/src/adapters/avatar-upload-store-r2.ts` : adapter R2-backed, stable key `avatars/{userId}/avatar` (sans extension — `httpMetadata.contentType` préserve le MIME), `AvatarUploadNotConfiguredError` (mode dégradé 503 si `AVATARS_BUCKET` ou `AVATARS_PUBLIC_URL` absent), guard `publicBaseUrl` avant le `bucket.put` (pas d'objet orphelin), cap 5 MiB.
+- `packages/api/src/routes/members.ts` : `PUT /v1/members/me/avatar` — Content-Type guard (415), Content-Length pre-check (413 avant lecture ArrayBuffer), body size check (413), empty body guard (400), mapping `AvatarUploadNotConfiguredError` → 503.
+- `packages/api/src/adapters/members-deps.ts` : méthode `uploadAvatar` — `createR2AvatarUploadStore` + `store.putAvatar` + `svcUpdateProfile({ avatarUrl })` en séquence.
+- `packages/api/src/worker.ts` : bypass body limit global 256 KiB pour `PUT /v1/members/me/avatar` ; CORS `allowMethods` étendu avec `'PUT'`.
+- `packages/api/src/__tests__/routes/members-avatar.test.ts` : 6 tests unitaires (401, 415, 413, 400, 503, 200).
+- Niveau 2 désormais **complet à 13/13**.
 
 ---
 
