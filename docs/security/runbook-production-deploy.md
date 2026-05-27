@@ -139,7 +139,24 @@ NEXT_PUBLIC_CSP_REPORT_URI=https://api.athlya.app/v1/csp-report
 
 ## Phase 7 — Vérifications post-deploy
 
-### Health check
+### Readiness gate (bloquant — issue #71)
+
+Après chaque `wrangler deploy`, **ne pas router le trafic** tant que `/health/ready` n'est pas vert :
+
+```bash
+# Script (30 tentatives × 2s)
+bash scripts/wait-health-ready.sh https://api.athlya.app
+
+# Manuel
+curl -sf https://api.athlya.app/health/ready | jq .
+# Attendu: HTTP 200 + { "status": "ready", "checks": { "db": { "status": "ok" }, ... } }
+```
+
+Si `503` + `not_ready` : vérifier `DB_URL`, `REDIS_URL`/`REDIS_TOKEN`, `CRON_DB_URL` (prod/staging).
+
+Configurer l'uptime monitor sur **`/health/ready`** (pas seulement `/health`) — alerte P1 si `not_ready` > 2 min.
+
+### Liveness (process up)
 
 ```bash
 curl -i https://api.athlya.app/health
