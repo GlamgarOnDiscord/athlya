@@ -711,7 +711,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
           'content-type': PROBLEM_JSON,
         });
       },
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     })(c, next);
   });
 
