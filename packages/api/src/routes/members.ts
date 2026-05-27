@@ -229,6 +229,16 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
       );
     }
 
+    const contentLength = parseInt(c.req.header('content-length') ?? '0', 10);
+    if (!isNaN(contentLength) && contentLength > AVATAR_MAX_BYTES) {
+      return avatarProblem(
+        c,
+        413,
+        `Avatar must not exceed ${AVATAR_MAX_BYTES / (1024 * 1024)} MB`,
+        'avatar_too_large',
+      );
+    }
+
     const body = await c.req.raw.arrayBuffer();
     if (body.byteLength > AVATAR_MAX_BYTES) {
       return avatarProblem(
