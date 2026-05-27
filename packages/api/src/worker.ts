@@ -380,7 +380,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
         return origin === allowed ? origin : '';
       },
       allowHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'cf-turnstile-token'],
-      allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       credentials: true,
       maxAge: 86400,
     }),
@@ -711,7 +711,8 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
           'content-type': PROBLEM_JSON,
         });
       },
-    })(c as Context<HonoEnv>, next);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    })(c, next);
   });
 
   // 7. Tenant claim guard — Sprint 1 / Slice 1.4 (Sprint-1 SP1.5,
