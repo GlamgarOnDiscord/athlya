@@ -51,9 +51,25 @@ vi.mock('@athlya/members', () => ({
   runExportJob: memberMocks.runExportJob,
 }));
 
+const notificationMocks = vi.hoisted(() => ({
+  handleEvent: vi.fn(),
+}));
+
+vi.mock('@athlya/notifications', () => ({
+  HANDLED_EVENT_TYPES: [
+    'reservation.created',
+    'reservation.reminder',
+    'reservation.cancelled',
+    'reservation.promoted',
+    'billing.subscription.failed',
+  ],
+  handleEvent: notificationMocks.handleEvent,
+}));
+
 const adapterMocks = vi.hoisted(() => ({
   buildCascadeDeps: vi.fn(),
   buildExportDeps: vi.fn(),
+  buildNotificationsDeps: vi.fn(),
 }));
 
 vi.mock('../adapters/cascade-deps.js', () => ({
@@ -62,6 +78,10 @@ vi.mock('../adapters/cascade-deps.js', () => ({
 
 vi.mock('../adapters/export-deps.js', () => ({
   buildExportDeps: adapterMocks.buildExportDeps,
+}));
+
+vi.mock('../adapters/notifications-deps.js', () => ({
+  buildNotificationsDeps: adapterMocks.buildNotificationsDeps,
 }));
 
 /* ------------------------------------------------------------------ */
@@ -146,6 +166,7 @@ beforeEach(() => {
 
   adapterMocks.buildCascadeDeps.mockReturnValue({ __brand: 'cascade-deps-sentinel' });
   adapterMocks.buildExportDeps.mockReturnValue({ __brand: 'export-deps-sentinel' });
+  adapterMocks.buildNotificationsDeps.mockReturnValue({ __brand: 'notifications-deps-sentinel' });
   memberMocks.handleUserDeleted.mockResolvedValue({
     kind: 'ok',
     counts: { reservations: 0, sessions: 0, pushTokens: 0, auditAnonymized: 0 },
@@ -156,6 +177,11 @@ beforeEach(() => {
     downloadUrl: 'https://r2.invalid/x.zip',
     expiresAt: '2026-05-18T10:00:00.000Z',
     sizeBytes: 0,
+  });
+  notificationMocks.handleEvent.mockResolvedValue({
+    status: 'ok',
+    email: true,
+    push: true,
   });
 });
 

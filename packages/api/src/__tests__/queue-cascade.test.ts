@@ -43,6 +43,7 @@
  * Validates: Findings S5-002 (RGPD Article 17 cascade dispatch).
  */
 
+import { parseEvent } from '@athlya/shared/events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /* ------------------------------------------------------------------ */
@@ -59,9 +60,25 @@ vi.mock('@athlya/members', () => ({
   runExportJob: memberMocks.runExportJob,
 }));
 
+const notificationMocks = vi.hoisted(() => ({
+  handleEvent: vi.fn(),
+}));
+
+vi.mock('@athlya/notifications', () => ({
+  HANDLED_EVENT_TYPES: [
+    'reservation.created',
+    'reservation.reminder',
+    'reservation.cancelled',
+    'reservation.promoted',
+    'billing.subscription.failed',
+  ],
+  handleEvent: notificationMocks.handleEvent,
+}));
+
 const adapterMocks = vi.hoisted(() => ({
   buildCascadeDeps: vi.fn(),
   buildExportDeps: vi.fn(),
+  buildNotificationsDeps: vi.fn(),
 }));
 
 vi.mock('../adapters/cascade-deps.js', () => ({
@@ -70,6 +87,10 @@ vi.mock('../adapters/cascade-deps.js', () => ({
 
 vi.mock('../adapters/export-deps.js', () => ({
   buildExportDeps: adapterMocks.buildExportDeps,
+}));
+
+vi.mock('../adapters/notifications-deps.js', () => ({
+  buildNotificationsDeps: adapterMocks.buildNotificationsDeps,
 }));
 
 /* ------------------------------------------------------------------ */
@@ -166,6 +187,7 @@ beforeEach(() => {
   // distinguishable object reference reach the consumer.
   adapterMocks.buildCascadeDeps.mockReturnValue({ __brand: 'cascade-deps-sentinel' });
   adapterMocks.buildExportDeps.mockReturnValue({ __brand: 'export-deps-sentinel' });
+  adapterMocks.buildNotificationsDeps.mockReturnValue({ __brand: 'notifications-deps-sentinel' });
   memberMocks.handleUserDeleted.mockResolvedValue({
     kind: 'ok',
     counts: { reservations: 0, sessions: 0, pushTokens: 0, auditAnonymized: 0 },
@@ -176,6 +198,11 @@ beforeEach(() => {
     downloadUrl: 'https://r2.invalid/x.zip',
     expiresAt: '2026-05-18T10:00:00.000Z',
     sizeBytes: 0,
+  });
+  notificationMocks.handleEvent.mockResolvedValue({
+    status: 'ok',
+    email: true,
+    push: true,
   });
 });
 
@@ -246,12 +273,57 @@ describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () =
     expect(msg.ack).not.toHaveBeenCalled();
   });
 
-  it('acks unrelated event types without invoking either consumer', async () => {
-    const stranger = {
-      id: 'evt-other-1',
+  it('routes reservation.created events to notifications consumer and acks', async () => {
+    const notificationEvent = parseEvent({
+      id: '00000000-0000-4000-a000-000000000010',
       type: 'reservation.created',
       occurredAt: '2026-05-15T10:00:00.000Z',
-      payload: { reservationId: 'r-1' },
+      studioId: '11111111-1111-4111-a111-111111111111',
+      payload: {
+        reservationId: '11111111-1111-4111-a111-111111111111',
+        classId: '22222222-2222-4222-a222-222222222222',
+        userId: '33333333-3333-4333-a333-333333333333',
+      },
+    });
+    const msg = mockMessage('msg-notification', notificationEvent);
+
+    await handleEventsBatch(mockBatch('athlya-events', [msg]), mockEnv());
+
+    expect(memberMocks.handleUserDeleted).not.toHaveBeenCalled();
+    expect(memberMocks.runExportJob).not.toHaveBeenCalled();
+    expect(adapterMocks.buildNotificationsDeps).toHaveBeenCalledTimes(1);
+    expect(notificationMocks.handleEvent).toHaveBeenCalledTimes(1);
+    expect(msg.ack).toHaveBeenCalledTimes(1);
+    expect(msg.retry).not.toHaveBeenCalled();
+  });
+
+  it('acks malformed notification payloads without retrying', async () => {
+    const malformed = {
+      id: 'not-a-uuid',
+      type: 'reservation.created',
+      occurredAt: '2026-05-15T10:00:00.000Z',
+      payload: {
+        reservationId: '11111111-1111-4111-a111-111111111111',
+        classId: '22222222-2222-4222-a222-222222222222',
+        userId: '33333333-3333-4333-a333-333333333333',
+      },
+    };
+    const msg = mockMessage('msg-bad-notification', malformed);
+
+    await handleEventsBatch(mockBatch('athlya-events', [msg]), mockEnv());
+
+    expect(notificationMocks.handleEvent).not.toHaveBeenCalled();
+    expect(adapterMocks.buildNotificationsDeps).not.toHaveBeenCalled();
+    expect(msg.ack).toHaveBeenCalledTimes(1);
+    expect(msg.retry).not.toHaveBeenCalled();
+  });
+
+  it('acks unrelated event types without invoking consumers', async () => {
+    const stranger = {
+      id: 'evt-other-2',
+      type: 'auth.user.registered',
+      occurredAt: '2026-05-15T10:00:00.000Z',
+      payload: { userId: '11111111-1111-4111-a111-111111111111' },
     };
     const msg = mockMessage('msg-other', stranger);
 
@@ -259,6 +331,7 @@ describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () =
 
     expect(memberMocks.handleUserDeleted).not.toHaveBeenCalled();
     expect(memberMocks.runExportJob).not.toHaveBeenCalled();
+    expect(notificationMocks.handleEvent).not.toHaveBeenCalled();
     expect(msg.ack).toHaveBeenCalledTimes(1);
     expect(msg.retry).not.toHaveBeenCalled();
   });
