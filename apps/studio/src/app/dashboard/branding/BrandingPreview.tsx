@@ -9,10 +9,9 @@
  * Why a separate file?
  * --------------------
  * The page itself is a Server Component (locale resolution +
- * static render). The preview uses inline styles bound to the
- * `color` prop; keeping it in a Client Component is the cleanest
- * way to ensure the inline `style` attribute is allowed by the
- * strict CSP.
+ * static render). Dynamic brand colours use CSS variables set via
+ * the CSSOM (`setProperty`) so production CSP does not rely on
+ * `style=""` attributes in app code (issue #75).
  *
  * Validation flow
  * ---------------
@@ -30,7 +29,9 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -91,6 +92,14 @@ export function BrandingPreview({ color }: BrandingPreviewProps): ReactElement {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
 
   const fg = useMemo(() => contrastForeground(currentColor), [currentColor]);
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = previewRef.current;
+    if (root === null) return;
+    root.style.setProperty('--brand-bg', currentColor);
+    root.style.setProperty('--brand-fg', fg);
+  }, [currentColor, fg]);
 
   const onColorChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setDraft(e.target.value);
@@ -140,12 +149,11 @@ export function BrandingPreview({ color }: BrandingPreviewProps): ReactElement {
   );
 
   return (
-    <div className="flex flex-col gap-4">
+    <div ref={previewRef} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-4">
         <div
           aria-hidden="true"
-          style={{ backgroundColor: currentColor }}
-          className="size-12 rounded-full border border-border"
+          className="brand-preview-swatch size-12 rounded-full border border-border"
         />
         <div className="flex flex-col text-sm">
           <span className="font-mono text-base">{currentColor}</span>
@@ -158,10 +166,7 @@ export function BrandingPreview({ color }: BrandingPreviewProps): ReactElement {
             })}
           </span>
         </div>
-        <span
-          className="ml-auto rounded-md px-4 py-2 text-sm font-medium"
-          style={{ backgroundColor: currentColor, color: fg }}
-        >
+        <span className="brand-preview-sample ml-auto rounded-md px-4 py-2 text-sm font-medium">
           {t('studio.branding.brandColor.sampleButton')}
         </span>
       </div>

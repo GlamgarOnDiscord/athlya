@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,6 +55,11 @@ export function ClassCard({
   );
   const startLabel = fmt.format(new Date(startsAt));
   const errorSlotId = `class-card-${id}-error`;
+  const capacityTrackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    capacityTrackRef.current?.style.setProperty('--bar-scale', String(pct / 100));
+  }, [pct]);
 
   const onClick = useCallback(() => {
     void onBook(id);
@@ -77,10 +82,15 @@ export function ClassCard({
               {remaining} / {capacity}
             </span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            ref={capacityTrackRef}
+            className="h-2 w-full overflow-hidden rounded-full bg-muted"
+          >
             <div
-              className={cn('h-full rounded-full transition-all', barColor)}
-              style={{ width: `${pct}%` }}
+              className={cn(
+                'class-card-capacity-bar h-full w-full origin-left rounded-full transition-transform',
+                barColor,
+              )}
               role="presentation"
             />
           </div>
