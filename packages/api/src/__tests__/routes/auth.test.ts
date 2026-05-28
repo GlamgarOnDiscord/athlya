@@ -6,11 +6,12 @@
  *   1. `POST /register` rejects when the Turnstile header is absent
  *      (403 `bot_challenge_failed`).
  *   2. `POST /login` rejects when Turnstile is absent (403).
- *   3. `POST /refresh` rejects an invalid body with 422 (no
+ *   3. `POST /password-reset/request` and `/confirm` reject without Turnstile (403).
+ *   4. `POST /refresh` rejects an invalid body with 422 (no
  *      Turnstile requirement).
- *   4. `POST /logout` without Authorization returns 401.
- *   5. `DELETE /me` without Authorization returns 401.
- *   6. `POST /refresh` on the happy path forwards to `deps.refresh`
+ *   5. `POST /logout` without Authorization returns 401.
+ *   6. `DELETE /me` without Authorization returns 401.
+ *   7. `POST /refresh` on the happy path forwards to `deps.refresh`
  *      and returns its payload.
  *
  * Slice B8.4 â€” the `/login-with-apple` and `/login-with-google`
@@ -184,6 +185,50 @@ describe('DELETE /v1/auth/me', () => {
     const body = (await res.json()) as any;
     expect(body.title).toBe('missing_authorization');
     expect(deps.auth.deleteMe).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /v1/auth/password-reset/request', () => {
+  it('rejects a request without the cf-turnstile-token header with 403 bot_challenge_failed', async () => {
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
+
+    const res = await app.request(
+      '/v1/auth/password-reset/request',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'ada@example.com' }),
+      },
+      env(),
+    );
+
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('bot_challenge_failed');
+    expect(deps.auth.requestPasswordReset).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /v1/auth/password-reset/confirm', () => {
+  it('rejects a request without the cf-turnstile-token header with 403 bot_challenge_failed', async () => {
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
+
+    const res = await app.request(
+      '/v1/auth/password-reset/confirm',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: 'reset-token', newPassword: 'Password1234' }),
+      },
+      env(),
+    );
+
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('bot_challenge_failed');
+    expect(deps.auth.confirmPasswordReset).not.toHaveBeenCalled();
   });
 });
 

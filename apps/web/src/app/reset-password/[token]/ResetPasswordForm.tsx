@@ -1,10 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+
+import { TurnstileWidget, type TurnstileWidgetHandle } from '../../../components/TurnstileWidget';
+import { getTurnstileSiteKey } from '../../../lib/env';
 import { createTranslator } from '../../../lib/i18n/t';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactElement } from 'react';
 
 type SubmitState =
   | { kind: 'idle' }
@@ -14,61 +17,83 @@ type SubmitState =
 
 interface ResetPasswordFormProps {
   readonly token: string;
+  readonly nonce: string;
 }
 
-export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
+export function ResetPasswordForm({ token, nonce }: ResetPasswordFormProps): ReactElement {
   const locale = useLocale();
   const t = useMemo(() => createTranslator(locale), [locale]);
+  const siteKey = getTurnstileSiteKey();
+  const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState('');
+
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [state, setState] = useState<SubmitState>({ kind: 'idle' });
 
-  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (state.kind === 'submitting') return;
+  const onSubmit = useCallback(
+    async (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (state.kind === 'submitting') return;
 
-    if (password.length < 8 || password.length > 72) {
-      setState({ kind: 'error', message: t('auth.resetPassword.errors.passwordLength') });
-      return;
-    }
-    if (password !== confirm) {
-      setState({ kind: 'error', message: t('auth.resetPassword.errors.passwordMismatch') });
-      return;
-    }
-
-    setState({ kind: 'submitting' });
-    try {
-      const res = await fetch('/api/auth/password-reset/confirm', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token, newPassword: password }),
-      });
-      if (res.status === 204) {
-        setState({ kind: 'success' });
-        window.setTimeout(() => {
-          window.location.assign('/login?reset=ok');
-        }, 1500);
+      if (password.length < 8 || password.length > 72) {
+        setState({ kind: 'error', message: t('auth.resetPassword.errors.passwordLength') });
         return;
       }
-      const body = (await res.json().catch(() => ({}))) as {
-        title?: string;
-        code?: string;
-      };
-      const code = body.code ?? body.title ?? 'unknown';
-      const errorMap: Record<string, string> = {
-        token_invalid: t('auth.resetPassword.errors.tokenInvalid'),
-        token_expired: t('auth.resetPassword.errors.tokenExpired'),
-        password_breached: t('errors.passwordBreached'),
-        hibp_unavailable: t('auth.resetPassword.errors.hibpUnavailable'),
-      };
-      setState({
-        kind: 'error',
-        message: errorMap[code] ?? t('errors.generic'),
-      });
-    } catch {
-      setState({ kind: 'error', message: t('errors.network') });
-    }
-  };
+      if (password !== confirm) {
+        setState({ kind: 'error', message: t('auth.resetPassword.errors.passwordMismatch') });
+        return;
+      }
+      if (siteKey !== undefined && turnstileToken === '') {
+        setState({ kind: 'error', message: t('auth.errors.turnstileRequired') });
+        return;
+      }
+
+      setState({ kind: 'submitting' });
+      const consumedToken = turnstileToken;
+      setTurnstileToken('');
+
+      try {
+        const headers: Record<string, string> = { 'content-type': 'application/json' };
+        if (consumedToken !== '') {
+          headers['cf-turnstile-token'] = consumedToken;
+        }
+
+        const res = await fetch('/api/auth/password-reset/confirm', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ token, newPassword: password }),
+        });
+        if (res.status === 204) {
+          setState({ kind: 'success' });
+          window.setTimeout(() => {
+            window.location.assign('/login?reset=ok');
+          }, 1500);
+          return;
+        }
+        const body = (await res.json().catch(() => ({}))) as {
+          title?: string;
+          code?: string;
+        };
+        const code = body.code ?? body.title ?? 'unknown';
+        const errorMap: Record<string, string> = {
+          token_invalid: t('auth.resetPassword.errors.tokenInvalid'),
+          token_expired: t('auth.resetPassword.errors.tokenExpired'),
+          password_breached: t('errors.passwordBreached'),
+          hibp_unavailable: t('auth.resetPassword.errors.hibpUnavailable'),
+        };
+        setState({
+          kind: 'error',
+          message: errorMap[code] ?? t('errors.generic'),
+        });
+        turnstileRef.current?.reset();
+      } catch {
+        setState({ kind: 'error', message: t('errors.network') });
+        turnstileRef.current?.reset();
+      }
+    },
+    [state.kind, password, confirm, siteKey, turnstileToken, token, t],
+  );
 
   if (state.kind === 'success') {
     return (
@@ -117,6 +142,13 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
         />
       </label>
 
+      <TurnstileWidget
+        siteKey={siteKey}
+        onToken={setTurnstileToken}
+        nonce={nonce}
+        ref={turnstileRef}
+      />
+
       {state.kind === 'error' && (
         <p
           role="alert"
@@ -128,7 +160,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
 
       <button
         type="submit"
-        disabled={state.kind === 'submitting'}
+        disabled={state.kind === 'submitting' || (siteKey !== undefined && turnstileToken === '')}
         className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
       >
         {state.kind === 'submitting'

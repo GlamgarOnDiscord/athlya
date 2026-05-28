@@ -81,7 +81,8 @@ R2 buckets : `athlya-avatars-production` + `athlya-exports-production`.
 ### Court terme (avant prod)
 
 - [ ] Câblage `worker.scheduled()` audit anonymize (5 lignes, bloqué par provisioning role Postgres `athlya_cron`)
-- [ ] `<TurnstileWidget />` dans `<ForgotPasswordForm />` (~30 lignes, bloqué par activation Turnstile prod)
+- [x] Turnstile sur forgot-password + reset confirm (`ForgotPasswordForm`, `ResetPasswordForm`, API `password-reset/*`)
+- [ ] `TURNSTILE_SECRET` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` provisionnés en prod
 
 ### Long terme (post-prod 6 mois)
 

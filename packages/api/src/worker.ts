@@ -90,7 +90,6 @@ import { rateLimit } from './middleware/rate-limit.js';
 import { guardRateLimiter } from './middleware/limiter-guard.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { tenantClaimGuard, tenantResolverMiddleware } from './middleware/tenant-resolver.js';
-import { turnstile } from './middleware/turnstile.js';
 import { buildSpecApp } from './openapi/spec.js';
 import { requireRole } from './routes/helpers.js';
 import {
@@ -601,12 +600,8 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
     guardLimiterWithDevBypass('auth', authLimiter, 'fail-closed') as Parameters<typeof app.use>[1],
   );
 
-  // Req 26.1–26.3 — Turnstile bot-challenge on the two pre-auth mutation
-  // routes. The middleware reads TURNSTILE_SECRET from c.env; dev-mode
-  // missing-secret behaviour is a warn + pass-through (not a 500).
-  const turnstileMw = turnstile() as Parameters<typeof app.use>[1];
-  app.use('/v1/auth/register', turnstileMw);
-  app.use('/v1/auth/login', turnstileMw);
+  // Req 26.1–26.3 — Turnstile on pre-auth mutations wired in auth router
+  // (register, login, password-reset/request, password-reset/confirm).
 
   // 5.5. Sprint 12 / Slice 12.2 (Epic B4.2) — per-mutation
   //      sliding-window rate limits. The global IP+user limits

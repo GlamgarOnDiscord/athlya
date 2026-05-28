@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { TurnstileWidget, type TurnstileWidgetHandle } from '../../components/TurnstileWidget';
 import { getTurnstileSiteKey } from '../../lib/env';
@@ -40,56 +40,61 @@ export function ForgotPasswordForm({ nonce }: ForgotPasswordFormProps): ReactEle
 
   const siteKey = getTurnstileSiteKey();
   const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
-  const turnstileToken = useRef<string>('');
+  const [turnstileToken, setTurnstileToken] = useState('');
 
   const [email, setEmail] = useState('');
   const [state, setState] = useState<SubmitState>({ kind: 'idle' });
 
-  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (state.kind === 'submitting') return;
+  const onSubmit = useCallback(
+    async (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (state.kind === 'submitting') return;
 
-    setState({ kind: 'submitting' });
-    try {
-      // Sprint 12 / Slice 13.1 — Turnstile token consumed once
-      // per submit. The next attempt requires a fresh
-      // challenge — the widget reset is triggered in the
-      // error/finally arms below.
-      const headers: Record<string, string> = {
-        'content-type': 'application/json',
-      };
-      if (turnstileToken.current !== '') {
-        headers['cf-turnstile-token'] = turnstileToken.current;
-      }
-
-      const res = await fetch('/api/auth/password-reset/request', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ email }),
-      });
-      if (res.status === 204) {
-        setState({ kind: 'sent' });
+      if (siteKey !== undefined && turnstileToken === '') {
+        setState({ kind: 'error', message: t('auth.errors.turnstileRequired') });
         return;
       }
-      const body = (await res.json().catch(() => ({}))) as {
-        title?: string;
-        code?: string;
-      };
-      setState({
-        kind: 'error',
-        message: body.title ?? body.code ?? t('auth.forgotPassword.errors.generic'),
-      });
-      turnstileRef.current?.reset();
-      turnstileToken.current = '';
-    } catch {
-      setState({
-        kind: 'error',
-        message: t('errors.network'),
-      });
-      turnstileRef.current?.reset();
-      turnstileToken.current = '';
-    }
-  };
+
+      setState({ kind: 'submitting' });
+      const consumedToken = turnstileToken;
+      setTurnstileToken('');
+
+      try {
+        const headers: Record<string, string> = {
+          'content-type': 'application/json',
+        };
+        if (consumedToken !== '') {
+          headers['cf-turnstile-token'] = consumedToken;
+        }
+
+        const res = await fetch('/api/auth/password-reset/request', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ email }),
+        });
+        if (res.status === 204) {
+          setState({ kind: 'sent' });
+          return;
+        }
+        const body = (await res.json().catch(() => ({}))) as {
+          title?: string;
+          code?: string;
+        };
+        setState({
+          kind: 'error',
+          message: body.title ?? body.code ?? t('auth.forgotPassword.errors.generic'),
+        });
+        turnstileRef.current?.reset();
+      } catch {
+        setState({
+          kind: 'error',
+          message: t('errors.network'),
+        });
+        turnstileRef.current?.reset();
+      }
+    },
+    [state.kind, siteKey, turnstileToken, email, t],
+  );
 
   if (state.kind === 'sent') {
     return (
@@ -121,9 +126,7 @@ export function ForgotPasswordForm({ nonce }: ForgotPasswordFormProps): ReactEle
 
       <TurnstileWidget
         siteKey={siteKey}
-        onToken={(token) => {
-          turnstileToken.current = token;
-        }}
+        onToken={setTurnstileToken}
         nonce={nonce}
         ref={turnstileRef}
       />
@@ -139,7 +142,7 @@ export function ForgotPasswordForm({ nonce }: ForgotPasswordFormProps): ReactEle
 
       <button
         type="submit"
-        disabled={state.kind === 'submitting'}
+        disabled={state.kind === 'submitting' || (siteKey !== undefined && turnstileToken === '')}
         className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
       >
         {state.kind === 'submitting'

@@ -225,7 +225,7 @@ const passwordResetConfirmRoute = createRoute({
     body: {
       content: {
         'application/json': {
-          schema: z.object({ token: z.string().min(1), password: z.string().min(8).max(72) }),
+          schema: z.object({ token: z.string().min(1), newPassword: z.string().min(8).max(72) }),
         },
       },
       required: true,
