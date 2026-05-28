@@ -397,9 +397,14 @@ describe('handleStripeWebhook — happy paths', () => {
     });
     expect(envelope?.payload['session']).toBe(stripeEvent.data);
 
-    // Publish ran inside a transaction; no audit fired.
+    // Publish + processed audit ran inside a transaction.
     expect(handles.withTransaction).toHaveBeenCalledTimes(1);
-    expect(handles.appendAudit).not.toHaveBeenCalled();
+    expect(handles.appendAudit).toHaveBeenCalledTimes(1);
+    expect(handles.appendAudit.mock.calls[0]?.[0]).toMatchObject({
+      action: 'billing.webhook.processed',
+      targetId: 'evt_checkout_1',
+      metadata: { stripeEventType: 'checkout.session.completed' },
+    });
   });
 
   it('dispatches customer.subscription.created as billing.subscription.started', async () => {
@@ -417,7 +422,8 @@ describe('handleStripeWebhook — happy paths', () => {
     const envelope = handles.publish.mock.calls[0]?.[0];
     expect(envelope?.type).toBe('billing.subscription.started');
     expect(envelope?.payload['subscription']).toBe(stripeEvent.data);
-    expect(handles.appendAudit).not.toHaveBeenCalled();
+    expect(handles.appendAudit).toHaveBeenCalledTimes(1);
+    expect(handles.appendAudit.mock.calls[0]?.[0]?.action).toBe('billing.webhook.processed');
   });
 
   it('dispatches invoice.payment_failed as billing.subscription.failed', async () => {
@@ -435,7 +441,8 @@ describe('handleStripeWebhook — happy paths', () => {
     const envelope = handles.publish.mock.calls[0]?.[0];
     expect(envelope?.type).toBe('billing.subscription.failed');
     expect(envelope?.payload['invoice']).toBe(stripeEvent.data);
-    expect(handles.appendAudit).not.toHaveBeenCalled();
+    expect(handles.appendAudit).toHaveBeenCalledTimes(1);
+    expect(handles.appendAudit.mock.calls[0]?.[0]?.action).toBe('billing.webhook.processed');
   });
 
   it('returns processed without publishing when claimStripeEvent reports a duplicate', async () => {

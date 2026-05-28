@@ -23,13 +23,13 @@
  * service, `verifyStripeSignature` + `handleStripeWebhook` handler.
  *
  * Webhook path: signature verification + `stripe_webhook_events`
- * idempotency (issue #69). Audit / bus publish remain no-op until
- * Epic 9 wiring lands — duplicates still ack 200 without re-publish.
+ * idempotency (issue #69) + audit_log append (issue #127).
  */
 
-import { handleStripeWebhook, verifyStripeSignature, type WebhookDeps } from '@athlya/billing';
+import { handleStripeWebhook, verifyStripeSignature, type WebhookAuditEntry, type WebhookDeps } from '@athlya/billing';
 import { claimStripeWebhookEvent } from '@athlya/db/stripe-webhook-events';
 
+import { createBillingWebhookAuditAppender } from './audit-log-wiring.js';
 import { getOrCreateWriteDb } from './deps-cache.js';
 
 import type { BillingDeps } from '../routes/billing.js';
@@ -99,17 +99,16 @@ export function buildBillingDeps(env: AthlyaBindings): BillingDeps {
         return { kind: 'signature_invalid' as const };
       }
 
-      // No-op audit / publish ports — slice B9 explicitly
-      // documents "PAS d'effet de bord". Every dispatch branch
-      // resolves cleanly; future slices will swap in real
-      // Drizzle + outbox-backed implementations.
+      // Real audit + transaction wrapper (issue #127); `publish` remains a no-op
+      // until outbox-backed dispatch ships.
       const db = getOrCreateWriteDb(env);
+      const auditPorts = createBillingWebhookAuditAppender(db);
       const deps: WebhookDeps = {
         verifySignature: (payload, sig, sec) => verifyStripeSignature(payload, sig, sec),
         claimStripeEvent: (eventId, eventType) => claimStripeWebhookEvent(db, eventId, eventType),
-        appendAudit: () => Promise.resolve(undefined),
+        appendAudit: (entry: WebhookAuditEntry) => auditPorts.appendAudit(entry),
         publish: () => Promise.resolve(undefined),
-        withTransaction: async (fn) => fn(),
+        withTransaction: (fn) => auditPorts.withTransaction(fn),
       };
 
       const outcome = await handleStripeWebhook(rawPayload, signature, secret, deps);
