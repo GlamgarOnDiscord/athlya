@@ -99,7 +99,7 @@ pnpm --filter @athlya/api exec wrangler deploy --env production
 
 Le deploy redémarre les isolates ; aucun downtime attendu.
 
-### 6. Smoke test
+### 6. Smoke test (API)
 
 ```powershell
 # Endpoint public
@@ -111,6 +111,22 @@ curl -H "authorization: Bearer $TOKEN" https://api.athlya.app/v1/classes?from=20
 ```
 
 Toutes les routes doivent répondre normalement (200 / 4xx selon le contexte). Vérifier les logs Cloudflare pour absence d'erreur SQL `permission denied`.
+
+### 6b. Smoke test RLS (DATABASE_URL athlya_app)
+
+Après bascule du secret, valider que le rôle runtime **n'a pas** BYPASSRLS et que les policies filtrent :
+
+```powershell
+$env:DATABASE_URL = "postgresql://athlya_app:...@..."
+node scripts/smoke-rls-cutover.mjs
+
+# Optionnel — vérifier qu'un admin voit les users de son studio :
+$env:SMOKE_STUDIO_ID = "<studio-uuid>"
+$env:SMOKE_ADMIN_ID = "<admin-user-uuid>"
+node scripts/smoke-rls-cutover.mjs
+```
+
+Exit code 0 requis avant de considérer le cutover terminé (issue #117).
 
 ### 7. Vérification RLS active
 
