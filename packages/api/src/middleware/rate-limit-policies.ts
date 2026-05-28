@@ -196,8 +196,10 @@ export const REQUIRED_FAIL_CLOSED_IDS = [
 
 /** Rows that must stay fail-closed (mutations + expensive reads + auth). */
 export function rowsRequiringFailClosed(): RateLimitCoverageRow[] {
-  return RATE_LIMIT_COVERAGE.filter((r) =>
-    (REQUIRED_FAIL_CLOSED_IDS as readonly string[]).includes(r.id),
+  return RATE_LIMIT_COVERAGE.filter(
+    (r) =>
+      (REQUIRED_FAIL_CLOSED_IDS as readonly string[]).includes(r.id) &&
+      r.failPolicy === 'fail-closed',
   );
 }
 

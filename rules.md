@@ -1,7 +1,7 @@
 # Athlya — règles de workflow (agents & humains)
 
 Document de référence pour enchaîner les issues CTO, ouvrir des PRs propres et merger sans bruit.  
-Dernière mise à jour : 2026-05-28 (post #126–#129).
+Dernière mise à jour : 2026-05-29 (post #131–#133).
 
 ---
 
