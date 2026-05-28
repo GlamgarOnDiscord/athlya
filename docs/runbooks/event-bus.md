@@ -327,23 +327,21 @@ Si une régression survient sur une combinaison spécifique
 - `gateway.integration.test.ts` (chaîne register → book → cancel
   → événements observés sur `state.events`).
 
-## 6. Topology future (ADR — issue #81)
+## 6. Topology split queues (issue #125)
 
-**État actuel (v0.1)** : un topic `athlya-events` + consumer unique dans `worker.ts` (`handleEventsBatch`). Suffisant sous ~1000 events/jour.
+**État v0.1.1** : trois lanes provisionnées dans `wrangler.toml` :
 
-**Cible** (volume notifications + billing en prod) :
+| Queue                         | Préfixe `event.type`                         | Consumer (`worker.ts`)   |
+| ----------------------------- | ------------------------------------------- | ------------------------ |
+| `athlya-events-notifications` | `reservation.*`, `billing.subscription.failed` | `handleNotificationsBatch` |
+| `athlya-events-rgpd`          | `auth.user.deleted`, `members.export.requested` | `handleRgpdBatch`        |
+| `athlya-events` (legacy)      | types non migrés                            | `handleEventsBatch`      |
 
-| Queue                         | Préfixe `event.type`        | Consumer        |
-| ----------------------------- | --------------------------- | --------------- |
-| `athlya-events-notifications` | `reservation.*`, notify     | notifications   |
-| `athlya-events-rgpd`          | `auth.user.deleted`, export | members         |
-| `athlya-events-billing`       | `billing.*`                 | billing         |
+**Routage** : `src/events/route-queue.ts` — publish, outbox drain et DLQ replay utilisent la même table.
 
-**Migration** : dual-write → drain ancienne queue → retirer binding legacy. Dedup Redis `event.id` inchangé (TTL 24h).
+**Migration** : le topic legacy reste actif pour vider le backlog ; retirer le consumer `athlya-events` une fois `pending=0` sur les types migrés.
 
-**Outbox** : router le drain par préfixe vers la queue cible (évolution schema optionnelle).
-
-Non implémenté — évite qu'un handler lent (export ZIP) retarde tout le batch partagé.
+**Billing analytics** (`athlya-events-billing`) : hors scope — webhooks Stripe restent HTTP.
 
 ## 7. Liens
 

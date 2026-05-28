@@ -109,6 +109,11 @@ export interface PublishLogger {
  */
 export interface PublishDeps {
   readonly queue?: Queue;
+  /**
+   * When set, selects the queue from `event.type` (split lanes, issue
+   * #125). Takes precedence over {@link queue}.
+   */
+  readonly resolveQueue?: (eventType: string) => Queue | undefined;
   readonly maxQueueRetries?: number;
   readonly retryBackoffMs?: (attempt: number) => number;
   readonly logger?: PublishLogger;
@@ -274,6 +279,10 @@ export async function publish(
  * envelope — we want validation failures to surface BEFORE the caller
  * hands us a live transaction handle.
  */
+function pickQueue(deps: PublishDeps, eventType: string): Queue | undefined {
+  return deps.resolveQueue?.(eventType) ?? deps.queue;
+}
+
 function validate(event: AthlyaEvent): AthlyaEvent {
   // `parseEvent` already throws `InvalidEventError` on failure. No
   // try/catch needed — just forward it.
@@ -297,12 +306,13 @@ async function publishTransactional(
   // Step 2: optionally try the queue. The outbox row is now part of
   // the caller's transaction, so a queue failure here only costs us
   // a drain-worker delivery delay.
-  if (deps.queue === undefined) {
+  const queue = pickQueue(deps, event.type);
+  if (queue === undefined) {
     return { delivery: 'outbox' };
   }
 
   try {
-    await sendWithRetries(deps.queue, event, deps, logger);
+    await sendWithRetries(queue, event, deps, logger);
     return { delivery: 'both' };
   } catch (err) {
     logger.warn('queue send exhausted on transactional path; relying on outbox drain', {
@@ -326,7 +336,8 @@ async function publishBestEffort(
 ): Promise<PublishResult> {
   const budget = normaliseBudget(deps.maxQueueRetries);
 
-  if (deps.queue === undefined) {
+  const queue = pickQueue(deps, event.type);
+  if (queue === undefined) {
     // Neither `tx` nor `queue`: the caller has no durability
     // option. Fail loud rather than silently succeed.
     logger.error('publish called without tx and without queue', {
@@ -337,7 +348,7 @@ async function publishBestEffort(
   }
 
   try {
-    await sendWithRetries(deps.queue, event, deps, logger);
+    await sendWithRetries(queue, event, deps, logger);
     return { delivery: 'queue' };
   } catch (err) {
     logger.error('queue send exhausted retry budget', {

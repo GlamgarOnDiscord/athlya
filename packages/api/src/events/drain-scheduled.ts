@@ -52,6 +52,7 @@ import {
   type OutboxStore,
   type QueueProducer,
 } from './drain-worker.js';
+import { resolveEventQueueProducer, type EventQueueBindings } from './route-queue.js';
 
 import type { AthlyaDb } from '@athlya/db/client';
 
@@ -92,9 +93,7 @@ export interface ExecutionContext {
  * wrangler-generated `Env` (task 8.1) can extend this interface
  * without needing a cast.
  */
-export interface ScheduledEnv {
-  /** Producer binding declared in `wrangler.toml` (task 9.4). */
-  readonly EVENTS_QUEUE: QueueProducer;
+export interface ScheduledEnv extends EventQueueBindings {
   /**
    * Resolver for an initialised Drizzle client. Using a thunk (not
    * a direct `db` property) keeps the wrangler-side wiring flexible:
@@ -227,7 +226,11 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
     // `DrainOutboxOptions` declares.
     const opts: Parameters<typeof drainOutbox>[0] = {
       store,
-      queue: env.EVENTS_QUEUE,
+      resolveQueue: (eventType) =>
+        resolveEventQueueProducer(
+          env as unknown as EventQueueBindings,
+          eventType,
+        ) as QueueProducer,
       batchSize,
       ...(logger !== undefined ? { logger } : {}),
     };

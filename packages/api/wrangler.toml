@@ -118,10 +118,9 @@ VERSION = "0.0.0-dev"
 # (signature `Queue.send(message)`). Every domain service that emits an
 # `AthlyaEvent` publishes through this binding.
 #
-# Queue name `athlya-events` is the single real-time topic for the
-# platform; events are self-describing (discriminated union on
-# `event.type`) so one topic with one DLQ is enough — see design §4
-# (Event Bus).
+# Queue name `athlya-events` is the legacy monolithic topic; new events
+# route to lane-specific queues (notifications / rgpd) — see
+# `src/events/route-queue.ts` and `docs/runbooks/event-bus.md` §6.
 
 [[queues.producers]]
 binding = "EVENTS_QUEUE"
@@ -174,6 +173,40 @@ dead_letter_queue = "athlya-events-dlq"
 
 [[queues.consumers]]
 queue = "athlya-events-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[queues.producers]]
+binding = "EVENTS_NOTIFICATIONS_QUEUE"
+queue = "athlya-events-notifications"
+
+[[queues.producers]]
+binding = "EVENTS_RGPD_QUEUE"
+queue = "athlya-events-rgpd"
+
+[[queues.consumers]]
+queue = "athlya-events-notifications"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-notifications-dlq"
+
+[[queues.consumers]]
+queue = "athlya-events-rgpd"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-rgpd-dlq"
+
+[[queues.consumers]]
+queue = "athlya-events-notifications-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[queues.consumers]]
+queue = "athlya-events-rgpd-dlq"
 max_batch_size = 10
 max_batch_timeout = 30
 max_retries = 3
@@ -275,6 +308,40 @@ max_batch_size = 10
 max_batch_timeout = 30
 max_retries = 3
 
+[[env.dev.queues.producers]]
+binding = "EVENTS_NOTIFICATIONS_QUEUE"
+queue = "athlya-events-notifications"
+
+[[env.dev.queues.producers]]
+binding = "EVENTS_RGPD_QUEUE"
+queue = "athlya-events-rgpd"
+
+[[env.dev.queues.consumers]]
+queue = "athlya-events-notifications"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-notifications-dlq"
+
+[[env.dev.queues.consumers]]
+queue = "athlya-events-rgpd"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-rgpd-dlq"
+
+[[env.dev.queues.consumers]]
+queue = "athlya-events-notifications-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[env.dev.queues.consumers]]
+queue = "athlya-events-rgpd-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
 # R2 buckets — Slice 1.3 SP1.4 (see top-level block for rationale).
 
 [[env.dev.r2_buckets]]
@@ -333,6 +400,40 @@ dead_letter_queue = "athlya-events-staging-dlq"
 
 [[env.staging.queues.consumers]]
 queue = "athlya-events-staging-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[env.staging.queues.producers]]
+binding = "EVENTS_NOTIFICATIONS_QUEUE"
+queue = "athlya-events-notifications-staging"
+
+[[env.staging.queues.producers]]
+binding = "EVENTS_RGPD_QUEUE"
+queue = "athlya-events-rgpd-staging"
+
+[[env.staging.queues.consumers]]
+queue = "athlya-events-notifications-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-notifications-staging-dlq"
+
+[[env.staging.queues.consumers]]
+queue = "athlya-events-rgpd-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-rgpd-staging-dlq"
+
+[[env.staging.queues.consumers]]
+queue = "athlya-events-notifications-staging-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[env.staging.queues.consumers]]
+queue = "athlya-events-rgpd-staging-dlq"
 max_batch_size = 10
 max_batch_timeout = 30
 max_retries = 3
@@ -398,6 +499,40 @@ dead_letter_queue = "athlya-events-dlq"
 
 [[env.production.queues.consumers]]
 queue = "athlya-events-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[env.production.queues.producers]]
+binding = "EVENTS_NOTIFICATIONS_QUEUE"
+queue = "athlya-events-notifications"
+
+[[env.production.queues.producers]]
+binding = "EVENTS_RGPD_QUEUE"
+queue = "athlya-events-rgpd"
+
+[[env.production.queues.consumers]]
+queue = "athlya-events-notifications"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-notifications-dlq"
+
+[[env.production.queues.consumers]]
+queue = "athlya-events-rgpd"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-rgpd-dlq"
+
+[[env.production.queues.consumers]]
+queue = "athlya-events-notifications-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[env.production.queues.consumers]]
+queue = "athlya-events-rgpd-dlq"
 max_batch_size = 10
 max_batch_timeout = 30
 max_retries = 3
@@ -468,6 +603,40 @@ dead_letter_queue = "athlya-events-staging-dlq"
 
 [[env.preview.queues.consumers]]
 queue = "athlya-events-staging-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[env.preview.queues.producers]]
+binding = "EVENTS_NOTIFICATIONS_QUEUE"
+queue = "athlya-events-notifications-staging"
+
+[[env.preview.queues.producers]]
+binding = "EVENTS_RGPD_QUEUE"
+queue = "athlya-events-rgpd-staging"
+
+[[env.preview.queues.consumers]]
+queue = "athlya-events-notifications-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-notifications-staging-dlq"
+
+[[env.preview.queues.consumers]]
+queue = "athlya-events-rgpd-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "athlya-events-rgpd-staging-dlq"
+
+[[env.preview.queues.consumers]]
+queue = "athlya-events-notifications-staging-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[env.preview.queues.consumers]]
+queue = "athlya-events-rgpd-staging-dlq"
 max_batch_size = 10
 max_batch_timeout = 30
 max_retries = 3

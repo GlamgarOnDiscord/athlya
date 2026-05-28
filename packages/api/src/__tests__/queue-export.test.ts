@@ -88,7 +88,7 @@ vi.mock('../adapters/notifications-deps.js', () => ({
 /*  System under test                                                  */
 /* ------------------------------------------------------------------ */
 
-import { handleEventsBatch } from '../worker.js';
+import { handleEventsBatch, handleRgpdBatch } from '../worker.js';
 
 import type { AthlyaBindings } from '../types.js';
 import type { Message, MessageBatch } from '@cloudflare/workers-types';
@@ -101,6 +101,8 @@ function mockEnv(overrides: Partial<AthlyaBindings> = {}): AthlyaBindings {
   const base: AthlyaBindings = {
     ENVIRONMENT: 'dev',
     EVENTS_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_QUEUE'],
+    EVENTS_NOTIFICATIONS_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_NOTIFICATIONS_QUEUE'],
+    EVENTS_RGPD_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_RGPD_QUEUE'],
     EVENTS_DLQ: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_DLQ'],
     DB_URL: 'postgres://export-test.invalid/athlya',
     REDIS_URL: 'https://export-test.upstash.io',
@@ -200,7 +202,7 @@ describe('worker.queue() — members.export.requested dispatch (Slice 1.3 SP1.4)
     const event = exportRequestedEvent('22222222-2222-4222-a222-222222222222', jobId);
     const msg = mockMessage('msg-export-1', event);
 
-    await handleEventsBatch(mockBatch('athlya-events', [msg]), env);
+    await handleRgpdBatch(mockBatch('athlya-events-rgpd', [msg]), env);
 
     expect(adapterMocks.buildExportDeps).toHaveBeenCalledTimes(1);
     expect(adapterMocks.buildExportDeps).toHaveBeenCalledWith(env);
@@ -238,7 +240,7 @@ describe('worker.queue() — members.export.requested dispatch (Slice 1.3 SP1.4)
       ),
     );
 
-    await handleEventsBatch(mockBatch('athlya-events', [msg]), env);
+    await handleRgpdBatch(mockBatch('athlya-events-rgpd', [msg]), env);
 
     expect(memberMocks.runExportJob).toHaveBeenCalledTimes(1);
     expect(msg.ack).toHaveBeenCalledTimes(1);

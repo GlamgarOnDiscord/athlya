@@ -142,20 +142,26 @@ function mockQueue(): Queue<unknown> & { send: ReturnType<typeof vi.fn> } {
 function mockBindings(): {
   env: DlqBindings;
   eventsQueue: ReturnType<typeof mockQueue>;
+  notificationsQueue: ReturnType<typeof mockQueue>;
+  rgpdQueue: ReturnType<typeof mockQueue>;
   eventsDlq: ReturnType<typeof mockQueue>;
   redis: FakeDlqRedis;
 } {
   const redis = new FakeDlqRedis();
   __setDlqRedisForTests(TEST_REDIS_URL, asRedis(redis));
   const eventsQueue = mockQueue();
+  const notificationsQueue = mockQueue();
+  const rgpdQueue = mockQueue();
   const eventsDlq = mockQueue();
   const env: DlqBindings = {
     EVENTS_QUEUE: eventsQueue,
+    EVENTS_NOTIFICATIONS_QUEUE: notificationsQueue,
+    EVENTS_RGPD_QUEUE: rgpdQueue,
     EVENTS_DLQ: eventsDlq,
     REDIS_URL: TEST_REDIS_URL,
     REDIS_TOKEN: 'test-token',
   };
-  return { env, eventsQueue, eventsDlq, redis };
+  return { env, eventsQueue, notificationsQueue, rgpdQueue, eventsDlq, redis };
 }
 
 /**
@@ -471,8 +477,8 @@ describe('dlqStats', () => {
 /* ------------------------------------------------------------------ */
 
 describe('dlqReplay', () => {
-  it('sends the stored payload on EVENTS_QUEUE and removes the tracker entry', async () => {
-    const { env, eventsQueue, redis } = mockBindings();
+  it('routes replay to the lane-specific queue from payload type', async () => {
+    const { env, notificationsQueue, redis } = mockBindings();
     const payload = { id: 'evt-1', type: 'reservation.created' };
     redis.strings.set(
       'dlq:entry:ok-id',
@@ -491,8 +497,8 @@ describe('dlqReplay', () => {
     expect(result).toEqual({ replayed: true });
 
     // Payload was re-published verbatim.
-    expect(eventsQueue.send).toHaveBeenCalledTimes(1);
-    expect(eventsQueue.send).toHaveBeenCalledWith(payload);
+    expect(notificationsQueue.send).toHaveBeenCalledTimes(1);
+    expect(notificationsQueue.send).toHaveBeenCalledWith(payload);
 
     // Tracker state was dropped.
     expect(redis.strings.has('dlq:entry:ok-id')).toBe(false);
