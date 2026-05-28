@@ -1,0 +1,259 @@
+#!/usr/bin/env node
+/**
+ * Canary deploy orchestrator — Workers Versions API (issue #129).
+ *
+ * Usage:
+ *   node scripts/canary-deploy.mjs upload --env <staging|production> [--message msg]
+ *   node scripts/canary-deploy.mjs promote --env <env> --version-id ID --percent N
+ *   node scripts/canary-deploy.mjs staging-smoke --base-url URL
+ *   node scripts/canary-deploy.mjs production-canary --base-url URL [--staging-url URL] [--wait-min 10] [--steps 5,25,100]
+ *   node scripts/canary-deploy.mjs rollback --env production [--version-id ID]
+ *
+ * Requires: pnpm, wrangler (packages/api), CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID in env.
+ */
+
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const API_DIR = path.join(ROOT, 'packages', 'api');
+
+const VALID_ENVS = new Set(['staging', 'production']);
+
+function usage(code = 0) {
+  console.log(`Usage:
+  node scripts/canary-deploy.mjs upload --env staging|production [--message text]
+  node scripts/canary-deploy.mjs promote --env ENV --version-id ID --percent N
+  node scripts/canary-deploy.mjs staging-smoke --base-url URL
+  node scripts/canary-deploy.mjs production-canary --base-url URL [--staging-url URL] [--wait-min 10] [--steps 5,25,100]
+  node scripts/canary-deploy.mjs rollback --env production [--version-id ID]
+
+Runbook: docs/runbooks/canary-deploy.md`);
+  process.exit(code);
+}
+
+function parseArgs(argv) {
+  const positional = [];
+  const flags = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--') continue;
+    if (a.startsWith('--')) {
+      const key = a.slice(2);
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith('--')) {
+        flags[key] = next;
+        i++;
+      } else {
+        flags[key] = true;
+      }
+    } else {
+      positional.push(a);
+    }
+  }
+  return { command: positional[0], flags, positional: positional.slice(1) };
+}
+
+function runWrangler(args, { capture = true } = {}) {
+  const result = spawnSync('pnpm', ['exec', 'wrangler', ...args], {
+    cwd: API_DIR,
+    encoding: 'utf8',
+    stdio: capture ? ['inherit', 'pipe', 'pipe'] : 'inherit',
+    env: process.env,
+  });
+  if (result.status !== 0) {
+    const err = result.stderr?.trim() || result.stdout?.trim() || `wrangler exit ${result.status}`;
+    throw new Error(err);
+  }
+  return {
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+  };
+}
+
+function assertEnv(name) {
+  if (!VALID_ENVS.has(name)) {
+    throw new Error(`Invalid --env "${name}" (expected staging|production)`);
+  }
+}
+
+function latestVersionId(env) {
+  const { stdout } = runWrangler(['versions', 'list', '--env', env, '--json']);
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw new Error('Failed to parse wrangler versions list --json output');
+  }
+  const versions = Array.isArray(parsed) ? parsed : parsed?.versions;
+  if (!Array.isArray(versions) || versions.length === 0) {
+    throw new Error(`No Worker versions returned for env=${env}`);
+  }
+  const id = versions[0]?.id ?? versions[0]?.version_id;
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new Error('Could not resolve latest version id from versions list');
+  }
+  return id;
+}
+
+function uploadVersion(env, message) {
+  assertEnv(env);
+  const msg =
+    typeof message === 'string' && message.length > 0
+      ? message
+      : `canary-${env}-${new Date().toISOString()}`;
+  console.log(`Uploading Worker version (${env})…`);
+  runWrangler(['versions', 'upload', '--env', env, '--message', msg, '-y'], { capture: false });
+  const versionId = latestVersionId(env);
+  console.log(`Uploaded version id: ${versionId}`);
+  return versionId;
+}
+
+function promoteVersion(env, versionId, percent) {
+  assertEnv(env);
+  const pct = Number(percent);
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+    throw new Error(`Invalid --percent ${percent}`);
+  }
+  if (typeof versionId !== 'string' || versionId.length === 0) {
+    throw new Error('--version-id is required for promote');
+  }
+  console.log(`Promoting ${env} version ${versionId} to ${pct}% traffic…`);
+  runWrangler(
+    [
+      'versions',
+      'deploy',
+      '--env',
+      env,
+      '--version-id',
+      versionId,
+      '--percentage',
+      String(Math.round(pct)),
+      '-y',
+    ],
+    { capture: false },
+  );
+}
+
+async function waitHealthReady(baseUrl, maxAttempts = 30, sleepSec = 2) {
+  const url = `${baseUrl.replace(/\/$/, '')}/health/ready`;
+  console.log(`Polling ${url}…`);
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body?.status === 'ready') {
+        console.log(`Ready after attempt ${attempt}/${maxAttempts}`);
+        return;
+      }
+      console.log(`attempt ${attempt}/${maxAttempts}: HTTP ${res.status} status=${body?.status ?? 'unknown'}`);
+    } catch (err) {
+      console.log(`attempt ${attempt}/${maxAttempts}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    if (attempt < maxAttempts) {
+      await sleep(sleepSec * 1000);
+    }
+  }
+  throw new Error(`/health/ready not ready after ${maxAttempts} attempts`);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function rollback(env, versionId) {
+  assertEnv(env);
+  const args = ['rollback', '--env', env, '-y', '-m', 'canary-deploy rollback (issue #129)'];
+  if (typeof versionId === 'string' && versionId.length > 0) {
+    args.push(versionId);
+  }
+  console.log(`Rolling back ${env}…`);
+  runWrangler(args, { capture: false });
+}
+
+async function stagingSmoke(baseUrl) {
+  if (!baseUrl) throw new Error('--base-url is required');
+  const versionId = uploadVersion('staging', `staging-smoke-${Date.now()}`);
+  await waitHealthReady(baseUrl);
+  console.log(JSON.stringify({ phase: 'staging-smoke', versionId, baseUrl }));
+  return versionId;
+}
+
+async function productionCanary({ baseUrl, stagingUrl, waitMin, steps }) {
+  if (!baseUrl) throw new Error('--base-url is required');
+  const waitMinutes =
+    Number.isFinite(waitMin) && waitMin > 0 ? waitMin : 10;
+  if (stagingUrl) {
+    console.log('Pre-flight: staging /health/ready…');
+    await waitHealthReady(stagingUrl);
+  }
+  const versionId = uploadVersion('production', `production-canary-${Date.now()}`);
+  const waitMs = waitMinutes * 60 * 1000;
+
+  for (const pct of steps) {
+    promoteVersion('production', versionId, pct);
+    if (pct < 100) {
+      console.log(`Monitoring ${waitMinutes} min at ${pct}% before next step…`);
+      await sleep(waitMs);
+    }
+  }
+
+  await waitHealthReady(baseUrl);
+  console.log(JSON.stringify({ phase: 'production-canary', versionId, steps, baseUrl }));
+  return versionId;
+}
+
+async function main() {
+  const { command, flags } = parseArgs(process.argv.slice(2));
+  if (!command) usage(2);
+
+  switch (command) {
+    case 'upload': {
+      if (!flags.env) throw new Error('--env is required');
+      const id = uploadVersion(flags.env, flags.message);
+      console.log(id);
+      break;
+    }
+    case 'promote': {
+      if (!flags.env) throw new Error('--env is required');
+      if (!flags['version-id']) throw new Error('--version-id is required');
+      if (flags.percent === undefined || flags.percent === true) {
+        throw new Error('--percent is required');
+      }
+      promoteVersion(flags.env, flags['version-id'], flags.percent);
+      break;
+    }
+    case 'staging-smoke':
+      await stagingSmoke(flags['base-url']);
+      break;
+    case 'production-canary': {
+      const steps = (flags.steps ?? '5,25,100')
+        .split(',')
+        .map((s) => Number(s.trim()))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      if (steps.length === 0 || steps[steps.length - 1] !== 100) {
+        throw new Error('--steps must end with 100 (e.g. 5,25,100)');
+      }
+  const rawWaitMin = Number(flags['wait-min'] ?? 10);
+  const waitMin = Number.isFinite(rawWaitMin) && rawWaitMin > 0 ? rawWaitMin : 10;
+  await productionCanary({
+    baseUrl: flags['base-url'],
+    stagingUrl: flags['staging-url'],
+    waitMin,
+    steps,
+  });
+      break;
+    }
+    case 'rollback':
+      rollback(flags.env ?? 'production', flags['version-id']);
+      break;
+    default:
+      usage(2);
+  }
+}
+
+main().catch((err) => {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+});
