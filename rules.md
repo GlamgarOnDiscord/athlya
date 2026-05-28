@@ -1,7 +1,7 @@
 # Athlya — règles de workflow (agents & humains)
 
 Document de référence pour enchaîner les issues CTO, ouvrir des PRs propres et merger sans bruit.  
-Dernière mise à jour : 2026-05-28 (post #126–#128).
+Dernière mise à jour : 2026-05-28 (post #126–#129).
 
 ---
 
@@ -69,7 +69,7 @@ gh pr merge <num> --squash --admin `
   --body "Closes #127"
 ```
 
-- Utiliser si possible des fichiers temporaires pour faire body et subject propre (sinon problèmes caractères speciaux etc..)
+- Utiliser si possible des fichiers temporaires pour faire body et subject propre (sinon problèmes caractères spéciaux etc..)
 
 ---
 

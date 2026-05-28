@@ -35,7 +35,7 @@ on:
         type: string
 
 concurrency:
-  group: deploy-canary-${{ github.ref }}
+  group: deploy-canary-${{ inputs.phase }}
   cancel-in-progress: false
 
 jobs:

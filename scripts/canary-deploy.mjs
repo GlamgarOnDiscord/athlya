@@ -182,17 +182,19 @@ async function stagingSmoke(baseUrl) {
 
 async function productionCanary({ baseUrl, stagingUrl, waitMin, steps }) {
   if (!baseUrl) throw new Error('--base-url is required');
+  const waitMinutes =
+    Number.isFinite(waitMin) && waitMin > 0 ? waitMin : 10;
   if (stagingUrl) {
     console.log('Pre-flight: staging /health/ready…');
     await waitHealthReady(stagingUrl);
   }
   const versionId = uploadVersion('production', `production-canary-${Date.now()}`);
-  const waitMs = Math.max(1, waitMin) * 60 * 1000;
+  const waitMs = waitMinutes * 60 * 1000;
 
   for (const pct of steps) {
     promoteVersion('production', versionId, pct);
     if (pct < 100) {
-      console.log(`Monitoring ${waitMin} min at ${pct}% before next step…`);
+      console.log(`Monitoring ${waitMinutes} min at ${pct}% before next step…`);
       await sleep(waitMs);
     }
   }
@@ -214,6 +216,11 @@ async function main() {
       break;
     }
     case 'promote': {
+      if (!flags.env) throw new Error('--env is required');
+      if (!flags['version-id']) throw new Error('--version-id is required');
+      if (flags.percent === undefined || flags.percent === true) {
+        throw new Error('--percent is required');
+      }
       promoteVersion(flags.env, flags['version-id'], flags.percent);
       break;
     }
@@ -228,12 +235,14 @@ async function main() {
       if (steps.length === 0 || steps[steps.length - 1] !== 100) {
         throw new Error('--steps must end with 100 (e.g. 5,25,100)');
       }
-      await productionCanary({
-        baseUrl: flags['base-url'],
-        stagingUrl: flags['staging-url'],
-        waitMin: Number(flags['wait-min'] ?? 10),
-        steps,
-      });
+  const rawWaitMin = Number(flags['wait-min'] ?? 10);
+  const waitMin = Number.isFinite(rawWaitMin) && rawWaitMin > 0 ? rawWaitMin : 10;
+  await productionCanary({
+    baseUrl: flags['base-url'],
+    stagingUrl: flags['staging-url'],
+    waitMin,
+    steps,
+  });
       break;
     }
     case 'rollback':

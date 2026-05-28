@@ -4,6 +4,7 @@
 - Workflow `.github/workflows/deploy-production.yml` (`workflow_dispatch` : staging-smoke, production-canary, rollback).
 - Runbook `canary-deploy.md` aligné CI + critères rollback.
 - Checklist `scripts/verify-canary-deploy-checklist.mjs` + bloc launch checklist.
+- `rules.md` — workflow agent/humain (référence repo, demandé avant enchaînement issues).
 
 Closes #129
 
