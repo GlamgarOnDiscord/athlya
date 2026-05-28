@@ -57,13 +57,13 @@ Alternative auto-hébergeable à bsport, Mywellness et Mindbody pour les studios
 
 ## Aperçu
 
-Athlya est un monorepo Turborepo qui regroupe trois applications clientes (web Next.js 16, mobile Expo SDK 55, studio admin Next.js 16) et une API edge Hono déployée sur Cloudflare Workers. La persistance repose sur Neon PostgreSQL 17 avec Row-Level Security, Upstash Redis pour les compteurs et limites, et un bus d'événements combinant Cloudflare Queues et Upstash QStash.
+Athlya est un monorepo Turborepo : **deux applications livrées en v1.0** (web membre Next.js 16, studio admin Next.js 16) et une API edge Hono sur Cloudflare Workers. L'application mobile Expo (Epic 11) est **roadmap v1.1** — voir [`docs/mobile/README.md`](docs/mobile/README.md) (0/13, pas de `apps/mobile`). La persistance repose sur Neon PostgreSQL 17 avec Row-Level Security, Upstash Redis pour les compteurs et limites, et un bus d'événements combinant Cloudflare Queues et Upstash QStash.
 
 Quatre axiomes structurent l'architecture :
 
 1. **Edge-first** — terminaison des requêtes au PoP Cloudflare le plus proche.
 2. **Event-driven** — les effets de bord (emails, push, analytics) passent par un bus asynchrone, jamais en RPC dans la requête utilisateur.
-3. **Local-first** — le mobile tient 72 h en lecture hors-ligne et bufferise les écritures dans une queue persistée (MMKV).
+3. **Local-first (cible mobile v1.1)** — objectif 72 h lecture hors-ligne + queue MMKV ; non livré en v1.0 backend-only.
 4. **Zero-trust / defense-in-depth** — JWT vérifié à l'edge, RLS PostgreSQL comme dernier rempart, validation Zod à chaque frontière.
 
 Cibles SLO : p99 < 500 ms, disponibilité 99,9 %, zéro double-booking sous contention.
@@ -76,10 +76,13 @@ Les documents de spécification et de décision vivent dans [`.kiro/specs/athlya
 
 ```mermaid
 graph TD
-    subgraph Clients
+    subgraph Clients_v1["Clients v1.0 (livres)"]
         Web["Web<br/>Next.js 16"]
-        Mobile["Mobile<br/>Expo SDK 55"]
         Admin["Studio Admin<br/>Next.js 16"]
+    end
+
+    subgraph Clients_v11["Roadmap v1.1"]
+        Mobile["Mobile<br/>Expo SDK 55<br/>(0/13)"]
     end
 
     subgraph Edge["Edge Cloudflare"]
@@ -110,8 +113,8 @@ graph TD
     end
 
     Web --> CDN --> GW
-    Mobile --> CDN
     Admin --> CDN
+    Mobile -.-> CDN
     GW --> Auth
     GW --> Members
     GW --> Reservations
@@ -243,7 +246,7 @@ wrangler secret put OTEL_EXPORTER_OTLP_HEADERS   --env staging
 
 ## État du projet
 
-**~252 / 294 tâches livrées (~86 %)** — v1.1.0 : studio admin complet (CRUD classes, membres, identité visuelle, facturation) + correctifs UX web B1-B7. Mobile (Expo), AI coach et Stripe-mature en roadmap post-1.0.
+**~252 / 294 tâches livrées (~86 %)** — v1.0 backend + web + studio. Mobile Expo (Epic 11, 0/13), AI coach et Stripe production-mature : roadmap post-1.0 — [`docs/mobile/README.md`](docs/mobile/README.md).
 
 Voir [`PROGRESS.md`](.kiro/specs/athlya-platform/PROGRESS.md) et [CHANGELOG.md](CHANGELOG.md) pour le détail.
 
