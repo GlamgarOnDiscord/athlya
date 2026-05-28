@@ -63,6 +63,8 @@ import { Redis } from '@upstash/redis';
 
 import { createSentryClient, type SentryClient } from '../sentry.js';
 
+import { resolveEventQueueProducer, type EventQueueBindings } from './route-queue.js';
+
 import type { AthlyaEnvironment } from '../types.js';
 import type { MessageBatch, Queue } from '@cloudflare/workers-types';
 
@@ -88,9 +90,8 @@ import type { MessageBatch, Queue } from '@cloudflare/workers-types';
  *   - `REDIS_URL`     Upstash REST URL for the tracker.
  *   - `REDIS_TOKEN`   Upstash REST token. Secret.
  */
-export interface DlqBindings {
+export interface DlqBindings extends EventQueueBindings {
   readonly EVENTS_DLQ: Queue<unknown>;
-  readonly EVENTS_QUEUE: Queue<unknown>;
   readonly REDIS_URL: string;
   readonly REDIS_TOKEN: string;
   /**
@@ -621,15 +622,23 @@ export async function dlqStats(env: DlqBindings): Promise<{
 /*  dlqReplay                                                          */
 /* ------------------------------------------------------------------ */
 
+function readPayloadEventType(payload: unknown): string {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+    return '';
+  }
+  const type = (payload as Record<string, unknown>)['type'];
+  return typeof type === 'string' ? type : '';
+}
+
 /**
- * Re-publish the tracked payload back onto the main events queue and
+ * Re-publish the tracked payload back onto the lane-specific events queue and
  * drop the tracker entry.
  *
  * Order of operations matters:
  *
  *   1. Load the entry. Missing → `{ replayed: false, reason:
  *      'not_found' }`. The HTTP wrapper surfaces that as 404.
- *   2. `EVENTS_QUEUE.send(payload)`. On failure, propagate the error
+ *   2. Lane-specific queue send (routed from payload `type`). On failure,
  *      (the HTTP wrapper will turn it into a 500) and leave the
  *      tracker untouched. We never want to delete a tracker entry
  *      for a payload we did not successfully re-publish.
@@ -657,7 +666,14 @@ export async function dlqReplay(
     return { replayed: false, reason: 'not_found' };
   }
 
-  await env.EVENTS_QUEUE.send(entry.payload);
+  const eventType = readPayloadEventType(entry.payload);
+  if (eventType.length === 0) {
+    console.warn('[dlq] replay: payload missing type — falling back to legacy queue', {
+      entryId,
+    });
+  }
+
+  await resolveEventQueueProducer(env, eventType).send(entry.payload);
 
   // Remove tracker state. Two separate calls — a pipeline here
   // would be a micro-optimisation, but the extra round trip keeps

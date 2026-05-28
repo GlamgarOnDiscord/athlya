@@ -97,7 +97,7 @@ vi.mock('../adapters/notifications-deps.js', () => ({
 /*  System under test (imports MUST come after vi.mock)                */
 /* ------------------------------------------------------------------ */
 
-import { handleEventsBatch } from '../worker.js';
+import { handleEventsBatch, handleRgpdBatch } from '../worker.js';
 
 import type { AthlyaBindings } from '../types.js';
 import type { Message, MessageBatch } from '@cloudflare/workers-types';
@@ -115,6 +115,8 @@ function mockEnv(overrides: Partial<AthlyaBindings> = {}): AthlyaBindings {
   const base: AthlyaBindings = {
     ENVIRONMENT: 'dev',
     EVENTS_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_QUEUE'],
+    EVENTS_NOTIFICATIONS_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_NOTIFICATIONS_QUEUE'],
+    EVENTS_RGPD_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_RGPD_QUEUE'],
     EVENTS_DLQ: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_DLQ'],
     DB_URL: 'postgres://cascade-test.invalid/athlya',
     REDIS_URL: 'https://cascade-test.upstash.io',
@@ -220,7 +222,7 @@ describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () =
     const event = deletedEvent('00000000-0000-4000-a000-000000000001');
     const msg = mockMessage('msg-cascade-1', event);
 
-    await handleEventsBatch(mockBatch('athlya-events', [msg]), env);
+    await handleRgpdBatch(mockBatch('athlya-events-rgpd', [msg]), env);
 
     expect(adapterMocks.buildCascadeDeps).toHaveBeenCalledTimes(1);
     expect(adapterMocks.buildCascadeDeps).toHaveBeenCalledWith(env);
@@ -252,7 +254,7 @@ describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () =
       'msg-cascade-degraded',
       deletedEvent('00000000-0000-4000-a000-000000000002'),
     );
-    await handleEventsBatch(mockBatch('athlya-events', [msg]), env);
+    await handleRgpdBatch(mockBatch('athlya-events-rgpd', [msg]), env);
 
     expect(memberMocks.handleUserDeleted).toHaveBeenCalledTimes(1);
     expect(msg.ack).toHaveBeenCalledTimes(1);

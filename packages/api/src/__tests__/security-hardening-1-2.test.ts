@@ -34,6 +34,12 @@ function mockEnv(overrides: Partial<AthlyaBindings> = {}): AthlyaBindings {
     EVENTS_QUEUE: {
       send: vi.fn().mockResolvedValue(undefined),
     } as unknown as AthlyaBindings['EVENTS_QUEUE'],
+    EVENTS_NOTIFICATIONS_QUEUE: {
+      send: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AthlyaBindings['EVENTS_NOTIFICATIONS_QUEUE'],
+    EVENTS_RGPD_QUEUE: {
+      send: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AthlyaBindings['EVENTS_RGPD_QUEUE'],
     EVENTS_DLQ: {
       send: vi.fn().mockResolvedValue(undefined),
     } as unknown as AthlyaBindings['EVENTS_DLQ'],

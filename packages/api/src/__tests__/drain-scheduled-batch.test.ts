@@ -19,7 +19,13 @@ vi.mock('@athlya/db/outbox', async (importOriginal) => {
 
 describe('resolveDrainBatchSize', () => {
   it('honours env.batchSize override', async () => {
-    const size = await resolveDrainBatchSize({} as never, { getDb: vi.fn(), EVENTS_QUEUE: {} as never, batchSize: 42 });
+    const size = await resolveDrainBatchSize({} as never, {
+      getDb: vi.fn(),
+      EVENTS_QUEUE: {} as never,
+      EVENTS_NOTIFICATIONS_QUEUE: {} as never,
+      EVENTS_RGPD_QUEUE: {} as never,
+      batchSize: 42,
+    });
     expect(size).toBe(42);
     expect(countPendingOutboxMock).not.toHaveBeenCalled();
   });
@@ -29,13 +35,23 @@ describe('resolveDrainBatchSize', () => {
       pending: OUTBOX_BACKLOG_BATCH_THRESHOLD + 1,
       oldestOccurredAt: null,
     });
-    const size = await resolveDrainBatchSize({} as never, { getDb: vi.fn(), EVENTS_QUEUE: {} as never });
+    const size = await resolveDrainBatchSize({} as never, {
+      getDb: vi.fn(),
+      EVENTS_QUEUE: {} as never,
+      EVENTS_NOTIFICATIONS_QUEUE: {} as never,
+      EVENTS_RGPD_QUEUE: {} as never,
+    });
     expect(size).toBe(ADAPTIVE_BATCH_SIZE);
   });
 
   it('uses default batch size under threshold', async () => {
     countPendingOutboxMock.mockResolvedValue({ pending: 10, oldestOccurredAt: null });
-    const size = await resolveDrainBatchSize({} as never, { getDb: vi.fn(), EVENTS_QUEUE: {} as never });
+    const size = await resolveDrainBatchSize({} as never, {
+      getDb: vi.fn(),
+      EVENTS_QUEUE: {} as never,
+      EVENTS_NOTIFICATIONS_QUEUE: {} as never,
+      EVENTS_RGPD_QUEUE: {} as never,
+    });
     expect(size).toBe(DEFAULT_BATCH_SIZE);
   });
 });
