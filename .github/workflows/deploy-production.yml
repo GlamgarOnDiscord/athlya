@@ -1,0 +1,120 @@
+name: Deploy (canary)
+
+# Issue #129 — gradual Workers deploy via Versions API.
+# Runbook: docs/runbooks/canary-deploy.md
+#
+# Required secrets:
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+# Required vars:
+#   STAGING_API_URL   (e.g. https://staging.api.athlya.app)
+#   PRODUCTION_API_URL (e.g. https://api.athlya.app)
+#
+# GitHub Environments (recommended):
+#   staging    — no approval
+#   production — required reviewers before prod-canary / rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Deploy phase
+        required: true
+        type: choice
+        options:
+          - staging-smoke
+          - production-canary
+          - rollback
+      version_id:
+        description: Rollback target version id (rollback phase only; omit for previous stable)
+        required: false
+        type: string
+      wait_minutes:
+        description: Minutes between canary steps (production-canary only)
+        required: false
+        default: '10'
+        type: string
+
+concurrency:
+  group: deploy-canary-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: ${{ inputs.phase }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: ${{ inputs.phase == 'staging-smoke' && 'staging' || 'production' }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Assert Cloudflare credentials
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set"
+            exit 1
+          fi
+
+      - name: Assert API URLs configured
+        if: inputs.phase != 'rollback'
+        env:
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+          PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.phase }}" = "staging-smoke" ] && [ -z "${STAGING_API_URL}" ]; then
+            echo "::error::vars.STAGING_API_URL is empty"
+            exit 1
+          fi
+          if [ "${{ inputs.phase }}" = "production-canary" ]; then
+            if [ -z "${PRODUCTION_API_URL}" ] || [ -z "${STAGING_API_URL}" ]; then
+              echo "::error::vars.PRODUCTION_API_URL and STAGING_API_URL must be set"
+              exit 1
+            fi
+          fi
+
+      - name: Staging smoke (upload + ready gate)
+        if: inputs.phase == 'staging-smoke'
+        env:
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+        run: node scripts/canary-deploy.mjs staging-smoke --base-url "${STAGING_API_URL}"
+
+      - name: Production canary (5% → 25% → 100%)
+        if: inputs.phase == 'production-canary'
+        env:
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+          PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+        run: |
+          node scripts/canary-deploy.mjs production-canary \
+            --base-url "${PRODUCTION_API_URL}" \
+            --staging-url "${STAGING_API_URL}" \
+            --wait-min "${{ inputs.wait_minutes }}" \
+            --steps "5,25,100"
+
+      - name: Rollback production
+        if: inputs.phase == 'rollback'
+        run: |
+          if [ -n "${{ inputs.version_id }}" ]; then
+            node scripts/canary-deploy.mjs rollback --env production --version-id "${{ inputs.version_id }}"
+          else
+            node scripts/canary-deploy.mjs rollback --env production
+          fi
