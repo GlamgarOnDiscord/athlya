@@ -50,13 +50,13 @@ Le password doit être :
 
 **Tension connue** (cf. commentaire en tête de `0004_rls_hardening.sql`) : la policy `audit_no_insert WITH CHECK (false)` installée par `0001_rls.sql` bloque les INSERTs sur `audit_log` pour tout rôle FORCEd. Une fois `DB_URL` basculé sur `athlya_app`, les writes audit existants (consents update, etc.) échoueront.
 
-Avant la bascule, appliquer la migration `0005_audit_log_app_insert.sql` (à livrer en slice B2-bis) qui remplace la policy par :
+Avant la bascule, appliquer la migration **`0011_audit_log_app_insert.sql`** (slice B2-bis, issue #118) qui remplace la policy par :
 
 ```sql
 DROP POLICY IF EXISTS "audit_no_insert" ON "audit_log";
 CREATE POLICY "audit_app_insert" ON "audit_log"
     FOR INSERT
-    WITH CHECK (true); -- la trigger + grants restreignent déjà l'écriture
+    WITH CHECK (true); -- grants + immutability trigger restreignent UPDATE/DELETE
 ```
 
 > Cette étape est **obligatoire** avant l'étape 3. Si elle est sautée, les requêtes qui touchent l'audit log (PATCH /v1/me/consents notamment) renverront 500.

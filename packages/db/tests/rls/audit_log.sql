@@ -3,7 +3,7 @@
 --
 -- Covered policies (Req 13.4, 22.2, 22.3):
 --   - audit_admin_only   SELECT USING app_role() = 'admin'
---   - audit_no_insert    INSERT WITH CHECK false   (bypass via service role)
+--   - audit_app_insert   INSERT WITH CHECK true    (0011 — athlya_app path)
 --   - audit_no_update    UPDATE USING false        (belt-and-braces)
 --   - audit_no_delete    DELETE USING false        (belt-and-braces)
 --
@@ -78,32 +78,27 @@ SELECT cmp_ok(
     'audit_admin_only: admin role can read audit rows (non-empty)'
 );
 
--- ---------- audit_no_insert: any INSERT from the tenant context fails ----------
+-- ---------- audit_app_insert: tenant context may append (0011 / issue #118) ----------
 
-SELECT throws_ok(
+SELECT lives_ok(
     $$INSERT INTO "audit_log" (actor_id, action, metadata)
-      VALUES ('11111111-1111-4111-8111-111111111113', 'forged', '{}'::jsonb)$$,
-    '42501',
-    NULL,
-    'audit_no_insert: admin cannot INSERT into audit_log via RLS (SQLSTATE 42501)'
+      VALUES ('11111111-1111-4111-8111-111111111113', 'user.consents.updated', '{}'::jsonb)$$,
+    'audit_app_insert: admin can INSERT into audit_log via athlya_app path'
 );
 
--- Even the member path fails with the same SQLSTATE.
 SELECT public.test_set_tenant(
     '11111111-1111-4111-8111-111111111111',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     'member'
 );
 
-SELECT throws_ok(
+SELECT lives_ok(
     $$INSERT INTO "audit_log" (actor_id, action, metadata)
-      VALUES ('11111111-1111-4111-8111-111111111111', 'forged', '{}'::jsonb)$$,
-    '42501',
-    NULL,
-    'audit_no_insert: member cannot INSERT into audit_log via RLS (SQLSTATE 42501)'
+      VALUES ('11111111-1111-4111-8111-111111111111', 'user.consents.updated', '{}'::jsonb)$$,
+    'audit_app_insert: member can INSERT audit row for consents path'
 );
 
--- ---------- audit_no_update via RLS ----------
+-- ---------- audit_no_update via RLS (admin context restored) ----------
 
 SELECT public.test_set_tenant(
     '11111111-1111-4111-8111-111111111113',
