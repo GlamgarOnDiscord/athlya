@@ -38,7 +38,7 @@
  *     calls `msg.retry()` and never `msg.ack()` so Cloudflare's
  *     redelivery budget kicks in.
  *   • Multi-event batch — a non-RGPD event in the same batch is
- *     ack'd unconditionally (no retry loop on unrelated types).
+ *     quarantined on the DLQ (no silent ack).
  *
  * Validates: Findings S5-002 (RGPD Article 17 cascade dispatch).
  */
@@ -320,7 +320,7 @@ describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () =
     expect(msg.retry).not.toHaveBeenCalled();
   });
 
-  it('acks unrelated event types without invoking consumers', async () => {
+  it('quarantines unrelated event types on DLQ instead of silent ack', async () => {
     const stranger = {
       id: 'evt-other-2',
       type: 'auth.user.registered',
@@ -328,14 +328,35 @@ describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () =
       payload: { userId: '11111111-1111-4111-a111-111111111111' },
     };
     const msg = mockMessage('msg-other', stranger);
+    const env = mockEnv();
+    const dlqSend = vi.mocked(env.EVENTS_DLQ.send);
 
-    await handleEventsBatch(mockBatch('athlya-events', [msg]), mockEnv());
+    await handleEventsBatch(mockBatch('athlya-events', [msg]), env);
 
     expect(memberMocks.handleUserDeleted).not.toHaveBeenCalled();
     expect(memberMocks.runExportJob).not.toHaveBeenCalled();
     expect(notificationMocks.handleEvent).not.toHaveBeenCalled();
+    expect(dlqSend).toHaveBeenCalledWith(stranger);
     expect(msg.ack).toHaveBeenCalledTimes(1);
     expect(msg.retry).not.toHaveBeenCalled();
+  });
+
+  it('retries when DLQ redirect fails for unknown event types', async () => {
+    const stranger = {
+      id: 'evt-other-3',
+      type: 'auth.user.registered',
+      occurredAt: '2026-05-15T10:00:00.000Z',
+      payload: { userId: '11111111-1111-4111-a111-111111111111' },
+    };
+    const msg = mockMessage('msg-other-retry', stranger);
+    const env = mockEnv({
+      EVENTS_DLQ: { send: vi.fn().mockRejectedValue(new Error('dlq down')) } as unknown as AthlyaBindings['EVENTS_DLQ'],
+    });
+
+    await handleEventsBatch(mockBatch('athlya-events', [msg]), env);
+
+    expect(msg.retry).toHaveBeenCalledTimes(1);
+    expect(msg.ack).not.toHaveBeenCalled();
   });
 
   it('acks malformed envelopes without throwing', async () => {

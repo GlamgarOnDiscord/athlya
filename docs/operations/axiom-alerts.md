@@ -297,6 +297,25 @@ Issue #126. Déclenche si les adapters QStash (ou le stub dégradé) loguent des
 
 **Action** : vérifier quota Upstash QStash ; upgrade plan si ≥2 studios ; confirmer logs `qstash.publish.ok` sur happy path post-wiring.
 
+### A15 — Unknown queue event type (Sev3 — Slack)
+
+Issue #132. Déclenche si un consumer reçoit un `event.type` hors catalogue (`known-event-types.ts`).
+
+```apl
+['athlya-logs']
+| where _time > now(-5m)
+| where ['message'] == "queue.unknown_event_type"
+| summarize events = count() by eventType = tostring(['eventType'])
+| where events > 0
+```
+
+**Trigger** : ≥ 1 row / 5 min.
+**Cooldown** : 15 minutes.
+**Channel** : `#ops-athlya-alerts`.
+**Message** : `⚠️ Unknown queue event {{eventType}} ({{events}} in 5m). Check typo / missing consumer wiring — docs/runbooks/event-bus.md § types inconnus.`
+
+**Action** : inspecter DLQ (`GET /admin/dlq/stats`), corriger routage publish ou étendre `HANDLED_EVENT_TYPES`, replay si safe.
+
 ## Budget ingest OTel (issue #83)
 
 Sampling côté Worker (`OTEL_SAMPLE_RATE`, défaut prod `0.1`) + health `1 %` + **5xx toujours exportés**. Cloudflare `head_sampling_rate` prod `0.1` réduit aussi les Tail events.
