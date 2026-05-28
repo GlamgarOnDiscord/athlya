@@ -22,6 +22,8 @@ function baseEnv(overrides: Partial<AthlyaBindings> = {}): AthlyaBindings {
   return {
     ENVIRONMENT: 'staging',
     EVENTS_QUEUE: {} as AthlyaBindings['EVENTS_QUEUE'],
+    EVENTS_NOTIFICATIONS_QUEUE: {} as AthlyaBindings['EVENTS_NOTIFICATIONS_QUEUE'],
+    EVENTS_RGPD_QUEUE: {} as AthlyaBindings['EVENTS_RGPD_QUEUE'],
     EVENTS_DLQ: {} as AthlyaBindings['EVENTS_DLQ'],
     DB_URL: 'postgres://direct/neondb',
     REDIS_URL: 'https://redis.example',

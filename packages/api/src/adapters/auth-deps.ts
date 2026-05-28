@@ -62,7 +62,8 @@ import {
   type SessionStore,
 } from '@athlya/auth';
 
-import { publish, type Queue } from '../events/publish.js';
+import { publish } from '../events/publish.js';
+import { buildRoutedPublishDeps } from '../events/publish-deps.js';
 
 import { createRedisSessionStore } from './auth-session-store-redis.js';
 import { createDrizzleUserRepo } from './auth-user-repo-drizzle.js';
@@ -260,10 +261,7 @@ async function getAuthState(env: AthlyaBindings): Promise<AuthServiceState> {
     },
     publishEvent: async (event: AthlyaEvent) => {
       try {
-        await publish(event, undefined, {
-          // FIXME(B8.3): Queue type not exposed by Cloudflare types — investigate
-          queue: env.EVENTS_QUEUE as unknown as Queue,
-        });
+        await publish(event, undefined, buildRoutedPublishDeps(env));
       } catch (err) {
         // Best-effort only: auth events are published AFTER
         // the repo insert commits, so a queue failure here

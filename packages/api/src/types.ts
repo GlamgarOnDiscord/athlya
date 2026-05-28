@@ -100,8 +100,19 @@ export interface AthlyaBindings {
   /**
    * Producer binding declared in `wrangler.toml` (task 9.4).
    * Domain services publish through this via `@athlya/api/events/publish`.
+   * Legacy topic — new events route to lane-specific queues (issue #125).
    */
   readonly EVENTS_QUEUE: Queue<unknown>;
+
+  /**
+   * Notifications lane (`reservation.*`, `billing.subscription.failed`).
+   */
+  readonly EVENTS_NOTIFICATIONS_QUEUE: Queue<unknown>;
+
+  /**
+   * RGPD lane (`auth.user.deleted`, `members.export.*`).
+   */
+  readonly EVENTS_RGPD_QUEUE: Queue<unknown>;
 
   /**
    * Producer binding for the dead-letter queue (`athlya-events-dlq`,

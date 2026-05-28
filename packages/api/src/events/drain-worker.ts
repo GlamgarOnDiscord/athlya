@@ -132,7 +132,10 @@ export interface Clock {
 /** Options bag accepted by {@link drainOutbox}. */
 export interface DrainOutboxOptions {
   readonly store: OutboxStore;
-  readonly queue: QueueProducer;
+  /** Legacy single-queue drain. Ignored when {@link resolveQueue} is set. */
+  readonly queue?: QueueProducer;
+  /** Route each outbox row to the lane-specific queue (issue #125). */
+  readonly resolveQueue?: (eventType: string) => QueueProducer;
   /** Defaults to {@link DEFAULT_BATCH_SIZE}. Must be a positive integer. */
   readonly batchSize?: number;
   readonly logger?: Logger;
@@ -202,7 +205,15 @@ const defaultClock: Clock = {
  *   3. Return `{ processed, succeeded, failed }`.
  */
 export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainResult> {
-  const { store, queue } = options;
+  const { store } = options;
+  const resolveQueue =
+    options.resolveQueue ??
+    ((_: string) => {
+      if (options.queue === undefined) {
+        throw new Error('drainOutbox requires queue or resolveQueue');
+      }
+      return options.queue;
+    });
   const logger = options.logger ?? defaultLogger;
   const clock = options.clock ?? defaultClock;
   const batchSize = normaliseBatchSize(options.batchSize);
@@ -225,6 +236,7 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
   let failed = 0;
 
   for (const row of rows) {
+    const queue = resolveQueue(row.eventType);
     const sendOk = await trySend(queue, row, logger);
     if (!sendOk) {
       failed += 1;

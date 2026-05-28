@@ -128,6 +128,8 @@ function buildApp(role: Role | null): {
 
   const env: DlqBindings = {
     EVENTS_QUEUE: eventsQueue as unknown as Queue<unknown>,
+    EVENTS_NOTIFICATIONS_QUEUE: eventsQueue as unknown as Queue<unknown>,
+    EVENTS_RGPD_QUEUE: eventsQueue as unknown as Queue<unknown>,
     EVENTS_DLQ: eventsDlq as unknown as Queue<unknown>,
     REDIS_URL: TEST_REDIS_URL,
     REDIS_TOKEN: 'test-token',

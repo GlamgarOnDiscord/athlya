@@ -55,7 +55,8 @@
  * @see Requirements 4.1, 4.2, 4.4 ; audit finding S5-001.
  */
 
-import { publish, type Queue } from '../events/publish.js';
+import { publish } from '../events/publish.js';
+import { buildRoutedPublishDeps } from '../events/publish-deps.js';
 
 import { getOrCreateDbHttp } from './deps-cache.js';
 import { createDrizzleExportJobStore } from './members-export-job-store-drizzle.js';
@@ -225,9 +226,7 @@ function buildEventPublisher(env: AthlyaBindings): EventPublisher {
   return {
     async publish(event: AthlyaEvent) {
       try {
-        await publish(event, undefined, {
-          queue: env.EVENTS_QUEUE as unknown as Queue,
-        });
+        await publish(event, undefined, buildRoutedPublishDeps(env));
       } catch (err) {
         console.warn('[export-deps] publishEvent failed', {
           eventId: event.id,

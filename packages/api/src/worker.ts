@@ -71,6 +71,10 @@ import { buildOutboxRouter } from './admin/outbox-routes.js';
 import { buildJwtRotateRouter } from './admin/jwt-rotate-routes.js';
 import { handleDlqBatch } from './events/drain-dlq.js';
 import { runScheduledDrain } from './events/drain-scheduled.js';
+import {
+  isNotificationsConsumerQueue,
+  isRgpdConsumerQueue,
+} from './events/route-queue.js';
 import { createLogger } from './logging.js';
 import {
   isCronDbUrlConfigured,
@@ -1393,7 +1397,29 @@ const worker = {
       return;
     }
 
-    // Main events queue branch — RGPD consumers dispatch.
+    if (isNotificationsConsumerQueue(batch.queue)) {
+      const task = handleNotificationsBatch(batch, env).catch((err: unknown) => {
+        console.error('[worker] notifications dispatcher failed', {
+          queue: batch.queue,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+      ctx.waitUntil(task);
+      return;
+    }
+
+    if (isRgpdConsumerQueue(batch.queue)) {
+      const task = handleRgpdBatch(batch, env).catch((err: unknown) => {
+        console.error('[worker] rgpd dispatcher failed', {
+          queue: batch.queue,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+      ctx.waitUntil(task);
+      return;
+    }
+
+    // Legacy monolithic events queue — drains backlog during migration.
     const task = handleEventsBatch(batch, env).catch((err: unknown) => {
       console.error('[worker] events dispatcher failed', {
         queue: batch.queue,
@@ -1441,6 +1467,126 @@ const NOTIFICATION_EVENT_TYPES = new Set<string>(HANDLED_EVENT_TYPES);
  * synthetic `MessageBatch` and assert ack/retry semantics without
  * touching the Hono surface.
  */
+export async function handleRgpdBatch(
+  batch: MessageBatch<unknown>,
+  env: AthlyaBindings,
+): Promise<void> {
+  for (const msg of batch.messages) {
+    const envelope = readEventEnvelope(msg.body);
+    if (envelope === null) {
+      console.warn('[worker] rgpd dispatcher: malformed envelope, acking', {
+        queue: batch.queue,
+        messageId: msg.id,
+      });
+      msg.ack();
+      continue;
+    }
+
+    try {
+      switch (envelope.type) {
+        case 'auth.user.deleted': {
+          const envelopePayload =
+            typeof envelope['payload'] === 'object' && envelope['payload'] !== null
+              ? (envelope['payload'] as Record<string, unknown>)
+              : undefined;
+          const rawUserId: unknown = envelopePayload?.['userId'];
+          if (
+            typeof rawUserId !== 'string' ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawUserId)
+          ) {
+            console.warn('[worker] auth.user.deleted: invalid userId — acking without processing', {
+              messageId: msg.id,
+            });
+            msg.ack();
+            break;
+          }
+          await handleUserDeleted(msg.body as AuthUserDeletedEvent, buildCascadeDeps(env));
+          msg.ack();
+          break;
+        }
+        case 'members.export.requested': {
+          const event = msg.body as MembersExportRequestedEvent;
+          await runExportJob(event.payload.exportJobId, buildExportDeps(env));
+          msg.ack();
+          break;
+        }
+        default: {
+          console.warn('[worker] rgpd dispatcher: unexpected event type, acking', {
+            queue: batch.queue,
+            messageId: msg.id,
+            eventType: envelope.type,
+          });
+          msg.ack();
+          break;
+        }
+      }
+    } catch (err) {
+      console.error('[worker] rgpd consumer failed', {
+        queue: batch.queue,
+        messageId: msg.id,
+        eventType: envelope.type,
+        eventId: envelope.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      msg.retry();
+    }
+  }
+}
+
+export async function handleNotificationsBatch(
+  batch: MessageBatch<unknown>,
+  env: AthlyaBindings,
+): Promise<void> {
+  for (const msg of batch.messages) {
+    const envelope = readEventEnvelope(msg.body);
+    if (envelope === null) {
+      console.warn('[worker] notifications dispatcher: malformed envelope, acking', {
+        queue: batch.queue,
+        messageId: msg.id,
+      });
+      msg.ack();
+      continue;
+    }
+
+    try {
+      if (!NOTIFICATION_EVENT_TYPES.has(envelope.type)) {
+        console.warn('[worker] notifications dispatcher: unexpected event type, acking', {
+          queue: batch.queue,
+          messageId: msg.id,
+          eventType: envelope.type,
+        });
+        msg.ack();
+        continue;
+      }
+
+      let event: AthlyaEvent;
+      try {
+        event = parseEvent(msg.body);
+      } catch (err) {
+        console.warn('[worker] notifications event malformed, acking', {
+          queue: batch.queue,
+          messageId: msg.id,
+          eventType: envelope.type,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        msg.ack();
+        continue;
+      }
+      await handleNotificationEvent(event, buildNotificationsDeps(env));
+      msg.ack();
+    } catch (err) {
+      console.error('[worker] notifications consumer failed', {
+        queue: batch.queue,
+        messageId: msg.id,
+        eventType: envelope.type,
+        eventId: envelope.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      msg.retry();
+    }
+  }
+}
+
 export async function handleEventsBatch(
   batch: MessageBatch<unknown>,
   env: AthlyaBindings,

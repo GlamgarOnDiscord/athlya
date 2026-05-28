@@ -40,7 +40,8 @@ import {
   type Role,
 } from '@athlya/members';
 
-import { publish, type Queue } from '../events/publish.js';
+import { publish } from '../events/publish.js';
+import { buildRoutedPublishDeps } from '../events/publish-deps.js';
 
 import { createR2AvatarUploadStore } from './avatar-upload-store-r2.js';
 import {
@@ -109,10 +110,7 @@ function buildEventPublisher(env: AthlyaBindings): {
   return {
     async publish(event) {
       try {
-        await publish(event, undefined, {
-          // FIXME(B8.3): Queue type not exposed by Cloudflare types — investigate
-          queue: env.EVENTS_QUEUE as unknown as Queue,
-        });
+        await publish(event, undefined, buildRoutedPublishDeps(env));
       } catch (err) {
         console.warn('[members-deps] publishEvent failed', {
           eventId: event.id,
