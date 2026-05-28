@@ -27,6 +27,7 @@ Au-delà de **5 studios** ou **500 membres** : budget **150–250 €/mois** (vo
 | Neon                | compute hours / CU    | 80 % plan        | Index lents, pool Hyperdrive                |
 | Cloudflare Workers  | requests + CPU ms     | Paid tier cap    | OTel sampling (#83), health probe frequency |
 | Cloudflare Queues   | backlog depth         | > 1000 5 min     | `docs/runbooks/outbox-ops.md`               |
+| Upstash QStash      | messages/day          | 80 % quota (400/500 free) | `docs/runbooks/qstash-quota.md`      |
 | Resend              | emails/month          | 80 % quota       | Désactiver digests non critiques            |
 | Axiom               | ingest GB/month       | 80 % quota       | Baisser `OTEL_SAMPLE_RATE` si besoin        |
 
@@ -35,6 +36,15 @@ Au-delà de **5 studios** ou **500 membres** : budget **150–250 €/mois** (vo
 1. Console Upstash → Database → **Usage** → alerte email à 80 % du quota journalier.
 2. Si alerte récurrente : audit des clés `ratelimit:*`, `session:*`, `booking:*` dans les logs Worker.
 3. **Fail-open rate limit** (#6) : quota dépassé → plus de trafic accepté + facture surprise. Monter de plan ou activer politique stricte côté ops.
+
+## Upstash QStash — messages/day (issue #126)
+
+1. Console Upstash → **QStash** → Usage → alerte **80 %** quota journalier (500/j free → seuil 400).
+2. Monitor Axiom **A14** sur logs `qstash.publish.failed` / `qstash.quota.degraded` (voir `docs/operations/axiom-alerts.md`).
+3. **Upgrade plan** dès 2e studio pilote ou sustained >400 msg/j.
+4. Projection **5 studios** : ~1000+ msg/j → tier payant obligatoire (~10–20 €/mois) — détail [`qstash-quota.md`](./qstash-quota.md).
+
+Checklist : `node scripts/verify-qstash-quota-checklist.mjs`
 
 ## Neon — compute
 
@@ -64,4 +74,5 @@ Alerte Axiom : ingest > 80 % quota → `#ops-athlya-alerts` (voir aussi `docs/op
 
 - README § Coûts opérationnels
 - `docs/operations/axiom-alerts.md`
+- `docs/runbooks/qstash-quota.md` (issue #126)
 - Issues #6 (rate limit fail-closed), #83 (OTel sampling)

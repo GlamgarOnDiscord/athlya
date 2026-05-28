@@ -278,6 +278,25 @@ latence des notifications, pas le user-visible flow.
 **Cooldown** : 2h.
 **Channel** : `#ops-athlya-alerts` (Slack only).
 
+### A14 — QStash publish failures / quota (Sev3 — Slack)
+
+Issue #126. Déclenche si les adapters QStash (ou le stub dégradé) loguent des échecs ou skips répétés.
+
+```apl
+['athlya-logs']
+| where _time > now(-1h)
+| where ['message'] in ("qstash.publish.failed", "qstash.schedule.skipped", "qstash.quota.degraded")
+| summarize events = count() by ['message']
+| where events > 5
+```
+
+**Trigger** : ≥ 1 row / heure.
+**Cooldown** : 60 minutes.
+**Channel** : `#ops-athlya-alerts`.
+**Message** : `⚠️ QStash stress: {{events}} {{message}} events in 1h. Check Upstash quota + docs/runbooks/qstash-quota.md`.
+
+**Action** : vérifier quota Upstash QStash ; upgrade plan si ≥2 studios ; confirmer logs `qstash.publish.ok` sur happy path post-wiring.
+
 ## Budget ingest OTel (issue #83)
 
 Sampling côté Worker (`OTEL_SAMPLE_RATE`, défaut prod `0.1`) + health `1 %` + **5xx toujours exportés**. Cloudflare `head_sampling_rate` prod `0.1` réduit aussi les Tail events.
