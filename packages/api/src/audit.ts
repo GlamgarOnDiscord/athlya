@@ -26,8 +26,8 @@
  *   • Validate every entry through a small zod schema so malformed
  *     audits (empty action slug, 10 kB target ids, …) fail fast at
  *     the call site rather than bloating the DB.
- *   • Delegate to a pluggable {@link AuditLogStore} port so the six
- *     wired call sites (see {@link AUDIT_ACTIONS}) can be unit-tested
+ *   • Delegate to a pluggable {@link AuditLogStore} port so wired
+ *     call sites (see {@link AUDIT_ACTIONS}) can be unit-tested
  *     with a `vi.fn()` double without touching Postgres.
  *   • Propagate — never swallow — a store rejection. The caller's
  *     transaction must roll back on any failure of the audit insert;
@@ -36,10 +36,10 @@
  *
  * Wired call sites (Requirement 22.1)
  * -----------------------------------
- * The six stable action slugs listed in {@link AUDIT_ACTIONS} are the
+ * The stable action slugs listed in {@link AUDIT_ACTIONS} are the
  * spec-mandated ones. The `action` field is typed as a closed union
  * branded with `string & {}`, so ad-hoc callers keep compile-time
- * autocomplete on the six canonical slugs while custom slugs (emitted
+ * autocomplete on the canonical slugs while custom slugs (emitted
  * by a future feature before a spec update) remain assignable without
  * widening to plain `string`.
  */
@@ -52,8 +52,8 @@ import { z } from 'zod';
 
 /**
  * Maximum length of an action slug. Chosen to accommodate a fully
- * qualified domain-scoped slug (`billing.stripe.signature_failed` is
- * 31 chars) with generous headroom for future compound actions, while
+ * qualified domain-scoped slug (`billing.webhook.signature_failed` is
+ * 33 chars) with generous headroom for future compound actions, while
  * staying small enough that a typo of the form `"x".repeat(10_000)`
  * bounces at the writer before it hits Postgres.
  */
@@ -77,7 +77,7 @@ const TARGET_TYPE_MAX_LENGTH = 64;
 const TARGET_ID_MAX_LENGTH = 128;
 
 /**
- * The six action slugs wired in the MVP, kept as a readonly tuple so
+ * Canonical action slugs wired in production, kept as a readonly tuple so
  * grep can find every call site and a future audit can diff the set
  * against the list in Requirement 22.1.
  *
@@ -90,7 +90,6 @@ export const AUDIT_ACTIONS = [
   'user.deleted',
   'reservation.cancelled_by_admin',
   'rls.violation',
-  'billing.stripe.signature_failed',
   'billing.webhook.signature_failed',
   'billing.webhook.processed',
   'user.consents.updated',

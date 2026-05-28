@@ -208,10 +208,10 @@ export function buildDlqRouter(deps: DlqRouterDeps = {}): Hono<DlqAdminEnv> {
   const router = new Hono<DlqAdminEnv>();
   const auditWriter = deps.auditWriter;
 
-  function actorIdFrom(c: Context<DlqAdminEnv>): string {
+  function actorIdFrom(c: Context<DlqAdminEnv>): string | null {
     const claims = c.get('authClaims');
     const raw = claims?.userId;
-    return typeof raw === 'string' ? raw : 'unknown';
+    return typeof raw === 'string' ? raw : null;
   }
 
   /* -------------------------------------------------------------- */
@@ -260,18 +260,23 @@ export function buildDlqRouter(deps: DlqRouterDeps = {}): Hono<DlqAdminEnv> {
     }
 
     if (auditWriter !== undefined) {
-      try {
-        await auditWriter.appendReplay({
-          actorId: actorIdFrom(c),
-          entryId: id,
-          messageType: result.messageType ?? null,
-        });
-      } catch (err) {
-        const logger = c.get('logger');
-        logger?.warn('dlq replay: audit append failed; continuing', {
-          entryId: id,
-          error: err instanceof Error ? err.message : String(err),
-        });
+      const actorId = actorIdFrom(c);
+      if (actorId === null) {
+        c.get('logger')?.warn('dlq replay: skipping audit — missing actor userId', { entryId: id });
+      } else {
+        try {
+          await auditWriter.appendReplay({
+            actorId,
+            entryId: id,
+            messageType: result.messageType ?? null,
+          });
+        } catch (err) {
+          const logger = c.get('logger');
+          logger?.warn('dlq replay: audit append failed; continuing', {
+            entryId: id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     }
 
@@ -290,14 +295,19 @@ export function buildDlqRouter(deps: DlqRouterDeps = {}): Hono<DlqAdminEnv> {
     const result = await dlqDiscard(c.env, id);
 
     if (result.discarded && auditWriter !== undefined) {
-      try {
-        await auditWriter.appendDiscard({ actorId: actorIdFrom(c), entryId: id });
-      } catch (err) {
-        const logger = c.get('logger');
-        logger?.warn('dlq discard: audit append failed; continuing', {
-          entryId: id,
-          error: err instanceof Error ? err.message : String(err),
-        });
+      const actorId = actorIdFrom(c);
+      if (actorId === null) {
+        c.get('logger')?.warn('dlq discard: skipping audit — missing actor userId', { entryId: id });
+      } else {
+        try {
+          await auditWriter.appendDiscard({ actorId, entryId: id });
+        } catch (err) {
+          const logger = c.get('logger');
+          logger?.warn('dlq discard: audit append failed; continuing', {
+            entryId: id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     }
 

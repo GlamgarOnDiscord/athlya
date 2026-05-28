@@ -99,10 +99,8 @@ export function buildBillingDeps(env: AthlyaBindings): BillingDeps {
         return { kind: 'signature_invalid' as const };
       }
 
-      // No-op audit / publish ports — slice B9 explicitly
-      // documents "PAS d'effet de bord". Every dispatch branch
-      // resolves cleanly; future slices will swap in real
-      // Drizzle + outbox-backed implementations.
+      // Real audit + transaction wrapper (issue #127); `publish` remains a no-op
+      // until outbox-backed dispatch ships.
       const db = getOrCreateWriteDb(env);
       const auditPorts = createBillingWebhookAuditAppender(db);
       const deps: WebhookDeps = {

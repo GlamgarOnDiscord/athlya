@@ -125,7 +125,7 @@ describe('appendAudit', () => {
       opaque,
       {
         actorId: VALID_ACTOR,
-        action: 'billing.stripe.signature_failed',
+        action: 'billing.webhook.signature_failed',
         metadata: { request_id: 'req_123' },
       },
       store,
@@ -251,14 +251,18 @@ describe('appendAudit', () => {
     ).rejects.toBeInstanceOf(CustomError);
   });
 
-  it('exposes AUDIT_ACTIONS as a tuple of the six wired slugs', () => {
+  it('exposes AUDIT_ACTIONS as the canonical wired slug tuple', () => {
     expect(AUDIT_ACTIONS).toEqual([
       'user.registered',
       'user.deleted',
       'reservation.cancelled_by_admin',
       'rls.violation',
-      'billing.stripe.signature_failed',
+      'billing.webhook.signature_failed',
+      'billing.webhook.processed',
       'user.consents.updated',
+      'jwt.key.rotation_prep',
+      'dlq.entry.replayed',
+      'dlq.entry.discarded',
     ]);
   });
 });
