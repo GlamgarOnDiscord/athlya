@@ -1,5 +1,7 @@
 # Runbook — Stripe billing (issue #69)
 
+Provisioning production : **[stripe-production.md](./stripe-production.md)** (issue #122).
+
 ## Secrets (staging + production)
 
 ```bash

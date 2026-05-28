@@ -22,9 +22,9 @@
  *     nextCursor: null }`) so the dashboard renders a stable empty
  *     state.
  *   • `POST /webhook` verifies the signature when
- *     STRIPE_WEBHOOK_SECRET is set. With no secret, the endpoint
- *     responds 200 immediately so Stripe stops retrying — the
- *     posture is logged at warn level for ops visibility.
+ *     STRIPE_WEBHOOK_SECRET is set. With no secret, staging/production
+ *     return 500 `configuration_error` (fail-closed, issue #69). Dev
+ *     returns 200 no-op for local runs without Stripe.
  *
  * The mode dégradé is documented in `docs/runbooks/billing.md`.
  *
