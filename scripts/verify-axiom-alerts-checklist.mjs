@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Print the 13 Axiom alert provisioning checklist (issue #120).
+ * Print the 14 Axiom alert provisioning checklist (issues #120, #126).
  * Operator ticks items in docs/runbooks/axiom-alerts-provision.md after UI setup.
  *
  * Usage:
@@ -22,6 +22,7 @@ const ALERTS = [
   { id: 'A11', name: 'S1 booking burn rate > 2x', sev: 2, route: 'Slack + PagerDuty' },
   { id: 'A12', name: 'S3 error burn rate > 2x', sev: 2, route: 'Slack + PagerDuty' },
   { id: 'A13', name: 'S4 queue lag burn rate > 2x', sev: 3, route: 'Slack' },
+  { id: 'A14', name: 'QStash publish / quota stress', sev: 3, route: 'Slack' },
 ];
 
 const json = process.argv.includes('--json');
@@ -47,7 +48,7 @@ Also required (non-Axiom):
 Test fires (min 3): T1 Checkly, T2 A1, T3 A5 — see runbook.
 `);
 
-if (ALERTS.length !== 13) {
-  console.error('Expected 13 alerts');
+if (ALERTS.length !== 14) {
+  console.error('Expected 14 alerts');
   process.exit(1);
 }

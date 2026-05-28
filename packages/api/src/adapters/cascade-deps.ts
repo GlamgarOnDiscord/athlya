@@ -60,14 +60,13 @@ import type { HandleUserDeletedDeps, Scheduler } from '@athlya/members';
 function buildDegradedScheduler(env: AthlyaBindings): Scheduler {
   return {
     scheduleAnonymization(userId, dueAt) {
-      console.warn(
-        '[cascade-deps] QStash binding missing — anonymisation schedule skipped (mode dégradé, finding S5-003)',
-        {
-          userId,
-          dueAt: dueAt.toISOString(),
-          env: env.ENVIRONMENT,
-        },
-      );
+      console.warn('qstash.schedule.skipped', {
+        op: 'anonymize',
+        userId,
+        dueAt: dueAt.toISOString(),
+        env: env.ENVIRONMENT,
+        reason: 'qstash_binding_missing',
+      });
       return Promise.resolve();
     },
   };

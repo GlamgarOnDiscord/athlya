@@ -1,8 +1,8 @@
-# Provisioning — 13 alertes Axiom (issue #120)
+# Provisioning — 14 alertes Axiom (issues #120, #126)
 
 **Owner:** SRE / on-call  
 **Durée estimée:** ~3 h (Day 2 checklist)  
-**Définitions APL:** [`docs/operations/axiom-alerts.md`](../operations/axiom-alerts.md) (A1–A13)
+**Définitions APL:** [`docs/operations/axiom-alerts.md`](../operations/axiom-alerts.md) (A1–A14)
 
 ---
 
@@ -15,7 +15,7 @@
 
 ---
 
-## Inventaire des 13 monitors
+## Inventaire des 14 monitors
 
 | ID | Nom | Sev | Route | Query |
 |----|-----|-----|-------|-------|
@@ -32,6 +32,7 @@
 | A11 | S1 booking burn rate > 2x | 2 | Slack + PD | § A11 |
 | A12 | S3 error burn rate > 2x | 2 | Slack + PD | § A12 |
 | A13 | S4 queue lag burn rate > 2x | 3 | Slack | § A13 |
+| A14 | QStash publish / quota stress | 3 | Slack | § A14 |
 
 **Mapping checklist launch (9 incident + 4 burn):**
 
@@ -48,6 +49,7 @@
 | Concurrency storm | A8 |
 | Burn availability (proxy error) | A12 |
 | Burn latency login | A2 |
+| QStash quota / publish failures | A14 |
 
 Items checklist **non-Axiom** (autre outil) : JWKS rotation expirée → runbook [`rotate-jwt.md`](./rotate-jwt.md) + alerte calendrier ; Stripe webhook → Sentry + audit `billing.stripe.signature_failed` ; RLS violation → audit `rls.violation` + future log alert ; RGPD cron skip → log `rgpd_maintenance_cycle_skipped` (alerte logs Phase B).
 
@@ -82,6 +84,7 @@ Pour **chaque** A1–A13 :
 | A11 | | [ ] | [ ] |
 | A12 | | [ ] | [ ] |
 | A13 | | [ ] | [ ] |
+| A14 | | [ ] | [ ] |
 
 ---
 
