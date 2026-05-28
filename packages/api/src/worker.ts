@@ -89,6 +89,15 @@ import { tracing } from './middleware/otel.js';
 import { registerErrorHandlers } from './middleware/problem-details.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import { guardRateLimiter } from './middleware/limiter-guard.js';
+import {
+  ADMIN_STATS_BUDGET,
+  EXPENSIVE_READ_BUDGET,
+  isAdminStatsGetPath,
+  isMembersListGetPath,
+  MEMBERS_LIST_BUDGET,
+  MUTATION_BUDGETS,
+  AUTH_BUDGET,
+} from './middleware/rate-limit-policies.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { tenantClaimGuard, tenantResolverMiddleware } from './middleware/tenant-resolver.js';
 import { buildSpecApp } from './openapi/spec.js';
@@ -564,7 +573,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   //    synthetic so read traffic cannot run unbounded during a Redis
   //    outage. `/health` and `/health/ready` stay outside `/v1/*`.
   const ipLimiter = rateLimit();
-  const authLimiter = rateLimit({ ipLimit: 20, windowSec: 60 });
+  const authLimiter = rateLimit({ ipLimit: AUTH_BUDGET.ipLimit, windowSec: AUTH_BUDGET.windowSec });
   const isDevEnv = (env: AthlyaBindings) => env.ENVIRONMENT === 'dev';
 
   const guardLimiter = (
@@ -629,21 +638,14 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   //      runs on every method by default; we wrap each limiter in
   //      a method guard so a benign GET on `/v1/reservations` is
   //      not throttled by the booking budget.
-  const reservationLimiter = rateLimit({
-    userLimit: 10,
-    ipLimit: 10,
-    windowSec: 60,
-  });
-  const profileLimiter = rateLimit({
-    userLimit: 5,
-    ipLimit: 5,
-    windowSec: 60,
-  });
-  const exportLimiter = rateLimit({
-    userLimit: 1,
-    ipLimit: 1,
-    windowSec: 86400,
-  });
+  const reservationLimiter = rateLimit(MUTATION_BUDGETS.reservation);
+  const profileLimiter = rateLimit(MUTATION_BUDGETS.profile);
+  const exportLimiter = rateLimit(MUTATION_BUDGETS.export);
+
+  const searchReadLimiter = rateLimit(EXPENSIVE_READ_BUDGET);
+  const membersListReadLimiter = rateLimit(MEMBERS_LIST_BUDGET);
+  const auditReadLimiter = rateLimit(EXPENSIVE_READ_BUDGET);
+  const adminStatsReadLimiter = rateLimit(ADMIN_STATS_BUDGET);
 
   // `guardLimiter` — mutations fail-closed, reads fail-open (issue #65).
   const guardMutationLimiter = (
@@ -653,6 +655,40 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
     const guarded = guardLimiterWithDevBypass('mutation', inner, 'fail-closed');
     return async (c: { req: { method: string } }, next: () => Promise<void>) => {
       if (c.req.method !== method) {
+        await next();
+        return undefined;
+      }
+      return (
+        guarded as unknown as (ctx: typeof c, n: typeof next) => Promise<Response | undefined>
+      )(c, next);
+    };
+  };
+
+  // Issue #133 — expensive reads fail-closed (503) if Redis is down.
+  const guardExpensiveReadLimiter = (
+    inner: ReturnType<typeof rateLimit>,
+    match: 'prefix' | 'members-list',
+  ) => {
+    const guarded = guardLimiterWithDevBypass('expensive-read', inner, 'fail-closed');
+    return async (c: { req: { method: string; path: string } }, next: () => Promise<void>) => {
+      if (c.req.method !== 'GET') {
+        await next();
+        return undefined;
+      }
+      if (match === 'members-list' && !isMembersListGetPath(c.req.path)) {
+        await next();
+        return undefined;
+      }
+      return (
+        guarded as unknown as (ctx: typeof c, n: typeof next) => Promise<Response | undefined>
+      )(c, next);
+    };
+  };
+
+  const guardAdminStatsReadLimiter = (inner: ReturnType<typeof rateLimit>) => {
+    const guarded = guardLimiterWithDevBypass('admin-stats', inner, 'fail-closed');
+    return async (c: { req: { method: string; path: string } }, next: () => Promise<void>) => {
+      if (c.req.method !== 'GET' || !isAdminStatsGetPath(c.req.path)) {
         await next();
         return undefined;
       }
@@ -678,6 +714,21 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   app.use(
     '/v1/members/me/export',
     guardMutationLimiter('POST', exportLimiter) as Parameters<typeof app.use>[1],
+  );
+
+  app.use(
+    '/v1/classes/search',
+    guardExpensiveReadLimiter(searchReadLimiter, 'prefix') as Parameters<typeof app.use>[1],
+  );
+  app.use(
+    '/v1/members',
+    guardExpensiveReadLimiter(membersListReadLimiter, 'members-list') as Parameters<
+      typeof app.use
+    >[1],
+  );
+  app.use(
+    '/v1/audit',
+    guardExpensiveReadLimiter(auditReadLimiter, 'prefix') as Parameters<typeof app.use>[1],
   );
 
   // 6. Body-size limit — Sprint 1 / Slice 1.2. Cloudflare's free
@@ -1185,6 +1236,10 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   // double-prefixing would shift the routes to `/admin/dlq/admin/dlq/*`
   // and break the contract documented in `dlq-routes.test.ts`.
   let latestAdminEnv: AthlyaBindings | undefined;
+  app.use(
+    '/admin/*',
+    guardAdminStatsReadLimiter(adminStatsReadLimiter) as Parameters<typeof app.use>[1],
+  );
   app.use('/admin/*', async (c, next) => {
     latestAdminEnv = c.env;
     await next();
