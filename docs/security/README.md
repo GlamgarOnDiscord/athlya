@@ -25,6 +25,7 @@ Documentation sécurité pour la plateforme Athlya. Tous les findings audit, spr
 - [`audit-S2-auth.md`](./audit-S2-auth.md) — Authentication & Authorization
 - [`audit-S3-dast.md`](./audit-S3-dast.md) — DAST (attaques live)
 - [`audit-S4-network.md`](./audit-S4-network.md) — Network, transport & DDoS
+- [`rate-limit-coverage.md`](./rate-limit-coverage.md) — matrice fail-open/closed (#133)
 - [`audit-S5-rgpd.md`](./audit-S5-rgpd.md) — RGPD / Data Privacy
 - [`audit-S6-frontend.md`](./audit-S6-frontend.md) — Frontend (web + studio)
 - [`audit-backlog.md`](./audit-backlog.md) — checklist MEDIUM/LOW/INFO résiduels (#79)
