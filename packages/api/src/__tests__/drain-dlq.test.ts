@@ -494,7 +494,7 @@ describe('dlqReplay', () => {
     redis.sets.set('dlq:pending', [{ score: 1_000, member: 'ok-id' }]);
 
     const result = await dlqReplay(env, 'ok-id');
-    expect(result).toEqual({ replayed: true });
+    expect(result).toEqual({ replayed: true, messageType: 'reservation.created' });
 
     // Payload was re-published verbatim.
     expect(notificationsQueue.send).toHaveBeenCalledTimes(1);

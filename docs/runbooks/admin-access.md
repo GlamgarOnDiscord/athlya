@@ -38,7 +38,7 @@ Tests automatisés existants : membre/coach → 403 JSON (`dlq-routes.test.ts`, 
 
 ## Phase 3 — Audit JWT rotate
 
-`POST /admin/jwt/rotate-prepare` doit écrire `audit_log` (`jwt.rotate.prepared`). Policy INSERT corrigée en migration `0011` (issue #118) — brancher `appendAudit` : issue #127.
+`POST /admin/jwt/rotate-prepare` écrit `audit_log` (`jwt.key.rotation_prep`, issue #127). Policy INSERT corrigée en migration `0011` (issue #118).
 
 ## Onboarding on-call
 

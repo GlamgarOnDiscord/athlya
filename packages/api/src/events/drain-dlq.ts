@@ -655,7 +655,7 @@ function readPayloadEventType(payload: unknown): string {
 export async function dlqReplay(
   env: DlqBindings,
   entryId: string,
-): Promise<{ replayed: boolean; reason?: string }> {
+): Promise<{ replayed: boolean; reason?: string; messageType?: string | null }> {
   if (typeof entryId !== 'string' || entryId.length === 0) {
     return { replayed: false, reason: 'not_found' };
   }
@@ -681,7 +681,7 @@ export async function dlqReplay(
   await redis.zrem(PENDING_SET_KEY, entryId);
   await redis.del(entryKey(entryId));
 
-  return { replayed: true };
+  return { replayed: true, messageType: eventType.length > 0 ? eventType : null };
 }
 
 /* ------------------------------------------------------------------ */

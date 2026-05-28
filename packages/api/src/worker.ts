@@ -61,6 +61,7 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 
+import { lazyDlqAuditWriter, lazyJwtRotateAuditWriter } from './adapters/audit-log-wiring.js';
 import { buildCascadeDeps } from './adapters/cascade-deps.js';
 import { buildCronSqlExecutor } from './adapters/cron-sql-executor.js';
 import { buildExportDeps } from './adapters/export-deps.js';
@@ -1186,9 +1187,22 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   // it at `app.route('/', router)` rather than at `/admin/dlq` —
   // double-prefixing would shift the routes to `/admin/dlq/admin/dlq/*`
   // and break the contract documented in `dlq-routes.test.ts`.
+  let latestAdminEnv: AthlyaBindings | undefined;
+  app.use('/admin/*', async (c, next) => {
+    latestAdminEnv = c.env;
+    await next();
+  });
+  const getAdminEnv = (): AthlyaBindings => {
+    if (latestAdminEnv === undefined) {
+      throw new Error(
+        'admin audit wiring: request env not yet captured; this should not happen if the /admin/* middleware ran first',
+      );
+    }
+    return latestAdminEnv;
+  };
   app.use('/admin/*', jwtAuth());
   app.use('/admin/*', requireRole('admin'));
-  app.route('/', buildDlqRouter() as unknown as Hono<HonoEnv>);
+  app.route('/', buildDlqRouter({ auditWriter: lazyDlqAuditWriter(getAdminEnv) }) as unknown as Hono<HonoEnv>);
   app.route('/', buildOutboxRouter() as unknown as Hono<HonoEnv>);
 
   // Sprint 12 / Slice 12.13 (Epic B3.1) — JWT rotation admin
@@ -1201,13 +1215,9 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   //   • GET  /admin/jwt/state           — read-only snapshot
   //   • POST /admin/jwt/rotate-prepare  — generate new keypair
   //
-  // Operator runbook: `docs/runbooks/rotate-jwt.md`. Audit hook
-  // is wired below via the in-memory bridge to the audit log
-  // writer once `appendAudit` ships in `auth-deps`. For now the
-  // router is mounted without an audit writer; the rotation
-  // succeeds and the operator-side wrangler steps remain the
-  // single source of truth for the rotation event.
-  app.route('/', buildJwtRotateRouter());
+  // Operator runbook: `docs/runbooks/rotate-jwt.md`. Audit rows
+  // are appended via `lazyJwtRotateAuditWriter` (issue #127).
+  app.route('/', buildJwtRotateRouter({ auditWriter: lazyJwtRotateAuditWriter(getAdminEnv) }));
 
   // 404: Problem Details envelope, minimal. Task 8.5 will lift the
   // full RFC 9457 shape (type URI catalogue, `instance`, `detail`)
