@@ -16,7 +16,7 @@ Checklist ops : `node scripts/verify-canary-deploy-checklist.mjs`
 ## CI — workflow GitHub (recommandé)
 
 Workflow : [`.github/workflows/deploy-production.yml`](../../.github/workflows/deploy-production.yml)  
-Actions → **Deploy (canary)** → `workflow_dispatch`
+Actions → **Deploy API** → `workflow_dispatch`
 
 | Phase | Action |
 |-------|--------|
