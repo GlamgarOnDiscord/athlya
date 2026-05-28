@@ -28,7 +28,6 @@ export default async function ResetPasswordPage({
 }): Promise<ReactElement> {
   const [{ token }, h] = await Promise.all([params, headers()]);
   const nonce = h.get('x-nonce') ?? '';
-  void nonce;
   void (await getLocale());
 
   return (
@@ -43,7 +42,7 @@ export default async function ResetPasswordPage({
           devrez vous reconnecter.
         </p>
       </header>
-      <ResetPasswordForm token={token} />
+      <ResetPasswordForm token={token} nonce={nonce} />
     </main>
   );
 }
