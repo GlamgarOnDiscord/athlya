@@ -165,6 +165,20 @@ function enforceAdmin(c: Context<DlqAdminEnv>): Response | null {
 /*  buildDlqRouter                                                     */
 /* ------------------------------------------------------------------ */
 
+/** Optional audit writer for replay / discard (issue #127). */
+export interface DlqAuditWriter {
+  appendReplay(input: {
+    actorId: string;
+    entryId: string;
+    messageType?: string | null;
+  }): Promise<void>;
+  appendDiscard(input: { actorId: string; entryId: string }): Promise<void>;
+}
+
+export interface DlqRouterDeps {
+  readonly auditWriter?: DlqAuditWriter;
+}
+
 /**
  * Response body shape of `GET /admin/dlq/stats`. Matches the
  * structural output of {@link dlqStats} verbatim; declared as an
@@ -190,8 +204,15 @@ export interface DlqStatsResponse {
  * an internal tool, etc.), and forcing one here would tie the admin
  * surface to a single distribution.
  */
-export function buildDlqRouter(): Hono<DlqAdminEnv> {
+export function buildDlqRouter(deps: DlqRouterDeps = {}): Hono<DlqAdminEnv> {
   const router = new Hono<DlqAdminEnv>();
+  const auditWriter = deps.auditWriter;
+
+  function actorIdFrom(c: Context<DlqAdminEnv>): string {
+    const claims = c.get('authClaims');
+    const raw = claims?.userId;
+    return typeof raw === 'string' ? raw : 'unknown';
+  }
 
   /* -------------------------------------------------------------- */
   /*  GET /admin/dlq/stats                                          */
@@ -237,6 +258,23 @@ export function buildDlqRouter(): Hono<DlqAdminEnv> {
         ),
       );
     }
+
+    if (auditWriter !== undefined) {
+      try {
+        await auditWriter.appendReplay({
+          actorId: actorIdFrom(c),
+          entryId: id,
+          messageType: result.messageType ?? null,
+        });
+      } catch (err) {
+        const logger = c.get('logger');
+        logger?.warn('dlq replay: audit append failed; continuing', {
+          entryId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     return c.json({ replayed: true }, 200);
   });
 
@@ -250,6 +288,19 @@ export function buildDlqRouter(): Hono<DlqAdminEnv> {
 
     const id = c.req.param('id');
     const result = await dlqDiscard(c.env, id);
+
+    if (result.discarded && auditWriter !== undefined) {
+      try {
+        await auditWriter.appendDiscard({ actorId: actorIdFrom(c), entryId: id });
+      } catch (err) {
+        const logger = c.get('logger');
+        logger?.warn('dlq discard: audit append failed; continuing', {
+          entryId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     return c.json({ discarded: result.discarded }, 200);
   });
 

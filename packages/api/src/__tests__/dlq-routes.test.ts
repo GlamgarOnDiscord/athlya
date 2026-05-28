@@ -25,7 +25,7 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buildDlqRouter } from '../admin/dlq-routes.js';
+import { buildDlqRouter, type DlqAuditWriter } from '../admin/dlq-routes.js';
 import { __resetDlqRedisCache, __setDlqRedisForTests } from '../events/drain-dlq.js';
 
 import type { DlqAdminEnv } from '../admin/dlq-routes.js';
@@ -113,7 +113,10 @@ type Role = 'member' | 'admin' | 'coach';
  * `role === null` means "no auth claims at all" — the unauthenticated
  * case.
  */
-function buildApp(role: Role | null): {
+function buildApp(
+  role: Role | null,
+  auditWriter?: DlqAuditWriter,
+): {
   app: Hono<DlqAdminEnv>;
   env: DlqBindings;
   redis: FakeDlqRedis;
@@ -152,7 +155,7 @@ function buildApp(role: Role | null): {
     await next();
   });
 
-  app.route('/', buildDlqRouter());
+  app.route('/', buildDlqRouter({ ...(auditWriter !== undefined ? { auditWriter } : {}) }));
 
   return { app, env, redis, eventsQueue };
 }
@@ -316,5 +319,38 @@ describe('POST /admin/dlq/discard/:id', () => {
     expect(res.status).toBe(200);
     const body = await res.json<{ discarded: boolean }>();
     expect(body.discarded).toBe(true);
+  });
+});
+
+describe('DLQ audit wiring', () => {
+  it('appends audit on replay when auditWriter is configured', async () => {
+    const appendReplay = vi.fn().mockResolvedValue(undefined);
+    const auditWriter: DlqAuditWriter = { appendReplay, appendDiscard: vi.fn() };
+    const { app, env, redis } = buildApp('admin', auditWriter);
+    seedEntry(redis, 'audit-replay-id', { id: 'evt', type: 'reservation.created' });
+
+    const res = await app.request('/admin/dlq/replay/audit-replay-id', { method: 'POST' }, env);
+    expect(res.status).toBe(200);
+    expect(appendReplay).toHaveBeenCalledTimes(1);
+    expect(appendReplay.mock.calls[0]?.[0]).toMatchObject({
+      actorId: '00000000-0000-4000-8000-000000000001',
+      entryId: 'audit-replay-id',
+      messageType: 'reservation.created',
+    });
+  });
+
+  it('appends audit on discard when auditWriter is configured', async () => {
+    const appendDiscard = vi.fn().mockResolvedValue(undefined);
+    const auditWriter: DlqAuditWriter = { appendReplay: vi.fn(), appendDiscard };
+    const { app, env, redis } = buildApp('admin', auditWriter);
+    seedEntry(redis, 'audit-discard-id');
+
+    const res = await app.request('/admin/dlq/discard/audit-discard-id', { method: 'POST' }, env);
+    expect(res.status).toBe(200);
+    expect(appendDiscard).toHaveBeenCalledTimes(1);
+    expect(appendDiscard.mock.calls[0]?.[0]).toMatchObject({
+      actorId: '00000000-0000-4000-8000-000000000001',
+      entryId: 'audit-discard-id',
+    });
   });
 });

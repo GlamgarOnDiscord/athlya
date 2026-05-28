@@ -91,7 +91,12 @@ export const AUDIT_ACTIONS = [
   'reservation.cancelled_by_admin',
   'rls.violation',
   'billing.stripe.signature_failed',
+  'billing.webhook.signature_failed',
+  'billing.webhook.processed',
   'user.consents.updated',
+  'jwt.key.rotation_prep',
+  'dlq.entry.replayed',
+  'dlq.entry.discarded',
 ] as const;
 
 /**

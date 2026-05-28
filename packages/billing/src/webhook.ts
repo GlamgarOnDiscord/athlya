@@ -500,12 +500,23 @@ export async function verifyStripeSignature(
  * webhook signature failure path.
  */
 const AUDIT_ACTION_SIGNATURE_FAILED = 'billing.webhook.signature_failed';
+const AUDIT_ACTION_PROCESSED = 'billing.webhook.processed';
 
 /** Target type tag for audit rows emitted by this handler. */
 const AUDIT_TARGET_TYPE = 'stripe_webhook';
 
 /** Placeholder used when the event id cannot be extracted. */
 const AUDIT_TARGET_UNKNOWN = 'unknown';
+
+async function appendProcessedAudit(deps: WebhookDeps, event: StripeEvent): Promise<void> {
+  await deps.appendAudit({
+    actorId: null,
+    action: AUDIT_ACTION_PROCESSED,
+    targetType: AUDIT_TARGET_TYPE,
+    targetId: event.id,
+    metadata: { stripeEventType: event.type },
+  });
+}
 
 /** Stripe event types dispatched to the event bus. */
 const EVENT_CHECKOUT_COMPLETED = 'checkout.session.completed';
@@ -635,6 +646,7 @@ export async function handleStripeWebhook(
             session: event.data,
           },
         });
+        await appendProcessedAudit(deps, event);
       });
       return {
         kind: 'processed',
@@ -655,6 +667,7 @@ export async function handleStripeWebhook(
             subscription: event.data,
           },
         });
+        await appendProcessedAudit(deps, event);
       });
       return {
         kind: 'processed',
@@ -675,6 +688,7 @@ export async function handleStripeWebhook(
             invoice: event.data,
           },
         });
+        await appendProcessedAudit(deps, event);
       });
       return {
         kind: 'processed',
