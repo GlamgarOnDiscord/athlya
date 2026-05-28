@@ -116,11 +116,10 @@ export interface AthlyaBindings {
 
   /**
    * Producer binding for the dead-letter queue (`athlya-events-dlq`,
-   * hardening task H2). Currently unused — the DLQ drain handler in
-   * `src/events/drain-dlq.ts` tracks observed messages in Redis and
-   * never re-publishes to the DLQ itself. The binding is kept in
-   * the surface so future workflows (e.g. "quarantine this event")
-   * have a named port without another `wrangler.toml` edit.
+   * hardening task H2). Used by `reject-unknown-queue-event.ts` to
+   * quarantine payloads whose `event.type` is not handled by any
+   * consumer lane (issue #132). The DLQ drain handler in
+   * `src/events/drain-dlq.ts` tracks observed messages in Redis.
    */
   readonly EVENTS_DLQ: Queue<unknown>;
 

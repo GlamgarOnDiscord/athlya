@@ -341,6 +341,16 @@ Si une régression survient sur une combinaison spécifique
 
 **Migration** : le topic legacy reste actif pour vider le backlog ; retirer le consumer `athlya-events` une fois `pending=0` sur les types migrés.
 
+### Types inconnus (issue #132)
+
+Les consumers (`handleEventsBatch`, `handleRgpdBatch`, `handleNotificationsBatch`) **n'ack plus silencieusement** un message dont le `event.type` n'est **pas géré par ce consumer / cette lane** (type inconnu globalement ou mal routé, ex. RGPD sur la queue notifications) :
+
+1. Log structuré `queue.unknown_event_type` + métrique `queue_unknown_event_total{ eventType }`
+2. Redirect immédiat vers `athlya-events-dlq` via binding `EVENTS_DLQ`, puis `ack` sur la queue primaire
+3. Si `EVENTS_DLQ.send` échoue → `msg.retry()` (budget CF puis DLQ automatique)
+
+Alerte Axiom **A15** : voir `docs/operations/axiom-alerts.md`.
+
 **Billing analytics** (`athlya-events-billing`) : hors scope — webhooks Stripe restent HTTP.
 
 ## 7. Liens

@@ -142,6 +142,18 @@ event et `now()` au moment du drain.
 
 **Cible SLO** : queue lag p99 < 60s.
 
+### Unknown queue event types (issue #132)
+
+Structured log `queue.unknown_event_type` emitted by `reject-unknown-queue-event.ts`.
+
+```apl
+['athlya-logs']
+| where _time > now(-1h)
+| where ['message'] == "queue.unknown_event_type"
+| summarize count = count() by eventType = tostring(['eventType']), queue = tostring(['queue'])
+| order by count desc
+```
+
 ### Concurrency limit hits
 
 Le `concurrency-limit.ts` middleware stamp un span event sur 429.

@@ -83,6 +83,7 @@ import {
   shouldRequireCronDbUrl,
 } from './maintenance/cron-db-config.js';
 import { runScheduledRgpdMaintenance } from './maintenance/scheduled-runner.js';
+import { rejectUnknownQueueEvent } from './events/reject-unknown-queue-event.js';
 import { jwtAuth } from './middleware/auth.js';
 import { tracing } from './middleware/otel.js';
 import { registerErrorHandlers } from './middleware/problem-details.js';
@@ -1517,12 +1518,16 @@ export async function handleRgpdBatch(
           break;
         }
         default: {
-          console.warn('[worker] rgpd dispatcher: unexpected event type, acking', {
-            queue: batch.queue,
-            messageId: msg.id,
-            eventType: envelope.type,
-          });
-          msg.ack();
+          await rejectUnknownQueueEvent(
+            msg,
+            {
+              queue: batch.queue,
+              messageId: msg.id,
+              eventType: envelope.type,
+              eventId: envelope.id,
+            },
+            env,
+          );
           break;
         }
       }
@@ -1556,12 +1561,16 @@ export async function handleNotificationsBatch(
 
     try {
       if (!NOTIFICATION_EVENT_TYPES.has(envelope.type)) {
-        console.warn('[worker] notifications dispatcher: unexpected event type, acking', {
-          queue: batch.queue,
-          messageId: msg.id,
-          eventType: envelope.type,
-        });
-        msg.ack();
+        await rejectUnknownQueueEvent(
+          msg,
+          {
+            queue: batch.queue,
+            messageId: msg.id,
+            eventType: envelope.type,
+            eventId: envelope.id,
+          },
+          env,
+        );
         continue;
       }
 
@@ -1672,10 +1681,16 @@ export async function handleEventsBatch(
             break;
           }
 
-          // Unknown consumer type — ack so the message does not
-          // accumulate retries for an event family we do not handle
-          // on this worker.
-          msg.ack();
+          await rejectUnknownQueueEvent(
+            msg,
+            {
+              queue: batch.queue,
+              messageId: msg.id,
+              eventType: envelope.type,
+              eventId: envelope.id,
+            },
+            env,
+          );
           break;
         }
       }
