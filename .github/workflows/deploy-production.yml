@@ -1,7 +1,7 @@
-name: Deploy (canary)
+name: Deploy API
 
-# Issue #129 — gradual Workers deploy via Versions API.
-# Runbook: docs/runbooks/canary-deploy.md
+# Issues #129 (canary) + #130 (direct deploy + /health/ready gate).
+# Runbooks: docs/runbooks/canary-deploy.md, docs/runbooks/deploy-production.md
 #
 # Required secrets:
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
@@ -21,6 +21,8 @@ on:
         required: true
         type: choice
         options:
+          - staging-deploy
+          - production-deploy
           - staging-smoke
           - production-canary
           - rollback
@@ -35,7 +37,7 @@ on:
         type: string
 
 concurrency:
-  group: deploy-canary-${{ inputs.phase }}
+  group: deploy-api-${{ inputs.phase }}
   cancel-in-progress: false
 
 jobs:
@@ -43,7 +45,7 @@ jobs:
     name: ${{ inputs.phase }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    environment: ${{ inputs.phase == 'staging-smoke' && 'staging' || 'production' }}
+    environment: ${{ (inputs.phase == 'staging-deploy' || inputs.phase == 'staging-smoke') && 'staging' || 'production' }}
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -81,16 +83,46 @@ jobs:
           PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
         run: |
           set -euo pipefail
-          if [ "${{ inputs.phase }}" = "staging-smoke" ] && [ -z "${STAGING_API_URL}" ]; then
-            echo "::error::vars.STAGING_API_URL is empty"
-            exit 1
-          fi
-          if [ "${{ inputs.phase }}" = "production-canary" ]; then
-            if [ -z "${PRODUCTION_API_URL}" ] || [ -z "${STAGING_API_URL}" ]; then
-              echo "::error::vars.PRODUCTION_API_URL and STAGING_API_URL must be set"
-              exit 1
-            fi
-          fi
+          case "${{ inputs.phase }}" in
+            staging-deploy|staging-smoke)
+              if [ -z "${STAGING_API_URL}" ]; then
+                echo "::error::vars.STAGING_API_URL is empty"
+                exit 1
+              fi
+              ;;
+            production-deploy)
+              if [ -z "${PRODUCTION_API_URL}" ]; then
+                echo "::error::vars.PRODUCTION_API_URL is empty"
+                exit 1
+              fi
+              ;;
+            production-canary)
+              if [ -z "${PRODUCTION_API_URL}" ] || [ -z "${STAGING_API_URL}" ]; then
+                echo "::error::vars.PRODUCTION_API_URL and STAGING_API_URL must be set"
+                exit 1
+              fi
+              ;;
+          esac
+
+      - name: Deploy staging (wrangler + ready gate)
+        if: inputs.phase == 'staging-deploy'
+        env:
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_SHA:0:7}"
+          pnpm --filter @athlya/api exec wrangler deploy --env staging --var "VERSION=${VERSION}"
+          bash scripts/wait-health-ready.sh "${STAGING_API_URL}"
+
+      - name: Deploy production (wrangler + ready gate)
+        if: inputs.phase == 'production-deploy'
+        env:
+          PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_SHA:0:7}"
+          pnpm --filter @athlya/api exec wrangler deploy --env production --var "VERSION=${VERSION}"
+          bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}"
 
       - name: Staging smoke (upload + ready gate)
         if: inputs.phase == 'staging-smoke'
