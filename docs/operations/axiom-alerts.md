@@ -181,7 +181,11 @@ et que les utilisateurs ne peuvent pas s'inscrire.
 
 ## Provisioning runbook
 
-Manuel pour le moment (slice future = Terraform Axiom provider) :
+**Procédure pas-à-pas (issue #120)** : [`docs/runbooks/axiom-alerts-provision.md`](../runbooks/axiom-alerts-provision.md)
+
+Checklist CLI : `node scripts/verify-axiom-alerts-checklist.mjs`
+
+Manuel Axiom UI (résumé) :
 
 1. Pour chaque alerte ci-dessus :
    - Ouvrir Axiom UI → Monitors → Create Alert
