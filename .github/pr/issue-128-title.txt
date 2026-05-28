@@ -1,0 +1,1 @@
+fix(api): fail-closed-soft sur rate limit global si Redis down (#128)

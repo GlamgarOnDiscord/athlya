@@ -414,7 +414,7 @@ Détail :
 
 - **Code** : `packages/api/src/middleware/limiter-guard.ts` + `worker.ts`
   - `/v1/auth/*` et limiters par mutation (`POST /v1/reservations`, export, …) → **503 `dependency_unavailable`** si Upstash injoignable (staging/prod).
-  - Limiter global `/v1/*` (reads) → **fail-open** pour survivre à une panne Redis.
+  - Limiter global `/v1/*` (reads) → **fail-closed-soft** (429 synthétique) si Upstash throw avant évaluation — issue #128. `/health` hors `/v1/*`.
   - `concurrencyLimit` sur réservations → fail-closed hors `dev`.
 - **Defense-in-depth** : règle Cloudflare WAF recommandée — rate limit `/v1/auth/*` ~100 req/min/IP (dashboard, hors repo).
 
