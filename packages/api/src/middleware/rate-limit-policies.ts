@@ -32,13 +32,6 @@ export const ADMIN_STATS_GET_PATHS = [
   '/admin/jwt/state',
 ] as const;
 
-/** Expensive authenticated reads — fail-closed when Upstash is down. */
-export const EXPENSIVE_READ_PATHS = [
-  { path: '/v1/classes/search', match: 'prefix' as const },
-  { path: '/v1/members', match: 'exact-get-list' as const },
-  { path: '/v1/audit', match: 'prefix' as const },
-] as const;
-
 export const EXPENSIVE_READ_BUDGET: RateLimitBudget = {
   userLimit: 30,
   ipLimit: 30,
@@ -141,9 +134,9 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     methods: 'GET',
     budget: EXPENSIVE_READ_BUDGET,
     failPolicy: 'fail-closed',
-    bucket: 'ip+user',
+    bucket: 'ip',
     wiredIn: 'worker.ts',
-    notes: 'Issue #133 — DB search',
+    notes: 'Issue #133 — gateway mount pre-jwtAuth → IP bucket; global /v1 user bucket when authed',
   },
   {
     id: 'members-list',
@@ -151,9 +144,9 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     methods: 'GET',
     budget: MEMBERS_LIST_BUDGET,
     failPolicy: 'fail-closed',
-    bucket: 'ip+user',
+    bucket: 'ip',
     wiredIn: 'worker.ts',
-    notes: 'Issue #133 — enumeration surface (exact path, not /me)',
+    notes: 'Issue #133 — exact list path only (isMembersListGetPath)',
   },
   {
     id: 'audit-list',
@@ -161,9 +154,9 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     methods: 'GET',
     budget: EXPENSIVE_READ_BUDGET,
     failPolicy: 'fail-closed',
-    bucket: 'ip+user',
+    bucket: 'ip',
     wiredIn: 'worker.ts',
-    notes: 'Issue #133 — admin audit pagination',
+    notes: 'Issue #133 — gateway mount pre-jwtAuth → IP bucket',
   },
   {
     id: 'admin-stats',
@@ -187,9 +180,25 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
   },
 ];
 
+/** Explicit fail-closed rows — tests fail if an id is removed or policy regresses. */
+export const REQUIRED_FAIL_CLOSED_IDS = [
+  'auth',
+  'reservation-mutation',
+  'reservation-cancel',
+  'profile-patch',
+  'consents-patch',
+  'export-post',
+  'classes-search',
+  'members-list',
+  'audit-list',
+  'admin-stats',
+] as const;
+
 /** Rows that must stay fail-closed (mutations + expensive reads + auth). */
 export function rowsRequiringFailClosed(): RateLimitCoverageRow[] {
-  return RATE_LIMIT_COVERAGE.filter((r) => r.failPolicy === 'fail-closed');
+  return RATE_LIMIT_COVERAGE.filter((r) =>
+    (REQUIRED_FAIL_CLOSED_IDS as readonly string[]).includes(r.id),
+  );
 }
 
 /** True when a GET list path should use the members-list limiter. */

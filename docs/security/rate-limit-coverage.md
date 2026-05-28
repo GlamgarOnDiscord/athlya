@@ -25,13 +25,15 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 | `profile-patch` | `PATCH /v1/me` | PATCH | 5 user+IP | fail-closed | ip+user |
 | `consents-patch` | `PATCH /v1/me/consents` | PATCH | 5 user+IP | fail-closed | ip+user |
 | `export-post` | `POST /v1/members/me/export` | POST | 1 / 24h user+IP | fail-closed | ip+user |
-| `classes-search` | `GET /v1/classes/search` | GET | 30 user+IP | **fail-closed** | ip+user |
-| `members-list` | `GET /v1/members` (exact) | GET | 20 user+IP | **fail-closed** | ip+user |
-| `audit-list` | `GET /v1/audit` | GET | 30 user+IP | **fail-closed** | ip+user |
+| `classes-search` | `GET /v1/classes/search` | GET | 30 IP | **fail-closed** | ip (pre-jwt) |
+| `members-list` | `GET /v1/members` (exact) | GET | 20 IP | **fail-closed** | ip (pre-jwt) |
+| `audit-list` | `GET /v1/audit` | GET | 30 IP | **fail-closed** | ip (pre-jwt) |
 | `admin-stats` | `GET /admin/{dlq,outbox}/stats`, `GET /admin/jwt/state` | GET | 10 user / 5 IP | **fail-closed** | ip+user |
 | `studio-burst` | Domain routers authentifiés | * | 1000 / studio | fail-open | studio |
 
 `/v1/members/me` et sous-routes ne matchent **pas** le limiter `members-list` (garde `isMembersListGetPath`).
+
+Les limiters reads coûteux sont montés **avant** `jwtAuth` → bucket **IP** sur le limiter dédié ; le global `/v1/*` applique quand même le bucket user si le JWT est présent.
 
 ## Defense-in-depth
 

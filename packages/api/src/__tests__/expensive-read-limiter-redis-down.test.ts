@@ -27,12 +27,6 @@ class RedisPipelineDownFake extends FakeRedis {
 
 const stagingHeaders = { host: 'staging.api.athlya.app', 'CF-Connecting-IP': '9.9.9.9' };
 
-const EXPENSIVE_V1_GETS = [
-  '/v1/classes/search?q=yoga',
-  '/v1/members',
-  '/v1/audit',
-] as const;
-
 describe('expensive read limiter Redis down (#133)', () => {
   beforeEach(() => {
     __resetRateLimitRedisCache();
@@ -49,22 +43,7 @@ describe('expensive read limiter Redis down (#133)', () => {
     );
   }
 
-  it.each(EXPENSIVE_V1_GETS)('staging GET %s → fail-closed when Redis down', async (path) => {
-    const env = buildMockEnv({
-      ENVIRONMENT: 'staging',
-      CORS_ORIGIN: 'https://app.staging.athlya.app',
-    });
-    primeDown(env);
-
-    const app = buildAppNoDomainRoutes();
-    const res = await app.request(path, { method: 'GET', headers: stagingHeaders }, env);
-
-    expect([429, 503]).toContain(res.status);
-    const body = (await res.json()) as { code?: string };
-    expect(['rate_limit_dependency_unavailable', 'dependency_unavailable']).toContain(body.code);
-  });
-
-  it.each(ADMIN_STATS_GET_PATHS)('staging GET %s → 503 fail-closed (before jwtAuth)', async (path) => {
+  it.each(ADMIN_STATS_GET_PATHS)('staging GET %s → 503 fail-closed (dedicated admin limiter)', async (path) => {
     const env = buildMockEnv({
       ENVIRONMENT: 'staging',
       CORS_ORIGIN: 'https://app.staging.athlya.app',

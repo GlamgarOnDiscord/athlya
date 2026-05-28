@@ -5,7 +5,7 @@ import {
   isAdminStatsGetPath,
   isMembersListGetPath,
   RATE_LIMIT_COVERAGE,
-  rowsRequiringFailClosed,
+  REQUIRED_FAIL_CLOSED_IDS,
 } from '../middleware/rate-limit-policies.js';
 
 describe('rate-limit-policies (#133)', () => {
@@ -14,10 +14,11 @@ describe('rate-limit-policies (#133)', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it.each(rowsRequiringFailClosed().map((r) => [r.id, r.route] as const))(
-    '%s (%s) uses fail-closed',
+  it.each([...REQUIRED_FAIL_CLOSED_IDS] as const)(
+    '%s remains fail-closed in registry',
     (id) => {
       const row = RATE_LIMIT_COVERAGE.find((r) => r.id === id);
+      expect(row, `missing coverage row ${id}`).toBeDefined();
       expect(row?.failPolicy).toBe('fail-closed');
     },
   );
