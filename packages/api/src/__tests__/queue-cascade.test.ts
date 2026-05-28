@@ -97,7 +97,7 @@ vi.mock('../adapters/notifications-deps.js', () => ({
 /*  System under test (imports MUST come after vi.mock)                */
 /* ------------------------------------------------------------------ */
 
-import { handleEventsBatch, handleRgpdBatch } from '../worker.js';
+import { handleEventsBatch, handleNotificationsBatch, handleRgpdBatch } from '../worker.js';
 
 import type { AthlyaBindings } from '../types.js';
 import type { Message, MessageBatch } from '@cloudflare/workers-types';
@@ -357,6 +357,41 @@ describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () =
 
     expect(msg.retry).toHaveBeenCalledTimes(1);
     expect(msg.ack).not.toHaveBeenCalled();
+  });
+
+  it('quarantines misrouted types on the RGPD lane', async () => {
+    const misrouted = {
+      id: 'evt-res-on-rgpd',
+      type: 'reservation.created',
+      occurredAt: '2026-05-15T10:00:00.000Z',
+      payload: {
+        reservationId: '11111111-1111-4111-a111-111111111111',
+        classId: '22222222-2222-4222-a222-222222222222',
+        userId: '33333333-3333-4333-a333-333333333333',
+      },
+    };
+    const msg = mockMessage('msg-rgpd-unknown', misrouted);
+    const env = mockEnv();
+    const dlqSend = vi.mocked(env.EVENTS_DLQ.send);
+
+    await handleRgpdBatch(mockBatch('athlya-events-rgpd', [msg]), env);
+
+    expect(dlqSend).toHaveBeenCalledWith(misrouted);
+    expect(msg.ack).toHaveBeenCalledTimes(1);
+    expect(memberMocks.handleUserDeleted).not.toHaveBeenCalled();
+  });
+
+  it('quarantines misrouted types on the notifications lane', async () => {
+    const misrouted = deletedEvent('00000000-0000-4000-a000-000000000099');
+    const msg = mockMessage('msg-notif-unknown', misrouted);
+    const env = mockEnv();
+    const dlqSend = vi.mocked(env.EVENTS_DLQ.send);
+
+    await handleNotificationsBatch(mockBatch('athlya-events-notifications', [msg]), env);
+
+    expect(dlqSend).toHaveBeenCalledWith(misrouted);
+    expect(msg.ack).toHaveBeenCalledTimes(1);
+    expect(notificationMocks.handleEvent).not.toHaveBeenCalled();
   });
 
   it('acks malformed envelopes without throwing', async () => {

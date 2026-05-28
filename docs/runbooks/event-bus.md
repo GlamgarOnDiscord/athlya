@@ -343,7 +343,7 @@ Si une régression survient sur une combinaison spécifique
 
 ### Types inconnus (issue #132)
 
-Les consumers (`handleEventsBatch`, `handleRgpdBatch`, `handleNotificationsBatch`) **n'ack plus silencieusement** un `event.type` absent de `src/events/known-event-types.ts` :
+Les consumers (`handleEventsBatch`, `handleRgpdBatch`, `handleNotificationsBatch`) **n'ack plus silencieusement** un message dont le `event.type` n'est **pas géré par ce consumer / cette lane** (type inconnu globalement ou mal routé, ex. RGPD sur la queue notifications) :
 
 1. Log structuré `queue.unknown_event_type` + métrique `queue_unknown_event_total{ eventType }`
 2. Redirect immédiat vers `athlya-events-dlq` via binding `EVENTS_DLQ`, puis `ack` sur la queue primaire

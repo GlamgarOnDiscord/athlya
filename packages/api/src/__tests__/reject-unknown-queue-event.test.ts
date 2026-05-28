@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { rejectUnknownQueueEvent } from '../events/reject-unknown-queue-event.js';
 
 describe('rejectUnknownQueueEvent', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('logs, sends payload to DLQ, and acks the primary message', async () => {
     const msg = {
       id: 'msg-1',
