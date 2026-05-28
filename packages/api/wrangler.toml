@@ -351,7 +351,7 @@ bucket_name = "athlya-exports-staging"
 name = "CLASS_CAPACITY_DO"
 class_name = "ClassCapacityDO"
 
-# Uncomment after Cloudflare Hyperdrive config is created (Neon EU, athlya_app role):
+# Uncomment after Hyperdrive config is created — see docs/runbooks/hyperdrive-provision.md (issue #119):
 # [[env.staging.hyperdrive]]
 # binding = "HYPERDRIVE"
 # id = "<staging-hyperdrive-config-id>"
@@ -416,7 +416,7 @@ bucket_name = "athlya-exports-production"
 name = "CLASS_CAPACITY_DO"
 class_name = "ClassCapacityDO"
 
-# Uncomment after Cloudflare Hyperdrive config is created (Neon EU, athlya_app role):
+# Uncomment after Hyperdrive config is created — see docs/runbooks/hyperdrive-provision.md (issue #119):
 # [[env.production.hyperdrive]]
 # binding = "HYPERDRIVE"
 # id = "<production-hyperdrive-config-id>"

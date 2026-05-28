@@ -63,9 +63,9 @@ Lockfile resolves to `4.20260509.1` (latest). The `^4.20241218.0` range in packa
 
 ### P2. Add Hyperdrive binding for connection pooling
 
-**Risk**: Higher cold-start latency without Cloudflare's connection pooler  
+**Risk**: Higher cold-start latency without Cloudflare's connection pooler; `/health/ready` 503 en staging/prod si absent  
 **File**: `packages/api/wrangler.toml`  
-**Action**: Create Hyperdrive config in Cloudflare dashboard, add `[[hyperdrive]]` binding  
+**Action**: Suivre [`docs/runbooks/hyperdrive-provision.md`](runbooks/hyperdrive-provision.md) (issue #119)  
 **Source**: Cloudflare Hyperdrive docs
 
 ### P3. Add Suspense/loading boundaries
