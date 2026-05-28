@@ -1,5 +1,7 @@
 # Runbook — Branch protection (issue #67)
 
+CI billing / quota recovery : **[ci-recovery.md](./ci-recovery.md)** (issue #123).
+
 Configure on **Settings → Branches → Branch protection rules → `master`**.
 
 ## Required status checks
