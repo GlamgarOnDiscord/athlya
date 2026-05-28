@@ -151,7 +151,7 @@ Lockfile resolves to `4.20260509.1` (latest). The `^4.20241218.0` range in packa
 | `@cloudflare/workers-types`   | Resolved to 4.20260509.1 (current)                                    |
 | Login throttle (5/15min)      | Implemented in `packages/auth/src/throttle.ts`                        |
 | HIBP breached-password check  | K-anonymity implementation, fail-closed policy                        |
-| Turnstile middleware          | Implemented for register + login routes                               |
+| Turnstile middleware          | register, login, password-reset request/confirm (issue #131)          |
 | Idempotency middleware        | Covers all mutations, 24h TTL                                         |
 | QR replay protection          | Redis-backed with jti + TTL matching token lifetime                   |
 | Timing-safe login             | Dummy bcrypt on missing/OAuth-only users (oracle prevention)          |

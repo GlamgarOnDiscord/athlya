@@ -601,9 +601,8 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
     guardLimiterWithDevBypass('auth', authLimiter, 'fail-closed') as Parameters<typeof app.use>[1],
   );
 
-  // Req 26.1–26.3 — Turnstile bot-challenge on the two pre-auth mutation
-  // routes. The middleware reads TURNSTILE_SECRET from c.env; dev-mode
-  // missing-secret behaviour is a warn + pass-through (not a 500).
+  // Req 26.1–26.3 — Turnstile on pre-auth mutations (register/login
+  // mounted here; password-reset/* wired in auth router).
   const turnstileMw = turnstile() as Parameters<typeof app.use>[1];
   app.use('/v1/auth/register', turnstileMw);
   app.use('/v1/auth/login', turnstileMw);

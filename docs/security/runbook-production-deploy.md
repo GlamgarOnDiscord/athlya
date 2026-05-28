@@ -78,10 +78,9 @@ wrangler secret put RESEND_FROM --env production
 wrangler secret put WEB_APP_URL --env production
 # Valeur: https://app.athlya.app
 
-# Turnstile (anti-bot register/login)
+# Turnstile (register, login, password-reset — issue #131)
 wrangler secret put TURNSTILE_SECRET --env production
-
-# Stripe (issue #69 — required before billing goes live)
+# Front: NEXT_PUBLIC_TURNSTILE_SITE_KEY sur app.athlya.app (Vercel/Pages)
 wrangler secret put STRIPE_SECRET_KEY --env production
 wrangler secret put STRIPE_WEBHOOK_SECRET --env production
 # Deploy gate: /v1/billing/webhook returns 500 if STRIPE_WEBHOOK_SECRET missing (non-dev).
@@ -190,24 +189,38 @@ curl -i https://app.athlya.app/ | grep -E '^(strict-transport|content-security|c
 
 ### Forgot-password flow
 
+Requiert `cf-turnstile-token` en prod/staging (403 sans token).
+
 ```bash
-# Devrait toujours renvoyer 204 (email-enumeration defence)
+# Sans Turnstile → 403 bot_challenge_failed
+curl -i -X POST https://api.athlya.app/v1/auth/password-reset/request \
+  -H "Content-Type: application/json" \
+  -H "Origin: https://app.athlya.app" \
+  -d '{"email":"test-non-existant@example.com"}'
+
+# Via proxy web (avec token widget) → 204
 curl -i -X POST https://app.athlya.app/api/auth/password-reset/request \
   -H "Content-Type: application/json" \
   -H "Origin: https://app.athlya.app" \
+  -H "cf-turnstile-token: <token-from-widget>" \
   -d '{"email":"test-non-existant@example.com"}'
 # Attendu: 204
 ```
 
 ### Turnstile check
 
-Tenter un POST `/v1/auth/login` SANS header `cf-turnstile-token` (en non-dev) :
+Tenter un POST `/v1/auth/login` ou `/v1/auth/password-reset/request` SANS header `cf-turnstile-token` (en non-dev) :
 
 ```bash
 curl -i -X POST https://api.athlya.app/v1/auth/login \
   -H "Content-Type: application/json" \
   -H "Origin: https://app.athlya.app" \
   -d '{"email":"alice@example.com","password":"x"}'
+# Attendu: 403 bot_challenge_failed
+
+curl -i -X POST https://api.athlya.app/v1/auth/password-reset/request \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com"}'
 # Attendu: 403 bot_challenge_failed
 ```
 
