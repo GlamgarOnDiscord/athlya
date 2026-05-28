@@ -560,8 +560,9 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   //
   //    Fail-closed on mutations (issue #65): auth + per-route
   //    mutation limiters return 503 when Upstash is unreachable.
-  //    The global IP limiter stays fail-open so read traffic
-  //    survives a Redis outage.
+  //    Global IP limiter uses fail-closed-soft (issue #128): 429
+  //    synthetic so read traffic cannot run unbounded during a Redis
+  //    outage. `/health` and `/health/ready` stay outside `/v1/*`.
   const ipLimiter = rateLimit();
   const authLimiter = rateLimit({ ipLimit: 20, windowSec: 60 });
   const isDevEnv = (env: AthlyaBindings) => env.ENVIRONMENT === 'dev';
@@ -569,7 +570,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   const guardLimiter = (
     scope: string,
     inner: ReturnType<typeof rateLimit>,
-    policy: 'fail-open' | 'fail-closed',
+    policy: 'fail-open' | 'fail-closed' | 'fail-closed-soft',
   ) =>
     guardRateLimiter(scope, inner, policy, false) as unknown as (
       c: Parameters<typeof inner>[0],
@@ -579,7 +580,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   const guardLimiterWithDevBypass = (
     scope: string,
     inner: ReturnType<typeof rateLimit>,
-    policy: 'fail-open' | 'fail-closed',
+    policy: 'fail-open' | 'fail-closed' | 'fail-closed-soft',
   ) => {
     const guarded = guardLimiter(scope, inner, policy);
     return async (c: Parameters<typeof inner>[0], next: () => Promise<void>) => {
@@ -593,7 +594,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
 
   app.use(
     '/v1/*',
-    guardLimiterWithDevBypass('global', ipLimiter, 'fail-open') as Parameters<typeof app.use>[1],
+    guardLimiterWithDevBypass('global', ipLimiter, 'fail-closed-soft') as Parameters<typeof app.use>[1],
   );
   app.use(
     '/v1/auth/*',
