@@ -24,6 +24,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@athlya/db', () => ({
+  pingDbHttp: vi.fn().mockResolvedValue(undefined),
+  pingDb: vi.fn().mockResolvedValue(undefined),
+}));
+
 import workerDefault, { buildApp } from '../worker.js';
 
 import type { AthlyaBindings } from '../types.js';
@@ -480,6 +485,33 @@ describe('/health/ready readiness probe', () => {
     expect(body.status).toBe('not_ready');
     expect(body.checks.cron.status).toBe('skipped');
     expect(body.checks.cron.error).toContain('CRON_DB_URL');
+  });
+
+  it('returns 503 not_ready in staging when HYPERDRIVE is not bound', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('OK', { status: 200 }));
+    const app = buildApp();
+    const res = await app.request(
+      '/health/ready',
+      { method: 'GET', headers: { host: 'staging.api.athlya.app' } },
+      mockEnv({
+        ENVIRONMENT: 'staging',
+        CORS_ORIGIN: 'https://app.staging.athlya.app',
+        DB_URL: 'postgresql://example',
+        REDIS_URL: 'https://redis.example',
+        REDIS_TOKEN: 'token',
+        CRON_DB_URL: 'postgresql://athlya_cron@localhost/athlya',
+      }),
+    );
+    fetchSpy.mockRestore();
+
+    expect(res.status).toBe(503);
+    const body = await res.json<{
+      status: string;
+      checks: { hyperdrive: { status: string; error?: string } };
+    }>();
+    expect(body.status).toBe('not_ready');
+    expect(body.checks.hyperdrive.status).toBe('skipped');
+    expect(body.checks.hyperdrive.error).toContain('HYPERDRIVE');
   });
 
   /**
