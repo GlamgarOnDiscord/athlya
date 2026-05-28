@@ -1,0 +1,1 @@
+fix(security): rate-limit coverage matrix + fail-closed expensive reads (#133)
