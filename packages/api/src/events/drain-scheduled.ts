@@ -54,6 +54,7 @@ import {
 } from './drain-worker.js';
 import { resolveEventQueueProducer, type EventQueueBindings } from './route-queue.js';
 
+import type { OutboxPendingSnapshot } from '@athlya/db/outbox';
 import type { AthlyaDb } from '@athlya/db/client';
 
 /** When pending exceeds this, the drain claims up to {@link ADAPTIVE_BATCH_SIZE}. */
@@ -61,6 +62,16 @@ export const OUTBOX_BACKLOG_BATCH_THRESHOLD = 500;
 
 /** Adaptive batch size under backlog (Worker CPU budget cap). */
 export const ADAPTIVE_BATCH_SIZE = 200;
+
+/**
+ * Overlap guard. Cron fires once per minute; a drain that runs longer
+ * than this risks colliding with the next tick. The transaction's
+ * `FOR UPDATE SKIP LOCKED` already makes overlap *correct* (the second
+ * drain just skips locked rows), but a long drain is a backlog signal,
+ * so we emit a structured warning metric instead of relying on a
+ * distributed lock. Keep this comfortably under the 60 s cron period.
+ */
+export const OUTBOX_DRAIN_OVERLAP_WARN_MS = 45_000;
 
 /* ------------------------------------------------------------------ */
 /*  Minimal Cloudflare Workers shapes                                  */
@@ -177,6 +188,10 @@ export function createTxBackedStore(db: AthlyaDb): {
  * unified Worker entrypoint (e.g. `apps/api/src/worker.ts`) without
  * round-tripping through the default export.
  */
+export function pickBatchSize(pending: number): number {
+  return pending > OUTBOX_BACKLOG_BATCH_THRESHOLD ? ADAPTIVE_BATCH_SIZE : DEFAULT_BATCH_SIZE;
+}
+
 export async function resolveDrainBatchSize(
   db: AthlyaDb,
   env: ScheduledEnv,
@@ -185,23 +200,57 @@ export async function resolveDrainBatchSize(
     return env.batchSize;
   }
   const { pending } = await countPendingOutbox(db);
-  return pending > OUTBOX_BACKLOG_BATCH_THRESHOLD ? ADAPTIVE_BATCH_SIZE : DEFAULT_BATCH_SIZE;
+  return pickBatchSize(pending);
+}
+
+/**
+ * Emit the backlog metric on every cron tick (issue #134 / alert A16).
+ *
+ * Goes through `console.log` unconditionally so Axiom always gets a
+ * `outbox_pending_count` data point, regardless of whether a
+ * {@link Logger} is wired — the production scheduled handler does not
+ * pass one. When a logger *is* present (tests / future OTel bridge) we
+ * also forward through it so structured tracing keeps the line.
+ */
+export function emitOutboxBacklogMetric(
+  snapshot: OutboxPendingSnapshot,
+  batchSize: number,
+  logger?: Logger,
+): void {
+  const oldestOccurredAt = snapshot.oldestOccurredAt?.toISOString() ?? null;
+  const ageMs =
+    snapshot.oldestOccurredAt !== null
+      ? Date.now() - snapshot.oldestOccurredAt.getTime()
+      : 0;
+  const meta = {
+    metric: 'outbox_pending_count',
+    pending: snapshot.pending,
+    oldestOccurredAt,
+    ageMs,
+    batchSize,
+    backlogThreshold: OUTBOX_BACKLOG_BATCH_THRESHOLD,
+    backlog: snapshot.pending > OUTBOX_BACKLOG_BATCH_THRESHOLD,
+  };
+  console.log('outbox.backlog', meta);
+  logger?.info('outbox drain: pending snapshot', meta);
 }
 
 export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult> {
   const db = await env.getDb();
-  const batchSize = await resolveDrainBatchSize(db, env);
   const logger = env.logger;
 
-  if (logger !== undefined) {
-    const { pending, oldestOccurredAt } = await countPendingOutbox(db);
-    logger.info('outbox drain: pending snapshot', {
-      pending,
-      oldestOccurredAt: oldestOccurredAt?.toISOString() ?? null,
-      batchSize,
-      backlogThreshold: OUTBOX_BACKLOG_BATCH_THRESHOLD,
-    });
+  // Single pending snapshot reused for both batch sizing and the
+  // backlog metric — the previous code queried `countPendingOutbox`
+  // twice per cycle. Skipped entirely when `batchSize` is overridden
+  // (explicit/test path), which also short-circuits the metric.
+  const snapshot = env.batchSize !== undefined ? null : await countPendingOutbox(db);
+  const batchSize = env.batchSize ?? pickBatchSize(snapshot?.pending ?? 0);
+
+  if (snapshot !== null) {
+    emitOutboxBacklogMetric(snapshot, batchSize, logger);
   }
+
+  const startedAt = Date.now();
 
   // One transaction per drain cycle: holds the SELECT FOR UPDATE
   // SKIP LOCKED locks on claimed rows until every row has been
@@ -209,7 +258,7 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
   // rolls the transaction back and the next cycle re-claims — the
   // `attempts` counter bump is discarded, but the consumer dedup
   // window (24 h, Req 17.4) absorbs any resulting duplicates.
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const store: OutboxStore = {
       async claimBatch(size: number): Promise<readonly ClaimedRow[]> {
         return claimBatch(tx, size);
@@ -237,6 +286,42 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
 
     return drainOutbox(opts);
   });
+
+  // Overlap guard: a drain slower than the warn threshold risks
+  // colliding with the next cron tick. SKIP LOCKED keeps that safe,
+  // but we surface it as a metric (alert A16) so ops can bump cron
+  // frequency or investigate a stuck consumer.
+  warnOnDrainOverlapRisk(Date.now() - startedAt, result, batchSize, logger);
+
+  return result;
+}
+
+/**
+ * Emit the overlap-risk metric when a drain cycle ran longer than
+ * {@link OUTBOX_DRAIN_OVERLAP_WARN_MS}. Returns `true` when it warned —
+ * exposed for unit tests so they do not have to fake wall-clock time.
+ */
+export function warnOnDrainOverlapRisk(
+  durationMs: number,
+  result: DrainResult,
+  batchSize: number,
+  logger?: Logger,
+): boolean {
+  if (durationMs <= OUTBOX_DRAIN_OVERLAP_WARN_MS) {
+    return false;
+  }
+  const meta = {
+    metric: 'outbox_drain_duration_ms',
+    durationMs,
+    overlapThresholdMs: OUTBOX_DRAIN_OVERLAP_WARN_MS,
+    processed: result.processed,
+    succeeded: result.succeeded,
+    failed: result.failed,
+    batchSize,
+  };
+  console.warn('outbox.drain_overlap_risk', meta);
+  logger?.warn('outbox drain: overlap risk (slow drain)', meta);
+  return true;
 }
 
 /* ------------------------------------------------------------------ */
