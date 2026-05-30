@@ -1,7 +1,7 @@
 # Athlya — règles de workflow (agents & humains)
 
 Document de référence pour enchaîner les issues CTO, ouvrir des PRs propres et merger sans bruit.  
-Dernière mise à jour : 2026-05-29 (post #131–#133).
+Dernière mise à jour : 2026-05-30 (post #134).
 
 ---
 
@@ -73,18 +73,20 @@ gh pr merge <num> --squash --admin `
 
 ---
 
-## 5. Review Copilot (obligatoire)
+## 5. Review bot (obligatoire)
+
+**Gate review = CodeRabbit** (free illimité sur repo public ; crédits Copilot épuisés depuis #134). Copilot reste actif en review auto si dispo, mais n'est plus le gate.
 
 Workflow **non négociable** sur chaque PR :
 
-1. Commenter sur la PR : `@copilot review`
-2. **Attendre 5 minutes** minimum
-3. Lire la review + commentaires inline (`gh api repos/.../pulls/<num>/comments`)
+1. Commenter sur la PR : `@coderabbitai review` (auto sur push aussi)
+2. **Attendre ~5 minutes** minimum
+3. Lire walkthrough + commentaires inline (`gh api repos/.../pulls/<num>/comments`, et `gh pr view <num> --json reviews,comments`)
 4. Appliquer les fixes pertinents
 5. Recommit + push
 6. Re-attendre si gros changements ; sinon merger quand review OK ou sans commentaires bloquants
 
-Ne pas merger sans avoir ping Copilot et lu le retour.
+Ne pas merger sans avoir lu le retour CodeRabbit (+ Copilot si présent).
 
 ---
 
@@ -108,7 +110,7 @@ pnpm --filter @athlya/api test -- src/__tests__/....test.ts
 
 - CI GitHub Actions peut être **bloquée par le quota billing** (issue #034) → jobs en ~3s sans logs.
 - Runbook : [`docs/runbooks/ci-recovery.md`](docs/runbooks/ci-recovery.md)
-- Si tests locaux verts + Copilot OK : merge **`--admin --squash`** acceptable en attendant le quota.
+- Si tests locaux verts + CodeRabbit OK : merge **`--admin --squash`** acceptable en attendant le quota.
 - Ne pas `--force-push` sur `master`.
 
 ---
@@ -176,7 +178,7 @@ Toutes les opérations GitHub via **`gh`** (issues, PR, checks, merge).
 - [ ] `.github/pr/issue-N-title.txt` + `body.md`
 - [ ] Commit ciblé (pas de fichiers parasites)
 - [ ] PR créée
-- [ ] `@copilot review` → **5 min** → fixes → push
+- [ ] `@coderabbitai review` → **5 min** → fixes → push
 - [ ] Squash merge message propre (sans Cursor)
 - [ ] Issue commentée + fermée
 - [ ] `git checkout master && git pull`
