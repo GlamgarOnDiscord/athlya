@@ -50,7 +50,7 @@ export const ADMIN_STATS_BUDGET: RateLimitBudget = {
   windowSec: 60,
 };
 
-export const AUTH_BUDGET: RateLimitBudget = { ipLimit: 20, windowSec: 60 };
+export const AUTH_BUDGET = { ipLimit: 20, windowSec: 60 } as const satisfies RateLimitBudget;
 
 export const MUTATION_BUDGETS = {
   reservation: { userLimit: 10, ipLimit: 10, windowSec: 60 },
