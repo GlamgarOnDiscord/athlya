@@ -316,6 +316,33 @@ Issue #132. Déclenche si un consumer reçoit un `event.type` hors catalogue (`k
 
 **Action** : inspecter DLQ (`GET /admin/dlq/stats`), corriger routage publish ou étendre `HANDLED_EVENT_TYPES`, replay si safe.
 
+### A16 — Outbox backlog / drain overlap (Sev2 — Slack)
+
+Issue #134. Le drain cron émet `outbox.backlog` (`metric: outbox_pending_count`) à chaque tick, et `outbox.drain_overlap_risk` (`metric: outbox_drain_duration_ms`) si un cycle dépasse `OUTBOX_DRAIN_OVERLAP_WARN_MS = 45_000`.
+
+```apl
+['athlya-logs']
+| where _time > now(-10m)
+| where ['message'] == "outbox.backlog"
+| summarize maxPending = max(toint(['pending'])), maxAgeMs = max(tolong(['ageMs'])) by bin(_time, 1m)
+| where maxPending > 500
+```
+
+```apl
+['athlya-logs']
+| where _time > now(-10m)
+| where ['message'] == "outbox.drain_overlap_risk"
+| summarize slow = count() by bin(_time, 1m)
+| where slow > 0
+```
+
+**Trigger** : `pending > 500` pendant **> 5 min** OU ≥ 1 `drain_overlap_risk` / 10 min.
+**Cooldown** : 15 minutes.
+**Channel** : `#ops-athlya-alerts`.
+**Message** : `⚠️ Outbox backlog {{maxPending}} (age {{maxAgeMs}}ms) — drain ne suit pas. Voir docs/runbooks/outbox-ops.md.`
+
+**Action** : vérifier `GET /admin/outbox/stats`, état queue consumers, envisager cron 30s (cf. runbook) ou batch size. Overlap = SKIP LOCKED protège déjà la correction, c'est un signal de charge.
+
 ## Budget ingest OTel (issue #83)
 
 Sampling côté Worker (`OTEL_SAMPLE_RATE`, défaut prod `0.1`) + health `1 %` + **5xx toujours exportés**. Cloudflare `head_sampling_rate` prod `0.1` réduit aussi les Tail events.

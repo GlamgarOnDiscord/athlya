@@ -154,6 +154,26 @@ Structured log `queue.unknown_event_type` emitted by `reject-unknown-queue-event
 | order by count desc
 ```
 
+### Outbox backlog & drain overlap (issue #134)
+
+`drain-scheduled.ts` émet `outbox.backlog` à chaque cron tick et `outbox.drain_overlap_risk` quand un cycle dépasse 45s.
+
+```apl
+['athlya-logs']
+| where _time > now(-6h)
+| where ['message'] == "outbox.backlog"
+| summarize pending = max(toint(['pending'])), ageMs = max(tolong(['ageMs'])) by bin(_time, 1m)
+| order by _time asc
+```
+
+```apl
+['athlya-logs']
+| where _time > now(-6h)
+| where ['message'] == "outbox.drain_overlap_risk"
+| summarize slowCycles = count(), maxDurationMs = max(tolong(['durationMs'])) by bin(_time, 5m)
+| order by _time asc
+```
+
 ### Concurrency limit hits
 
 Le `concurrency-limit.ts` middleware stamp un span event sur 429.
