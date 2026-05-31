@@ -11,9 +11,13 @@
  * file convention), which injects the nonce both into a request header
  * (readable by server components) and into the response CSP.
  *
- * TODO(deployment task): wire up `@opennextjs/cloudflare` so this app can
- * ship to Cloudflare Workers alongside the Hono API. Keeping the
- * deployment adapter out of scope for 10.1.
+ * Deployment (issue #139): the hosting decision is **OpenNext →
+ * Cloudflare Workers** (same zone as the Hono API → first-party cookies
+ * on `.athlya.app`, minimal CORS). Decision + unified deploy ordering:
+ * `docs/security/deploy-web-adr.md` and `docs/runbooks/deploy-unified.md`.
+ * The `@opennextjs/cloudflare` adapter wiring is a dedicated follow-up
+ * slice (build/deploy validation gated on CI quota #123) — see the ADR's
+ * implementation plan.
  *
  * @see Req 25.3, Req 25.4 — requirements.md
  */

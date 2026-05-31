@@ -27,6 +27,7 @@ Documentation sécurité pour la plateforme Athlya. Tous les findings audit, spr
 - [`audit-S4-network.md`](./audit-S4-network.md) — Network, transport & DDoS
 - [`rate-limit-coverage.md`](./rate-limit-coverage.md) — matrice fail-open/closed (#133)
 - [`csp-style-src-attr-adr.md`](./csp-style-src-attr-adr.md) — ADR risque accepté `style-src-attr 'unsafe-inline'` (#137 / S3)
+- [`deploy-web-adr.md`](./deploy-web-adr.md) — ADR hébergement web OpenNext CF (#139 / A6)
 - [`audit-S5-rgpd.md`](./audit-S5-rgpd.md) — RGPD / Data Privacy
 - [`audit-S6-frontend.md`](./audit-S6-frontend.md) — Frontend (web + studio)
 - [`audit-backlog.md`](./audit-backlog.md) — checklist MEDIUM/LOW/INFO résiduels (#79)
