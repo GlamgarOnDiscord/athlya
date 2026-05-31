@@ -1,0 +1,1 @@
+perf(api): cap ClassCapacityDO subscribers + poll fallback (#141)
