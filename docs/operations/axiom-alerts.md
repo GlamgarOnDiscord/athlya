@@ -343,6 +343,25 @@ Issue #134. Le drain cron émet `outbox.backlog` (`metric: outbox_pending_count`
 
 **Action** : vérifier `GET /admin/outbox/stats`, état queue consumers, envisager cron 30s (cf. runbook) ou batch size. Overlap = SKIP LOCKED protège déjà la correction, c'est un signal de charge.
 
+### A17 — Capacity drift Redis↔PG (Sev2 — Slack)
+
+Issue #135. Le cron de réconciliation émet `capacity.drift` (`metric: capacity_redis_pg_drift`) quand le compteur Redis `class:{id}:remaining` diverge du `COUNT(confirmed)` Postgres. Le job auto-heal Redis depuis PG ; une dérive **persistante** (≥ 5 min) signale un bug de compensation ou une perte Redis répétée.
+
+```apl
+['athlya-logs']
+| where _time > now(-15m)
+| where ['message'] == "capacity.drift"
+| summarize maxDrift = max(abs(toint(['drift']))), classes = dcount(tostring(['classId'])) by bin(_time, 5m)
+| where classes > 0
+```
+
+**Trigger** : drift sur la même fenêtre **2 sweeps consécutifs** (> 5 min) OU `direction == "oversell_risk"` avec `drift` élevé.
+**Cooldown** : 15 minutes.
+**Channel** : `#ops-athlya-alerts`.
+**Message** : `⚠️ Capacity drift Redis↔PG sur {{classes}} classe(s), max {{maxDrift}}. Auto-heal actif — si persistant, investiguer book.ts compensation. docs/runbooks/capacity-drift.md.`
+
+**Action** : transitoire (±1) = bénin (booking en vol). Persistant = `oversell_risk` (surbooking) ou `false_full` (faux complet) → vérifier logs `reservation.*`, crash Worker, état Upstash. Le heal ramène Redis = PG ; runbook pour forcer un reset manuel.
+
 ## Budget ingest OTel (issue #83)
 
 Sampling côté Worker (`OTEL_SAMPLE_RATE`, défaut prod `0.1`) + health `1 %` + **5xx toujours exportés**. Cloudflare `head_sampling_rate` prod `0.1` réduit aussi les Tail events.

@@ -174,6 +174,26 @@ Structured log `queue.unknown_event_type` emitted by `reject-unknown-queue-event
 | order by _time asc
 ```
 
+### Capacity drift Redis↔PG (issue #135)
+
+Le cron `capacity-reconcile-runner.ts` émet `capacity.drift` par classe divergente, et `capacity reconcile: sweep complete` en fin de passe.
+
+```apl
+['athlya-logs']
+| where _time > now(-6h)
+| where ['message'] == "capacity.drift"
+| summarize drifts = count(), maxAbsDrift = max(abs(toint(['drift']))) by bin(_time, 5m), direction = tostring(['direction'])
+| order by _time asc
+```
+
+```apl
+['athlya-logs']
+| where _time > now(-6h)
+| where ['message'] == "capacity reconcile: sweep complete"
+| project _time, checked = toint(['checked']), drifted = toint(['drifted']), healed = toint(['healed']), healFailures = toint(['healFailures'])
+| order by _time desc
+```
+
 ### Concurrency limit hits
 
 Le `concurrency-limit.ts` middleware stamp un span event sur 429.

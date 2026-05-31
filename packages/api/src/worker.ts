@@ -83,6 +83,9 @@ import {
   shouldRequireCronDbUrl,
 } from './maintenance/cron-db-config.js';
 import { runScheduledRgpdMaintenance } from './maintenance/scheduled-runner.js';
+import { runScheduledCapacityReconcile } from './maintenance/capacity-reconcile-runner.js';
+import { getOrCreateRedis } from './adapters/deps-cache.js';
+import { createRedisRemainingCounter } from '@athlya/reservations/counter';
 import { rejectUnknownQueueEvent } from './events/reject-unknown-queue-event.js';
 import { jwtAuth } from './middleware/auth.js';
 import { tracing } from './middleware/otel.js';
@@ -1390,6 +1393,29 @@ const worker = {
         cron: event.cron,
         scheduledTime: event.scheduledTime,
       });
+    }
+
+    // Issue #135 — capacity drift reconciliation. Compares the Redis
+    // remaining-seats counter against the authoritative PG confirmed
+    // count for every active class, emits `capacity_redis_pg_drift`
+    // (alert A17) and auto-heals Redis from PG. Needs the BYPASSRLS
+    // cron executor (cross-tenant COUNT) AND Redis credentials; skipped
+    // silently otherwise so dev without `CRON_DB_URL` stays quiet.
+    if (cronExecutor !== null && athlyaEnv.REDIS_URL && athlyaEnv.REDIS_TOKEN) {
+      const counter = createRedisRemainingCounter(
+        getOrCreateRedis(athlyaEnv.REDIS_URL, athlyaEnv.REDIS_TOKEN),
+      );
+      const reconcileTask = runScheduledCapacityReconcile({
+        executeSql: cronExecutor,
+        counter,
+      }).catch((err: unknown) => {
+        console.error('[worker] scheduled capacity reconcile failed', {
+          cron: event.cron,
+          scheduledTime: event.scheduledTime,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+      ctx.waitUntil(reconcileTask);
     }
   },
   /**
