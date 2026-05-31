@@ -243,20 +243,84 @@ function buildAuthHeader(publicKey: string): string {
 }
 
 /**
+ * One frame of a Sentry `stacktrace`. Field names follow the Sentry
+ * event protocol (`filename`, `function`, `lineno`, `colno`, `in_app`).
+ */
+interface SentryStackFrame {
+  filename: string;
+  function?: string;
+  lineno: number;
+  colno: number;
+  in_app: boolean;
+}
+
+/**
+ * Matches a V8 stack line in either form:
+ *   `    at fnName (file:///x/worker.js:12:34)`
+ *   `    at file:///x/worker.js:12:34`
+ * Capture groups: 1 = optional function name, 2 = file, 3 = line, 4 = col.
+ */
+const STACK_FRAME_RE = /^\s*at\s+(?:(.+?)\s+\()?(.+?):(\d+):(\d+)\)?\s*$/u;
+
+/**
+ * Parse an `Error.stack` string into Sentry stacktrace frames.
+ *
+ * Without this, the event carries only `type`/`value` and Sentry has
+ * no `filename:lineno` to match against the uploaded source maps
+ * (issue #138) — prod stacks would stay un-de-minified. We emit
+ * frames so the release-tagged maps actually resolve.
+ *
+ * Sentry expects frames **oldest-first** (the crashing frame last),
+ * which is the reverse of V8's top-down `stack` order — hence the
+ * final `reverse()`.
+ */
+function parseStackFrames(stack: string): SentryStackFrame[] {
+  const frames: SentryStackFrame[] = [];
+  for (const line of stack.split('\n')) {
+    const m = STACK_FRAME_RE.exec(line);
+    if (m === null) continue;
+    const fn = m[1];
+    const filename = m[2];
+    const lineno = Number(m[3]);
+    const colno = Number(m[4]);
+    if (filename === undefined || !Number.isFinite(lineno) || !Number.isFinite(colno)) {
+      continue;
+    }
+    frames.push({
+      filename,
+      ...(fn !== undefined && fn.length > 0 ? { function: fn } : {}),
+      lineno,
+      colno,
+      in_app: true,
+    });
+  }
+  return frames.reverse();
+}
+
+/**
  * Serialise the thrown value into the Sentry-expected `exception`
  * shape. Non-Error throws (strings, plain objects) are normalised so
- * we never send an empty event.
+ * we never send an empty event. When the `Error` carries a `stack`,
+ * we parse it into `stacktrace.frames` so source-map de-minification
+ * works (issue #138).
  */
 function toExceptionPayload(err: unknown): {
   type: string;
   value: string;
-  stacktrace?: { frames: never[] };
+  stacktrace?: { frames: SentryStackFrame[] };
 } {
   if (err instanceof Error) {
-    return {
+    const base = {
       type: err.name.length > 0 ? err.name : 'Error',
       value: err.message.length > 0 ? err.message : '(no message)',
     };
+    if (typeof err.stack === 'string' && err.stack.length > 0) {
+      const frames = parseStackFrames(err.stack);
+      if (frames.length > 0) {
+        return { ...base, stacktrace: { frames } };
+      }
+    }
+    return base;
   }
   // Everything else is coerced to a string. A richer parser is not
   // worth the bytes for a fallback path.

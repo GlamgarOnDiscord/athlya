@@ -67,6 +67,13 @@ main = "src/worker.ts"
 compatibility_date = "2026-03-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Source maps (issue #138). Emits a `.js.map` next to the bundle so:
+#   1. Cloudflare maps stack traces in the dashboard / Tail logs;
+#   2. the deploy workflow uploads the same map to Sentry (release =
+#      short git sha = the `VERSION` var tagged on every event), turning
+#      minified prod stack traces into file:line.
+upload_source_maps = true
+
 # ----------------------------------------------------------------------------
 # Observability
 # ----------------------------------------------------------------------------

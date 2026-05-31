@@ -151,9 +151,36 @@ describe('createSentryClient — envelope', () => {
     expect(payload['level']).toBe('error');
     expect(payload['environment']).toBe('production');
     expect(payload['release']).toBe('athlya-api@0.1.0');
-    expect(payload['exception']).toEqual({
-      values: [{ type: 'Error', value: 'boom' }],
+    const exception = payload['exception'] as { values: Array<Record<string, unknown>> };
+    expect(exception.values[0]).toMatchObject({ type: 'Error', value: 'boom' });
+  });
+
+  it('serialises Error.stack into Sentry stacktrace frames (issue #138)', async () => {
+    const err = new Error('kaboom');
+    err.stack = [
+      'Error: kaboom',
+      '    at handleThing (file:///app/worker.js:42:13)',
+      '    at file:///app/worker.js:7:1',
+    ].join('\n');
+
+    await client.captureException(err);
+
+    const body = (fetchSpy.mock.calls[0]![1] as RequestInit).body as string;
+    const { payload } = parseEnvelopeBody(body);
+    const exception = payload['exception'] as {
+      values: Array<{ stacktrace?: { frames: Array<Record<string, unknown>> } }>;
+    };
+    const frames = exception.values[0]!.stacktrace!.frames;
+    // Sentry order = oldest call first → the crashing frame (worker.js:42) last.
+    expect(frames).toHaveLength(2);
+    expect(frames[1]).toMatchObject({
+      filename: 'file:///app/worker.js',
+      function: 'handleThing',
+      lineno: 42,
+      colno: 13,
+      in_app: true,
     });
+    expect(frames[0]).toMatchObject({ filename: 'file:///app/worker.js', lineno: 7, colno: 1 });
   });
 
   it('exposes traceId as tags.trace_id', async () => {
