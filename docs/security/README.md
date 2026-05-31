@@ -84,6 +84,7 @@ R2 buckets : `athlya-avatars-production` + `athlya-exports-production`.
 - [ ] Câblage `worker.scheduled()` audit anonymize (5 lignes, bloqué par provisioning role Postgres `athlya_cron`)
 - [x] Turnstile sur forgot-password + reset confirm (`ForgotPasswordForm`, `ResetPasswordForm`, API `password-reset/*`)
 - [ ] `TURNSTILE_SECRET` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` provisionnés en prod
+- [x] CSP report sink livré (`POST /v1/csp-report`, issue #136, alerte A18) — reste à définir `NEXT_PUBLIC_CSP_REPORT_URI=https://api.athlya.app/v1/csp-report` en prod (web + studio)
 
 ### Long terme (post-prod 6 mois)
 

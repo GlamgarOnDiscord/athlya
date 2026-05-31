@@ -374,6 +374,27 @@ Trigger **immédiat** oversell (sécurité — surbooking, pas d'attente de pers
 
 **Action** : transitoire (±1) = bénin (booking en vol). Persistant = `oversell_risk` (surbooking) ou `false_full` (faux complet) → vérifier logs `reservation.*`, crash Worker, état Upstash. Le heal ramène Redis = PG ; runbook pour forcer un reset manuel.
 
+### A18 — CSP violation spike (Sev3 — Slack)
+
+Issue #136. L'endpoint `POST /v1/csp-report` émet `csp.violation` (`metric: csp_violation_total`) par violation reçue. Un pic = injection script bloquée (early-warning XSS) ou régression de policy après déploiement.
+
+```apl
+['athlya-logs']
+| where _time > now(-30m)
+| where ['message'] == "csp.violation"
+| where tostring(['blockedUri']) !startswith "chrome-extension:" and tostring(['blockedUri']) !startswith "moz-extension:" and tostring(['blockedUri']) !startswith "safari-extension:"
+| summarize violations = count() by directive = tostring(['effectiveDirective']), blocked = tostring(['blockedUri'])
+| where violations > 20
+| order by violations desc
+```
+
+**Trigger** : > 20 violations / 30 min sur une même `effectiveDirective`, **après filtrage du bruit extensions navigateur** (`*-extension:`). `disposition == "enforce"` = bloqué réellement (prioriser) vs `report` = report-only.
+**Cooldown** : 30 minutes.
+**Channel** : `#ops-athlya-alerts`.
+**Message** : `⚠️ CSP violations spike: {{violations}} sur {{directive}} (blocked {{blocked}}). Possible XSS bloqué ou régression policy — apps/web/src/lib/csp.ts.`
+
+**Action** : si `blockedUri` interne/inattendu après déploiement → régression CSP (whitelist manquante). Si externe/script injecté → investiguer XSS (input non échappé). Bruit récurrent extensions (`chrome-extension:`, `moz-extension:`) → filtrer dans la query.
+
 ## Budget ingest OTel (issue #83)
 
 Sampling côté Worker (`OTEL_SAMPLE_RATE`, défaut prod `0.1`) + health `1 %` + **5xx toujours exportés**. Cloudflare `head_sampling_rate` prod `0.1` réduit aussi les Tail events.

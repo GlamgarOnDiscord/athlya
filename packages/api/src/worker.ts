@@ -86,6 +86,7 @@ import { runScheduledRgpdMaintenance } from './maintenance/scheduled-runner.js';
 import { runScheduledCapacityReconcile } from './maintenance/capacity-reconcile-runner.js';
 import { getOrCreateRedis } from './adapters/deps-cache.js';
 import { createRedisRemainingCounter } from '@athlya/reservations/counter';
+import { handleCspReport } from './routes/csp-report.js';
 import { rejectUnknownQueueEvent } from './events/reject-unknown-queue-event.js';
 import { jwtAuth } from './middleware/auth.js';
 import { tracing } from './middleware/otel.js';
@@ -823,7 +824,11 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
     // claim to compare. The downstream router still mounts its
     // own `jwtAuth()` on the post-auth subroutes (`/logout`,
     // `/me`).
-    if (c.req.path.startsWith('/v1/auth/')) {
+    //
+    // `/v1/csp-report` (issue #136) is also public: browsers POST
+    // CSP violation reports with no credentials. It still runs
+    // behind the global IP limiter mounted earlier in the chain.
+    if (c.req.path.startsWith('/v1/auth/') || c.req.path === '/v1/csp-report') {
       await next();
       return undefined;
     }
@@ -874,6 +879,12 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   /* -------------------------------------------------------------- */
   /*  Routes                                                        */
   /* -------------------------------------------------------------- */
+
+  // Public CSP violation sink (issue #136). Unauthenticated — browsers
+  // POST report-uri / Reporting API payloads with no credentials. Skips
+  // the `/v1/*` jwtAuth gate (see the skip clause above) but still runs
+  // behind the global fail-closed-soft IP limiter.
+  app.post('/v1/csp-report', (c) => handleCspReport(c));
 
   /**
    * Uptime probe. Returns the environment name, the echoed trace id
