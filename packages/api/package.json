@@ -150,18 +150,18 @@
     }
   },
   "devDependencies": {
-    "@sentry/cli": "3.4.3",
     "@athlya/eslint-config": "workspace:*",
     "@athlya/tsconfig": "workspace:*",
     "@cloudflare/workers-types": "^4.20260523.1",
+    "@sentry/cli": "3.4.3",
     "@types/node": "^20.19.9",
     "eslint": "^9.39.1",
     "fast-check": "^3.23.2",
-    "hono": "^4.12.22",
+    "hono": "^4.12.23",
     "openapi-typescript": "^7.13.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.0",
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.95.0"
   }
 }
