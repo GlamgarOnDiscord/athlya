@@ -26,6 +26,10 @@
       "types": "./src/counter.ts",
       "default": "./src/counter.ts"
     },
+    "./reconcile": {
+      "types": "./src/reconcile.ts",
+      "default": "./src/reconcile.ts"
+    },
     "./checkin": {
       "types": "./src/checkin.ts",
       "default": "./src/checkin.ts"
