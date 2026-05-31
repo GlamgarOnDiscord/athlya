@@ -213,8 +213,12 @@ export interface CircuitTransition {
   /** `clock()` value at the moment of the transition. */
   readonly at: number;
   /**
-   * Half-open jitter (ms) drawn for the window the breaker just entered.
-   * Only meaningful for `* → open`; `0` otherwise.
+   * Half-open jitter (ms) for the current outage window. Carries the
+   * drawn value on `* → open` (jitter chosen for the upcoming probe
+   * delay) and on the matching `open → half_open` promotion (the
+   * jitter actually waited out — chart it for realized probe spread).
+   * `0` on `half_open → closed`: no outage window is in flight, so the
+   * persisted `this.jitterMs` would be stale.
    */
   readonly jitterMs: number;
 }
@@ -446,10 +450,15 @@ export class CircuitBreaker {
    * error is swallowed (the breaker has no logger of its own to report
    * it to without re-coupling to the framework).
    */
-  private emitTransition(from: CircuitState, to: CircuitState, at: number): void {
+  private emitTransition(
+    from: CircuitState,
+    to: CircuitState,
+    at: number,
+    jitterMs: number,
+  ): void {
     if (this.onTransition === undefined) return;
     try {
-      this.onTransition({ name: this._name, from, to, at, jitterMs: this.jitterMs });
+      this.onTransition({ name: this._name, from, to, at, jitterMs });
     } catch {
       /* swallowed — see doc above */
     }
@@ -477,7 +486,8 @@ export class CircuitBreaker {
     if (now - this.openedAt >= this.resetTimeoutMs + this.jitterMs) {
       this._state = 'half_open';
       this.probeInFlight = false;
-      this.emitTransition('open', 'half_open', now);
+      // Surface the jitter actually waited out for this window.
+      this.emitTransition('open', 'half_open', now, this.jitterMs);
     }
   }
 
@@ -495,7 +505,7 @@ export class CircuitBreaker {
       this.resetJitterMs > 0
         ? Math.min(this.resetJitterMs, Math.max(0, Math.floor(this.random() * this.resetJitterMs)))
         : 0;
-    this.emitTransition(from, 'open', now);
+    this.emitTransition(from, 'open', now, this.jitterMs);
   }
 
   /** Promote `half_open` → `closed` after a successful probe. */
@@ -503,7 +513,8 @@ export class CircuitBreaker {
     this._state = 'closed';
     this.failures = [];
     this.probeInFlight = false;
-    this.emitTransition('half_open', 'closed', this.clock());
+    // No outage window in flight — persisted jitter is stale, report 0.
+    this.emitTransition('half_open', 'closed', this.clock(), 0);
   }
 
   /** Demote `half_open` → `open` after a failed probe. */

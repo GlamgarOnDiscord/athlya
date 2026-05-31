@@ -386,26 +386,28 @@ describe('CircuitBreaker — half-open jitter', () => {
 /* ------------------------------------------------------------------ */
 
 describe('CircuitBreaker — onTransition hook', () => {
-  it('emits closed → open → half_open → closed with jitter on open', () => {
+  it('emits closed → open → half_open → closed, jitter on open + matching half_open, 0 on close', () => {
     const now = { value: 0 };
     const events: Array<{ from: string; to: string; at: number; jitterMs: number }> = [];
+    // random=0.5 → jitter = floor(0.5 * 12_000) = 6_000.
     const breaker = new CircuitBreaker({
       name: 'redis',
       resetTimeoutMs: 60_000,
-      random: () => 0,
+      random: () => 0.5,
       clock: () => now.value,
       onTransition: (e) => events.push({ from: e.from, to: e.to, at: e.at, jitterMs: e.jitterMs }),
     });
 
     for (let i = 0; i < 5; i += 1) breaker.recordFailure();
-    now.value = 60_000;
+    now.value = 66_000; // reset (60_000) + jitter (6_000)
     expect(breaker.state()).toBe('half_open');
     breaker.recordSuccess();
 
     expect(events).toEqual([
-      { from: 'closed', to: 'open', at: 0, jitterMs: 0 },
-      { from: 'open', to: 'half_open', at: 60_000, jitterMs: 0 },
-      { from: 'half_open', to: 'closed', at: 60_000, jitterMs: 0 },
+      { from: 'closed', to: 'open', at: 0, jitterMs: 6_000 },
+      { from: 'open', to: 'half_open', at: 66_000, jitterMs: 6_000 },
+      // half_open → closed: no window in flight → 0, NOT the stale 6_000.
+      { from: 'half_open', to: 'closed', at: 66_000, jitterMs: 0 },
     ]);
   });
 
