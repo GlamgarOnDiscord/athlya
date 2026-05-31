@@ -359,6 +359,20 @@ export interface AthlyaBindings {
   readonly CLASS_CAPACITY_DO?: DurableObjectNamespace;
 
   /**
+   * Max simultaneous WebSocket subscribers a single `ClassCapacityDO`
+   * instance accepts before shedding new upgrades (issue #141 / audit
+   * P6). A DO is single-threaded and one hot class concentrates every
+   * subscriber on one isolate; past this cap the broadcast fan-out and
+   * connection memory stop being free. Excess clients get a 503 +
+   * `X-Capacity-Fallback: poll` so they degrade to polling
+   * `GET /v1/classes` instead of hammering the saturated DO.
+   *
+   * Optional string env var (Workers vars are strings). Parsed as an
+   * int; absent / invalid / non-positive → {@link DEFAULT_CLASS_CAPACITY_MAX_WS}.
+   */
+  readonly CLASS_CAPACITY_MAX_WS?: string;
+
+  /**
    * Postgres connection string for the RGPD maintenance cron role
    * (`athlya_cron`). Used by `worker.scheduled()` for J+30 user
    * anonymisation, outbox/export_jobs purge, and audit_log scrubbing.

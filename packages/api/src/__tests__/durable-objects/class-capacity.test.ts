@@ -11,7 +11,10 @@
 
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { ClassCapacityDO } from '../../durable-objects/class-capacity.js';
+import {
+  ClassCapacityDO,
+  DEFAULT_CLASS_CAPACITY_MAX_WS,
+} from '../../durable-objects/class-capacity.js';
 
 /* ------------------------------------------------------------------ */
 /*  Cloudflare Workers globals polyfill                                */
@@ -63,8 +66,10 @@ function makeCtx(sockets: WebSocket[] = []) {
   };
 }
 
-function makeEnv() {
-  return {} as import('../../types.js').AthlyaBindings;
+function makeEnv(maxWs?: string) {
+  return (maxWs === undefined
+    ? {}
+    : { CLASS_CAPACITY_MAX_WS: maxWs }) as import('../../types.js').AthlyaBindings;
 }
 
 /* ------------------------------------------------------------------ */
@@ -144,6 +149,35 @@ describe('ClassCapacityDO', () => {
     const do_ = new ClassCapacityDO(makeCtx(), makeEnv());
     do_.webSocketError(ws, new Error('boom'));
     expect(ws.close).toHaveBeenCalledWith(1011, 'Internal error');
+  });
+
+  it('sheds new upgrades past the subscriber cap with 503 + poll fallback (issue #141)', async () => {
+    const existing = Array.from({ length: 2 }, () => makeWebSocket());
+    const ctx = makeCtx(existing);
+    const do_ = new ClassCapacityDO(ctx, makeEnv('2'));
+
+    const req = new Request('https://worker.dev/ws', { headers: { Upgrade: 'websocket' } });
+    const res = await do_.fetch(req);
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get('X-Capacity-Fallback')).toBe('poll');
+    expect(res.headers.get('Retry-After')).toBe('30');
+    expect(ctx.acceptWebSocket).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the default cap on absent/invalid CLASS_CAPACITY_MAX_WS', async () => {
+    // One subscriber, default cap (500) → upgrade still accepted.
+    const ctx = makeCtx([makeWebSocket()]);
+    const do_ = new ClassCapacityDO(ctx, makeEnv('not-a-number'));
+    expect(DEFAULT_CLASS_CAPACITY_MAX_WS).toBe(500);
+
+    const req = new Request('https://worker.dev/ws', { headers: { Upgrade: 'websocket' } });
+    try {
+      await do_.fetch(req);
+    } catch {
+      // Node rejects status 101 — we only assert the socket was accepted.
+    }
+    expect(ctx.acceptWebSocket).toHaveBeenCalledOnce();
   });
 
   it('skips faulted WebSockets during broadcast without throwing', async () => {
