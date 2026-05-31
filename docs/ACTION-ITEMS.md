@@ -14,12 +14,9 @@ Zod `RegisterRequestSchema` / `LoginRequestSchema` cap `.max(72)` (`packages/sha
 
 Lockfile resolves to `4.20260509.1` (latest). The `^4.20241218.0` range in package.json is permissive enough. No action needed.
 
-### S4. Add CSP report-uri/report-to
+### ~~S4. Add CSP report-uri/report-to~~ RESOLVED (2026-05-31, issue #136)
 
-**Risk**: CSP violations invisible — no monitoring before they block users  
-**File**: `apps/web/src/lib/csp.ts`  
-**Action**: Add `report-to` directive pointing to a reporting endpoint (or use Report URI service)  
-**Source**: MDN CSP reference
+`apps/web/src/lib/csp.ts` émet déjà `report-to`/`report-uri` + header `Report-To` quand `NEXT_PUBLIC_CSP_REPORT_URI` est défini (`apps/web/src/proxy.ts`). Endpoint récepteur livré : `POST /v1/csp-report` (`packages/api/src/routes/csp-report.ts`, public, derrière le limiter IP) accepte `application/csp-report` (legacy) + `application/reports+json` (Reporting API), émet `csp.violation` (`metric: csp_violation_total`). Alerte Axiom **A18** + query. **Prod** : définir `NEXT_PUBLIC_CSP_REPORT_URI=https://api.athlya.app/v1/csp-report` (et équivalent studio). Tests `packages/api/src/__tests__/csp-report.test.ts`.
 
 ### S5. No CORS middleware on API gateway
 

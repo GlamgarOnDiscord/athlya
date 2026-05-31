@@ -194,6 +194,19 @@ Le cron `capacity-reconcile-runner.ts` émet `capacity.drift` par classe diverge
 | order by _time desc
 ```
 
+### CSP violations (issue #136)
+
+`POST /v1/csp-report` (`routes/csp-report.ts`) émet `csp.violation` par violation. Filtrer le bruit des extensions navigateur.
+
+```apl
+['athlya-logs']
+| where _time > now(-24h)
+| where ['message'] == "csp.violation"
+| where tostring(['blockedUri']) !startswith "chrome-extension:" and tostring(['blockedUri']) !startswith "moz-extension:"
+| summarize violations = count() by directive = tostring(['effectiveDirective']), disposition = tostring(['disposition'])
+| order by violations desc
+```
+
 ### Concurrency limit hits
 
 Le `concurrency-limit.ts` middleware stamp un span event sur 429.
