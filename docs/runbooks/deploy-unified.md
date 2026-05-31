@@ -9,7 +9,7 @@ Décision d'hébergement : [`deploy-web-adr.md`](../security/deploy-web-adr.md) 
 | API (Hono) | `athlya-api` | `api.athlya.app` |
 | Web (Next/OpenNext) | `athlya-web` | `app.athlya.app` |
 
-Domaine enregistrable commun `athlya.app` → cookies de session first-party `Domain=.athlya.app; SameSite=Lax; Secure`.
+Domaine enregistrable commun `athlya.app` → requêtes web↔API **same-site** (`SameSite=Lax` suffit). Le cookie refresh reste **host-only** sur l'origine web (cf. ci-dessous) — pas de partage cross-subdomain.
 
 ## Ordre de déploiement (non atomique → ordonné)
 
@@ -25,9 +25,9 @@ Rollback : web puis API (ordre inverse), via `wrangler rollback` / `scripts/cana
 ## CORS / cookies — checklist prod
 
 - [ ] `CORS_ORIGIN=https://app.athlya.app` sur l'API (`worker.ts` rejette tout le reste hors dev).
-- [ ] Cookies session : `Domain=.athlya.app`, `SameSite=Lax`, `Secure`, `HttpOnly`.
-- [ ] Préflight OPTIONS `app.athlya.app → api.athlya.app` : `Access-Control-Allow-Credentials: true`, origin echo strict.
-- [ ] Pas de `SameSite=None` (first-party suffit en same-site cross-subdomain).
+- [ ] Cookie refresh **inchangé / host-only** : `athlya.refresh`, `Path=/api/auth`, `SameSite=Lax`, `HttpOnly`, `Secure`, **sans `Domain`** (cf. `apps/web/src/lib/auth/cookies.ts`). **Ne PAS** ajouter `Domain=.athlya.app` (partagerait le refresh avec `{slug}.athlya.app` → CSRF S4-006).
+- [ ] Access token en mémoire (`token-store.ts`), envoyé en `Bearer` → pas de cookie credential cross-origin.
+- [ ] Pas de `SameSite=None` (same-site suffit ; web et API sous `athlya.app`).
 - [ ] E2E : `apps/web/e2e` rejoués contre staging (login/book/cancel).
 
 ## État

@@ -15,7 +15,7 @@ Issue #139 (P2 infra, audit A6). API sur CF Workers, web Next.js avec TODO `@ope
 - **`docs/security/deploy-web-adr.md`** : ADR (comparatif, conséquences cookies/CORS, plan d'implémentation, déclencheurs réévaluation).
 - **`docs/runbooks/deploy-unified.md`** : runbook ordre déploiement API→web, rollback, checklist CORS/cookies prod.
 - **`apps/web/next.config.ts`** : TODO `@opennextjs/cloudflare` **résolu** → référence ADR + plan slice dédiée.
-- **`security/README.md`** : lien ADR.
+- **`docs/security/README.md`** : lien ADR.
 
 ## Critères d'acceptation
 
