@@ -150,6 +150,7 @@
     }
   },
   "devDependencies": {
+    "@sentry/cli": "3.4.3",
     "@athlya/eslint-config": "workspace:*",
     "@athlya/tsconfig": "workspace:*",
     "@cloudflare/workers-types": "^4.20260523.1",
