@@ -38,6 +38,8 @@ function makeBreaker(
     failureThreshold: number;
     windowMs: number;
     resetTimeoutMs: number;
+    resetJitterMs: number;
+    random: () => number;
   }> = {},
 ): { breaker: CircuitBreaker; now: { value: number } } {
   const now = { value: 0 };
@@ -46,6 +48,11 @@ function makeBreaker(
     failureThreshold: overrides.failureThreshold ?? 5,
     windowMs: overrides.windowMs ?? 30_000,
     resetTimeoutMs: overrides.resetTimeoutMs ?? 60_000,
+    // Default jitter OFF for the deterministic transition tests so the
+    // exact-deadline assertions hold. The jitter behaviour (issue #140)
+    // has its own dedicated describe block below.
+    resetJitterMs: overrides.resetJitterMs ?? 0,
+    random: overrides.random ?? ((): number => 0),
     clock: () => now.value,
   });
   return { breaker, now };
@@ -279,6 +286,142 @@ describe('CircuitBreaker — state transitions', () => {
     expect(() => new CircuitBreaker({ name: 'x', failureThreshold: 0 })).toThrow(RangeError);
     expect(() => new CircuitBreaker({ name: 'x', windowMs: 0 })).toThrow(RangeError);
     expect(() => new CircuitBreaker({ name: 'x', resetTimeoutMs: 0 })).toThrow(RangeError);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Half-open jitter (issue #140 / audit R1 — anti-storm)              */
+/* ------------------------------------------------------------------ */
+
+describe('CircuitBreaker — half-open jitter', () => {
+  it('defaults resetJitterMs to 20% of resetTimeoutMs and delays the probe deadline', () => {
+    const now = { value: 0 };
+    // random() = 0.5 → jitter = floor(0.5 * 12_000) = 6_000.
+    const breaker = new CircuitBreaker({
+      name: 'jitter',
+      resetTimeoutMs: 60_000,
+      random: () => 0.5,
+      clock: () => now.value,
+    });
+
+    for (let i = 0; i < 5; i += 1) {
+      breaker.recordFailure();
+    }
+    expect(breaker.state()).toBe('open');
+
+    // At the plain deadline the breaker is STILL open (jitter not elapsed).
+    now.value = 60_000;
+    expect(breaker.state()).toBe('open');
+    // Just before reset + jitter: still open.
+    now.value = 65_999;
+    expect(breaker.state()).toBe('open');
+    // At reset + jitter (66_000): half-open.
+    now.value = 66_000;
+    expect(breaker.state()).toBe('half_open');
+  });
+
+  it('de-synchronises two isolates that tripped at the same instant', () => {
+    const nowA = { value: 0 };
+    const nowB = { value: 0 };
+    const breakerA = new CircuitBreaker({
+      name: 'dep',
+      resetTimeoutMs: 60_000,
+      random: () => 0, // jitter 0 → probes at 60_000
+      clock: () => nowA.value,
+    });
+    const breakerB = new CircuitBreaker({
+      name: 'dep',
+      resetTimeoutMs: 60_000,
+      random: () => 0.99, // jitter ~11_880 → probes much later
+      clock: () => nowB.value,
+    });
+
+    for (let i = 0; i < 5; i += 1) {
+      breakerA.recordFailure();
+      breakerB.recordFailure();
+    }
+
+    nowA.value = 60_000;
+    nowB.value = 60_000;
+    // Same trip instant, same deadline — but the jitter spreads them:
+    // A probes now, B is still open.
+    expect(breakerA.state()).toBe('half_open');
+    expect(breakerB.state()).toBe('open');
+  });
+
+  it('draws a fresh jitter on every trip', () => {
+    const now = { value: 0 };
+    const randoms = [0, 0.99];
+    let i = 0;
+    const breaker = new CircuitBreaker({
+      name: 'dep',
+      resetTimeoutMs: 60_000,
+      random: () => randoms[i++ % randoms.length]!,
+      clock: () => now.value,
+    });
+
+    // First trip: random=0 → jitter 0 → half-open at 60_000.
+    for (let k = 0; k < 5; k += 1) breaker.recordFailure();
+    now.value = 60_000;
+    expect(breaker.state()).toBe('half_open');
+
+    // Failed probe re-opens at t=60_000 and draws random=0.99 →
+    // jitter = floor(0.99 * 12_000) = 11_880. Deadline = openedAt
+    // (60_000) + reset (60_000) + jitter (11_880) = 131_880.
+    breaker.recordFailure();
+    expect(breaker.state()).toBe('open');
+    now.value = 131_879;
+    expect(breaker.state()).toBe('open'); // 1 ms before reset + jitter
+    now.value = 131_880;
+    expect(breaker.state()).toBe('half_open');
+  });
+
+  it('rejects a negative resetJitterMs', () => {
+    expect(() => new CircuitBreaker({ name: 'x', resetJitterMs: -1 })).toThrow(RangeError);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Transition observability hook (issue #140 — metrics)              */
+/* ------------------------------------------------------------------ */
+
+describe('CircuitBreaker — onTransition hook', () => {
+  it('emits closed → open → half_open → closed, jitter on open + matching half_open, 0 on close', () => {
+    const now = { value: 0 };
+    const events: Array<{ from: string; to: string; at: number; jitterMs: number }> = [];
+    // random=0.5 → jitter = floor(0.5 * 12_000) = 6_000.
+    const breaker = new CircuitBreaker({
+      name: 'redis',
+      resetTimeoutMs: 60_000,
+      random: () => 0.5,
+      clock: () => now.value,
+      onTransition: (e) => events.push({ from: e.from, to: e.to, at: e.at, jitterMs: e.jitterMs }),
+    });
+
+    for (let i = 0; i < 5; i += 1) breaker.recordFailure();
+    now.value = 66_000; // reset (60_000) + jitter (6_000)
+    expect(breaker.state()).toBe('half_open');
+    breaker.recordSuccess();
+
+    expect(events).toEqual([
+      { from: 'closed', to: 'open', at: 0, jitterMs: 6_000 },
+      { from: 'open', to: 'half_open', at: 66_000, jitterMs: 6_000 },
+      // half_open → closed: no window in flight → 0, NOT the stale 6_000.
+      { from: 'half_open', to: 'closed', at: 66_000, jitterMs: 0 },
+    ]);
+  });
+
+  it('swallows hook exceptions — a logging failure never escalates an outage', () => {
+    const breaker = new CircuitBreaker({
+      name: 'pg',
+      onTransition: () => {
+        throw new Error('sink down');
+      },
+    });
+    expect(() => {
+      for (let i = 0; i < 5; i += 1) breaker.recordFailure();
+    }).not.toThrow();
+    expect(breaker.state()).toBe('open');
   });
 });
 
