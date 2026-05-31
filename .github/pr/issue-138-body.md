@@ -4,10 +4,11 @@ Issue #138 (P2 infra, audit O1). Sentry est branché (envelope hand-rolled) et t
 
 ## Changements
 
+- **`packages/api/src/sentry.ts`** : parse `Error.stack` → `stacktrace.frames` (`filename`/`function`/`lineno`/`colno`). **Pré-requis** : sans frames dans l'event, Sentry n'a rien à matcher contre les maps (le client hand-rolled n'envoyait que `type`/`value`).
 - **`packages/api/wrangler.toml`** : `upload_source_maps = true` (wrangler émet `.js.map`).
 - **`deploy-production.yml`** :
   - `staging-deploy` / `production-deploy` : ajout `--outdir dist` (génère bundle + map).
-  - nouvelle étape **`Sentry release + source maps`** : `sentry-cli` release `${GITHUB_SHA:0:7}` → `sourcemaps inject` → `upload --release` → `set-commits --auto` → `finalize` → `deploys new -e <env>`.
+  - nouvelle étape **`Sentry release + source maps`** : `sentry-cli` (devDependency **pinnée exacte** `@sentry/cli@3.4.3`, invoquée via `pnpm exec` — pas de `npx` flottant avec le token en env) release `${GITHUB_SHA:0:7}` → `sourcemaps inject` → `upload --release` → `set-commits --auto` → `finalize` → `deploys new -e <env>`.
   - **soft-gate** : skip propre si `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` absents (fork PRs, secret non provisionné).
 - **`docs/runbooks/sentry-sourcemaps.md`** + `verify-sentry-sourcemaps-checklist.mjs` + note secrets dans `security/README.md`.
 

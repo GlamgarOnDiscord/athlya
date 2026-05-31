@@ -17,6 +17,11 @@ const ITEMS = [
     doc: 'packages/api/src/sentry.ts',
   },
   {
+    id: 'M2b',
+    label: 'Events sérialisent Error.stack en stacktrace.frames (sinon rien à matcher)',
+    doc: 'packages/api/src/sentry.ts → parseStackFrames',
+  },
+  {
     id: 'M3',
     label: 'Étape CI: sentry-cli new/inject/upload/set-commits/finalize/deploys',
     doc: '.github/workflows/deploy-production.yml § Sentry release + source maps',

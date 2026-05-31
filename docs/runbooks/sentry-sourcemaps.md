@@ -30,6 +30,7 @@ Soft-gate : si `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` absents, l'éta
 
 ## Notes / limites
 
+- **Frames dans l'event** : `packages/api/src/sentry.ts` parse `Error.stack` en `stacktrace.frames` (`filename`/`lineno`/`colno`). Sans frames, Sentry n'a rien à matcher contre les maps — c'est le pré-requis de la dé-minification (corrigé #138).
 - **Matching** : on s'appuie sur le matching **release + filename** (event.release == nom de release uploadée). Le `sourcemaps inject` ajoute des debug-ids aux artefacts uploadés ; le bundle déployé par wrangler n'embarque pas ces ids (injection post-deploy locale), donc le debug-id matching seul ne suffit pas — d'où l'importance que `VERSION` == nom de release.
 - **Canary / smoke** : `production-canary` passe par `scripts/canary-deploy.mjs` (versions upload) — source maps non câblées sur ce chemin (Phase 1 cible les phases `*-deploy` directes). Suivi possible si besoin.
 - **Phase 3 (SDK `@sentry/cloudflare`)** : hors scope, rejetée pour la taille de bundle (cf. `sentry.ts` docblock + ADR #76).

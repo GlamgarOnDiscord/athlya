@@ -152,12 +152,17 @@ jobs:
           fi
           RELEASE="${GITHUB_SHA:0:7}"
           ENV_NAME="${{ inputs.phase == 'production-deploy' && 'production' || 'staging' }}"
-          npx @sentry/cli@^2 releases new "$RELEASE"
-          npx @sentry/cli@^2 sourcemaps inject dist
-          npx @sentry/cli@^2 sourcemaps upload --release "$RELEASE" dist
-          npx @sentry/cli@^2 releases set-commits "$RELEASE" --auto --ignore-missing
-          npx @sentry/cli@^2 releases finalize "$RELEASE"
-          npx @sentry/cli@^2 releases deploys "$RELEASE" new -e "$ENV_NAME"
+          # Pinned CLI (devDependency @sentry/cli, exact version) invoked
+          # through pnpm so CI runs a lockfile-reviewed artifact rather
+          # than a floating npx range resolved while the auth token is in
+          # the environment.
+          SENTRY_CLI="pnpm --filter @athlya/api exec sentry-cli"
+          $SENTRY_CLI releases new "$RELEASE"
+          $SENTRY_CLI sourcemaps inject dist
+          $SENTRY_CLI sourcemaps upload --release "$RELEASE" dist
+          $SENTRY_CLI releases set-commits "$RELEASE" --auto --ignore-missing
+          $SENTRY_CLI releases finalize "$RELEASE"
+          $SENTRY_CLI releases deploys "$RELEASE" new -e "$ENV_NAME"
 
       - name: Staging smoke (upload + ready gate)
         if: inputs.phase == 'staging-smoke'
