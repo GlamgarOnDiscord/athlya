@@ -36,7 +36,7 @@ Retry-After: 30
 
 Options non implémentées (à activer sur données d'incident) :
 
-1. **Sharding DO par tranche** : `idFromName(`${classId}:${shard}`)` avec N shards, fan-out croisé par broadcast inter-shard ou via le drain outbox.
+1. **Sharding DO par tranche** : `idFromName("<classId>:<shard>")` avec N shards, fan-out croisé par broadcast inter-shard ou via le drain outbox.
 2. **SSE agrégé studio-wide** : un flux par studio plutôt qu'un WS par cours, en lecture seule.
 3. Polling pur si le temps réel n'est pas critique pour le tier concerné.
 
