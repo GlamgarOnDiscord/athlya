@@ -12,8 +12,8 @@
  * `csp.violation` log line per report (metric `csp_violation_total`,
  * alert A18). It NEVER returns an error to the browser: a violation
  * report is fire-and-forget telemetry, so we always answer `204` (even
- * on a malformed body) and swallow parse failures into a counted
- * `csp.report_parse_error` metric.
+ * on a malformed body) and swallow parse failures into a
+ * `csp.report_parse_error` log line (metric `csp_report_parse_error_total`).
  *
  * Payload shapes:
  *   • `application/csp-report` (legacy `report-uri`):

@@ -382,12 +382,13 @@ Issue #136. L'endpoint `POST /v1/csp-report` émet `csp.violation` (`metric: csp
 ['athlya-logs']
 | where _time > now(-30m)
 | where ['message'] == "csp.violation"
+| where tostring(['blockedUri']) !startswith "chrome-extension:" and tostring(['blockedUri']) !startswith "moz-extension:" and tostring(['blockedUri']) !startswith "safari-extension:"
 | summarize violations = count() by directive = tostring(['effectiveDirective']), blocked = tostring(['blockedUri'])
 | where violations > 20
 | order by violations desc
 ```
 
-**Trigger** : > 20 violations / 30 min sur une même `effectiveDirective` (baseline normale ≈ bruit extensions navigateur). `disposition == "enforce"` = bloqué réellement (prioriser) vs `report` = report-only.
+**Trigger** : > 20 violations / 30 min sur une même `effectiveDirective`, **après filtrage du bruit extensions navigateur** (`*-extension:`). `disposition == "enforce"` = bloqué réellement (prioriser) vs `report` = report-only.
 **Cooldown** : 30 minutes.
 **Channel** : `#ops-athlya-alerts`.
 **Message** : `⚠️ CSP violations spike: {{violations}} sur {{directive}} (blocked {{blocked}}). Possible XSS bloqué ou régression policy — apps/web/src/lib/csp.ts.`

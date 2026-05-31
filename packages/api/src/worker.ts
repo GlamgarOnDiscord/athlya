@@ -880,6 +880,12 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   /*  Routes                                                        */
   /* -------------------------------------------------------------- */
 
+  // Public CSP violation sink (issue #136). Unauthenticated — browsers
+  // POST report-uri / Reporting API payloads with no credentials. Skips
+  // the `/v1/*` jwtAuth gate (see the skip clause above) but still runs
+  // behind the global fail-closed-soft IP limiter.
+  app.post('/v1/csp-report', (c) => handleCspReport(c));
+
   /**
    * Uptime probe. Returns the environment name, the echoed trace id
    * and the deployed version. Intentionally does NOT touch Redis,
@@ -887,12 +893,6 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
    * few times a minute and a dependency failure must not cascade
    * to a red health check.
    */
-  // Public CSP violation sink (issue #136). Unauthenticated — browsers
-  // POST report-uri / Reporting API payloads with no credentials. Skips
-  // the `/v1/*` jwtAuth gate (see the skip clause above) but still runs
-  // behind the global fail-closed-soft IP limiter.
-  app.post('/v1/csp-report', (c) => handleCspReport(c));
-
   app.get('/health', (c) => {
     return c.json({
       status: 'ok' as const,
