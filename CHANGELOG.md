@@ -169,7 +169,29 @@ Premier jalon stable. Le backend est verrouillé Niveau Série A : auth hardenin
 
 ## [Unreleased]
 
-Aucune entrée pour le moment.
+### Added — Durcissement post-audit prod (2026-05)
+
+- **#134** — Drain outbox adaptatif (batch 100→200 si backlog > 500), métrique `outbox.backlog` à chaque tick, garde d'overlap par durée (`outbox.drain_overlap_risk`), alerte Axiom A16.
+- **#135** — Réconciliation dérive capacité Redis↔PG (`reconcileCapacityDrift`) avec auto-heal, runner cron, métrique `capacity_redis_pg_drift`, alerte A17, runbook `capacity-drift.md`.
+- **#136** — Sink public de rapports CSP (`POST /v1/csp-report`, formats legacy + Reporting API), métriques `csp.violation`/`csp.report_parse_error`, alerte A18.
+- **#140** — Circuit breaker : **jitter half-open per-isolate** (anti-storm, défaut 20 % de `resetTimeoutMs`, sans état partagé) + hook `onTransition` pour métrique transitions d'état.
+- **#141** — Cap d'abonnés `ClassCapacityDO` (`CLASS_CAPACITY_MAX_WS`, défaut 500) avec load-shedding `503 + X-Capacity-Fallback: poll`, runbook scaling.
+
+### Changed
+
+- **#138** — Upload des source maps + tracking de release Sentry en CI (`sentry-cli` épinglé), sérialisation `Error.stack` en `stacktrace.frames` dans l'envelope Sentry.
+
+### Security
+
+- **#137** — ADR d'acceptation de risque `style-src-attr 'unsafe-inline'` + tests verrouillant la posture CSP.
+- **#139** — ADR hébergement web (OpenNext CF vs Vercel) + runbook de déploiement unifié ; cookie refresh confirmé **host-only** (pas de `Domain` → pas de risque CSRF sur sous-domaines tenant).
+- **#142** — Override pnpm `tmp >= 0.2.6` (dev-only via testcontainers) → ferme l'advisory Dependabot High (Path Traversal).
+
+### Docs
+
+- ADR circuit breaker (`docs/security/circuit-breaker-adr.md`) ré-évalué post-audit R1 ; `rules.md` à jour (post #135–#142).
+
+> **Bloqueur ops** : #123 (quota GitHub Actions / billing) reste ouverte — hors-code, voir `docs/runbooks/ci-recovery.md`.
 
 ---
 
