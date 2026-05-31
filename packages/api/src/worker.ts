@@ -83,6 +83,9 @@ import {
   shouldRequireCronDbUrl,
 } from './maintenance/cron-db-config.js';
 import { runScheduledRgpdMaintenance } from './maintenance/scheduled-runner.js';
+import { runScheduledCapacityReconcile } from './maintenance/capacity-reconcile-runner.js';
+import { getOrCreateRedis } from './adapters/deps-cache.js';
+import { createRedisRemainingCounter } from '@athlya/reservations/counter';
 import { rejectUnknownQueueEvent } from './events/reject-unknown-queue-event.js';
 import { jwtAuth } from './middleware/auth.js';
 import { tracing } from './middleware/otel.js';
@@ -1386,6 +1389,41 @@ const worker = {
       ctx.waitUntil(rgpdTask);
     } else if (shouldRequireCronDbUrl(athlyaEnv.ENVIRONMENT)) {
       logCronDbUrlMissing({
+        environment: athlyaEnv.ENVIRONMENT,
+        cron: event.cron,
+        scheduledTime: event.scheduledTime,
+      });
+    }
+
+    // Issue #135 — capacity drift reconciliation. Compares the Redis
+    // remaining-seats counter against the authoritative PG confirmed
+    // count for every active class, emits `capacity_redis_pg_drift`
+    // (alert A17) and auto-heals Redis from PG. Needs the BYPASSRLS
+    // cron executor (cross-tenant COUNT) AND Redis credentials; skipped
+    // silently otherwise so dev without `CRON_DB_URL` stays quiet.
+    if (cronExecutor !== null && athlyaEnv.REDIS_URL && athlyaEnv.REDIS_TOKEN) {
+      const counter = createRedisRemainingCounter(
+        getOrCreateRedis(athlyaEnv.REDIS_URL, athlyaEnv.REDIS_TOKEN),
+      );
+      const reconcileTask = runScheduledCapacityReconcile({
+        executeSql: cronExecutor,
+        counter,
+      }).catch((err: unknown) => {
+        console.error('[worker] scheduled capacity reconcile failed', {
+          cron: event.cron,
+          scheduledTime: event.scheduledTime,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+      ctx.waitUntil(reconcileTask);
+    } else if (cronExecutor !== null && shouldRequireCronDbUrl(athlyaEnv.ENVIRONMENT)) {
+      // Required env with a working cron DB but no Redis credentials:
+      // the auto-heal job is silently absent otherwise. Surface a
+      // configuration error so ops sees the gap (mirrors the
+      // CRON_DB_URL-missing signal above).
+      console.error('[worker] capacity reconcile: configuration_error', {
+        code: 'configuration_error',
+        reason: 'REDIS_URL/REDIS_TOKEN missing — capacity drift reconciliation disabled',
         environment: athlyaEnv.ENVIRONMENT,
         cron: event.cron,
         scheduledTime: event.scheduledTime,

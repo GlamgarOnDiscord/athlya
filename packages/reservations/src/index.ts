@@ -16,6 +16,7 @@
 export * from './state-machine.js';
 export * from './list.js';
 export * from './counter.js';
+export * from './reconcile.js';
 export * from './checkin.js';
 export * from './cancel.js';
 export * from './book.js';

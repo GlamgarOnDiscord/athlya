@@ -343,6 +343,37 @@ Issue #134. Le drain cron émet `outbox.backlog` (`metric: outbox_pending_count`
 
 **Action** : vérifier `GET /admin/outbox/stats`, état queue consumers, envisager cron 30s (cf. runbook) ou batch size. Overlap = SKIP LOCKED protège déjà la correction, c'est un signal de charge.
 
+### A17 — Capacity drift Redis↔PG (Sev2 — Slack)
+
+Issue #135. Le cron de réconciliation émet `capacity.drift` (`metric: capacity_redis_pg_drift`) quand le compteur Redis `class:{id}:remaining` diverge du `COUNT(confirmed)` Postgres. Le job auto-heal Redis depuis PG ; une dérive **persistante** (≥ 5 min) signale un bug de compensation ou une perte Redis répétée.
+
+Dérive **persistante** (même `classId` sur ≥ 2 fenêtres de 5 min → exclut la race transitoire ±1) :
+
+```apl
+['athlya-logs']
+| where _time > now(-15m)
+| where ['message'] == "capacity.drift"
+| summarize windows = dcount(bin(_time, 5m)), maxDrift = max(abs(toint(['drift']))) by classId = tostring(['classId'])
+| where windows >= 2
+```
+
+Trigger **immédiat** oversell (sécurité — surbooking, pas d'attente de persistance) :
+
+```apl
+['athlya-logs']
+| where _time > now(-5m)
+| where ['message'] == "capacity.drift" and tostring(['direction']) == "oversell_risk"
+| summarize n = count(), maxDrift = max(toint(['drift'])) by classId = tostring(['classId'])
+| where maxDrift >= 3
+```
+
+**Trigger** : query #1 retourne ≥ 1 ligne (drift persistant même classe) OU query #2 ≥ 1 ligne (oversell ≥ 3 places immédiat).
+**Cooldown** : 15 minutes.
+**Channel** : `#ops-athlya-alerts`.
+**Message** : `⚠️ Capacity drift Redis↔PG sur {{classes}} classe(s), max {{maxDrift}}. Auto-heal actif — si persistant, investiguer book.ts compensation. docs/runbooks/capacity-drift.md.`
+
+**Action** : transitoire (±1) = bénin (booking en vol). Persistant = `oversell_risk` (surbooking) ou `false_full` (faux complet) → vérifier logs `reservation.*`, crash Worker, état Upstash. Le heal ramène Redis = PG ; runbook pour forcer un reset manuel.
+
 ## Budget ingest OTel (issue #83)
 
 Sampling côté Worker (`OTEL_SAMPLE_RATE`, défaut prod `0.1`) + health `1 %` + **5xx toujours exportés**. Cloudflare `head_sampling_rate` prod `0.1` réduit aussi les Tail events.
