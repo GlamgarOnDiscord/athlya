@@ -39,6 +39,28 @@ describe('generateCsp', () => {
     expect(csp).toMatch(/connect-src[^;]*https:\/\/challenges\.cloudflare\.com/u);
   });
 
+  // Issue #137 / audit S3 — documented risk acceptance (Option C).
+  // These assertions lock the posture so the directive can't drift
+  // silently: see docs/security/csp-style-src-attr-adr.md.
+  describe('style-src-attr (issue #137 documented risk)', () => {
+    it("emits style-src-attr 'unsafe-inline' in the production posture (sonner / Base UI)", () => {
+      const csp = generateCsp({ nonce });
+      expect(csp).toContain(`style-src-attr 'unsafe-inline'`);
+    });
+
+    it('keeps style-src itself nonce-gated (does NOT allow unnonced <style> blocks)', () => {
+      const csp = generateCsp({ nonce });
+      // style-src must stay 'self' + nonce — never widened to 'unsafe-inline'.
+      expect(csp).toMatch(/style-src 'self' 'nonce-[^']+'/u);
+      expect(csp).not.toMatch(/style-src 'self'[^;]*'unsafe-inline'/u);
+    });
+
+    it('does NOT emit a separate style-src-attr in dev (broad style-src covers it)', () => {
+      const csp = generateCsp({ nonce, isDev: true });
+      expect(csp).not.toContain('style-src-attr');
+    });
+  });
+
   it('disables object-src, upgrades insecure requests and locks base-uri / form-action', () => {
     const csp = generateCsp({ nonce });
     expect(csp).toContain("object-src 'none'");

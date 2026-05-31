@@ -1,0 +1,1 @@
+docs(security): ADR accept style-src-attr risk + lock CSP posture (#137)
