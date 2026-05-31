@@ -1,7 +1,9 @@
 # Athlya — règles de workflow (agents & humains)
 
 Document de référence pour enchaîner les issues CTO, ouvrir des PRs propres et merger sans bruit.  
-Dernière mise à jour : 2026-05-30 (post #134).
+Dernière mise à jour : 2026-05-31 (post #135–#142).
+
+> **État backlog (2026-05-31)** : toutes les issues codables sont mergées (#135 reconcile capacity, #136 CSP sink, #137 ADR style-src-attr, #138 Sentry source maps, #139 ADR deploy web, #140 circuit breaker jitter, #141 cap DO WS, #142 dep tmp). Seule **#123 reste ouverte** — bloquée hors-code par le billing GitHub Actions (cf. `docs/runbooks/ci-recovery.md`).
 
 ---
 
@@ -108,7 +110,7 @@ pnpm --filter @athlya/api test -- src/__tests__/....test.ts
 
 ## 7. CI & merge
 
-- CI GitHub Actions peut être **bloquée par le quota billing** (issue #034) → jobs en ~3s sans logs.
+- CI GitHub Actions peut être **bloquée par le quota billing** (issue #123) → jobs en ~3s sans logs.
 - Runbook : [`docs/runbooks/ci-recovery.md`](docs/runbooks/ci-recovery.md)
 - Si tests locaux verts + CodeRabbit OK : merge **`--admin --squash`** acceptable en attendant le quota.
 - Ne pas `--force-push` sur `master`.
@@ -164,7 +166,7 @@ Toutes les opérations GitHub via **`gh`** (issues, PR, checks, merge).
 | Sujet | Où |
 |-------|-----|
 | Drafts issues CTO | `.github/issue-drafts/` |
-| CI quota | #034, `docs/runbooks/ci-recovery.md` |
+| CI quota | #123, `docs/runbooks/ci-recovery.md` |
 | Launch checklist | `docs/operations/v1.0.0-launch-checklist.md` |
 | Action items | `docs/ACTION-ITEMS.md` |
 
