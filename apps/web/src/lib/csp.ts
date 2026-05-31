@@ -101,6 +101,12 @@ export function generateCsp({ nonce, apiUrl, reportUri, dev, isDev }: CspOptions
   // attribute styles at runtime. `style-src 'nonce-...'` still
   // blocks unnonced `<style>` blocks.
   //
+  // Issue #137 / audit S3 — keeping this directive is an accepted,
+  // documented risk (LOW): it widens ONLY style attributes, never
+  // script-src or unnonced <style>. The dynamic runtime styles these
+  // libs emit cannot be nonce/hash-gated (CSP3 limitation). Full
+  // rationale + compensating controls: docs/security/csp-style-src-attr-adr.md
+  //
   // In dev we don't emit `style-src-attr` separately — the broad
   // `style-src 'unsafe-inline'` already covers attribute styles.
   const styleSrcAttr = isDev === true ? '' : `style-src-attr 'unsafe-inline'`;
