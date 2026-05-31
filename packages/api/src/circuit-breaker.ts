@@ -112,6 +112,15 @@
  *           per-isolate. The breaker is a **local, best-effort
  *           fuse**, not a globally-coordinated load shedder.
  *
+ *        d) **Half-open jitter (issue #140 / audit R1).** To blunt
+ *           the synchronised-probe edge of (2), each trip draws a
+ *           random `resetJitterMs` (default 20 % of
+ *           `resetTimeoutMs`) added to the half-open deadline. N
+ *           isolates that tripped together now probe spread over
+ *           `[reset, reset + jitter)` instead of all at `reset`,
+ *           cutting the peak probe rate against a dead downstream
+ *           with zero shared state and zero hot-path latency.
+ *
  *   3. **Redis-backed coordination was considered and rejected.**
  *      Keeping the breaker's state in Redis would add roughly
  *      +5-10 ms per downstream call (one Redis RTT, on the probe
@@ -161,8 +170,53 @@ export interface CircuitBreakerOptions {
   readonly windowMs?: number;
   /** Open → half-open cool-down in milliseconds. Default 60 000. */
   readonly resetTimeoutMs?: number;
+  /**
+   * Maximum extra random delay (ms) added on top of `resetTimeoutMs`
+   * before an open breaker becomes half-open. Default = 20 % of
+   * `resetTimeoutMs`.
+   *
+   * Issue #140 (audit R1): the breaker is per-isolate, so under a
+   * downstream outage every warm isolate that tripped at roughly the
+   * same instant would otherwise fire its half-open probe at the SAME
+   * `openedAt + resetTimeoutMs` deadline — a synchronised
+   * connection-storm against a service that is likely still dead. A
+   * per-trip random jitter de-synchronises probes across the fleet at
+   * **zero hot-path cost** (no shared state, no Redis RTT), spreading
+   * them over `[resetTimeoutMs, resetTimeoutMs + resetJitterMs)`.
+   *
+   * Set to `0` to disable (restores the exact-deadline behaviour).
+   */
+  readonly resetJitterMs?: number;
   /** Monotonic clock. Default `Date.now`. Injected by tests. */
   readonly clock?: () => number;
+  /**
+   * Random source in `[0, 1)`. Default `Math.random`. Injected by
+   * tests to make the jitter deterministic (e.g. `() => 0`).
+   */
+  readonly random?: () => number;
+  /**
+   * Optional observability hook fired on every state change (issue
+   * #140 acceptance criterion: "métrique breaker state transitions").
+   * Call sites pass a structured-log emitter; the breaker itself stays
+   * framework-free. Synchronous and best-effort — exceptions thrown by
+   * the hook are swallowed so a logging failure can never escalate a
+   * downstream outage. Not invoked on construction.
+   */
+  readonly onTransition?: (event: CircuitTransition) => void;
+}
+
+/** Payload handed to {@link CircuitBreakerOptions.onTransition}. */
+export interface CircuitTransition {
+  readonly name: string;
+  readonly from: CircuitState;
+  readonly to: CircuitState;
+  /** `clock()` value at the moment of the transition. */
+  readonly at: number;
+  /**
+   * Half-open jitter (ms) drawn for the window the breaker just entered.
+   * Only meaningful for `* → open`; `0` otherwise.
+   */
+  readonly jitterMs: number;
 }
 
 /** Public state label. Narrower strings keep caller `switch`es exhaustive. */
@@ -200,6 +254,8 @@ const DEFAULT_FAILURE_THRESHOLD = 5;
 const DEFAULT_WINDOW_MS = 30_000;
 /** Default open → half-open cool-down (Req 24.2). */
 const DEFAULT_RESET_TIMEOUT_MS = 60_000;
+/** Default jitter fraction of `resetTimeoutMs` (issue #140 — anti-storm). */
+const DEFAULT_RESET_JITTER_FRACTION = 0.2;
 
 /* ------------------------------------------------------------------ */
 /*  Implementation                                                     */
@@ -222,7 +278,10 @@ export class CircuitBreaker {
   private readonly failureThreshold: number;
   private readonly windowMs: number;
   private readonly resetTimeoutMs: number;
+  private readonly resetJitterMs: number;
   private readonly clock: () => number;
+  private readonly random: () => number;
+  private readonly onTransition: ((event: CircuitTransition) => void) | undefined;
 
   /** Current state label. See {@link CircuitState}. */
   private _state: CircuitState = 'closed';
@@ -233,6 +292,13 @@ export class CircuitBreaker {
   /** Timestamp the breaker last flipped to `open`. Only valid while open. */
   private openedAt = 0;
 
+  /**
+   * Per-trip random jitter (ms) added to `resetTimeoutMs` before the
+   * open → half-open promotion. Recomputed on every `tripOpen` so each
+   * outage window gets a fresh, independent spread (issue #140).
+   */
+  private jitterMs = 0;
+
   /** True while a half-open probe is pending. Blocks concurrent probes. */
   private probeInFlight = false;
 
@@ -241,7 +307,11 @@ export class CircuitBreaker {
     this.failureThreshold = opts.failureThreshold ?? DEFAULT_FAILURE_THRESHOLD;
     this.windowMs = opts.windowMs ?? DEFAULT_WINDOW_MS;
     this.resetTimeoutMs = opts.resetTimeoutMs ?? DEFAULT_RESET_TIMEOUT_MS;
+    this.resetJitterMs =
+      opts.resetJitterMs ?? Math.floor(this.resetTimeoutMs * DEFAULT_RESET_JITTER_FRACTION);
     this.clock = opts.clock ?? Date.now;
+    this.random = opts.random ?? Math.random;
+    this.onTransition = opts.onTransition;
 
     if (this.failureThreshold < 1) {
       throw new RangeError(`failureThreshold must be >= 1 (got ${String(this.failureThreshold)})`);
@@ -251,6 +321,9 @@ export class CircuitBreaker {
     }
     if (this.resetTimeoutMs < 1) {
       throw new RangeError(`resetTimeoutMs must be >= 1 (got ${String(this.resetTimeoutMs)})`);
+    }
+    if (this.resetJitterMs < 0) {
+      throw new RangeError(`resetJitterMs must be >= 0 (got ${String(this.resetJitterMs)})`);
     }
   }
 
@@ -367,6 +440,21 @@ export class CircuitBreaker {
 
   /* ----------- internal transitions ----------- */
 
+  /**
+   * Fire the observability hook for `from → to`. Best-effort: a hook
+   * that throws must never turn a dependency blip into a 500, so the
+   * error is swallowed (the breaker has no logger of its own to report
+   * it to without re-coupling to the framework).
+   */
+  private emitTransition(from: CircuitState, to: CircuitState, at: number): void {
+    if (this.onTransition === undefined) return;
+    try {
+      this.onTransition({ name: this._name, from, to, at, jitterMs: this.jitterMs });
+    } catch {
+      /* swallowed — see doc above */
+    }
+  }
+
   /** Drop failure timestamps that fell out of the sliding window. */
   private pruneFailures(now: number): void {
     const cutoff = now - this.windowMs;
@@ -377,22 +465,37 @@ export class CircuitBreaker {
     }
   }
 
-  /** Check the 60 s reset window and promote `open` → `half_open`. */
+  /**
+   * Check the reset window (+ per-trip jitter) and promote
+   * `open` → `half_open`. The jitter de-synchronises probes across
+   * isolates so a dead downstream is not hit by every warm isolate at
+   * the same instant (issue #140).
+   */
   private maybeTransitionFromOpen(): void {
     if (this._state !== 'open') return;
     const now = this.clock();
-    if (now - this.openedAt >= this.resetTimeoutMs) {
+    if (now - this.openedAt >= this.resetTimeoutMs + this.jitterMs) {
       this._state = 'half_open';
       this.probeInFlight = false;
+      this.emitTransition('open', 'half_open', now);
     }
   }
 
-  /** Trip `closed` → `open`. */
+  /** Trip `closed`/`half_open` → `open`. Draws a fresh half-open jitter. */
   private tripOpen(now: number): void {
+    const from = this._state;
     this._state = 'open';
     this.openedAt = now;
     this.failures = [];
     this.probeInFlight = false;
+    // Fresh jitter per outage window. `random()` ∈ [0, 1) → jitter ∈
+    // [0, resetJitterMs). Clamped defensively in case an injected
+    // random source returns out of range.
+    this.jitterMs =
+      this.resetJitterMs > 0
+        ? Math.min(this.resetJitterMs, Math.max(0, Math.floor(this.random() * this.resetJitterMs)))
+        : 0;
+    this.emitTransition(from, 'open', now);
   }
 
   /** Promote `half_open` → `closed` after a successful probe. */
@@ -400,6 +503,7 @@ export class CircuitBreaker {
     this._state = 'closed';
     this.failures = [];
     this.probeInFlight = false;
+    this.emitTransition('half_open', 'closed', this.clock());
   }
 
   /** Demote `half_open` → `open` after a failed probe. */
