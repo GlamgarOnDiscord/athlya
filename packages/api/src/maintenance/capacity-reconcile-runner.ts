@@ -42,21 +42,23 @@ export interface ScheduledCapacityReconcileDeps {
 /**
  * Active classes = not soft-deleted and not yet started. Past classes
  * carry no meaningful Redis counter, so reconciling them would only
- * add noise. `LEFT JOIN` keeps classes with zero confirmed bookings.
+ * add noise.
+ *
+ * The `LEFT JOIN` + per-row `COUNT(... FILTER)` aggregates reservations
+ * only for the active class set (the join predicate restricts the
+ * reservation rows scanned), rather than aggregating the entire
+ * `reservations` table up front. `GROUP BY c.id` keeps classes with
+ * zero confirmed bookings (the `LEFT JOIN` yields `confirmed = 0`).
  */
 const ACTIVE_CLASS_CAPACITY_SQL = `
   SELECT c.id::text AS "classId",
          c.capacity::int AS "capacity",
-         COALESCE(r.confirmed, 0)::int AS "confirmed"
+         COUNT(r.id) FILTER (WHERE r.status = 'confirmed')::int AS "confirmed"
     FROM classes c
-    LEFT JOIN (
-      SELECT class_id, COUNT(*)::int AS confirmed
-        FROM reservations
-       WHERE status = 'confirmed'
-       GROUP BY class_id
-    ) r ON r.class_id = c.id
+    LEFT JOIN reservations r ON r.class_id = c.id
    WHERE c.deleted_at IS NULL
      AND c.starts_at > now()
+   GROUP BY c.id, c.capacity
 `;
 
 function buildRepo(executeSql: CapacityReconcileSqlExecutor): CapacityReconcileRepo {

@@ -1416,6 +1416,18 @@ const worker = {
         });
       });
       ctx.waitUntil(reconcileTask);
+    } else if (cronExecutor !== null && shouldRequireCronDbUrl(athlyaEnv.ENVIRONMENT)) {
+      // Required env with a working cron DB but no Redis credentials:
+      // the auto-heal job is silently absent otherwise. Surface a
+      // configuration error so ops sees the gap (mirrors the
+      // CRON_DB_URL-missing signal above).
+      console.error('[worker] capacity reconcile: configuration_error', {
+        code: 'configuration_error',
+        reason: 'REDIS_URL/REDIS_TOKEN missing — capacity drift reconciliation disabled',
+        environment: athlyaEnv.ENVIRONMENT,
+        cron: event.cron,
+        scheduledTime: event.scheduledTime,
+      });
     }
   },
   /**
