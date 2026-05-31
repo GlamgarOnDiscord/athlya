@@ -41,7 +41,8 @@
   "pnpm": {
     "overrides": {
       "miniflare>ws": "8.20.1",
-      "dockerode>uuid": "11.1.1"
+      "dockerode>uuid": "11.1.1",
+      "testcontainers>tmp": "^0.2.6"
     }
   }
 }
