@@ -1,10 +1,7 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  buildOutboxRouter,
-  OUTBOX_PENDING_ALERT_THRESHOLD,
-} from '../admin/outbox-routes.js';
+import { buildOutboxRouter, OUTBOX_PENDING_ALERT_THRESHOLD } from '../admin/outbox-routes.js';
 
 import type { OutboxAdminEnv } from '../admin/outbox-routes.js';
 

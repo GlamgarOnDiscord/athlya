@@ -297,7 +297,9 @@ export function buildDlqRouter(deps: DlqRouterDeps = {}): Hono<DlqAdminEnv> {
     if (result.discarded && auditWriter !== undefined) {
       const actorId = actorIdFrom(c);
       if (actorId === null) {
-        c.get('logger')?.warn('dlq discard: skipping audit — missing actor userId', { entryId: id });
+        c.get('logger')?.warn('dlq discard: skipping audit — missing actor userId', {
+          entryId: id,
+        });
       } else {
         try {
           await auditWriter.appendDiscard({ actorId, entryId: id });

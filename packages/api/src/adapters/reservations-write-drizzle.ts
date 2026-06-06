@@ -37,6 +37,7 @@
  * @see Requirements 8.1–8.6, 9.1–9.5, 10.1–10.5, 16.3.
  */
 
+import { withTenant, type AthlyaDb, type AthlyaTx, type TenantClaims } from '@athlya/db/client';
 import { isPostgresRaiseException, isPostgresUniqueViolation } from '@athlya/db/errors';
 import { classes, outbox, reservations } from '@athlya/db/schema';
 import { ClassCapacityExceededError, UniqueViolationError } from '@athlya/reservations';
@@ -44,7 +45,6 @@ import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
-import { withTenant, type AthlyaDb, type AthlyaTx, type TenantClaims } from '@athlya/db/client';
 import type { ReservationRow } from '@athlya/db/schema';
 import type {
   BookingClassRow,

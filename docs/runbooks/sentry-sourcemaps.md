@@ -14,11 +14,11 @@ Rendre les stack traces prod **lisibles** (`fichier:ligne` au lieu de bundle min
 
 ## Secrets / vars CI requis
 
-| Clé | Type | Valeur |
-|-----|------|--------|
+| Clé                 | Type   | Valeur                                                                           |
+| ------------------- | ------ | -------------------------------------------------------------------------------- |
 | `SENTRY_AUTH_TOKEN` | secret | token avec scope `project:releases` + `org:read` (settings Sentry → Auth Tokens) |
-| `SENTRY_ORG` | var | slug org Sentry |
-| `SENTRY_PROJECT` | var | slug projet (ex. `athlya-api`) |
+| `SENTRY_ORG`        | var    | slug org Sentry                                                                  |
+| `SENTRY_PROJECT`    | var    | slug projet (ex. `athlya-api`)                                                   |
 
 Soft-gate : si `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` absents, l'étape **skip** (warning) sans casser le deploy.
 

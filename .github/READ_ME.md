@@ -25,9 +25,9 @@ daemon is available. SQL RLS assertions use `pgtap.yml` when migrations change.
 
 Configure under **Settings → Secrets and variables → Actions → Variables**:
 
-| Variable              | Required for                         |
-| --------------------- | ------------------------------------ |
-| `K6_STAGING_BASE_URL` | k6 load tests (`load-test.yml`)      |
+| Variable              | Required for                            |
+| --------------------- | --------------------------------------- |
+| `K6_STAGING_BASE_URL` | k6 load tests (`load-test.yml`)         |
 | `ZAP_TARGET_URL`      | OWASP ZAP baseline (`zap-baseline.yml`) |
 
 `ci-required-vars.yml` fails on `master` when either is empty. Branch protection

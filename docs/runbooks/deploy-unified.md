@@ -4,9 +4,9 @@ Décision d'hébergement : [`deploy-web-adr.md`](../security/deploy-web-adr.md) 
 
 ## Topologie cible
 
-| Composant | Worker | Domaine |
-|-----------|--------|---------|
-| API (Hono) | `athlya-api` | `api.athlya.app` |
+| Composant           | Worker       | Domaine          |
+| ------------------- | ------------ | ---------------- |
+| API (Hono)          | `athlya-api` | `api.athlya.app` |
 | Web (Next/OpenNext) | `athlya-web` | `app.athlya.app` |
 
 Domaine enregistrable commun `athlya.app` → requêtes web↔API **same-site** (`SameSite=Lax` suffit). Le cookie refresh reste **host-only** sur l'origine web (cf. ci-dessous) — pas de partage cross-subdomain.

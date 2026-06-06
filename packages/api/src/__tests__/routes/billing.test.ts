@@ -16,6 +16,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { buildBillingDeps } from '../../adapters/billing-deps.js';
 import { __resetJwksCacheForTests } from '../../middleware/auth.js';
 import { buildApp } from '../../worker.js';
+import { readJson } from '../helpers/read-json.js';
 
 import {
   buildLocalResolver,
@@ -356,7 +357,7 @@ describe('POST /v1/billing/webhook', () => {
     );
 
     expect(res.status).toBe(500);
-    const body = (await res.json()) as { code?: string };
+    const body = await readJson<{ code?: string }>(res);
     expect(body.code).toBe('configuration_error');
   });
 

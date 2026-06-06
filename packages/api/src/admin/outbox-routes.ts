@@ -11,8 +11,8 @@
 import { countPendingOutbox } from '@athlya/db/outbox';
 import { Hono } from 'hono';
 
-import { withTenantTx } from '../middleware/tenant.js';
 import { PROBLEM_JSON_CONTENT_TYPE } from '../middleware/problem-details.js';
+import { withTenantTx } from '../middleware/tenant.js';
 
 import type { AthlyaBindings, AthlyaVariables } from '../types.js';
 import type { Context } from 'hono';

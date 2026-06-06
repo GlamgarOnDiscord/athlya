@@ -67,9 +67,9 @@ function makeCtx(sockets: WebSocket[] = []) {
 }
 
 function makeEnv(maxWs?: string) {
-  return (maxWs === undefined
-    ? {}
-    : { CLASS_CAPACITY_MAX_WS: maxWs }) as import('../../types.js').AthlyaBindings;
+  return (
+    maxWs === undefined ? {} : { CLASS_CAPACITY_MAX_WS: maxWs }
+  ) as import('../../types.js').AthlyaBindings;
 }
 
 /* ------------------------------------------------------------------ */

@@ -450,12 +450,7 @@ export class CircuitBreaker {
    * error is swallowed (the breaker has no logger of its own to report
    * it to without re-coupling to the framework).
    */
-  private emitTransition(
-    from: CircuitState,
-    to: CircuitState,
-    at: number,
-    jitterMs: number,
-  ): void {
+  private emitTransition(from: CircuitState, to: CircuitState, at: number, jitterMs: number): void {
     if (this.onTransition === undefined) return;
     try {
       this.onTransition({ name: this._name, from, to, at, jitterMs });

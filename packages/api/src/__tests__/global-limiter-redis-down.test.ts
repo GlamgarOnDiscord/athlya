@@ -8,6 +8,8 @@ import {
   __primeRateLimitRedisForTests,
   __resetRateLimitRedisCache,
 } from '../middleware/rate-limit.js';
+
+import { readJson } from './helpers/read-json.js';
 import { buildAppNoDomainRoutes, FakeRedis, buildMockEnv } from './helpers/test-app.js';
 
 import type { Redis } from '@upstash/redis';
@@ -40,10 +42,7 @@ describe('global limiter Redis down (#128)', () => {
       ENVIRONMENT: 'staging',
       CORS_ORIGIN: 'https://app.staging.athlya.app',
     });
-    __primeRateLimitRedisForTests(
-      env.REDIS_URL,
-      new RedisPipelineDownFake() as unknown as Redis,
-    );
+    __primeRateLimitRedisForTests(env.REDIS_URL, new RedisPipelineDownFake() as unknown as Redis);
 
     const app = buildAppNoDomainRoutes();
     const res = await app.request(
@@ -54,7 +53,7 @@ describe('global limiter Redis down (#128)', () => {
 
     expect(res.status).toBe(429);
     expect(res.headers.get('content-type')).toBe('application/problem+json');
-    const body = (await res.json()) as { status: number; code: string };
+    const body = await readJson<{ status: number; code: string }>(res);
     expect(body.status).toBe(429);
     expect(body.code).toBe('rate_limit_dependency_unavailable');
   });
@@ -64,10 +63,7 @@ describe('global limiter Redis down (#128)', () => {
       ENVIRONMENT: 'staging',
       CORS_ORIGIN: 'https://app.staging.athlya.app',
     });
-    __primeRateLimitRedisForTests(
-      env.REDIS_URL,
-      new RedisPipelineDownFake() as unknown as Redis,
-    );
+    __primeRateLimitRedisForTests(env.REDIS_URL, new RedisPipelineDownFake() as unknown as Redis);
 
     const app = buildAppNoDomainRoutes();
     const res = await app.request(
@@ -81,10 +77,7 @@ describe('global limiter Redis down (#128)', () => {
 
   it('dev bypass keeps /v1/* reachable when Redis pipeline throws', async () => {
     const env = buildMockEnv({ ENVIRONMENT: 'dev' });
-    __primeRateLimitRedisForTests(
-      env.REDIS_URL,
-      new RedisPipelineDownFake() as unknown as Redis,
-    );
+    __primeRateLimitRedisForTests(env.REDIS_URL, new RedisPipelineDownFake() as unknown as Redis);
 
     const app = buildAppNoDomainRoutes();
     const res = await app.request(
