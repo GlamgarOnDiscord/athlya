@@ -8,10 +8,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  CSP_VIOLATION_LOG_MESSAGE,
-  CSP_VIOLATION_METRIC,
-} from '../routes/csp-report.js';
+import { CSP_VIOLATION_LOG_MESSAGE, CSP_VIOLATION_METRIC } from '../routes/csp-report.js';
+
 import { buildAppNoDomainRoutes } from './helpers/test-app.js';
 
 import type { AthlyaBindings } from '../types.js';

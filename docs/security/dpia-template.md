@@ -130,21 +130,21 @@ Neon, Upstash, R2, Queues et backups Neon sont provisionnés en régions EU (voi
 
 ### 8.2 Compute Cloudflare Workers (transit / traitement)
 
-| Élément | Localisation | Garantie contractuelle |
-|---------|--------------|------------------------|
-| Smart Placement | PoP proche Redis/Neon ou client | Optimisation perf, **pas** pin `region_exclusive_eu` |
-| Requêtes HTTP (headers, JWT, traceId) | Edge global CF | Transit possible hors UE |
-| Logs OTLP → Axiom | Endpoint + dataset **à configurer en EU** | DPA Axiom + `OTEL_EXPORTER_OTLP_*` |
-| Sentry | DSN `*.de.sentry.io` (boot check SP5.1) | EU |
+| Élément                               | Localisation                              | Garantie contractuelle                               |
+| ------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| Smart Placement                       | PoP proche Redis/Neon ou client           | Optimisation perf, **pas** pin `region_exclusive_eu` |
+| Requêtes HTTP (headers, JWT, traceId) | Edge global CF                            | Transit possible hors UE                             |
+| Logs OTLP → Axiom                     | Endpoint + dataset **à configurer en EU** | DPA Axiom + `OTEL_EXPORTER_OTLP_*`                   |
+| Sentry                                | DSN `*.de.sentry.io` (boot check SP5.1)   | EU                                                   |
 
 **Décision documentée** : `docs/security/eu-data-residency-adr.md` — go Smart Placement MVP ; pin région Enterprise en réévaluation.
 
 ### 8.3 Transferts tiers hors UE connus
 
-| Fournisseur | Données | Safeguard |
-|-------------|---------|-----------|
-| Expo Push | device tokens, payload notification | SCC / DPA Expo ; alternative EU à étudier (issue #86) |
-| Stripe (si compte US) | billing metadata | Stripe Atlas EU + SCC |
+| Fournisseur           | Données                             | Safeguard                                             |
+| --------------------- | ----------------------------------- | ----------------------------------------------------- |
+| Expo Push             | device tokens, payload notification | SCC / DPA Expo ; alternative EU à étudier (issue #86) |
+| Stripe (si compte US) | billing metadata                    | Stripe Atlas EU + SCC                                 |
 
 ### 8.4 Mesures de réduction
 

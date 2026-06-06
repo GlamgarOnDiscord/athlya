@@ -51,6 +51,7 @@
 
 import { handleUserDeleted, runExportJob } from '@athlya/members';
 import { HANDLED_EVENT_TYPES, handleEvent as handleNotificationEvent } from '@athlya/notifications';
+import { createRedisRemainingCounter } from '@athlya/reservations/counter';
 import {
   parseEvent,
   type AthlyaEvent,
@@ -64,35 +65,29 @@ import { cors } from 'hono/cors';
 import { lazyDlqAuditWriter, lazyJwtRotateAuditWriter } from './adapters/audit-log-wiring.js';
 import { buildCascadeDeps } from './adapters/cascade-deps.js';
 import { buildCronSqlExecutor } from './adapters/cron-sql-executor.js';
+import { getOrCreateRedis } from './adapters/deps-cache.js';
 import { buildExportDeps } from './adapters/export-deps.js';
 import { buildNotificationsDeps } from './adapters/notifications-deps.js';
 import { buildStudioSlugResolver } from './adapters/studio-slug-resolver.js';
 import { buildDlqRouter } from './admin/dlq-routes.js';
-import { buildOutboxRouter } from './admin/outbox-routes.js';
 import { buildJwtRotateRouter } from './admin/jwt-rotate-routes.js';
+import { buildOutboxRouter } from './admin/outbox-routes.js';
 import { handleDlqBatch } from './events/drain-dlq.js';
 import { runScheduledDrain } from './events/drain-scheduled.js';
-import {
-  isNotificationsConsumerQueue,
-  isRgpdConsumerQueue,
-} from './events/route-queue.js';
+import { rejectUnknownQueueEvent } from './events/reject-unknown-queue-event.js';
+import { isNotificationsConsumerQueue, isRgpdConsumerQueue } from './events/route-queue.js';
 import { createLogger } from './logging.js';
+import { runScheduledCapacityReconcile } from './maintenance/capacity-reconcile-runner.js';
 import {
   isCronDbUrlConfigured,
   logCronDbUrlMissing,
   shouldRequireCronDbUrl,
 } from './maintenance/cron-db-config.js';
 import { runScheduledRgpdMaintenance } from './maintenance/scheduled-runner.js';
-import { runScheduledCapacityReconcile } from './maintenance/capacity-reconcile-runner.js';
-import { getOrCreateRedis } from './adapters/deps-cache.js';
-import { createRedisRemainingCounter } from '@athlya/reservations/counter';
-import { handleCspReport } from './routes/csp-report.js';
-import { rejectUnknownQueueEvent } from './events/reject-unknown-queue-event.js';
 import { jwtAuth } from './middleware/auth.js';
+import { guardRateLimiter } from './middleware/limiter-guard.js';
 import { tracing } from './middleware/otel.js';
 import { registerErrorHandlers } from './middleware/problem-details.js';
-import { rateLimit } from './middleware/rate-limit.js';
-import { guardRateLimiter } from './middleware/limiter-guard.js';
 import {
   ADMIN_STATS_BUDGET,
   EXPENSIVE_READ_BUDGET,
@@ -102,9 +97,11 @@ import {
   MUTATION_BUDGETS,
   AUTH_BUDGET,
 } from './middleware/rate-limit-policies.js';
+import { rateLimit } from './middleware/rate-limit.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { tenantClaimGuard, tenantResolverMiddleware } from './middleware/tenant-resolver.js';
 import { buildSpecApp } from './openapi/spec.js';
+import { handleCspReport } from './routes/csp-report.js';
 import { requireRole } from './routes/helpers.js';
 import {
   buildDefaultDeps,
@@ -584,11 +581,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
     scope: string,
     inner: ReturnType<typeof rateLimit>,
     policy: 'fail-open' | 'fail-closed' | 'fail-closed-soft',
-  ) =>
-    guardRateLimiter(scope, inner, policy, false) as unknown as (
-      c: Parameters<typeof inner>[0],
-      next: () => Promise<void>,
-    ) => Promise<Response | undefined>;
+  ) => guardRateLimiter(scope, inner, policy, false);
 
   const guardLimiterWithDevBypass = (
     scope: string,
@@ -607,7 +600,9 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
 
   app.use(
     '/v1/*',
-    guardLimiterWithDevBypass('global', ipLimiter, 'fail-closed-soft') as Parameters<typeof app.use>[1],
+    guardLimiterWithDevBypass('global', ipLimiter, 'fail-closed-soft') as Parameters<
+      typeof app.use
+    >[1],
   );
   app.use(
     '/v1/auth/*',
@@ -1268,8 +1263,11 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   };
   app.use('/admin/*', jwtAuth());
   app.use('/admin/*', requireRole('admin'));
-  app.route('/', buildDlqRouter({ auditWriter: lazyDlqAuditWriter(getAdminEnv) }) as unknown as Hono<HonoEnv>);
-  app.route('/', buildOutboxRouter() as unknown as Hono<HonoEnv>);
+  app.route(
+    '/',
+    buildDlqRouter({ auditWriter: lazyDlqAuditWriter(getAdminEnv) }) as unknown as Hono<HonoEnv>,
+  );
+  app.route('/', buildOutboxRouter());
 
   // Sprint 12 / Slice 12.13 (Epic B3.1) — JWT rotation admin
   // surface. Mounted under the same `/admin/*` chain so it

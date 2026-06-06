@@ -23,12 +23,12 @@ L'audit prod 2026-05-27 a rouvert le sujet (**R1, Medium/P2**) : sous panne prol
 
 Pourquoi pas Option A/B(DO)/C maintenant : le jitter résout le pic synchronisé (cœur de R1) à coût nul. Le plafond reste **1 probe/isolate/fenêtre** (inchangé, déjà garanti par `probeInFlight`) — la coordination globale (Redis/DO) n'apporterait qu'une réduction du nombre total de probes, pas justifiable face au budget latence p99 < 500 ms tant que Hyperdrive fail-fast + Upstash SLA bornent le blast radius.
 
-| Critère | Per-isolate (retenu) | Redis-backed (rejeté) |
-|---------|----------------------|------------------------|
-| Latence hot path | 0 ms additionnel | +5–10 ms RTT Redis estimé |
-| Coordination globale | Non (N probes max) | Oui |
-| SLO p99 réservation (< 500 ms) | Compatible | Risque budget dépassé |
-| Implémentation | Livré (`circuit-breaker.ts`) | Nouveau port + ops Redis |
+| Critère                        | Per-isolate (retenu)         | Redis-backed (rejeté)     |
+| ------------------------------ | ---------------------------- | ------------------------- |
+| Latence hot path               | 0 ms additionnel             | +5–10 ms RTT Redis estimé |
+| Coordination globale           | Non (N probes max)           | Oui                       |
+| SLO p99 réservation (< 500 ms) | Compatible                   | Risque budget dépassé     |
+| Implémentation                 | Livré (`circuit-breaker.ts`) | Nouveau port + ops Redis  |
 
 ## Benchmark (design review, pas load test formel)
 

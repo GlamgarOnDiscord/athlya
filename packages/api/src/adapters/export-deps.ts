@@ -55,8 +55,8 @@
  * @see Requirements 4.1, 4.2, 4.4 ; audit finding S5-001.
  */
 
-import { publish } from '../events/publish.js';
 import { buildRoutedPublishDeps } from '../events/publish-deps.js';
+import { publish } from '../events/publish.js';
 
 import { getOrCreateDbHttp } from './deps-cache.js';
 import { createDrizzleExportJobStore } from './members-export-job-store-drizzle.js';

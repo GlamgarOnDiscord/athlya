@@ -33,10 +33,10 @@ Exemples : `fix/issue-127-audit-log-wiring`, `fix/issue-128-global-rate-limit-fa
 
 Créer **avant** la PR GitHub :
 
-| Fichier | Contenu |
-|---------|---------|
-| `.github/pr/issue-<num>-title.txt` | Titre squash (1 ligne, convention commits) |
-| `.github/pr/issue-<num>-body.md` | Summary + `Closes #<num>` + test plan coché |
+| Fichier                            | Contenu                                     |
+| ---------------------------------- | ------------------------------------------- |
+| `.github/pr/issue-<num>-title.txt` | Titre squash (1 ligne, convention commits)  |
+| `.github/pr/issue-<num>-body.md`   | Summary + `Closes #<num>` + test plan coché |
 
 Création PR :
 
@@ -132,11 +132,11 @@ Le commentaire doit permettre à un autre dev de comprendre **quoi** a été liv
 
 ## 9. Patterns récurrents (issues ops / sécu)
 
-| Type | Livrables typiques |
-|------|-------------------|
+| Type           | Livrables typiques                                                         |
+| -------------- | -------------------------------------------------------------------------- |
 | Ops / alerting | runbook `docs/runbooks/…`, script `scripts/verify-….mjs`, checklist launch |
-| Sécu API | code + tests unit/intégration + doc `docs/security/` |
-| Wiring admin | lazy deps Worker, audit_log, tests routes admin |
+| Sécu API       | code + tests unit/intégration + doc `docs/security/`                       |
+| Wiring admin   | lazy deps Worker, audit_log, tests routes admin                            |
 
 Inventaires (ex. monitors Axiom) : **compter et aligner** doc + script verify + checklist (ne pas laisser 13 vs 14).
 
@@ -163,12 +163,12 @@ Toutes les opérations GitHub via **`gh`** (issues, PR, checks, merge).
 
 ## 12. Références
 
-| Sujet | Où |
-|-------|-----|
-| Drafts issues CTO | `.github/issue-drafts/` |
-| CI quota | #123, `docs/runbooks/ci-recovery.md` |
-| Launch checklist | `docs/operations/v1.0.0-launch-checklist.md` |
-| Action items | `docs/ACTION-ITEMS.md` |
+| Sujet             | Où                                           |
+| ----------------- | -------------------------------------------- |
+| Drafts issues CTO | `.github/issue-drafts/`                      |
+| CI quota          | #123, `docs/runbooks/ci-recovery.md`         |
+| Launch checklist  | `docs/operations/v1.0.0-launch-checklist.md` |
+| Action items      | `docs/ACTION-ITEMS.md`                       |
 
 ---
 

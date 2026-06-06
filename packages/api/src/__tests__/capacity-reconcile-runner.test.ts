@@ -5,7 +5,9 @@ import { runScheduledCapacityReconcile } from '../maintenance/capacity-reconcile
 import type { CapacityReconcileSqlExecutor } from '../maintenance/capacity-reconcile-runner.js';
 import type { CapacityHealer } from '@athlya/reservations/reconcile';
 
-function counterStub(remaining: number | null): CapacityHealer & { reset: ReturnType<typeof vi.fn> } {
+function counterStub(
+  remaining: number | null,
+): CapacityHealer & { reset: ReturnType<typeof vi.fn> } {
   return {
     getRemaining: vi.fn(async () => remaining),
     reset: vi.fn(async () => undefined),

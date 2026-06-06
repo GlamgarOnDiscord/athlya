@@ -111,7 +111,9 @@ describe('reconcileCapacityDrift', () => {
       { classId: 'good', capacity: 20, confirmed: 1 },
     ]);
     const counter: CapacityHealer = {
-      getRemaining: vi.fn(async (id: string) => (id === 'bad' ? Promise.reject(new Error('redis down')) : 19)),
+      getRemaining: vi.fn(async (id: string) =>
+        id === 'bad' ? Promise.reject(new Error('redis down')) : 19,
+      ),
       reset: vi.fn(async () => undefined),
     };
     vi.spyOn(console, 'error').mockImplementation(() => {});

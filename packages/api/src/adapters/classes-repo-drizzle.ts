@@ -272,7 +272,6 @@ export function createDrizzleUpdateClassRepo(db: AthlyaDbAny): UpdateClassRepo {
  * excluded at the SQL level.
  */
 export function createDrizzleSearchClassesRepo(db: AthlyaDbAny): ClassSearchRepo {
-  /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment */
   return {
     async search(
       studioId: string,
@@ -325,5 +324,4 @@ export function createDrizzleSearchClassesRepo(db: AthlyaDbAny): ClassSearchRepo
       }));
     },
   };
-  /* eslint-enable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment */
 }

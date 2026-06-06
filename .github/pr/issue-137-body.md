@@ -4,11 +4,11 @@ Issue #137 (P2 security, audit S3). `style-src-attr 'unsafe-inline'` reste requi
 
 ## Inventaire
 
-| Lib | Usage | Inline `style=""` runtime |
-|-----|-------|---------------------------|
-| `sonner` ^2.0.7 | toasts | `--index`/`transform`/`opacity`/`height` par toast |
-| `@base-ui/react` ^1.5.0 | popover/select/menu/tooltip | `transform`/`top`/`left` (positionnement) |
-| `react-day-picker` | datepicker | styles d'attribut ponctuels |
+| Lib                     | Usage                       | Inline `style=""` runtime                          |
+| ----------------------- | --------------------------- | -------------------------------------------------- |
+| `sonner` ^2.0.7         | toasts                      | `--index`/`transform`/`opacity`/`height` par toast |
+| `@base-ui/react` ^1.5.0 | popover/select/menu/tooltip | `transform`/`top`/`left` (positionnement)          |
+| `react-day-picker`      | datepicker                  | styles d'attribut ponctuels                        |
 
 ## Décision — Option C (risque accepté, documenté)
 
