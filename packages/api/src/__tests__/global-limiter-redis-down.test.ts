@@ -40,10 +40,7 @@ describe('global limiter Redis down (#128)', () => {
       ENVIRONMENT: 'staging',
       CORS_ORIGIN: 'https://app.staging.athlya.app',
     });
-    __primeRateLimitRedisForTests(
-      env.REDIS_URL,
-      new RedisPipelineDownFake() as unknown as Redis,
-    );
+    __primeRateLimitRedisForTests(env.REDIS_URL, new RedisPipelineDownFake() as unknown as Redis);
 
     const app = buildAppNoDomainRoutes();
     const res = await app.request(
@@ -64,10 +61,7 @@ describe('global limiter Redis down (#128)', () => {
       ENVIRONMENT: 'staging',
       CORS_ORIGIN: 'https://app.staging.athlya.app',
     });
-    __primeRateLimitRedisForTests(
-      env.REDIS_URL,
-      new RedisPipelineDownFake() as unknown as Redis,
-    );
+    __primeRateLimitRedisForTests(env.REDIS_URL, new RedisPipelineDownFake() as unknown as Redis);
 
     const app = buildAppNoDomainRoutes();
     const res = await app.request(
@@ -81,10 +75,7 @@ describe('global limiter Redis down (#128)', () => {
 
   it('dev bypass keeps /v1/* reachable when Redis pipeline throws', async () => {
     const env = buildMockEnv({ ENVIRONMENT: 'dev' });
-    __primeRateLimitRedisForTests(
-      env.REDIS_URL,
-      new RedisPipelineDownFake() as unknown as Redis,
-    );
+    __primeRateLimitRedisForTests(env.REDIS_URL, new RedisPipelineDownFake() as unknown as Redis);
 
     const app = buildAppNoDomainRoutes();
     const res = await app.request(

@@ -72,10 +72,7 @@ import { buildOutboxRouter } from './admin/outbox-routes.js';
 import { buildJwtRotateRouter } from './admin/jwt-rotate-routes.js';
 import { handleDlqBatch } from './events/drain-dlq.js';
 import { runScheduledDrain } from './events/drain-scheduled.js';
-import {
-  isNotificationsConsumerQueue,
-  isRgpdConsumerQueue,
-} from './events/route-queue.js';
+import { isNotificationsConsumerQueue, isRgpdConsumerQueue } from './events/route-queue.js';
 import { createLogger } from './logging.js';
 import {
   isCronDbUrlConfigured,
@@ -607,7 +604,9 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
 
   app.use(
     '/v1/*',
-    guardLimiterWithDevBypass('global', ipLimiter, 'fail-closed-soft') as Parameters<typeof app.use>[1],
+    guardLimiterWithDevBypass('global', ipLimiter, 'fail-closed-soft') as Parameters<
+      typeof app.use
+    >[1],
   );
   app.use(
     '/v1/auth/*',
@@ -1268,7 +1267,10 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   };
   app.use('/admin/*', jwtAuth());
   app.use('/admin/*', requireRole('admin'));
-  app.route('/', buildDlqRouter({ auditWriter: lazyDlqAuditWriter(getAdminEnv) }) as unknown as Hono<HonoEnv>);
+  app.route(
+    '/',
+    buildDlqRouter({ auditWriter: lazyDlqAuditWriter(getAdminEnv) }) as unknown as Hono<HonoEnv>,
+  );
   app.route('/', buildOutboxRouter() as unknown as Hono<HonoEnv>);
 
   // Sprint 12 / Slice 12.13 (Epic B3.1) — JWT rotation admin

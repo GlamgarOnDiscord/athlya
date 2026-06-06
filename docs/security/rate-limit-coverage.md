@@ -6,30 +6,30 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 
 ## Politiques fail-open / fail-closed
 
-| Politique | Comportement Redis down | HTTP | Issues |
-| --------- | ----------------------- | ---- | ------ |
-| `fail-closed` | Requête bloquée | **503** `dependency_unavailable` | #65 mutations, #133 reads coûteux |
-| `fail-closed-soft` | Requête bloquée (synthétique) | **429** `rate_limit_dependency_unavailable` | #128 global `/v1/*` |
-| `fail-open` | Requête laissée passer | — | `studioRateLimit()` domain routers |
+| Politique          | Comportement Redis down       | HTTP                                        | Issues                             |
+| ------------------ | ----------------------------- | ------------------------------------------- | ---------------------------------- |
+| `fail-closed`      | Requête bloquée               | **503** `dependency_unavailable`            | #65 mutations, #133 reads coûteux  |
+| `fail-closed-soft` | Requête bloquée (synthétique) | **429** `rate_limit_dependency_unavailable` | #128 global `/v1/*`                |
+| `fail-open`        | Requête laissée passer        | —                                           | `studioRateLimit()` domain routers |
 
 `ENVIRONMENT=dev` bypass tous les limiters gateway (comportement inchangé).
 
 ## Matrice route × budget × policy
 
-| ID | Route | Methods | Budget (60s sauf export) | Fail policy | Bucket |
-| -- | ----- | ------- | ------------------------ | ----------- | ------ |
-| `global-v1` | `/v1/*` | * | 1000 IP / 5000 user (defaults) | fail-closed-soft | ip+user |
-| `auth` | `/v1/auth/*` | * | 20 IP | fail-closed | ip |
-| `reservation-mutation` | `POST /v1/reservations` | POST | 10 user+IP | fail-closed | ip+user |
-| `reservation-cancel` | `DELETE /v1/reservations/:id` | DELETE | 10 user+IP | fail-closed | ip+user |
-| `profile-patch` | `PATCH /v1/me` | PATCH | 5 user+IP | fail-closed | ip+user |
-| `consents-patch` | `PATCH /v1/me/consents` | PATCH | 5 user+IP | fail-closed | ip+user |
-| `export-post` | `POST /v1/members/me/export` | POST | 1 / 24h user+IP | fail-closed | ip+user |
-| `classes-search` | `GET /v1/classes/search` | GET | 30 IP | **fail-closed** | ip (pre-jwt) |
-| `members-list` | `GET /v1/members` (exact) | GET | 20 IP | **fail-closed** | ip (pre-jwt) |
-| `audit-list` | `GET /v1/audit` | GET | 30 IP | **fail-closed** | ip (pre-jwt) |
-| `admin-stats` | `GET /admin/{dlq,outbox}/stats`, `GET /admin/jwt/state` | GET | 10 user / 5 IP | **fail-closed** | ip+user |
-| `studio-burst` | Domain routers authentifiés | * | 1000 / studio | fail-open | studio |
+| ID                     | Route                                                   | Methods | Budget (60s sauf export)       | Fail policy      | Bucket       |
+| ---------------------- | ------------------------------------------------------- | ------- | ------------------------------ | ---------------- | ------------ |
+| `global-v1`            | `/v1/*`                                                 | \*      | 1000 IP / 5000 user (defaults) | fail-closed-soft | ip+user      |
+| `auth`                 | `/v1/auth/*`                                            | \*      | 20 IP                          | fail-closed      | ip           |
+| `reservation-mutation` | `POST /v1/reservations`                                 | POST    | 10 user+IP                     | fail-closed      | ip+user      |
+| `reservation-cancel`   | `DELETE /v1/reservations/:id`                           | DELETE  | 10 user+IP                     | fail-closed      | ip+user      |
+| `profile-patch`        | `PATCH /v1/me`                                          | PATCH   | 5 user+IP                      | fail-closed      | ip+user      |
+| `consents-patch`       | `PATCH /v1/me/consents`                                 | PATCH   | 5 user+IP                      | fail-closed      | ip+user      |
+| `export-post`          | `POST /v1/members/me/export`                            | POST    | 1 / 24h user+IP                | fail-closed      | ip+user      |
+| `classes-search`       | `GET /v1/classes/search`                                | GET     | 30 IP                          | **fail-closed**  | ip (pre-jwt) |
+| `members-list`         | `GET /v1/members` (exact)                               | GET     | 20 IP                          | **fail-closed**  | ip (pre-jwt) |
+| `audit-list`           | `GET /v1/audit`                                         | GET     | 30 IP                          | **fail-closed**  | ip (pre-jwt) |
+| `admin-stats`          | `GET /admin/{dlq,outbox}/stats`, `GET /admin/jwt/state` | GET     | 10 user / 5 IP                 | **fail-closed**  | ip+user      |
+| `studio-burst`         | Domain routers authentifiés                             | \*      | 1000 / studio                  | fail-open        | studio       |
 
 `/v1/members/me` et sous-routes ne matchent **pas** le limiter `members-list` (garde `isMembersListGetPath`).
 

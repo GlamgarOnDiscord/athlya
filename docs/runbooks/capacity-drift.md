@@ -4,10 +4,10 @@
 
 Le compteur de places `class:{id}:remaining` (Upstash Redis) est le hot-path du booking (`packages/reservations/src/book.ts`, Algorithm 1). PostgreSQL est **la source de vérité** : `capacity - COUNT(confirmed)`. Un crash Worker entre le `DECR` Redis et le `COMMIT` PG, ou un `INCR` compensatoire manqué, fait diverger les deux :
 
-| Sens | Symptôme | Risque |
-|------|----------|--------|
-| Redis **> ** attendu | `direction: oversell_risk` | surbooking (places vendues que PG ne couvre pas) |
-| Redis **< ** attendu | `direction: false_full` | faux « complet », users poussés en waitlist à tort |
+| Sens                 | Symptôme                   | Risque                                             |
+| -------------------- | -------------------------- | -------------------------------------------------- |
+| Redis **> ** attendu | `direction: oversell_risk` | surbooking (places vendues que PG ne couvre pas)   |
+| Redis **< ** attendu | `direction: false_full`    | faux « complet », users poussés en waitlist à tort |
 
 ## Réconciliation automatique
 

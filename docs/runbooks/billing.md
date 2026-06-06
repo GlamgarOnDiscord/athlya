@@ -36,11 +36,11 @@ Exporter le `whsec_…` dans `STRIPE_WEBHOOK_SECRET` pour `wrangler dev`.
 
 ## Mode dégradé
 
-| Env | `STRIPE_*` absent | Comportement |
-|-----|-------------------|--------------|
-| `dev` | oui | webhook 200 no-op (logs warn) |
-| `staging` / `production` | oui | webhook **500** |
-| * | checkout 503 `billing_not_configured` | |
+| Env                      | `STRIPE_*` absent                     | Comportement                  |
+| ------------------------ | ------------------------------------- | ----------------------------- |
+| `dev`                    | oui                                   | webhook 200 no-op (logs warn) |
+| `staging` / `production` | oui                                   | webhook **500**               |
+| \*                       | checkout 503 `billing_not_configured` |                               |
 
 ## Connect / onboarding studio
 

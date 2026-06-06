@@ -18,13 +18,17 @@ export function createJwtRotateAuditWriter(env: AthlyaBindings): JwtRotateAuditW
   const store = createDrizzleAuditLogStore(db);
   return {
     async appendRotationPrep({ actorId, kidOld, kidNew, graceSec }) {
-      await appendAudit(null, {
-        actorId,
-        action: 'jwt.key.rotation_prep',
-        targetType: 'jwt_key',
-        targetId: kidNew,
-        metadata: { kidOld, kidNew, graceSec },
-      }, store);
+      await appendAudit(
+        null,
+        {
+          actorId,
+          action: 'jwt.key.rotation_prep',
+          targetType: 'jwt_key',
+          targetId: kidNew,
+          metadata: { kidOld, kidNew, graceSec },
+        },
+        store,
+      );
     },
   };
 }
@@ -35,22 +39,30 @@ export function createDlqAuditWriter(env: AthlyaBindings): DlqAuditWriter {
   const store = createDrizzleAuditLogStore(db);
   return {
     async appendReplay({ actorId, entryId, messageType }) {
-      await appendAudit(null, {
-        actorId,
-        action: 'dlq.entry.replayed',
-        targetType: 'dlq_entry',
-        targetId: entryId,
-        metadata: { messageType: messageType ?? null },
-      }, store);
+      await appendAudit(
+        null,
+        {
+          actorId,
+          action: 'dlq.entry.replayed',
+          targetType: 'dlq_entry',
+          targetId: entryId,
+          metadata: { messageType: messageType ?? null },
+        },
+        store,
+      );
     },
     async appendDiscard({ actorId, entryId }) {
-      await appendAudit(null, {
-        actorId,
-        action: 'dlq.entry.discarded',
-        targetType: 'dlq_entry',
-        targetId: entryId,
-        metadata: {},
-      }, store);
+      await appendAudit(
+        null,
+        {
+          actorId,
+          action: 'dlq.entry.discarded',
+          targetType: 'dlq_entry',
+          targetId: entryId,
+          metadata: {},
+        },
+        store,
+      );
     },
   };
 }
@@ -91,13 +103,17 @@ export function createBillingWebhookAuditAppender(db: AthlyaDbAny): {
 
   return {
     appendAudit: async (entry) => {
-      await appendAudit(txHolder.current, {
-        actorId: entry.actorId,
-        action: entry.action,
-        targetType: entry.targetType,
-        targetId: entry.targetId,
-        metadata: entry.metadata,
-      }, store);
+      await appendAudit(
+        txHolder.current,
+        {
+          actorId: entry.actorId,
+          action: entry.action,
+          targetType: entry.targetType,
+          targetId: entry.targetId,
+          metadata: entry.metadata,
+        },
+        store,
+      );
     },
     withTransaction: async (fn) =>
       db.transaction(async (tx) => {

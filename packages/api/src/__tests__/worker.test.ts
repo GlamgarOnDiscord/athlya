@@ -494,7 +494,9 @@ describe('/health/ready readiness probe', () => {
   });
 
   it('returns 503 not_ready in staging when HYPERDRIVE is not bound', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('OK', { status: 200 }));
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('OK', { status: 200 }));
     const app = buildApp();
     const res = await app.request(
       '/health/ready',
