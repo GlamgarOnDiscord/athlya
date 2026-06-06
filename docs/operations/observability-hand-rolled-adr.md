@@ -11,12 +11,12 @@ Raison initiale (H6) : SDK OTel > 200 KB Worker compilé ; isolates Workers inco
 
 ## Trade-offs
 
-| | Hand-rolled | `@sentry/cloudflare` + OTel SDK |
-|---|-------------|-------------------------------|
-| Bundle | ~faible | +200 KB estimé |
-| Breadcrumbs / release health | limité | complet |
-| Spec drift OTLP | risque mitigé par tests `otel.test.ts` | vendor |
-| PII scrub | implémenté custom | `beforeSend` |
+|                              | Hand-rolled                            | `@sentry/cloudflare` + OTel SDK |
+| ---------------------------- | -------------------------------------- | ------------------------------- |
+| Bundle                       | ~faible                                | +200 KB estimé                  |
+| Breadcrumbs / release health | limité                                 | complet                         |
+| Spec drift OTLP              | risque mitigé par tests `otel.test.ts` | vendor                          |
+| PII scrub                    | implémenté custom                      | `beforeSend`                    |
 
 ## Prochaines étapes
 

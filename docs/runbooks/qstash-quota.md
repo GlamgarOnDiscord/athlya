@@ -9,13 +9,13 @@
 
 ## Charge projetée
 
-| Scénario | Msgs QStash / jour | Verdict |
-| -------- | ------------------ | ------- |
-| 1 studio, 50 bookings/j | ~50 | OK free tier |
-| 1 studio, 100 membres actifs | **200+** | OK mais marge faible |
-| 2 studios pilotes | **400+** | Alerte 80 % (~400) |
-| **5 studios** × 100 membres | **1000+** | **Tier payant obligatoire** |
-| + anonymisation J+30 (RGPD) | +faible vs reminders | Négligeable au début |
+| Scénario                     | Msgs QStash / jour   | Verdict                     |
+| ---------------------------- | -------------------- | --------------------------- |
+| 1 studio, 50 bookings/j      | ~50                  | OK free tier                |
+| 1 studio, 100 membres actifs | **200+**             | OK mais marge faible        |
+| 2 studios pilotes            | **400+**             | Alerte 80 % (~400)          |
+| **5 studios** × 100 membres  | **1000+**            | **Tier payant obligatoire** |
+| + anonymisation J+30 (RGPD)  | +faible vs reminders | Négligeable au début        |
 
 **Règle ops:** upgrade plan QStash dès le **2e studio** ou si sustained **>400 msg/j** pendant 3 jours.
 
@@ -37,10 +37,10 @@ Budget 5 studios (ordre de grandeur): **~10–20 €/mois** QStash pay-as-you-go
 2. **Alerts** → email + (si dispo) webhook Slack à **80 %** du quota journalier (400/500 sur free tier).
 3. Noter la date de configuration dans le tableau de suivi ci-dessous.
 
-| Env | Quota plan | Alerte 80 % | Date config | Owner |
-| --- | ---------- | ----------- | ----------- | ----- |
-| prod | 500/j (free) ou payant | [ ] | | |
-| staging | partagé ou dédié | [ ] | | |
+| Env     | Quota plan             | Alerte 80 % | Date config | Owner |
+| ------- | ---------------------- | ----------- | ----------- | ----- |
+| prod    | 500/j (free) ou payant | [ ]         |             |       |
+| staging | partagé ou dédié       | [ ]         |             |       |
 
 ---
 
@@ -70,12 +70,12 @@ Définition complète: [`docs/operations/axiom-alerts.md`](../operations/axiom-a
 
 Messages structurés émis par les adapters QStash (ou stubs dégradés) :
 
-| Message | Niveau | Quand |
-| ------- | ------ | ----- |
-| `qstash.publish.ok` | info | Publish QStash réussi |
-| `qstash.publish.failed` | warn | HTTP 4xx/5xx Upstash |
-| `qstash.quota.degraded` | warn | Quota dépassé / rate limit |
-| `qstash.schedule.skipped` | warn | Binding absent (mode dégradé) |
+| Message                   | Niveau | Quand                         |
+| ------------------------- | ------ | ----------------------------- |
+| `qstash.publish.ok`       | info   | Publish QStash réussi         |
+| `qstash.publish.failed`   | warn   | HTTP 4xx/5xx Upstash          |
+| `qstash.quota.degraded`   | warn   | Quota dépassé / rate limit    |
+| `qstash.schedule.skipped` | warn   | Binding absent (mode dégradé) |
 
 **Invariant:** jamais de silence — tout skip ou échec doit loguer l'un de ces messages.
 
@@ -94,11 +94,11 @@ Messages structurés émis par les adapters QStash (ou stubs dégradés) :
 
 ## Escalation
 
-| Niveau | Condition | Action |
-| ------ | --------- | ------ |
-| Sev3 | Alerte 80 % Upstash | Vérifier volume bookings ; batch reminders si > N cours/h |
-| Sev2 | Quota 100 % / messages dropped | Upgrade plan QStash ; désactiver scheduling non critique |
-| Sev1 | Rappels prod absents > 1h avec trafic booking | Page on-call ; activer tier payant immédiat |
+| Niveau | Condition                                     | Action                                                    |
+| ------ | --------------------------------------------- | --------------------------------------------------------- |
+| Sev3   | Alerte 80 % Upstash                           | Vérifier volume bookings ; batch reminders si > N cours/h |
+| Sev2   | Quota 100 % / messages dropped                | Upgrade plan QStash ; désactiver scheduling non critique  |
+| Sev1   | Rappels prod absents > 1h avec trafic booking | Page on-call ; activer tier payant immédiat               |
 
 **Batch reminders (future):** 1 message QStash → N emails même créneau si > 20 cours/h (cf. critique spec § QStash).
 

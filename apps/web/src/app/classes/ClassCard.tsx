@@ -82,10 +82,7 @@ export function ClassCard({
               {remaining} / {capacity}
             </span>
           </div>
-          <div
-            ref={capacityTrackRef}
-            className="h-2 w-full overflow-hidden rounded-full bg-muted"
-          >
+          <div ref={capacityTrackRef} className="h-2 w-full overflow-hidden rounded-full bg-muted">
             <div
               className={cn(
                 'class-card-capacity-bar h-full w-full origin-left rounded-full transition-transform',

@@ -7,6 +7,8 @@ import {
 } from '../middleware/limiter-guard.js';
 import { rateLimit, type RateLimitContext } from '../middleware/rate-limit.js';
 
+import { readJson } from './helpers/read-json.js';
+
 function fakeContext(): RateLimitContext & { header: ReturnType<typeof vi.fn> } {
   return {
     env: {
@@ -27,7 +29,7 @@ describe('buildDependencyUnavailableResponse', () => {
     const res = buildDependencyUnavailableResponse('trace-65');
     expect(res.status).toBe(503);
     expect(res.headers.get('retry-after')).toBe('30');
-    const body = (await res.json()) as { status: number; code: string; traceId: string };
+    const body = await readJson<{ status: number; code: string; traceId: string }>(res);
     expect(body.status).toBe(503);
     expect(body.code).toBe('dependency_unavailable');
     expect(body.traceId).toBe('trace-65');
@@ -39,7 +41,7 @@ describe('buildRateLimitDependencyDeniedResponse', () => {
     const res = buildRateLimitDependencyDeniedResponse('trace-128', 60);
     expect(res.status).toBe(429);
     expect(res.headers.get('retry-after')).toBe('60');
-    const body = (await res.json()) as { status: number; code: string; traceId: string };
+    const body = await readJson<{ status: number; code: string; traceId: string }>(res);
     expect(body.status).toBe(429);
     expect(body.code).toBe('rate_limit_dependency_unavailable');
     expect(body.traceId).toBe('trace-128');

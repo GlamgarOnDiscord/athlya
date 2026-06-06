@@ -4,11 +4,11 @@ Surface `/admin/*` : DLQ, outbox stats, JWT rotation. Protégée applicativement
 
 ## Routes concernées
 
-| Route                         | Risque si JWT admin volé      |
-| ----------------------------- | ----------------------------- |
-| `GET/POST /admin/dlq/*`       | Replay / discard bus events   |
-| `GET /admin/outbox/stats`     | Fuite métriques ops           |
-| `GET/POST /admin/jwt/*`       | Préparation rotation clés     |
+| Route                     | Risque si JWT admin volé    |
+| ------------------------- | --------------------------- |
+| `GET/POST /admin/dlq/*`   | Replay / discard bus events |
+| `GET /admin/outbox/stats` | Fuite métriques ops         |
+| `GET/POST /admin/jwt/*`   | Préparation rotation clés   |
 
 ## Phase 1 — Cloudflare Access (production)
 

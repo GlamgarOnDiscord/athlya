@@ -64,11 +64,11 @@ runs-on: [self-hosted, linux, athlya-docker]
 
 Verifier [`branch-protection.md`](./branch-protection.md) :
 
-| Check requis | Workflow |
-|--------------|----------|
-| Lint, typecheck, and tests | `ci.yml` |
-| Property tests (Docker) | `integration-docker.yml` |
-| pgTAP RLS suite | `pgtap.yml` |
+| Check requis               | Workflow                 |
+| -------------------------- | ------------------------ |
+| Lint, typecheck, and tests | `ci.yml`                 |
+| Property tests (Docker)    | `integration-docker.yml` |
+| pgTAP RLS suite            | `pgtap.yml`              |
 
 ```powershell
 gh api repos/GlamgarOnDiscord/athlya/branches/master/protection 2>$null

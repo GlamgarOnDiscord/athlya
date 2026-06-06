@@ -33,7 +33,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { __resetJwksCacheForTests } from '../../middleware/auth.js';
-import { __primeRateLimitRedisForTests, __resetRateLimitRedisCache } from '../../middleware/rate-limit.js';
+import {
+  __primeRateLimitRedisForTests,
+  __resetRateLimitRedisCache,
+} from '../../middleware/rate-limit.js';
 import { __resetTenantDbCache } from '../../middleware/tenant.js';
 
 import {

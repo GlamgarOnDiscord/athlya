@@ -19,11 +19,11 @@
 
 ### Comparatif
 
-| Option | Pour | Contre | Verdict |
-|--------|------|--------|---------|
-| **OpenNext CF** (retenu) | Même vendor (1 pipeline, 1 facture, 1 résidence EU) ; web `app.athlya.app` + API `api.athlya.app` = **même domaine enregistrable `athlya.app`** → requêtes **same-site** (`SameSite=Lax` suffit), CORS minimal ; cohérent ADR #66 | Maturité OpenNext (suivre les releases) ; build adapter à maintenir | ✅ |
-| Vercel web + CF API | Excellente DX Next | **Cross-site** (classification cookies, CORS large, +surface CSRF) ; 2e vendor hors résidence EU CF ; 2 pipelines non atomiques | ❌ |
-| Monolith Worker (web servi par Hono) | Simple en théorie | Refacto lourd, perte du runtime Next (RSC/streaming) | ❌ |
+| Option                               | Pour                                                                                                                                                                                                                              | Contre                                                                                                                          | Verdict |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| **OpenNext CF** (retenu)             | Même vendor (1 pipeline, 1 facture, 1 résidence EU) ; web `app.athlya.app` + API `api.athlya.app` = **même domaine enregistrable `athlya.app`** → requêtes **same-site** (`SameSite=Lax` suffit), CORS minimal ; cohérent ADR #66 | Maturité OpenNext (suivre les releases) ; build adapter à maintenir                                                             | ✅      |
+| Vercel web + CF API                  | Excellente DX Next                                                                                                                                                                                                                | **Cross-site** (classification cookies, CORS large, +surface CSRF) ; 2e vendor hors résidence EU CF ; 2 pipelines non atomiques | ❌      |
+| Monolith Worker (web servi par Hono) | Simple en théorie                                                                                                                                                                                                                 | Refacto lourd, perte du runtime Next (RSC/streaming)                                                                            | ❌      |
 
 ## Conséquences
 

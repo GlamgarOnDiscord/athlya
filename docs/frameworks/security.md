@@ -17,13 +17,13 @@ _Last updated: 2026-05-14_
 
 ### Password Hashing (packages/auth/src/password.ts)
 
-| Aspect               | Implementation             | Assessment                                              |
-| -------------------- | -------------------------- | ------------------------------------------------------- |
-| Algorithm            | bcrypt                     | Good (OWASP recommended)                                |
-| Cost factor          | 12                         | Meets OWASP 2024 minimum                                |
-| Library              | bcryptjs ^3.0.2            | Pure JS, Workers-compatible                             |
-| Empty password check | Yes (throws)               | Good                                                    |
-| Max length           | Zod + forms `.max(72)`     | Resolved 2026-05-27 — wire cap before bcrypt |
+| Aspect               | Implementation         | Assessment                                   |
+| -------------------- | ---------------------- | -------------------------------------------- |
+| Algorithm            | bcrypt                 | Good (OWASP recommended)                     |
+| Cost factor          | 12                     | Meets OWASP 2024 minimum                     |
+| Library              | bcryptjs ^3.0.2        | Pure JS, Workers-compatible                  |
+| Empty password check | Yes (throws)           | Good                                         |
+| Max length           | Zod + forms `.max(72)` | Resolved 2026-05-27 — wire cap before bcrypt |
 
 Zod `RegisterRequestSchema` / `LoginRequestSchema` and web password inputs cap at 72 characters so bcrypt silent truncation never applies to user passwords.
 

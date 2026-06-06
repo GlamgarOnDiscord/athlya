@@ -331,11 +331,11 @@ Si une régression survient sur une combinaison spécifique
 
 **État v0.1.1** : trois lanes provisionnées dans `wrangler.toml` :
 
-| Queue                         | Préfixe `event.type`                         | Consumer (`worker.ts`)   |
-| ----------------------------- | ------------------------------------------- | ------------------------ |
-| `athlya-events-notifications` | `reservation.*`, `billing.subscription.failed` | `handleNotificationsBatch` |
-| `athlya-events-rgpd`          | `auth.user.deleted`, `members.export.requested` | `handleRgpdBatch`        |
-| `athlya-events` (legacy)      | types non migrés                            | `handleEventsBatch`      |
+| Queue                         | Préfixe `event.type`                            | Consumer (`worker.ts`)     |
+| ----------------------------- | ----------------------------------------------- | -------------------------- |
+| `athlya-events-notifications` | `reservation.*`, `billing.subscription.failed`  | `handleNotificationsBatch` |
+| `athlya-events-rgpd`          | `auth.user.deleted`, `members.export.requested` | `handleRgpdBatch`          |
+| `athlya-events` (legacy)      | types non migrés                                | `handleEventsBatch`        |
 
 **Routage** : `src/events/route-queue.ts` — publish, outbox drain et DLQ replay utilisent la même table.
 

@@ -27,6 +27,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { readJson } from '../helpers/read-json.js';
+
 import { buildStubDeps, buildTestApp, env } from './route-test-helpers.js';
 
 /* ------------------------------------------------------------------ */
@@ -204,7 +206,7 @@ describe('POST /v1/auth/password-reset/request', () => {
     );
 
     expect(res.status).toBe(403);
-    const body = (await res.json()) as { code?: string };
+    const body = await readJson<{ code?: string }>(res);
     expect(body.code).toBe('bot_challenge_failed');
     expect(deps.auth.requestPasswordReset).not.toHaveBeenCalled();
   });
@@ -226,7 +228,7 @@ describe('POST /v1/auth/password-reset/confirm', () => {
     );
 
     expect(res.status).toBe(403);
-    const body = (await res.json()) as { code?: string };
+    const body = await readJson<{ code?: string }>(res);
     expect(body.code).toBe('bot_challenge_failed');
     expect(deps.auth.confirmPasswordReset).not.toHaveBeenCalled();
   });

@@ -14,14 +14,11 @@ describe('rate-limit-policies (#133)', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it.each([...REQUIRED_FAIL_CLOSED_IDS] as const)(
-    '%s remains fail-closed in registry',
-    (id) => {
-      const row = RATE_LIMIT_COVERAGE.find((r) => r.id === id);
-      expect(row, `missing coverage row ${id}`).toBeDefined();
-      expect(row?.failPolicy).toBe('fail-closed');
-    },
-  );
+  it.each([...REQUIRED_FAIL_CLOSED_IDS] as const)('%s remains fail-closed in registry', (id) => {
+    const row = RATE_LIMIT_COVERAGE.find((r) => r.id === id);
+    expect(row, `missing coverage row ${id}`).toBeDefined();
+    expect(row?.failPolicy).toBe('fail-closed');
+  });
 
   it('global limiter uses fail-closed-soft', () => {
     const global = RATE_LIMIT_COVERAGE.find((r) => r.id === 'global-v1');

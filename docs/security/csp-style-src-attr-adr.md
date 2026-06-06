@@ -11,11 +11,11 @@ La CSP des apps web émet `style-src 'self' 'nonce-…'` (les `<style>` blocks n
 
 ### Inventaire des libs exigeant `style-src-attr 'unsafe-inline'`
 
-| Lib | Version | Usage Athlya | Inline `style=""` runtime |
-|-----|---------|--------------|---------------------------|
-| `sonner` | ^2.0.7 | Toasts (`components/ui/sonner.tsx`, `layout.tsx`) | Oui — `--index`, `--toasts-before`, `transform`, `opacity`, `height` sur chaque `<li>` toast (animation/empilement) |
-| `@base-ui/react` | ^1.5.0 | Popover, Select, Menu, Tooltip positionnés | Oui — `transform`/`top`/`left` injectés par le moteur d'ancrage (floating positioning) |
-| `react-day-picker` | (transitif via UI) | Sélecteur de date | Styles d'attribut ponctuels |
+| Lib                | Version            | Usage Athlya                                      | Inline `style=""` runtime                                                                                           |
+| ------------------ | ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `sonner`           | ^2.0.7             | Toasts (`components/ui/sonner.tsx`, `layout.tsx`) | Oui — `--index`, `--toasts-before`, `transform`, `opacity`, `height` sur chaque `<li>` toast (animation/empilement) |
+| `@base-ui/react`   | ^1.5.0             | Popover, Select, Menu, Tooltip positionnés        | Oui — `transform`/`top`/`left` injectés par le moteur d'ancrage (floating positioning)                              |
+| `react-day-picker` | (transitif via UI) | Sélecteur de date                                 | Styles d'attribut ponctuels                                                                                         |
 
 Ces styles sont **dynamiques** (valeurs calculées à chaque frame d'animation / repositionnement), donc ni un hash CSP (`'unsafe-hashes'` + hash figés) ni un nonce d'attribut ne s'appliquent.
 
