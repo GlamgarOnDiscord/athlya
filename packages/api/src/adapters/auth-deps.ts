@@ -62,8 +62,8 @@ import {
   type SessionStore,
 } from '@athlya/auth';
 
-import { publish } from '../events/publish.js';
 import { buildRoutedPublishDeps } from '../events/publish-deps.js';
+import { publish } from '../events/publish.js';
 
 import { createRedisSessionStore } from './auth-session-store-redis.js';
 import { createDrizzleUserRepo } from './auth-user-repo-drizzle.js';

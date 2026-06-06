@@ -4,11 +4,13 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { ADMIN_STATS_GET_PATHS } from '../middleware/rate-limit-policies.js';
 import {
   __primeRateLimitRedisForTests,
   __resetRateLimitRedisCache,
 } from '../middleware/rate-limit.js';
-import { ADMIN_STATS_GET_PATHS } from '../middleware/rate-limit-policies.js';
+
+import { readJson } from './helpers/read-json.js';
 import { buildAppNoDomainRoutes, FakeRedis, buildMockEnv } from './helpers/test-app.js';
 
 import type { Redis } from '@upstash/redis';
@@ -53,7 +55,7 @@ describe('expensive read limiter Redis down (#133)', () => {
       const res = await app.request(path, { method: 'GET', headers: stagingHeaders }, env);
 
       expect(res.status).toBe(503);
-      const body = (await res.json()) as { code?: string };
+      const body = await readJson<{ code?: string }>(res);
       expect(body.code).toBe('dependency_unavailable');
     },
   );

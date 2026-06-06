@@ -3,13 +3,14 @@
  */
 
 import { appendAudit } from '../audit.js';
+
 import { createDrizzleAuditLogStore } from './audit-log-store-drizzle.js';
 import { getOrCreateDbHttp } from './deps-cache.js';
 
-import type { JwtRotateAuditWriter } from '../admin/jwt-rotate-routes.js';
 import type { DlqAuditWriter } from '../admin/dlq-routes.js';
-import type { WebhookAuditEntry } from '@athlya/billing';
+import type { JwtRotateAuditWriter } from '../admin/jwt-rotate-routes.js';
 import type { AthlyaBindings } from '../types.js';
+import type { WebhookAuditEntry } from '@athlya/billing';
 import type { AthlyaDbAny } from '@athlya/db/client';
 
 /** JWT rotate prepare → `audit_log`. */

@@ -8,6 +8,8 @@ import {
   __primeRateLimitRedisForTests,
   __resetRateLimitRedisCache,
 } from '../middleware/rate-limit.js';
+
+import { readJson } from './helpers/read-json.js';
 import { buildAppNoDomainRoutes, FakeRedis, buildMockEnv } from './helpers/test-app.js';
 
 import type { Redis } from '@upstash/redis';
@@ -51,7 +53,7 @@ describe('global limiter Redis down (#128)', () => {
 
     expect(res.status).toBe(429);
     expect(res.headers.get('content-type')).toBe('application/problem+json');
-    const body = (await res.json()) as { status: number; code: string };
+    const body = await readJson<{ status: number; code: string }>(res);
     expect(body.status).toBe(429);
     expect(body.code).toBe('rate_limit_dependency_unavailable');
   });
