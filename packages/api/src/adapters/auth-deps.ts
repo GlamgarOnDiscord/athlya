@@ -437,6 +437,15 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
         sessionStore: state.sessionStore,
       });
     },
+    checkPasswordResetRateLimit: async (email: string) => {
+      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const key = `pw-reset:${email.toLowerCase().trim()}`;
+      const count = await redis.incr(key);
+      if (count === 1) {
+        await redis.expire(key, 86400); // 24h window
+      }
+      return count <= 3;
+    },
   };
 }
 

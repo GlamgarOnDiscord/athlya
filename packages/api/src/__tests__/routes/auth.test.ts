@@ -208,6 +208,55 @@ describe('POST /v1/auth/password-reset/request', () => {
     expect(body.code).toBe('bot_challenge_failed');
     expect(deps.auth.requestPasswordReset).not.toHaveBeenCalled();
   });
+
+  it('returns 429 rate_limit_exceeded when the per-email reset limit is hit', async () => {
+    const checkPasswordResetRateLimit = vi.fn().mockResolvedValue(false);
+    const deps = buildStubDeps({ auth: { checkPasswordResetRateLimit } });
+    const app = buildTestApp(deps);
+
+    const res = await app.request(
+      '/v1/auth/password-reset/request',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'cf-turnstile-token': 'test-token',
+        },
+        body: JSON.stringify({ email: 'ada@example.com' }),
+      },
+      env(),
+    );
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('content-type')).toBe('application/problem+json');
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('rate_limit_exceeded');
+    expect(checkPasswordResetRateLimit).toHaveBeenCalledWith('ada@example.com');
+    expect(deps.auth.requestPasswordReset).not.toHaveBeenCalled();
+  });
+
+  it('forwards to requestPasswordReset when under the per-email limit', async () => {
+    const checkPasswordResetRateLimit = vi.fn().mockResolvedValue(true);
+    const deps = buildStubDeps({ auth: { checkPasswordResetRateLimit } });
+    const app = buildTestApp(deps);
+
+    const res = await app.request(
+      '/v1/auth/password-reset/request',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'cf-turnstile-token': 'test-token',
+        },
+        body: JSON.stringify({ email: 'ada@example.com' }),
+      },
+      env(),
+    );
+
+    expect(res.status).toBe(204);
+    expect(checkPasswordResetRateLimit).toHaveBeenCalledWith('ada@example.com');
+    expect(deps.auth.requestPasswordReset).toHaveBeenCalledWith('ada@example.com');
+  });
 });
 
 describe('POST /v1/auth/password-reset/confirm', () => {

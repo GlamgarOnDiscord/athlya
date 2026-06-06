@@ -19,12 +19,10 @@ import { getPublicApiUrl } from '../../../../../lib/env';
 
 import type { NextRequest } from 'next/server';
 
-const ConfirmBodySchema = z
-  .object({
-    token: z.string().min(1).max(256),
-    newPassword: z.string().min(8).max(72),
-  })
-  .strict();
+const ConfirmBodySchema = z.strictObject({
+  token: z.string().min(1).max(256),
+  newPassword: z.string().min(8).max(72),
+});
 
 function problemJson(
   status: number,
@@ -75,6 +73,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         'cf-turnstile-token': turnstileToken,
       },
       body: JSON.stringify(parsed.data),
+      signal: AbortSignal.timeout(10_000),
+      cache: 'no-store',
     });
     if (upstream.status === 204) {
       return new NextResponse(null, { status: 204 });

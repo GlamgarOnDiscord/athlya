@@ -35,6 +35,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           authorization: authHeader,
           'content-type': 'application/json',
         },
+        signal: AbortSignal.timeout(10_000),
+        cache: 'no-store',
       });
     } catch {
       // Best-effort — a failed upstream logout is logged upstream
