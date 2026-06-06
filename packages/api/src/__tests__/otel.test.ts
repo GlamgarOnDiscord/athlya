@@ -560,9 +560,7 @@ describe('resolveOtelSampleRate', () => {
   });
 
   it('honours OTEL_SAMPLE_RATE override', () => {
-    expect(
-      resolveOtelSampleRate({ ENVIRONMENT: 'production', OTEL_SAMPLE_RATE: '0.2' }),
-    ).toBe(0.2);
+    expect(resolveOtelSampleRate({ ENVIRONMENT: 'production', OTEL_SAMPLE_RATE: '0.2' })).toBe(0.2);
   });
 });
 

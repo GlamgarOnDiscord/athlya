@@ -12,10 +12,10 @@ assignees: ''
 
 ## Comportement attendu vs observé
 
-| | |
-|---|---|
-| **Attendu** | |
-| **Observé** | |
+|             |     |
+| ----------- | --- |
+| **Attendu** |     |
+| **Observé** |     |
 
 ## Reproduction
 

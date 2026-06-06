@@ -101,7 +101,9 @@ function mockEnv(overrides: Partial<AthlyaBindings> = {}): AthlyaBindings {
   const base: AthlyaBindings = {
     ENVIRONMENT: 'dev',
     EVENTS_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_QUEUE'],
-    EVENTS_NOTIFICATIONS_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_NOTIFICATIONS_QUEUE'],
+    EVENTS_NOTIFICATIONS_QUEUE: {
+      send: vi.fn(),
+    } as unknown as AthlyaBindings['EVENTS_NOTIFICATIONS_QUEUE'],
     EVENTS_RGPD_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_RGPD_QUEUE'],
     EVENTS_DLQ: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_DLQ'],
     DB_URL: 'postgres://export-test.invalid/athlya',

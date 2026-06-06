@@ -12,14 +12,14 @@ Athlya promet une résidence des **données au repos** en UE (Neon `aws-eu-centr
 
 **Go** sur Smart Placement + dépendances EU-pinnées pour le MVP. **No-go** sur `region_exclusive_eu` tant que le plan Workers Enterprise n'est pas souscrit.
 
-| Couche | Mécanisme | Résidence effective |
-|--------|-----------|---------------------|
-| Postgres | Neon EU + Hyperdrive (config EU) | UE |
-| Redis | Upstash EU | UE |
-| Object / queues | R2 + Queues compte EU | UE |
-| Observabilité | Sentry `*.de.sentry.io`, Axiom EU dataset | UE (configurer DPA) |
-| Compute Workers | Smart Placement (`wrangler.toml` `[placement]`) | **Optimisation latence, pas pin légal** |
-| Edge request metadata | JWT, traceId, logs structurés | Peut transiter PoP hors UE |
+| Couche                | Mécanisme                                       | Résidence effective                     |
+| --------------------- | ----------------------------------------------- | --------------------------------------- |
+| Postgres              | Neon EU + Hyperdrive (config EU)                | UE                                      |
+| Redis                 | Upstash EU                                      | UE                                      |
+| Object / queues       | R2 + Queues compte EU                           | UE                                      |
+| Observabilité         | Sentry `*.de.sentry.io`, Axiom EU dataset       | UE (configurer DPA)                     |
+| Compute Workers       | Smart Placement (`wrangler.toml` `[placement]`) | **Optimisation latence, pas pin légal** |
+| Edge request metadata | JWT, traceId, logs structurés                   | Peut transiter PoP hors UE              |
 
 ## Conséquences
 

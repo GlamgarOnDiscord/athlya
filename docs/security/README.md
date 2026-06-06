@@ -6,13 +6,13 @@ Documentation sécurité pour la plateforme Athlya. Tous les findings audit, spr
 
 **Code applicatif 100 % production-ready côté sécurité.**
 
-| Sévérité     | Audit | Code-side résolu |
-| ------------ | ----- | ---------------- |
-| **CRITICAL** | 5     | **5/5** ✅       |
-| **HIGH**     | 14    | **14/14** ✅     |
+| Sévérité     | Audit | Code-side résolu                                        |
+| ------------ | ----- | ------------------------------------------------------- |
+| **CRITICAL** | 5     | **5/5** ✅                                              |
+| **HIGH**     | 14    | **14/14** ✅                                            |
 | **MEDIUM**   | 23    | 12/23 — détail [`audit-backlog.md`](./audit-backlog.md) |
-| **LOW**      | 21    | 4/21             |
-| **INFO**     | 11    | 0/11             |
+| **LOW**      | 21    | 4/21                                                    |
+| **INFO**     | 11    | 0/11                                                    |
 
 **Score audit moyen** : 70 → **~96/100**
 

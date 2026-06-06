@@ -54,8 +54,8 @@ import {
 } from './drain-worker.js';
 import { resolveEventQueueProducer, type EventQueueBindings } from './route-queue.js';
 
-import type { OutboxPendingSnapshot } from '@athlya/db/outbox';
 import type { AthlyaDb } from '@athlya/db/client';
+import type { OutboxPendingSnapshot } from '@athlya/db/outbox';
 
 /** When pending exceeds this, the drain claims up to {@link ADAPTIVE_BATCH_SIZE}. */
 export const OUTBOX_BACKLOG_BATCH_THRESHOLD = 500;
@@ -192,10 +192,7 @@ export function pickBatchSize(pending: number): number {
   return pending > OUTBOX_BACKLOG_BATCH_THRESHOLD ? ADAPTIVE_BATCH_SIZE : DEFAULT_BATCH_SIZE;
 }
 
-export async function resolveDrainBatchSize(
-  db: AthlyaDb,
-  env: ScheduledEnv,
-): Promise<number> {
+export async function resolveDrainBatchSize(db: AthlyaDb, env: ScheduledEnv): Promise<number> {
   if (env.batchSize !== undefined) {
     return env.batchSize;
   }
@@ -219,9 +216,7 @@ export function emitOutboxBacklogMetric(
 ): void {
   const oldestOccurredAt = snapshot.oldestOccurredAt?.toISOString() ?? null;
   const ageMs =
-    snapshot.oldestOccurredAt !== null
-      ? Date.now() - snapshot.oldestOccurredAt.getTime()
-      : 0;
+    snapshot.oldestOccurredAt !== null ? Date.now() - snapshot.oldestOccurredAt.getTime() : 0;
   const meta = {
     metric: 'outbox_pending_count',
     pending: snapshot.pending,
@@ -275,11 +270,7 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
     // `DrainOutboxOptions` declares.
     const opts: Parameters<typeof drainOutbox>[0] = {
       store,
-      resolveQueue: (eventType) =>
-        resolveEventQueueProducer(
-          env as unknown as EventQueueBindings,
-          eventType,
-        ) as QueueProducer,
+      resolveQueue: (eventType) => resolveEventQueueProducer(env, eventType) as QueueProducer,
       batchSize,
       ...(logger !== undefined ? { logger } : {}),
     };

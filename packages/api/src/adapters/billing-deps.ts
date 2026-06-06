@@ -26,7 +26,12 @@
  * idempotency (issue #69) + audit_log append (issue #127).
  */
 
-import { handleStripeWebhook, verifyStripeSignature, type WebhookAuditEntry, type WebhookDeps } from '@athlya/billing';
+import {
+  handleStripeWebhook,
+  verifyStripeSignature,
+  type WebhookAuditEntry,
+  type WebhookDeps,
+} from '@athlya/billing';
 import { claimStripeWebhookEvent } from '@athlya/db/stripe-webhook-events';
 
 import { createBillingWebhookAuditAppender } from './audit-log-wiring.js';

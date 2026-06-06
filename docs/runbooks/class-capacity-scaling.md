@@ -7,7 +7,7 @@
 
 ## Limite documentée
 
-Un DO est **mono-thread, un seul isolate**. Un *hot class* (cours très demandé) concentre **tous** les abonnés sur cette instance :
+Un DO est **mono-thread, un seul isolate**. Un _hot class_ (cours très demandé) concentre **tous** les abonnés sur cette instance :
 
 - broadcast = **O(abonnés)** à chaque booking/cancel ;
 - mémoire connexions bornée par le DO.
