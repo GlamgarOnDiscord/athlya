@@ -231,7 +231,7 @@ describe('POST /v1/auth/password-reset/request', () => {
 
     expect(res.status).toBe(429);
     expect(res.headers.get('content-type')).toBe('application/problem+json');
-    const body = (await res.json()) as { code?: string };
+    const body = await readJson<{ code?: string }>(res);
     expect(body.code).toBe('rate_limit_exceeded');
     expect(checkPasswordResetRateLimit).toHaveBeenCalledWith('ada@example.com');
     expect(deps.auth.requestPasswordReset).not.toHaveBeenCalled();
