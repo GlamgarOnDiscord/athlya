@@ -102,6 +102,7 @@ describe('updateClass — role gate', () => {
 
     const err = await updateClass(
       CLASS_ID,
+      STUDIO_ID,
       // Deliberately *invalid* payload: if the role gate were
       // ever bypassed, validation would fail first and we'd see
       // `validation_failed` instead of `forbidden`. Asserting
@@ -121,9 +122,13 @@ describe('updateClass — role gate', () => {
   it('rejects a coach with forbidden (coaches may read but not edit classes)', async () => {
     const { deps, findById, updateClassOptimistic, reset } = buildDeps();
 
-    const err = await updateClass(CLASS_ID, { version: 3, title: 'Updated' }, 'coach', deps).catch(
-      (e: unknown) => e,
-    );
+    const err = await updateClass(
+      CLASS_ID,
+      STUDIO_ID,
+      { version: 3, title: 'Updated' },
+      'coach',
+      deps,
+    ).catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(UpdateClassError);
     expect((err as UpdateClassError).code).toBe('forbidden');
@@ -151,20 +156,26 @@ describe('updateClass — happy path', () => {
 
     const result = await updateClass(
       CLASS_ID,
+      STUDIO_ID,
       { version: 3, title: 'HIIT morning (renamed)' },
       'admin',
       deps,
     );
 
     expect(result).toEqual(updatedRow);
-    expect(findById).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+    expect(findById).toHaveBeenCalledExactlyOnceWith(CLASS_ID, STUDIO_ID);
 
     // The repo was called with the `version` stripped off — the
     // guard is a separate argument, never a patch column.
     const expectedFields: UpdateClassFields = {
       title: 'HIIT morning (renamed)',
     };
-    expect(updateClassOptimistic).toHaveBeenCalledExactlyOnceWith(CLASS_ID, expectedFields, 3);
+    expect(updateClassOptimistic).toHaveBeenCalledExactlyOnceWith(
+      CLASS_ID,
+      STUDIO_ID,
+      expectedFields,
+      3,
+    );
 
     // Capacity was not in the patch, so the Redis counter is left
     // alone. Requirement 6.7 only asks to "recompute Redis counter
@@ -183,6 +194,7 @@ describe('updateClass — happy path', () => {
 
     await updateClass(
       CLASS_ID,
+      STUDIO_ID,
       // Capacity is present but equal to the existing value —
       // the service must treat this as a no-op for the counter.
       { version: 3, capacity: BASE_ROW.capacity, title: 'Rebranded' },
@@ -209,6 +221,7 @@ describe('updateClass — optimistic-lock conflict', () => {
 
     const err = await updateClass(
       CLASS_ID,
+      STUDIO_ID,
       // Caller echoes version 2 while the row is at 3.
       { version: 2, title: 'Stale write' },
       'admin',
@@ -222,6 +235,7 @@ describe('updateClass — optimistic-lock conflict', () => {
     // prove the conflict. Only the Redis side-effect is skipped.
     expect(updateClassOptimistic).toHaveBeenCalledExactlyOnceWith(
       CLASS_ID,
+      STUDIO_ID,
       { title: 'Stale write' },
       2,
     );
@@ -245,7 +259,7 @@ describe('updateClass — capacity change', () => {
       version: BASE_ROW.version + 1,
     });
 
-    await updateClass(CLASS_ID, { version: 3, capacity: NEW_CAPACITY }, 'admin', deps);
+    await updateClass(CLASS_ID, STUDIO_ID, { version: 3, capacity: NEW_CAPACITY }, 'admin', deps);
 
     expect(reset).toHaveBeenCalledExactlyOnceWith(CLASS_ID, NEW_CAPACITY);
   });
@@ -256,10 +270,12 @@ describe('updateClass — capacity change', () => {
     findById.mockResolvedValueOnce(BASE_ROW);
     updateClassOptimistic.mockResolvedValueOnce(null);
 
-    await updateClass(CLASS_ID, { version: 2, capacity: 40 }, 'admin', deps).catch(() => {
-      /* conflict is expected; swallowed here because the
-       * counter assertion below is the point of the test. */
-    });
+    await updateClass(CLASS_ID, STUDIO_ID, { version: 2, capacity: 40 }, 'admin', deps).catch(
+      () => {
+        /* conflict is expected; swallowed here because the
+         * counter assertion below is the point of the test. */
+      },
+    );
 
     expect(reset).not.toHaveBeenCalled();
   });
@@ -275,13 +291,38 @@ describe('updateClass — not found', () => {
 
     findById.mockResolvedValueOnce(null);
 
-    const err = await updateClass(CLASS_ID, { version: 0, title: 'Any' }, 'admin', deps).catch(
-      (e: unknown) => e,
-    );
+    const err = await updateClass(
+      CLASS_ID,
+      STUDIO_ID,
+      { version: 0, title: 'Any' },
+      'admin',
+      deps,
+    ).catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(UpdateClassError);
     expect((err as UpdateClassError).code).toBe('not_found');
-    expect(findById).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+    expect(findById).toHaveBeenCalledExactlyOnceWith(CLASS_ID, STUDIO_ID);
+    expect(updateClassOptimistic).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it('surfaces `not_found` when a class belongs to a different studio (cross-tenant security check)', async () => {
+    const { deps, findById, updateClassOptimistic, reset } = buildDeps();
+
+    const DIFFERENT_STUDIO_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ff';
+    findById.mockResolvedValueOnce(null);
+
+    const err = await updateClass(
+      CLASS_ID,
+      DIFFERENT_STUDIO_ID,
+      { version: 3, title: 'Hacked' },
+      'admin',
+      deps,
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(UpdateClassError);
+    expect((err as UpdateClassError).code).toBe('not_found');
+    expect(findById).toHaveBeenCalledExactlyOnceWith(CLASS_ID, DIFFERENT_STUDIO_ID);
     expect(updateClassOptimistic).not.toHaveBeenCalled();
     expect(reset).not.toHaveBeenCalled();
   });

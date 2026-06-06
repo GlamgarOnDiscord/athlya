@@ -190,7 +190,7 @@ export function buildClassesDeps(env: AthlyaBindings): ClassesDeps {
     },
 
     async updateClass(
-      _studioId: string,
+      studioId: string,
       classId: string,
       patch: UpdateClassRequest,
     ): Promise<UpdateClassOutcome> {
@@ -200,7 +200,7 @@ export function buildClassesDeps(env: AthlyaBindings): ClassesDeps {
       const counter = createRedisRemainingCounter(redis);
 
       try {
-        const row = await svcUpdateClass(classId, patch, 'admin', {
+        const row = await svcUpdateClass(classId, studioId, patch, 'admin', {
           classRepo,
           counter,
         });
