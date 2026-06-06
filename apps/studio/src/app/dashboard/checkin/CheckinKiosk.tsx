@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -9,9 +10,9 @@ import { Label } from '@/components/ui/label';
 import { useApiClient } from '../../../lib/api/buildClient';
 import { ApiError } from '../../../lib/api/client';
 import { useAuth } from '../../../lib/auth/AuthContext';
-import { newIdempotencyKey } from '../../../lib/idempotency';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
+import { newIdempotencyKey } from '../../../lib/idempotency';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -121,10 +122,11 @@ function SuccessBanner({ member, countdown, t }: SuccessBannerProps): ReactEleme
       className="flex flex-col items-center gap-4 rounded-xl border border-green-500 bg-green-50 p-8 text-center dark:bg-green-950"
     >
       {member.avatarUrl !== null && member.avatarUrl !== '' ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <Image
           src={member.avatarUrl}
           alt=""
+          width={80}
+          height={80}
           className="size-20 rounded-full border-2 border-green-500 object-cover"
         />
       ) : (

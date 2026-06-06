@@ -28,9 +28,9 @@
  */
 'use client';
 
-import { useMemo, useEffect, useState } from 'react';
-
 import Link from 'next/link';
+import { useMemo, useState } from 'react';
+
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -58,18 +58,14 @@ type Mode = 'hidden' | 'collapsed' | 'expanded';
 export function CookieBanner() {
   const locale = useLocale();
   const t = useMemo(() => createTranslator(locale), [locale]);
-  const [mode, setMode] = useState<Mode>('hidden');
-  const [draft, setDraft] = useState<AnalyticsConsent>(DEFAULT_CONSENT);
-
-  // Decide on mount (client-only) whether to surface the banner.
-  // SSR returns `'hidden'` — the banner never flashes during
-  // hydration on a returning user.
-  useEffect(() => {
-    if (shouldPromptForConsent()) {
-      setMode('collapsed');
-      setDraft(readAnalyticsConsent());
-    }
-  }, []);
+  const [mode, setMode] = useState<Mode>(() => {
+    if (typeof window === 'undefined') return 'hidden';
+    return shouldPromptForConsent() ? 'collapsed' : 'hidden';
+  });
+  const [draft, setDraft] = useState<AnalyticsConsent>(() => {
+    if (typeof window === 'undefined') return DEFAULT_CONSENT;
+    return shouldPromptForConsent() ? readAnalyticsConsent() : DEFAULT_CONSENT;
+  });
 
   const persist = (next: { analytics: boolean; errorTracking: boolean }) => {
     writeAnalyticsConsent(next);

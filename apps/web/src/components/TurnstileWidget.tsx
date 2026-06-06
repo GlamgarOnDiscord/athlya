@@ -136,6 +136,14 @@ export function TurnstileWidget({
    * accepts. Stash it so the imperative handle can forward it.
    */
   const widgetIdRef = useRef<string | null>(null);
+  // Keep a stable ref to the latest `onToken` so the render effect
+  // below never lists it as a dependency (which would re-mount the
+  // Turnstile widget on every parent re-render). Synced in an effect
+  // rather than during render to satisfy react-hooks/refs.
+  const onTokenRef = useRef(onToken);
+  useEffect(() => {
+    onTokenRef.current = onToken;
+  }, [onToken]);
   const locale = useLocale();
   const t = useMemo(() => createTranslator(locale), [locale]);
 
@@ -156,10 +164,10 @@ export function TurnstileWidget({
         // `reset` invalidates the currently-held token; mirror
         // that on the React side so the form's submit guard
         // blocks until the user clears the fresh challenge.
-        onToken('');
+        onTokenRef.current('');
       },
     }),
-    [onToken],
+    [],
   );
 
   useEffect(() => {
@@ -178,17 +186,17 @@ export function TurnstileWidget({
           // expired one.
           'refresh-expired': 'auto',
           callback: (token: string) => {
-            onToken(token);
+            onTokenRef.current(token);
           },
           'error-callback': () => {
             // Challenge failed to load / evaluate — drop
             // any stale token so the submit guard blocks.
-            onToken('');
+            onTokenRef.current('');
           },
           'expired-callback': () => {
             // Cloudflare expires tokens after ~5 min.
             // Mirror on our side so the form re-asks.
-            onToken('');
+            onTokenRef.current('');
             // Proactively ask Cloudflare to issue a fresh
             // token so the user doesn't have to click
             // "retry" on an expired challenge.
@@ -207,7 +215,7 @@ export function TurnstileWidget({
           'timeout-callback': () => {
             // Challenge UI timed out before the user
             // solved it. Same cleanup + reset as expired.
-            onToken('');
+            onTokenRef.current('');
             if (
               typeof window !== 'undefined' &&
               window.turnstile !== undefined &&
@@ -251,19 +259,18 @@ export function TurnstileWidget({
       // in React state and the next submit ships a token whose
       // widget no longer exists — Cloudflare then rejects with
       // `invalid-input-response`.
-      onToken('');
+      onTokenRef.current('');
     };
-  }, [keyConfigured, siteKey, nonce, onToken]);
+  }, [keyConfigured, siteKey, nonce]);
 
   if (!keyConfigured) {
     return (
-      <div
-        role="status"
+      <output
         className="rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
         data-testid="turnstile-widget-devwarning"
       >
         {t('web.turnstile.notConfigured')}
-      </div>
+      </output>
     );
   }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -45,7 +45,7 @@ export function AuditLogList(): ReactElement {
   const client = useApiClient(getToken);
 
   const [items, setItems] = useState<ReadonlyArray<AuditItem>>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const cursorRef = useRef<string | null>(null);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
 
@@ -58,7 +58,7 @@ export function AuditLogList(): ReactElement {
         if (currentCursor !== null) params.set('cursor', currentCursor);
         const page = await client.get<AuditPage>(`/v1/audit?${params.toString()}`);
         setItems((prev) => (currentCursor === null ? [...page.items] : [...prev, ...page.items]));
-        setCursor(page.nextCursor);
+        cursorRef.current = page.nextCursor;
         setHasMore(page.nextCursor !== null);
         setStatus({ kind: 'idle' });
       } catch (err: unknown) {
@@ -146,7 +146,7 @@ export function AuditLogList(): ReactElement {
             size="sm"
             disabled={status.kind === 'loading'}
             onClick={() => {
-              void fetchPage(cursor);
+              void fetchPage(cursorRef.current);
             }}
           >
             {status.kind === 'loading' ? t('common.loading') : t('studio.audit.loadMore')}

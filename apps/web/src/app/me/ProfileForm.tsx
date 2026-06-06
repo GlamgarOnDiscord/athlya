@@ -22,6 +22,7 @@
 'use client';
 
 import { UpdateProfileRequestSchema } from '@athlya/shared/schemas/api';
+import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -177,10 +178,11 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="profile-avatar-file">{t('profile.avatar')}</Label>
           {form.avatarUrl !== '' ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={form.avatarUrl}
               alt=""
+              width={80}
+              height={80}
               className="size-20 rounded-full border border-border object-cover"
             />
           ) : null}

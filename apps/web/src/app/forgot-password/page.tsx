@@ -26,7 +26,13 @@ import { getLocale } from '../../lib/i18n/getLocale';
 
 import { ForgotPasswordForm } from './ForgotPasswordForm';
 
+import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
+
+export const metadata: Metadata = {
+  title: 'Réinitialiser le mot de passe',
+  description: 'Demandez un lien de réinitialisation de mot de passe.',
+};
 
 export default async function ForgotPasswordPage(): Promise<ReactElement> {
   const h = await headers();

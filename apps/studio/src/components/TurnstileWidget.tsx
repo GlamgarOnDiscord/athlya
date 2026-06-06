@@ -79,6 +79,13 @@ export function TurnstileWidget({
 }: TurnstileWidgetProps): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
+  // Stable ref to the latest `onToken`, synced in an effect (not
+  // during render) so the render effect below can omit it from its
+  // deps without re-mounting the widget. Satisfies react-hooks/refs.
+  const onTokenRef = useRef(onToken);
+  useEffect(() => {
+    onTokenRef.current = onToken;
+  }, [onToken]);
   const locale = useLocale();
   const t = useMemo(() => createTranslator(locale), [locale]);
 
@@ -96,10 +103,10 @@ export function TurnstileWidget({
           return;
         }
         window.turnstile.reset(widgetIdRef.current);
-        onToken('');
+        onTokenRef.current('');
       },
     }),
-    [onToken],
+    [],
   );
 
   useEffect(() => {
@@ -114,10 +121,10 @@ export function TurnstileWidget({
         const id = window.turnstile.render(container, {
           sitekey: siteKey as string,
           'refresh-expired': 'auto',
-          callback: (token: string) => onToken(token),
-          'error-callback': () => onToken(''),
+          callback: (token: string) => onTokenRef.current(token),
+          'error-callback': () => onTokenRef.current(''),
           'expired-callback': () => {
-            onToken('');
+            onTokenRef.current('');
             if (
               typeof window !== 'undefined' &&
               window.turnstile !== undefined &&
@@ -131,7 +138,7 @@ export function TurnstileWidget({
             }
           },
           'timeout-callback': () => {
-            onToken('');
+            onTokenRef.current('');
             if (
               typeof window !== 'undefined' &&
               window.turnstile !== undefined &&
@@ -163,9 +170,9 @@ export function TurnstileWidget({
         window.turnstile.remove(widgetIdRef.current);
         widgetIdRef.current = null;
       }
-      onToken('');
+      onTokenRef.current('');
     };
-  }, [keyConfigured, siteKey, nonce, onToken]);
+  }, [keyConfigured, siteKey, nonce]);
 
   if (!keyConfigured) {
     return (

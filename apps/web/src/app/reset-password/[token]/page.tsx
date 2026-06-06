@@ -19,7 +19,13 @@ import { getLocale } from '../../../lib/i18n/getLocale';
 
 import { ResetPasswordForm } from './ResetPasswordForm';
 
+import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
+
+export const metadata: Metadata = {
+  title: 'Définir un nouveau mot de passe',
+  description: 'Entrez votre nouveau mot de passe pour accéder à votre compte.',
+};
 
 export default async function ResetPasswordPage({
   params,

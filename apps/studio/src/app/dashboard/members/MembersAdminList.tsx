@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import Image from 'next/image';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,7 +48,7 @@ export function MembersAdminList(): ReactElement {
   const client = useApiClient(getToken);
 
   const [items, setItems] = useState<ReadonlyArray<MemberRow>>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const cursorRef = useRef<string | null>(null);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
   const [query, setQuery] = useState<string>('');
@@ -61,7 +62,7 @@ export function MembersAdminList(): ReactElement {
         if (currentCursor !== null) params.set('cursor', currentCursor);
         const page = await client.get<MembersPage>(`/v1/members?${params.toString()}`);
         setItems((prev) => (currentCursor === null ? [...page.items] : [...prev, ...page.items]));
-        setCursor(page.nextCursor);
+        cursorRef.current = page.nextCursor;
         setHasMore(page.nextCursor !== null);
         setStatus({ kind: 'idle' });
       } catch (err: unknown) {
@@ -160,7 +161,7 @@ export function MembersAdminList(): ReactElement {
             size="sm"
             disabled={status.kind === 'loading'}
             onClick={() => {
-              void fetchPage(cursor);
+              void fetchPage(cursorRef.current);
             }}
           >
             {status.kind === 'loading' ? t('common.loading') : t('studio.members.loadMore')}
@@ -200,10 +201,11 @@ function MemberRowItem({ member, locale, t }: MemberRowItemProps): ReactElement 
       <TableCell>
         <div className="flex items-center gap-3">
           {member.avatarUrl !== null && member.avatarUrl !== '' ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={member.avatarUrl}
               alt=""
+              width={32}
+              height={32}
               className="size-8 rounded-full border border-border object-cover"
             />
           ) : (
