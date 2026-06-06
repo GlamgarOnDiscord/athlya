@@ -40,8 +40,8 @@ import {
   type Role,
 } from '@athlya/members';
 
-import { publish } from '../events/publish.js';
 import { buildRoutedPublishDeps } from '../events/publish-deps.js';
+import { publish } from '../events/publish.js';
 
 import { createR2AvatarUploadStore } from './avatar-upload-store-r2.js';
 import {

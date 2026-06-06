@@ -9,13 +9,13 @@ Pour rollout graduel (5 → 25 → 100 %), voir [`canary-deploy.md`](./canary-de
 Fichier : [`.github/workflows/deploy-production.yml`](../../.github/workflows/deploy-production.yml)  
 Actions → **Deploy API** → `workflow_dispatch`
 
-| Phase | Comportement |
-|-------|----------------|
-| `staging-deploy` | `wrangler deploy --env staging` + `wait-health-ready.sh` |
+| Phase               | Comportement                                                                     |
+| ------------------- | -------------------------------------------------------------------------------- |
+| `staging-deploy`    | `wrangler deploy --env staging` + `wait-health-ready.sh`                         |
 | `production-deploy` | `wrangler deploy --env production` + ready gate (approbation env **production**) |
-| `staging-smoke` | Canary upload staging only (issue #129) |
-| `production-canary` | Canary 5→25→100 % |
-| `rollback` | Rollback Workers version |
+| `staging-smoke`     | Canary upload staging only (issue #129)                                          |
+| `production-canary` | Canary 5→25→100 %                                                                |
+| `rollback`          | Rollback Workers version                                                         |
 
 ## Prérequis
 

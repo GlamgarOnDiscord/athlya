@@ -68,19 +68,13 @@ function normalise(entry: Record<string, unknown>): NormalisedViolation | null {
       : // Reporting API: { type, body: {...} } — fall back to the entry itself
         ((entry['body'] as Record<string, unknown> | undefined) ?? entry);
 
-  const effectiveDirective =
-    str(body['effectiveDirective']) ?? str(body['violated-directive']);
+  const effectiveDirective = str(body['effectiveDirective']) ?? str(body['violated-directive']);
   const blockedUri = str(body['blockedURL']) ?? str(body['blocked-uri']);
-  const documentUri =
-    str(body['documentURL']) ?? str(body['document-uri']) ?? str(entry['url']);
+  const documentUri = str(body['documentURL']) ?? str(body['document-uri']) ?? str(entry['url']);
   const disposition = str(body['disposition']);
   const sourceFile = str(body['sourceFile']) ?? str(body['source-file']);
 
-  if (
-    effectiveDirective === null &&
-    blockedUri === null &&
-    documentUri === null
-  ) {
+  if (effectiveDirective === null && blockedUri === null && documentUri === null) {
     return null;
   }
   return { effectiveDirective, blockedUri, documentUri, disposition, sourceFile };
@@ -89,9 +83,7 @@ function normalise(entry: Record<string, unknown>): NormalisedViolation | null {
 /** Coerce an arbitrary parsed JSON body into the list of report entries. */
 function toEntries(parsed: unknown): Record<string, unknown>[] {
   if (Array.isArray(parsed)) {
-    return parsed.filter(
-      (e): e is Record<string, unknown> => e !== null && typeof e === 'object',
-    );
+    return parsed.filter((e): e is Record<string, unknown> => e !== null && typeof e === 'object');
   }
   if (parsed !== null && typeof parsed === 'object') {
     return [parsed as Record<string, unknown>];

@@ -3,9 +3,10 @@
  * event to the lane-specific queue binding (issue #125).
  */
 
+import { resolveEventQueueProducer, type EventQueueBindings } from './route-queue.js';
+
 import type { PublishDeps, Queue } from './publish.js';
 import type { AthlyaBindings } from '../types.js';
-import { resolveEventQueueProducer, type EventQueueBindings } from './route-queue.js';
 
 /** Build publish deps that route by `event.type`. */
 export function buildRoutedPublishDeps(env: AthlyaBindings): PublishDeps {

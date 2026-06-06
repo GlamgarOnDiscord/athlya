@@ -90,14 +90,14 @@ stripe trigger checkout.session.completed
 node scripts/verify-stripe-provision-checklist.mjs
 ```
 
-| Item | Staging | Production |
-|------|---------|------------|
-| STRIPE_SECRET_KEY | [ ] | [ ] |
-| STRIPE_WEBHOOK_SECRET | [ ] | [ ] |
-| Webhook endpoint actif | [ ] | [ ] |
-| Migration 0010 | [ ] | [ ] |
-| Checkout E2E admin | [ ] | [ ] |
-| Replay event.id idempotent | [ ] | [ ] |
+| Item                       | Staging | Production |
+| -------------------------- | ------- | ---------- |
+| STRIPE_SECRET_KEY          | [ ]     | [ ]        |
+| STRIPE_WEBHOOK_SECRET      | [ ]     | [ ]        |
+| Webhook endpoint actif     | [ ]     | [ ]        |
+| Migration 0010             | [ ]     | [ ]        |
+| Checkout E2E admin         | [ ]     | [ ]        |
+| Replay event.id idempotent | [ ]     | [ ]        |
 
 ---
 

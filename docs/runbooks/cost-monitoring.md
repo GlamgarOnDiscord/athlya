@@ -4,12 +4,12 @@ Runbook pour surveiller les coûts récurrents avant scale multi-studios (issue 
 
 ## Estimation rapide (req / membre / jour)
 
-| Flux                    | Redis cmds / action | Notes                          |
-| ----------------------- | ------------------- | ------------------------------ |
-| Login                   | ~3                  | rate limit + session           |
-| Booking                 | ~5–8                | lock + capacity + idempotency  |
-| Refresh token           | ~2                  | rotate Lua                     |
-| Health (synthetic)      | 0                   | pas de Redis si probe seule    |
+| Flux               | Redis cmds / action | Notes                         |
+| ------------------ | ------------------- | ----------------------------- |
+| Login              | ~3                  | rate limit + session          |
+| Booking            | ~5–8                | lock + capacity + idempotency |
+| Refresh token      | ~2                  | rotate Lua                    |
+| Health (synthetic) | 0                   | pas de Redis si probe seule   |
 
 Ordre de grandeur pilote (50 membres actifs, 2 sessions/jour) :
 
@@ -21,15 +21,15 @@ Au-delà de **5 studios** ou **500 membres** : budget **150–250 €/mois** (vo
 
 ## Seuils d'alerte (à configurer dans chaque console)
 
-| Provider            | Métrique              | Seuil recommandé | Action                                      |
-| ------------------- | --------------------- | ---------------- | ------------------------------------------- |
-| Upstash             | commands/day          | 80 % quota plan  | Vérifier rate limit + booking hot keys      |
-| Neon                | compute hours / CU    | 80 % plan        | Index lents, pool Hyperdrive                |
-| Cloudflare Workers  | requests + CPU ms     | Paid tier cap    | OTel sampling (#83), health probe frequency |
-| Cloudflare Queues   | backlog depth         | > 1000 5 min     | `docs/runbooks/outbox-ops.md`               |
-| Upstash QStash      | messages/day          | 80 % quota (400/500 free) | `docs/runbooks/qstash-quota.md`      |
-| Resend              | emails/month          | 80 % quota       | Désactiver digests non critiques            |
-| Axiom               | ingest GB/month       | 80 % quota       | Baisser `OTEL_SAMPLE_RATE` si besoin        |
+| Provider           | Métrique           | Seuil recommandé          | Action                                      |
+| ------------------ | ------------------ | ------------------------- | ------------------------------------------- |
+| Upstash            | commands/day       | 80 % quota plan           | Vérifier rate limit + booking hot keys      |
+| Neon               | compute hours / CU | 80 % plan                 | Index lents, pool Hyperdrive                |
+| Cloudflare Workers | requests + CPU ms  | Paid tier cap             | OTel sampling (#83), health probe frequency |
+| Cloudflare Queues  | backlog depth      | > 1000 5 min              | `docs/runbooks/outbox-ops.md`               |
+| Upstash QStash     | messages/day       | 80 % quota (400/500 free) | `docs/runbooks/qstash-quota.md`             |
+| Resend             | emails/month       | 80 % quota                | Désactiver digests non critiques            |
+| Axiom              | ingest GB/month    | 80 % quota                | Baisser `OTEL_SAMPLE_RATE` si besoin        |
 
 ## Upstash — alerte commands/day
 

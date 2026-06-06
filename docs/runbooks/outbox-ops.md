@@ -15,8 +15,8 @@
 
 ## SLO
 
-| Metric | Target |
-|--------|--------|
+| Metric                               | Target                                                            |
+| ------------------------------------ | ----------------------------------------------------------------- |
 | Domain event → notification delivery | **p95 < 2 min** (`OUTBOX_EVENT_TO_NOTIFICATION_P95_MS = 120_000`) |
 
 Cron granularity + queue consumer latency dominate tail latency; alert on backlog, not only on cron tick.

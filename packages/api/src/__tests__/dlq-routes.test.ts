@@ -25,10 +25,9 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buildDlqRouter, type DlqAuditWriter } from '../admin/dlq-routes.js';
+import { buildDlqRouter, type DlqAuditWriter, type DlqAdminEnv } from '../admin/dlq-routes.js';
 import { __resetDlqRedisCache, __setDlqRedisForTests } from '../events/drain-dlq.js';
 
-import type { DlqAdminEnv } from '../admin/dlq-routes.js';
 import type { DlqBindings } from '../events/drain-dlq.js';
 import type { Queue } from '@cloudflare/workers-types';
 import type { Redis } from '@upstash/redis';
@@ -130,9 +129,9 @@ function buildApp(
   const eventsDlq = { send: vi.fn().mockResolvedValue(undefined) };
 
   const env: DlqBindings = {
-    EVENTS_QUEUE: eventsQueue as unknown as Queue<unknown>,
-    EVENTS_NOTIFICATIONS_QUEUE: eventsQueue as unknown as Queue<unknown>,
-    EVENTS_RGPD_QUEUE: eventsQueue as unknown as Queue<unknown>,
+    EVENTS_QUEUE: eventsQueue,
+    EVENTS_NOTIFICATIONS_QUEUE: eventsQueue,
+    EVENTS_RGPD_QUEUE: eventsQueue,
     EVENTS_DLQ: eventsDlq as unknown as Queue<unknown>,
     REDIS_URL: TEST_REDIS_URL,
     REDIS_TOKEN: 'test-token',

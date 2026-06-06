@@ -115,7 +115,9 @@ function mockEnv(overrides: Partial<AthlyaBindings> = {}): AthlyaBindings {
   const base: AthlyaBindings = {
     ENVIRONMENT: 'dev',
     EVENTS_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_QUEUE'],
-    EVENTS_NOTIFICATIONS_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_NOTIFICATIONS_QUEUE'],
+    EVENTS_NOTIFICATIONS_QUEUE: {
+      send: vi.fn(),
+    } as unknown as AthlyaBindings['EVENTS_NOTIFICATIONS_QUEUE'],
     EVENTS_RGPD_QUEUE: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_RGPD_QUEUE'],
     EVENTS_DLQ: { send: vi.fn() } as unknown as AthlyaBindings['EVENTS_DLQ'],
     DB_URL: 'postgres://cascade-test.invalid/athlya',
@@ -350,7 +352,9 @@ describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () =
     };
     const msg = mockMessage('msg-other-retry', stranger);
     const env = mockEnv({
-      EVENTS_DLQ: { send: vi.fn().mockRejectedValue(new Error('dlq down')) } as unknown as AthlyaBindings['EVENTS_DLQ'],
+      EVENTS_DLQ: {
+        send: vi.fn().mockRejectedValue(new Error('dlq down')),
+      } as unknown as AthlyaBindings['EVENTS_DLQ'],
     });
 
     await handleEventsBatch(mockBatch('athlya-events', [msg]), env);

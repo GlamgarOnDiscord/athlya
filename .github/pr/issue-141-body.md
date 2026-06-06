@@ -1,6 +1,6 @@
 ## Contexte
 
-Audit P6 (Low–Medium, issue #141) : `ClassCapacityDO` = 1 WebSocket par cours. Un *hot class* (50+ connexions) concentre tout sur **un seul DO mono-thread** → broadcast O(abonnés) par booking + mémoire connexions bornée par l'isolate. Limite CF non gérée.
+Audit P6 (Low–Medium, issue #141) : `ClassCapacityDO` = 1 WebSocket par cours. Un _hot class_ (50+ connexions) concentre tout sur **un seul DO mono-thread** → broadcast O(abonnés) par booking + mémoire connexions bornée par l'isolate. Limite CF non gérée.
 
 ## Changements
 

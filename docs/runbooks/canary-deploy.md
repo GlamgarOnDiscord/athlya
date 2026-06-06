@@ -18,11 +18,11 @@ Checklist ops : `node scripts/verify-canary-deploy-checklist.mjs`
 Workflow : [`.github/workflows/deploy-production.yml`](../../.github/workflows/deploy-production.yml)  
 Actions → **Deploy API** → `workflow_dispatch`
 
-| Phase | Action |
-|-------|--------|
-| `staging-smoke` | `versions upload` staging + gate `/health/ready` |
+| Phase               | Action                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------- |
+| `staging-smoke`     | `versions upload` staging + gate `/health/ready`                                            |
 | `production-canary` | staging ready → upload prod → **5 %** (10 min) → **25 %** (10 min) → **100 %** + ready prod |
-| `rollback` | `wrangler rollback` production (option `version_id`) |
+| `rollback`          | `wrangler rollback` production (option `version_id`)                                        |
 
 Environment GitHub **`production`** : approbation manuelle obligatoire avant canary/rollback.
 
