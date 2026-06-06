@@ -92,7 +92,7 @@ export interface ClassRepo {
    * service can distinguish `not_found` (row is missing) from
    * `conflict` (row exists but version is stale).
    */
-  findById(classId: string, studioId: string): Promise<ClassRow | null>;
+  findById(studioId: string, classId: string): Promise<ClassRow | null>;
 
   /**
    * Apply the mutable `patch` to the class identified by `classId`
@@ -111,8 +111,8 @@ export interface ClassRepo {
    * enforced atomically by the database.
    */
   updateClassOptimistic(
-    classId: string,
     studioId: string,
+    classId: string,
     patch: UpdateClassFields,
     expectedVersion: number,
   ): Promise<ClassRow | null>;
@@ -251,8 +251,8 @@ export class UpdateClassError extends Error {
  * Related requirements: 6.5, 6.6, 6.7.
  */
 export async function updateClass(
-  classId: string,
   studioId: string,
+  classId: string,
   patch: unknown,
   requesterRole: Role,
   deps: UpdateClassDeps,
@@ -289,7 +289,7 @@ export async function updateClass(
   //     but the separate read lets us distinguish `not_found` (no
   //     row at all) from `conflict` (row exists, version mismatch)
   //     which the API caller genuinely needs to act on differently.
-  const existing = await deps.classRepo.findById(classId, studioId);
+  const existing = await deps.classRepo.findById(studioId, classId);
   if (existing === null) {
     throw new UpdateClassError('not_found', `class not found: ${classId}`);
   }
@@ -298,8 +298,8 @@ export async function updateClass(
   //     reports 0 rows affected, which we translate to `conflict`
   //     (Requirement 6.6 — "0 rows affected → 409 Conflict").
   const updated = await deps.classRepo.updateClassOptimistic(
-    classId,
     studioId,
+    classId,
     fields,
     expectedVersion,
   );
