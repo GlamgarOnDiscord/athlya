@@ -138,7 +138,7 @@
     "@hono/zod-openapi": "^1.4.0",
     "@upstash/redis": "^1.35.6",
     "drizzle-orm": "^0.45.2",
-    "jose": "^5.9.6",
+    "jose": "^6.2.3",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
