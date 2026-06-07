@@ -9,7 +9,7 @@
 # Wired via `git config core.hooksPath .githooks` (set by the root
 # package.json `prepare` script on every `pnpm install`).
 
-echo "▶ pre-push: running pnpm preflight (format:check + lint + typecheck)…"
+echo "▶ pre-push: running pnpm preflight (frozen install + format:check + lint + typecheck)…"
 if ! pnpm preflight; then
   echo "✖ preflight failed — fix locally (try \`pnpm format\`) before pushing, or \`git push --no-verify\` to bypass." >&2
   exit 1
