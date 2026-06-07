@@ -52,7 +52,7 @@ import type { DomainDeps } from '../../routes/index.js';
 import type { AthlyaBindings, HonoEnv } from '../../types.js';
 import type { Redis } from '@upstash/redis';
 import type { Hono } from 'hono';
-import type { JWK, KeyLike } from 'jose';
+import type { JWK } from 'jose';
 
 /* ------------------------------------------------------------------ */
 /*  Re-exports                                                         */
@@ -79,8 +79,8 @@ export const TEST_STUDIO_ID = '22222222-2222-4222-8222-222222222222';
 
 /** RS256 keypair + extracted public JWK, ready to feed the resolver. */
 export interface TestKeypair {
-  privateKey: KeyLike;
-  publicKey: KeyLike;
+  privateKey: CryptoKey;
+  publicKey: CryptoKey;
   publicJwk: JWK;
 }
 
@@ -176,7 +176,7 @@ export const TEST_JWT_AUDIENCE = 'athlya-api-dev';
  * `role`, …) without a fresh helper per case.
  */
 export async function signTestJwt(
-  privateKey: KeyLike,
+  privateKey: CryptoKey,
   claims: Record<string, unknown>,
   opts: SignTestJwtOptions = {},
 ): Promise<string> {

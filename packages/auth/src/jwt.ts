@@ -40,7 +40,7 @@
 
 import { SignJWT, createLocalJWKSet, exportJWK, importPKCS8, importSPKI, jwtVerify } from 'jose';
 
-import type { JSONWebKeySet, JWK, JWTPayload, JWTVerifyOptions, KeyLike } from 'jose';
+import type { CryptoKey, JSONWebKeySet, JWK, JWTPayload, JWTVerifyOptions } from 'jose';
 
 /**
  * Signing algorithm pinned by this module. Both access and refresh
@@ -109,8 +109,8 @@ export interface RefreshClaims extends JWTPayload {
  */
 export interface SigningKey {
   readonly kid: string;
-  readonly privateKey: KeyLike;
-  readonly publicKey: KeyLike;
+  readonly privateKey: CryptoKey;
+  readonly publicKey: CryptoKey;
   readonly notBefore?: Date;
   readonly notAfter?: Date;
 }
