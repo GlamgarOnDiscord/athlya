@@ -9,6 +9,22 @@ updates:
     labels:
       - dependencies
       - npm
+    # Group minor/patch bumps into one PR each so we get 1-2 PRs/week instead
+    # of ~10. Majors stay ungrouped (one PR each) for manual review — they
+    # break things (e.g. ESLint 10 vs eslint-plugin-import). See CONTRIBUTING.
+    groups:
+      dev-minor-patch:
+        applies-to: version-updates
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      prod-minor-patch:
+        applies-to: version-updates
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: github-actions
     directory: /
@@ -18,3 +34,12 @@ updates:
     labels:
       - dependencies
       - github-actions
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+        # Minor/patch only — keep action majors as individual PRs (they break
+        # things too) so they don't block the minor/patch auto-merge flow.
+        update-types:
+          - minor
+          - patch

@@ -1,0 +1,34 @@
+name: Dependabot auto-merge
+
+# Enable GitHub auto-merge (squash) on safe Dependabot PRs — minor/patch only.
+# Auto-merge waits for the required status checks + conversation resolution
+# before merging, so branch protection still gates the merge. Majors are NOT
+# auto-merged: they need manual local testing (see CONTRIBUTING / the /ship skill).
+#
+# No checkout step → no untrusted code runs with the elevated token.
+
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for minor/patch updates
+        if: >-
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge --auto --squash --delete-branch "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

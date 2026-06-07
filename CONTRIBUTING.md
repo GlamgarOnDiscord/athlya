@@ -75,22 +75,47 @@ git checkout -b fix/description-courte
 git checkout -b docs/description-courte
 ```
 
-### Avant de pusher
+### Avant de pusher — `pnpm preflight`
 
 ```bash
-pnpm -r typecheck
-pnpm -r test
-pnpm format
-pnpm -r lint
+pnpm preflight   # install --frozen-lockfile && format:check && lint && typecheck
 ```
 
-Les quatre doivent être verts. Les PR avec typecheck ou tests rouges ne sont pas reviewées.
+`preflight` reproduit les gates **rapides et déterministes** du job CI requis
+`Lint, typecheck, and tests` — soit `format:check`, `lint`, `typecheck` (mais
+**pas** la suite de tests, qui ne tourne qu'en CI). Un rouge déterministe est
+donc attrapé en local en ~30 s au lieu d'un aller-retour CI de ~5 min ; lance
+`pnpm -r test` toi-même si ton changement touche de la logique. Le hook
+`.githooks/pre-push` (câblé par le script `prepare` au `pnpm install`) le
+lance automatiquement — bypass ponctuel : `git push --no-verify`.
+
+Rappels :
+
+- `format:check` est **repo-wide** : tout fichier tracké non formaté échoue.
+  `pnpm format` corrige.
+- Une dépendance retirée ⇒ `pnpm install` pour resynchroniser le lockfile
+  (la CI utilise `--frozen-lockfile`).
 
 ### Ouvrir la PR
 
 Le template de PR (`.github/PULL_REQUEST_TEMPLATE.md`) liste les items à vérifier. **Cocher chaque case** ou expliquer pourquoi ce n'est pas applicable.
 
 Lier la PR à l'issue ou à la tâche concernée (`Closes #42` ou `Relates to Epic 8.9`).
+
+### Reviews automatiques (obligatoire avant merge)
+
+Les bots **CodeRabbit**, **cubic** et **Copilot** reviewent chaque PR. Avant de
+merger **et** avant de fermer la PR/issue : lire **tous** leurs commentaires et
+**appliquer les bons** (sécurité, bugs, perf, correctness) dans un commit de
+suivi. Re-vérifier juste avant le merge — les reviews arrivent parfois après la
+CI. Jamais de merge par-dessus un commentaire actionnable non traité.
+
+### Merge
+
+On merge uniquement quand **tous** les checks sont verts (pas seulement le check
+requis), threads de review résolus. Les bumps dependabot minor/patch sont
+**groupés et auto-mergés** ; les majors sont testés en local puis revus
+manuellement.
 
 ---
 
