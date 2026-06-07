@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '../lib/auth/AuthContext';
 import { useLocale } from '../lib/i18n/LocaleContext';
 import { createTranslator } from '../lib/i18n/t';
+
 import { LocaleSwitcher } from './LocaleSwitcher';
 
 export function AppNav(): ReactElement {
@@ -48,7 +49,7 @@ export function AppNav(): ReactElement {
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:ring-2 focus:ring-ring"
+        className="absolute left-4 top-0 z-50 -translate-y-full rounded-b-md bg-background px-4 py-2 text-sm font-medium text-foreground ring-2 ring-ring transition-transform focus:translate-y-0"
       >
         {t('common.skipToContent')}
       </a>
