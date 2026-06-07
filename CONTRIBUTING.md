@@ -2,7 +2,7 @@
 
 Merci de prendre le temps. Ce document décrit comment proposer une contribution qui a de bonnes chances d'être mergée rapidement.
 
-> **Avant tout** : Athlya est en phase active de développement (~252 / 294 tâches livrées — v1.1.0). Pour éviter les contributions en doublon ou hors-scope, ouvrir une **issue de discussion** avant de commencer un gros chantier.
+> **Avant tout** : Athlya est en phase active de développement (~277 / 313 tâches livrées — v1.1.0). Pour éviter les contributions en doublon ou hors-scope, ouvrir une **issue de discussion** avant de commencer un gros chantier.
 
 ---
 

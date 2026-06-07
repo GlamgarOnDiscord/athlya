@@ -169,6 +169,30 @@ Premier jalon stable. Le backend est verrouillé Niveau Série A : auth hardenin
 
 ## [Unreleased]
 
+### Security — Session 2026-06
+
+- **#192 / #193** — `updateClass` scopé par `studioId` (anti-mutation cross-tenant ; defense-in-depth au niveau service, en plus de la RLS `withTenant`). Ordre des paramètres aligné `studioId`-first.
+- **#194 / #195** — Rate-limit password-reset par email (3 / 24 h, clé **hashée SHA-256**, TTL auto-réparant) + timeouts upstream (`AbortSignal.timeout(10s)` + `cache: 'no-store'`) sur tous les proxys auth Next (web + studio).
+- **#200 / #203** — Révocation du grant mort `UPDATE (actor_id, metadata) ON audit_log` de `athlya_cron` (**migration 0012**) ; restaure l'invariant d'immuabilité (pgTAP test 3 ↦ 42501). L'anonymisation RGPD J+30 passe exclusivement par la fonction SECURITY DEFINER `anonymize_user_audit()`.
+
+### Fixed — Session 2026-06
+
+- **#198 / #199** — Restauration du check CI requis `Lint, typecheck, and tests` : `prettier --write` sur 53 fichiers + 15 erreurs lint `@athlya/api` masquées par le short-circuit format (helper `readJson<T>` pour le faux positif typescript-eslint ↔ tsc sur `res.json()`).
+- **#202** — Élimination du flake property `AuditLog round-trip` (échec aléatoire sur #189 / #202) : exclusion des clés `__proto__` / `constructor` / `prototype` de l'arbitrary `auditLogArb`.
+
+### Changed — Session 2026-06
+
+- **#196 / #197** — Nettoyage qualité (suppression composants UI morts + deps `react-day-picker` / `shadcn`, `cursorRef`, metadata SEO, skip-link a11y). Reverts des changements react-doctor régressifs signalés en review (next/image sur avatars distants / `data:`, lazy-init `CookieBanner` ↦ hydration mismatch).
+
+### CI / DX — Session 2026-06
+
+- **#201 / #202** — `pnpm preflight` (mirror du gate CI requis) + hook `.githooks/pre-push` auto-câblé ; Turbo remote cache activé. Coupe les allers-retours CI rouges déterministes.
+- **#204 / #205** — Workflow codifié : `CLAUDE.md` racine, section `CONTRIBUTING`, skill Claude `/ship`. Dependabot **groupé** (minor/patch dev + prod + actions) + **auto-merge** des minor/patch (majors isolés).
+
+### Docs — Session 2026-06
+
+- Passe de fraîcheur : badges CI **live** (statut réel au lieu de statiques verts), compteur de tâches **277 / 313** et version **v1.1.0** réconciliés (README / PROGRESS / tasks.md). Inventaire vérifié depuis les cases de `tasks.md`.
+
 ### Added — Durcissement post-audit prod (2026-05)
 
 - **#134** — Drain outbox adaptatif (batch 100→200 si backlog > 500), métrique `outbox.backlog` à chaque tick, garde d'overlap par durée (`outbox.drain_overlap_risk`), alerte Axiom A16.
@@ -191,7 +215,7 @@ Premier jalon stable. Le backend est verrouillé Niveau Série A : auth hardenin
 
 - ADR circuit breaker (`docs/security/circuit-breaker-adr.md`) ré-évalué post-audit R1 ; `rules.md` à jour (post #135–#142).
 
-> **Bloqueur ops** : #123 (quota GitHub Actions / billing) reste ouverte — hors-code, voir `docs/runbooks/ci-recovery.md`.
+> **#123** (quota GitHub Actions / billing) **résolue** (2026-06) — quota rétabli, tous les workflows (CI, pgTAP, Docker PBT, secret-scan) re-tournent verts sur master.
 
 ---
 
