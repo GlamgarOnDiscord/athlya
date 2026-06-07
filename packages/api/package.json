@@ -152,7 +152,7 @@
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",
     "@athlya/tsconfig": "workspace:*",
-    "@cloudflare/workers-types": "^4.20260523.1",
+    "@cloudflare/workers-types": "^4.20260607.1",
     "@sentry/cli": "3.5.0",
     "@types/node": "^20.19.9",
     "eslint": "^9.39.1",
@@ -161,7 +161,7 @@
     "openapi-typescript": "^7.13.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.0",
+    "vitest": "^4.1.8",
     "wrangler": "^4.98.0"
   }
 }
