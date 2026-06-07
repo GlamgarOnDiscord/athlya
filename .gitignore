@@ -63,3 +63,6 @@ yarn-error.log*
 
 # Playwright MCP snapshots
 .playwright-mcp/
+
+# Claude Code runtime
+.claude/scheduled_tasks.lock
