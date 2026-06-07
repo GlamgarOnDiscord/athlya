@@ -144,6 +144,14 @@ export interface AuthDeps {
    */
   confirmPasswordReset(input: { token: string; newPassword: string }): Promise<void>;
 
+  /**
+   * Per-email rate limit for password-reset requests (3 per 24h).
+   * Check and record a password-reset attempt for `email`.
+   * Returns `true` if the attempt is allowed, `false` if the
+   * per-email limit is exceeded.
+   */
+  checkPasswordResetRateLimit?(email: string): Promise<boolean>;
+
   /** Dependency bundle forwarded to the idempotency middleware. */
   readonly idempotency?: IdempotencyMiddlewareDeps;
 }
@@ -285,6 +293,23 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
     async (c) => {
       traceOperation(c, 'auth.password-reset.request');
       const body = readValidated<{ email: string }>(c, 'json');
+      if (deps.checkPasswordResetRateLimit !== undefined) {
+        const allowed = await deps.checkPasswordResetRateLimit(body.email);
+        if (!allowed) {
+          return c.body(
+            JSON.stringify({
+              type: 'about:blank',
+              title: 'Too Many Requests',
+              status: 429,
+              detail: 'Password reset request limit exceeded. Try again later.',
+              code: 'rate_limit_exceeded',
+              traceId: c.get('traceId'),
+            }),
+            429,
+            { 'content-type': 'application/problem+json' },
+          );
+        }
+      }
       await deps.requestPasswordReset(body.email);
       return c.body(null, 204);
     },

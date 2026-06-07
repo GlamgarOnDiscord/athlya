@@ -72,6 +72,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
+      signal: AbortSignal.timeout(10_000),
+      cache: 'no-store',
     });
   } catch {
     return problemJson(502, {

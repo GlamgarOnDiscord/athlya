@@ -20,7 +20,7 @@ import { getPublicApiUrl } from '../../../../../lib/env';
 
 import type { NextRequest } from 'next/server';
 
-const RequestBodySchema = z.object({ email: z.email().max(254) }).strict();
+const RequestBodySchema = z.strictObject({ email: z.email().max(254) });
 
 function problemJson(
   status: number,
@@ -71,6 +71,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         'cf-turnstile-token': turnstileToken,
       },
       body: JSON.stringify(parsed.data),
+      signal: AbortSignal.timeout(10_000),
+      cache: 'no-store',
     });
     // Forward upstream status verbatim — 204 on success, 4xx /
     // 5xx on rejections. Don't attempt to read the body when
