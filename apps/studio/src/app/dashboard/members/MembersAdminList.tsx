@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -201,11 +200,10 @@ function MemberRowItem({ member, locale, t }: MemberRowItemProps): ReactElement 
       <TableCell>
         <div className="flex items-center gap-3">
           {member.avatarUrl !== null && member.avatarUrl !== '' ? (
-            <Image
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
               src={member.avatarUrl}
               alt=""
-              width={32}
-              height={32}
               className="size-8 rounded-full border border-border object-cover"
             />
           ) : (

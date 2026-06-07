@@ -149,25 +149,14 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
    * is disabled, but the shape leaves room for it) reuses the same
    * key. The entry is released on resolve.
    */
-  const keysInFlightRef = useRef<Map<string, string> | null>(null);
-  if (keysInFlightRef.current === null) keysInFlightRef.current = new Map();
+  const keysInFlightRef = useRef<Map<string, string>>(new Map());
 
   /* --------------------------- fetch ------------------------------ */
-
-  const prevFetchDepsRef = useRef({ client, reloadNonce, bootResolved });
-  const depsChanged =
-    prevFetchDepsRef.current.client !== client ||
-    prevFetchDepsRef.current.reloadNonce !== reloadNonce ||
-    prevFetchDepsRef.current.bootResolved !== bootResolved;
-
-  if (depsChanged && bootResolved) {
-    prevFetchDepsRef.current = { client, reloadNonce, bootResolved };
-    setState((s) => ({ ...s, status: { kind: 'loading' } }));
-  }
 
   useEffect(() => {
     if (!bootResolved) return;
     let cancelled = false;
+    setState((s) => ({ ...s, status: { kind: 'loading' } }));
 
     const { from, to } = buildRange(new Date());
     const qs = new URLSearchParams({ from, to }).toString();
@@ -235,10 +224,10 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
   const handleBook = useCallback(
     async (classId: string): Promise<void> => {
       // Pick / mint the Idempotency-Key for this logical attempt.
-      let key = keysInFlightRef.current!.get(classId);
+      let key = keysInFlightRef.current.get(classId);
       if (key === undefined) {
         key = newIdempotencyKey();
-        keysInFlightRef.current!.set(classId, key);
+        keysInFlightRef.current.set(classId, key);
       }
 
       // Clear any stale per-card error before the new attempt.
@@ -302,7 +291,7 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
         }
       } finally {
         // Release the in-flight key regardless of outcome.
-        keysInFlightRef.current!.delete(classId);
+        keysInFlightRef.current.delete(classId);
         setState((s) => {
           if (!s.bookingInFlight.has(classId)) return s;
           const next = new Set(s.bookingInFlight);
