@@ -20,7 +20,7 @@ export interface CspOptions {
 
 const TURNSTILE_ORIGIN = 'https://challenges.cloudflare.com';
 
-export const CSP_REPORT_GROUP = 'athlya-csp';
+const CSP_REPORT_GROUP = 'athlya-csp';
 
 export function generateCsp({ nonce, apiUrl, reportUri, dev, isDev }: CspOptions): string {
   if (nonce.length === 0) {

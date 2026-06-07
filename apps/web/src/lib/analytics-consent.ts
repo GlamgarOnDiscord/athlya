@@ -39,13 +39,13 @@
  * `socialMedia` category) so old payloads do not collide with the
  * new shape.
  */
-export const ANALYTICS_CONSENT_KEY = 'athlya.analytics-consent.v1';
+const ANALYTICS_CONSENT_KEY = 'athlya.analytics-consent.v1';
 
 /**
  * 13 months in milliseconds — CNIL doctrine maximum durée du
  * consentement. Past this window we re-prompt the user.
  */
-export const ANALYTICS_CONSENT_TTL_MS = 13 * 30 * 24 * 60 * 60 * 1000;
+const ANALYTICS_CONSENT_TTL_MS = 13 * 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Snapshot of the user's consent for client-side analytics.
