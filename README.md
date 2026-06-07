@@ -6,12 +6,11 @@
 
 Alternative auto-hébergeable à bsport, Mywellness et Mindbody pour les studios boutique, chaînes mid-size, coachs indépendants et communautés sportives.
 
-[![CI unit](https://img.shields.io/badge/CI%20unit-lint%2Btests-22c55e?style=flat-square&logo=github-actions&logoColor=white)](.github/workflows/ci.yml)
-[![CI Docker PBT](https://img.shields.io/badge/CI%20Docker-PBT-22c55e?style=flat-square&logo=docker&logoColor=white)](.github/workflows/integration-docker.yml)
-[![pgTAP RLS](https://img.shields.io/badge/pgTAP%20RLS-SQL%20migrations-22c55e?style=flat-square&logo=postgresql&logoColor=white)](.github/workflows/pgtap.yml)
-[![OWASP ZAP](https://img.shields.io/badge/OWASP%20ZAP-staging%20var%20required-f59e0b?style=flat-square&logo=owasp&logoColor=white)](.github/workflows/zap-baseline.yml)
-[![k6 load](https://img.shields.io/badge/k6%20load-staging%20var%20required-f59e0b?style=flat-square&logo=k6&logoColor=white)](.github/workflows/load-test.yml)
-[![Deps audit](https://img.shields.io/badge/deps%20audit-daily-0ea5e9?style=flat-square&logo=npm&logoColor=white)](.github/workflows/deps-audit.yml)
+[![CI](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/ci.yml/badge.svg)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/ci.yml)
+[![Integration (Docker / PBT)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/integration-docker.yml/badge.svg)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/integration-docker.yml)
+[![pgTAP RLS](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/pgtap.yml/badge.svg)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/pgtap.yml)
+[![CodeQL](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/codeql.yml/badge.svg)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/codeql.yml)
+[![Daily deps audit](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/deps-audit.yml/badge.svg)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/deps-audit.yml)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-8b5cf6?style=flat-square)](#licence)
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -23,14 +22,14 @@ Alternative auto-hébergeable à bsport, Mywellness et Mindbody pour les studios
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Drizzle](https://img.shields.io/badge/Drizzle-ORM-c5f74f?style=flat-square&logo=drizzle&logoColor=black)](https://orm.drizzle.team/)
 [![Zod](https://img.shields.io/badge/Zod-4-3068b7?style=flat-square)](https://zod.dev/)
-[![Vitest](https://img.shields.io/badge/Vitest-3-6e9f18?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-4-6e9f18?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/)
 [![fast-check](https://img.shields.io/badge/fast--check-PBT-8b5cf6?style=flat-square)](https://fast-check.dev/)
 
 [![Tests](https://img.shields.io/badge/tests-1260%20✓-22c55e?style=flat-square)](#état-des-tests)
-[![Couverture domaines](<https://img.shields.io/badge/tâches-246%2F294%20(83.7%25)-0ea5e9?style=flat-square>)](.kiro/specs/athlya-platform/tasks.md)
-[![PBT](https://img.shields.io/badge/property--based-8%2F9-8b5cf6?style=flat-square)](.kiro/specs/athlya-platform/PROGRESS.md)
+[![Couverture domaines](<https://img.shields.io/badge/tâches-277%2F313%20(88.5%25)-0ea5e9?style=flat-square>)](.kiro/specs/athlya-platform/tasks.md)
+[![PBT](https://img.shields.io/badge/property--based-9%2F10-8b5cf6?style=flat-square)](.kiro/specs/athlya-platform/PROGRESS.md)
 [![RGPD](https://img.shields.io/badge/RGPD-by%20design-22c55e?style=flat-square)](#vie-privée--rgpd)
-[![Release](https://img.shields.io/badge/release-v1.0.0-22c55e?style=flat-square)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/release-v1.1.0-22c55e?style=flat-square)](CHANGELOG.md)
 
 </div>
 
@@ -177,7 +176,7 @@ graph TD
 
 | Niveau             | Outil                         | Nombre               |
 | ------------------ | ----------------------------- | -------------------- |
-| Unit + intégration | Vitest 3                      | ~790                 |
+| Unit + intégration | Vitest 4                      | ~1015                |
 | Property-based     | fast-check 3.23               | 9 invariants formels |
 | RLS PostgreSQL     | pgTAP en CI                   | ~60 assertions       |
 | E2E (prévu)        | Playwright                    | —                    |
@@ -246,7 +245,7 @@ wrangler secret put OTEL_EXPORTER_OTLP_HEADERS   --env staging
 
 ## État du projet
 
-**~252 / 294 tâches livrées (~86 %)** — v1.0 backend + web + studio. Mobile Expo (Epic 11, 0/13), AI coach et Stripe production-mature : roadmap post-1.0 — [`docs/mobile/README.md`](docs/mobile/README.md).
+**~277 / 313 tâches livrées (~88.5 %)** — v1.1 backend + web + studio. Mobile Expo (Epic 11, 0/13), AI coach et Stripe production-mature : roadmap post-1.0 — [`docs/mobile/README.md`](docs/mobile/README.md).
 
 Voir [`PROGRESS.md`](.kiro/specs/athlya-platform/PROGRESS.md) et [CHANGELOG.md](CHANGELOG.md) pour le détail.
 
