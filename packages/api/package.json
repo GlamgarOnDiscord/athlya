@@ -162,6 +162,6 @@
     "rimraf": "^6.0.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.0",
-    "wrangler": "^4.95.0"
+    "wrangler": "^4.98.0"
   }
 }
