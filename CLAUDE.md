@@ -19,8 +19,9 @@ Any code/config/docs change goes through the **`/ship`** workflow
    (`gh api .../issues/<n>/comments`, where CodeRabbit posts its summary) AND
    review bodies (`gh pr view <n> --json reviews`) — and apply the good ones
    BEFORE merge and BEFORE close. Re-check right before merging — reviews land late.
-7. **Merge** only when **ALL** checks are green (`--admin` only for a _proven_
-   flake): `gh pr merge <n> --squash --admin --delete-branch`.
+7. **Merge** only when **ALL** checks are green:
+   `gh pr merge <n> --squash --delete-branch` (add `--admin` only to bypass a
+   _proven_ flake, never as the default).
 
 Watch CI with the **`Monitor`** tool, never `sleep`. Rerun known flakes
 (Docker registry timeout, `round-trip` property seed) with `gh run rerun <id> --failed`.
@@ -28,7 +29,8 @@ Watch CI with the **`Monitor`** tool, never `sleep`. Rerun known flakes
 ## Hard rules
 
 - Code, comments, identifiers, commits: **English only**. No scaffolding comments.
-- Commits: conventional, **no Claude attribution**; use `tomcoudrieau@gmail.com`.
+- Commits: conventional, **no Claude attribution**; use the repo's configured
+  git identity (`git config user.name` / `user.email`).
 - Node 20 (`.nvmrc`, `engines`). pnpm ≥ 9. Don't bump `@types/node` past 20.
 - `format:check` is repo-wide — keep every tracked file prettier-clean.
 - In `packages/api` tests, read responses with the `readJson<T>(res)` helper,

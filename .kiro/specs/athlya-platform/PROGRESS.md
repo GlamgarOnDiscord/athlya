@@ -1,6 +1,6 @@
 # Athlya Platform — Progress & Remaining Work
 
-**Dernière mise à jour :** N2.13 R2 avatar upload livré — `PUT /v1/members/me/avatar` (PR #59 mergée) : R2 bucket adapter, stable key `avatars/{userId}/avatar`, `AvatarUploadNotConfiguredError` (mode dégradé 503), Content-Length pre-check, CORS `PUT` method, 6 unit tests.
+**Dernière mise à jour :** Session 2026-06 — durcissement sécurité + CI/DX. Fix isolation tenant `updateClass(studioId)` (#193), hardening auth password-reset (#195), révocation grant audit_log mort `athlya_cron` / migration 0012 (#203), restauration du check CI requis (#199), élimination du flake `round-trip` (#202), gate `pnpm preflight` + hook + skill `/ship` + dependabot grouping/auto-merge (#205). Compteur vérifié : **277 / 313 tâches**.
 **Tâches complétées :** Epic 14 (1/1), Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.8.1, CN.8.2, CN.9.2, CN.9.3 — cases parents cochées
 **Hardening tasks livrées :** 8 / 8 (H1 à H8) + 6 issues GitHub (#47–#53 #56) + 8 Dependabot alerts (PR #58)
 **Niveau 2 (live wiring) :** 13 / 13 items ✅ COMPLET (voir section dédiée)
@@ -62,8 +62,8 @@ Insérée entre Epic 8 et Epic 10. Règle les 4 vrais bloquants identifiés dans
 
 ## Épics partiels
 
-### Epic 7 — Checkpoint domain (0/1)
-- 7. Pending — `pnpm -r test` gate. Toutes les suites passent individuellement et `pnpm -r test` retourne exit code 0.
+### Epic 7 — Checkpoint domain (1/1) ✅
+- 7. Validé — `pnpm -r test` gate vert (exit 0), cohérent avec `tasks.md` (case cochée). Toutes les suites domaine passent.
 
 ### Epic 18 — Apple Health (0/1)
 - 18.1 HealthKit read — bloqué par Epic 11 (mobile Expo).
