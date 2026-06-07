@@ -2,35 +2,26 @@
  * Pure-TS audit log anonymisation — Sprint 13 / Slice 13.3 (Epic
  * B10.2).
  *
- * Pattern alternatif au SECURITY DEFINER `anonymize_user_audit()`
- * de la migration 0003. Cette implémentation TypeScript :
+ * ⚠️ NON CÂBLÉ EN PRODUCTION — INCOMPATIBLE AVEC L'IMMUTABILITÉ (issue #200).
  *
- *   1. Exécute deux UPDATE paramétrés sur `audit_log` qui scrubent
- *      les colonnes PII (`actor_id`, `metadata.email`,
- *      `metadata.userAgent`, `metadata.ip`) tout en préservant le
- *      row count pour la traçabilité forensique.
+ * Ce module exécute deux UPDATE paramétrés directs sur `audit_log` sous
+ * l'identité du role connecté (`CRON_DB_URL`, `athlya_cron`). Mais le
+ * trigger `audit_log_immutable()` (migration 0003) lève
+ * `audit_log is append-only` (SQLSTATE P0001) pour **tout role sauf
+ * `athlya_owner`** — un GRANT ou une POLICY ne change rien, le trigger
+ * s'exécute après le contrôle de privilège. Un UPDATE direct par
+ * `athlya_cron` échouera donc toujours.
  *
- *   2. N'a PAS besoin de la fonction SECURITY DEFINER ; l'identité
- *      d'exécution est celle du role connecté (`CRON_DB_URL`,
- *      typiquement `athlya_cron`).
+ * Le seul chemin d'anonymisation valide est la fonction SECURITY
+ * DEFINER `anonymize_user_audit()` (migration 0003), qui tourne en
+ * `athlya_owner` et que le trigger laisse passer. C'est elle que
+ * `worker.scheduled` appelle en production (voir `worker.ts`,
+ * `SELECT anonymize_user_audit($1)`), via l'EXECUTE accordé à
+ * `athlya_cron` en 0003. Le grant `UPDATE ON audit_log` du 0009 a été
+ * révoqué (migration 0012) car mort et trompeur.
  *
- * Pré-requis schema (migration `0009_audit_cron_grants.sql` à
- * livrer en slice future si jamais Neon refuse le `BYPASSRLS` du
- * 0003) :
- *
- *     -- audit_log doit autoriser UPDATE par `athlya_cron`
- *     CREATE POLICY audit_anonymize_cron ON audit_log
- *         FOR UPDATE TO athlya_cron USING (true);
- *     GRANT UPDATE (actor_id, metadata) ON audit_log TO athlya_cron;
- *
- * Tant que cette migration n'est pas en place, l'`anonymizeOne`
- * de la slice 13.2 reste branché sur le SECURITY DEFINER existant
- * (qui fonctionnera dès que migration 0003 sera appliquée via une
- * fenêtre de superuser temporaire).
- *
- * Ce module est exposé en alternative — le runner tente
- * `anonymizeOne` (SECURITY DEFINER), et si l'opérateur opte pour
- * le pattern pure-TS, il câble `anonymizeViaSql` à la place.
+ * Conservé uniquement comme référence du shape SQL ; ne pas le câbler
+ * sans d'abord retirer ou assouplir le trigger d'immutabilité.
  *
  * Algorithme par utilisateur :
  *   - 1 UPDATE sur les rows où `actor_id = $userId`
