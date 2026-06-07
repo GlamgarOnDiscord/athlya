@@ -76,7 +76,7 @@
     "@athlya/tsconfig": "workspace:*",
     "@fast-check/vitest": "^0.4.1",
     "@testcontainers/postgresql": "^11.0.0",
-    "@types/node": "^20.19.9",
+    "@types/node": "^25.9.2",
     "drizzle-orm": "^0.45.2",
     "eslint": "^9.39.1",
     "fast-check": "^3.23.2",
