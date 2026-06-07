@@ -439,10 +439,23 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
     },
     checkPasswordResetRateLimit: async (email: string) => {
       const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
-      const key = `pw-reset:${email.toLowerCase().trim()}`;
+      // Hash the email so Redis never stores raw PII and key
+      // cardinality stays bounded (mirrors loginBucketKey, S5-007).
+      const data = new TextEncoder().encode(email.toLowerCase().trim());
+      const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
+      const hex = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('')
+        .slice(0, 24);
+      const key = `pw-reset:${hex}`;
       const count = await redis.incr(key);
       if (count === 1) {
         await redis.expire(key, 86400); // 24h window
+      } else if ((await redis.ttl(key)) < 0) {
+        // A prior EXPIRE may have failed, leaving the counter with no
+        // TTL — re-arm it so a transient error can never turn the
+        // window into a permanent lockout.
+        await redis.expire(key, 86400);
       }
       return count <= 3;
     },
