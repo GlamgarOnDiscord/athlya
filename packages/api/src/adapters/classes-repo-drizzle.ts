@@ -193,18 +193,21 @@ export function createDrizzleDeleteClassRepo(db: AthlyaDbAny) {
 
 export function createDrizzleUpdateClassRepo(db: AthlyaDbAny): UpdateClassRepo {
   return {
-    async findById(classId: string): Promise<ClassRow | null> {
+    async findById(studioId: string, classId: string): Promise<ClassRow | null> {
       const rows = await withConnectionRetry(() =>
         db
           .select()
           .from(classes)
-          .where(and(eq(classes.id, classId), isNull(classes.deletedAt)))
+          .where(
+            and(eq(classes.id, classId), eq(classes.studioId, studioId), isNull(classes.deletedAt)),
+          )
           .limit(1),
       );
       return rows[0] ?? null;
     },
 
     async updateClassOptimistic(
+      studioId: string,
       classId: string,
       patch: UpdateClassFields,
       expectedVersion: number,
@@ -245,6 +248,7 @@ export function createDrizzleUpdateClassRepo(db: AthlyaDbAny): UpdateClassRepo {
           .where(
             and(
               eq(classes.id, classId),
+              eq(classes.studioId, studioId),
               eq(classes.version, expectedVersion),
               isNull(classes.deletedAt),
             ),
