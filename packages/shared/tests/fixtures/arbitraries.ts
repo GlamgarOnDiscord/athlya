@@ -298,7 +298,18 @@ export const auditLogArb: fc.Arbitrary<AuditLog> = fc.record({
   targetType: fc.option(fc.string({ maxLength: 60 }), { nil: null }),
   targetId: fc.option(fc.string({ maxLength: 80 }), { nil: null }),
   metadata: fc
-    .dictionary(fc.string({ minLength: 1, maxLength: 40 }), fc.jsonValue(), { maxKeys: 8 })
+    .dictionary(
+      // Exclude `__proto__` / `constructor` / `prototype`: as object keys
+      // they survive a JSON round-trip as own properties inconsistently
+      // (and are a prototype-pollution footgun), which breaks structural
+      // identity. They never occur in real audit metadata, which our own
+      // code controls.
+      fc
+        .string({ minLength: 1, maxLength: 40 })
+        .filter((k) => k !== '__proto__' && k !== 'constructor' && k !== 'prototype'),
+      fc.jsonValue(),
+      { maxKeys: 8 },
+    )
     .map((v) => JSON.parse(JSON.stringify(v)) as Record<string, unknown>),
   createdAt: isoDateTimeArb,
 });
