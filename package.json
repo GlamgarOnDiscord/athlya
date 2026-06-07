@@ -15,6 +15,8 @@
     "typecheck": "turbo run typecheck",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
+    "preflight": "pnpm install --frozen-lockfile && pnpm format:check && pnpm lint && pnpm typecheck",
+    "prepare": "git config core.hooksPath .githooks 2>/dev/null || exit 0",
     "clean": "turbo run clean && rimraf node_modules .turbo",
     "seed:all": "node packages/db/scripts/migrate.mjs && node packages/db/scripts/seed-dev.mjs && node packages/db/scripts/seed-classes.mjs",
     "check:dead": "knip --exclude duplicates",

@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+# Mirror the required CI gate ("Lint, typecheck, and tests") locally so a
+# red check is caught before the push instead of after a ~5 min CI round-trip.
+#
+# Runs: frozen-lockfile install + prettier --check + lint + typecheck.
+# Tests are intentionally excluded (slow + Docker-gated/flaky); CI still
+# runs them. Skip in a pinch with `git push --no-verify`.
+#
+# Wired via `git config core.hooksPath .githooks` (set by the root
+# package.json `prepare` script on every `pnpm install`).
+
+echo "▶ pre-push: running pnpm preflight (frozen install + format:check + lint + typecheck)…"
+if ! pnpm preflight; then
+  echo "✖ preflight failed — fix locally (try \`pnpm format\`) before pushing, or \`git push --no-verify\` to bypass." >&2
+  exit 1
+fi
+echo "✔ preflight passed."
