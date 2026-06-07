@@ -62,7 +62,7 @@
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",
     "@athlya/tsconfig": "workspace:*",
-    "@electric-sql/pglite": "^0.4.6",
+    "@electric-sql/pglite": "^0.5.1",
     "@fast-check/vitest": "^0.4.1",
     "@testcontainers/postgresql": "^11.0.0",
     "@types/node": "^20.19.9",
@@ -72,6 +72,6 @@
     "rimraf": "^6.0.1",
     "testcontainers": "^11.0.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.8"
   }
 }
