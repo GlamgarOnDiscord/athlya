@@ -99,6 +99,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         'cf-turnstile-token': turnstileToken,
       },
       body: JSON.stringify(parsed.data),
+      signal: AbortSignal.timeout(10_000),
+      cache: 'no-store',
     });
   } catch {
     return problemJson(502, {

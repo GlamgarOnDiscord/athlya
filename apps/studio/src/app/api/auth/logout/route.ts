@@ -30,6 +30,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           authorization: authHeader,
           'content-type': 'application/json',
         },
+        signal: AbortSignal.timeout(10_000),
+        cache: 'no-store',
       });
     } catch {
       // Best-effort upstream logout — local session always clears.
