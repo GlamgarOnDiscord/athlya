@@ -81,9 +81,11 @@ git checkout -b docs/description-courte
 pnpm preflight   # install --frozen-lockfile && format:check && lint && typecheck
 ```
 
-`preflight` reproduit **exactement** les gates rapides du job CI requis
-(`Lint, typecheck, and tests`), donc un rouge déterministe est attrapé en
-local en ~30 s au lieu d'un aller-retour CI de ~5 min. Le hook
+`preflight` reproduit les gates **rapides et déterministes** du job CI requis
+`Lint, typecheck, and tests` — soit `format:check`, `lint`, `typecheck` (mais
+**pas** la suite de tests, qui ne tourne qu'en CI). Un rouge déterministe est
+donc attrapé en local en ~30 s au lieu d'un aller-retour CI de ~5 min ; lance
+`pnpm -r test` toi-même si ton changement touche de la logique. Le hook
 `.githooks/pre-push` (câblé par le script `prepare` au `pnpm install`) le
 lance automatiquement — bypass ponctuel : `git push --no-verify`.
 

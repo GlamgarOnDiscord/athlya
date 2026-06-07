@@ -15,8 +15,10 @@ Any code/config/docs change goes through the **`/ship`** workflow
    = `install --frozen-lockfile && format:check && lint && typecheck`.
 5. **PR** with `Closes #XX`.
 6. ⭐ **AI bot reviews are mandatory**: read ALL CodeRabbit/cubic/Copilot
-   comments (`gh api .../pulls/<n>/comments`) and apply the good ones BEFORE
-   merge and BEFORE close. Re-check right before merging — reviews land late.
+   feedback — inline (`gh api .../pulls/<n>/comments`), PR conversation
+   (`gh api .../issues/<n>/comments`, where CodeRabbit posts its summary) AND
+   review bodies (`gh pr view <n> --json reviews`) — and apply the good ones
+   BEFORE merge and BEFORE close. Re-check right before merging — reviews land late.
 7. **Merge** only when **ALL** checks are green (`--admin` only for a _proven_
    flake): `gh pr merge <n> --squash --admin --delete-branch`.
 

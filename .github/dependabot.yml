@@ -38,3 +38,8 @@ updates:
       github-actions:
         patterns:
           - '*'
+        # Minor/patch only — keep action majors as individual PRs (they break
+        # things too) so they don't block the minor/patch auto-merge flow.
+        update-types:
+          - minor
+          - patch
