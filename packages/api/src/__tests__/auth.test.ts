@@ -36,7 +36,7 @@ import { __resetJwksCacheForTests, jwtAuth, type JwksKeyResolver } from '../midd
 import { buildApp } from '../worker.js';
 
 import type { AthlyaBindings } from '../types.js';
-import type { JWK, KeyLike } from 'jose';
+import type { JWK } from 'jose';
 
 /* ------------------------------------------------------------------ */
 /*  Fixtures                                                           */
@@ -79,8 +79,8 @@ function mockEnv(overrides: Partial<AthlyaBindings> = {}): AthlyaBindings {
 /** RSA 2048-bit keypair reused across all tests in this suite.
  * Minted once in `beforeAll` to amortise the ~100 ms generation cost. */
 interface Keypair {
-  privateKey: KeyLike;
-  publicKey: KeyLike;
+  privateKey: CryptoKey;
+  publicKey: CryptoKey;
   publicJwk: JWK;
 }
 
@@ -136,7 +136,7 @@ function buildLocalResolver(publicJwk: JWK, kid: string): JwksKeyResolver {
  * to those exact defaults).
  */
 async function signTestToken(
-  privateKey: KeyLike,
+  privateKey: CryptoKey,
   claims: Record<string, unknown>,
   opts: {
     kid?: string;

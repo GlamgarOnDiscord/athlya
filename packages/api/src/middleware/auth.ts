@@ -64,7 +64,7 @@ import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
 import { createLogger } from '../logging.js';
 
 import type { AthlyaBindings } from '../types.js';
-import type { FlattenedJWSInput, JWSHeaderParameters, JWTPayload, KeyLike } from 'jose';
+import type { FlattenedJWSInput, JWSHeaderParameters, JWTPayload } from 'jose';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -156,7 +156,7 @@ const JWKS_COOLDOWN_MS = 30 * 1_000;
 export type JwksKeyResolver = (
   protectedHeader?: JWSHeaderParameters,
   token?: FlattenedJWSInput,
-) => Promise<KeyLike>;
+) => Promise<CryptoKey>;
 
 /**
  * One getter per distinct `JWT_JWKS_URL`. Keeping this in module
