@@ -29,7 +29,7 @@ Alternative auto-hébergeable à bsport, Mywellness et Mindbody pour les studios
 [![Couverture domaines](<https://img.shields.io/badge/tâches-277%2F313%20(88.5%25)-0ea5e9?style=flat-square>)](.kiro/specs/athlya-platform/tasks.md)
 [![PBT](https://img.shields.io/badge/property--based-9%2F10-8b5cf6?style=flat-square)](.kiro/specs/athlya-platform/PROGRESS.md)
 [![RGPD](https://img.shields.io/badge/RGPD-by%20design-22c55e?style=flat-square)](#vie-privée--rgpd)
-[![Release](https://img.shields.io/badge/release-v1.1.0-22c55e?style=flat-square)](CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/changelog-v1.1.0-22c55e?style=flat-square)](CHANGELOG.md)
 
 </div>
 

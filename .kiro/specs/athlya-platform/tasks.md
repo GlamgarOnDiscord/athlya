@@ -1,10 +1,10 @@
 # Implementation Plan: Athlya Platform
 
-> **🚀 v1.0.0 released — Backend production-ready (Niveau Série A)**
+> **🚀 v1.1.0 — Backend production-ready (Niveau Série A) + apps web/studio**
 >
 > 277 / 313 tâches cochées (88.5 %). Score critique 9.95 / 10. ~1015 tests verts cumulés. Voir [`CHANGELOG.md`](../../../CHANGELOG.md) pour les highlights.
 >
-> Les 36 tâches restantes (Mobile Epic 10, AI/Programs Epics 21-25, Niveau Stripe-mature CN.6.3/CN.6.4/CN.7/CN.8/CN.9/CN.10) sont **renvoyées vers [`docs/roadmap/post-1.0.md`](../../../docs/roadmap/post-1.0.md)** et ne bloquent pas la mise en production v1.0.0. Elles restent listées ci-dessous pour traçabilité, mais leur prise en charge dépend d'un déclencheur explicite (business, ops, sécurité ou produit) — voir critères de promotion dans la roadmap post-1.0.
+> Les 36 tâches restantes (Mobile Epic 10, AI/Programs Epics 21-25, Niveau Stripe-mature CN.6.3/CN.6.4/CN.7/CN.8/CN.9/CN.10) sont **renvoyées vers [`docs/roadmap/post-1.0.md`](../../../docs/roadmap/post-1.0.md)** et ne bloquent pas la mise en production. Elles restent listées ci-dessous pour traçabilité, mais leur prise en charge dépend d'un déclencheur explicite (business, ops, sécurité ou produit) — voir critères de promotion dans la roadmap post-1.0.
 >
 > Sprint 16 livré : SP16.1b → SP16.7 (dépendances bumped, pgTAP câblé, cascade RGPD skip retiré, flake round-trip résolu).
 

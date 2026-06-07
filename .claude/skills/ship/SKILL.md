@@ -40,8 +40,8 @@ Understand the real shape before touching anything.
 ## 4. Implement (EPCT: explore → plan → code → test)
 
 - Match surrounding code style. Code/comments/identifiers in **English**.
-- No scaffolding comments. No Claude attribution in commits; use the user's
-  name/email (`tomcoudrieau@gmail.com`).
+- No scaffolding comments. No Claude attribution in commits; commit with the
+  repo's configured git identity (`git config user.name` / `user.email`).
 - Add/adjust tests for new logic.
 
 ## 5. ⭐ Local preflight (BEFORE pushing)
@@ -96,10 +96,10 @@ The `.githooks/pre-push` hook runs it automatically on push — let it.
 - Branch protection: only `Lint, typecheck, and tests` is _required_;
   `enforce_admins: false`, `required_conversation_resolution: true`, strict on.
 - **Policy: wait for ALL checks green** (pgTAP / axe / CodeQL / ZAP too), not
-  just the required one. Use `--admin` **only** to bypass a check that is a
-  _proven_ flake.
-- `gh pr merge <n> --squash --admin --delete-branch`. Verify the green run's
-  head sha == PR HEAD first.
+  just the required one.
+- Default merge: `gh pr merge <n> --squash --delete-branch`. Add `--admin`
+  **only** to bypass a check that is a _proven_ flake — never as the default.
+- Verify the green run's head sha == PR HEAD first.
 - Issue auto-closes via `Closes #XX`.
 
 ## 10. After merge
@@ -124,4 +124,4 @@ The `.githooks/pre-push` hook runs it automatically on push — let it.
 | Rerun flake    | `gh run rerun <id> --failed`                                                                               |
 | Bot reviews    | inline `.../pulls/<n>/comments` + conversation `.../issues/<n>/comments` + `gh pr view <n> --json reviews` |
 | Resolve thread | GraphQL `resolveReviewThread`                                                                              |
-| Merge          | `gh pr merge <n> --squash --admin --delete-branch` (all checks green)                                      |
+| Merge          | `gh pr merge <n> --squash --delete-branch` (all green; `--admin` only for a proven flake)                  |
