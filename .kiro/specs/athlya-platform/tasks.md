@@ -1162,7 +1162,7 @@ Post-launch, à itérer dans l'année.
 #### Developer experience
 
 - [x] CN.9.1 OpenAPI 3.1 généré depuis Hono — `@hono/zod-openapi` génère la spec depuis les routes Zod. `openapi-typescript` génère client TS pour `apps/web` + `apps/mobile`. Zero drift de types.
-- [~] CN.9.2 Changesets + changelog auto — **retiré (#214)**. Setup no-op : les `@athlya/*` sont des packages internes `workspace:*` jamais publiés sur npm, donc changesets ne produisait jamais de PR "Version Packages" (`release.yml` tournait à vide). Le `CHANGELOG.md` racine est tenu à la main (Keep a Changelog). Workflow + `.changeset/` + scripts + dep supprimés.
+- [x] CN.9.2 Changesets + changelog auto — **RETIRÉ (#214)**. Setup no-op : les `@athlya/*` sont des packages internes `workspace:*` jamais publiés sur npm, donc changesets ne produisait jamais de PR "Version Packages" (`release.yml` tournait à vide). Le `CHANGELOG.md` racine est tenu à la main (Keep a Changelog). Workflow + `.changeset/` + scripts + dep supprimés.
 - [x] CN.9.3 Testcontainers → PGlite en local — PBT P4 (RGPD cascade) et P7 (tenant isolation) s'exécutent sans Docker sur Windows via `@electric-sql/pglite`. Testcontainers réservé au CI Linux. P1 (booking) reste `describe.skip` (bug withTenant hors scope).
 - [x] CN.9.4 `/health/ready` distinct de `/health` (slice 11.2 livrée Vague 40)
 
