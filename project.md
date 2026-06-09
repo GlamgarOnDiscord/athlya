@@ -834,7 +834,6 @@ athlya-platform/
 │       ├── eslint/
 │       ├── tsconfig/
 │       └── tailwind/
-├── .changeset/                     # Versioning packages
 ├── turbo.json
 ├── pnpm-workspace.yaml
 ├── package.json

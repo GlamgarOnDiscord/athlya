@@ -188,6 +188,8 @@ Premier jalon stable. Le backend est verrouillé Niveau Série A : auth hardenin
 
 - **#201 / #202** — `pnpm preflight` (mirror du gate CI requis) + hook `.githooks/pre-push` auto-câblé ; Turbo remote cache activé. Coupe les allers-retours CI rouges déterministes.
 - **#204 / #205** — Workflow codifié : `CLAUDE.md` racine, section `CONTRIBUTING`, skill Claude `/ship`. Dependabot **groupé** (minor/patch dev + prod + actions) + **auto-merge** des minor/patch (majors isolés).
+- **#214 / #215** — Retrait de la machinerie changesets morte (`release.yml` no-op + `.changeset/` + scripts + dep) : les `@athlya/*` ne sont jamais publiés sur npm. Le `CHANGELOG.md` racine reste tenu à la main (politique documentée dans CONTRIBUTING).
+- **jose 5 → 6** (#210), **testcontainers 11 → 12** (#211), **fetch-metadata v3** (#206) — majors testés en local puis mergés ; `@types/node` 24 (#209) tenu à `^20`. Migration jose `KeyLike → CryptoKey` (5 sites, auth 123/123).
 
 ### Docs — Session 2026-06
 

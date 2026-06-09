@@ -271,6 +271,14 @@ Suivre le template. Au minimum :
 - Les tâches des specs (Epic 8.3, H4, etc.) sont déjà découpées à cette granularité
 - Si c'est gros, découper en plusieurs PR liées
 
+### Changelog
+
+Le [`CHANGELOG.md`](CHANGELOG.md) racine est **tenu à la main** (format
+[Keep a Changelog](https://keepachangelog.com/)). Ajouter une entrée sous
+`## [Unreleased]` pour tout changement notable (sécurité, feature, fix, breaking).
+Il n'y a **pas** d'automatisation changesets : les `@athlya/*` sont des packages
+internes (`workspace:*`) jamais publiés sur npm, donc rien à versionner/publier.
+
 ---
 
 ## Ce qui ne sera pas mergé
