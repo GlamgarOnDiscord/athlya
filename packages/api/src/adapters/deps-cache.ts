@@ -51,6 +51,13 @@ import type { AthlyaBindings } from '../types.js';
 export const dbHttpCache = new Map<string, AthlyaDbHttp>();
 
 /**
+ * Separate cache for EU read-replica handles (CN.8.3). Kept distinct
+ * from {@link dbHttpCache} so a replica URL that happens to collide
+ * with a primary URL in a test never cross-populates the caches.
+ */
+export const dbHttpEuCache = new Map<string, AthlyaDbHttp>();
+
+/**
  * Cache of Upstash Redis clients keyed on `${url}::${token}`. The
  * Redis client is itself stateless (REST over `fetch`), but the
  * constructor allocates a few internal helpers that are cheap to
@@ -90,6 +97,45 @@ export function getOrCreateDbHttp(url: string): AthlyaDbHttp {
     dbHttpCache.set(url, db);
   }
   return db;
+}
+
+/**
+ * Return the EU read-replica handle when `euUrl` is provided, using a
+ * dedicated cache so primary and replica handles never alias each other.
+ */
+function getOrCreateDbHttpEu(euUrl: string): AthlyaDbHttp {
+  let db = dbHttpEuCache.get(euUrl);
+  if (db === undefined) {
+    db = createDbHttp(euUrl);
+    dbHttpEuCache.set(euUrl, db);
+  }
+  return db;
+}
+
+/**
+ * Choose the read DB handle based on the Cloudflare request continent.
+ *
+ * When `env.DB_URL_EU` is set **and** `continent` is `'EU'`, the EU
+ * read-replica is returned to cut cross-Atlantic round-trip latency
+ * from ~100 ms to ~15-20 ms. In all other cases the primary handle is
+ * returned so behaviour is unchanged for non-EU traffic and for deploys
+ * that have not yet provisioned a replica.
+ *
+ * Writes must always go through {@link getOrCreateWriteDb}; never route
+ * a mutation through this function.
+ *
+ * @param env       - Worker bindings (reads `DB_URL` and optional `DB_URL_EU`).
+ * @param continent - Value of `request.cf?.continent` at the call site.
+ *                    `undefined` → primary used (conservative fallback).
+ */
+export function getOrCreateDbHttpForRegion(
+  env: { readonly DB_URL: string; readonly DB_URL_EU?: string },
+  continent: string | undefined,
+): AthlyaDbHttp {
+  if (env.DB_URL_EU !== undefined && env.DB_URL_EU.length > 0 && continent === 'EU') {
+    return getOrCreateDbHttpEu(env.DB_URL_EU);
+  }
+  return getOrCreateDbHttp(env.DB_URL);
 }
 
 /**
@@ -145,6 +191,7 @@ export function getOrCreateWriteDb(env: AthlyaBindings): AthlyaDb {
  */
 export function resetAllDepsCachesForTests(): void {
   dbHttpCache.clear();
+  dbHttpEuCache.clear();
   redisCache.clear();
   writeDbCache.clear();
 }

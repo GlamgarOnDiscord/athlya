@@ -264,7 +264,10 @@ const notImplemented = (what: string): never => {
  * capture that keeps the lazy facade alive across Cloudflare's
  * Worker isolate lifecycle.
  */
-export function buildDefaultDeps(env: AthlyaBindings): DomainDeps {
+export function buildDefaultDeps(
+  env: AthlyaBindings,
+  cf?: { readonly continent?: string },
+): DomainDeps {
   // Sprint-10 SP10.1 (Vague 38, critique C1.1) — fail-fast on
   // missing secrets in production / staging. Pattern 12-factor
   // App: a service MUST refuse to start when its required
@@ -334,7 +337,7 @@ export function buildDefaultDeps(env: AthlyaBindings): DomainDeps {
   // Neon credentials keep the integration-chain assertions intact.
   const hasMembersSecrets = typeof env.DB_URL === 'string' && env.DB_URL.length > 0;
   const members: MembersDeps = hasMembersSecrets
-    ? buildMembersDeps(env)
+    ? buildMembersDeps(env, cf)
     : {
         getProfile: () => notImplemented('members.getProfile'),
         updateProfile: () => notImplemented('members.updateProfile'),
@@ -351,7 +354,7 @@ export function buildDefaultDeps(env: AthlyaBindings): DomainDeps {
   const hasReservationsSecrets =
     hasMembersSecrets && typeof env.REDIS_URL === 'string' && env.REDIS_URL.length > 0;
   const classes = hasReservationsSecrets
-    ? buildClassesDeps(env)
+    ? buildClassesDeps(env, cf)
     : {
         listClasses: () => notImplemented('reservations.listClasses'),
         searchClasses: () => notImplemented('reservations.searchClasses'),
@@ -360,7 +363,7 @@ export function buildDefaultDeps(env: AthlyaBindings): DomainDeps {
         deleteClass: () => notImplemented('classes.deleteClass'),
       };
   const reservations = hasReservationsSecrets
-    ? buildReservationsDeps(env)
+    ? buildReservationsDeps(env, cf)
     : {
         bookClass: () => notImplemented('reservations.bookClass'),
         cancelReservation: () => notImplemented('reservations.cancelReservation'),

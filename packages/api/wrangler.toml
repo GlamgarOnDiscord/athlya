@@ -373,6 +373,7 @@ class_name = "ClassCapacityDO"
 # Secrets are set via:
 #   wrangler secret put REDIS_TOKEN    --env staging
 #   wrangler secret put DB_URL         --env staging
+#   wrangler secret put DB_URL_EU      --env staging   # optional — Neon EU read replica (CN.8.3)
 #   wrangler secret put JWT_JWKS_URL   --env staging
 #   wrangler secret put SENTRY_DSN     --env staging   # optional
 # and NEVER land in this file.
@@ -474,6 +475,7 @@ class_name = "ClassCapacityDO"
 # Secrets are set via:
 #   wrangler secret put REDIS_TOKEN    --env production
 #   wrangler secret put DB_URL         --env production
+#   wrangler secret put DB_URL_EU      --env production  # optional — Neon EU read replica (CN.8.3)
 #   wrangler secret put JWT_JWKS_URL   --env production
 #   wrangler secret put SENTRY_DSN     --env production
 # and NEVER land in this file.

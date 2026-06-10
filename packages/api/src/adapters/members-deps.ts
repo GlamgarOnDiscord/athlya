@@ -45,7 +45,7 @@ import { publish } from '../events/publish.js';
 
 import { createR2AvatarUploadStore } from './avatar-upload-store-r2.js';
 import {
-  getOrCreateDbHttp,
+  getOrCreateDbHttpForRegion,
   primeDbHttpForTests,
   resetAllDepsCachesForTests,
 } from './deps-cache.js';
@@ -133,19 +133,22 @@ function buildEventPublisher(env: AthlyaBindings): {
  * per-isolate cache and builds the lightweight adapter wrappers
  * fresh per call.
  */
-export function buildMembersDeps(env: AthlyaBindings): MembersDeps {
+export function buildMembersDeps(
+  env: AthlyaBindings,
+  cf?: { readonly continent?: string },
+): MembersDeps {
   const now = () => Date.now();
   const events = buildEventPublisher(env);
 
   return {
     async getProfile(userId): Promise<MemberProfile> {
-      const db = getOrCreateDbHttp(env.DB_URL);
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
       const repo = createDrizzleMemberRepo(db);
       return svcGetProfile(userId, { repo });
     },
 
     async updateProfile(userId: string, patch: UpdateProfileRequest): Promise<MemberProfile> {
-      const db = getOrCreateDbHttp(env.DB_URL);
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
       const repo = createDrizzleMemberRepo(db);
       return svcUpdateProfile(userId, patch, { repo });
     },
@@ -157,14 +160,14 @@ export function buildMembersDeps(env: AthlyaBindings): MembersDeps {
         env.ENVIRONMENT,
       );
       const avatarUrl = await store.putAvatar(userId, contentType, body);
-      const db = getOrCreateDbHttp(env.DB_URL);
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
       const repo = createDrizzleMemberRepo(db);
       await svcUpdateProfile(userId, { avatarUrl }, { repo });
       return { avatarUrl };
     },
 
     async updateConsents(userId: string, input: UpdateConsentsRequest) {
-      const db = getOrCreateDbHttp(env.DB_URL);
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
       const consentsRepo = createDrizzleConsentsRepo(db);
       const audit = createDrizzleAuditLogWriter(db);
       return svcUpdateConsents(userId, input, {
@@ -175,7 +178,7 @@ export function buildMembersDeps(env: AthlyaBindings): MembersDeps {
     },
 
     async enqueueExport(userId: string): Promise<{ jobId: string }> {
-      const db = getOrCreateDbHttp(env.DB_URL);
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
       const jobs = createDrizzleExportJobStore(db);
       const result: EnqueueExportResult = await svcEnqueueExport(userId, {
         jobs,
@@ -195,7 +198,7 @@ export function buildMembersDeps(env: AthlyaBindings): MembersDeps {
       requesterRole: 'admin' | 'coach',
       opts,
     ): Promise<MembersPage> {
-      const db = getOrCreateDbHttp(env.DB_URL);
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
       const repo = createDrizzleMemberRepo(db);
       const role: Role = requesterRole;
       // Project the route-level `ListMembersQuery` shape onto
