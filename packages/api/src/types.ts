@@ -387,6 +387,20 @@ export interface AthlyaBindings {
    * Format: `postgresql://athlya_cron:...@host/athlya?sslmode=require`
    */
   readonly CRON_DB_URL?: string;
+
+  /**
+   * Neon read-replica connection string for the EU region (CN.8.3).
+   *
+   * When set, read-only queries originating from European Cloudflare
+   * colos (`cf.continent === 'EU'`) are routed to this replica instead
+   * of the primary `DB_URL`. Writes always use the primary.
+   *
+   * Absent → zero behaviour change; every query uses `DB_URL` as before.
+   *
+   * Provisioned via:
+   *   `wrangler secret put DB_URL_EU --env production`
+   */
+  readonly DB_URL_EU?: string;
 }
 
 /* ------------------------------------------------------------------ */
