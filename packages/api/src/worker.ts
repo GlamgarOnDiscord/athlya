@@ -769,15 +769,18 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
     })(c, next);
   });
 
-  // 6.5. B5.3 — Compress /v1/* responses that exceed the 1 KB threshold.
-  //      Uses CompressionStream (Cloudflare Workers + Node 20) to
-  //      auto-negotiate gzip or deflate from Accept-Encoding. Cloudflare's
-  //      CDN compresses transparently at the edge for cached responses;
-  //      this middleware covers direct API clients (mobile, CI, preview
-  //      environments) that bypass CDN. The middleware skips HEAD requests,
-  //      already-encoded bodies, Cache-Control: no-transform, and bodies
-  //      below 1 KB. Strong ETags are weakened to W/ETag per RFC 7232
-  //      (compressed representation differs byte-for-byte from the original).
+  // 6.5. B5.3 — Compress /v1/* responses via Accept-Encoding negotiation.
+  //      Uses CompressionStream (Cloudflare Workers + Node 20) to serve
+  //      gzip or deflate. Cloudflare CDN also compresses at the edge for
+  //      cached responses; this middleware covers direct API clients (mobile,
+  //      CI, preview environments) that bypass CDN. Skips HEAD requests,
+  //      already-encoded bodies, and Cache-Control: no-transform.
+  //      Note: the built-in 1 KB threshold only fires when the response
+  //      carries a Content-Length header. Workers responses from c.json()
+  //      typically omit Content-Length, so small JSON bodies will also be
+  //      compressed when Accept-Encoding is present — acceptable given
+  //      compression overhead is negligible at this scale. Strong ETags are
+  //      weakened to W/ETag per RFC 7232.
   app.use('/v1/*', compress());
 
   // 7. Tenant claim guard — Sprint 1 / Slice 1.4 (Sprint-1 SP1.5,

@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 
-// A body large enough to exceed the 1 KB threshold.
-// JSON.stringify wraps it in {"data":"xxx..."} — ~2014 bytes total.
+// ~2014 bytes — large enough to trigger compression regardless of threshold.
 const LARGE_PAYLOAD = { data: 'x'.repeat(2000) };
 
-// A body small enough to stay below the 1 KB threshold.
+// Small payload — used to document that Workers/Fetch responses from c.json()
+// do NOT set Content-Length, so Hono's 1 KB threshold guard is bypassed and
+// small bodies are compressed too when Accept-Encoding is present.
 const SMALL_PAYLOAD = { ok: true };
 
 // A strong ETag value (without W/ prefix).
@@ -16,16 +17,7 @@ function buildTestApp(): Hono {
   const app = new Hono();
   app.use('*', compress());
   app.get('/large', (c) => c.json(LARGE_PAYLOAD));
-  app.get('/small', (c) => {
-    // Explicitly set Content-Length so the compress() threshold check fires.
-    // Without it, Hono's test harness does not add Content-Length, and the
-    // middleware's `contentLength && contentLength < 1024` guard is skipped.
-    const body = JSON.stringify(SMALL_PAYLOAD);
-    return c.body(body, 200, {
-      'content-type': 'application/json',
-      'content-length': String(body.length),
-    });
-  });
+  app.get('/small', (c) => c.json(SMALL_PAYLOAD));
   app.get('/etag', (c) => {
     // c.header() must be called before c.json() so the header is included
     // in the Response created by newResponse().
@@ -61,13 +53,16 @@ describe('compress middleware', () => {
     expect(res.headers.get('content-encoding')).toBeNull();
   });
 
-  it('does not compress a response below the 1 KB threshold', async () => {
+  // Workers/Fetch responses from c.json() do not emit Content-Length, so
+  // Hono's built-in 1 KB threshold guard does not fire. Small JSON bodies
+  // are therefore also compressed when Accept-Encoding is present.
+  it('compresses a small c.json() response because Content-Length is absent', async () => {
     const app = buildTestApp();
     const res = await app.request('/small', {
       headers: { 'accept-encoding': 'gzip' },
     });
     expect(res.status).toBe(200);
-    expect(res.headers.get('content-encoding')).toBeNull();
+    expect(res.headers.get('content-encoding')).toBe('gzip');
   });
 
   it('weakens a strong ETag to a weak ETag when compressing (RFC 7232)', async () => {
