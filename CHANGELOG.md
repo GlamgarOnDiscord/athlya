@@ -186,6 +186,7 @@ Premier jalon stable. Le backend est verrouillé Niveau Série A : auth hardenin
 
 ### Performance — Session 2026-06
 
+- **#218 / #222 — CN.8.3** — Routage des lectures vers un réplica Neon EU (`DB_URL_EU`) quand `cf.continent === 'EU'`. Handle EU mis en cache par isolate dans `dbHttpEuCache` (séparé de `dbHttpCache`). Selectors `getOrCreateDbHttpForRegion` câblés sur tous les read-paths : `listClasses`, `searchClasses`, `listMyReservations`, `getProfile`, `updateProfile`, `uploadAvatar`, `updateConsents`, `enqueueExport`, `listMembersByStudio`. Les write-paths restent sur le primaire. `cf.continent` propagé depuis `worker.ts` via `buildDefaultDeps(env, cf)`. 8 tests unitaires (mock `@athlya/db/client`).
 - **#216 / #217 — B5.3** — Middleware Hono `compress()` monté sur `/v1/*` : négociation `Accept-Encoding` gzip/deflate, affaiblissement des ETags forts en `W/ETag` (RFC 7232). Couvre les clients directs (mobile, CI, preview environments) qui bypasse le CDN Cloudflare. Note comportementale documentée : le seuil 1 Ko ne s'applique qu'en présence du header `Content-Length` — les réponses `c.json()` (Workers/Fetch runtime) ne le positionnent pas, donc les petits payloads sont également compressés. 6 tests unitaires.
 
 ### CI / DX — Session 2026-06
