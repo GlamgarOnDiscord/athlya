@@ -184,6 +184,10 @@ Premier jalon stable. Le backend est verrouillé Niveau Série A : auth hardenin
 
 - **#196 / #197** — Nettoyage qualité (suppression composants UI morts + deps `react-day-picker` / `shadcn`, `cursorRef`, metadata SEO, skip-link a11y). Reverts des changements react-doctor régressifs signalés en review (next/image sur avatars distants / `data:`, lazy-init `CookieBanner` ↦ hydration mismatch).
 
+### Performance — Session 2026-06
+
+- **#216 / #217 — B5.3** — Middleware Hono `compress()` monté sur `/v1/*` : négociation `Accept-Encoding` gzip/deflate, affaiblissement des ETags forts en `W/ETag` (RFC 7232). Couvre les clients directs (mobile, CI, preview environments) qui bypasse le CDN Cloudflare. Note comportementale documentée : le seuil 1 Ko ne s'applique qu'en présence du header `Content-Length` — les réponses `c.json()` (Workers/Fetch runtime) ne le positionnent pas, donc les petits payloads sont également compressés. 6 tests unitaires.
+
 ### CI / DX — Session 2026-06
 
 - **#201 / #202** — `pnpm preflight` (mirror du gate CI requis) + hook `.githooks/pre-push` auto-câblé ; Turbo remote cache activé. Coupe les allers-retours CI rouges déterministes.
