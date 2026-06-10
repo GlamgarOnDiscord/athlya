@@ -25,7 +25,7 @@ on:
         type: string
 
 concurrency:
-  group: canary-deploy-production
+  group: deploy-api-production-canary
   cancel-in-progress: false
 
 jobs:
@@ -33,7 +33,6 @@ jobs:
     name: Rollback production
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -57,20 +56,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Assert Cloudflare credentials
+      - name: Assert credentials and vars
         run: |
           set -euo pipefail
           if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
             echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set"
             exit 1
           fi
+          if [ -z "${PRODUCTION_API_URL}" ]; then
+            echo "::error::vars.PRODUCTION_API_URL is not set"
+            exit 1
+          fi
 
       - name: Rollback to previous stable
+        env:
+          TARGET_VERSION_ID: ${{ inputs.version_id }}
         run: |
           set -euo pipefail
-          if [ -n "${{ inputs.version_id }}" ]; then
-            echo "Rolling back to version: ${{ inputs.version_id }}"
-            node scripts/canary-deploy.mjs rollback --env production --version-id "${{ inputs.version_id }}"
+          if [ -n "${TARGET_VERSION_ID}" ]; then
+            echo "Rolling back to version: ${TARGET_VERSION_ID}"
+            node scripts/canary-deploy.mjs rollback --env production --version-id "${TARGET_VERSION_ID}"
           else
             echo "Rolling back to previous stable version"
             node scripts/canary-deploy.mjs rollback --env production
@@ -83,16 +88,20 @@ jobs:
         if: always()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          ROLLBACK_REASON: ${{ inputs.reason }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
           if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
             echo "SLACK_WEBHOOK_URL not configured — skipping Slack notification"
             exit 0
           fi
-          STATUS="${{ job.status }}"
-          REASON="${{ inputs.reason }}"
           SHA="${GITHUB_SHA:0:7}"
-          EMOJI=$([[ "$STATUS" == "success" ]] && echo ":white_check_mark:" || echo ":x:")
+          EMOJI=$([[ "${JOB_STATUS}" == "success" ]] && echo ":white_check_mark:" || echo ":x:")
+          PAYLOAD=$(jq -n \
+            --arg text "${EMOJI} *Rollback ${JOB_STATUS}* — reason: ${ROLLBACK_REASON} | sha: ${SHA} | <${RUN_URL}|View run>" \
+            '{"text": $text}')
           curl -s -X POST "${SLACK_WEBHOOK_URL}" \
             -H "Content-Type: application/json" \
-            -d "{\"text\": \"${EMOJI} *Rollback ${STATUS}* — reason: ${REASON} | sha: ${SHA} | <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>\"}"
+            -d "${PAYLOAD}"

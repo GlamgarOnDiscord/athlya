@@ -38,7 +38,8 @@ gh workflow run rollback.yml \
 List available versions:
 
 ```bash
-pnpm --filter @athlya/api exec wrangler versions list --env production --json | jq '.[] | {id, created_on}'
+pnpm --filter @athlya/api exec wrangler versions list --env production --json \
+  | jq '(if type == "array" then . else .versions end) | .[] | {id, created_on}'
 ```
 
 ## Axiom alert configuration
