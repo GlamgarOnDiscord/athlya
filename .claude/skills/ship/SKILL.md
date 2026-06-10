@@ -69,26 +69,43 @@ The `.githooks/pre-push` hook runs it automatically on push — let it.
 - Required check: **`Lint, typecheck, and tests`**. Also runs (by path):
   pgTAP (`packages/db/migrations/**`), CodeQL, ZAP, secret-scan, Socket,
   axe/E2E (`apps/**`), Docker PBT.
-- Watch with the **`Monitor` tool**, never `sleep` (poll-until-terminal loop).
+- Watch with the **`Monitor` tool**, never `sleep`. Use this poll loop so
+  every terminal check emits a line and `ALL-CONCLUDED` fires when every
+  check has left `pending`:
+  ```bash
+  prev=""
+  while true; do
+    s=$(gh pr checks <n> --json name,bucket 2>/dev/null || echo "[]")
+    cur=$(echo "$s" | jq -r '.[] | select(.bucket!="pending") | "\(.name): \(.bucket)"' | sort)
+    diff_lines=$(comm -13 <(echo "$prev") <(echo "$cur") 2>/dev/null)
+    [ -n "$diff_lines" ] && echo "$diff_lines"
+    prev="$cur"
+    echo "$s" | jq -e 'length > 0 and all(.bucket!="pending")' >/dev/null && echo "ALL-CONCLUDED" && break
+    sleep 30
+  done
+  ```
 - CI red:
   - Real failure → fix locally (re-run preflight) → push.
   - Known flake (Docker registry timeout; `round-trip` property seed flake)
     → `gh run rerun <id> --failed`, don't change code.
 
-## 8. ⭐ MANDATORY — AI bot reviews before merge AND before close
+## 8. ⭐ MANDATORY — AI bot reviews after EVERY push and before merge/close
 
-- Fetch ALL feedback (CodeRabbit, cubic, Copilot), not just inline:
-  - inline: `gh api repos/GlamgarOnDiscord/athlya/pulls/<n>/comments`
+- Bots re-review on every new commit. **Read reviews after each push**,
+  not only at the end — Copilot / CodeRabbit can raise new issues on a
+  fix commit that change what needs to be done before merge.
+- Fetch ALL feedback (CodeRabbit, cubic, Copilot), not just inline.
+  Check the commit SHA on each comment to know if it's old or new:
+  - inline (with commit id): `gh api repos/GlamgarOnDiscord/athlya/pulls/<n>/comments --jq '[.[] | {commit: .commit_id[:8], login: .user.login, body: .body[:200]}]'`
   - PR conversation (CodeRabbit summary lives here):
     `gh api repos/GlamgarOnDiscord/athlya/issues/<n>/comments`
   - review bodies: `gh pr view <n> --json reviews`
 - **Read ALL comments. Apply the good ones** (security / bugs / perf /
   correctness / consistency) in a follow-up commit. Skip only true false
   positives, and say why.
-- Reviews can land **after** CI / after your push — re-check right before
-  merging, not just once.
-- After applying: re-run preflight → push → resolve the threads via GraphQL
-  `resolveReviewThread` (else `required_conversation_resolution` blocks merge).
+- After applying: re-run preflight → push → re-read reviews on the new
+  commit → resolve threads via GraphQL `resolveReviewThread` (else
+  `required_conversation_resolution` blocks merge).
 - **Never merge over an unaddressed actionable bot comment.**
 
 ## 9. Merge (wait for ALL checks green)
