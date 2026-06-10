@@ -1,6 +1,6 @@
 # Athlya Platform — Progress & Remaining Work
 
-**Dernière mise à jour :** Session 2026-06 — CN.6.4 chaos flag CHAOS_NEON_FAILURE_RATE (#219/#223). CN.7.1+CN.7.3 canary deploy + automatic rollback (#220/#226). CN.8.3 Neon EU read-replica routing (#218/#222). B5.3 Hono compress() middleware (#217). Compteur vérifié : **282 / 313 tâches**.
+**Dernière mise à jour :** Session 2026-06 — CN.6.4 chaos flag CHAOS_NEON_FAILURE_RATE (#219/#223). CN.7.1+CN.7.3 canary deploy + automatic rollback (#220/#226). Copilot follow-up fixes on canary/rollback workflows (#236/#239). CN.8.3 Neon EU read-replica routing (#218/#222). B5.3 Hono compress() middleware (#217). Compteur vérifié : **282 / 313 tâches**.
 **Tâches complétées :** Epic 14 (1/1), Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.6.4, CN.7.1, CN.7.3, CN.8.1, CN.8.2, CN.8.3, CN.9.2, CN.9.3 — cases parents cochées
 **Hardening tasks livrées :** 8 / 8 (H1 à H8) + 6 issues GitHub (#47–#53 #56) + 8 Dependabot alerts (PR #58)
 **Niveau 2 (live wiring) :** 13 / 13 items ✅ COMPLET (voir section dédiée)
