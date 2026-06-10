@@ -64,7 +64,7 @@ import {
 import {
   getOrCreateDbHttp,
   getOrCreateDbHttpForRegion,
-  getOrCreateRedis,
+  getOrCreateRedisForEnv,
   getOrCreateWriteDb,
   primeDbHttpForTests,
   resetAllDepsCachesForTests,
@@ -144,7 +144,7 @@ export function buildClassesDeps(
       range: ListClassesQuery,
     ): Promise<{ items: ClassListing[] }> {
       const db = getOrCreateDbHttpForRegion(env, cf?.continent);
-      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const redis = getOrCreateRedisForEnv(env);
       const classRepo = createDrizzleListClassesRepo(db);
       const counter = createRedisRemainingCounter(redis);
       const items = await svcListClasses(studioId, range, {
@@ -159,7 +159,7 @@ export function buildClassesDeps(
       query: SearchClassesQuery,
     ): Promise<{ items: ClassSearchResult[] }> {
       const db = getOrCreateDbHttpForRegion(env, cf?.continent);
-      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const redis = getOrCreateRedisForEnv(env);
       const searchRepo = createDrizzleSearchClassesRepo(db);
       const counter = createRedisRemainingCounter(redis);
 
@@ -177,7 +177,7 @@ export function buildClassesDeps(
 
     async createClass(studioId: string, input: CreateClassRequest): Promise<ClassRow> {
       const db = getOrCreateDbHttp(env.DB_URL);
-      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const redis = getOrCreateRedisForEnv(env);
       const classRepo = createDrizzleCreateClassRepo(db);
       const counter = createRedisRemainingCounter(redis);
       return svcCreateClass(studioId as StudioId, input, {
@@ -199,7 +199,7 @@ export function buildClassesDeps(
       patch: UpdateClassRequest,
     ): Promise<UpdateClassOutcome> {
       const db = getOrCreateDbHttp(env.DB_URL);
-      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const redis = getOrCreateRedisForEnv(env);
       const classRepo = createDrizzleUpdateClassRepo(db);
       const counter = createRedisRemainingCounter(redis);
 
@@ -268,7 +268,7 @@ export function buildReservationsDeps(
     },
 
     async bookClass(claims, input) {
-      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const redis = getOrCreateRedisForEnv(env);
 
       const dbWrite = getOrCreateWriteDb(env);
       const repo = createDrizzleBookingRepo(dbWrite, toTenantClaims(claims));
@@ -322,7 +322,7 @@ export function buildReservationsDeps(
 
     async cancelReservation(claims, params) {
       const dbWrite = getOrCreateWriteDb(env);
-      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const redis = getOrCreateRedisForEnv(env);
       const repo = createDrizzleCancelRepo(dbWrite, toTenantClaims(claims));
       const counter = createRedisRemainingCounter(redis);
 
@@ -358,7 +358,7 @@ export function buildReservationsDeps(
     },
 
     async getRemainingSeats(classId: string) {
-      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const redis = getOrCreateRedisForEnv(env);
       const counter = createRedisRemainingCounter(redis);
       return counter.getRemaining(classId);
     },

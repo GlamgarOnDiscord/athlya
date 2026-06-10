@@ -542,7 +542,25 @@ export function toProblemResponse(err: unknown, ctx: ProblemContext): ProblemRes
     return { status: body.status, body };
   }
 
-  // Branch 5 — fallback. Log with full message, return generic body.
+  // Branch 5 — chaos injection (CN.6.4). `ChaosInjectedError` has
+  // `code === 'chaos_injected'`; duck-typed to avoid a dep on deps-cache.
+  if (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { code?: unknown }).code === 'chaos_injected'
+  ) {
+    const body: ProblemDetailsBody = {
+      type: 'about:blank',
+      title: 'Service Unavailable',
+      status: 503,
+      code: 'chaos_injected',
+      traceId: ctx.traceId,
+    };
+    logProblem(err, 503, ctx);
+    return { status: 503, body };
+  }
+
+  // Branch 6 — fallback. Log with full message, return generic body.
   const body = internalServerErrorBody(ctx.traceId);
   logProblem(err, 500, ctx);
   return { status: 500, body };

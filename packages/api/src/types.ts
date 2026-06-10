@@ -402,6 +402,14 @@ export interface AthlyaBindings {
    *   `wrangler secret put DB_URL_EU --env production`
    */
   readonly DB_URL_EU?: string;
+  /**
+   * Staging-only chaos flag. Float string in [0, 1] — probability that each
+   * DB or Redis accessor throws `ChaosInjectedError`. MUST NOT be set in
+   * production. Absent or `'0'` → zero behaviour change.
+   *
+   * Set via: `wrangler secret put CHAOS_NEON_FAILURE_RATE --env staging`
+   */
+  readonly CHAOS_NEON_FAILURE_RATE?: string;
 }
 
 /* ------------------------------------------------------------------ */

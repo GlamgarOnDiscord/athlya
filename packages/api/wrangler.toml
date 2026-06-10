@@ -373,7 +373,8 @@ class_name = "ClassCapacityDO"
 # Secrets are set via:
 #   wrangler secret put REDIS_TOKEN    --env staging
 #   wrangler secret put DB_URL         --env staging
-#   wrangler secret put DB_URL_EU      --env staging   # optional — Neon EU read replica (CN.8.3)
+#   wrangler secret put DB_URL_EU             --env staging   # optional — Neon EU read replica (CN.8.3)
+#   wrangler secret put CHAOS_NEON_FAILURE_RATE --env staging # optional — chaos float [0,1] for circuit-breaker testing (CN.6.4); NEVER set in production
 #   wrangler secret put JWT_JWKS_URL   --env staging
 #   wrangler secret put SENTRY_DSN     --env staging   # optional
 # and NEVER land in this file.
