@@ -1,0 +1,98 @@
+name: Rollback Production
+
+# CN.7.3 — manual or webhook-triggered rollback to the previous stable deployment.
+# Runbook: docs/runbooks/automatic-rollback.md
+#
+# Trigger modes:
+#   1. Manual:          gh workflow run rollback.yml -f reason="..."
+#   2. Axiom webhook:   POST /repos/{owner}/{repo}/actions/workflows/rollback.yml/dispatches
+#      Fired when p99_ms > 2000 OR error_rate_5min > 0.02 for 5 consecutive minutes.
+#
+# Required secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, SLACK_WEBHOOK_URL (optional)
+# Required vars:    PRODUCTION_API_URL
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Rollback reason (shown in Slack notification)
+        required: false
+        type: string
+        default: manual
+      version_id:
+        description: Target version ID (omit to roll back to previous stable)
+        required: false
+        type: string
+
+concurrency:
+  group: canary-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Rollback production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Assert Cloudflare credentials
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set"
+            exit 1
+          fi
+
+      - name: Rollback to previous stable
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.version_id }}" ]; then
+            echo "Rolling back to version: ${{ inputs.version_id }}"
+            node scripts/canary-deploy.mjs rollback --env production --version-id "${{ inputs.version_id }}"
+          else
+            echo "Rolling back to previous stable version"
+            node scripts/canary-deploy.mjs rollback --env production
+          fi
+
+      - name: Verify health after rollback
+        run: bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}" 30 5
+
+      - name: Notify Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+            echo "SLACK_WEBHOOK_URL not configured — skipping Slack notification"
+            exit 0
+          fi
+          STATUS="${{ job.status }}"
+          REASON="${{ inputs.reason }}"
+          SHA="${GITHUB_SHA:0:7}"
+          EMOJI=$([[ "$STATUS" == "success" ]] && echo ":white_check_mark:" || echo ":x:")
+          curl -s -X POST "${SLACK_WEBHOOK_URL}" \
+            -H "Content-Type: application/json" \
+            -d "{\"text\": \"${EMOJI} *Rollback ${STATUS}* — reason: ${REASON} | sha: ${SHA} | <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>\"}"
