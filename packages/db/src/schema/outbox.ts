@@ -19,14 +19,32 @@
  * 16.4 (drain worker).
  */
 
-import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { createdAt, sqlIsNull, uuidPrimaryKey } from './_shared.js';
+import { studios } from './studios.js';
 
 export const outbox = pgTable(
   'outbox',
   {
     id: uuidPrimaryKey(),
+    /**
+     * Denormalised studio context. Populated automatically from the
+     * `app.studio_id` session variable set by `withTenant`; NULL for
+     * rows inserted outside tenant context (legacy / drain worker).
+     * Used by the `outbox_admin_only` RLS policy to scope admin reads
+     * to the calling admin's studio (migration 0014).
+     */
+    studioId: uuid('studio_id').references(() => studios.id, { onDelete: 'set null' }),
     /** Domain-level event identifier. Unique so retries are safe. */
     eventId: text('event_id').notNull(),
     eventType: text('event_type').notNull(),
