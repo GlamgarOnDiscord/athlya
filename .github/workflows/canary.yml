@@ -69,13 +69,16 @@ jobs:
             exit 1
           fi
 
+      - name: Pre-flight staging health check
+        if: env.STAGING_API_URL != ''
+        run: bash scripts/wait-health-ready.sh "${STAGING_API_URL}" 10 5
+
       - name: Canary 1% → 10% → 100%
         id: canary
         run: |
           set -euo pipefail
           node scripts/canary-deploy.mjs production-canary \
             --base-url "${PRODUCTION_API_URL}" \
-            --staging-url "${STAGING_API_URL:-}" \
             --wait-min "10" \
             --steps "1,10,100"
 
