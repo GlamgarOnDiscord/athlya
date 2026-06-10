@@ -1,4 +1,9 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
+
+vi.mock('@athlya/db/client', () => ({
+  createDbHttp: (url: string) => ({ _url: url }),
+  createDb: vi.fn(),
+}));
 
 import {
   dbHttpCache,
@@ -8,7 +13,6 @@ import {
   resetAllDepsCachesForTests,
 } from '../adapters/deps-cache.js';
 
-// neon() validates URL format at construction — use valid Neon URL shapes.
 const PRIMARY_URL = 'postgresql://user:pass@ep-primary.us-east-2.aws.neon.tech/db';
 const EU_URL = 'postgresql://user:pass@ep-eu-replica.eu-central-1.aws.neon.tech/db';
 

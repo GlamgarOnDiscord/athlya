@@ -1214,8 +1214,10 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       // trivially cheap on the hot path — one hashmap lookup
       // per call.
       let latestEnv: AthlyaBindings | undefined;
+      let latestCf: { readonly continent?: string } | undefined;
       app.use('/v1/*', async (c, next) => {
         latestEnv = c.env;
+        latestCf = (c.req.raw.cf as { continent?: string } | undefined) ?? undefined;
         await next();
       });
       const lazyDeps = buildLazyDomainDeps(() => {
@@ -1224,7 +1226,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
             'lazy domain deps: request env not yet captured; this should not happen if the /v1/* middleware ran first',
           );
         }
-        return buildDefaultDeps(latestEnv);
+        return buildDefaultDeps(latestEnv, latestCf);
       });
       mountDomainRoutes(app, lazyDeps);
     }

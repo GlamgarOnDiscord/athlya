@@ -63,6 +63,7 @@ import {
 } from './classes-repo-drizzle.js';
 import {
   getOrCreateDbHttp,
+  getOrCreateDbHttpForRegion,
   getOrCreateRedis,
   getOrCreateWriteDb,
   primeDbHttpForTests,
@@ -133,13 +134,16 @@ export function __primeDbHttpForTests(url: string): {
  * HTTP DB + Redis handles from the per-isolate caches and a fresh
  * thin adapter wrapper.
  */
-export function buildClassesDeps(env: AthlyaBindings): ClassesDeps {
+export function buildClassesDeps(
+  env: AthlyaBindings,
+  cf?: { readonly continent?: string },
+): ClassesDeps {
   return {
     async listClasses(
       studioId: string,
       range: ListClassesQuery,
     ): Promise<{ items: ClassListing[] }> {
-      const db = getOrCreateDbHttp(env.DB_URL);
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
       const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
       const classRepo = createDrizzleListClassesRepo(db);
       const counter = createRedisRemainingCounter(redis);
@@ -154,7 +158,7 @@ export function buildClassesDeps(env: AthlyaBindings): ClassesDeps {
       studioId: string,
       query: SearchClassesQuery,
     ): Promise<{ items: ClassSearchResult[] }> {
-      const db = getOrCreateDbHttp(env.DB_URL);
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
       const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
       const searchRepo = createDrizzleSearchClassesRepo(db);
       const counter = createRedisRemainingCounter(redis);
@@ -253,10 +257,13 @@ function extractUpdateErrorCode(err: unknown): string | null {
  *   - `bookClass` / `cancelReservation` → {@link getOrCreateWriteDb}
  *     (Hyperdrive: cached per isolate; direct DB_URL: per request).
  */
-export function buildReservationsDeps(env: AthlyaBindings): ReservationsDeps {
+export function buildReservationsDeps(
+  env: AthlyaBindings,
+  cf?: { readonly continent?: string },
+): ReservationsDeps {
   return {
     async listMyReservations(userId: string, query) {
-      const db = getOrCreateDbHttp(env.DB_URL);
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
       return queryListMyReservations(userId, query, { db });
     },
 

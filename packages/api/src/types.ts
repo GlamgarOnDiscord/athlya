@@ -398,6 +398,7 @@ export interface AthlyaBindings {
    * Absent → zero behaviour change; every query uses `DB_URL` as before.
    *
    * Provisioned via:
+   *   `wrangler secret put DB_URL_EU --env staging`
    *   `wrangler secret put DB_URL_EU --env production`
    */
   readonly DB_URL_EU?: string;
