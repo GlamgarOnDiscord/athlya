@@ -40,6 +40,52 @@ import { resolvePostgresWriteUrl, usesHyperdriveWritePath } from './postgres-wri
 import type { AthlyaBindings } from '../types.js';
 
 /* ------------------------------------------------------------------ */
+/*  Chaos engineering (CN.6.4)                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Thrown by the chaos layer when `CHAOS_NEON_FAILURE_RATE` is set and
+ * `Math.random()` falls below the configured rate. Triggers the circuit
+ * breaker so error-path behaviour can be verified in staging without
+ * touching the DB.
+ *
+ * Never thrown in production — `CHAOS_NEON_FAILURE_RATE` MUST NOT be
+ * set outside staging.
+ */
+export class ChaosInjectedError extends Error {
+  readonly code = 'chaos_injected' as const;
+  constructor() {
+    super('chaos: injected DB/Redis failure');
+    this.name = 'ChaosInjectedError';
+  }
+}
+
+/**
+ * Parse `env.CHAOS_NEON_FAILURE_RATE` into a `[0, 1]` float.
+ * Returns `undefined` when the var is absent, empty, or not a valid
+ * number — so callers can short-circuit cheaply.
+ */
+export function parseChaosRate(env: {
+  readonly CHAOS_NEON_FAILURE_RATE?: string;
+}): number | undefined {
+  const raw = env.CHAOS_NEON_FAILURE_RATE;
+  if (raw === undefined || raw.length === 0) return undefined;
+  const rate = parseFloat(raw);
+  if (!Number.isFinite(rate) || rate <= 0) return undefined;
+  return Math.min(rate, 1);
+}
+
+/**
+ * Throw {@link ChaosInjectedError} with probability `rate`.
+ * No-op when `rate` is `undefined` or `0`.
+ */
+export function throwIfChaos(rate: number | undefined): void {
+  if (rate !== undefined && Math.random() < rate) {
+    throw new ChaosInjectedError();
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Module-scope caches                                                */
 /* ------------------------------------------------------------------ */
 
@@ -129,9 +175,14 @@ function getOrCreateDbHttpEu(euUrl: string): AthlyaDbHttp {
  *                    `undefined` → primary used (conservative fallback).
  */
 export function getOrCreateDbHttpForRegion(
-  env: { readonly DB_URL: string; readonly DB_URL_EU?: string },
+  env: {
+    readonly DB_URL: string;
+    readonly DB_URL_EU?: string;
+    readonly CHAOS_NEON_FAILURE_RATE?: string;
+  },
   continent: string | undefined,
 ): AthlyaDbHttp {
+  throwIfChaos(parseChaosRate(env));
   if (env.DB_URL_EU !== undefined && env.DB_URL_EU.length > 0 && continent === 'EU') {
     return getOrCreateDbHttpEu(env.DB_URL_EU);
   }
@@ -152,6 +203,20 @@ export function getOrCreateRedis(url: string, token: string): Redis {
     redisCache.set(key, redis);
   }
   return redis;
+}
+
+/**
+ * Redis accessor with chaos injection. Use this variant in deps builders
+ * that have access to `env` (i.e. all `*-deps.ts` builders). Delegates to
+ * {@link getOrCreateRedis} after the chaos gate.
+ */
+export function getOrCreateRedisForEnv(env: {
+  readonly REDIS_URL: string;
+  readonly REDIS_TOKEN: string;
+  readonly CHAOS_NEON_FAILURE_RATE?: string;
+}): Redis {
+  throwIfChaos(parseChaosRate(env));
+  return getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
 }
 
 /**

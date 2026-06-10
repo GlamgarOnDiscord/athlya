@@ -69,7 +69,7 @@ import { createRedisSessionStore } from './auth-session-store-redis.js';
 import { createDrizzleUserRepo } from './auth-user-repo-drizzle.js';
 import {
   getOrCreateDbHttp,
-  getOrCreateRedis,
+  getOrCreateRedisForEnv,
   primeDbHttpForTests,
   resetAllDepsCachesForTests,
 } from './deps-cache.js';
@@ -212,7 +212,7 @@ interface AuthServiceState {
  */
 async function getAuthState(env: AthlyaBindings): Promise<AuthServiceState> {
   const db = getOrCreateDbHttp(env.DB_URL);
-  const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+  const redis = getOrCreateRedisForEnv(env);
 
   // The Worker's Bindings interface doesn't declare the JWT env
   // keys yet (they were added after task 8.2); widen the type
@@ -340,7 +340,7 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
       // `AuthError('rate_limited')` when `allow === false` —
       // the Problem-Details mapper translates that to HTTP
       // 429 with `Retry-After` automatically.
-      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const redis = getOrCreateRedisForEnv(env);
       const decision = await shouldAllowLogin(ctx.ip, input.email, {
         redis,
       });
@@ -438,7 +438,7 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
       });
     },
     checkPasswordResetRateLimit: async (email: string) => {
-      const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
+      const redis = getOrCreateRedisForEnv(env);
       // Hash the email so Redis never stores raw PII and key
       // cardinality stays bounded (mirrors loginBucketKey, S5-007).
       const data = new TextEncoder().encode(email.toLowerCase().trim());
