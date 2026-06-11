@@ -315,8 +315,9 @@ CREATE POLICY "workout_sessions_delete_own" ON "workout_sessions"
 -- the API layer (audit query helper joins on `users.studio_id`); the
 -- RLS layer keeps the simpler `role = 'admin'` gate so non-admins
 -- cannot read any row at all. See README.md § "audit_log scoping".
--- TODO(req-22.3): once audit rows carry a `studio_id` denormalised
--- column, tighten this policy to `studio_id = app_studio_id()`.
+-- Migration 0015 adds the `studio_id` column and replaces this policy
+-- with `role = 'admin' AND (studio_id IS NULL OR studio_id = app_studio_id())`
+-- to fully close Req 22.3. The policy below is superseded by 0015.
 -- ---------------------------------------------------------------------
 
 DROP POLICY IF EXISTS "audit_admin_only" ON "audit_log";--> statement-breakpoint
