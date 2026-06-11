@@ -145,6 +145,18 @@ export interface AuthDeps {
   confirmPasswordReset(input: { token: string; newPassword: string }): Promise<void>;
 
   /**
+   * Per-user rate limit for token refresh (10 per 15-minute window).
+   * Prevents token amplification when a refresh token is stolen:
+   * the attacker can rotate it at most 10 times per window instead
+   * of 1000 times (the global IP limit). Returns `true` if the
+   * call is allowed, `false` on deny (route returns 429).
+   *
+   * Issue #240. Optional — if absent the endpoint has no refresh-
+   * specific throttle (only the global /v1/auth/* IP budget applies).
+   */
+  checkRefreshRateLimit?(refreshToken: string): Promise<boolean>;
+
+  /**
    * Per-email rate limit for password-reset requests (3 per 24h).
    * Check and record a password-reset attempt for `email`.
    * Returns `true` if the attempt is allowed, `false` if the
@@ -218,6 +230,23 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
   router.post('/refresh', zValidator('json', RefreshRequestSchema), async (c) => {
     traceOperation(c, 'auth.refresh');
     const body = readValidated<RefreshRequest>(c, 'json');
+    if (deps.checkRefreshRateLimit !== undefined) {
+      const allowed = await deps.checkRefreshRateLimit(body.refreshToken);
+      if (!allowed) {
+        return c.body(
+          JSON.stringify({
+            type: 'about:blank',
+            title: 'Too Many Requests',
+            status: 429,
+            detail: 'Refresh rate limit exceeded. Try again later.',
+            code: 'rate_limit_exceeded',
+            traceId: c.get('traceId'),
+          }),
+          429,
+          { 'content-type': 'application/problem+json' },
+        );
+      }
+    }
     const session = await deps.refresh(body);
     return c.json(session, 200);
   });

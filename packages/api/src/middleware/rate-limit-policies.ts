@@ -52,6 +52,9 @@ export const ADMIN_STATS_BUDGET: RateLimitBudget = {
 
 export const AUTH_BUDGET = { ipLimit: 20, windowSec: 60 } as const satisfies RateLimitBudget;
 
+/** Issue #240 — per-user refresh throttle (10 per 15-min window). */
+export const REFRESH_BUDGET: RateLimitBudget = { userLimit: 10, windowSec: 900 };
+
 export const MUTATION_BUDGETS = {
   reservation: { userLimit: 10, ipLimit: 10, windowSec: 60 },
   profile: { userLimit: 5, ipLimit: 5, windowSec: 60 },
@@ -82,6 +85,16 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     bucket: 'ip',
     wiredIn: 'worker.ts',
     notes: 'Issue #65',
+  },
+  {
+    id: 'auth-refresh',
+    route: '/v1/auth/refresh',
+    methods: 'POST',
+    budget: REFRESH_BUDGET,
+    failPolicy: 'fail-closed',
+    bucket: 'user',
+    wiredIn: 'domain-router',
+    notes: 'Issue #240 — per-user sliding window keyed on SHA-256(JWT sub)',
   },
   {
     id: 'reservation-mutation',
@@ -183,6 +196,7 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
 /** Explicit fail-closed rows — tests fail if an id is removed or policy regresses. */
 export const REQUIRED_FAIL_CLOSED_IDS = [
   'auth',
+  'auth-refresh',
   'reservation-mutation',
   'reservation-cancel',
   'profile-patch',

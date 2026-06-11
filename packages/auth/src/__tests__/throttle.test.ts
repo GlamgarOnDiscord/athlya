@@ -21,9 +21,14 @@ import { describe, expect, it } from 'vitest';
 import {
   LOGIN_ATTEMPT_LIMIT,
   LOGIN_WINDOW_SEC,
+  REFRESH_ATTEMPT_LIMIT,
+  REFRESH_BUCKET_PREFIX,
+  REFRESH_WINDOW_SEC,
   loginBucketKey,
   normalizeLoginEmail,
+  refreshBucketKey,
   shouldAllowLogin,
+  shouldAllowRefresh,
 } from '../throttle.js';
 
 import type { LoginThrottleDeps } from '../throttle.js';
@@ -336,5 +341,91 @@ describe('loginBucketKey (Sprint-3 Slice 3.2 — S5-007 hashed key)', () => {
   it('rejects empty ip or email', async () => {
     await expect(loginBucketKey('', EMAIL_A)).rejects.toThrow(TypeError);
     await expect(loginBucketKey(IP_A, '')).rejects.toThrow(TypeError);
+  });
+});
+
+describe('refreshBucketKey (issue #240)', () => {
+  const VALID_JWT =
+    'eyJhbGciOiJIUzI1NiJ9.' +
+    btoa(JSON.stringify({ sub: 'user-abc-123', iat: 1_700_000_000 }))
+      .replace(/=/g, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_') +
+    '.fakesig';
+
+  it('builds a key under the refresh prefix with a 16-char hex suffix', async () => {
+    const key = await refreshBucketKey(VALID_JWT);
+    expect(key.startsWith(`${REFRESH_BUCKET_PREFIX}:`)).toBe(true);
+    const suffix = key.slice(REFRESH_BUCKET_PREFIX.length + 1);
+    expect(suffix).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('is deterministic for the same token', async () => {
+    expect(await refreshBucketKey(VALID_JWT)).toBe(await refreshBucketKey(VALID_JWT));
+  });
+
+  it('two tokens with the same sub collide into the same bucket', async () => {
+    const jwt2 =
+      'eyJhbGciOiJIUzI1NiJ9.' +
+      btoa(JSON.stringify({ sub: 'user-abc-123', iat: 9_999_999_999 }))
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_') +
+      '.differentsig';
+    expect(await refreshBucketKey(VALID_JWT)).toBe(await refreshBucketKey(jwt2));
+  });
+
+  it('falls back to token hash when sub is absent', async () => {
+    const noSub =
+      'eyJhbGciOiJIUzI1NiJ9.' +
+      btoa(JSON.stringify({ iat: 1 }))
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_') +
+      '.fakesig';
+    const key = await refreshBucketKey(noSub);
+    expect(key.startsWith(`${REFRESH_BUCKET_PREFIX}:`)).toBe(true);
+  });
+
+  it('rejects an empty string', async () => {
+    await expect(refreshBucketKey('')).rejects.toThrow(TypeError);
+  });
+});
+
+describe('shouldAllowRefresh (issue #240)', () => {
+  const TOKEN = 'header.eyJzdWIiOiJ1c2VyLTEifQ.sig';
+
+  it('allows the first 10 calls and denies the 11th', async () => {
+    const fake = new FakeRedis();
+    const deps = makeDeps(fake);
+    fake.nowMs = 1_000;
+
+    for (let i = 0; i < REFRESH_ATTEMPT_LIMIT; i++) {
+      const d = await shouldAllowRefresh(TOKEN, deps);
+      expect(d.allow).toBe(true);
+      expect(d.remaining).toBe(REFRESH_ATTEMPT_LIMIT - (i + 1));
+      fake.nowMs += 1;
+    }
+
+    const denied = await shouldAllowRefresh(TOKEN, deps);
+    expect(denied.allow).toBe(false);
+    expect(denied.retryAfterSec).toBeGreaterThan(0);
+    expect(denied.retryAfterSec).toBeLessThanOrEqual(REFRESH_WINDOW_SEC);
+  });
+
+  it('resets after the 900 s window has elapsed', async () => {
+    const fake = new FakeRedis();
+    const deps = makeDeps(fake);
+    fake.nowMs = 0;
+
+    for (let i = 0; i < REFRESH_ATTEMPT_LIMIT; i++) {
+      await shouldAllowRefresh(TOKEN, deps);
+    }
+    expect((await shouldAllowRefresh(TOKEN, deps)).allow).toBe(false);
+
+    fake.nowMs += REFRESH_WINDOW_SEC * 1000 + 1;
+    const after = await shouldAllowRefresh(TOKEN, deps);
+    expect(after.allow).toBe(true);
+    expect(after.remaining).toBe(REFRESH_ATTEMPT_LIMIT - 1);
   });
 });
