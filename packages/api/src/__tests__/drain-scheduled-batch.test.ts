@@ -5,6 +5,7 @@ import {
   OUTBOX_BACKLOG_BATCH_THRESHOLD,
   OUTBOX_DRAIN_OVERLAP_WARN_MS,
   emitOutboxBacklogMetric,
+  emitOutboxDrainErrorsMetric,
   pickBatchSize,
   resolveDrainBatchSize,
   runScheduledDrain,
@@ -158,6 +159,74 @@ describe('runScheduledDrain', () => {
 
     expect(countPendingOutboxMock).not.toHaveBeenCalled();
     expect(claimBatchMock).toHaveBeenCalledWith(expect.anything(), 25);
+  });
+
+  it('emits athlya.outbox.drain_errors when the drain reports failures', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    countPendingOutboxMock.mockReset().mockResolvedValue({ pending: 5, oldestOccurredAt: null });
+
+    const failingRow = {
+      id: 'row-1',
+      eventType: 'member.registered',
+      payload: {},
+      attempts: 0,
+      occurredAt: new Date(),
+    };
+    claimBatchMock.mockReset().mockResolvedValue([failingRow]);
+    markPublishedMock.mockReset().mockResolvedValue(undefined);
+
+    await runScheduledDrain({
+      getDb: () => fakeDb(),
+      EVENTS_QUEUE: { send: vi.fn().mockRejectedValue(new Error('queue down')) },
+      EVENTS_NOTIFICATIONS_QUEUE: {} as never,
+      EVENTS_RGPD_QUEUE: {} as never,
+    });
+
+    expect(log).toHaveBeenCalledWith(
+      'athlya.outbox.drain_errors',
+      expect.objectContaining({ metric: 'outbox_drain_errors', failed: 1 }),
+    );
+  });
+});
+
+describe('emitOutboxDrainErrorsMetric', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('is a no-op when there are no failures', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    emitOutboxDrainErrorsMetric({ processed: 5, succeeded: 5, failed: 0 });
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it('emits the drain_errors metric unconditionally when failed > 0', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    emitOutboxDrainErrorsMetric({ processed: 10, succeeded: 7, failed: 3 });
+    expect(log).toHaveBeenCalledWith(
+      'athlya.outbox.drain_errors',
+      expect.objectContaining({
+        metric: 'outbox_drain_errors',
+        failed: 3,
+        processed: 10,
+        succeeded: 7,
+      }),
+    );
+  });
+
+  it('forwards to logger.error when a logger is wired', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorSpy = vi.fn();
+    emitOutboxDrainErrorsMetric(
+      { processed: 2, succeeded: 1, failed: 1 },
+      {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: errorSpy,
+      },
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      'outbox drain: failed items in batch',
+      expect.objectContaining({ metric: 'outbox_drain_errors', failed: 1 }),
+    );
   });
 });
 

@@ -38,7 +38,13 @@ Response fields:
 
 ### Axiom queries
 
-Drain completion (failures):
+Drain errors counter (**émis à chaque cycle avec `failed > 0`**, indépendant du logger — issue #229) :
+
+```
+['athlya-logs'] | where ['message'] == "athlya.outbox.drain_errors"
+```
+
+Drain completion (failures, via logger):
 
 ```
 ['drain'] | where message == "outbox drain: batch complete" and failed > 0
@@ -61,7 +67,7 @@ Voir `docs/operations/axiom-queries.md` § Outbox backlog et alerte **A16**.
 ### BetterStack / uptime
 
 - Alert **P1** if `GET /admin/outbox/stats` reports `backlogAlertRecommended: true` for **> 5 minutes** (synthetic check or scheduled `curl`).
-- Secondary: Axiom alert on `failed > 0` in batch complete logs.
+- Secondary: Axiom alert on `athlya.outbox.drain_errors` (`drain_errors > 10` in 5-minute window) — see `docs/runbooks/outbox-drain-stalled.md`.
 
 ## Load test (backlog recovery)
 
@@ -71,7 +77,8 @@ Voir `docs/operations/axiom-queries.md` § Outbox backlog et alerte **A16**.
 
 ## Related
 
-- `packages/api/src/events/drain-scheduled.ts` — adaptive batch + backlog metric (`outbox.backlog`) + overlap guard (`outbox.drain_overlap_risk`)
+- `packages/api/src/events/drain-scheduled.ts` — adaptive batch + backlog metric (`outbox.backlog`) + overlap guard (`outbox.drain_overlap_risk`) + drain errors counter (`athlya.outbox.drain_errors`)
+- `docs/runbooks/outbox-drain-stalled.md` — diagnosis & recovery for stalled/erroring drain
 - `packages/api/src/admin/outbox-routes.ts` — admin stats
 - `docs/operations/axiom-alerts.md` — alerte **A16**
 - `scripts/verify-outbox-drain-checklist.mjs` — checklist ops #134
