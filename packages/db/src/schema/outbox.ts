@@ -38,13 +38,15 @@ export const outbox = pgTable(
   {
     id: uuidPrimaryKey(),
     /**
-     * Denormalised studio context. Populated automatically from the
-     * `app.studio_id` session variable set by `withTenant`; NULL for
-     * rows inserted outside tenant context (legacy / drain worker).
-     * Used by the `outbox_admin_only` RLS policy to scope admin reads
-     * to the calling admin's studio (migration 0014).
+     * Denormalised studio context. Populated automatically via the
+     * column DEFAULT (NULLIF(current_setting('app.studio_id',true),'')::uuid)
+     * when the insert runs inside a withTenant transaction. NULL for
+     * rows predating migration 0014 (legacy). ON DELETE CASCADE ensures
+     * deleted-studio rows are removed rather than NULLed, which would
+     * otherwise re-enable the IS NULL policy fallback cross-tenant.
+     * Used by the outbox_admin_only RLS policy (migration 0014).
      */
-    studioId: uuid('studio_id').references(() => studios.id, { onDelete: 'set null' }),
+    studioId: uuid('studio_id').references(() => studios.id, { onDelete: 'cascade' }),
     /** Domain-level event identifier. Unique so retries are safe. */
     eventId: text('event_id').notNull(),
     eventType: text('event_type').notNull(),

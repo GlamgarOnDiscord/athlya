@@ -7,22 +7,24 @@
 --   studio_id = app_studio_id()
 -- ensures each admin sees only their own studio's pending events.
 --
--- Column strategy: nullable (existing rows have no studio context) with
--- a column DEFAULT of current_setting('app.studio_id', true)::uuid so
--- rows inserted inside a withTenant transaction (which issues
--- SET LOCAL app.studio_id = ...) are automatically stamped. Rows
--- inserted without tenant context (e.g. tests, backfills) remain NULL
--- and the updated policy grants access where studio_id IS NULL to avoid
--- hiding legacy rows from admins.
+-- Column strategy: nullable (legacy rows from before this migration have
+-- no studio context; the IS NULL fallback in the policy keeps them visible
+-- to all admins until they drain naturally) with a column DEFAULT of
+-- NULLIF(current_setting('app.studio_id',true),'')::uuid so rows inserted
+-- inside a withTenant transaction are automatically stamped.
+-- test_unset_tenant() sets the GUC to '' not NULL; the NULLIF guard ensures
+-- that path yields NULL rather than a cast error.
 --
--- The drain worker (athlya_cron / BYPASSRLS) is unaffected — it skips
--- RLS entirely when claiming and publishing rows.
+-- ON DELETE CASCADE rather than SET NULL: when a studio is deleted its
+-- outbox rows are deleted too. ON DELETE SET NULL would set studio_id back
+-- to NULL, re-enabling the IS NULL policy fallback for the former studio's
+-- rows and reintroducing cross-tenant visibility for any admin.
 -- =====================================================================
 
 ALTER TABLE "outbox"
     ADD COLUMN "studio_id" uuid
-        REFERENCES "studios" ("id") ON DELETE SET NULL
-        DEFAULT (current_setting('app.studio_id', true)::uuid);
+        REFERENCES "studios" ("id") ON DELETE CASCADE
+        DEFAULT (NULLIF(current_setting('app.studio_id', true), '')::uuid);
 
 -- Tighten the admin read policy to the caller's studio.
 DROP POLICY IF EXISTS "outbox_admin_only" ON "outbox";
