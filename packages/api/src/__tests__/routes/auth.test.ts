@@ -160,8 +160,8 @@ describe('POST /v1/auth/refresh', () => {
     });
   });
 
-  it('returns 429 rate_limit_exceeded when checkRefreshRateLimit returns false (issue #240)', async () => {
-    const checkRefreshRateLimit = vi.fn().mockResolvedValue(false);
+  it('returns 429 rate_limit_exceeded with Retry-After when checkRefreshRateLimit denies (issue #240)', async () => {
+    const checkRefreshRateLimit = vi.fn().mockResolvedValue({ allow: false, retryAfterSec: 840 });
     const deps = buildStubDeps({ auth: { checkRefreshRateLimit } });
     const app = buildTestApp(deps);
 
@@ -177,13 +177,14 @@ describe('POST /v1/auth/refresh', () => {
 
     expect(res.status).toBe(429);
     expect(res.headers.get('content-type')).toBe('application/problem+json');
+    expect(Number(res.headers.get('retry-after'))).toBeGreaterThan(0);
     const body = await readJson<{ code?: string }>(res);
     expect(body.code).toBe('rate_limit_exceeded');
     expect(checkRefreshRateLimit).toHaveBeenCalledWith('r.stolen');
     expect(deps.auth.refresh).not.toHaveBeenCalled();
   });
 
-  it('forwards to deps.refresh when checkRefreshRateLimit returns true', async () => {
+  it('forwards to deps.refresh when checkRefreshRateLimit allows', async () => {
     const session = {
       accessToken: 'a.t2',
       refreshToken: 'r.t2',
@@ -191,7 +192,7 @@ describe('POST /v1/auth/refresh', () => {
       refreshTokenExpiresIn: 2_592_000,
       user: { id: 'u2' },
     };
-    const checkRefreshRateLimit = vi.fn().mockResolvedValue(true);
+    const checkRefreshRateLimit = vi.fn().mockResolvedValue({ allow: true });
     const deps = buildStubDeps({
       auth: { checkRefreshRateLimit, refresh: vi.fn().mockResolvedValue(session) },
     });

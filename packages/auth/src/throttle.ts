@@ -292,8 +292,11 @@ function decodeJwtSubUnsafe(token: string): string | undefined {
   const parts = token.split('.');
   if (parts.length !== 3 || parts[1] === undefined) return undefined;
   try {
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const json = atob(base64);
+    // base64url → base64: swap chars then add required '=' padding so
+    // atob() works reliably across all runtimes (some reject unpadded input).
+    const b64url = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64url.padEnd(b64url.length + ((4 - (b64url.length % 4)) % 4), '=');
+    const json = new TextDecoder().decode(Uint8Array.from(atob(padded), (c) => c.charCodeAt(0)));
     const payload: unknown = JSON.parse(json);
     if (typeof payload !== 'object' || payload === null) return undefined;
     const sub = (payload as Record<string, unknown>).sub;
