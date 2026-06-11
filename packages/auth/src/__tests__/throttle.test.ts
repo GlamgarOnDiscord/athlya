@@ -278,6 +278,24 @@ describe('normalizeLoginEmail', () => {
     const once = normalizeLoginEmail('Alice@Example.COM');
     expect(normalizeLoginEmail(once)).toBe(once);
   });
+
+  it('collapses IDN Unicode domain to punycode (issue #243)', () => {
+    expect(normalizeLoginEmail('alice@café.com')).toBe('alice@xn--caf-dma.com');
+  });
+
+  it('treats Unicode and punycode domain as the same bucket key', () => {
+    expect(normalizeLoginEmail('alice@café.com')).toBe(
+      normalizeLoginEmail('alice@xn--caf-dma.com'),
+    );
+  });
+
+  it('returns trimmed+lowercased form when domain is unparseable', () => {
+    expect(normalizeLoginEmail('alice@[invalid')).toBe('alice@[invalid');
+  });
+
+  it('handles email with no @ sign gracefully', () => {
+    expect(normalizeLoginEmail('notanemail')).toBe('notanemail');
+  });
 });
 
 describe('loginBucketKey (Sprint-3 Slice 3.2 — S5-007 hashed key)', () => {
