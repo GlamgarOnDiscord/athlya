@@ -21,12 +21,13 @@
  * @see Requirements 3.3, 17.1.
  */
 
+import { withTenantHttp } from '@athlya/db';
 import { users } from '@athlya/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
-import type { AthlyaDbAny } from '@athlya/db/client';
+import type { AthlyaDbAny, AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
 import type { ConsentsRepo } from '@athlya/members';
 
 /**
@@ -64,6 +65,53 @@ export function createDrizzleConsentsRepo(db: AthlyaDbAny): ConsentsRepo {
         // (only reads), and an aborted soft-delete race is a
         // genuinely exceptional condition, not a user-facing
         // 4xx.
+        throw new Error(`updateConsents: user ${userId} not found or soft-deleted`);
+      }
+      return row.consents;
+    },
+  };
+}
+
+/**
+ * HTTP-driver variant — each query runs inside a `withTenantHttp`
+ * batch so `SET LOCAL app.*` activates RLS policies before the
+ * business statement executes.
+ */
+export function createDrizzleConsentsRepoHttp(
+  db: AthlyaDbHttp,
+  claims: TenantClaims,
+): ConsentsRepo {
+  return {
+    async findConsents(userId) {
+      const rows = await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .select({ consents: users.consents })
+            .from(users)
+            .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+            .limit(1),
+        ),
+      );
+      const row = rows[0];
+      return row === undefined ? null : row.consents;
+    },
+
+    async updateConsents(userId, consents) {
+      const rows = await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .update(users)
+            .set({ consents })
+            .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+            .returning(),
+        ),
+      );
+      const row = rows[0];
+      if (row === undefined) {
         throw new Error(`updateConsents: user ${userId} not found or soft-deleted`);
       }
       return row.consents;

@@ -1,6 +1,6 @@
 # Athlya Platform — Progress & Remaining Work
 
-**Dernière mise à jour :** Session 2026-06 — Security sprint: Req 22.3 audit_log studio_id scoping (#225 → PR #246 ✅), CWE-601 Stripe open redirect fix (#241 → PR #247 ✅), IDN punycode throttle bypass (#243 → PR #248 🔄 CI). Aussi: composite indexes (#238 → PR #242 ✅), outbox RLS studio_id (#244 → PR #245 ✅). Compteur vérifié : **282 / 313 tâches** (+sécurité).
+**Dernière mise à jour :** Session 2026-06 — Security sprint: Req 22.3 audit_log studio_id scoping (#225 → PR #246 ✅), CWE-601 Stripe open redirect fix (#241 → PR #247 ✅), IDN punycode throttle bypass (#243 → PR #248 ✅), per-user refresh throttle + Retry-After (#240 → PR #249 ✅). Aussi: composite indexes (#238 → PR #242 ✅), outbox RLS studio_id (#244 → PR #245 ✅). Compteur vérifié : **282 / 313 tâches** (+sécurité).
 **Tâches complétées :** Epic 14 (1/1), Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.6.4, CN.7.1, CN.7.3, CN.8.1, CN.8.2, CN.8.3, CN.9.2, CN.9.3 — cases parents cochées
 **Hardening tasks livrées :** 8 / 8 (H1 à H8) + 6 issues GitHub (#47–#53 #56) + 8 Dependabot alerts (PR #58)
 **Niveau 2 (live wiring) :** 13 / 13 items ✅ COMPLET (voir section dédiée)

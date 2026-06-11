@@ -735,9 +735,11 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
     // with the JWT claim â€” never Bob's userId. The state-level
     // assertion below proves the mutation landed on Alice and
     // not on Bob (defense in depth around the userId argument).
-    expect(deps.members.updateProfile).toHaveBeenCalledWith(ALICE_ID, {
-      displayName: 'Alice Renamed',
-    });
+    expect(deps.members.updateProfile).toHaveBeenCalledWith(
+      ALICE_ID,
+      { displayName: 'Alice Renamed' },
+      expect.objectContaining({ userId: ALICE_ID }),
+    );
     expect(state.users.get(ALICE_ID)!.displayName).toBe('Alice Renamed');
     expect(state.users.get(BOB_ID)!.displayName).toBe('Bob');
   });
@@ -769,11 +771,11 @@ describe('multi-tenant isolation â€” cross-tenant access surfaces 404', () 
     );
 
     expect(res.status).toBe(200);
-    expect(deps.members.updateConsents).toHaveBeenCalledWith(BOB_ID, {
-      marketing: true,
-      analytics: false,
-      thirdParty: false,
-    });
+    expect(deps.members.updateConsents).toHaveBeenCalledWith(
+      BOB_ID,
+      { marketing: true, analytics: false, thirdParty: false },
+      expect.objectContaining({ userId: BOB_ID }),
+    );
     // Alice must NOT have been touched.
     const calls = deps.members.updateConsents as unknown as {
       mock: { calls: Array<[string, unknown]> };

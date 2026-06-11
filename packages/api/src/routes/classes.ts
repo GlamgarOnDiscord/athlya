@@ -44,6 +44,7 @@ import {
   traceOperation,
 } from './helpers.js';
 
+import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
 import type {
@@ -90,18 +91,21 @@ export interface ClassesDeps {
   listClasses(
     studioId: string,
     range: ListClassesQuery,
+    claims: AuthClaims,
   ): Promise<{ items: ReadonlyArray<unknown> }>;
   searchClasses(
     studioId: string,
     query: SearchClassesQuery,
+    claims: AuthClaims,
   ): Promise<{ items: ReadonlyArray<unknown> }>;
-  createClass(studioId: string, input: CreateClassRequest): Promise<unknown>;
+  createClass(studioId: string, input: CreateClassRequest, claims: AuthClaims): Promise<unknown>;
   updateClass(
     studioId: string,
     classId: string,
     patch: UpdateClassRequest,
+    claims: AuthClaims,
   ): Promise<UpdateClassOutcome>;
-  deleteClass(studioId: string, classId: string): Promise<DeleteClassOutcome>;
+  deleteClass(studioId: string, classId: string, claims: AuthClaims): Promise<DeleteClassOutcome>;
 
   readonly idempotency?: IdempotencyMiddlewareDeps;
 }
@@ -172,7 +176,7 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
       throw new Error('authClaims unexpectedly missing after jwtAuth');
     }
     const query = readValidated<SearchClassesQuery>(c, 'query');
-    const result = await deps.searchClasses(claims.studioId, query);
+    const result = await deps.searchClasses(claims.studioId, query, claims);
     return c.json({ items: result.items as unknown[] }, 200);
   });
 
@@ -184,7 +188,7 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
       throw new Error('authClaims unexpectedly missing after jwtAuth');
     }
     const query = readValidated<ListClassesQuery>(c, 'query');
-    const result = await deps.listClasses(claims.studioId, query);
+    const result = await deps.listClasses(claims.studioId, query, claims);
 
     // B5.1 — ETag + Cache-Control. The listing is tenant-scoped,
     // range-bounded and counter-driven; data turns over either
@@ -252,7 +256,7 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
         throw new Error('authClaims unexpectedly missing after jwtAuth');
       }
       const body = readValidated<CreateClassRequest>(c, 'json');
-      const created = await deps.createClass(claims.studioId, body);
+      const created = await deps.createClass(claims.studioId, body, claims);
       return c.json(created as Record<string, unknown>, 201);
     },
   );
@@ -273,7 +277,7 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
       }
       const { id } = readValidated<ClassIdParam>(c, 'param');
       const patch = readValidated<UpdateClassRequest>(c, 'json');
-      const outcome = await deps.updateClass(claims.studioId, id, patch);
+      const outcome = await deps.updateClass(claims.studioId, id, patch, claims);
       switch (outcome.kind) {
         case 'updated':
           return c.json(outcome.class as Record<string, unknown>, 200);
@@ -297,7 +301,7 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
         throw new Error('authClaims unexpectedly missing after jwtAuth');
       }
       const { id } = readValidated<ClassIdParam>(c, 'param');
-      const outcome = await deps.deleteClass(claims.studioId, id);
+      const outcome = await deps.deleteClass(claims.studioId, id, claims);
       if (outcome.kind === 'not_found') {
         return problem404(c, `class ${id} not found`);
       }

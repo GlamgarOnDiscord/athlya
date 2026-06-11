@@ -55,6 +55,23 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Guard — no raw AthlyaDbHttp usage outside withTenantHttp
+        run: |
+          # Flag adapter files that make direct db.select/insert/update/execute calls
+          # on an AthlyaDbHttp handle without going through withTenantHttp.
+          # Files that intentionally bypass RLS (e.g. pre-auth flows, non-tenant tables)
+          # must carry a // neon-http-norls: <reason> comment to be allowlisted.
+          offenders=$(
+            grep -rl 'AthlyaDbHttp' packages/api/src/adapters/ \
+            | xargs grep -l 'db\.\(select\|insert\|update\|execute\)(' \
+            | xargs grep -L 'withTenantHttp\|neon-http-norls' 2>/dev/null || true
+          )
+          if [ -n "$offenders" ]; then
+            echo "ERROR: adapter files use AthlyaDbHttp without withTenantHttp or neon-http-norls allowlist:"
+            echo "$offenders"
+            exit 1
+          fi
+
       - name: Typecheck
         run: pnpm typecheck
 

@@ -231,6 +231,7 @@ describe('PUT /v1/members/me/avatar', () => {
       TEST_USER_ID,
       'image/jpeg',
       expect.any(ArrayBuffer),
+      expect.objectContaining({ userId: TEST_USER_ID }),
     );
   });
 });

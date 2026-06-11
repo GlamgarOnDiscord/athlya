@@ -33,12 +33,13 @@
  * @see Requirements 3.1, 3.2, 3.4, 3.5, 13.2.
  */
 
+import { withTenantHttp } from '@athlya/db';
 import { users } from '@athlya/db/schema';
 import { and, eq, isNull, lt, or, desc, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
-import type { AthlyaDbAny } from '@athlya/db/client';
+import type { AthlyaDbAny, AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
 import type { MemberProfile, MemberRepo, MembersPage } from '@athlya/members';
 import type { UpdateProfileRequest } from '@athlya/shared/schemas/api';
 
@@ -215,3 +216,95 @@ function decodeCursor(raw: string | undefined): Cursor | null {
 // resolvable; it is not directly used above but is a companion to
 // the `desc`/`eq`/`and`/… operator imports.
 void sql;
+
+/* ------------------------------------------------------------------ */
+/*  HTTP-driver variant (uses withTenantHttp per query)                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * HTTP-driver variant of {@link createDrizzleMemberRepo}.
+ *
+ * Each method wraps its single Drizzle query in `withTenantHttp` so
+ * the three `SET LOCAL app.*` statements and the business query are
+ * sent to Neon in one HTTP batch, activating the RLS policies that
+ * rely on `app_user_id()` / `app_studio_id()` / `app_role()`.
+ */
+export function createDrizzleMemberRepoHttp(db: AthlyaDbHttp, claims: TenantClaims): MemberRepo {
+  return {
+    async findProfile(userId) {
+      const rows = await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .select()
+            .from(users)
+            .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+            .limit(1),
+        ),
+      );
+      const row = rows[0];
+      return row === undefined ? null : toMemberProfile(row);
+    },
+
+    async updateProfile(userId, patch) {
+      const patchColumns = buildUpdatePatch(patch);
+      const rows = await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .update(users)
+            .set(patchColumns)
+            .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+            .returning(),
+        ),
+      );
+      const row = rows[0];
+      if (row === undefined) {
+        throw new Error(`updateProfile: user ${userId} not found or soft-deleted`);
+      }
+      return toMemberProfile(row);
+    },
+
+    async listByStudio(studioId, opts) {
+      const cursor = decodeCursor(opts.cursor);
+      const conditions: Parameters<typeof and>[0][] = [
+        eq(users.studioId, studioId),
+        isNull(users.deletedAt),
+      ];
+      if (cursor !== null) {
+        conditions.push(
+          or(
+            lt(users.createdAt, cursor.createdAt),
+            and(eq(users.createdAt, cursor.createdAt), lt(users.id, cursor.id)),
+          ),
+        );
+      }
+
+      const rows = await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .select()
+            .from(users)
+            .where(and(...conditions))
+            .orderBy(desc(users.createdAt), desc(users.id))
+            .limit(opts.limit + 1),
+        ),
+      );
+
+      const hasMore = rows.length > opts.limit;
+      const items = rows.slice(0, opts.limit).map((r) => toMemberProfile(r));
+      const nextCursor = hasMore
+        ? encodeCursor({
+            createdAt: rows[opts.limit - 1]!.createdAt,
+            id: rows[opts.limit - 1]!.id,
+          })
+        : null;
+
+      return { items, nextCursor } satisfies MembersPage;
+    },
+  };
+}

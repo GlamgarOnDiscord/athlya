@@ -31,12 +31,13 @@
  * @see Requirements 7.4, 10.1.
  */
 
+import { withTenantHttp } from '@athlya/db';
 import { classes, reservations } from '@athlya/db/schema';
 import { and, asc, eq, gte, lte } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
-import type { AthlyaDbAny } from '@athlya/db/client';
+import type { AthlyaDbAny, AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
 
 /** Default lookback window, aligned with `ListClassesQuerySchema`. */
 const DEFAULT_LOOKBACK_DAYS = 90;
@@ -69,6 +70,7 @@ export interface ReservationListItem {
 
 export interface ListMyReservationsDeps {
   readonly db: AthlyaDbAny;
+  readonly claims?: TenantClaims;
 }
 
 /**
@@ -95,32 +97,33 @@ export async function listMyReservations(
       : new Date(nowMs + DEFAULT_LOOKAHEAD_DAYS * MS_PER_DAY);
   const limit = Math.min(Math.max(query.limit ?? 50, 1), 100);
 
-  const rows = await withConnectionRetry(() =>
-    deps.db
-      .select({
-        id: reservations.id,
-        classId: reservations.classId,
-        userId: reservations.userId,
-        status: reservations.status,
-        createdAt: reservations.createdAt,
-        cancelledAt: reservations.cancelledAt,
-        checkedInAt: reservations.checkedInAt,
-        classTitle: classes.title,
-        classStartsAt: classes.startsAt,
-        classDurationMin: classes.durationMin,
-      })
-      .from(reservations)
-      .innerJoin(classes, eq(classes.id, reservations.classId))
-      .where(
-        and(
-          eq(reservations.userId, userId),
-          gte(classes.startsAt, from),
-          lte(classes.startsAt, to),
-        ),
-      )
-      .orderBy(asc(classes.startsAt))
-      .limit(limit),
-  );
+  const selectQuery = deps.db
+    .select({
+      id: reservations.id,
+      classId: reservations.classId,
+      userId: reservations.userId,
+      status: reservations.status,
+      createdAt: reservations.createdAt,
+      cancelledAt: reservations.cancelledAt,
+      checkedInAt: reservations.checkedInAt,
+      classTitle: classes.title,
+      classStartsAt: classes.startsAt,
+      classDurationMin: classes.durationMin,
+    })
+    .from(reservations)
+    .innerJoin(classes, eq(classes.id, reservations.classId))
+    .where(
+      and(eq(reservations.userId, userId), gte(classes.startsAt, from), lte(classes.startsAt, to)),
+    )
+    .orderBy(asc(classes.startsAt))
+    .limit(limit);
+
+  const rows =
+    deps.claims !== undefined
+      ? await withConnectionRetry(() =>
+          withTenantHttp(deps.db as AthlyaDbHttp, deps.claims!, selectQuery),
+        )
+      : await withConnectionRetry(() => selectQuery);
 
   const items: ReservationListItem[] = rows.map((row) => ({
     id: row.id,

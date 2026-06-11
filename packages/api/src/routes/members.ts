@@ -53,6 +53,7 @@ import {
   requireRole,
 } from './helpers.js';
 
+import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
 import type { UpdateConsentsRequest, UpdateProfileRequest } from '@athlya/shared/schemas/api';
@@ -103,8 +104,12 @@ export type MemberProfileView = unknown;
  * so this module never imports from the members package directly.
  */
 export interface MembersDeps {
-  getProfile(userId: string): Promise<MemberProfileView>;
-  updateProfile(userId: string, patch: UpdateProfileRequest): Promise<MemberProfileView>;
+  getProfile(userId: string, claims: AuthClaims): Promise<MemberProfileView>;
+  updateProfile(
+    userId: string,
+    patch: UpdateProfileRequest,
+    claims: AuthClaims,
+  ): Promise<MemberProfileView>;
   /**
    * Upload a raw image body to R2 and persist the resulting public URL
    * on the user's profile in one shot (N2.13).
@@ -116,13 +121,19 @@ export interface MembersDeps {
     userId: string,
     contentType: string,
     body: ArrayBuffer,
+    claims: AuthClaims,
   ): Promise<{ avatarUrl: string }>;
-  updateConsents(userId: string, input: UpdateConsentsRequest): Promise<unknown>;
-  enqueueExport(userId: string): Promise<{ jobId: string }>;
+  updateConsents(
+    userId: string,
+    input: UpdateConsentsRequest,
+    claims: AuthClaims,
+  ): Promise<unknown>;
+  enqueueExport(userId: string, claims: AuthClaims): Promise<{ jobId: string }>;
   listMembersByStudio(
     studioId: string,
     requesterRole: 'admin' | 'coach',
     opts: ListMembersQuery,
+    claims: AuthClaims,
   ): Promise<MembersPageView>;
 
   /** Dependency bundle forwarded to the idempotency middleware. */
@@ -185,7 +196,7 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
     if (claims === undefined) {
       throw new Error('authClaims unexpectedly missing after jwtAuth');
     }
-    const profile = await deps.getProfile(claims.userId);
+    const profile = await deps.getProfile(claims.userId, claims);
     return c.json(profile as Record<string, unknown>, 200);
   });
 
@@ -202,7 +213,7 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
         throw new Error('authClaims unexpectedly missing after jwtAuth');
       }
       const patch = readValidated<UpdateProfileRequest>(c, 'json');
-      const updated = await deps.updateProfile(claims.userId, patch);
+      const updated = await deps.updateProfile(claims.userId, patch, claims);
       return c.json(updated as Record<string, unknown>, 200);
     },
   );
@@ -253,7 +264,7 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
     }
 
     try {
-      const result = await deps.uploadAvatar(claims.userId, contentType, body);
+      const result = await deps.uploadAvatar(claims.userId, contentType, body, claims);
       return c.json(result, 200);
     } catch (err) {
       if (err instanceof AvatarUploadNotConfiguredError) {
@@ -281,7 +292,7 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
         throw new Error('authClaims unexpectedly missing after jwtAuth');
       }
       const patch = readValidated<UpdateConsentsRequest>(c, 'json');
-      const consents = await deps.updateConsents(claims.userId, patch);
+      const consents = await deps.updateConsents(claims.userId, patch, claims);
       return c.json(consents as Record<string, unknown>, 200);
     },
   );
@@ -297,7 +308,7 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
       if (claims === undefined) {
         throw new Error('authClaims unexpectedly missing after jwtAuth');
       }
-      const { jobId } = await deps.enqueueExport(claims.userId);
+      const { jobId } = await deps.enqueueExport(claims.userId, claims);
       // 202 Accepted — ZIP assembly runs out-of-band (Req 4.2).
       return c.json({ jobId }, 202);
     },
@@ -320,7 +331,7 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
         return problem403(c, 'listing studio members requires admin or coach role');
       }
       const query = readValidated<ListMembersQuery>(c, 'query');
-      const page = await deps.listMembersByStudio(claims.studioId, claims.role, query);
+      const page = await deps.listMembersByStudio(claims.studioId, claims.role, query, claims);
       return c.json(page as unknown as Record<string, unknown>, 200);
     },
   );
