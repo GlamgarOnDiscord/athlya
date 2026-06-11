@@ -284,7 +284,32 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
   // frequency or investigate a stuck consumer.
   warnOnDrainOverlapRisk(Date.now() - startedAt, result, batchSize, logger);
 
+  emitOutboxDrainErrorsMetric(result, logger);
+
   return result;
+}
+
+/**
+ * Emit the drain-errors counter when any row failed to publish.
+ *
+ * Goes through `console.log` unconditionally so Axiom always records a
+ * `outbox_drain_errors` data point — the production scheduled handler
+ * does not wire a {@link Logger}. When a logger is present we also
+ * forward through it for structured tracing.
+ *
+ * The function is a no-op when `result.failed === 0` so the happy path
+ * emits nothing (no false positives in Axiom).
+ */
+export function emitOutboxDrainErrorsMetric(result: DrainResult, logger?: Logger): void {
+  if (result.failed === 0) return;
+  const meta = {
+    metric: 'outbox_drain_errors',
+    failed: result.failed,
+    processed: result.processed,
+    succeeded: result.succeeded,
+  };
+  console.log('athlya.outbox.drain_errors', meta);
+  logger?.error('outbox drain: failed items in batch', meta);
 }
 
 /**
