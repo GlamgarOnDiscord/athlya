@@ -40,6 +40,9 @@ import type { AthlyaDbHttp } from '@athlya/db/client';
  * Build the Drizzle-backed adapter. The factory is per-isolate
  * (binds the `db` handle) and stateless beyond that — no caching
  * inside the closure.
+ *
+ * neon-http-norls: password_reset_tokens has no tenant-scoped RLS policy;
+ * the flow runs pre-authentication so no TenantClaims are available.
  */
 export function createDrizzlePasswordResetRepo(db: AthlyaDbHttp): PasswordResetRepo {
   return {
