@@ -23,6 +23,7 @@ export {
   pingDbHttp,
   pingDb,
   withTenant,
+  withTenantHttp,
   InvalidClaimsError,
   type AthlyaDb,
   type AthlyaDbAny,

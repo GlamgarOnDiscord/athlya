@@ -49,11 +49,12 @@ import {
   primeDbHttpForTests,
   resetAllDepsCachesForTests,
 } from './deps-cache.js';
-import { createDrizzleAuditLogWriter } from './members-audit-writer-drizzle.js';
-import { createDrizzleConsentsRepo } from './members-consents-repo-drizzle.js';
-import { createDrizzleExportJobStore } from './members-export-job-store-drizzle.js';
-import { createDrizzleMemberRepo } from './members-repo-drizzle.js';
+import { createDrizzleAuditLogWriterHttp } from './members-audit-writer-drizzle.js';
+import { createDrizzleConsentsRepoHttp } from './members-consents-repo-drizzle.js';
+import { createDrizzleExportJobStoreHttp } from './members-export-job-store-drizzle.js';
+import { createDrizzleMemberRepoHttp } from './members-repo-drizzle.js';
 
+import type { AuthClaims } from '../middleware/auth.js';
 import type { MembersDeps } from '../routes/members.js';
 import type { AthlyaBindings } from '../types.js';
 import type { AthlyaDbHttp } from '@athlya/db/client';
@@ -141,19 +142,23 @@ export function buildMembersDeps(
   const events = buildEventPublisher(env);
 
   return {
-    async getProfile(userId): Promise<MemberProfile> {
+    async getProfile(userId: string, claims: AuthClaims): Promise<MemberProfile> {
       const db = getOrCreateDbHttpForRegion(env, cf?.continent);
-      const repo = createDrizzleMemberRepo(db);
+      const repo = createDrizzleMemberRepoHttp(db, claims);
       return svcGetProfile(userId, { repo });
     },
 
-    async updateProfile(userId: string, patch: UpdateProfileRequest): Promise<MemberProfile> {
+    async updateProfile(
+      userId: string,
+      patch: UpdateProfileRequest,
+      claims: AuthClaims,
+    ): Promise<MemberProfile> {
       const db = getOrCreateDbHttpForRegion(env, cf?.continent);
-      const repo = createDrizzleMemberRepo(db);
+      const repo = createDrizzleMemberRepoHttp(db, claims);
       return svcUpdateProfile(userId, patch, { repo });
     },
 
-    async uploadAvatar(userId, contentType, body) {
+    async uploadAvatar(userId: string, contentType: string, body: ArrayBuffer, claims: AuthClaims) {
       const store = createR2AvatarUploadStore(
         env.AVATARS_BUCKET,
         env.AVATARS_PUBLIC_URL,
@@ -161,15 +166,15 @@ export function buildMembersDeps(
       );
       const avatarUrl = await store.putAvatar(userId, contentType, body);
       const db = getOrCreateDbHttpForRegion(env, cf?.continent);
-      const repo = createDrizzleMemberRepo(db);
+      const repo = createDrizzleMemberRepoHttp(db, claims);
       await svcUpdateProfile(userId, { avatarUrl }, { repo });
       return { avatarUrl };
     },
 
-    async updateConsents(userId: string, input: UpdateConsentsRequest) {
+    async updateConsents(userId: string, input: UpdateConsentsRequest, claims: AuthClaims) {
       const db = getOrCreateDbHttpForRegion(env, cf?.continent);
-      const consentsRepo = createDrizzleConsentsRepo(db);
-      const audit = createDrizzleAuditLogWriter(db);
+      const consentsRepo = createDrizzleConsentsRepoHttp(db, claims);
+      const audit = createDrizzleAuditLogWriterHttp(db, claims);
       return svcUpdateConsents(userId, input, {
         consentsRepo,
         audit,
@@ -177,9 +182,9 @@ export function buildMembersDeps(
       });
     },
 
-    async enqueueExport(userId: string): Promise<{ jobId: string }> {
+    async enqueueExport(userId: string, claims: AuthClaims): Promise<{ jobId: string }> {
       const db = getOrCreateDbHttpForRegion(env, cf?.continent);
-      const jobs = createDrizzleExportJobStore(db);
+      const jobs = createDrizzleExportJobStoreHttp(db, claims);
       const result: EnqueueExportResult = await svcEnqueueExport(userId, {
         jobs,
         events,
@@ -197,9 +202,10 @@ export function buildMembersDeps(
       studioId: string,
       requesterRole: 'admin' | 'coach',
       opts,
+      claims: AuthClaims,
     ): Promise<MembersPage> {
       const db = getOrCreateDbHttpForRegion(env, cf?.continent);
-      const repo = createDrizzleMemberRepo(db);
+      const repo = createDrizzleMemberRepoHttp(db, claims);
       const role: Role = requesterRole;
       // Project the route-level `ListMembersQuery` shape onto
       // the service-level `ListMembersOptions` shape so the

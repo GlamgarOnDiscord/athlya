@@ -24,12 +24,13 @@
  * @see Requirements 4.1, 4.2, 4.3, 20.1.
  */
 
+import { withTenantHttp } from '@athlya/db';
 import { exportJobs } from '@athlya/db/schema';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
-import type { AthlyaDbAny } from '@athlya/db/client';
+import type { AthlyaDbAny, AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
 import type { ExportJobRecord, ExportJobStore } from '@athlya/members';
 
 /**
@@ -91,6 +92,99 @@ export function createDrizzleExportJobStore(db: AthlyaDbAny): ExportJobStore {
 
     async findActiveByUser(userId) {
       const rows = await withConnectionRetry(() =>
+        db
+          .select({ id: exportJobs.id })
+          .from(exportJobs)
+          .where(
+            and(eq(exportJobs.userId, userId), inArray(exportJobs.status, ['pending', 'running'])),
+          )
+          .orderBy(desc(exportJobs.requestedAt))
+          .limit(1),
+      );
+      return rows[0]?.id ?? null;
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  HTTP-driver variant                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * HTTP-driver variant — each query runs inside a `withTenantHttp`
+ * batch so `SET LOCAL app.*` activates RLS policies before the
+ * business statement executes.
+ */
+export function createDrizzleExportJobStoreHttp(
+  db: AthlyaDbHttp,
+  claims: TenantClaims,
+): ExportJobStore {
+  return {
+    async create(jobId, userId, requestedAt) {
+      await withTenantHttp(
+        db,
+        claims,
+        db.insert(exportJobs).values({
+          id: jobId,
+          userId,
+          status: 'pending',
+          requestedAt,
+        }),
+      );
+    },
+
+    async markRunning(jobId, startedAt) {
+      await withTenantHttp(
+        db,
+        claims,
+        db
+          .update(exportJobs)
+          .set({ status: 'running', startedAt })
+          .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'pending'))),
+      );
+    },
+
+    async markCompleted(jobId, completedAt, downloadUrl, downloadExpiresAt) {
+      await withTenantHttp(
+        db,
+        claims,
+        db
+          .update(exportJobs)
+          .set({
+            status: 'completed',
+            completedAt,
+            downloadUrl,
+            downloadExpiresAt,
+          })
+          .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'running'))),
+      );
+    },
+
+    async markFailed(jobId, error) {
+      await withTenantHttp(
+        db,
+        claims,
+        db
+          .update(exportJobs)
+          .set({ status: 'failed', error })
+          .where(and(eq(exportJobs.id, jobId), inArray(exportJobs.status, ['pending', 'running']))),
+      );
+    },
+
+    async get(jobId) {
+      const rows = await withTenantHttp(
+        db,
+        claims,
+        db.select().from(exportJobs).where(eq(exportJobs.id, jobId)).limit(1),
+      );
+      const row = rows[0];
+      return row === undefined ? null : toExportJobRecord(row);
+    },
+
+    async findActiveByUser(userId) {
+      const rows = await withTenantHttp(
+        db,
+        claims,
         db
           .select({ id: exportJobs.id })
           .from(exportJobs)

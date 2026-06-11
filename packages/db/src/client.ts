@@ -42,6 +42,7 @@ import { DbError } from './errors.js';
 import * as schema from './schema/index.js';
 
 import type { ExtractTablesWithRelations } from 'drizzle-orm';
+import type { BatchItem } from 'drizzle-orm/batch';
 import type { NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import type { PostgresJsDatabase, PostgresJsTransaction } from 'drizzle-orm/postgres-js';
 import type { Options, PostgresType, Sql } from 'postgres';
@@ -285,6 +286,60 @@ export async function withTenant<T>(
     await tx.execute(sql`select set_config('app.role', ${safe.role}, true)`);
     return fn(tx);
   });
+}
+
+/**
+ * Run a single Drizzle query through the Neon HTTP driver with the
+ * three tenant session variables set in the same network round-trip.
+ *
+ * ### Why this is necessary
+ *
+ * Unlike {@link withTenant} (postgres-js interactive transaction),
+ * the Neon HTTP driver sends each Drizzle call as an independent HTTP
+ * request to Neon's SQL-over-HTTP endpoint. A plain `db.select()` on
+ * the HTTP driver therefore runs without any `app.*` session variables,
+ * making the RLS policies on every tenant-scoped table evaluate their
+ * `USING (studio_id = app_studio_id())` predicate against NULL — which,
+ * when the connection role has BYPASSRLS (Neon's default provisioned
+ * role), means the policy is skipped entirely and all rows are visible.
+ *
+ * `withTenantHttp` uses `db.batch([])` — Neon's HTTP batch API — which
+ * sends all queries in a single HTTP request wrapped in a transaction.
+ * The three `SET LOCAL` statements share that transaction with the
+ * business query, so `app_studio_id()` / `app_user_id()` / `app_role()`
+ * return the correct values when the query executes.
+ *
+ * ### Usage
+ *
+ * ```ts
+ * const rows = await withTenantHttp(db, claims,
+ *   db.select().from(users).where(eq(users.id, userId)),
+ * );
+ * ```
+ *
+ * Pass a **not-yet-awaited** Drizzle query builder as the third argument.
+ * Do NOT `await` it before passing — the builder is lazy and `batch()`
+ * will execute it alongside the SET LOCAL statements.
+ *
+ * @throws {@link InvalidClaimsError} when claims are malformed.
+ */
+export async function withTenantHttp<TResult>(
+  db: AthlyaDbHttp,
+  claims: TenantClaims,
+  query: BatchItem<'pg'> & { _: { result: TResult } },
+): Promise<TResult> {
+  const safe = validateClaims(claims);
+  // db.batch sends all queries in a single HTTP request wrapped in a
+  // Neon transaction. SET LOCAL scoping applies within that transaction.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const [, , , result] = await db.batch([
+    db.execute(sql`select set_config('app.user_id', ${safe.userId}, true)`),
+    db.execute(sql`select set_config('app.studio_id', ${safe.studioId}, true)`),
+    db.execute(sql`select set_config('app.role', ${safe.role}, true)`),
+    query,
+  ] as const);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+  return result as TResult;
 }
 
 /**

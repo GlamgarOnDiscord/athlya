@@ -55,11 +55,11 @@ import { cancelReservation as svcCancelReservation } from '@athlya/reservations/
 import { updateClass as svcUpdateClass } from '@athlya/reservations/update';
 
 import {
-  createDrizzleCreateClassRepo,
-  createDrizzleDeleteClassRepo,
-  createDrizzleListClassesRepo,
-  createDrizzleSearchClassesRepo,
-  createDrizzleUpdateClassRepo,
+  createDrizzleCreateClassRepoHttp,
+  createDrizzleDeleteClassRepoHttp,
+  createDrizzleListClassesRepoHttp,
+  createDrizzleSearchClassesRepoHttp,
+  createDrizzleUpdateClassRepoHttp,
 } from './classes-repo-drizzle.js';
 import {
   getOrCreateDbHttp,
@@ -142,10 +142,11 @@ export function buildClassesDeps(
     async listClasses(
       studioId: string,
       range: ListClassesQuery,
+      claims: AuthClaims,
     ): Promise<{ items: ClassListing[] }> {
       const db = getOrCreateDbHttpForRegion(env, cf?.continent);
       const redis = getOrCreateRedisForEnv(env);
-      const classRepo = createDrizzleListClassesRepo(db);
+      const classRepo = createDrizzleListClassesRepoHttp(db, toTenantClaims(claims));
       const counter = createRedisRemainingCounter(redis);
       const items = await svcListClasses(studioId, range, {
         classRepo,
@@ -157,10 +158,11 @@ export function buildClassesDeps(
     async searchClasses(
       studioId: string,
       query: SearchClassesQuery,
+      claims: AuthClaims,
     ): Promise<{ items: ClassSearchResult[] }> {
       const db = getOrCreateDbHttpForRegion(env, cf?.continent);
       const redis = getOrCreateRedisForEnv(env);
-      const searchRepo = createDrizzleSearchClassesRepo(db);
+      const searchRepo = createDrizzleSearchClassesRepoHttp(db, toTenantClaims(claims));
       const counter = createRedisRemainingCounter(redis);
 
       const range =
@@ -175,10 +177,14 @@ export function buildClassesDeps(
       return { items };
     },
 
-    async createClass(studioId: string, input: CreateClassRequest): Promise<ClassRow> {
+    async createClass(
+      studioId: string,
+      input: CreateClassRequest,
+      claims: AuthClaims,
+    ): Promise<ClassRow> {
       const db = getOrCreateDbHttp(env.DB_URL);
       const redis = getOrCreateRedisForEnv(env);
-      const classRepo = createDrizzleCreateClassRepo(db);
+      const classRepo = createDrizzleCreateClassRepoHttp(db, toTenantClaims(claims));
       const counter = createRedisRemainingCounter(redis);
       return svcCreateClass(studioId as StudioId, input, {
         classRepo,
@@ -186,9 +192,13 @@ export function buildClassesDeps(
       });
     },
 
-    async deleteClass(studioId: string, classId: string): Promise<DeleteClassOutcome> {
+    async deleteClass(
+      studioId: string,
+      classId: string,
+      claims: AuthClaims,
+    ): Promise<DeleteClassOutcome> {
       const db = getOrCreateDbHttp(env.DB_URL);
-      const repo = createDrizzleDeleteClassRepo(db);
+      const repo = createDrizzleDeleteClassRepoHttp(db, toTenantClaims(claims));
       const found = await repo.deleteClass(studioId, classId);
       return found ? { kind: 'deleted' } : { kind: 'not_found' };
     },
@@ -197,10 +207,11 @@ export function buildClassesDeps(
       studioId: string,
       classId: string,
       patch: UpdateClassRequest,
+      claims: AuthClaims,
     ): Promise<UpdateClassOutcome> {
       const db = getOrCreateDbHttp(env.DB_URL);
       const redis = getOrCreateRedisForEnv(env);
-      const classRepo = createDrizzleUpdateClassRepo(db);
+      const classRepo = createDrizzleUpdateClassRepoHttp(db, toTenantClaims(claims));
       const counter = createRedisRemainingCounter(redis);
 
       try {
@@ -262,9 +273,9 @@ export function buildReservationsDeps(
   cf?: { readonly continent?: string },
 ): ReservationsDeps {
   return {
-    async listMyReservations(userId: string, query) {
+    async listMyReservations(userId: string, query, claims: AuthClaims) {
       const db = getOrCreateDbHttpForRegion(env, cf?.continent);
-      return queryListMyReservations(userId, query, { db });
+      return queryListMyReservations(userId, query, { db, claims: toTenantClaims(claims) });
     },
 
     async bookClass(claims, input) {

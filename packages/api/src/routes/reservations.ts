@@ -104,6 +104,7 @@ export interface ReservationsDeps {
   listMyReservations(
     userId: string,
     query: ListMyReservationsQuery,
+    claims: AuthClaims,
   ): Promise<{ items: ReadonlyArray<unknown> }>;
   getRemainingSeats(classId: string): Promise<number | null>;
 
@@ -317,7 +318,7 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
       throw new Error('authClaims unexpectedly missing after jwtAuth');
     }
     const query = readValidated<ListMyReservationsQuery>(c, 'query');
-    const result = await deps.listMyReservations(claims.userId, query);
+    const result = await deps.listMyReservations(claims.userId, query, claims);
 
     // B5.2 — ETag + Cache-Control. Reservation status mutates
     // in real time when the owner cancels or when the

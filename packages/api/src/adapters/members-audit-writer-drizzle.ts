@@ -22,11 +22,12 @@
  * @see Requirements 22.1, 22.2, 22.3.
  */
 
+import { withTenantHttp } from '@athlya/db';
 import { auditLog } from '@athlya/db/schema';
 
 import { withConnectionRetry } from './db-retry.js';
 
-import type { AthlyaDbAny } from '@athlya/db/client';
+import type { AthlyaDbAny, AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
 import type { AuditLogWriter } from '@athlya/members';
 
 /**
@@ -45,6 +46,31 @@ export function createDrizzleAuditLogWriter(db: AthlyaDbAny): AuditLogWriter {
           metadata: entry.metadata,
         });
       });
+    },
+  };
+}
+
+/**
+ * HTTP-driver variant — wraps the insert in `withTenantHttp` so RLS
+ * policies on `audit_log` see the correct `app.*` session variables.
+ */
+export function createDrizzleAuditLogWriterHttp(
+  db: AthlyaDbHttp,
+  claims: TenantClaims,
+): AuditLogWriter {
+  return {
+    async append(entry) {
+      await withTenantHttp(
+        db,
+        claims,
+        db.insert(auditLog).values({
+          actorId: entry.actorId,
+          action: entry.action,
+          targetType: entry.targetType,
+          targetId: entry.targetId,
+          metadata: entry.metadata,
+        }),
+      );
     },
   };
 }
