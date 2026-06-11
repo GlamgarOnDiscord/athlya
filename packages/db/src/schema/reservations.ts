@@ -19,7 +19,8 @@
  * waitlist promotion), 10.1–10.5 (state machine), 11.6 (check-in).
  */
 
-import { pgTable, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { index, pgTable, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import { createdAt, uuidPrimaryKey } from './_shared.js';
 import { classes } from './classes.js';
@@ -49,6 +50,9 @@ export const reservations = pgTable(
      * design document.
      */
     uniqueIndex('reservations_class_user_unique').on(table.classId, table.userId),
+    index('reservations_class_status_created_at_idx')
+      .on(table.classId, table.status, table.createdAt)
+      .where(sql`status = 'waitlist'`),
   ],
 );
 
