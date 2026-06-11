@@ -1,6 +1,6 @@
 # Athlya Platform — Progress & Remaining Work
 
-**Dernière mise à jour :** Session 2026-06 — CN.6.4 chaos flag CHAOS_NEON_FAILURE_RATE (#219/#223). CN.7.1+CN.7.3 canary deploy + automatic rollback (#220/#226). Copilot follow-up fixes on canary/rollback workflows (#236/#239). CN.8.3 Neon EU read-replica routing (#218/#222). B5.3 Hono compress() middleware (#217). Compteur vérifié : **282 / 313 tâches**.
+**Dernière mise à jour :** Session 2026-06 — Security sprint: Req 22.3 audit_log studio_id scoping (#225 → PR #246 ✅), CWE-601 Stripe open redirect fix (#241 → PR #247 ✅), IDN punycode throttle bypass (#243 → PR #248 🔄 CI). Aussi: composite indexes (#238 → PR #242 ✅), outbox RLS studio_id (#244 → PR #245 ✅). Compteur vérifié : **282 / 313 tâches** (+sécurité).
 **Tâches complétées :** Epic 14 (1/1), Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.6.4, CN.7.1, CN.7.3, CN.8.1, CN.8.2, CN.8.3, CN.9.2, CN.9.3 — cases parents cochées
 **Hardening tasks livrées :** 8 / 8 (H1 à H8) + 6 issues GitHub (#47–#53 #56) + 8 Dependabot alerts (PR #58)
 **Niveau 2 (live wiring) :** 13 / 13 items ✅ COMPLET (voir section dédiée)
@@ -87,13 +87,13 @@ Suite complète (10 packages, Docker absent sur ce poste — `pnpm -r test` reto
 |---|---|---|
 | `@athlya/shared` | **135/135** ⏫ | +27 brand-color (unit + property test numRuns 50) |
 | `@athlya/db` | **61/61** ⏫ | +16 CN.9.3 PGlite (P7 tenant isolation — 4 Docker-gated upgraded to always-run) |
-| `@athlya/auth` | 85/85 | — |
+| `@athlya/auth` | **90/90** ⏫ | +5 IDN punycode throttle tests (#243) |
 | `@athlya/ratelimit` | 7/7 | — |
 | `@athlya/api` | **401/401** ⏫ | +6 B5.3 compress middleware (gzip/deflate negotiation, ETag weakening, threshold behavior) |
 | `@athlya/members` | **74/74** ⏫ | +7 CN.9.3 PGlite (P4 RGPD cascade — Docker-gated upgraded to always-run) |
 | `@athlya/reservations` | 113/113 (+ 2 Docker-gated) | dont PBT P1, P2, P3 |
 | `@athlya/notifications` | 58/58 | — |
-| `@athlya/billing` | **30/30** ⏫ | +21 webhook (12 HMAC + 4 happy + 5 failure) |
+| `@athlya/billing` | **32/32** ⏫ | +21 webhook; +2 CWE-601 (strict schema + trailing slash, #241) |
 | `@athlya/web` | **74/74** ⏫ | Epic 10 livré : 10.1 (10), 10.2 (+23), 10.3 (+10), 10.4 (+11), 10.5 (+9), 10.6 (+11). 10.7/10.8 : couche E2E Playwright (axe WCAG 2.2 AA + register→book→cancel) exécutée en CI uniquement (Chromium absent du sandbox Windows) |
 
 **Total : ~1043 tests verts** (+20 CN.6.4 chaos, +8 CN.8.3 EU read-replica cache, +6 B5.3 compress middleware). Suites P4 (5.6) et P7 (2.7) s'exécutent désormais localement sans Docker via PGlite (CN.9.3) — Testcontainers réservé au CI Linux. P1 (6.8 booking) reste `describe.skip` (bug withTenant hors scope CN.9.3). Playwright E2E (axe + flows) s'exécute dans `.github/workflows/axe.yml` avec 4 jobs parallèles : `a11y`, `e2e-flows`, `studio-a11y`, `studio-e2e-flows`.
