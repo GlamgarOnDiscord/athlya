@@ -55,6 +55,15 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Guard — no raw AthlyaDbHttp usage outside withTenantHttp
+        run: |
+          offenders=$(grep -rl 'AthlyaDbHttp' packages/api/src/adapters/ | xargs grep -L 'withTenantHttp' 2>/dev/null || true)
+          if [ -n "$offenders" ]; then
+            echo "ERROR: adapter files use AthlyaDbHttp without withTenantHttp:"
+            echo "$offenders"
+            exit 1
+          fi
+
       - name: Typecheck
         run: pnpm typecheck
 
