@@ -44,10 +44,12 @@
  *   - `priceId` is a non-empty string (Stripe price ids look like
  *     `price_…` but we don't lock to a prefix so test fixtures using
  *     shorter mock ids still type-check).
- *   - `successUrl` and `cancelUrl` are HTTPS URLs. Stripe rejects
- *     non-HTTPS redirects for live mode; enforcing it at the service
- *     boundary gives callers a typed `ZodError` rather than an opaque
- *     Stripe 400.
+ *
+ * `successUrl` and `cancelUrl` are NOT client-supplied: they are
+ * constructed server-side from `deps.redirectBaseUrl` to prevent
+ * CWE-601 open redirect (issue #241). The Stripe template variable
+ * `{CHECKOUT_SESSION_ID}` is appended to the success URL so Stripe
+ * substitutes the real session id on redirect.
  *
  * Invalid input throws `ZodError`. The service never swallows it —
  * the API layer translates it to RFC 7807 Problem Details.
@@ -56,6 +58,12 @@
  */
 
 import { z } from 'zod';
+
+/**
+ * Stripe template variable for session id substitution. Stripe
+ * replaces this literal string in the `success_url` at redirect time.
+ */
+const STRIPE_SESSION_ID_TEMPLATE = '{CHECKOUT_SESSION_ID}';
 
 /* ------------------------------------------------------------------ */
 /*  Domain types                                                       */
@@ -183,36 +191,17 @@ export interface StripeClient {
 /* ------------------------------------------------------------------ */
 
 /**
- * Validates `successUrl` / `cancelUrl` are absolute HTTPS URLs.
- * Using a refinement instead of `z.string().url()` keeps us in
- * control: `url()` accepts `http://`, and Stripe rejects that in
- * live mode anyway.
- */
-const httpsUrl = z
-  .string()
-  .min(1)
-  .refine(
-    (raw) => {
-      try {
-        const parsed = new URL(raw);
-        return parsed.protocol === 'https:';
-      } catch {
-        return false;
-      }
-    },
-    { message: 'must be an absolute https:// URL' },
-  );
-
-/**
  * Public input contract for {@link createCheckoutSession}. Zod-parsed
  * up front so malformed data throws a typed `ZodError` the API layer
  * can translate into RFC 7807 Problem Details.
+ *
+ * `successUrl` and `cancelUrl` are intentionally absent — they are
+ * constructed server-side from `CreateCheckoutSessionDeps.redirectBaseUrl`
+ * to prevent CWE-601 open redirect (issue #241).
  */
 export const CreateCheckoutSessionInputSchema = z.object({
   userId: z.string().min(1),
   priceId: z.string().min(1),
-  successUrl: httpsUrl,
-  cancelUrl: httpsUrl,
 });
 
 /** Inferred input type — callers use this, the schema is internal. */
@@ -227,6 +216,13 @@ export interface CreateCheckoutSessionDeps {
   readonly users: UserLookupRepo;
   readonly billing: StudioBillingRepo;
   readonly stripe: StripeClient;
+  /**
+   * Base URL for server-side redirect construction (CWE-601 fix, issue #241).
+   * Must be an absolute `https://` origin, e.g. `https://app.athlya.app`.
+   * `successUrl` becomes `${redirectBaseUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`
+   * and `cancelUrl` becomes `${redirectBaseUrl}/billing/cancel`.
+   */
+  readonly redirectBaseUrl: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -271,19 +267,20 @@ export type CreateCheckoutSessionResult =
  *
  * Flow:
  *
- *   1. **Validate input.** Zod rejects empty ids / non-HTTPS redirect
- *      URLs with a `ZodError`.
+ *   1. **Validate input.** Zod rejects empty ids with a `ZodError`.
  *   2. **Look up the user.** Missing → `'user_not_found'`. No Stripe
  *      call is made.
  *   3. **Look up the studio's billing.** Missing studio row or
  *      `stripeAccountId === null` → `'billing_not_configured'`.
  *      The Stripe call is skipped because the session would fail
  *      Stripe's own validation with a less-helpful error.
- *   4. **Call Stripe.** Forward `successUrl`, `cancelUrl`, the
- *      resolved Connect account id and per-member metadata
- *      (`userId`, `studioId`) so the webhook handler (task 16.2)
- *      can correlate later.
- *   5. **Return** the `sessionId` + hosted `url`.
+ *   4. **Build redirect URLs server-side.** `successUrl` and `cancelUrl`
+ *      are derived from `deps.redirectBaseUrl` — never from client input
+ *      — to prevent CWE-601 open redirect (issue #241).
+ *   5. **Call Stripe.** Forward the constructed URLs, the resolved
+ *      Connect account id and per-member metadata (`userId`, `studioId`)
+ *      so the webhook handler (task 16.2) can correlate later.
+ *   6. **Return** the `sessionId` + hosted `url`.
  *
  * Any thrown error from the Stripe client propagates unchanged.
  */
@@ -294,7 +291,7 @@ export async function createCheckoutSession(
   // Step 1 — validate. Throws ZodError on malformed input.
   const parsed = CreateCheckoutSessionInputSchema.parse(input);
 
-  const { users, billing, stripe } = deps;
+  const { users, billing, stripe, redirectBaseUrl } = deps;
 
   // Step 2 — user lookup.
   const user = await users.getUser(parsed.userId);
@@ -308,14 +305,19 @@ export async function createCheckoutSession(
     return { kind: 'billing_not_configured' };
   }
 
-  // Step 4 — Stripe call. Metadata carries the correlation keys the
+  // Step 4 — build redirect URLs server-side (CWE-601, issue #241).
+  // Stripe replaces {CHECKOUT_SESSION_ID} with the real session id.
+  const successUrl = `${redirectBaseUrl}/billing/success?session_id=${STRIPE_SESSION_ID_TEMPLATE}`;
+  const cancelUrl = `${redirectBaseUrl}/billing/cancel`;
+
+  // Step 5 — Stripe call. Metadata carries the correlation keys the
   // webhook handler needs; `customerEmail` pre-fills the Stripe
   // Checkout page; `stripeAccount` pins the session to the studio's
   // Connect account.
   const session = await stripe.createCheckoutSession({
     priceId: parsed.priceId,
-    successUrl: parsed.successUrl,
-    cancelUrl: parsed.cancelUrl,
+    successUrl,
+    cancelUrl,
     customerEmail: user.email,
     metadata: {
       userId: user.userId,
@@ -324,7 +326,7 @@ export async function createCheckoutSession(
     stripeAccount: studioBilling.stripeAccountId,
   });
 
-  // Step 5 — ok.
+  // Step 6 — ok.
   return {
     kind: 'ok',
     sessionId: session.id,
