@@ -251,6 +251,116 @@ export async function shouldAllowLogin(
 }
 
 // ---------------------------------------------------------------------------
+// Refresh-token throttle (issue #240)
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum number of refresh calls allowed per user per 15-minute
+ * window. A legitimate SPA that rotates on every 401 makes ~1
+ * refresh per access-token lifetime (typically also 15 minutes),
+ * so this budget is deliberately generous for normal use while
+ * cutting off an attacker who drains a stolen token at full speed.
+ */
+export const REFRESH_ATTEMPT_LIMIT = 10;
+
+/**
+ * Sliding-window size for the refresh throttle. Matches the
+ * access-token lifetime (15 min = 900 s) so a single rotation cycle
+ * always fits inside one window.
+ */
+export const REFRESH_WINDOW_SEC = 900;
+
+/**
+ * Redis key prefix for refresh throttle buckets.
+ */
+export const REFRESH_BUCKET_PREFIX = 'auth:refresh';
+
+/**
+ * Extract the JWT `sub` claim from a token without verifying the
+ * signature. Used only to key the rate-limit bucket — the actual
+ * signature verification happens inside the refresh use-case.
+ *
+ * Decoding without verification is safe here because the bucket key
+ * is not a trust decision: if an attacker forges a fake `sub`, they
+ * only pollute their own bucket (no consequence). The actual handler
+ * rejects the token if the signature is wrong.
+ *
+ * Returns `undefined` when the token is not a well-formed JWT or
+ * the payload does not carry a non-empty `sub` string.
+ */
+function decodeJwtSubUnsafe(token: string): string | undefined {
+  const parts = token.split('.');
+  if (parts.length !== 3 || parts[1] === undefined) return undefined;
+  try {
+    // base64url → base64: swap chars then add required '=' padding so
+    // atob() works reliably across all runtimes (some reject unpadded input).
+    const b64url = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64url.padEnd(b64url.length + ((4 - (b64url.length % 4)) % 4), '=');
+    const json = new TextDecoder().decode(Uint8Array.from(atob(padded), (c) => c.charCodeAt(0)));
+    const payload: unknown = JSON.parse(json);
+    if (typeof payload !== 'object' || payload === null) return undefined;
+    const sub = (payload as Record<string, unknown>).sub;
+    return typeof sub === 'string' && sub.length > 0 ? sub : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Build the Redis key for a refresh-token throttle bucket.
+ *
+ * Key strategy: SHA-256(sub)[:16] where `sub` is decoded from the
+ * JWT payload without signature verification. If the token is
+ * malformed or lacks a sub, falls back to SHA-256(token)[:16] so
+ * each unique refresh token still has its own isolated bucket.
+ *
+ * Both paths collapse to 64 bits of key space — negligible collision
+ * probability for the realistic population of concurrent users.
+ */
+export async function refreshBucketKey(refreshToken: string): Promise<string> {
+  if (typeof refreshToken !== 'string' || refreshToken.length === 0) {
+    throw new TypeError('refreshBucketKey: refreshToken must be a non-empty string');
+  }
+  const sub = decodeJwtSubUnsafe(refreshToken);
+  const input = sub !== undefined ? sub : refreshToken;
+  const data = new TextEncoder().encode(input);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
+  const hex = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `${REFRESH_BUCKET_PREFIX}:${hex.slice(0, 16)}`;
+}
+
+/**
+ * Evaluate whether a token-refresh call may proceed.
+ *
+ * Policy: {@link REFRESH_ATTEMPT_LIMIT} calls per user per
+ * {@link REFRESH_WINDOW_SEC} second window. A stolen refresh token
+ * used at full speed hits the limit within seconds, preventing the
+ * "token amplification" attack described in issue #240.
+ *
+ * Returns `{ allow: true, remaining }` or
+ * `{ allow: false, retryAfterSec }`, matching the shape of
+ * {@link LoginThrottleDecision} for consistency.
+ */
+export async function shouldAllowRefresh(
+  refreshToken: string,
+  deps: LoginThrottleDeps,
+): Promise<LoginThrottleDecision> {
+  const key = await refreshBucketKey(refreshToken);
+  const decision = await rateLimitSlidingWindow(
+    deps.now !== undefined ? { redis: deps.redis, now: deps.now } : { redis: deps.redis },
+    key,
+    REFRESH_ATTEMPT_LIMIT,
+    REFRESH_WINDOW_SEC,
+  );
+  if (decision.kind === 'allow') {
+    return { allow: true, remaining: decision.remaining };
+  }
+  return { allow: false, retryAfterSec: decision.retryAfterSec };
+}
+
+// ---------------------------------------------------------------------------
 // Internal assertions
 // ---------------------------------------------------------------------------
 

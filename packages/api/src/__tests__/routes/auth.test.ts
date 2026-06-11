@@ -159,6 +159,59 @@ describe('POST /v1/auth/refresh', () => {
       refreshToken: 'r.old',
     });
   });
+
+  it('returns 429 rate_limit_exceeded with Retry-After when checkRefreshRateLimit denies (issue #240)', async () => {
+    const checkRefreshRateLimit = vi.fn().mockResolvedValue({ allow: false, retryAfterSec: 840 });
+    const deps = buildStubDeps({ auth: { checkRefreshRateLimit } });
+    const app = buildTestApp(deps);
+
+    const res = await app.request(
+      '/v1/auth/refresh',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ refreshToken: 'r.stolen' }),
+      },
+      env(),
+    );
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('content-type')).toBe('application/problem+json');
+    expect(Number(res.headers.get('retry-after'))).toBeGreaterThan(0);
+    const body = await readJson<{ code?: string }>(res);
+    expect(body.code).toBe('rate_limit_exceeded');
+    expect(checkRefreshRateLimit).toHaveBeenCalledWith('r.stolen');
+    expect(deps.auth.refresh).not.toHaveBeenCalled();
+  });
+
+  it('forwards to deps.refresh when checkRefreshRateLimit allows', async () => {
+    const session = {
+      accessToken: 'a.t2',
+      refreshToken: 'r.t2',
+      accessTokenExpiresIn: 900,
+      refreshTokenExpiresIn: 2_592_000,
+      user: { id: 'u2' },
+    };
+    const checkRefreshRateLimit = vi.fn().mockResolvedValue({ allow: true });
+    const deps = buildStubDeps({
+      auth: { checkRefreshRateLimit, refresh: vi.fn().mockResolvedValue(session) },
+    });
+    const app = buildTestApp(deps);
+
+    const res = await app.request(
+      '/v1/auth/refresh',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ refreshToken: 'r.valid' }),
+      },
+      env(),
+    );
+
+    expect(res.status).toBe(200);
+    expect(checkRefreshRateLimit).toHaveBeenCalledWith('r.valid');
+    expect(deps.auth.refresh).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('POST /v1/auth/logout', () => {

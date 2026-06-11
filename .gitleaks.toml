@@ -30,6 +30,8 @@ useDefault = true
     '''idempotency\.test\.ts''',
     # packages/reservations — check-in tests (opaque JWT-shaped stub token)
     '''checkin\.test\.ts''',
+    # packages/auth — refresh-throttle tests (fake JWT-shaped strings for bucket-key tests)
+    '''throttle\.test\.ts''',
     # docs — runbook showing placeholder PEM blocks for the rotation procedure
     '''rotate-jwt\.md''',
   ]
