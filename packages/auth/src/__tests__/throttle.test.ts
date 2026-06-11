@@ -283,7 +283,7 @@ describe('normalizeLoginEmail', () => {
     expect(normalizeLoginEmail('alice@café.com')).toBe('alice@xn--caf-dma.com');
   });
 
-  it('treats Unicode and punycode domain as the same bucket key', () => {
+  it('Unicode and punycode IDN variants normalise to identical form', () => {
     expect(normalizeLoginEmail('alice@café.com')).toBe(
       normalizeLoginEmail('alice@xn--caf-dma.com'),
     );
@@ -317,6 +317,12 @@ describe('loginBucketKey (Sprint-3 Slice 3.2 — S5-007 hashed key)', () => {
   it('collides across email casing (normalisation preserved)', async () => {
     expect(await loginBucketKey(IP_A, 'Alice@Example.COM')).toBe(
       await loginBucketKey(IP_A, 'alice@example.com'),
+    );
+  });
+
+  it('collides for Unicode vs punycode IDN domain (issue #243)', async () => {
+    expect(await loginBucketKey(IP_A, 'alice@café.com')).toBe(
+      await loginBucketKey(IP_A, 'alice@xn--caf-dma.com'),
     );
   });
 
