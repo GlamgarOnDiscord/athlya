@@ -16,16 +16,17 @@
 --   - Rows written outside a tenant context (JWT key rotation, DLQ replay,
 --     billing webhooks via the HTTP driver) get studio_id = NULL and remain
 --     visible to ALL admins — these are platform-level events.
---   - ON DELETE SET NULL: audit records survive studio deletion to preserve
---     the audit trail; the `studio_id → NULL` transition makes those rows
---     globally visible, which is acceptable (the studio no longer exists).
+--   - `studio_id` is stored WITHOUT a foreign key. A FK with ON DELETE SET NULL
+--     would trigger the `audit_log_forbid_update` trigger (BEFORE UPDATE FOR
+--     EACH ROW) and block studio deletions. Since audit rows must survive studio
+--     deletion, denormalized UUID (no FK) is the correct choice — `studio_id`
+--     records which studio context the event occurred in, not a live reference.
 --   - Legacy rows (seeded before this migration) also get studio_id = NULL
 --     and are therefore visible to all admins — backward-compatible.
 -- =====================================================================
 
 ALTER TABLE "audit_log"
     ADD COLUMN "studio_id" uuid
-        REFERENCES "studios" ("id") ON DELETE SET NULL
         DEFAULT (NULLIF(current_setting('app.studio_id', true), '')::uuid);
 
 DROP POLICY IF EXISTS "audit_admin_only" ON "audit_log";

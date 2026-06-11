@@ -42,7 +42,7 @@ INSERT INTO "audit_log" (actor_id, action, studio_id, metadata) VALUES
 -- last block in this file issues `RESET ROLE` to exercise the
 -- audit_log_immutable() trigger independently of RLS.
 SET LOCAL ROLE athlya_tenant_test;
-SELECT plan(11);
+SELECT plan(12);
 
 -- ---------- audit_admin_only: member sees nothing ----------
 
@@ -84,6 +84,19 @@ SELECT cmp_ok(
     '>',
     0,
     'audit_admin_only: admin role can read audit rows (non-empty)'
+);
+
+-- ---------- audit_admin_only: admin can see their own studio-scoped rows ----------
+-- The seeded row above for studio A must be visible to admin_A.
+-- Without this check the "non-empty" assertion above could pass purely
+-- due to NULL-studio legacy rows while a broken studio_id filter goes unnoticed.
+
+SELECT cmp_ok(
+    (SELECT count(*)::int FROM "audit_log"
+     WHERE studio_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+    '>',
+    0,
+    'audit_admin_only: admin_A can read own studio-scoped audit rows'
 );
 
 -- ---------- cross-tenant isolation: admin_A cannot see studio_B rows ----------
