@@ -60,16 +60,18 @@ export function createDrizzleAuditLogWriterHttp(
 ): AuditLogWriter {
   return {
     async append(entry) {
-      await withTenantHttp(
-        db,
-        claims,
-        db.insert(auditLog).values({
-          actorId: entry.actorId,
-          action: entry.action,
-          targetType: entry.targetType,
-          targetId: entry.targetId,
-          metadata: entry.metadata,
-        }),
+      await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db.insert(auditLog).values({
+            actorId: entry.actorId,
+            action: entry.action,
+            targetType: entry.targetType,
+            targetId: entry.targetId,
+            metadata: entry.metadata,
+          }),
+        ),
       );
     },
   };

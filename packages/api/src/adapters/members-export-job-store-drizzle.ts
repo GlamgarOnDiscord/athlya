@@ -121,78 +121,95 @@ export function createDrizzleExportJobStoreHttp(
 ): ExportJobStore {
   return {
     async create(jobId, userId, requestedAt) {
-      await withTenantHttp(
-        db,
-        claims,
-        db.insert(exportJobs).values({
-          id: jobId,
-          userId,
-          status: 'pending',
-          requestedAt,
-        }),
+      await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db.insert(exportJobs).values({
+            id: jobId,
+            userId,
+            status: 'pending',
+            requestedAt,
+          }),
+        ),
       );
     },
 
     async markRunning(jobId, startedAt) {
-      await withTenantHttp(
-        db,
-        claims,
-        db
-          .update(exportJobs)
-          .set({ status: 'running', startedAt })
-          .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'pending'))),
+      await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .update(exportJobs)
+            .set({ status: 'running', startedAt })
+            .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'pending'))),
+        ),
       );
     },
 
     async markCompleted(jobId, completedAt, downloadUrl, downloadExpiresAt) {
-      await withTenantHttp(
-        db,
-        claims,
-        db
-          .update(exportJobs)
-          .set({
-            status: 'completed',
-            completedAt,
-            downloadUrl,
-            downloadExpiresAt,
-          })
-          .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'running'))),
+      await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .update(exportJobs)
+            .set({
+              status: 'completed',
+              completedAt,
+              downloadUrl,
+              downloadExpiresAt,
+            })
+            .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'running'))),
+        ),
       );
     },
 
     async markFailed(jobId, error) {
-      await withTenantHttp(
-        db,
-        claims,
-        db
-          .update(exportJobs)
-          .set({ status: 'failed', error })
-          .where(and(eq(exportJobs.id, jobId), inArray(exportJobs.status, ['pending', 'running']))),
+      await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .update(exportJobs)
+            .set({ status: 'failed', error })
+            .where(
+              and(eq(exportJobs.id, jobId), inArray(exportJobs.status, ['pending', 'running'])),
+            ),
+        ),
       );
     },
 
     async get(jobId) {
-      const rows = await withTenantHttp(
-        db,
-        claims,
-        db.select().from(exportJobs).where(eq(exportJobs.id, jobId)).limit(1),
+      const rows = await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db.select().from(exportJobs).where(eq(exportJobs.id, jobId)).limit(1),
+        ),
       );
       const row = rows[0];
       return row === undefined ? null : toExportJobRecord(row);
     },
 
     async findActiveByUser(userId) {
-      const rows = await withTenantHttp(
-        db,
-        claims,
-        db
-          .select({ id: exportJobs.id })
-          .from(exportJobs)
-          .where(
-            and(eq(exportJobs.userId, userId), inArray(exportJobs.status, ['pending', 'running'])),
-          )
-          .orderBy(desc(exportJobs.requestedAt))
-          .limit(1),
+      const rows = await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .select({ id: exportJobs.id })
+            .from(exportJobs)
+            .where(
+              and(
+                eq(exportJobs.userId, userId),
+                inArray(exportJobs.status, ['pending', 'running']),
+              ),
+            )
+            .orderBy(desc(exportJobs.requestedAt))
+            .limit(1),
+        ),
       );
       return rows[0]?.id ?? null;
     },

@@ -232,14 +232,16 @@ void sql;
 export function createDrizzleMemberRepoHttp(db: AthlyaDbHttp, claims: TenantClaims): MemberRepo {
   return {
     async findProfile(userId) {
-      const rows = await withTenantHttp(
-        db,
-        claims,
-        db
-          .select()
-          .from(users)
-          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
-          .limit(1),
+      const rows = await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .select()
+            .from(users)
+            .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+            .limit(1),
+        ),
       );
       const row = rows[0];
       return row === undefined ? null : toMemberProfile(row);
@@ -247,14 +249,16 @@ export function createDrizzleMemberRepoHttp(db: AthlyaDbHttp, claims: TenantClai
 
     async updateProfile(userId, patch) {
       const patchColumns = buildUpdatePatch(patch);
-      const rows = await withTenantHttp(
-        db,
-        claims,
-        db
-          .update(users)
-          .set(patchColumns)
-          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
-          .returning(),
+      const rows = await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .update(users)
+            .set(patchColumns)
+            .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+            .returning(),
+        ),
       );
       const row = rows[0];
       if (row === undefined) {
@@ -278,15 +282,17 @@ export function createDrizzleMemberRepoHttp(db: AthlyaDbHttp, claims: TenantClai
         );
       }
 
-      const rows = await withTenantHttp(
-        db,
-        claims,
-        db
-          .select()
-          .from(users)
-          .where(and(...conditions))
-          .orderBy(desc(users.createdAt), desc(users.id))
-          .limit(opts.limit + 1),
+      const rows = await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .select()
+            .from(users)
+            .where(and(...conditions))
+            .orderBy(desc(users.createdAt), desc(users.id))
+            .limit(opts.limit + 1),
+        ),
       );
 
       const hasMore = rows.length > opts.limit;

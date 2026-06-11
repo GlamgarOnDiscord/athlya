@@ -120,7 +120,9 @@ export async function listMyReservations(
 
   const rows =
     deps.claims !== undefined
-      ? await withTenantHttp(deps.db as AthlyaDbHttp, deps.claims, selectQuery)
+      ? await withConnectionRetry(() =>
+          withTenantHttp(deps.db as AthlyaDbHttp, deps.claims!, selectQuery),
+        )
       : await withConnectionRetry(() => selectQuery);
 
   const items: ReservationListItem[] = rows.map((row) => ({

@@ -83,28 +83,32 @@ export function createDrizzleConsentsRepoHttp(
 ): ConsentsRepo {
   return {
     async findConsents(userId) {
-      const rows = await withTenantHttp(
-        db,
-        claims,
-        db
-          .select({ consents: users.consents })
-          .from(users)
-          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
-          .limit(1),
+      const rows = await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .select({ consents: users.consents })
+            .from(users)
+            .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+            .limit(1),
+        ),
       );
       const row = rows[0];
       return row === undefined ? null : row.consents;
     },
 
     async updateConsents(userId, consents) {
-      const rows = await withTenantHttp(
-        db,
-        claims,
-        db
-          .update(users)
-          .set({ consents })
-          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
-          .returning(),
+      const rows = await withConnectionRetry(() =>
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .update(users)
+            .set({ consents })
+            .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+            .returning(),
+        ),
       );
       const row = rows[0];
       if (row === undefined) {
