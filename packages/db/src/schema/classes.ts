@@ -17,6 +17,7 @@
  * query shape), 10.1 (referenced by reservations state-machine).
  */
 
+import { sql } from 'drizzle-orm';
 import { index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 import { createdAt, uuidPrimaryKey, deletedAt } from './_shared.js';
@@ -55,6 +56,9 @@ export const classes = pgTable(
      * and the sort order.
      */
     index('classes_studio_starts_at_idx').on(table.studioId, table.startsAt),
+    index('classes_id_studio_idx')
+      .on(table.id, table.studioId)
+      .where(sql`deleted_at IS NULL`),
   ],
 );
 
