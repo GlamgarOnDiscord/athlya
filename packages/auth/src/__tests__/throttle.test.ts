@@ -278,6 +278,24 @@ describe('normalizeLoginEmail', () => {
     const once = normalizeLoginEmail('Alice@Example.COM');
     expect(normalizeLoginEmail(once)).toBe(once);
   });
+
+  it('collapses IDN Unicode domain to punycode (issue #243)', () => {
+    expect(normalizeLoginEmail('alice@café.com')).toBe('alice@xn--caf-dma.com');
+  });
+
+  it('Unicode and punycode IDN variants normalise to identical form', () => {
+    expect(normalizeLoginEmail('alice@café.com')).toBe(
+      normalizeLoginEmail('alice@xn--caf-dma.com'),
+    );
+  });
+
+  it('returns trimmed+lowercased form when domain is unparseable', () => {
+    expect(normalizeLoginEmail('alice@[invalid')).toBe('alice@[invalid');
+  });
+
+  it('handles email with no @ sign gracefully', () => {
+    expect(normalizeLoginEmail('notanemail')).toBe('notanemail');
+  });
 });
 
 describe('loginBucketKey (Sprint-3 Slice 3.2 — S5-007 hashed key)', () => {
@@ -299,6 +317,12 @@ describe('loginBucketKey (Sprint-3 Slice 3.2 — S5-007 hashed key)', () => {
   it('collides across email casing (normalisation preserved)', async () => {
     expect(await loginBucketKey(IP_A, 'Alice@Example.COM')).toBe(
       await loginBucketKey(IP_A, 'alice@example.com'),
+    );
+  });
+
+  it('collides for Unicode vs punycode IDN domain (issue #243)', async () => {
+    expect(await loginBucketKey(IP_A, 'alice@café.com')).toBe(
+      await loginBucketKey(IP_A, 'alice@xn--caf-dma.com'),
     );
   });
 

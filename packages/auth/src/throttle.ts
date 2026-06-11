@@ -120,21 +120,33 @@ export interface LoginThrottleDecision {
  *   - Trim surrounding whitespace (defensive; the Zod schema should
  *     already have refused padded emails, but the throttle is the
  *     security boundary).
- *   - Lower-case. RFC 5321 makes the local part case-sensitive in
- *     principle, but in practice every production mail provider folds
- *     it; treating them as equal here matches operator expectation and
- *     removes the bypass vector.
- *
- * We deliberately do **not** punycode-normalize the domain or apply
- * any other Unicode transformation: the bucket is a cache key, not an
- * authoritative identity, and the user-facing email validation lives
- * upstream in the Zod schema.
+ *   - Lower-case the whole address. RFC 5321 makes the local part
+ *     case-sensitive in principle, but in practice every production
+ *     mail provider folds it; treating them as equal here matches
+ *     operator expectation and removes the bypass vector.
+ *   - Punycode-normalize the domain via the `URL` constructor (issue #243).
+ *     Without this, homoglyph variants of an IDN domain (`café.com` vs
+ *     `xn--caf-dma.com`) hash to different buckets and allow N × 5
+ *     brute-force attempts per window. The `URL` API is available in
+ *     all Workers and Node ≥ 20 runtimes; no external dep is needed.
+ *     Falls back to the trimmed+lowercased form when the domain cannot
+ *     be parsed (malformed input that upstream Zod already rejected).
  */
 export function normalizeLoginEmail(email: string): string {
   if (typeof email !== 'string') {
     throw new TypeError('shouldAllowLogin: email must be a string');
   }
-  return email.trim().toLowerCase();
+  const trimmed = email.trim().toLowerCase();
+  const at = trimmed.lastIndexOf('@');
+  if (at === -1) return trimmed;
+  const local = trimmed.slice(0, at);
+  const domain = trimmed.slice(at + 1);
+  try {
+    const normalized = new URL(`https://x@${domain}`).hostname;
+    return `${local}@${normalized}`;
+  } catch {
+    return trimmed;
+  }
 }
 
 /**
