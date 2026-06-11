@@ -19,14 +19,34 @@
  * 16.4 (drain worker).
  */
 
-import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { createdAt, sqlIsNull, uuidPrimaryKey } from './_shared.js';
+import { studios } from './studios.js';
 
 export const outbox = pgTable(
   'outbox',
   {
     id: uuidPrimaryKey(),
+    /**
+     * Denormalised studio context. Populated automatically via the
+     * column DEFAULT (NULLIF(current_setting('app.studio_id',true),'')::uuid)
+     * when the insert runs inside a withTenant transaction. NULL for
+     * rows predating migration 0014 (legacy). ON DELETE CASCADE ensures
+     * deleted-studio rows are removed rather than NULLed, which would
+     * otherwise re-enable the IS NULL policy fallback cross-tenant.
+     * Used by the outbox_admin_only RLS policy (migration 0014).
+     */
+    studioId: uuid('studio_id').references(() => studios.id, { onDelete: 'cascade' }),
     /** Domain-level event identifier. Unique so retries are safe. */
     eventId: text('event_id').notNull(),
     eventType: text('event_type').notNull(),
