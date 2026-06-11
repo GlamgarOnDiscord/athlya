@@ -111,6 +111,38 @@ ORDER BY created_at ASC
 LIMIT 1
 FOR UPDATE SKIP LOCKED;
 
+-- ---------------------------------------------------------------------
+-- Q6 — countWaitlistAhead (issue #238, migration 0013)
+-- ---------------------------------------------------------------------
+-- The waitlist position query filters on (class_id, status, created_at).
+-- Expected plan: Index Scan using reservations_class_status_created_at_idx.
+-- A sequential scan here means the partial composite index is missing.
+
+\echo '----- Q6: countWaitlistAhead (waitlist partial index) -----'
+EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+SELECT COUNT(*)
+FROM reservations
+WHERE class_id = :test_class_id
+  AND status = 'waitlist'
+  AND created_at < NOW();
+
+-- ---------------------------------------------------------------------
+-- Q7 — admin RLS EXISTS subquery on classes (issue #238, migration 0013)
+-- ---------------------------------------------------------------------
+-- reservations_read_admin_same_studio evaluates:
+--   EXISTS (SELECT 1 FROM classes c
+--           WHERE c.id = reservations.class_id
+--             AND c.studio_id = app_studio_id())
+-- Expected plan: Index Only Scan using classes_id_studio_idx.
+
+\echo '----- Q7: admin RLS EXISTS subquery (classes_id_studio_idx) -----'
+EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+SELECT 1
+FROM classes
+WHERE id = :test_class_id
+  AND studio_id = :test_studio_id
+  AND deleted_at IS NULL;
+
 \echo '====================================='
 \echo 'EXPLAIN ANALYZE complete.'
 \echo 'Review each plan : Index Scan vs Seq Scan.'

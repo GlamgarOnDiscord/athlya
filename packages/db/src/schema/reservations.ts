@@ -52,7 +52,7 @@ export const reservations = pgTable(
     uniqueIndex('reservations_class_user_unique').on(table.classId, table.userId),
     index('reservations_class_status_created_at_idx')
       .on(table.classId, table.status, table.createdAt)
-      .where(sql`status IN ('waitlist', 'confirmed')`),
+      .where(sql`status = 'waitlist'`),
   ],
 );
 
