@@ -42,7 +42,7 @@ INSERT INTO "audit_log" (actor_id, action, studio_id, metadata) VALUES
 -- last block in this file issues `RESET ROLE` to exercise the
 -- audit_log_immutable() trigger independently of RLS.
 SET LOCAL ROLE athlya_tenant_test;
-SELECT plan(12);
+SELECT plan(11);
 
 -- ---------- audit_admin_only: member sees nothing ----------
 
