@@ -199,10 +199,12 @@ export interface StripeClient {
  * constructed server-side from `CreateCheckoutSessionDeps.redirectBaseUrl`
  * to prevent CWE-601 open redirect (issue #241).
  */
-export const CreateCheckoutSessionInputSchema = z.object({
-  userId: z.string().min(1),
-  priceId: z.string().min(1),
-});
+export const CreateCheckoutSessionInputSchema = z
+  .object({
+    userId: z.string().min(1),
+    priceId: z.string().min(1),
+  })
+  .strict();
 
 /** Inferred input type — callers use this, the schema is internal. */
 export type CreateCheckoutSessionInput = z.infer<typeof CreateCheckoutSessionInputSchema>;
@@ -306,9 +308,13 @@ export async function createCheckoutSession(
   }
 
   // Step 4 — build redirect URLs server-side (CWE-601, issue #241).
+  // Strip trailing slashes and any path/query from redirectBaseUrl so a
+  // misconfigured value like `https://app.athlya.app/` never produces
+  // `//billing/...` double-slash URLs. We use URL.origin to normalise.
   // Stripe replaces {CHECKOUT_SESSION_ID} with the real session id.
-  const successUrl = `${redirectBaseUrl}/billing/success?session_id=${STRIPE_SESSION_ID_TEMPLATE}`;
-  const cancelUrl = `${redirectBaseUrl}/billing/cancel`;
+  const origin = new URL(redirectBaseUrl).origin;
+  const successUrl = `${origin}/billing/success?session_id=${STRIPE_SESSION_ID_TEMPLATE}`;
+  const cancelUrl = `${origin}/billing/cancel`;
 
   // Step 5 — Stripe call. Metadata carries the correlation keys the
   // webhook handler needs; `customerEmail` pre-fills the Stripe

@@ -222,6 +222,18 @@ describe('createCheckoutSession — input validation', () => {
       ZodError,
     );
   });
+
+  it('throws ZodError when extra keys like successUrl are passed (strict schema)', async () => {
+    const { deps } = buildDeps();
+
+    await expect(
+      createCheckoutSession(
+        // @ts-expect-error intentionally passing extra key to verify runtime rejection
+        { ...BASE_INPUT, successUrl: 'https://evil.com' },
+        deps,
+      ),
+    ).rejects.toBeInstanceOf(ZodError);
+  });
 });
 
 /* ================================================================== */
@@ -233,6 +245,19 @@ describe('createCheckoutSession — server-side redirect URLs', () => {
     const { createStripeSession, deps } = buildDeps();
 
     await createCheckoutSession(BASE_INPUT, deps);
+
+    const call = createStripeSession.mock.calls[0]?.[0];
+    expect(call?.successUrl).toBe(
+      `${REDIRECT_BASE_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+    );
+    expect(call?.cancelUrl).toBe(`${REDIRECT_BASE_URL}/billing/cancel`);
+  });
+
+  it('strips trailing slash from redirectBaseUrl to avoid double-slash paths', async () => {
+    const { createStripeSession, deps } = buildDeps();
+    const depsWithSlash = { ...deps, redirectBaseUrl: `${REDIRECT_BASE_URL}/` };
+
+    await createCheckoutSession(BASE_INPUT, depsWithSlash);
 
     const call = createStripeSession.mock.calls[0]?.[0];
     expect(call?.successUrl).toBe(
