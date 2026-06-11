@@ -5,7 +5,8 @@
  * {@link createCheckoutSession}:
  *
  *   - Happy path: Stripe called once with the full params including
- *     `stripeAccount`, `customerEmail` and per-member metadata.
+ *     `stripeAccount`, `customerEmail`, server-built redirect URLs and
+ *     per-member metadata.
  *   - `user_not_found`       when the user lookup returns `null`
  *                            (Stripe MUST NOT be called — sensitive
  *                            outbound call skipped for unknown ids).
@@ -13,8 +14,9 @@
  *   - `billing_not_configured` when the studio exists but has not
  *                            completed Stripe onboarding
  *                            (`stripeAccountId === null`).
- *   - Zod rejects a non-HTTPS `successUrl` with a `ZodError`.
  *   - Zod rejects an empty `priceId` with a `ZodError`.
+ *   - Redirect URLs are always derived from `redirectBaseUrl` — never
+ *     from client input (CWE-601 / issue #241).
  *   - A thrown Stripe error propagates unchanged (no swallowing).
  *
  * Every dependency is a hand-rolled `vi.fn()` double — no network,
@@ -49,8 +51,7 @@ const STRIPE_ACCOUNT_ID = 'acct_1Test000000';
 const PRICE_ID = 'price_monthly_basic';
 const SESSION_ID = 'cs_test_abc123';
 const SESSION_URL = 'https://checkout.stripe.com/c/pay/cs_test_abc123';
-const SUCCESS_URL = 'https://app.athlya.test/billing/success';
-const CANCEL_URL = 'https://app.athlya.test/billing/cancel';
+const REDIRECT_BASE_URL = 'https://app.athlya.test';
 
 const BASE_USER: UserBillingContext = {
   userId: USER_ID,
@@ -66,8 +67,6 @@ const BASE_BILLING: StudioBilling = {
 const BASE_INPUT: CreateCheckoutSessionInput = {
   userId: USER_ID,
   priceId: PRICE_ID,
-  successUrl: SUCCESS_URL,
-  cancelUrl: CANCEL_URL,
 };
 
 /* ------------------------------------------------------------------ */
@@ -114,6 +113,7 @@ function buildDeps(
       users: { getUser },
       billing: { getBilling },
       stripe: { createCheckoutSession: createStripeSession },
+      redirectBaseUrl: REDIRECT_BASE_URL,
     },
   };
 }
@@ -138,13 +138,13 @@ describe('createCheckoutSession — happy path', () => {
     expect(getUser).toHaveBeenCalledExactlyOnceWith(USER_ID);
     expect(getBilling).toHaveBeenCalledExactlyOnceWith(STUDIO_ID);
 
-    // Stripe was called once with the full params — Connect
-    // account id, customer email pre-fill, and metadata carrying
-    // both correlation keys the webhook will need.
+    // Stripe was called once with the full params — Connect account id,
+    // customer email pre-fill, server-built redirect URLs, and metadata
+    // carrying both correlation keys the webhook will need.
     expect(createStripeSession).toHaveBeenCalledExactlyOnceWith({
       priceId: PRICE_ID,
-      successUrl: SUCCESS_URL,
-      cancelUrl: CANCEL_URL,
+      successUrl: `${REDIRECT_BASE_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${REDIRECT_BASE_URL}/billing/cancel`,
       customerEmail: 'member@example.com',
       metadata: {
         userId: USER_ID,
@@ -207,22 +207,6 @@ describe('createCheckoutSession — billing_not_configured', () => {
 /* ================================================================== */
 
 describe('createCheckoutSession — input validation', () => {
-  it('throws ZodError when successUrl is not HTTPS', async () => {
-    const { deps } = buildDeps();
-
-    await expect(
-      createCheckoutSession({ ...BASE_INPUT, successUrl: 'http://insecure.example/' }, deps),
-    ).rejects.toBeInstanceOf(ZodError);
-  });
-
-  it('throws ZodError when cancelUrl is not HTTPS', async () => {
-    const { deps } = buildDeps();
-
-    await expect(
-      createCheckoutSession({ ...BASE_INPUT, cancelUrl: 'ftp://nope.example/' }, deps),
-    ).rejects.toBeInstanceOf(ZodError);
-  });
-
   it('throws ZodError when priceId is empty', async () => {
     const { deps } = buildDeps();
 
@@ -237,6 +221,49 @@ describe('createCheckoutSession — input validation', () => {
     await expect(createCheckoutSession({ ...BASE_INPUT, userId: '' }, deps)).rejects.toBeInstanceOf(
       ZodError,
     );
+  });
+
+  it('throws ZodError when extra keys like successUrl are passed (strict schema)', async () => {
+    const { deps } = buildDeps();
+
+    await expect(
+      createCheckoutSession(
+        // @ts-expect-error intentionally passing extra key to verify runtime rejection
+        { ...BASE_INPUT, successUrl: 'https://evil.com' },
+        deps,
+      ),
+    ).rejects.toBeInstanceOf(ZodError);
+  });
+});
+
+/* ================================================================== */
+/*  Redirect URL construction (CWE-601 / issue #241)                  */
+/* ================================================================== */
+
+describe('createCheckoutSession — server-side redirect URLs', () => {
+  it('always builds successUrl and cancelUrl from redirectBaseUrl, never from client input', async () => {
+    const { createStripeSession, deps } = buildDeps();
+
+    await createCheckoutSession(BASE_INPUT, deps);
+
+    const call = createStripeSession.mock.calls[0]?.[0];
+    expect(call?.successUrl).toBe(
+      `${REDIRECT_BASE_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+    );
+    expect(call?.cancelUrl).toBe(`${REDIRECT_BASE_URL}/billing/cancel`);
+  });
+
+  it('strips trailing slash from redirectBaseUrl to avoid double-slash paths', async () => {
+    const { createStripeSession, deps } = buildDeps();
+    const depsWithSlash = { ...deps, redirectBaseUrl: `${REDIRECT_BASE_URL}/` };
+
+    await createCheckoutSession(BASE_INPUT, depsWithSlash);
+
+    const call = createStripeSession.mock.calls[0]?.[0];
+    expect(call?.successUrl).toBe(
+      `${REDIRECT_BASE_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+    );
+    expect(call?.cancelUrl).toBe(`${REDIRECT_BASE_URL}/billing/cancel`);
   });
 });
 
