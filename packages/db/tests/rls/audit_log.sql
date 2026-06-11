@@ -3,6 +3,7 @@
 --
 -- Covered policies (Req 13.4, 22.2, 22.3):
 --   - audit_admin_only   SELECT USING app_role() = 'admin'
+--                        AND (studio_id IS NULL OR studio_id = app_studio_id())
 --   - audit_app_insert   INSERT WITH CHECK true    (0011 — athlya_app path)
 --   - audit_no_update    UPDATE USING false        (belt-and-braces)
 --   - audit_no_delete    DELETE USING false        (belt-and-braces)
@@ -28,13 +29,20 @@
 -- =====================================================================
 
 BEGIN;
+
+-- Insert studio-scoped audit rows as superuser (bypasses RLS) to enable
+-- cross-tenant isolation assertions below. These are rolled back at end.
+INSERT INTO "audit_log" (actor_id, action, studio_id, metadata) VALUES
+    (NULL, 'rls.violation', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '{}'::jsonb),
+    (NULL, 'rls.violation', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '{}'::jsonb);
+
 -- Switch to the non-superuser test role so RLS policies actually
 -- apply. The session role (postgres) is a superuser and therefore
 -- bypasses RLS; the enclosing ROLLBACK restores it at file end. The
 -- last block in this file issues `RESET ROLE` to exercise the
 -- audit_log_immutable() trigger independently of RLS.
 SET LOCAL ROLE athlya_tenant_test;
-SELECT plan(9);
+SELECT plan(12);
 
 -- ---------- audit_admin_only: member sees nothing ----------
 
@@ -76,6 +84,37 @@ SELECT cmp_ok(
     '>',
     0,
     'audit_admin_only: admin role can read audit rows (non-empty)'
+);
+
+-- ---------- cross-tenant isolation: admin_A cannot see studio_B rows ----------
+
+SELECT is(
+    (SELECT count(*)::int FROM "audit_log"
+     WHERE studio_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
+    0,
+    'audit_admin_only: admin_A cannot read studio_B audit rows (cross-tenant isolation)'
+);
+
+-- ---------- cross-tenant isolation: admin_B cannot see studio_A rows ----------
+
+SELECT public.test_set_tenant(
+    '22222222-2222-4222-8222-222222222222',  -- admin B
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'admin'
+);
+
+SELECT is(
+    (SELECT count(*)::int FROM "audit_log"
+     WHERE studio_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+    0,
+    'audit_admin_only: admin_B cannot read studio_A audit rows (cross-tenant isolation)'
+);
+
+-- Restore admin_A context for the insert tests below.
+SELECT public.test_set_tenant(
+    '11111111-1111-4111-8111-111111111113',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'admin'
 );
 
 -- ---------- audit_app_insert: tenant context may append (0011 / issue #118) ----------

@@ -25,10 +25,20 @@
 import { bigserial, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core';
 
 import { createdAt } from './_shared.js';
+import { studios } from './studios.js';
 import { users } from './users.js';
 
 export const auditLog = pgTable('audit_log', {
   id: bigserial('id', { mode: 'bigint' }).primaryKey(),
+  /**
+   * Denormalised studio context. Populated automatically via the column
+   * DEFAULT (NULLIF(current_setting('app.studio_id',true),'')::uuid) when
+   * the insert runs inside a withTenant transaction. NULL for system-level
+   * rows (JWT rotate, DLQ, legacy rows predating migration 0015).
+   * ON DELETE SET NULL preserves the audit trail after studio deletion.
+   * Used by the audit_admin_only RLS policy (migration 0015).
+   */
+  studioId: uuid('studio_id').references(() => studios.id, { onDelete: 'set null' }),
   /** Nullable for RGPD anonymisation (Requirement 5.3). */
   actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
   action: text('action').notNull(),
