@@ -572,23 +572,32 @@ class_name = "ClassCapacityDO"
 #
 # CI deploys one Worker per PR: `athlya-api-pr-<N>` via `--name` in
 # `.github/workflows/preview.yml`. Each Worker has its own `DB_URL` secret
-# (Neon branch `preview-pr-<N>`). The `name` below is the wrangler default
-# for local/manual preview; production CI always overrides it.
+# (Neon branch `preview-pr-<N>`).
 #
-# Queues + R2 are shared with staging — preview traffic is ephemeral and
-# low-volume so contamination of staging event/export/avatar stores is
-# acceptable. Redis is also the staging instance.
+# Isolation (issue #237):
+#   • Queues — dedicated `athlya-events-preview*` queues, provisioned by
+#     the preview workflow on PR open and deleted on PR close. Preview events
+#     never land in staging queues, so staging consumers and staging users
+#     are unaffected by preview bugs or load tests.
+#   • Redis — a separate Upstash Redis database (`athlya-preview`) with its
+#     own URL and token (PREVIEW_REDIS_URL / PREVIEW_REDIS_TOKEN secrets).
+#     Rate-limit keys, idempotency keys, and circuit-breaker state from
+#     preview Workers cannot pollute the staging namespace.
+#   • R2 — distinct bucket names (`athlya-avatars-preview`, etc.) already
+#     in place.
 #
 # Required secrets (set once or per-PR via workflow):
 #   wrangler secret put DB_URL             --env preview   # per-PR (Neon branch)
-#   wrangler secret put REDIS_URL          --env preview   # once (staging Redis)
-#   wrangler secret put REDIS_TOKEN        --env preview   # once (staging Redis)
+#   wrangler secret put REDIS_URL          --env preview   # once (preview Redis)
+#   wrangler secret put REDIS_TOKEN        --env preview   # once (preview Redis)
 #   wrangler secret put JWT_JWKS_URL       --env preview   # once
 #   wrangler secret put TURNSTILE_SECRET   --env preview   # once
 #
 # Required one-time provisioning (R2 buckets):
 #   wrangler r2 bucket create athlya-avatars-preview  --env preview
 #   wrangler r2 bucket create athlya-exports-preview  --env preview
+#
+# Queues are provisioned automatically by the preview workflow (issue #237).
 [env.preview]
 name = "athlya-api-preview"
 
@@ -598,55 +607,55 @@ VERSION = "0.0.0-preview"
 
 [[env.preview.queues.producers]]
 binding = "EVENTS_QUEUE"
-queue = "athlya-events-staging"
+queue = "athlya-events-preview"
 
 [[env.preview.queues.producers]]
 binding = "EVENTS_DLQ"
-queue = "athlya-events-staging-dlq"
+queue = "athlya-events-preview-dlq"
 
 [[env.preview.queues.consumers]]
-queue = "athlya-events-staging"
+queue = "athlya-events-preview"
 max_batch_size = 10
 max_batch_timeout = 5
 max_retries = 5
-dead_letter_queue = "athlya-events-staging-dlq"
+dead_letter_queue = "athlya-events-preview-dlq"
 
 [[env.preview.queues.consumers]]
-queue = "athlya-events-staging-dlq"
+queue = "athlya-events-preview-dlq"
 max_batch_size = 10
 max_batch_timeout = 30
 max_retries = 3
 
 [[env.preview.queues.producers]]
 binding = "EVENTS_NOTIFICATIONS_QUEUE"
-queue = "athlya-events-notifications-staging"
+queue = "athlya-events-notifications-preview"
 
 [[env.preview.queues.producers]]
 binding = "EVENTS_RGPD_QUEUE"
-queue = "athlya-events-rgpd-staging"
+queue = "athlya-events-rgpd-preview"
 
 [[env.preview.queues.consumers]]
-queue = "athlya-events-notifications-staging"
+queue = "athlya-events-notifications-preview"
 max_batch_size = 10
 max_batch_timeout = 5
 max_retries = 5
-dead_letter_queue = "athlya-events-notifications-staging-dlq"
+dead_letter_queue = "athlya-events-notifications-preview-dlq"
 
 [[env.preview.queues.consumers]]
-queue = "athlya-events-rgpd-staging"
+queue = "athlya-events-rgpd-preview"
 max_batch_size = 10
 max_batch_timeout = 5
 max_retries = 5
-dead_letter_queue = "athlya-events-rgpd-staging-dlq"
+dead_letter_queue = "athlya-events-rgpd-preview-dlq"
 
 [[env.preview.queues.consumers]]
-queue = "athlya-events-notifications-staging-dlq"
+queue = "athlya-events-notifications-preview-dlq"
 max_batch_size = 10
 max_batch_timeout = 30
 max_retries = 3
 
 [[env.preview.queues.consumers]]
-queue = "athlya-events-rgpd-staging-dlq"
+queue = "athlya-events-rgpd-preview-dlq"
 max_batch_size = 10
 max_batch_timeout = 30
 max_retries = 3
