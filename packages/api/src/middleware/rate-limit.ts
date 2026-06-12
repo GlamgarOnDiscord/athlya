@@ -124,6 +124,9 @@ export const IP_BUCKET_PREFIX = 'rl:ip';
 /** Key prefix for the user bucket. */
 export const USER_BUCKET_PREFIX = 'rl:user';
 
+/** Key prefix for the host-probe rate-limit bucket (issue #244). */
+export const HOST_PROBE_BUCKET_PREFIX = 'rl:host-probe';
+
 /** Problem Details content-type per RFC 9457. */
 const PROBLEM_JSON = 'application/problem+json';
 
@@ -152,6 +155,12 @@ export interface RateLimitOptions {
    * `c.env.REDIS_URL` / `c.env.REDIS_TOKEN` on first use.
    */
   readonly redis?: Redis;
+  /**
+   * Override the IP-bucket key prefix. Defaults to {@link IP_BUCKET_PREFIX}.
+   * Used by the host-probe limiter (issue #244) to keep its counter in a
+   * separate namespace from the global per-IP limiter.
+   */
+  readonly keyPrefix?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -404,6 +413,7 @@ export function rateLimit(opts: RateLimitOptions = {}): RateLimitMiddleware {
   const ipLimit = opts.ipLimit ?? DEFAULT_IP_LIMIT;
   const windowSec = opts.windowSec ?? DEFAULT_WINDOW_SEC;
   const injectedRedis = opts.redis;
+  const ipPrefix = opts.keyPrefix ?? IP_BUCKET_PREFIX;
 
   if (!Number.isFinite(userLimit) || userLimit <= 0) {
     throw new RangeError(`rateLimit: userLimit must be > 0, got ${String(userLimit)}`);
@@ -422,7 +432,7 @@ export function rateLimit(opts: RateLimitOptions = {}): RateLimitMiddleware {
     const isAuthenticated = userId !== undefined;
     const key = isAuthenticated
       ? `${USER_BUCKET_PREFIX}:${userId}`
-      : `${IP_BUCKET_PREFIX}:${deriveClientIp(c.req)}`;
+      : `${ipPrefix}:${deriveClientIp(c.req)}`;
     const limit = isAuthenticated ? userLimit : ipLimit;
 
     const decision = await rateLimitSlidingWindow({ redis }, key, limit, windowSec);
