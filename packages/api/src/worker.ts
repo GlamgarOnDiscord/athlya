@@ -98,7 +98,7 @@ import {
   MUTATION_BUDGETS,
   AUTH_BUDGET,
 } from './middleware/rate-limit-policies.js';
-import { rateLimit } from './middleware/rate-limit.js';
+import { rateLimit, HOST_PROBE_BUCKET_PREFIX, deriveClientIp } from './middleware/rate-limit.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { tenantClaimGuard, tenantResolverMiddleware } from './middleware/tenant-resolver.js';
 import { buildSpecApp } from './openapi/spec.js';
@@ -248,6 +248,15 @@ export function buildApp(options: BuildAppOptions = {}): Hono<HonoEnv> {
 export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<HonoEnv> {
   const app = new Hono<HonoEnv>();
 
+  // Host-probe rate limiter — issue #244. Counts only requests that fail
+  // the host check (called inline below) using a separate key namespace
+  // so it never interferes with the global /v1/* IP limiter.
+  const hostProbeRateLimiter = rateLimit({
+    ipLimit: 100,
+    windowSec: 60,
+    keyPrefix: HOST_PROBE_BUCKET_PREFIX,
+  });
+
   // 0. Host check — Sprint 1 / Slice 1.2 (Findings S3-003, S4-006,
   //    S4-015). Defense against DNS rebinding and Host-header
   //    spoofing: an attacker who can answer DNS for the victim's
@@ -296,17 +305,35 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       allowed = ALLOWED_HOSTS_DEV_PATTERNS.some((re) => re.test(host));
     }
     if (!allowed) {
-      // Sprint-10 SP10.1 (Vague 38, critique C2.6) — log
-      // structuré sur 421. Tentative DNS rebinding / Host
-      // spoofing visible dans Tail Workers + Axiom.
-      console.warn('host check: Host header mismatch → 421', {
+      // issue #244 — rate-limit host probes and return 404 (not 421)
+      // to reduce information leakage about valid studio slugs.
+      if (env !== 'dev') {
+        // Count only rejected probes (not all traffic) so legitimate
+        // requests on valid hosts are never affected.
+        try {
+          const probeResult = await hostProbeRateLimiter(c, async () => {});
+          if (probeResult instanceof Response) {
+            return probeResult; // 429 — probe limit reached
+          }
+        } catch {
+          // Fail-open: Redis unavailable, let the probe through with a warn.
+          console.warn('athlya.host_probe.redis_errors', {
+            metric: 'host_probe_redis_errors',
+            ip: deriveClientIp(c.req),
+          });
+        }
+        // Jitter: slow enumeration even when rate-limit is bypassed via
+        // distributed IPs (issue #244).
+        await new Promise<void>((r) => setTimeout(r, 50 + Math.floor(Math.random() * 150)));
+      }
+      console.warn('host check: Host header mismatch → 404', {
         code: 'host_check_mismatch',
         env,
         rejectedHost: host,
         method: c.req.method,
         path: new URL(c.req.url).pathname,
       });
-      return c.body(null, 421);
+      return c.body(null, 404);
     }
     await next();
     return undefined;

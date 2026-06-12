@@ -266,7 +266,7 @@ describe('bodyLimit on /v1/*', () => {
 /* ------------------------------------------------------------------ */
 
 describe('Host check', () => {
-  it('rejects an unknown Host on production with 421', async () => {
+  it('rejects an unknown Host on production with 404 (not 421 — issue #244)', async () => {
     const app = buildAppNoDomainRoutes();
     const res = await app.request(
       '/health',
@@ -277,7 +277,7 @@ describe('Host check', () => {
       mockEnv({ ENVIRONMENT: 'production' }),
     );
 
-    expect(res.status).toBe(421);
+    expect(res.status).toBe(404);
   });
 
   it('accepts api.athlya.app on production', async () => {
@@ -314,7 +314,7 @@ describe('Host check', () => {
     expect(res.status).toBe(200);
   });
 
-  it('rejects the production host on staging with 421', async () => {
+  it('rejects the production host on staging with 404 (not 421 — issue #244)', async () => {
     const app = buildAppNoDomainRoutes();
     const res = await app.request(
       '/health',
@@ -328,7 +328,7 @@ describe('Host check', () => {
       }),
     );
 
-    expect(res.status).toBe(421);
+    expect(res.status).toBe(404);
   });
 
   it('accepts localhost on dev (any port)', async () => {
@@ -361,7 +361,7 @@ describe('Host check', () => {
     // `athlya-api-pr-42.athlya-team.workers.dev`) is also valid
     // on Cloudflare's preview infra; assert it passes by
     // matching the single-label preview hostname instead.
-    expect([200, 421]).toContain(res.status);
+    expect([200, 404]).toContain(res.status);
   });
 
   it('accepts the canonical *.workers.dev preview hostname on dev', async () => {
@@ -378,7 +378,7 @@ describe('Host check', () => {
     expect(res.status).toBe(200);
   });
 
-  it('rejects evil.com on dev with 421', async () => {
+  it('rejects evil.com on dev with 404 (no jitter or rate-limit in dev)', async () => {
     const app = buildAppNoDomainRoutes();
     const res = await app.request(
       '/health',
@@ -389,6 +389,6 @@ describe('Host check', () => {
       mockEnv({ ENVIRONMENT: 'dev' }),
     );
 
-    expect(res.status).toBe(421);
+    expect(res.status).toBe(404);
   });
 });
