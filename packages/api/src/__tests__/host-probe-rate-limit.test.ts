@@ -51,13 +51,15 @@ describe('host-probe rate limiting (issue #244)', () => {
 
   it('returns 429 when the host-probe bucket is saturated', async () => {
     const fake = new FakeRedis();
-    fake.nowMs = 1_000;
 
-    // Pre-populate the sorted set with 100 timestamps so the very first probe
-    // request sees the bucket as full and gets 429 immediately (no jitter).
+    // Pre-populate the sorted set with 100 recent timestamps so the very first
+    // probe request sees the bucket as full and gets 429 immediately (no jitter).
+    // Scores must be within the sliding window (now - 60s), so use Date.now().
     const probeKey = `${HOST_PROBE_BUCKET_PREFIX}:5.5.5.5`;
+    const nowMs = Date.now();
+    fake.nowMs = nowMs;
     for (let i = 0; i < 100; i++) {
-      await fake.zadd(probeKey, { score: fake.nowMs + i, member: `req-${String(i)}` });
+      await fake.zadd(probeKey, { score: nowMs - i, member: `req-${String(i)}` });
     }
 
     __primeRateLimitRedisForTests(stagingEnv.REDIS_URL, fake as unknown as Redis);
