@@ -234,23 +234,30 @@ describe('confirmReset (Sprint-6 SP6.3 — S2-006)', () => {
     ).rejects.toMatchObject({ code: 'password_breached' });
   });
 
-  it('rejects with hibp_unavailable when HIBP cannot be reached', async () => {
+  it('fails open when HIBP cannot be reached — emits degraded metric and completes reset (issue #233)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const passwordResetRepo = makeResetRepo();
+    const sessionStore = makeSessionStore();
     passwordResetRepo.findActiveTokenByHash.mockResolvedValueOnce({
       userId: USER_ID,
       expiresAt: new Date(Date.now() + 60_000),
     });
 
-    await expect(
-      confirmReset(
-        { token: 'good', newPassword: 'new-correct-horse-staple-1' },
-        {
-          passwordResetRepo,
-          sessionStore: makeSessionStore(),
-          hibpFetch: hibpDown,
-        },
-      ),
-    ).rejects.toMatchObject({ code: 'hibp_unavailable' });
+    const result = await confirmReset(
+      { token: 'good', newPassword: 'new-correct-horse-staple-1' },
+      {
+        passwordResetRepo,
+        sessionStore,
+        hibpFetch: hibpDown,
+      },
+    );
+
+    expect(result.userId).toBe(USER_ID);
+    expect(warn).toHaveBeenCalledWith(
+      'athlya.hibp.degraded',
+      expect.objectContaining({ metric: 'hibp_degraded', degraded: true, op: 'confirmReset' }),
+    );
+    expect(sessionStore.revokeAllForUser).toHaveBeenCalledWith(USER_ID);
   });
 
   it('happy path consumes the token, updates the password and revokes every session', async () => {

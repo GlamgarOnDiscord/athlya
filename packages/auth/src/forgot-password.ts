@@ -307,7 +307,8 @@ export async function confirmReset(
     throw new AuthError('token_expired');
   }
 
-  // HIBP fail-closed (mirror Sprint-3 SP3.2 / S2-009).
+  // Issue #233: fail-open — allow password reset to proceed when HIBP
+  // is unreachable, matching the same policy as register().
   let breached: boolean;
   try {
     breached = await defaultIsBreached(
@@ -316,9 +317,16 @@ export async function confirmReset(
     );
   } catch (err) {
     if (err instanceof HibpUnavailableError) {
-      throw new AuthError('hibp_unavailable');
+      console.warn('athlya.hibp.degraded', {
+        metric: 'hibp_degraded',
+        degraded: true,
+        op: 'confirmReset',
+        error: err.message,
+      });
+      breached = false;
+    } else {
+      throw err;
     }
-    throw err;
   }
   if (breached) {
     throw new AuthError('password_breached');

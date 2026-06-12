@@ -277,23 +277,23 @@ describe('register', () => {
     expect(repo.createUser).not.toHaveBeenCalled();
   });
 
-  it('fails closed with hibp_unavailable when HIBP cannot be reached (Sprint-3 SP3.2 / S2-009)', async () => {
+  it('fails open when HIBP cannot be reached — emits degraded metric and allows registration (issue #233)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { deps, repo } = makeDeps({ hibpFail: true });
     repo.findStudioBySlug.mockResolvedValue({
       id: STUDIO_ID,
       slug: 'athlya-studio',
       name: 'Athlya',
     });
+    repo.createUser.mockResolvedValue(makeUserRow());
 
-    // Sprint-3 SP3.2: distinguish HIBP transient outage from
-    // password-actually-breached. The policy stays fail-closed
-    // (registration rejected), but the wire-level error code is
-    // `hibp_unavailable` so the gateway can render a friendly
-    // "service degraded, please retry" message rather than the
-    // misleading "your password is breached" one.
-    await expect(register(REGISTER_INPUT, deps)).rejects.toMatchObject({
-      code: 'hibp_unavailable',
-    });
+    const session = await register(REGISTER_INPUT, deps);
+
+    expect(session.user.id).toBe(USER_ID);
+    expect(warn).toHaveBeenCalledWith(
+      'athlya.hibp.degraded',
+      expect.objectContaining({ metric: 'hibp_degraded', degraded: true, op: 'register' }),
+    );
   });
 
   it('rejects with email_taken when the repo reports a unique-email collision', async () => {

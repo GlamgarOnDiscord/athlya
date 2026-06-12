@@ -627,10 +627,9 @@ function buildUserDeletedEvent(
  *   1. Resolve the studio by slug (reject `studio_not_found`).
  *   2. Check the password against HIBP. A hit rejects with
  *      `password_breached` (Req 1.2). A {@link HibpUnavailableError}
- *      is treated **fail-closed** per design: we still reject with
- *      `password_breached` so an attacker cannot defeat the check by
- *      DoS-ing the HIBP endpoint. The audit log entry (written by
- *      the gateway) records the distinction.
+ *      is treated **fail-open** (issue #233): registration proceeds
+ *      and a `console.warn` metric is emitted so ops can detect HIBP
+ *      outages via Axiom.
  *   3. Hash the password with bcrypt cost 12.
  *   4. Insert the user row; map unique-email violations to
  *      `email_taken`.
@@ -652,18 +651,12 @@ export async function register(input: RegisterRequest, deps: AuthServiceDeps): P
     throw new AuthError('studio_not_found');
   }
 
-  // Sprint-3 Slice 3.2 (Vague 31, audit finding S2-009) —
-  // distinguish HIBP-unavailable from password-actually-breached.
-  // The previous code conflated both into `password_breached`,
-  // which was a UX disaster: a user whose ISP transiently fails
-  // to reach the HIBP API gets a misleading "your password is
-  // breached" message and may lose trust in the entire flow. The
-  // new policy is still fail-closed (registration is rejected
-  // until HIBP is back), but the wire-level error code is now
-  // `hibp_unavailable` so the API Gateway can render a friendly
-  // "the security check is temporarily unavailable, please retry
-  // in a moment" Problem Details. The audit-log entry written
-  // upstream still records the policy decision.
+  // Issue #233: fail-open when HIBP is unreachable so a third-party
+  // outage does not block all new registrations. The security
+  // trade-off (a breached password may slip through during an outage)
+  // is acceptable compared to a total registration blackout.
+  // A console.warn is emitted unconditionally so Axiom always records
+  // the degraded event for alerting.
   let breached: boolean;
   try {
     breached = await defaultIsBreached(
@@ -672,13 +665,16 @@ export async function register(input: RegisterRequest, deps: AuthServiceDeps): P
     );
   } catch (err) {
     if (err instanceof HibpUnavailableError) {
-      throw new AuthError(
-        'hibp_unavailable',
-        'HIBP unavailable; rejecting registration fail-closed',
-        { cause: 'hibp_unavailable' },
-      );
+      console.warn('athlya.hibp.degraded', {
+        metric: 'hibp_degraded',
+        degraded: true,
+        op: 'register',
+        error: err.message,
+      });
+      breached = false;
+    } else {
+      throw err;
     }
-    throw err;
   }
   if (breached) {
     throw new AuthError('password_breached');
