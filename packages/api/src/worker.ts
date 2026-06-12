@@ -571,9 +571,9 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   //
   //    Fail-closed on mutations (issue #65): auth + per-route
   //    mutation limiters return 503 when Upstash is unreachable.
-  //    Global IP limiter uses fail-closed-soft (issue #128): 429
-  //    synthetic so read traffic cannot run unbounded during a Redis
-  //    outage. `/health` and `/health/ready` stay outside `/v1/*`.
+  //    Global IP limiter is fail-open (issue #233): Redis outage lets
+  //    read traffic through with a warn log instead of a synthetic
+  //    429 (issue #128 revised). `/health` stays outside `/v1/*`.
   const ipLimiter = rateLimit();
   const authLimiter = rateLimit({ ipLimit: AUTH_BUDGET.ipLimit, windowSec: AUTH_BUDGET.windowSec });
   const isDevEnv = (env: AthlyaBindings) => env.ENVIRONMENT === 'dev';
@@ -601,9 +601,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
 
   app.use(
     '/v1/*',
-    guardLimiterWithDevBypass('global', ipLimiter, 'fail-closed-soft') as Parameters<
-      typeof app.use
-    >[1],
+    guardLimiterWithDevBypass('global', ipLimiter, 'fail-open') as Parameters<typeof app.use>[1],
   );
   app.use(
     '/v1/auth/*',

@@ -107,11 +107,18 @@ export function guardRateLimiter(
 
       const traceId = readTraceId(c);
       const logger = readLogger(c);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn('athlya.ratelimit.redis_errors', {
+        metric: 'ratelimit_redis_errors',
+        scope,
+        policy,
+        error: errMsg,
+      });
       logger.warn('rate-limit unavailable', {
         scope,
         policy,
         outcome: policy === 'fail-closed-soft' ? 'dependency_denied' : policy,
-        error: err instanceof Error ? err.message : String(err),
+        error: errMsg,
       });
 
       if (policy === 'fail-closed') {

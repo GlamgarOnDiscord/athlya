@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildDependencyUnavailableResponse,
@@ -49,6 +49,8 @@ describe('buildRateLimitDependencyDeniedResponse', () => {
 });
 
 describe('guardRateLimiter', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it('fail-closed returns 503 when inner limiter throws before next', async () => {
     const inner = vi.fn(async () => {
       throw new Error('ECONNREFUSED');
@@ -88,5 +90,20 @@ describe('guardRateLimiter', () => {
 
     expect(result).toBeUndefined();
     expect(next).toHaveBeenCalledOnce();
+  });
+
+  it('emits athlya.ratelimit.redis_errors metric on any Redis failure (issue #233)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const inner = vi.fn(async () => {
+      throw new Error('ECONNREFUSED');
+    }) as unknown as ReturnType<typeof rateLimit>;
+
+    const guarded = guardRateLimiter('global', inner, 'fail-open', false);
+    await guarded(fakeContext(), vi.fn());
+
+    expect(warn).toHaveBeenCalledWith(
+      'athlya.ratelimit.redis_errors',
+      expect.objectContaining({ metric: 'ratelimit_redis_errors', scope: 'global' }),
+    );
   });
 });
