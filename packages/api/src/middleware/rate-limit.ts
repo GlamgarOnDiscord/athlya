@@ -425,7 +425,18 @@ export function rateLimit(opts: RateLimitOptions = {}): RateLimitMiddleware {
       : `${IP_BUCKET_PREFIX}:${deriveClientIp(c.req)}`;
     const limit = isAuthenticated ? userLimit : ipLimit;
 
-    const decision = await rateLimitSlidingWindow({ redis }, key, limit, windowSec);
+    let decision: RateLimitDecision;
+    try {
+      decision = await rateLimitSlidingWindow({ redis }, key, limit, windowSec);
+    } catch (err) {
+      console.warn('athlya.ratelimit.redis_errors', {
+        metric: 'ratelimit_redis_errors',
+        key,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await next();
+      return undefined;
+    }
 
     if (decision.kind === 'deny') {
       const traceId = readTraceId(c);

@@ -21,7 +21,7 @@
  * Validates: Requirements 14.3, 14.4.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FakeRedis } from '../../tests/helpers/fake-redis.js';
 import {
@@ -366,5 +366,51 @@ describe('deriveClientIp â€” header precedence', () => {
       },
     });
     expect(ip).toBe('15.15.15.15');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Redis fail-open degradation (issue #233)                          */
+/* ------------------------------------------------------------------ */
+
+describe('rateLimit — Redis failure fails open', () => {
+  afterEach(() => {
+    __resetRateLimitRedisCache();
+    vi.restoreAllMocks();
+  });
+
+  it('allows the request through and emits the redis_errors metric when Redis throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const brokenRedis = {
+      eval: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
+    } as unknown as Redis;
+
+    const middleware = rateLimit({ redis: brokenRedis });
+    const c = fakeContext({ headers: { 'CF-Connecting-IP': '9.9.9.9' } });
+    const next = vi.fn().mockResolvedValue(undefined);
+
+    const out = await middleware(c, next);
+
+    expect(out).toBeUndefined();
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      'athlya.ratelimit.redis_errors',
+      expect.objectContaining({ metric: 'ratelimit_redis_errors' }),
+    );
+  });
+
+  it('does not return 500 when Redis is unavailable', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const brokenRedis = {
+      eval: vi.fn().mockRejectedValue(new Error('timeout')),
+    } as unknown as Redis;
+
+    const middleware = rateLimit({ redis: brokenRedis });
+    const c = fakeContext({ headers: { 'CF-Connecting-IP': '9.9.9.9' } });
+    const next = vi.fn().mockResolvedValue(undefined);
+
+    const out = await middleware(c, next);
+
+    expect(out).not.toBeInstanceOf(Response);
   });
 });
