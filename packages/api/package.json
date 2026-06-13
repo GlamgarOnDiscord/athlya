@@ -154,7 +154,7 @@
     "@athlya/tsconfig": "workspace:*",
     "@cloudflare/workers-types": "^4.20260613.1",
     "@sentry/cli": "3.5.0",
-    "@types/node": "^20.19.9",
+    "@types/node": "^22.19.21",
     "eslint": "^9.39.1",
     "fast-check": "^3.23.2",
     "hono": "^4.12.25",

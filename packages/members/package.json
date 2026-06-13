@@ -54,7 +54,7 @@
     "@athlya/tsconfig": "workspace:*",
     "@electric-sql/pglite": "^0.5.2",
     "@testcontainers/postgresql": "^11.0.0",
-    "@types/node": "^20.19.9",
+    "@types/node": "^22.19.21",
     "eslint": "^9.39.1",
     "postgres": "^3.4.5",
     "rimraf": "^6.0.1",

@@ -65,7 +65,7 @@
     "@electric-sql/pglite": "^0.5.2",
     "@fast-check/vitest": "^0.4.1",
     "@testcontainers/postgresql": "^11.0.0",
-    "@types/node": "^20.19.9",
+    "@types/node": "^22.19.21",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.39.1",
     "fast-check": "^3.23.2",
