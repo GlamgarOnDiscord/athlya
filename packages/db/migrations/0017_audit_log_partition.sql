@@ -178,7 +178,8 @@ REVOKE ALL ON "audit_log" FROM athlya_app;--> statement-breakpoint
 REVOKE ALL ON "audit_log" FROM athlya_cron;--> statement-breakpoint
 
 GRANT SELECT, INSERT ON "audit_log" TO athlya_app;--> statement-breakpoint
-GRANT SELECT, UPDATE ("actor_id", "metadata") ON "audit_log" TO athlya_cron;--> statement-breakpoint
+-- athlya_cron has NO direct grant on audit_log after migration 0012
+-- revoked SELECT + UPDATE. Do not restore them here.
 
 -- ---------------------------------------------------------------------
 -- 7. Restore immutability triggers.
