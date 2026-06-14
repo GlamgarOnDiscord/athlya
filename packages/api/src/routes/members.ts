@@ -38,6 +38,7 @@ import { z } from 'zod';
 import {
   AVATAR_ALLOWED_TYPES,
   AVATAR_MAX_BYTES,
+  AvatarInvalidFormatError,
   AvatarUploadNotConfiguredError,
 } from '../adapters/avatar-upload-store-r2.js';
 import { jwtAuth } from '../middleware/auth.js';
@@ -148,7 +149,7 @@ const PROBLEM_JSON = 'application/problem+json';
 
 function avatarProblem(
   c: Context<HonoEnv>,
-  status: 400 | 413 | 415 | 503,
+  status: 400 | 413 | 415 | 422 | 503,
   detail: string,
   code: string,
 ): Response {
@@ -158,11 +159,13 @@ function avatarProblem(
       title:
         status === 503
           ? 'Service Unavailable'
-          : status === 415
-            ? 'Unsupported Media Type'
-            : status === 413
-              ? 'Content Too Large'
-              : 'Bad Request',
+          : status === 422
+            ? 'Unprocessable Content'
+            : status === 415
+              ? 'Unsupported Media Type'
+              : status === 413
+                ? 'Content Too Large'
+                : 'Bad Request',
       status,
       detail,
       code,
@@ -267,6 +270,14 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
       const result = await deps.uploadAvatar(claims.userId, contentType, body, claims);
       return c.json(result, 200);
     } catch (err) {
+      if (err instanceof AvatarInvalidFormatError) {
+        return avatarProblem(
+          c,
+          422,
+          'File content does not match declared content type',
+          'avatar_invalid_format',
+        );
+      }
       if (err instanceof AvatarUploadNotConfiguredError) {
         return avatarProblem(
           c,
