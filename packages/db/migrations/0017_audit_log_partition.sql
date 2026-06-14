@@ -61,11 +61,15 @@ CREATE TABLE "audit_log" (
     PRIMARY KEY ("id", "created_at")
 ) PARTITION BY RANGE ("created_at");--> statement-breakpoint
 
--- Transfer sequence ownership so the sequence survives the DROP below.
-ALTER SEQUENCE "audit_log_id_seq" OWNED BY "audit_log"."id";--> statement-breakpoint
-
--- Ownership must be set before partition creation (partitions inherit it).
+-- Set ownership first: ALTER SEQUENCE ... OWNED BY requires both the
+-- sequence and the target table to share the same owner. The sequence
+-- was already transferred to athlya_owner in migration 0003, so we
+-- must own the new table first before linking the sequence to it.
 ALTER TABLE "audit_log" OWNER TO athlya_owner;--> statement-breakpoint
+
+-- Transfer sequence ownership so the sequence survives the DROP of
+-- _audit_log_legacy below.
+ALTER SEQUENCE "audit_log_id_seq" OWNED BY "audit_log"."id";--> statement-breakpoint
 
 -- FK on new partitioned parent (same semantics as original).
 ALTER TABLE "audit_log"
