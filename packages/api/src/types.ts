@@ -410,6 +410,27 @@ export interface AthlyaBindings {
    * Set via: `wrangler secret put CHAOS_NEON_FAILURE_RATE --env staging`
    */
   readonly CHAOS_NEON_FAILURE_RATE?: string;
+
+  /**
+   * Cloudflare Access application audience tag (UUID) for the
+   * `/admin/*` CF Access policy (issue #273). When set alongside
+   * {@link CF_ACCESS_CERTS_URL}, the `cfAccessGuard()` middleware
+   * enforces that every `/admin/*` request carries a valid
+   * `CF-Access-JWT-Assertion` header issued by this CF Access app.
+   *
+   * Leave unset in dev — the guard is a no-op when either binding is
+   * absent. Set via `wrangler secret put CF_ACCESS_AUD --env <env>`.
+   */
+  readonly CF_ACCESS_AUD?: string;
+
+  /**
+   * JWKS endpoint for CF Access JWT verification, e.g.
+   * `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`.
+   * Required alongside {@link CF_ACCESS_AUD} to activate the guard.
+   *
+   * Set via `wrangler secret put CF_ACCESS_CERTS_URL --env <env>`.
+   */
+  readonly CF_ACCESS_CERTS_URL?: string;
 }
 
 /* ------------------------------------------------------------------ */
