@@ -1480,6 +1480,30 @@ const worker = {
         scheduledTime: event.scheduledTime,
       });
     }
+
+    // Issue #235 — auto-provision the next monthly audit_log partition 7 days
+    // before month rollover. The function is idempotent so running it on every
+    // cron tick is safe. Skipped silently when CRON_DB_URL is absent (dev).
+    if (cronExecutor !== null) {
+      const partitionTask = cronExecutor
+        .selectRows<{ ensure_next_audit_log_partition: string }>(
+          'SELECT ensure_next_audit_log_partition(now())',
+          [],
+        )
+        .then((rows) => {
+          console.log('[worker] audit_log partition ensured', {
+            result: rows[0]?.ensure_next_audit_log_partition,
+          });
+        })
+        .catch((err: unknown) => {
+          console.error('[worker] audit_log partition provision failed', {
+            cron: event.cron,
+            scheduledTime: event.scheduledTime,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      ctx.waitUntil(partitionTask);
+    }
   },
   /**
    * Queue consumer dispatch. Cloudflare delivers every queue
