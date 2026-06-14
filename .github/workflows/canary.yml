@@ -95,6 +95,7 @@ jobs:
       # gradual rollout needed because each sub-worker is isolated by CF
       # routing and a bad deploy affects only its own domain.
       - name: Deploy bulkhead sub-workers (auth / reservations / billing)
+        id: deploy_subworkers
         if: steps.config.outputs.ready == 'true' && steps.canary.outcome == 'success'
         run: |
           set -euo pipefail
@@ -102,9 +103,15 @@ jobs:
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production
 
+      # Issue #276 — roll back ALL Workers (main + sub-workers) on any failure
+      # so the fleet never sits in a mixed-version state. Each command uses
+      # || true so one failing rollback does not block the others.
       - name: Rollback on failure
-        if: failure() && steps.config.outputs.ready == 'true' && steps.canary.outcome == 'failure'
+        if: failure() && steps.config.outputs.ready == 'true'
         run: |
-          echo "::warning::Canary health check failed — rolling back production"
-          node scripts/canary-deploy.mjs rollback --env production
-          echo "::error::Canary rolled back. Check /health/ready logs for the failure."
+          echo "::warning::Deploy failed — rolling back production main Worker and sub-workers"
+          node scripts/canary-deploy.mjs rollback --env production || true
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.auth.toml --env production || true
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.reservations.toml --env production || true
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.billing.toml --env production || true
+          echo "::error::Deploy rolled back. Check logs for the failure."
