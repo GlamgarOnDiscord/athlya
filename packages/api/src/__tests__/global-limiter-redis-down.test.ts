@@ -1,6 +1,6 @@
 /**
- * Issue #233 — global `/v1/*` limiter is fail-open when Redis throws
- * (revised from issue #128 which used fail-closed-soft / 429).
+ * Issue #271 — global `/v1/*` limiter is fail-closed-soft when Redis throws:
+ * returns 429 rate_limit_dependency_unavailable instead of passing through.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -26,7 +26,7 @@ class RedisPipelineDownFake extends FakeRedis {
   }
 }
 
-describe('global limiter Redis down (#128)', () => {
+describe('global limiter Redis down (#271)', () => {
   const stagingHeaders = { host: 'staging.api.athlya.app', 'CF-Connecting-IP': '9.9.9.9' };
 
   beforeEach(() => {
@@ -37,7 +37,7 @@ describe('global limiter Redis down (#128)', () => {
     __resetRateLimitRedisCache();
   });
 
-  it('staging GET /v1/* passes through (fail-open) when Redis pipeline throws', async () => {
+  it('staging GET /v1/* returns 429 (fail-closed-soft) when Redis pipeline throws', async () => {
     const env = buildMockEnv({
       ENVIRONMENT: 'staging',
       CORS_ORIGIN: 'https://app.staging.athlya.app',
@@ -51,11 +51,9 @@ describe('global limiter Redis down (#128)', () => {
       env,
     );
 
-    // Fail-open: request reaches the route layer (404 unknown route),
-    // NOT blocked by the limiter (429 or 503).
-    expect(res.status).toBe(404);
-    expect(res.status).not.toBe(429);
-    expect(res.status).not.toBe(503);
+    expect(res.status).toBe(429);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('rate_limit_dependency_unavailable');
   });
 
   it('staging GET /health is not blocked by the global limiter', async () => {
