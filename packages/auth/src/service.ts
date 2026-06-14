@@ -862,10 +862,11 @@ export async function login(
         } as unknown as AthlyaEvent;
         await deps.publishEvent(event);
       }
-    } catch {
-      // Swallowed — the login succeeded, the anomaly path is
-      // best-effort. A future iteration could log here via
-      // an injected logger.
+    } catch (err) {
+      console.warn('[auth] anomaly detection failed — best-effort skipped', {
+        code: 'anomaly_detection_error',
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
