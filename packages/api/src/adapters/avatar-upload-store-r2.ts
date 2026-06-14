@@ -37,6 +37,40 @@ export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 /** MIME types accepted by the upload endpoint. */
 export const AVATAR_ALLOWED_TYPES = new Set<string>(['image/jpeg', 'image/png', 'image/webp']);
 
+/** Thrown when the uploaded file's magic bytes don't match its declared Content-Type. */
+export class AvatarInvalidFormatError extends Error {
+  public constructor() {
+    super('File content does not match declared content type');
+    this.name = 'AvatarInvalidFormatError';
+  }
+}
+
+/**
+ * Validate the first 12 bytes of `body` against `contentType` magic bytes.
+ * JPEG: FF D8 FF — PNG: 89 50 4E 47 — WebP: RIFF????WEBP
+ */
+export function validateAvatarMagicBytes(body: ArrayBuffer, contentType: string): void {
+  const bytes = new Uint8Array(body, 0, Math.min(12, body.byteLength));
+  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  const isWebp =
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50;
+
+  const valid =
+    (contentType === 'image/jpeg' && isJpeg) ||
+    (contentType === 'image/png' && isPng) ||
+    (contentType === 'image/webp' && isWebp);
+
+  if (!valid) throw new AvatarInvalidFormatError();
+}
+
 /* ------------------------------------------------------------------ */
 /*  Stable error class                                                 */
 /* ------------------------------------------------------------------ */
@@ -114,6 +148,8 @@ export function createR2AvatarUploadStore(
         );
         throw new AvatarUploadNotConfiguredError('AVATARS_PUBLIC_URL not configured');
       }
+
+      validateAvatarMagicBytes(body, contentType);
 
       const key = avatarObjectKey(userId);
 
