@@ -111,7 +111,7 @@ import {
   mountDomainRoutes,
   type DomainDeps,
 } from './routes/index.js';
-import { captureUnhandled, assertSentryDsnIsEu } from './sentry.js';
+import { captureUnhandled, assertSentryDsnIsEu, createSentryClient } from './sentry.js';
 import { extractTraceparentId, newTraceId } from './tracing/ids.js';
 
 import type { DlqBindings } from './events/drain-dlq.js';
@@ -1465,6 +1465,22 @@ const worker = {
         cron: event.cron,
         scheduledTime: event.scheduledTime,
       });
+      // Issue #269 — also surface to Sentry so the missing binding
+      // triggers an on-call alert rather than silently skipping RGPD
+      // anonymisation. createSentryClient is a no-op when SENTRY_DSN
+      // is absent, so this is safe to call unconditionally.
+      const sentryAlert = createSentryClient({
+        ...(athlyaEnv.SENTRY_DSN !== undefined ? { dsn: athlyaEnv.SENTRY_DSN } : {}),
+        environment: athlyaEnv.ENVIRONMENT,
+        ...(athlyaEnv.VERSION !== undefined ? { release: athlyaEnv.VERSION } : {}),
+      }).captureException(new Error('CRON_DB_URL missing — RGPD maintenance skipped'), {
+        tags: {
+          code: 'configuration_error',
+          binding: 'CRON_DB_URL',
+          cron: event.cron ?? 'unknown',
+        },
+      });
+      ctx.waitUntil(sentryAlert);
     }
 
     // Issue #135 — capacity drift reconciliation. Compares the Redis
