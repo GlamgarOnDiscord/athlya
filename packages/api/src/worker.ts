@@ -86,6 +86,7 @@ import {
 } from './maintenance/cron-db-config.js';
 import { runScheduledRgpdMaintenance } from './maintenance/scheduled-runner.js';
 import { jwtAuth } from './middleware/auth.js';
+import { cfAccessGuard } from './middleware/cf-access-guard.js';
 import { guardRateLimiter } from './middleware/limiter-guard.js';
 import { tracing } from './middleware/otel.js';
 import { registerErrorHandlers } from './middleware/problem-details.js';
@@ -1320,6 +1321,9 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
     }
     return latestAdminEnv;
   };
+  // Issue #273 — CF Access defense-in-depth on /admin/*. No-op when
+  // CF_ACCESS_AUD / CF_ACCESS_CERTS_URL are absent (dev / unconfigured).
+  app.use('/admin/*', cfAccessGuard() as Parameters<typeof app.use>[1]);
   app.use('/admin/*', jwtAuth());
   app.use('/admin/*', requireRole('admin'));
   app.route(
