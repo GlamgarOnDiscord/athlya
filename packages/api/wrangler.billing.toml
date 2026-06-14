@@ -1,0 +1,105 @@
+# ----------------------------------------------------------------------------
+# athlya-api-billing — Billing bulkhead Worker (issue #230, CN.6.3)
+#
+# Routes:
+#   staging:    staging.api.athlya.app/v1/billing/*
+#               staging.api.athlya.app/admin/*
+#               staging.api.athlya.app/v1/audit/*
+#   production: api.athlya.app/v1/billing/*
+#               api.athlya.app/admin/*
+#               api.athlya.app/v1/audit/*
+#
+# Stripe webhook storms on POST /v1/billing/webhook saturate this
+# Worker's isolate only; auth and reservation latency are unaffected.
+#
+# Secrets (set once per env via `wrangler secret put --config wrangler.billing.toml`):
+#   DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, CORS_ORIGIN,
+#   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+# ----------------------------------------------------------------------------
+
+name = "athlya-api-billing"
+main = "src/workers/billing.ts"
+compatibility_date = "2026-03-01"
+compatibility_flags = ["nodejs_compat"]
+upload_source_maps = true
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+
+[vars]
+ENVIRONMENT = "dev"
+VERSION = "0.0.0-dev"
+
+# ============================================================================
+# Staging
+# ============================================================================
+
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 0.5
+
+[env.staging]
+name = "athlya-api-billing-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+VERSION = "0.0.0-staging"
+OTEL_SAMPLE_RATE = "0.5"
+
+[env.staging.placement]
+mode = "smart"
+
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/billing/*"
+zone_name = "athlya.app"
+
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/admin/*"
+zone_name = "athlya.app"
+
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/audit/*"
+zone_name = "athlya.app"
+
+# ============================================================================
+# Production
+# ============================================================================
+
+[env.production.observability]
+enabled = true
+head_sampling_rate = 0.1
+
+[env.production]
+name = "athlya-api-billing-production"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+VERSION = "0.1.0"
+OTEL_SAMPLE_RATE = "0.1"
+
+[env.production.placement]
+mode = "smart"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/billing/*"
+zone_name = "athlya.app"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/admin/*"
+zone_name = "athlya.app"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/audit/*"
+zone_name = "athlya.app"
+
+# ============================================================================
+# Preview (per-PR, deployed by preview.yml with --name override)
+# ============================================================================
+
+[env.preview]
+name = "athlya-api-billing-preview"
+
+[env.preview.vars]
+ENVIRONMENT = "preview"
+VERSION = "0.0.0-preview"

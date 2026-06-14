@@ -89,6 +89,19 @@ jobs:
             --wait-min "10" \
             --steps "1,10,100"
 
+      # Issue #230 — deploy bulkhead sub-workers after the main canary
+      # completes its 100% promotion. Sub-workers take over specific route
+      # prefixes (auth, reservations, billing) immediately at 100%; no
+      # gradual rollout needed because each sub-worker is isolated by CF
+      # routing and a bad deploy affects only its own domain.
+      - name: Deploy bulkhead sub-workers (auth / reservations / billing)
+        if: steps.config.outputs.ready == 'true' && steps.canary.outcome == 'success'
+        run: |
+          set -euo pipefail
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env production
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production
+
       - name: Rollback on failure
         if: failure() && steps.config.outputs.ready == 'true' && steps.canary.outcome == 'failure'
         run: |

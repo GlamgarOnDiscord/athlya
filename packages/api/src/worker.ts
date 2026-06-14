@@ -235,6 +235,21 @@ export function buildApp(options: BuildAppOptions = {}): Hono<HonoEnv> {
 }
 
 /**
+ * Build a Hono instance with the full global middleware chain
+ * (host check, CORS, tracing, OTel, rate limiters, body limit,
+ * tenant resolver, security headers, health endpoints, admin routes,
+ * error handlers) but WITHOUT any `/v1/*` domain route mounts.
+ *
+ * Used by the bulkhead sub-worker entry points (`src/workers/`) so
+ * each domain Worker gets the same security posture as the monolith
+ * without duplicating the middleware setup. Each sub-worker calls this
+ * and then mounts only its own domain routes on top (issue #230).
+ */
+export function buildBaseApp(): Hono<HonoEnv> {
+  return __buildAppInternal({ skipDomainRoutes: true });
+}
+
+/**
  * Internal entry point shared by {@link buildApp} (production) and
  * the test helper (`__tests__/helpers/test-app.ts`). The
  * `skipDomainRoutes` test seam is gated behind this private export

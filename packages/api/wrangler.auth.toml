@@ -1,0 +1,95 @@
+# ----------------------------------------------------------------------------
+# athlya-api-auth — Auth bulkhead Worker (issue #230, CN.6.3)
+#
+# Routes:
+#   staging:    staging.api.athlya.app/v1/auth/*
+#               staging.api.athlya.app/v1/sessions/*
+#   production: api.athlya.app/v1/auth/*
+#               api.athlya.app/v1/sessions/*
+#
+# More-specific patterns take priority over the catch-all /*  on the
+# main athlya-api Worker. Cloudflare evaluates routes from most- to
+# least-specific so this Worker always wins for its prefix.
+#
+# Secrets (set once per env via `wrangler secret put --config wrangler.auth.toml`):
+#   DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, CORS_ORIGIN
+# ----------------------------------------------------------------------------
+
+name = "athlya-api-auth"
+main = "src/workers/auth.ts"
+compatibility_date = "2026-03-01"
+compatibility_flags = ["nodejs_compat"]
+upload_source_maps = true
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+
+[vars]
+ENVIRONMENT = "dev"
+VERSION = "0.0.0-dev"
+
+# ============================================================================
+# Staging
+# ============================================================================
+
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 0.5
+
+[env.staging]
+name = "athlya-api-auth-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+VERSION = "0.0.0-staging"
+OTEL_SAMPLE_RATE = "0.5"
+
+[env.staging.placement]
+mode = "smart"
+
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/auth/*"
+zone_name = "athlya.app"
+
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/sessions/*"
+zone_name = "athlya.app"
+
+# ============================================================================
+# Production
+# ============================================================================
+
+[env.production.observability]
+enabled = true
+head_sampling_rate = 0.1
+
+[env.production]
+name = "athlya-api-auth-production"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+VERSION = "0.1.0"
+OTEL_SAMPLE_RATE = "0.1"
+
+[env.production.placement]
+mode = "smart"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/auth/*"
+zone_name = "athlya.app"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/sessions/*"
+zone_name = "athlya.app"
+
+# ============================================================================
+# Preview (per-PR, deployed by preview.yml with --name override)
+# ============================================================================
+
+[env.preview]
+name = "athlya-api-auth-preview"
+
+[env.preview.vars]
+ENVIRONMENT = "preview"
+VERSION = "0.0.0-preview"
