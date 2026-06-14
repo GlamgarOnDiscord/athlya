@@ -145,6 +145,64 @@
  */
 
 /* ------------------------------------------------------------------ */
+/*  Distributed store interface (issue #231)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Optional shared-state back-end for {@link CircuitBreaker}.
+ *
+ * When provided, the breaker uses this store as the source of truth for
+ * state across all isolates. All methods are async and must never throw —
+ * if the back-end is unavailable the caller swallows the error and falls
+ * back to the in-memory state machine (graceful degradation, H3 §4).
+ *
+ * The concrete implementation lives in
+ * `src/adapters/circuit-breaker-redis-store.ts`.
+ */
+export interface CircuitBreakerStore {
+  /**
+   * Read current circuit state from shared storage.
+   *
+   * Implementation hint: store `open_until` as a millisecond timestamp.
+   *   - Absent     → `'closed'`
+   *   - value > now → `'open'`
+   *   - value ≤ now → `'half_open'`
+   */
+  getState(now: number): Promise<CircuitState>;
+
+  /**
+   * Atomically record a failure and return `true` when the circuit tripped
+   * to `open`. When `true` is returned, the store has already persisted the
+   * `open_until` timestamp (`now + resetTimeoutMs`).
+   */
+  recordFailure(
+    now: number,
+    windowMs: number,
+    failureThreshold: number,
+    resetTimeoutMs: number,
+  ): Promise<boolean>;
+
+  /** Clear failure history (called on success). */
+  recordSuccess(): Promise<void>;
+
+  /**
+   * Set the circuit to `open` directly (called after a failed half-open
+   * probe). `openUntil` is the absolute millisecond timestamp.
+   */
+  recordOpen(openUntil: number): Promise<void>;
+
+  /**
+   * Acquire the half-open probe slot via a NX lock.
+   * Returns `true` when this caller wins and should run the probe.
+   * `ttlMs` bounds how long the lock is held before auto-expiry.
+   */
+  tryAcquireProbe(ttlMs: number): Promise<boolean>;
+
+  /** Release the probe lock unconditionally (after probe completes). */
+  releaseProbe(): Promise<void>;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Public types                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -203,6 +261,19 @@ export interface CircuitBreakerOptions {
    * downstream outage. Not invoked on construction.
    */
   readonly onTransition?: (event: CircuitTransition) => void;
+  /**
+   * Optional shared-state back-end (issue #231).
+   *
+   * When provided, `exec()` reads and writes circuit state through this
+   * store so that failures accumulate fleet-wide and only one isolate
+   * probes in half-open. If the store throws, the breaker silently
+   * falls back to the current in-memory state machine — graceful
+   * degradation is the contract.
+   *
+   * The Upstash Redis implementation is in
+   * `src/adapters/circuit-breaker-redis-store.ts`.
+   */
+  readonly store?: CircuitBreakerStore;
 }
 
 /** Payload handed to {@link CircuitBreakerOptions.onTransition}. */
@@ -249,6 +320,17 @@ export class CircuitOpenError extends Error {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Internal helpers                                                   */
+/* ------------------------------------------------------------------ */
+
+/** Numeric rank so we can compare "how open" two states are. */
+function stateRank(s: CircuitState): number {
+  if (s === 'open') return 2;
+  if (s === 'half_open') return 1;
+  return 0;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Defaults                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -286,6 +368,7 @@ export class CircuitBreaker {
   private readonly clock: () => number;
   private readonly random: () => number;
   private readonly onTransition: ((event: CircuitTransition) => void) | undefined;
+  private readonly _store: CircuitBreakerStore | undefined;
 
   /** Current state label. See {@link CircuitState}. */
   private _state: CircuitState = 'closed';
@@ -316,6 +399,7 @@ export class CircuitBreaker {
     this.clock = opts.clock ?? Date.now;
     this.random = opts.random ?? Math.random;
     this.onTransition = opts.onTransition;
+    this._store = opts.store;
 
     if (this.failureThreshold < 1) {
       throw new RangeError(`failureThreshold must be >= 1 (got ${String(this.failureThreshold)})`);
@@ -362,36 +446,121 @@ export class CircuitBreaker {
    *                   (success → closed, failure → open). Any
    *                   concurrent call while the probe is in flight
    *                   is rejected with {@link CircuitOpenError}.
+   *
+   * When a {@link CircuitBreakerStore} is configured (issue #231),
+   * state is read from and written to the store so that failures
+   * accumulate fleet-wide. Store errors are swallowed and the breaker
+   * falls back to the local in-memory state machine.
    */
   async exec<T>(fn: () => Promise<T>): Promise<T> {
-    this.maybeTransitionFromOpen();
+    const now = this.clock();
 
-    if (this._state === 'open') {
+    // ---- Determine effective state (store → local fallback) ----
+    let effectiveState: CircuitState;
+    if (this._store !== undefined) {
+      try {
+        effectiveState = await this._store.getState(now);
+        // Advance local state when the store says we are more-open.
+        if (stateRank(effectiveState) > stateRank(this._state)) {
+          this._state = effectiveState;
+          if (effectiveState === 'open') this.openedAt = now;
+        }
+      } catch {
+        // Store unavailable — fall back to in-memory state machine.
+        this.maybeTransitionFromOpen();
+        effectiveState = this._state;
+      }
+    } else {
+      this.maybeTransitionFromOpen();
+      effectiveState = this._state;
+    }
+
+    if (effectiveState === 'open') {
       throw new CircuitOpenError(this._name);
     }
 
-    if (this._state === 'half_open') {
-      if (this.probeInFlight) {
-        throw new CircuitOpenError(this._name);
+    // ---- Half-open probe path ----
+    if (effectiveState === 'half_open') {
+      let probeWon = false;
+      if (this._store !== undefined) {
+        try {
+          probeWon = await this._store.tryAcquireProbe(this.resetTimeoutMs);
+        } catch {
+          // Store unavailable — fall back to local probe flag.
+          if (this.probeInFlight) throw new CircuitOpenError(this._name);
+          probeWon = true;
+          this.probeInFlight = true;
+        }
+      } else {
+        if (this.probeInFlight) throw new CircuitOpenError(this._name);
+        probeWon = true;
+        this.probeInFlight = true;
       }
-      this.probeInFlight = true;
+
+      if (!probeWon) throw new CircuitOpenError(this._name);
+
       try {
         const result = await fn();
+        // Probe succeeded: clear distributed state, then advance local.
+        if (this._store !== undefined) {
+          try {
+            await this._store.recordSuccess();
+            await this._store.releaseProbe();
+          } catch {
+            /* swallow — local update still happens */
+          }
+        }
         this.onProbeSuccess();
         return result;
       } catch (err) {
+        // Probe failed: re-open circuit in the store, then locally.
+        const openUntil = now + this.resetTimeoutMs;
+        if (this._store !== undefined) {
+          try {
+            await this._store.recordOpen(openUntil);
+            await this._store.releaseProbe();
+          } catch {
+            /* swallow */
+          }
+        }
         this.onProbeFailure();
         throw err;
       }
     }
 
-    // Closed path.
+    // ---- Closed path ----
     try {
       const result = await fn();
+      if (this._store !== undefined) {
+        try {
+          await this._store.recordSuccess();
+        } catch {
+          /* swallow */
+        }
+      }
       this.recordSuccess();
       return result;
     } catch (err) {
+      let trippedByStore = false;
+      if (this._store !== undefined) {
+        try {
+          trippedByStore = await this._store.recordFailure(
+            now,
+            this.windowMs,
+            this.failureThreshold,
+            this.resetTimeoutMs,
+          );
+        } catch {
+          /* swallow — local tracking still updates */
+        }
+      }
+      // Always update local state so in-memory fallback stays consistent.
       this.recordFailure();
+      // If the store tripped the circuit but local threshold hasn't been
+      // reached yet, force-trip locally to stay in sync with peers.
+      if (trippedByStore && this._state !== 'open') {
+        this.tripOpen(now);
+      }
       throw err;
     }
   }
