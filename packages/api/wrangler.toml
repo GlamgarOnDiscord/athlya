@@ -461,10 +461,9 @@ bucket_name = "athlya-exports-staging"
 name = "CLASS_CAPACITY_DO"
 class_name = "ClassCapacityDO"
 
-# Uncomment after Hyperdrive config is created — see docs/runbooks/hyperdrive-provision.md (issue #119):
-# [[env.staging.hyperdrive]]
-# binding = "HYPERDRIVE"
-# id = "<staging-hyperdrive-config-id>"
+[[env.staging.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "49e3db37042d4f2999b0c0061363929c"
 
 # ============================================================================
 # Production environment
@@ -561,10 +560,9 @@ bucket_name = "athlya-exports-production"
 name = "CLASS_CAPACITY_DO"
 class_name = "ClassCapacityDO"
 
-# Uncomment after Hyperdrive config is created — see docs/runbooks/hyperdrive-provision.md (issue #119):
-# [[env.production.hyperdrive]]
-# binding = "HYPERDRIVE"
-# id = "<production-hyperdrive-config-id>"
+[[env.production.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "4cdf25a926de4c84a810dc25fd19135d"
 
 # ============================================================================
 # Preview environment (CN.7.2 — per-PR preview deployments)
