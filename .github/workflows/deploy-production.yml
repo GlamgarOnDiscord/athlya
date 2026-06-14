@@ -194,6 +194,28 @@ jobs:
             --wait-min "${{ inputs.wait_minutes }}" \
             --steps "5,25,100"
 
+      # Issue #276 — roll back sub-workers when a staging or production
+      # deploy step fails mid-sequence (e.g. billing fails after auth and
+      # reservations have already been promoted). Each command uses || true
+      # so one failing rollback does not block the others.
+      - name: Rollback staging sub-workers on failure
+        if: failure() && inputs.phase == 'staging-deploy'
+        run: |
+          echo "::warning::Staging deploy failed — rolling back staging sub-workers"
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.auth.toml --env staging || true
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.reservations.toml --env staging || true
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.billing.toml --env staging || true
+          echo "::error::Staging sub-workers rolled back."
+
+      - name: Rollback production sub-workers on failure
+        if: failure() && inputs.phase == 'production-deploy'
+        run: |
+          echo "::warning::Production deploy failed — rolling back production sub-workers"
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.auth.toml --env production || true
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.reservations.toml --env production || true
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.billing.toml --env production || true
+          echo "::error::Production sub-workers rolled back."
+
       - name: Rollback production
         if: inputs.phase == 'rollback'
         run: |
