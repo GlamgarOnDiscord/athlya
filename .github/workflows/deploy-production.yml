@@ -113,7 +113,14 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_SHA:0:7}"
+          # Main gateway (scheduled + queue handlers, /health, /openapi.json)
           pnpm --filter @athlya/api exec wrangler deploy --env staging --var "VERSION=${VERSION}" --outdir dist
+          # Bulkhead sub-workers (issue #230): deploy in sequence so route
+          # ownership transfers atomically — auth first (lowest risk), then
+          # reservations, then billing.
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env staging --var "VERSION=${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env staging --var "VERSION=${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env staging --var "VERSION=${VERSION}"
           bash scripts/wait-health-ready.sh "${STAGING_API_URL}"
 
       - name: Deploy production (wrangler + ready gate)
@@ -123,7 +130,12 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_SHA:0:7}"
+          # Main gateway
           pnpm --filter @athlya/api exec wrangler deploy --env production --var "VERSION=${VERSION}" --outdir dist
+          # Bulkhead sub-workers (issue #230)
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env production --var "VERSION=${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production --var "VERSION=${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production --var "VERSION=${VERSION}"
           bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}"
 
       # Issue #138 — upload source maps to Sentry + record the release so

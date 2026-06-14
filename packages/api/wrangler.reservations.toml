@@ -1,0 +1,155 @@
+# ----------------------------------------------------------------------------
+# athlya-api-reservations — Reservations bulkhead Worker (issue #230, CN.6.3)
+#
+# Routes:
+#   staging:    staging.api.athlya.app/v1/classes/*
+#               staging.api.athlya.app/v1/reservations/*
+#               staging.api.athlya.app/v1/members/*
+#               staging.api.athlya.app/v1/checkins/*
+#               staging.api.athlya.app/v1/studios/*
+#   production: api.athlya.app/v1/classes/*
+#               api.athlya.app/v1/reservations/*
+#               api.athlya.app/v1/members/*
+#               api.athlya.app/v1/checkins/*
+#               api.athlya.app/v1/studios/*
+#
+# Durable Objects:
+#   ClassCapacityDO — real-time class capacity via WebSocket.
+#   The DO is defined and owned by this Worker (src/workers/reservations.ts
+#   exports it). The [[migrations]] tag v1 is intentionally scoped here;
+#   the main athlya-api Worker no longer owns this namespace.
+#
+# Secrets (set once per env via `wrangler secret put --config wrangler.reservations.toml`):
+#   DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, CORS_ORIGIN, HYPERDRIVE (binding)
+# ----------------------------------------------------------------------------
+
+name = "athlya-api-reservations"
+main = "src/workers/reservations.ts"
+compatibility_date = "2026-03-01"
+compatibility_flags = ["nodejs_compat"]
+upload_source_maps = true
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+
+[vars]
+ENVIRONMENT = "dev"
+VERSION = "0.0.0-dev"
+
+[[durable_objects.bindings]]
+name = "CLASS_CAPACITY_DO"
+class_name = "ClassCapacityDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["ClassCapacityDO"]
+
+# ============================================================================
+# Staging
+# ============================================================================
+
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 0.5
+
+[env.staging]
+name = "athlya-api-reservations-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+VERSION = "0.0.0-staging"
+OTEL_SAMPLE_RATE = "0.5"
+
+[env.staging.placement]
+mode = "smart"
+
+[[env.staging.durable_objects.bindings]]
+name = "CLASS_CAPACITY_DO"
+class_name = "ClassCapacityDO"
+
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/classes/*"
+zone_name = "athlya.app"
+
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/reservations/*"
+zone_name = "athlya.app"
+
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/members/*"
+zone_name = "athlya.app"
+
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/checkins/*"
+zone_name = "athlya.app"
+
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/studios/*"
+zone_name = "athlya.app"
+
+[[env.staging.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "49e3db37042d4f2999b0c0061363929c"
+
+# ============================================================================
+# Production
+# ============================================================================
+
+[env.production.observability]
+enabled = true
+head_sampling_rate = 0.1
+
+[env.production]
+name = "athlya-api-reservations-production"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+VERSION = "0.1.0"
+OTEL_SAMPLE_RATE = "0.1"
+
+[env.production.placement]
+mode = "smart"
+
+[[env.production.durable_objects.bindings]]
+name = "CLASS_CAPACITY_DO"
+class_name = "ClassCapacityDO"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/classes/*"
+zone_name = "athlya.app"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/reservations/*"
+zone_name = "athlya.app"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/members/*"
+zone_name = "athlya.app"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/checkins/*"
+zone_name = "athlya.app"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/studios/*"
+zone_name = "athlya.app"
+
+[[env.production.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "4cdf25a926de4c84a810dc25fd19135d"
+
+# ============================================================================
+# Preview (per-PR, deployed by preview.yml with --name override)
+# ============================================================================
+
+[env.preview]
+name = "athlya-api-reservations-preview"
+
+[env.preview.vars]
+ENVIRONMENT = "preview"
+VERSION = "0.0.0-preview"
+
+[[env.preview.durable_objects.bindings]]
+name = "CLASS_CAPACITY_DO"
+class_name = "ClassCapacityDO"
