@@ -30,6 +30,27 @@
 
 BEGIN;
 
+-- ---------- partition structure (superuser, before role switch) ----------
+
+-- Run these two checks as superuser (session role = postgres, bypasses RLS)
+-- before narrowing to the tenant test role. They rely on pg_class which
+-- is not filtered by RLS.
+
+SELECT plan(14);
+
+SELECT is(
+    (SELECT relkind::text FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relname = 'audit_log'),
+    'p',
+    'partition: audit_log relkind is ''p'' (partitioned table)'
+);
+
+SELECT lives_ok(
+    $$SELECT ensure_next_audit_log_partition(now())$$,
+    'partition: ensure_next_audit_log_partition(now()) is callable and idempotent'
+);
+
 -- Insert studio-scoped audit rows as superuser (bypasses RLS) to enable
 -- cross-tenant isolation assertions below. These are rolled back at end.
 INSERT INTO "audit_log" (actor_id, action, studio_id, metadata) VALUES
@@ -42,7 +63,6 @@ INSERT INTO "audit_log" (actor_id, action, studio_id, metadata) VALUES
 -- last block in this file issues `RESET ROLE` to exercise the
 -- audit_log_immutable() trigger independently of RLS.
 SET LOCAL ROLE athlya_tenant_test;
-SELECT plan(12);
 
 -- ---------- audit_admin_only: member sees nothing ----------
 

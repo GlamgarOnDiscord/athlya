@@ -2,11 +2,11 @@
  * `audit_log` — append-only record of security-relevant actions.
  *
  * Column choices:
- *   - `id` is a `BIGSERIAL`: the audit stream easily outgrows a 32-bit
- *     counter over the platform's lifetime, and monotonic integers let
- *     us do cheap `WHERE id > :cursor` cursor pagination on the admin
- *     review tool without relying on creation timestamps (which are not
- *     unique under burst load).
+ *   - `id` is a bigint backed by the `audit_log_id_seq` bigserial sequence.
+ *     The primary key is composite (id, created_at) because PostgreSQL
+ *     requires every unique constraint on a partitioned table to include the
+ *     partition key (migration 0017, issue #235). No inbound FK references
+ *     point at audit_log.id so the widened PK is safe.
  *   - `actor_id` is nullable because Requirement 5.3 requires us to
  *     anonymise audit rows 30 days after the referenced user's deletion
  *     by setting `actor_id = NULL` and scrubbing PII from `metadata`.
@@ -22,38 +22,45 @@
  * 22.3 (admin-scoped read).
  */
 
-import { bigserial, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { bigint, jsonb, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core';
 
 import { createdAt } from './_shared.js';
 import { users } from './users.js';
 
-export const auditLog = pgTable('audit_log', {
-  id: bigserial('id', { mode: 'bigint' }).primaryKey(),
-  /**
-   * Denormalised studio context. Populated automatically via the column
-   * DEFAULT (NULLIF(current_setting('app.studio_id',true),'')::uuid) when
-   * the insert runs inside a withTenant transaction. NULL for system-level
-   * rows (JWT rotate, DLQ, legacy rows predating migration 0015).
-   * No FK: audit rows must outlive studio deletion, and a FK with
-   * ON DELETE SET NULL would conflict with the audit_log_forbid_update
-   * trigger (migration 0015). Denormalized UUID only.
-   * Used by the audit_admin_only RLS policy (migration 0015).
-   */
-  studioId: uuid('studio_id'),
-  /** Nullable for RGPD anonymisation (Requirement 5.3). */
-  actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
-  action: text('action').notNull(),
-  targetType: text('target_type'),
-  targetId: text('target_id'),
-  /**
-   * Open-ended JSON: the shape varies per `action`. Callers should
-   * redact PII at write time when the value references a user — the
-   * 30-day anonymisation job cannot recover from a leak of
-   * irreversible data like hashed credit-card fingerprints.
-   */
-  metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
-  createdAt: createdAt(),
-});
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: bigint('id', { mode: 'bigint' })
+      .notNull()
+      .default(sql`nextval('audit_log_id_seq'::regclass)`),
+    /**
+     * Denormalised studio context. Populated automatically via the column
+     * DEFAULT (NULLIF(current_setting('app.studio_id',true),'')::uuid) when
+     * the insert runs inside a withTenant transaction. NULL for system-level
+     * rows (JWT rotate, DLQ, legacy rows predating migration 0015).
+     * No FK: audit rows must outlive studio deletion, and a FK with
+     * ON DELETE SET NULL would conflict with the audit_log_forbid_update
+     * trigger (migration 0015). Denormalized UUID only.
+     * Used by the audit_admin_only RLS policy (migration 0015).
+     */
+    studioId: uuid('studio_id'),
+    /** Nullable for RGPD anonymisation (Requirement 5.3). */
+    actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    action: text('action').notNull(),
+    targetType: text('target_type'),
+    targetId: text('target_id'),
+    /**
+     * Open-ended JSON: the shape varies per `action`. Callers should
+     * redact PII at write time when the value references a user — the
+     * 30-day anonymisation job cannot recover from a leak of
+     * irreversible data like hashed credit-card fingerprints.
+     */
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: createdAt(),
+  },
+  (table) => [primaryKey({ name: 'audit_log_pkey', columns: [table.id, table.createdAt] })],
+);
 
 export type AuditLogRow = typeof auditLog.$inferSelect;
 export type AuditLogInsert = typeof auditLog.$inferInsert;
