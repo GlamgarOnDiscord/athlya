@@ -118,7 +118,12 @@ export const RegisterRequestSchema = z
       .email()
       .max(254)
       .transform((v) => v.toLowerCase()),
-    password: z.string().min(8).max(72),
+    password: z
+      .string()
+      .min(8)
+      .refine((v) => new TextEncoder().encode(v).length <= 72, {
+        message: 'Password must be at most 72 bytes when UTF-8 encoded',
+      }),
     displayName: z.string().trim().min(1).max(80),
     studioSlug: SlugSchema,
     consents: ConsentsInputSchema,
@@ -138,7 +143,12 @@ export const LoginRequestSchema = z
       .email()
       .max(254)
       .transform((v) => v.toLowerCase()),
-    password: z.string().min(1).max(72),
+    password: z
+      .string()
+      .min(1)
+      .refine((v) => new TextEncoder().encode(v).length <= 72, {
+        message: 'Password must be at most 72 bytes when UTF-8 encoded',
+      }),
   })
   .strict();
 
