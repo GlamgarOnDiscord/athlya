@@ -1,11 +1,10 @@
 /**
  * Shared column builders and helpers reused across every Athlya table.
  *
- * Centralising these keeps column shapes uniform (every UUID is a v7, every
- * `createdAt` uses the same timestamp semantics, every soft-delete is
- * nullable `timestamptz`) and makes it trivial to change the default
- * strategy in one place — e.g. swap `gen_random_uuid()` for a dedicated
- * `uuid_generate_v7()` once the PostgreSQL extension is enabled in 2.2.
+ * Centralising these keeps column shapes uniform (every UUID primary key
+ * is a v7, every `createdAt` uses the same timestamp semantics, every
+ * soft-delete is nullable `timestamptz`) and makes it trivial to change
+ * the default strategy in one place.
  *
  * Related requirements:
  *   - Requirement 5.1, 5.4 (soft-delete `deleted_at` pattern for RGPD).
@@ -19,20 +18,16 @@ import { timestamp, uuid } from 'drizzle-orm/pg-core';
 /**
  * SQL expression used as the default for every UUID primary key.
  *
- * Task 2.2 enables `pgcrypto` in `migrations/0000_init.sql` so
- * `gen_random_uuid()` is guaranteed to resolve on Neon PostgreSQL 17.
- * This produces UUID v4 values, which are correct but slightly less
- * index-locality-friendly than UUID v7.
+ * `gen_uuid_v7()` is a pure-SQL function added in migration 0016 (issue
+ * #232). It embeds a 48-bit Unix-ms timestamp in the leading bytes of the
+ * UUID (RFC 9562 §5.7), which guarantees monotonically increasing B-tree
+ * insertions — eliminating the index fragmentation caused by the previous
+ * random UUID v4 default.
  *
- * Once Neon ships `pg_uuidv7` as a managed extension, a follow-up
- * migration will run `CREATE EXTENSION pg_uuidv7` plus
- * `ALTER TABLE … ALTER COLUMN id SET DEFAULT uuid_generate_v7()` for
- * every table, and this constant will be flipped to
- * `sql\`uuid_generate_v7()\``. The Drizzle column type does not change,
- * so the swap is a SQL-only change. See the TODO at the top of
- * `0000_init.sql` and `migrations/README.md` for the tracking note.
+ * No PostgreSQL extension is required; the function works on Neon
+ * PostgreSQL 17 out of the box.
  */
-export const DEFAULT_UUID_SQL = sql`gen_random_uuid()`;
+export const DEFAULT_UUID_SQL = sql`gen_uuid_v7()`;
 
 /**
  * Standard UUID primary-key column. Every top-level entity uses this shape.
