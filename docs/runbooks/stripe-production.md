@@ -90,14 +90,40 @@ stripe trigger checkout.session.completed
 node scripts/verify-stripe-provision-checklist.mjs
 ```
 
-| Item                       | Staging | Production |
-| -------------------------- | ------- | ---------- |
-| STRIPE_SECRET_KEY          | [ ]     | [ ]        |
-| STRIPE_WEBHOOK_SECRET      | [ ]     | [ ]        |
-| Webhook endpoint actif     | [ ]     | [ ]        |
-| Migration 0010             | [ ]     | [ ]        |
-| Checkout E2E admin         | [ ]     | [ ]        |
-| Replay event.id idempotent | [ ]     | [ ]        |
+| Item                       | Staging | Production | Notes                                                     |
+| -------------------------- | ------- | ---------- | --------------------------------------------------------- |
+| STRIPE_SECRET_KEY          | [x]     | [x]        | mode test (`sk_test_...`), provisionné 2026-06-16         |
+| STRIPE_WEBHOOK_SECRET      | [x]     | [x]        | 2 endpoints distincts dans Stripe Dashboard               |
+| Webhook endpoint actif     | [x]     | [x]        | `*.workers.dev` (pas de domaine custom — voir ci-dessous) |
+| Migration 0010             | [x]     | [x]        | `stripe_webhook_events` créée + grantée à `athlya_app`    |
+| Checkout E2E admin         | [ ]     | [ ]        | **bloqué**, voir "Limite connue" ci-dessous               |
+| Replay event.id idempotent | [ ]     | [ ]        | **bloqué**, idem                                          |
+
+### ⚠️ Limite connue — pas de validation HTTP E2E sans domaine custom
+
+Le gateway (`worker.ts`) applique une allowlist stricte sur le header `Host`
+(issue #244, findings S3-003/S4-006) : seuls `api.athlya.app` et
+`staging.api.athlya.app` sont acceptés en production/staging. Toute requête
+vers l'URL `*.workers.dev` (la seule disponible — ce projet open-source n'a
+pas de nom de domaine) reçoit un **404 délibéré**, avant même d'atteindre les
+routes billing.
+
+Conséquence : `smoke-stripe-webhook-config.mjs`, un vrai test `checkout.session.completed`
+end-to-end, et le test de replay idempotent ne peuvent **pas** être exécutés
+tant qu'aucun domaine réel n'est provisionné. Ce n'est pas un bug — c'est la
+même protection qui empêche le host-header spoofing — mais ça bloque cette
+validation spécifique.
+
+**À refaire dès qu'un domaine existe** :
+
+1. Provisionner le DNS pour `api.athlya.app` / `staging.api.athlya.app` (ou
+   équivalent si le domaine final diffère).
+2. `wrangler deploy --env staging` puis `--env production` (le code est déjà
+   prêt, `workers_dev = true` ajouté en attendant comme fallback de test).
+3. Lancer `node scripts/smoke-stripe-webhook-config.mjs` contre le vrai domaine.
+4. `stripe trigger checkout.session.completed` en mode test pour valider le
+   webhook réel + l'idempotency (rejouer le même event.id, vérifier qu'il
+   n'est traité qu'une fois via `stripe_webhook_events`).
 
 ---
 
