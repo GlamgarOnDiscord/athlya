@@ -372,6 +372,10 @@ bucket_name = "athlya-exports-dev"
 [env.staging]
 name = "athlya-api-staging"
 route = { pattern = "staging.api.athlya.app/*", zone_name = "athlya.app" }
+# workers.dev fallback — until staging.api.athlya.app DNS is provisioned
+# (no custom domain owned yet), this is the only reachable URL:
+# https://athlya-api-staging.<account>.workers.dev
+workers_dev = true
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
