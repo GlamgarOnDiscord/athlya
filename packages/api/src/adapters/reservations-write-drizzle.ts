@@ -57,6 +57,32 @@ import type {
 import type { CancelOutboxEvent, CancelRepo, ClassForCancel } from '@athlya/reservations/cancel';
 
 /* ------------------------------------------------------------------ */
+/*  Adapter-boundary cast helpers                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Cast a Drizzle transaction handle to the service-layer opaque
+ * `BookingTx` marker. Used inside `withTransaction` to hand the
+ * service an opaque handle it cannot introspect — enforcing that only
+ * the adapter (not the service) calls Drizzle APIs.
+ *
+ * The double-cast is inherent to the opaque-type adapter pattern and
+ * intentionally isolated here rather than scattered at every call site.
+ */
+function toBookingTx(tx: AthlyaTx): BookingTx {
+  return tx as unknown as BookingTx;
+}
+
+/**
+ * Inverse of {@link toBookingTx} — recover the underlying Drizzle
+ * transaction from the opaque `BookingTx` handle so the adapter's
+ * concrete method implementations can run queries.
+ */
+function toAthlyaTx(tx: BookingTx): AthlyaTx {
+  return tx as unknown as AthlyaTx;
+}
+
+/* ------------------------------------------------------------------ */
 /*  BookingRepo                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -87,7 +113,7 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
     },
 
     async withTransaction<T>(fn: (tx: BookingTx) => Promise<T>): Promise<T> {
-      return withTenant(db, claims, async (tx) => fn(tx as unknown as BookingTx));
+      return withTenant(db, claims, async (tx) => fn(toBookingTx(tx)));
     },
 
     async findExistingConfirmedOrWaitlistReservation(
@@ -95,7 +121,7 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
       classId,
       userId,
     ): Promise<BookingReservationRow | null> {
-      const drizzleTx = tx as unknown as AthlyaTx;
+      const drizzleTx = toAthlyaTx(tx);
       const rows = await drizzleTx
         .select()
         .from(reservations)
@@ -105,7 +131,7 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
     },
 
     async insertReservation(tx, input): Promise<BookingReservationRow> {
-      const drizzleTx = tx as unknown as AthlyaTx;
+      const drizzleTx = toAthlyaTx(tx);
       try {
         const [row] = await drizzleTx
           .insert(reservations)
@@ -133,11 +159,11 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
     },
 
     async insertOutbox(tx, event): Promise<void> {
-      await insertOutboxRow(tx as unknown as AthlyaTx, event);
+      await insertOutboxRow(toAthlyaTx(tx), event);
     },
 
     async countWaitlistAhead(tx, classId, reservationCreatedAt): Promise<number> {
-      const drizzleTx = tx as unknown as AthlyaTx;
+      const drizzleTx = toAthlyaTx(tx);
       const result = await drizzleTx
         .select({ count: sql<number>`count(*)::int` })
         .from(reservations)

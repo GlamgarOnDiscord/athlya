@@ -389,6 +389,15 @@ export interface AthlyaBindings {
   readonly CRON_DB_URL?: string;
 
   /**
+   * Base URL of the web application — used by the password-reset flow to
+   * construct the email link sent to users. Falls back to a placeholder when
+   * absent so dev environments can exercise the flow without a deployed
+   * frontend. Set via `wrangler secret put WEB_APP_URL --env <env>` or as a
+   * `[vars]` entry in `wrangler.toml`.
+   */
+  readonly WEB_APP_URL?: string;
+
+  /**
    * Neon read-replica connection string for the EU region (CN.8.3).
    *
    * When set, read-only queries originating from European Cloudflare
