@@ -1,7 +1,7 @@
 # Athlya Platform — Progress & Remaining Work
 
-**Dernière mise à jour :** Session 2026-06 — Security sprint: Req 22.3 audit_log studio_id scoping (#225 → PR #246 ✅), CWE-601 Stripe open redirect fix (#241 → PR #247 ✅), IDN punycode throttle bypass (#243 → PR #248 ✅), per-user refresh throttle + Retry-After (#240 → PR #249 ✅). Aussi: composite indexes (#238 → PR #242 ✅), outbox RLS studio_id (#244 → PR #245 ✅). Compteur vérifié : **282 / 313 tâches** (+sécurité).
-**Tâches complétées :** Epic 14 (1/1), Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.6.4, CN.7.1, CN.7.3, CN.8.1, CN.8.2, CN.8.3, CN.9.2, CN.9.3 — cases parents cochées
+**Dernière mise à jour :** Session 2026-06-16 — Ops sprint: migrations Neon 0000-0017 appliquées sur staging+production, RLS cutover `athlya_app` (NOBYPASSRLS — piège Console Neon documenté → role recréé via SQL), Stripe secrets + webhooks (staging PR #269 + prod PR #292), R2 buckets + Queues Cloudflare provisionnés, JWT keypairs générés, Upstash Redis configuré. Issues closes : #268 (PR #291), #270 (PR #292), #279 (direct). + esbuild/postcss overrides (#290), Sentry CRON alert (#286). Tasks.md CN.6.4 cochée (PR #293 — code existait déjà). Compteur vérifié : **283 / 313 tâches**.
+**Tâches complétées :** Epic 14 (1/1), Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.6.4 (cochée PR #293), CN.8.1, CN.8.2, CN.9.2, CN.9.3 — cases parents cochées
 **Hardening tasks livrées :** 8 / 8 (H1 à H8) + 6 issues GitHub (#47–#53 #56) + 8 Dependabot alerts (PR #58)
 **Niveau 2 (live wiring) :** 13 / 13 items ✅ COMPLET (voir section dédiée)
 
