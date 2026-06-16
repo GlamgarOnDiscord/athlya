@@ -64,9 +64,9 @@ try {
   ok('0011 audit insert migration applied');
 
   const [policyRow] = await sql`
-    SELECT polname::text AS name
+    SELECT policyname::text AS name
     FROM pg_policies
-    WHERE tablename = 'audit_log' AND polname = 'audit_app_insert'
+    WHERE tablename = 'audit_log' AND policyname = 'audit_app_insert'
   `;
   if (policyRow === undefined) {
     fail('policy audit_app_insert missing on audit_log');
