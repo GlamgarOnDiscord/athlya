@@ -186,3 +186,68 @@ Vérifier dans cet ordre :
 - [ ] Mettre à jour le README ops avec la date de cutover.
 - [ ] Cocher le critère d'acceptation B2 final dans `tasks.md` (slice B2-prod).
 - [ ] Programmer une rotation password `athlya_app` à 90 jours (calendrier ops).
+
+---
+
+## ⚠️ Piège plateforme Neon — rôles Console héritent de BYPASSRLS
+
+**Découvert le 2026-06-16, lors du cutover réel.** `athlya_app` avait été créé
+via la Neon Console (Roles & Databases → Add role) sur les deux branches. Le
+smoke test post-cutover a révélé `rolbypassrls = true` malgré la migration
+`0004_rls_hardening.sql` qui tente `ALTER ROLE athlya_app ... NOBYPASSRLS`.
+
+**Cause** : tout rôle créé via la Neon Console, l'API ou le CLI est
+automatiquement membre de `neon_superuser`, qui porte `BYPASSRLS`. Seuls les
+rôles créés **par une requête SQL `CREATE ROLE`** (psql, pgAdmin, ou tout
+client SQL — pas le SQL Editor de la Console qui est aussi un client SQL et
+fonctionne correctement) échappent à cette adhésion automatique.
+
+**`ALTER ROLE` est également bloqué** sur un rôle existant créé via Console —
+`neondb_owner` n'a pas l'option ADMIN nécessaire (`permission denied to alter
+role` / `permission denied to drop role`, car le propriétaire effectif de
+l'ADMIN option est un rôle interne Neon `cloud_admin`).
+
+**Fix appliqué** :
+
+1. Supprimer le rôle existant via la Neon Console (`Roles & Databases` → `⋮`
+   sur `athlya_app` → **Delete role**) — `neondb_owner` ne peut pas le DROP
+   en SQL.
+2. Recréer via SQL, en tant que `neondb_owner`, depuis un client direct (pas
+   le SQL Editor de Console) :
+   ```sql
+   CREATE ROLE athlya_app LOGIN PASSWORD '...'
+     NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
+   ```
+3. Ré-appliquer tous les GRANTs (capturés depuis l'ancien rôle via
+   `information_schema.table_privileges` avant suppression, pour ne rien
+   oublier — voir migrations 0004/0010/0011 pour la liste canonique).
+4. Mettre à jour le secret `DB_URL` avec le nouveau mot de passe.
+5. Re-valider avec `node scripts/smoke-rls-cutover.mjs` → `rolbypassrls:
+false` attendu.
+
+**À ne jamais refaire** : créer/recréer un rôle applicatif via la Neon
+Console si NOBYPASSRLS est requis. Toujours passer par `CREATE ROLE` en SQL
+direct.
+
+### Bug corrigé dans le smoke test lui-même
+
+`scripts/smoke-rls-cutover.mjs` référençait `pg_policies.polname`, qui
+n'existe pas (`pg_policies` est une vue, sa colonne est `policyname` ; `polname`
+est la colonne du catalogue brut `pg_policy`). Corrigé en même temps que ce
+cutover.
+
+### Cutover exécuté
+
+- **Date** : 2026-06-16
+- **Opérateur** : ops automation (session Claude Code, autorisation explicite
+  utilisateur)
+- **Environnements** : staging (`br-lively-boat-alqy5lyt`) + production
+  (`br-sweet-sunset-alxstab9`), projet Neon `athlya-dev` (`solitary-dew-81017827`)
+- **Résultat** : `node scripts/smoke-rls-cutover.mjs` exit 0 sur les deux,
+  `rolbypassrls: false` confirmé, policy `audit_app_insert` active, SELECT non
+  scopé sur `users` renvoie 0 ligne.
+- **Non couvert** : validation HTTP end-to-end (login/booking via l'API) —
+  bloquée par l'allowlist stricte du header `Host` (`worker.ts`, issue #244),
+  qui n'accepte que `api.athlya.app` / `staging.api.athlya.app`. Aucun domaine
+  custom n'est provisionné (projet open-source sans nom de domaine acheté à
+  ce jour). À refaire une fois un domaine réel disponible.
