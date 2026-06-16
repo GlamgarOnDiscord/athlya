@@ -1144,7 +1144,7 @@ Post-launch, à itérer dans l'année.
 
 - [x] CN.6.1 Retry + exponential backoff + jitter sur adapters (HIBP livré slice 11.3, autres adapters slice future)
 - [x] CN.6.2 Timeouts explicites par dépendance (HIBP `AbortSignal.timeout(2000)` livré slice 11.3, autres adapters slice future)
-- [ ] CN.6.3 Bulkhead pattern — séparer les Workers par domaine (`api-auth`, `api-reservations`, `api-billing`) pour isoler les failures CPU.
+- [x] CN.6.3 Bulkhead pattern — séparer les Workers par domaine (`api-auth`, `api-reservations`, `api-billing`) pour isoler les failures CPU.
 - [x] CN.6.4 Chaos engineering minimal — flag `CHAOS_NEON_FAILURE_RATE=0.1` en staging qui injecte 10% d'erreurs Neon/Upstash. Vérifie que le circuit breaker s'ouvre + 503 propres.
 
 #### Déploiement
