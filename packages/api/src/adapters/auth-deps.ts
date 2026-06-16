@@ -243,10 +243,7 @@ async function getAuthState(env: AthlyaBindings): Promise<AuthServiceState> {
   // in dev/staging logs so the flow is exercisable end-to-end.
   const passwordResetRepo = createDrizzlePasswordResetRepo(db);
   const emailTransport = buildPasswordResetEmailTransport(env);
-  const resetLinkBaseUrl =
-    ((env as { WEB_APP_URL?: string }).WEB_APP_URL?.length ?? 0) > 0
-      ? (env as unknown as { WEB_APP_URL: string }).WEB_APP_URL
-      : 'https://app.athlya.test';
+  const resetLinkBaseUrl = env.WEB_APP_URL || 'https://app.athlya.test';
 
   const serviceDeps: AuthServiceDeps = {
     userRepo,
@@ -494,11 +491,8 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
  * the route" if a stricter posture lands.
  */
 function buildPasswordResetEmailTransport(env: AthlyaBindings): PasswordResetEmailTransport {
-  const apiKey = (env as { RESEND_API_KEY?: string }).RESEND_API_KEY;
-  const fromAddress =
-    ((env as { RESEND_FROM?: string }).RESEND_FROM?.length ?? 0) > 0
-      ? (env as unknown as { RESEND_FROM: string }).RESEND_FROM
-      : 'Athlya <noreply@athlya.app>';
+  const apiKey = env.RESEND_API_KEY;
+  const fromAddress = env.RESEND_FROM || 'Athlya <noreply@athlya.app>';
 
   if (apiKey === undefined || apiKey.length === 0) {
     return {
