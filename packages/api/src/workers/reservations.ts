@@ -17,6 +17,8 @@
  * auth or billing latency.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import { buildBaseApp } from '../worker.js';
 import { buildDefaultDeps, buildLazyDomainDeps } from '../routes/index.js';
 import { buildCapacityRouter } from '../routes/capacity.js';
@@ -33,19 +35,22 @@ export { ClassCapacityDO } from '../durable-objects/class-capacity.js';
 const app = buildBaseApp();
 
 let latestEnv: AthlyaBindings | undefined;
-let latestCf: { readonly continent?: string } | undefined;
+
+// Per-request cf via AsyncLocalStorage — prevents continent routing cross-
+// contamination between concurrent requests in the same isolate (issue #303).
+const cfStorage = new AsyncLocalStorage<{ readonly continent?: string } | undefined>();
 
 app.use('/v1/*', async (c, next) => {
   latestEnv = c.env;
-  latestCf = (c.req.raw.cf as { continent?: string } | undefined) ?? undefined;
-  await next();
+  const cf = (c.req.raw.cf as { continent?: string } | undefined) ?? undefined;
+  await cfStorage.run(cf, () => next());
 });
 
 const lazyDeps = buildLazyDomainDeps(() => {
   if (latestEnv === undefined) {
     throw new Error('reservations worker: env not yet captured — /v1/* middleware must run first');
   }
-  return buildDefaultDeps(latestEnv, latestCf);
+  return buildDefaultDeps(latestEnv, cfStorage.getStore());
 });
 
 // Capacity WebSocket mounts first: /v1/classes/:classId/capacity/ws must
