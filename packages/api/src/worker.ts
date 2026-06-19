@@ -1118,12 +1118,38 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       return { status: 'skipped', error: 'CRON_DB_URL missing' };
     }
 
+    // R2 binding checks — issue #300. Absent bindings are treated as
+    // `skipped` in dev (acceptable) but trigger not-ready in staging/prod.
+    // Without AVATARS_BUCKET, RGPD cascade silently skips avatar purge.
+    // Without EXPORTS_BUCKET, member data-export jobs fail at runtime.
+    function probeAvatarsBucket(): ProbeResult {
+      if (env.AVATARS_BUCKET !== undefined) {
+        return { status: 'ok', latencyMs: 0 };
+      }
+      return {
+        status: 'skipped',
+        error: 'AVATARS_BUCKET binding absent — RGPD avatar purge disabled',
+      };
+    }
+
+    function probeExportsBucket(): ProbeResult {
+      if (env.EXPORTS_BUCKET !== undefined) {
+        return { status: 'ok', latencyMs: 0 };
+      }
+      return {
+        status: 'skipped',
+        error: 'EXPORTS_BUCKET binding absent — member data exports disabled',
+      };
+    }
+
     const [dbProbe, redisProbe, cronProbe, hyperdriveProbe] = await Promise.all([
       probeDb(),
       probeRedis(),
       Promise.resolve(probeCronConfig()),
       probeHyperdriveWrite(),
     ]);
+    const avatarsBucketProbe = probeAvatarsBucket();
+    const exportsBucketProbe = probeExportsBucket();
 
     // Dev: any `skipped` is acceptable (= no real binding wired).
     // Staging/prod: `skipped` is a configuration bug → not ready.
@@ -1131,7 +1157,12 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       p.status === 'failed' || (!isDev && p.status === 'skipped');
 
     const ready =
-      !failed(dbProbe) && !failed(redisProbe) && !failed(cronProbe) && !failed(hyperdriveProbe);
+      !failed(dbProbe) &&
+      !failed(redisProbe) &&
+      !failed(cronProbe) &&
+      !failed(hyperdriveProbe) &&
+      !failed(avatarsBucketProbe) &&
+      !failed(exportsBucketProbe);
     const httpStatus = ready ? 200 : 503;
 
     return c.json(
@@ -1145,6 +1176,8 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
           redis: redisProbe,
           cron: cronProbe,
           hyperdrive: hyperdriveProbe,
+          avatarsBucket: avatarsBucketProbe,
+          exportsBucket: exportsBucketProbe,
         },
       },
       httpStatus,
