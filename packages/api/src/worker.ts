@@ -49,6 +49,8 @@
  * the `main = "src/worker.ts"` entry.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import { handleUserDeleted, runExportJob } from '@athlya/members';
 import { HANDLED_EVENT_TYPES, handleEvent as handleNotificationEvent } from '@athlya/notifications';
 import { createRedisRemainingCounter } from '@athlya/reservations/counter';
@@ -1257,11 +1259,15 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       // trivially cheap on the hot path — one hashmap lookup
       // per call.
       let latestEnv: AthlyaBindings | undefined;
-      let latestCf: { readonly continent?: string } | undefined;
+      // Per-request cf via AsyncLocalStorage — prevents continent routing
+      // cross-contamination between concurrent requests in the same isolate
+      // (issue #303). latestEnv is safe at closure scope because c.env is
+      // the same bindings object for every request in one isolate.
+      const cfStorage = new AsyncLocalStorage<{ readonly continent?: string } | undefined>();
       app.use('/v1/*', async (c, next) => {
         latestEnv = c.env;
-        latestCf = (c.req.raw.cf as { continent?: string } | undefined) ?? undefined;
-        await next();
+        const cf = (c.req.raw.cf as { continent?: string } | undefined) ?? undefined;
+        await cfStorage.run(cf, () => next());
       });
       const lazyDeps = buildLazyDomainDeps(() => {
         if (latestEnv === undefined) {
@@ -1269,7 +1275,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
             'lazy domain deps: request env not yet captured; this should not happen if the /v1/* middleware ran first',
           );
         }
-        return buildDefaultDeps(latestEnv, latestCf);
+        return buildDefaultDeps(latestEnv, cfStorage.getStore());
       });
       mountDomainRoutes(app, lazyDeps);
     }
