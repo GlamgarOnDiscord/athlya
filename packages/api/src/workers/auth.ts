@@ -3,7 +3,9 @@
  *
  * Handles:
  *   • /v1/auth/*   — register, login, logout, refresh, password reset
- *   • /v1/sessions/* — session list
+ *
+ * /v1/sessions/* is not mounted here — the sessions adapter is not yet
+ * implemented. Routes are added once the adapter ships (issue #302).
  *
  * Shares the same global middleware chain as the monolith (host check,
  * CORS, tracing, rate limiters, security headers, error handlers) via
@@ -17,7 +19,6 @@
 import { buildBaseApp } from '../worker.js';
 import { buildDefaultDeps, buildLazyDomainDeps } from '../routes/index.js';
 import { buildAuthRouter } from '../routes/auth.js';
-import { buildSessionsRouter } from '../routes/sessions.js';
 
 import type { AthlyaBindings } from '../types.js';
 
@@ -40,7 +41,6 @@ const lazyDeps = buildLazyDomainDeps(() => {
 });
 
 app.route('/v1/auth', buildAuthRouter(lazyDeps.auth));
-app.route('/v1/sessions', buildSessionsRouter(lazyDeps.sessions));
 
 export { app };
 

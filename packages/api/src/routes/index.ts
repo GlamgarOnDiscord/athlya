@@ -101,8 +101,16 @@ export interface DomainDeps {
   readonly members: MembersDeps;
   readonly classes: ClassesDeps;
   readonly reservations: ReservationsDeps;
-  readonly sessions: SessionsDeps;
-  readonly checkins: CheckinsDeps;
+  /**
+   * Optional — absent until the workout-session adapter ships.
+   * Routes are not mounted when undefined (issue #302).
+   */
+  readonly sessions?: SessionsDeps;
+  /**
+   * Optional — absent until the check-in adapter ships.
+   * Routes are not mounted when undefined (issue #302).
+   */
+  readonly checkins?: CheckinsDeps;
   readonly studios: StudiosDeps;
   readonly billing: BillingDeps;
 }
@@ -130,8 +138,12 @@ export function mountDomainRoutes(app: Hono<HonoEnv>, deps: DomainDeps): Hono<Ho
   app.route('/v1/classes', buildCapacityRouter());
   app.route('/v1/classes', buildClassesRouter(deps.classes));
   app.route('/v1/reservations', buildReservationsRouter(deps.reservations));
-  app.route('/v1/sessions', buildSessionsRouter(deps.sessions));
-  app.route('/v1/checkins', buildCheckinsRouter(deps.checkins));
+  if (deps.sessions !== undefined) {
+    app.route('/v1/sessions', buildSessionsRouter(deps.sessions));
+  }
+  if (deps.checkins !== undefined) {
+    app.route('/v1/checkins', buildCheckinsRouter(deps.checkins));
+  }
   app.route('/v1/studios', buildStudiosRouter(deps.studios));
   app.route('/v1/billing', buildBillingRouter(deps.billing));
   return app;
@@ -182,14 +194,15 @@ export function mountDomainRoutes(app: Hono<HonoEnv>, deps: DomainDeps): Hono<Ho
  *     the async signature is already the contract.
  */
 export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
-  const forward = <K extends keyof DomainDeps, M extends keyof DomainDeps[K]>(
+  const forward = <K extends keyof Required<DomainDeps>, M extends keyof Required<DomainDeps>[K]>(
     domain: K,
     method: M,
   ) => {
     return ((...args: unknown[]) => {
-      const real = resolve()[domain][method] as unknown as (...args: unknown[]) => unknown;
-      return real.apply(resolve()[domain], args);
-    }) as unknown as DomainDeps[K][M];
+      const bundle = resolve()[domain] as Required<DomainDeps>[K];
+      const real = bundle[method] as unknown as (...args: unknown[]) => unknown;
+      return real.apply(bundle, args);
+    }) as unknown as Required<DomainDeps>[K][M];
   };
 
   return {
@@ -226,13 +239,6 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
       cancelReservation: forward('reservations', 'cancelReservation'),
       listMyReservations: forward('reservations', 'listMyReservations'),
       getRemainingSeats: forward('reservations', 'getRemainingSeats'),
-    },
-    sessions: {
-      logSession: forward('sessions', 'logSession'),
-      listSessions: forward('sessions', 'listSessions'),
-    },
-    checkins: {
-      checkIn: forward('checkins', 'checkIn'),
     },
     studios: {
       getStudio: forward('studios', 'getStudio'),
@@ -376,13 +382,6 @@ export function buildDefaultDeps(
     members,
     classes,
     reservations,
-    sessions: {
-      logSession: () => notImplemented('members.logSession'),
-      listSessions: () => notImplemented('members.listSessions'),
-    },
-    checkins: {
-      checkIn: () => notImplemented('reservations.checkIn'),
-    },
     studios: hasMembersSecrets
       ? buildStudiosDeps(env)
       : {

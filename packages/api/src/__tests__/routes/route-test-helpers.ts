@@ -68,13 +68,16 @@ export function buildStubDeps(
     members?: Partial<DomainDeps['members']>;
     classes?: Partial<DomainDeps['classes']>;
     reservations?: Partial<DomainDeps['reservations']>;
-    sessions?: Partial<DomainDeps['sessions']>;
-    checkins?: Partial<DomainDeps['checkins']>;
+    sessions?: Partial<Required<DomainDeps>['sessions']>;
+    checkins?: Partial<Required<DomainDeps>['checkins']>;
     studios?: Partial<DomainDeps['studios']>;
     billing?: Partial<DomainDeps['billing']>;
     audit?: Partial<DomainDeps['audit']>;
   } = {},
-): DomainDeps {
+): DomainDeps & {
+  readonly sessions: Required<DomainDeps>['sessions'];
+  readonly checkins: Required<DomainDeps>['checkins'];
+} {
   return {
     auth: {
       register: vi.fn(),
