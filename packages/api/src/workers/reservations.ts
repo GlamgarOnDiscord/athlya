@@ -5,8 +5,10 @@
  *   • /v1/classes/*      — list, search, create, update, delete, capacity WS
  *   • /v1/reservations/* — book, cancel, list
  *   • /v1/members/*      — profile, consents, export
- *   • /v1/checkins/*     — check-in
  *   • /v1/studios/*      — studio read/update
+ *
+ * /v1/checkins/* is not mounted — the check-in adapter is not yet
+ * implemented. Routes are added once the adapter ships (issue #302).
  *
  * Owns the ClassCapacityDO Durable Object (real-time class capacity via
  * WebSocket). The `[[migrations]]` tag in `wrangler.reservations.toml`
@@ -20,7 +22,6 @@
 import { buildBaseApp } from '../worker.js';
 import { buildDefaultDeps, buildLazyDomainDeps } from '../routes/index.js';
 import { buildCapacityRouter } from '../routes/capacity.js';
-import { buildCheckinsRouter } from '../routes/checkins.js';
 import { buildClassesRouter } from '../routes/classes.js';
 import { buildMembersRouter } from '../routes/members.js';
 import { buildReservationsRouter } from '../routes/reservations.js';
@@ -55,7 +56,6 @@ app.route('/v1/classes', buildCapacityRouter());
 app.route('/v1/classes', buildClassesRouter(lazyDeps.classes));
 app.route('/v1/reservations', buildReservationsRouter(lazyDeps.reservations));
 app.route('/v1/members', buildMembersRouter(lazyDeps.members));
-app.route('/v1/checkins', buildCheckinsRouter(lazyDeps.checkins));
 app.route('/v1/studios', buildStudiosRouter(lazyDeps.studios));
 
 export { app };
