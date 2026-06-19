@@ -5,6 +5,8 @@ name: Deploy API
 #
 # Required secrets:
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+#   MIGRATION_DB_URL_STAGING    — neondb_owner URL for staging Neon branch (DDL access)
+#   MIGRATION_DB_URL_PRODUCTION — neondb_owner URL for production Neon branch (DDL access)
 #   SENTRY_AUTH_TOKEN  (optional — #138 source map upload; skipped if unset)
 # Required vars:
 #   STAGING_API_URL   (e.g. https://staging.api.athlya.app)
@@ -105,6 +107,37 @@ jobs:
               fi
               ;;
           esac
+
+      # Run DB migrations before deploying the Worker so the schema is
+      # always ahead of the code, never behind. Uses the neondb_owner
+      # connection string (BYPASSRLS) for DDL access; the app role
+      # (athlya_app) cannot run DDL. Migration is idempotent — already-
+      # applied migrations are skipped by the _athlya_migrations table.
+      - name: Run DB migrations (staging)
+        if: inputs.phase == 'staging-deploy'
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_DB_URL_STAGING }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::error::MIGRATION_DB_URL_STAGING secret is not set — cannot run migrations"
+            exit 1
+          fi
+          node packages/db/scripts/migrate.mjs
+          echo "::notice::Staging migrations applied successfully"
+
+      - name: Run DB migrations (production)
+        if: inputs.phase == 'production-deploy'
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_DB_URL_PRODUCTION }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::error::MIGRATION_DB_URL_PRODUCTION secret is not set — cannot run migrations"
+            exit 1
+          fi
+          node packages/db/scripts/migrate.mjs
+          echo "::notice::Production migrations applied successfully"
 
       - name: Deploy staging (wrangler + ready gate)
         if: inputs.phase == 'staging-deploy'
