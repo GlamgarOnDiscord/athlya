@@ -62,6 +62,8 @@ import {
   type SessionStore,
 } from '@athlya/auth';
 
+import { outbox } from '@athlya/db/schema';
+
 import { buildRoutedPublishDeps } from '../events/publish-deps.js';
 import { publish } from '../events/publish.js';
 
@@ -257,21 +259,48 @@ async function getAuthState(env: AthlyaBindings): Promise<AuthServiceState> {
         (env as { JWT_AUDIENCE?: string }).JWT_AUDIENCE ?? `athlya-api-${env.ENVIRONMENT}`,
     },
     publishEvent: async (event: AthlyaEvent) => {
+      // Step 1 — write to outbox for durability. Not in the same
+      // transaction as the user mutation (issue #298 tracks the full
+      // transactional outbox as follow-up), but this closes the
+      // "queue-publish failure = event silently lost" gap: if step 2
+      // fails, the drain worker picks up from the outbox on the next
+      // cron tick. ON CONFLICT DO NOTHING makes re-publishes idempotent.
+      const dbHttp = getOrCreateDbHttp(env.DB_URL);
+      try {
+        await dbHttp
+          .insert(outbox)
+          .values({
+            eventId: event.id,
+            eventType: event.type,
+            payload: event as Record<string, unknown>,
+            occurredAt: new Date(event.occurredAt),
+          })
+          .onConflictDoNothing();
+      } catch (outboxErr) {
+        // Outbox write failed — event may be lost if step 2 also
+        // fails. Log at error level so Sentry captures it.
+        console.error('[auth-deps] publishEvent: outbox write failed', {
+          eventId: event.id,
+          eventType: event.type,
+          error: outboxErr instanceof Error ? outboxErr.message : String(outboxErr),
+        });
+      }
+
+      // Step 2 — publish directly to queue for low-latency delivery.
+      // If this fails the outbox row (written above) ensures the drain
+      // picks up the event. Best-effort: a double-publish is safe
+      // because queue consumers are idempotent on event.id.
       try {
         await publish(event, undefined, buildRoutedPublishDeps(env));
       } catch (err) {
-        // Best-effort only: auth events are published AFTER
-        // the repo insert commits, so a queue failure here
-        // is a notification delay, not a consistency break.
-        // The drain worker (task 9.3) does NOT pick up a
-        // missing event on this path — a follow-up slice
-        // will move auth events into a transactional outbox
-        // insert.
-        console.warn('[auth-deps] publishEvent failed', {
-          eventId: event.id,
-          eventType: event.type,
-          error: err instanceof Error ? err.message : String(err),
-        });
+        console.warn(
+          '[auth-deps] publishEvent: queue publish failed — drain will retry from outbox',
+          {
+            eventId: event.id,
+            eventType: event.type,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        );
       }
     },
   };
