@@ -39,6 +39,10 @@ import { Rate, Trend } from 'k6/metrics';
 // dashboard k6 cloud + Grafana.
 const errorRate = new Rate('errors');
 const bookingDuration = new Trend('booking_duration_ms', true);
+// Per-outcome duration trends so the SLO threshold covers real
+// successes (201 confirmed, 202 waitlisted) independently.
+const confirmedDuration = new Trend('booking_confirmed_ms', true);
+const waitlistedDuration = new Trend('booking_waitlisted_ms', true);
 
 export const options = {
   scenarios: {
@@ -52,9 +56,11 @@ export const options = {
     },
   },
   thresholds: {
-    // SLO S1 : p99 < 500ms. Le workflow CI échoue si cette
-    // threshold est violée.
-    'http_req_duration{status:200,name:book_class}': ['p(99)<500'],
+    // SLO S1 : p99 < 500ms on successful bookings (201 confirmed,
+    // 202 waitlisted). Previously measured on status:200 which
+    // excluded all real successes — fixed by issue #304.
+    booking_confirmed_ms: ['p(99)<500'],
+    booking_waitlisted_ms: ['p(99)<500'],
     // Error rate < 0.1% (SLO S3).
     errors: ['rate<0.001'],
     // Sanity check : majorité des requests doivent aboutir.
@@ -99,7 +105,11 @@ export default function () {
   );
 
   const ok = check(res, {
-    'status 200 or 409 or 429': (r) => r.status === 200 || r.status === 409 || r.status === 429,
+    // 201 = confirmed, 202 = waitlisted, 409 = already booked / full,
+    // 429 = rate limited — all expected non-error outcomes.
+    // Previously checked for 200 which excluded all real successes.
+    'status 201 or 202 or 409 or 429': (r) =>
+      r.status === 201 || r.status === 202 || r.status === 409 || r.status === 429,
     'no 5xx': (r) => r.status < 500,
   });
 
@@ -108,6 +118,10 @@ export default function () {
   } else {
     errorRate.add(0);
   }
+
+  // Record per-outcome duration so SLO thresholds cover real successes.
+  if (res.status === 201) confirmedDuration.add(res.timings.duration);
+  if (res.status === 202) waitlistedDuration.add(res.timings.duration);
 
   bookingDuration.add(res.timings.duration);
 
