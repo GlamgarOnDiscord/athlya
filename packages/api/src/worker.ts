@@ -51,6 +51,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+import { createNeonHttpSql } from '@athlya/db';
 import { handleUserDeleted, runExportJob } from '@athlya/members';
 import { HANDLED_EVENT_TYPES, handleEvent as handleNotificationEvent } from '@athlya/notifications';
 import { createRedisRemainingCounter } from '@athlya/reservations/counter';
@@ -1144,12 +1145,59 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       };
     }
 
-    const [dbProbe, redisProbe, cronProbe, hyperdriveProbe] = await Promise.all([
-      probeDb(),
-      probeRedis(),
-      Promise.resolve(probeCronConfig()),
-      probeHyperdriveWrite(),
-    ]);
+    // Audit log partition check — issue #319. Migration 0017 partitions
+    // audit_log by month. If next month's partition is missing, every
+    // INSERT into audit_log fails on the 1st of the new month, causing
+    // a full downtime. Probe verifies current + next month partitions exist.
+    async function probeAuditLogPartitions(): Promise<ProbeResult> {
+      if (env.DB_URL === undefined || env.DB_URL === '') {
+        return { status: 'skipped', error: 'DB_URL missing — cannot check partitions' };
+      }
+      const started = Date.now();
+      try {
+        const sqlFn = createNeonHttpSql(env.DB_URL);
+        const now = new Date();
+        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const fmt = (d: Date) =>
+          `audit_log_${String(d.getFullYear())}_${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const currentPartition = fmt(now);
+        const nextPartition = fmt(nextMonth);
+        const rows = (await sqlFn(
+          `SELECT table_name AS name
+           FROM information_schema.tables
+           WHERE table_schema = 'public'
+             AND table_name = ANY($1::text[])`,
+          [[currentPartition, nextPartition]],
+        )) as Array<{ name: string }>;
+        const found = new Set(rows.map((r) => r.name));
+        const missing: string[] = [];
+        if (!found.has(currentPartition)) missing.push(currentPartition);
+        if (!found.has(nextPartition)) missing.push(nextPartition);
+        if (missing.length > 0) {
+          return {
+            status: 'failed',
+            latencyMs: Date.now() - started,
+            error: `Missing audit_log partitions: ${missing.join(', ')}`,
+          };
+        }
+        return { status: 'ok', latencyMs: Date.now() - started };
+      } catch (err) {
+        return {
+          status: 'failed',
+          latencyMs: Date.now() - started,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+
+    const [dbProbe, redisProbe, cronProbe, hyperdriveProbe, auditPartitionProbe] =
+      await Promise.all([
+        probeDb(),
+        probeRedis(),
+        Promise.resolve(probeCronConfig()),
+        probeHyperdriveWrite(),
+        probeAuditLogPartitions(),
+      ]);
     const avatarsBucketProbe = probeAvatarsBucket();
     const exportsBucketProbe = probeExportsBucket();
 
@@ -1164,7 +1212,8 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       !failed(cronProbe) &&
       !failed(hyperdriveProbe) &&
       !failed(avatarsBucketProbe) &&
-      !failed(exportsBucketProbe);
+      !failed(exportsBucketProbe) &&
+      !failed(auditPartitionProbe);
     const httpStatus = ready ? 200 : 503;
 
     return c.json(
@@ -1180,6 +1229,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
           hyperdrive: hyperdriveProbe,
           avatarsBucket: avatarsBucketProbe,
           exportsBucket: exportsBucketProbe,
+          auditLogPartitions: auditPartitionProbe,
         },
       },
       httpStatus,
