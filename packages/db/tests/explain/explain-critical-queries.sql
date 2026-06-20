@@ -81,10 +81,9 @@ FOR UPDATE;
 -- ---------------------------------------------------------------------
 -- Q4 — listMyReservations (read path, Epic 5.x)
 -- ---------------------------------------------------------------------
--- Doit utiliser l'index `reservations_user_idx` pour le SELECT
--- par user_id. ORDER BY created_at DESC peut nécessiter un sort
--- additionnel si l'index ne couvre pas la colonne — vérifier le
--- plan ci-dessous.
+-- Doit utiliser l'index `reservations_user_id_created_at_idx` (migration 0018)
+-- pour le SELECT par user_id. L'index couvre (user_id, created_at DESC) et
+-- élimine le sort pour ORDER BY created_at DESC.
 
 \echo '----- Q4: listMyReservations user range -----'
 EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
