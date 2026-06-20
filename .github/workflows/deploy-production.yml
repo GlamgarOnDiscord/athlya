@@ -156,6 +156,17 @@ jobs:
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env staging --var "VERSION=${VERSION}"
           bash scripts/wait-health-ready.sh "${STAGING_API_URL}"
 
+      # Smoke each route group after staging deploy — verifies no sub-worker
+      # is returning 5xx. A 4xx (auth required) is a healthy response.
+      # Rolls back if any route group fails (issue #301).
+      - name: Smoke all route groups (staging)
+        if: inputs.phase == 'staging-deploy'
+        env:
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+        run: |
+          set -euo pipefail
+          node scripts/smoke-routes.mjs --base-url "${STAGING_API_URL}"
+
       - name: Deploy production (wrangler + ready gate)
         if: inputs.phase == 'production-deploy'
         env:
@@ -170,6 +181,15 @@ jobs:
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production --var "VERSION=${VERSION}"
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production --var "VERSION=${VERSION}"
           bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}"
+
+      # Smoke all route groups after production deploy — issue #301.
+      - name: Smoke all route groups (production)
+        if: inputs.phase == 'production-deploy'
+        env:
+          PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+        run: |
+          set -euo pipefail
+          node scripts/smoke-routes.mjs --base-url "${PRODUCTION_API_URL}"
 
       # Issue #138 — upload source maps to Sentry + record the release so
       # prod stack traces de-minify to file:line. The release name is the
