@@ -44,7 +44,7 @@ jobs:
     if: ${{ vars.K6_STAGING_BASE_URL != '' }}
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install k6
         run: |
@@ -78,7 +78,7 @@ jobs:
     if: ${{ vars.K6_STAGING_BASE_URL != '' }}
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install k6
         run: |
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install k6
         run: |
