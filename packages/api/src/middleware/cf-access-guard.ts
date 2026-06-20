@@ -27,7 +27,7 @@ export interface CfAccessGuardContext {
   readonly req: { header(name: string): string | undefined };
   get(key: 'traceId'): string;
   get(key: string): unknown;
-  body(data: string, status: 403, headers: Record<string, string>): Response;
+  body(data: string, status: 403 | 503, headers: Record<string, string>): Response;
 }
 
 export type CfAccessKeyResolver = (
@@ -105,8 +105,27 @@ export function cfAccessGuard(opts: CfAccessGuardOptions = {}) {
     const certsUrl = env.CF_ACCESS_CERTS_URL;
 
     if (!aud || !certsUrl) {
-      await next();
-      return undefined;
+      // In dev: CF Access is optional — no-op so local development works
+      // without CF Access credentials.
+      // In staging/prod: CF Access is REQUIRED — return 503 so the admin
+      // surface is never reachable from JWT alone (issue #315).
+      if (env.ENVIRONMENT === 'dev') {
+        await next();
+        return undefined;
+      }
+      return c.body(
+        JSON.stringify({
+          type: 'about:blank',
+          title: 'Service Unavailable',
+          status: 503,
+          code: 'cf_access_not_configured',
+          detail:
+            'CF_ACCESS_AUD and CF_ACCESS_CERTS_URL must be set in staging/production. Admin routes are disabled until CF Access is configured.',
+          traceId: c.get('traceId'),
+        }),
+        503,
+        { 'content-type': PROBLEM_JSON },
+      );
     }
 
     const assertion = c.req.header('CF-Access-JWT-Assertion');

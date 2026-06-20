@@ -47,11 +47,13 @@ function buildCtx(overrides: {
   assertionHeader?: string;
   cfAccessAud?: string;
   cfAccessCertsUrl?: string;
+  environment?: 'dev' | 'staging' | 'production';
 }): CfAccessGuardContext {
   return {
     env: {
       CF_ACCESS_AUD: overrides.cfAccessAud,
       CF_ACCESS_CERTS_URL: overrides.cfAccessCertsUrl,
+      ENVIRONMENT: overrides.environment ?? 'dev',
     } as CfAccessGuardContext['env'],
     req: {
       header(name: string) {
@@ -76,11 +78,12 @@ describe('cfAccessGuard middleware', () => {
     __resetCfAccessJwksCacheForTests();
   });
 
-  it('is a no-op when CF_ACCESS_AUD is absent', async () => {
+  it('is a no-op in dev when CF_ACCESS_AUD is absent', async () => {
     const mw = cfAccessGuard();
     let nextCalled = false;
     const ctx = buildCtx({
       cfAccessCertsUrl: 'https://test.cloudflareaccess.com/cdn-cgi/access/certs',
+      environment: 'dev',
     });
     const res = await mw(ctx, async () => {
       nextCalled = true;
@@ -89,15 +92,37 @@ describe('cfAccessGuard middleware', () => {
     expect(nextCalled).toBe(true);
   });
 
-  it('is a no-op when CF_ACCESS_CERTS_URL is absent', async () => {
+  it('is a no-op in dev when CF_ACCESS_CERTS_URL is absent', async () => {
     const mw = cfAccessGuard();
     let nextCalled = false;
-    const ctx = buildCtx({ cfAccessAud: TEST_AUD });
+    const ctx = buildCtx({ cfAccessAud: TEST_AUD, environment: 'dev' });
     const res = await mw(ctx, async () => {
       nextCalled = true;
     });
     expect(res).toBeUndefined();
     expect(nextCalled).toBe(true);
+  });
+
+  it('returns 503 cf_access_not_configured in staging when CF Access is absent', async () => {
+    const mw = cfAccessGuard();
+    const ctx = buildCtx({ environment: 'staging' });
+    const res = await mw(ctx, async () => {
+      throw new Error('next() must not be called');
+    });
+    expect(res).toBeInstanceOf(Response);
+    expect((res as Response).status).toBe(503);
+    const body = await (res as Response).json();
+    expect((body as { code: string }).code).toBe('cf_access_not_configured');
+  });
+
+  it('returns 503 cf_access_not_configured in production when CF Access is absent', async () => {
+    const mw = cfAccessGuard();
+    const ctx = buildCtx({ environment: 'production' });
+    const res = await mw(ctx, async () => {
+      throw new Error('next() must not be called');
+    });
+    expect(res).toBeInstanceOf(Response);
+    expect((res as Response).status).toBe(503);
   });
 
   it('returns 403 cf_access_required when header is missing', async () => {
