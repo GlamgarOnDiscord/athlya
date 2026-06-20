@@ -38,6 +38,26 @@ Watch CI with the **`Monitor`** tool, never `sleep`. Rerun known flakes
 - Only `Lint, typecheck, and tests` is a required check; pgTAP runs on
   `packages/db/migrations/**`, axe/E2E on `apps/**`.
 
+## Database migrations — expand/contract required for canary safety
+
+The deploy pipeline uses a canary strategy (CN.7.1). The old Worker version
+runs alongside the new one during rollout. Any migration that breaks the old
+code during that window causes 1-100% request failures.
+
+**Required pattern for schema changes:**
+
+1. **Expand** — add the new column/index as `nullable` with no breaking
+   constraint. Deploy. Both old and new Workers coexist safely.
+2. **Deploy code** — new Worker starts writing the new column/field.
+3. **Contract** _(separate migration, separate deploy)_ — add `NOT NULL`,
+   drop old columns, rename. Old Workers are gone by this point.
+
+**Never** do `ADD COLUMN col NOT NULL` without a `DEFAULT` in a single
+migration that ships with a Worker deploy — the old Worker doesn't send that
+column and every its INSERT fails.
+
+See `docs/runbooks/expand-contract-migrations.md` for worked examples.
+
 ## Dependencies
 
 Minor/patch dev-deps are **grouped + auto-merged** (`.github/dependabot.yml`,
