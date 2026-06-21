@@ -108,6 +108,18 @@ jobs:
               ;;
           esac
 
+      # Issue #328 — verify all required secrets are present on every worker
+      # before uploading a new version. Exits non-zero if any secret is
+      # missing, which hard-fails the deploy rather than deploying a
+      # misconfigured worker silently.
+      - name: Verify secrets (staging)
+        if: inputs.phase == 'staging-deploy'
+        run: node scripts/verify-secrets.mjs --env staging
+
+      - name: Verify secrets (production)
+        if: inputs.phase == 'production-deploy'
+        run: node scripts/verify-secrets.mjs --env production
+
       # Run DB migrations before deploying the Worker so the schema is
       # always ahead of the code, never behind. Uses the neondb_owner
       # connection string (BYPASSRLS) for DDL access; the app role
