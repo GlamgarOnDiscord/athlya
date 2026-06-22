@@ -99,19 +99,24 @@ jobs:
 
       - name: Post plan to PR
         if: steps.prereq.outputs.skip != 'true' && github.event_name == 'pull_request'
+        env:
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+          PLAN_STDOUT: ${{ steps.plan.outputs.stdout }}
         uses: actions/github-script@v7
         with:
           script: |
-            const output = `#### Terraform Plan \`${{ steps.plan.outcome }}\`
-            <details><summary>Show Plan</summary>
-
-            \`\`\`terraform
-            ${{ steps.plan.outputs.stdout }}
-            \`\`\`
-
-            </details>
-
-            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+            const outcome = process.env.PLAN_OUTCOME;
+            const planOut = process.env.PLAN_STDOUT || '(no output)';
+            const output = [
+              `#### Terraform Plan \`${outcome}\``,
+              '<details><summary>Show Plan</summary>',
+              '',
+              '```terraform',
+              planOut,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
