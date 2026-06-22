@@ -61,7 +61,7 @@ jobs:
     steps:
       - name: Checkout
         # Needed so the baseline action can read `.zap/rules.tsv`.
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Resolve target URL and guard on empty configuration
         id: guard
