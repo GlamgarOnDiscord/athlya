@@ -1,0 +1,184 @@
+name: Staging gate
+
+# Issue #343 — proves the staging environment before production deploys.
+#
+# This workflow runs 5 sequential sub-checks against staging:
+#   1. Verify all required secrets are present (scripts/verify-secrets.mjs)
+#   2. Deploy to staging and wait for /health/ready
+#   3. Smoke all route groups (scripts/smoke-routes.mjs)
+#   4. Migration check — verify DB has all expected migrations applied
+#   5. k6 performance gate — p99 < 500ms, error rate < 1%
+#
+# The job skips gracefully when STAGING_API_URL or CLOUDFLARE_API_TOKEN
+# are not configured (e.g. contributor forks without infra access), so
+# PRs that don't touch API/DB code are not blocked.
+#
+# Required checks: add "Staging gate / staging-gate" to branch protection
+# required status checks once staging is provisioned.
+#
+# Required secrets (GitHub environment: staging):
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+#   MIGRATION_DB_URL_STAGING  — neondb_owner URL for the staging branch
+# Required vars:
+#   STAGING_API_URL            — e.g. https://staging.api.athlya.app
+# Optional (for k6 perf gate):
+#   K6_STAGING_AUTH_TOKEN, K6_STAGING_STUDIO_ID, K6_STAGING_CLASS_IDS
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'packages/api/**'
+      - 'packages/db/**'
+      - 'packages/auth/**'
+      - 'packages/billing/**'
+      - 'packages/members/**'
+      - 'packages/notifications/**'
+      - 'packages/reservations/**'
+      - 'packages/shared/**'
+      - '.github/workflows/staging-gate.yml'
+  workflow_dispatch:
+    inputs:
+      soak_duration:
+        description: 'k6 soak duration (e.g. 2m for PR, 10m for release gates)'
+        required: false
+        default: '2m'
+        type: string
+
+concurrency:
+  group: staging-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  staging-gate:
+    name: Staging gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Check infra prerequisites
+        id: prereq
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ] || [ -z "${STAGING_API_URL}" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, or STAGING_API_URL not configured — staging gate skipped. Set these in the 'staging' GitHub environment to enable this gate."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup pnpm
+        if: steps.prereq.outputs.skip != 'true'
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        if: steps.prereq.outputs.skip != 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.prereq.outputs.skip != 'true'
+        run: pnpm install --frozen-lockfile
+
+      # Sub-check 1 — secrets presence
+      - name: '[1/5] Verify secrets'
+        if: steps.prereq.outputs.skip != 'true'
+        run: node scripts/verify-secrets.mjs --env staging
+
+      # Sub-check 2 — deploy staging and gate on /health/ready
+      - name: '[2/5] Deploy staging'
+        if: steps.prereq.outputs.skip != 'true'
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_DB_URL_STAGING }}
+        run: |
+          set -euo pipefail
+          if [ -n "${DATABASE_URL}" ]; then
+            echo "::notice::Applying migrations before deploy"
+            node packages/db/scripts/migrate.mjs
+          fi
+          VERSION="${GITHUB_SHA:0:7}"
+          pnpm --filter @athlya/api exec wrangler deploy --env staging --var "VERSION=${VERSION}" --outdir dist
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env staging --var "VERSION=${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env staging --var "VERSION=${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env staging --var "VERSION=${VERSION}"
+          bash scripts/wait-health-ready.sh "${STAGING_API_URL}"
+
+      # Sub-check 3 — smoke all route groups
+      - name: '[3/5] Smoke all route groups'
+        if: steps.prereq.outputs.skip != 'true'
+        run: node scripts/smoke-routes.mjs --base-url "${STAGING_API_URL}"
+
+      # Sub-check 4 — migration check: every .sql file in migrations/
+      # must appear in the _athlya_migrations table on staging.
+      - name: '[4/5] Migration check'
+        if: steps.prereq.outputs.skip != 'true'
+        env:
+          MIGRATION_DB_URL: ${{ secrets.MIGRATION_DB_URL_STAGING }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MIGRATION_DB_URL}" ]; then
+            echo "::warning::MIGRATION_DB_URL_STAGING not set — migration check skipped"
+            exit 0
+          fi
+          # Expected: filename stems of all forward migration files
+          expected=$(ls packages/db/migrations/*.sql | grep -v '\.down\.sql$' | sort | xargs -I{} basename {} .sql)
+          # Applied: what the staging DB reports
+          applied=$(psql "${MIGRATION_DB_URL}" -t -c \
+            "SELECT name FROM _athlya_migrations ORDER BY name" 2>/dev/null | tr -d ' \r')
+          missing=$(comm -23 <(echo "$expected" | sort) <(echo "$applied" | sort))
+          if [ -n "$missing" ]; then
+            echo "::error::Staging DB is missing migrations:"
+            echo "$missing"
+            exit 1
+          fi
+          echo "::notice::All $(echo "$expected" | wc -l | tr -d ' ') migrations applied on staging"
+
+      # Sub-check 5 — k6 perf gate (skipped if k6 secrets not set)
+      - name: Install k6
+        if: steps.prereq.outputs.skip != 'true' && vars.K6_STAGING_BASE_URL != ''
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: '[5/5] k6 performance gate'
+        if: steps.prereq.outputs.skip != 'true' && vars.K6_STAGING_BASE_URL != ''
+        env:
+          K6_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
+          K6_AUTH_TOKEN: ${{ secrets.K6_STAGING_AUTH_TOKEN }}
+          K6_STUDIO_ID: ${{ secrets.K6_STAGING_STUDIO_ID }}
+          K6_CLASS_IDS: ${{ secrets.K6_STAGING_CLASS_IDS }}
+          K6_SOAK_DURATION: ${{ inputs.soak_duration || '2m' }}
+        run: |
+          k6 run k6/book-class.js \
+            --duration "${K6_SOAK_DURATION}" \
+            --summary-export=k6-staging-gate-summary.json
+
+      - name: '[5/5] k6 gate skipped'
+        if: steps.prereq.outputs.skip != 'true' && vars.K6_STAGING_BASE_URL == ''
+        run: echo "::notice::k6 perf gate skipped — set K6_STAGING_BASE_URL, K6_STAGING_AUTH_TOKEN, K6_STAGING_STUDIO_ID, K6_STAGING_CLASS_IDS in GitHub vars/secrets to enable"
+
+      - name: Upload k6 summary
+        if: steps.prereq.outputs.skip != 'true' && vars.K6_STAGING_BASE_URL != '' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-staging-gate-summary
+          path: k6-staging-gate-summary.json
+          retention-days: 14
