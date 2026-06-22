@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars (git-ignored) and fill in values.
+# Never commit terraform.tfvars — it contains sensitive credentials.
+
+cloudflare_api_token  = "TODO: wrangler secret from 1Password"
+cloudflare_account_id = "TODO: from Cloudflare dashboard → Workers → Account ID"
+cloudflare_zone_id    = "TODO: from Cloudflare dashboard → athlya.app zone"
+environment           = "staging"  # or "production"
