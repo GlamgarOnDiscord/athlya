@@ -386,6 +386,7 @@ export function jwtAuth(options: JwtAuthOptions = {}): JwtAuthMiddleware {
     // Step 3 — verify against the cached JWKS.
     const getKey = options.keyResolver ?? getDefaultJwksResolver(c.env.JWT_JWKS_URL);
     let payload: JWTPayload;
+    const jwtVerifyStart = Date.now();
     try {
       const verifyOpts: Parameters<typeof jwtVerify>[2] = {
         algorithms: [...ALLOWED_ALGORITHMS],
@@ -408,6 +409,11 @@ export function jwtAuth(options: JwtAuthOptions = {}): JwtAuthMiddleware {
       // NOT exposed to the caller so attackers can't
       // fingerprint the verification path.
       return respond401(c, 'invalid_token');
+    }
+
+    const jwtVerifyMs = Date.now() - jwtVerifyStart;
+    if (jwtVerifyMs >= 15) {
+      console.warn(JSON.stringify({ msg: 'athlya.auth.jwt_verify_slow', jwtVerifyMs, traceId }));
     }
 
     // Step 4 — extract canonical claims.
