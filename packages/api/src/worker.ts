@@ -423,11 +423,6 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
         }
         const allowed = athlyaEnv.CORS_ORIGIN;
         if (allowed === undefined || allowed === '') {
-          // Sprint-10 SP10.1 (C2.7) — pas de dedup
-          // module-scope. Le warning sort à chaque
-          // request avec ce bug de config — bruyant
-          // intentionnellement, dedup côté ingestion
-          // (Tail Workers / Axiom).
           const logger = (c as { get: (k: string) => unknown }).get('logger') as
             | { error: (msg: string, ctx?: unknown) => void }
             | undefined;
@@ -442,10 +437,6 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
               ctx,
             );
           } else {
-            // The CORS middleware can run before the
-            // logger is set up on `c` — fall back to
-            // the console-backed default so the line
-            // never silently disappears.
             console.error(
               'CORS_ORIGIN missing in non-dev env; rejecting all cross-origin requests',
               ctx,
@@ -453,7 +444,8 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
           }
           return '';
         }
-        return origin === allowed ? origin : '';
+        const allowedSet = new Set(allowed.split(',').map((o) => o.trim()));
+        return allowedSet.has(origin) ? origin : '';
       },
       allowHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'cf-turnstile-token'],
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
