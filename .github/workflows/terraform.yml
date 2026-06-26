@@ -1,0 +1,129 @@
+name: Terraform plan
+
+# Issue #305 — run terraform plan on PRs that touch infra/*.
+# Blocks merge if the plan errors. Does NOT auto-apply.
+#
+# Required secrets (GitHub environment: staging):
+#   TF_VAR_cloudflare_api_token   — Cloudflare API token (Workers:Read, Queue:Read, R2:Read)
+#   TF_VAR_cloudflare_account_id  — Cloudflare account ID
+#   TF_VAR_cloudflare_zone_id     — Cloudflare zone ID for athlya.app
+#
+# The plan is scoped to the staging environment by default.
+# Production apply requires a manual workflow_dispatch + required reviewer.
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/terraform.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      action:
+        description: 'Terraform action'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  terraform:
+    name: Terraform ${{ inputs.action || 'plan' }} (${{ inputs.environment || 'staging' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment || 'staging' }}
+
+    defaults:
+      run:
+        working-directory: infra/terraform
+
+    env:
+      TF_VAR_cloudflare_api_token: ${{ secrets.TF_VAR_cloudflare_api_token }}
+      TF_VAR_cloudflare_account_id: ${{ secrets.TF_VAR_cloudflare_account_id }}
+      TF_VAR_cloudflare_zone_id: ${{ secrets.TF_VAR_cloudflare_zone_id }}
+      TF_VAR_environment: ${{ inputs.environment || 'staging' }}
+
+    steps:
+      - name: Check infra prerequisites
+        id: prereq
+        run: |
+          if [ -z "${TF_VAR_cloudflare_api_token}" ]; then
+            echo "::notice::TF_VAR_cloudflare_api_token not set — terraform plan skipped. Set it in the '${{ inputs.environment || 'staging' }}' GitHub environment."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+        working-directory: .
+
+      - name: Checkout
+        if: steps.prereq.outputs.skip != 'true'
+        uses: actions/checkout@v7
+
+      - name: Setup Terraform
+        if: steps.prereq.outputs.skip != 'true'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '~1.9'
+
+      - name: terraform init
+        if: steps.prereq.outputs.skip != 'true'
+        run: terraform init -input=false
+
+      - name: terraform validate
+        if: steps.prereq.outputs.skip != 'true'
+        run: terraform validate
+
+      - name: terraform plan
+        if: steps.prereq.outputs.skip != 'true' && (inputs.action == 'plan' || github.event_name == 'pull_request')
+        id: plan
+        run: terraform plan -input=false -no-color -out=tfplan
+        continue-on-error: false
+
+      - name: Post plan to PR
+        if: steps.prereq.outputs.skip != 'true' && github.event_name == 'pull_request'
+        env:
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+          PLAN_STDOUT: ${{ steps.plan.outputs.stdout }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const outcome = process.env.PLAN_OUTCOME;
+            const planOut = process.env.PLAN_STDOUT || '(no output)';
+            const output = [
+              `#### Terraform Plan \`${outcome}\``,
+              '<details><summary>Show Plan</summary>',
+              '',
+              '```terraform',
+              planOut,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: terraform apply
+        if: steps.prereq.outputs.skip != 'true' && inputs.action == 'apply' && github.event_name == 'workflow_dispatch'
+        run: terraform apply -input=false tfplan
