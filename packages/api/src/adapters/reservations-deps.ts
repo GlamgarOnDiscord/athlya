@@ -328,6 +328,8 @@ export function buildReservationsDeps(
           return { kind: 'class_in_past' };
         case 'class_not_found':
           return { kind: 'not_found' };
+        case 'counter_unavailable':
+          return { kind: 'counter_unavailable' };
       }
     },
 

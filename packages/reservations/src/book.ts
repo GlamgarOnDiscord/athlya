@@ -365,8 +365,9 @@ export interface BookAlreadyBooked {
  * Business failures. Kept short and stable — the API gateway maps
  * each code to an HTTP status + Problem Details slug:
  *
- *   - `class_in_past`   → 422 with `class_in_past`   (Req 8.6)
- *   - `class_not_found` → 404 (RLS: other studio or missing row)
+ *   - `class_in_past`        → 422 with `class_in_past`   (Req 8.6)
+ *   - `class_not_found`      → 404 (RLS: other studio or missing row)
+ *   - `counter_unavailable`  → 503 (Redis down; client should retry)
  */
 export interface BookClassInPast {
   readonly code: 'class_in_past';
@@ -374,22 +375,27 @@ export interface BookClassInPast {
 export interface BookClassNotFound {
   readonly code: 'class_not_found';
 }
+export interface BookCounterUnavailable {
+  readonly code: 'counter_unavailable';
+}
 
 /**
  * Discriminated union returned by {@link bookClass}. Every branch
  * carries a stable `code` the gateway uses to build the response.
  *
- * Transient failures (DB outage, Redis disconnect, RLS violation on
- * insert, …) are NOT modelled here — they propagate as thrown
- * errors which the gateway's global handler turns into 5xx Problem
- * Details envelopes.
+ * Transient failures (DB outage, RLS violation on insert, …) are NOT
+ * modelled here — they propagate as thrown errors which the gateway's
+ * global handler turns into 5xx Problem Details envelopes.
+ * Redis unavailability is modelled explicitly so the gateway can
+ * return a retryable 503 with a proper code rather than an opaque 5xx.
  */
 export type BookResult =
   | BookConfirmed
   | BookWaitlisted
   | BookAlreadyBooked
   | BookClassInPast
-  | BookClassNotFound;
+  | BookClassNotFound
+  | BookCounterUnavailable;
 
 /* ------------------------------------------------------------------ */
 /*  Input                                                              */
@@ -541,7 +547,16 @@ export async function bookClass(input: BookClassInput): Promise<BookResult> {
   // turn it into a durable reservation. A negative value means the
   // counter was already exhausted — fall through to the waitlist
   // branch.
-  const remaining = await counter.decrRemaining(classId);
+  //
+  // If Redis is unavailable we fail-closed: the booking is rejected
+  // with counter_unavailable so the client gets a retryable 503
+  // rather than an opaque 5xx, and the capacity invariant is preserved.
+  let remaining: number;
+  try {
+    remaining = await counter.decrRemaining(classId);
+  } catch {
+    return { code: 'counter_unavailable' };
+  }
 
   if (remaining >= 0) {
     // ---- Step 2: confirmed-booking transaction --------------------
