@@ -71,10 +71,11 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     route: '/v1/*',
     methods: '*',
     budget: 'default',
-    failPolicy: 'fail-closed-soft',
+    failPolicy: 'fail-open',
     bucket: 'ip+user',
     wiredIn: 'worker.ts',
-    notes: 'Issue #128 — 429 synthetic if Redis down',
+    notes:
+      'Issue #322 — fail-open: Redis outage lets requests through; mutation limiters stay fail-closed',
   },
   {
     id: 'auth',
