@@ -73,11 +73,11 @@ type ListMyReservationsQuery = z.infer<typeof ListMyReservationsQuerySchema>;
  * Mirrors the shape used by `@athlya/reservations/book` — `waitlist`
  * carries the 1-based FIFO position.
  *
- *   • `confirmed` → HTTP 201 with the reservation body.
- *   • `waitlist`  → HTTP 202 with the reservation + `position`.
- *   • `conflict`  → HTTP 409 (already-booked idempotent replay,
- *                   design §E2).
- *   • `class_in_past` → HTTP 422.
+ *   • `confirmed`           → HTTP 201 with the reservation body.
+ *   • `waitlist`            → HTTP 202 with the reservation + `position`.
+ *   • `conflict`            → HTTP 409 (already-booked idempotent replay).
+ *   • `class_in_past`       → HTTP 422.
+ *   • `counter_unavailable` → HTTP 503 (Redis down; client should retry).
  */
 export type BookingOutcome =
   | { readonly kind: 'confirmed'; readonly reservation: unknown }
@@ -88,7 +88,8 @@ export type BookingOutcome =
     }
   | { readonly kind: 'conflict'; readonly reservation: unknown }
   | { readonly kind: 'class_in_past' }
-  | { readonly kind: 'not_found' };
+  | { readonly kind: 'not_found' }
+  | { readonly kind: 'counter_unavailable' };
 
 /** Outcome for `cancelReservation`. Mirrors design §6.11. */
 export type CancelOutcome =
@@ -231,6 +232,19 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
           );
         case 'not_found':
           return problemBody(c, 404, 'Not Found', 'not_found', 'class not found');
+        case 'counter_unavailable':
+          return c.body(
+            JSON.stringify({
+              type: 'about:blank',
+              title: 'Service Unavailable',
+              status: 503,
+              code: 'counter_unavailable',
+              detail: 'Seat counter temporarily unavailable — retry in a moment',
+              traceId: c.get('traceId'),
+            }),
+            503,
+            { 'content-type': 'application/problem+json', 'retry-after': '5' },
+          );
       }
     },
   );
