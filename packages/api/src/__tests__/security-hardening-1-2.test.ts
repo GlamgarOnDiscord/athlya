@@ -201,6 +201,46 @@ describe('CORS staging/production requires CORS_ORIGIN', () => {
 
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
   });
+
+  it('echoes a second origin when CORS_ORIGIN is comma-separated (multi-tenant)', async () => {
+    const app = buildAppNoDomainRoutes();
+    const res = await app.request(
+      '/health',
+      {
+        method: 'GET',
+        headers: {
+          origin: 'https://studio-a.athlya.app',
+          host: 'staging.api.athlya.app',
+        },
+      },
+      mockEnv({
+        ENVIRONMENT: 'staging',
+        CORS_ORIGIN: 'https://app.athlya.app,https://studio-a.athlya.app',
+      }),
+    );
+
+    expect(res.headers.get('access-control-allow-origin')).toBe('https://studio-a.athlya.app');
+  });
+
+  it('rejects an origin not in the comma-separated list', async () => {
+    const app = buildAppNoDomainRoutes();
+    const res = await app.request(
+      '/health',
+      {
+        method: 'GET',
+        headers: {
+          origin: 'https://evil.example.com',
+          host: 'staging.api.athlya.app',
+        },
+      },
+      mockEnv({
+        ENVIRONMENT: 'staging',
+        CORS_ORIGIN: 'https://app.athlya.app,https://studio-a.athlya.app',
+      }),
+    );
+
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
 });
 
 /* ------------------------------------------------------------------ */

@@ -158,25 +158,20 @@ export interface AthlyaBindings {
   readonly MIGRATION_DB_URL?: string;
 
   /**
-   * Strict CORS allow-list — exactly ONE origin in staging/production
-   * (the matching member-facing or studio frontend). Optional in
-   * `dev` where the worker hard-codes a localhost whitelist
-   * (`http://localhost:{3000,3001}` + `127.0.0.1` variants).
+   * Strict CORS allow-list for staging/production. Optional in `dev`
+   * where the worker hard-codes a localhost whitelist.
    *
    * **Required in staging/production**: `buildApp` mounts a sentinel
    * middleware that refuses every request with a 500
    * `configuration_error` Problem Details body when this binding is
-   * empty in those environments (Slice 1.2-A — Sprint-1 SP1.3, audit
-   * finding S4-014). The fail-loud pattern matches `TURNSTILE_SECRET`:
-   * a missing secret outside dev surfaces a clean 500 instead of
-   * silently breaking cross-origin requests with no signal in the
-   * Worker logs.
+   * empty in those environments.
    *
    * Provisioned via:
    *   `wrangler secret put CORS_ORIGIN --env <staging|production>`
    *
-   * Format: a single fully-qualified origin, no trailing slash, no
-   * path. Example: `https://app.athlya.app`.
+   * Format: comma-separated fully-qualified origins, no trailing slash,
+   * no path. Single origin: `https://app.athlya.app`. Multi-tenant:
+   * `https://app.athlya.app,https://studio-a.athlya.app`.
    */
   readonly CORS_ORIGIN?: string;
 
