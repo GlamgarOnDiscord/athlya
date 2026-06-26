@@ -30,7 +30,8 @@
     "prettier": "^3.8.4",
     "rimraf": "^6.0.1",
     "turbo": "^2.9.18",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6"
   },
   "prettier": "@athlya/prettier-config",
   "dependencies": {
@@ -38,14 +39,16 @@
   },
   "pnpm": {
     "overrides": {
-      "miniflare>ws": "8.20.1",
       "dockerode>uuid": "11.1.1",
       "testcontainers>tmp": "^0.2.6",
       "@grpc/grpc-js": ">=1.14.4",
       "esbuild": ">=0.28.1",
       "postcss": ">=8.5.10",
       "js-yaml": ">=4.2.0",
-      "@babel/core": ">=7.29.6"
+      "@babel/core": ">=7.29.6",
+      "@sentry/cli>undici": "6.27.0",
+      "testcontainers>undici": "8.5.0",
+      "jsdom>ws": "^8.21.0"
     }
   }
 }
