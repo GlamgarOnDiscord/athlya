@@ -52,15 +52,18 @@ function makeRow(overrides: Partial<ClassSearchRow> = {}): ClassSearchRow {
 function buildDeps(): {
   deps: SearchClassesDeps;
   search: ReturnType<typeof vi.fn<ClassSearchRepo['search']>>;
-  getRemaining: ReturnType<typeof vi.fn<RemainingCounterReader['getRemaining']>>;
+  getManyRemaining: ReturnType<typeof vi.fn<RemainingCounterReader['getManyRemaining']>>;
 } {
   const search = vi.fn<ClassSearchRepo['search']>();
-  const getRemaining = vi.fn<RemainingCounterReader['getRemaining']>();
+  const getManyRemaining = vi.fn<RemainingCounterReader['getManyRemaining']>();
   const deps: SearchClassesDeps = {
     searchRepo: { search },
-    counter: { getRemaining },
+    counter: {
+      getRemaining: vi.fn<RemainingCounterReader['getRemaining']>(),
+      getManyRemaining,
+    },
   };
-  return { deps, search, getRemaining };
+  return { deps, search, getManyRemaining };
 }
 
 /* ------------------------------------------------------------------ */
@@ -72,13 +75,12 @@ describe('searchClasses — happy path', () => {
     const rowA = makeRow({ id: CLASS_ID_A, title: 'HIIT 6:30', capacity: 20 });
     const rowB = makeRow({ id: CLASS_ID_B, title: 'Yoga 18:00', description: null, capacity: 15 });
 
-    const { deps, search, getRemaining } = buildDeps();
+    const { deps, search, getManyRemaining } = buildDeps();
     search.mockResolvedValue([rowA, rowB]);
-    getRemaining.mockImplementation(async (classId) => {
-      if (classId === CLASS_ID_A) return 7;
-      if (classId === CLASS_ID_B) return 15;
-      return null;
-    });
+    // eslint-disable-next-line @typescript-eslint/require-await
+    getManyRemaining.mockImplementation(async (ids) =>
+      ids.map((id) => (id === CLASS_ID_A ? 7 : id === CLASS_ID_B ? 15 : null)),
+    );
 
     const result = await searchClasses(STUDIO_ID, 'hiit', undefined, deps);
 
@@ -94,9 +96,8 @@ describe('searchClasses — happy path', () => {
   });
 
   it('forwards the date range to the repo', async () => {
-    const { deps, search, getRemaining } = buildDeps();
+    const { deps, search } = buildDeps();
     search.mockResolvedValue([]);
-    getRemaining.mockResolvedValue(null);
 
     const range = {
       from: new Date('2026-06-01T00:00:00.000Z'),
@@ -114,13 +115,13 @@ describe('searchClasses — happy path', () => {
 
 describe('searchClasses — empty result', () => {
   it('returns [] without touching the counter', async () => {
-    const { deps, search, getRemaining } = buildDeps();
+    const { deps, search, getManyRemaining } = buildDeps();
     search.mockResolvedValue([]);
 
     const result = await searchClasses(STUDIO_ID, 'nonexistent', undefined, deps);
 
     expect(result).toStrictEqual([]);
-    expect(getRemaining).not.toHaveBeenCalled();
+    expect(getManyRemaining).not.toHaveBeenCalled();
   });
 });
 
@@ -130,18 +131,20 @@ describe('searchClasses — empty result', () => {
 
 describe('searchClasses — counter fallbacks', () => {
   it('falls back to capacity when the counter returns null', async () => {
-    const { deps, search, getRemaining } = buildDeps();
+    const { deps, search, getManyRemaining } = buildDeps();
     search.mockResolvedValue([makeRow({ capacity: 20 })]);
-    getRemaining.mockResolvedValue(null);
+    // eslint-disable-next-line @typescript-eslint/require-await
+    getManyRemaining.mockImplementation(async (ids) => ids.map(() => null));
 
     const [first] = await searchClasses(STUDIO_ID, 'hiit', undefined, deps);
     expect(first?.remaining).toBe(20);
   });
 
   it('clamps a transient negative counter value to 0', async () => {
-    const { deps, search, getRemaining } = buildDeps();
+    const { deps, search, getManyRemaining } = buildDeps();
     search.mockResolvedValue([makeRow()]);
-    getRemaining.mockResolvedValue(-5);
+    // eslint-disable-next-line @typescript-eslint/require-await
+    getManyRemaining.mockImplementation(async (ids) => ids.map(() => -5));
 
     const [first] = await searchClasses(STUDIO_ID, 'hiit', undefined, deps);
     expect(first?.remaining).toBe(0);

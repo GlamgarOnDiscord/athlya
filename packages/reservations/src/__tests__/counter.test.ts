@@ -80,6 +80,19 @@ class FakeRedis implements RedisLike {
     this.store.set(key, String(next));
     return next;
   }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async mget(...keys: string[]): Promise<unknown[]> {
+    return keys.map((k) => {
+      const v = this.store.get(k);
+      if (v === undefined) return null;
+      if (this.deserialize) {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : v;
+      }
+      return v;
+    });
+  }
 }
 
 const CLASS_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8a1';
@@ -257,5 +270,50 @@ describe('reset → decr → decr → incr → getRemaining', () => {
     await expect(counter.decr(CLASS_ID)).resolves.toBe(3);
     await expect(counter.incr(CLASS_ID)).resolves.toBe(4);
     await expect(counter.getRemaining(CLASS_ID)).resolves.toBe(4);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  getManyRemaining                                                   */
+/* ------------------------------------------------------------------ */
+
+const CLASS_ID_2 = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8b2';
+const CLASS_ID_3 = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8c3';
+
+describe('getManyRemaining', () => {
+  it('returns values in the same order as classIds', async () => {
+    const redis = new FakeRedis();
+    const counter = createRedisRemainingCounter(redis);
+    await counter.reset(CLASS_ID, 20);
+    await counter.reset(CLASS_ID_2, 5);
+
+    await expect(counter.getManyRemaining([CLASS_ID, CLASS_ID_2])).resolves.toStrictEqual([20, 5]);
+  });
+
+  it('returns null for absent keys', async () => {
+    const redis = new FakeRedis();
+    const counter = createRedisRemainingCounter(redis);
+    await counter.reset(CLASS_ID, 10);
+
+    await expect(counter.getManyRemaining([CLASS_ID, CLASS_ID_3])).resolves.toStrictEqual([
+      10,
+      null,
+    ]);
+  });
+
+  it('returns [] for an empty input', async () => {
+    const redis = new FakeRedis();
+    const counter = createRedisRemainingCounter(redis);
+    await expect(counter.getManyRemaining([])).resolves.toStrictEqual([]);
+  });
+
+  it('works with auto-deserialised number values', async () => {
+    const redis = new FakeRedis();
+    redis.deserialize = true;
+    const counter = createRedisRemainingCounter(redis);
+    await counter.reset(CLASS_ID, 12);
+    await counter.reset(CLASS_ID_2, 7);
+
+    await expect(counter.getManyRemaining([CLASS_ID, CLASS_ID_2])).resolves.toStrictEqual([12, 7]);
   });
 });
