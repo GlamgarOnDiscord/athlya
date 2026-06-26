@@ -87,6 +87,7 @@ import {
   logCronDbUrlMissing,
   shouldRequireCronDbUrl,
 } from './maintenance/cron-db-config.js';
+import { runDbKeepalive } from './maintenance/db-keepalive.js';
 import { runScheduledRgpdMaintenance } from './maintenance/scheduled-runner.js';
 import { jwtAuth } from './middleware/auth.js';
 import { cfAccessGuard } from './middleware/cf-access-guard.js';
@@ -1522,6 +1523,22 @@ const worker = {
     // `0009_audit_cron_grants.sql`). Dev may use `neondb_owner`.
     const athlyaEnv = env as AthlyaBindings & ScheduledEnv;
     const cronExecutor = buildCronSqlExecutor(athlyaEnv.CRON_DB_URL);
+
+    // Issue #316 — DB keepalive probe. Measures CRON_DB_URL round-trip
+    // latency on every tick. Logs db_keepalive + db_cold_start_suspected
+    // when latency > 400ms so Axiom can alert before user traffic is
+    // affected. Long-term mitigation: min_cu=0.25 on Neon compute.
+    if (cronExecutor !== null) {
+      const keepaliveTask = runDbKeepalive(cronExecutor, { label: 'cron_db' }).catch(
+        (err: unknown) => {
+          console.error('[worker] db keepalive failed', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        },
+      );
+      ctx.waitUntil(keepaliveTask);
+    }
+
     if (cronExecutor !== null) {
       const rgpdTask = runScheduledRgpdMaintenance({
         executeSql: cronExecutor,
