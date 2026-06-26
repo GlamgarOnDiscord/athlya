@@ -1,6 +1,6 @@
 /**
- * Issue #271 — global `/v1/*` limiter is fail-closed-soft when Redis throws:
- * returns 429 rate_limit_dependency_unavailable instead of passing through.
+ * Issue #322 — global `/v1/*` limiter must be fail-open when Redis throws:
+ * requests pass through instead of receiving a 429.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -37,7 +37,7 @@ describe('global limiter Redis down (#271)', () => {
     __resetRateLimitRedisCache();
   });
 
-  it('staging GET /v1/* returns 429 (fail-closed-soft) when Redis pipeline throws', async () => {
+  it('staging GET /v1/* passes through (fail-open) when Redis pipeline throws', async () => {
     const env = buildMockEnv({
       ENVIRONMENT: 'staging',
       CORS_ORIGIN: 'https://app.staging.athlya.app',
@@ -51,9 +51,7 @@ describe('global limiter Redis down (#271)', () => {
       env,
     );
 
-    expect(res.status).toBe(429);
-    const body = await res.json<{ code: string }>();
-    expect(body.code).toBe('rate_limit_dependency_unavailable');
+    expect(res.status).toBe(404);
   });
 
   it('staging GET /health is not blocked by the global limiter', async () => {
