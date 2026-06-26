@@ -313,17 +313,13 @@ export async function listClasses(
     return [];
   }
 
-  // Kick off every counter read in parallel. The listing endpoint is
-  // latency-sensitive (Req 27.1 ties calendar reads to the p95 budget)
-  // and the counter reads are independent, so serialising them would
-  // be a pure waste of wall-clock time — especially in the edge
-  // runtime where round-trip cost dominates.
-  const remainings = await Promise.all(
-    rows.map(async (row) => {
-      const remote = await deps.counter.getRemaining(row.id);
-      return remote ?? row.capacity;
-    }),
-  );
+  // Batch all counter reads in a single MGET round-trip (issue #307).
+  // The listing endpoint is latency-sensitive (Req 27.1) and the reads
+  // are independent. getManyRemaining collapses N Redis GETs into one
+  // network call, which is critical at edge where each hop adds tail
+  // latency.
+  const rawRemainings = await deps.counter.getManyRemaining(rows.map((r) => r.id));
+  const remainings = rawRemainings.map((r, i) => r ?? rows[i]!.capacity);
 
   return rows.map((row, index) => ({
     id: row.id,

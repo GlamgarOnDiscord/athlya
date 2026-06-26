@@ -50,6 +50,16 @@ export interface RemainingCounterReader {
    * (task 6.2) has not yet landed or for a pilot-data import.
    */
   getRemaining(classId: string): Promise<number | null>;
+
+  /**
+   * Batch-fetch remaining seat counts for multiple class IDs in a
+   * single MGET round-trip. Returns values in the same order as
+   * `classIds`; each entry is `null` when the key is absent.
+   *
+   * Falls back to `getRemaining` for empty arrays, and falls back
+   * to individual GETs when the Redis client does not expose `mget`.
+   */
+  getManyRemaining(classIds: string[]): Promise<(number | null)[]>;
 }
 
 /**
@@ -106,6 +116,7 @@ export const DEFAULT_COUNTER_PREFIX = 'class';
  */
 export interface RedisLike {
   get(key: string): Promise<unknown>;
+  mget(...keys: string[]): Promise<unknown[]>;
   set(key: string, value: string | number): Promise<unknown>;
   incr(key: string): Promise<number>;
   decr(key: string): Promise<number>;
@@ -163,6 +174,13 @@ export function createRedisRemainingCounter(
     async getRemaining(classId: string): Promise<number | null> {
       const raw = await client.get(key(classId));
       return parseRemaining(raw);
+    },
+
+    async getManyRemaining(classIds: string[]): Promise<(number | null)[]> {
+      if (classIds.length === 0) return [];
+      const keys = classIds.map(key);
+      const raws = await client.mget(...keys);
+      return raws.map(parseRemaining);
     },
 
     async decr(classId: string): Promise<number> {

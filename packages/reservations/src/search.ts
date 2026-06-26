@@ -91,12 +91,8 @@ export async function searchClasses(
     return [];
   }
 
-  const remainings = await Promise.all(
-    rows.map(async (row) => {
-      const remote = await deps.counter.getRemaining(row.id);
-      return remote ?? row.capacity;
-    }),
-  );
+  const rawRemainings = await deps.counter.getManyRemaining(rows.map((r) => r.id));
+  const remainings = rawRemainings.map((r, i) => r ?? rows[i]!.capacity);
 
   return rows.map((row, index) => ({
     id: row.id,

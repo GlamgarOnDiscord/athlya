@@ -71,16 +71,19 @@ function makeRow(overrides: Partial<ClassRow> = {}): ClassRow {
 function buildDeps(): {
   deps: ListClassesDeps;
   findInRange: ReturnType<typeof vi.fn<ClassRepo['findInRange']>>;
-  getRemaining: ReturnType<typeof vi.fn<RemainingCounterReader['getRemaining']>>;
+  getManyRemaining: ReturnType<typeof vi.fn<RemainingCounterReader['getManyRemaining']>>;
 } {
   const findInRange = vi.fn<ClassRepo['findInRange']>();
-  const getRemaining = vi.fn<RemainingCounterReader['getRemaining']>();
+  const getManyRemaining = vi.fn<RemainingCounterReader['getManyRemaining']>();
 
   const deps: ListClassesDeps = {
     classRepo: { findInRange },
-    counter: { getRemaining },
+    counter: {
+      getRemaining: vi.fn<RemainingCounterReader['getRemaining']>(),
+      getManyRemaining,
+    },
   };
-  return { deps, findInRange, getRemaining };
+  return { deps, findInRange, getManyRemaining };
 }
 
 /** Valid 7-day window used by the happy-path tests. */
@@ -108,14 +111,12 @@ describe('listClasses — happy path (Req 7.1, 7.2)', () => {
       capacity: 15,
     });
 
-    const { deps, findInRange, getRemaining } = buildDeps();
+    const { deps, findInRange, getManyRemaining } = buildDeps();
     findInRange.mockResolvedValue([rowA, rowB]);
     // eslint-disable-next-line @typescript-eslint/require-await
-    getRemaining.mockImplementation(async (classId) => {
-      if (classId === CLASS_ID_A) return 7;
-      if (classId === CLASS_ID_B) return 15;
-      return null;
-    });
+    getManyRemaining.mockImplementation(async (ids) =>
+      ids.map((id) => (id === CLASS_ID_A ? 7 : id === CLASS_ID_B ? 15 : null)),
+    );
 
     const result = await listClasses(STUDIO_ID, WINDOW_7D, deps);
 
@@ -142,7 +143,9 @@ describe('listClasses — happy path (Req 7.1, 7.2)', () => {
     expect(calledRange.from.toISOString()).toBe(WINDOW_7D.from);
     expect(calledRange.to.toISOString()).toBe(WINDOW_7D.to);
 
-    expect(getRemaining).toHaveBeenCalledTimes(2);
+    // Single MGET round-trip for both rows.
+    expect(getManyRemaining).toHaveBeenCalledOnce();
+    expect(getManyRemaining).toHaveBeenCalledWith([CLASS_ID_A, CLASS_ID_B]);
   });
 
   it('preserves repo ordering (startsAt ASC) — the service does not re-sort', async () => {
@@ -153,9 +156,10 @@ describe('listClasses — happy path (Req 7.1, 7.2)', () => {
     const rowA = makeRow({ id: CLASS_ID_A, startsAt: new Date('2026-02-03T06:30:00.000Z') });
     const rowB = makeRow({ id: CLASS_ID_B, startsAt: new Date('2026-02-02T06:30:00.000Z') });
 
-    const { deps, findInRange, getRemaining } = buildDeps();
+    const { deps, findInRange, getManyRemaining } = buildDeps();
     findInRange.mockResolvedValue([rowA, rowB]);
-    getRemaining.mockResolvedValue(10);
+    // eslint-disable-next-line @typescript-eslint/require-await
+    getManyRemaining.mockImplementation(async (ids) => ids.map(() => 10));
 
     const result = await listClasses(STUDIO_ID, WINDOW_7D, deps);
     expect(result.map((c) => c.id)).toStrictEqual([CLASS_ID_A, CLASS_ID_B]);
@@ -163,9 +167,10 @@ describe('listClasses — happy path (Req 7.1, 7.2)', () => {
 
   it('preserves a null coachId', async () => {
     const row = makeRow({ coachId: null });
-    const { deps, findInRange, getRemaining } = buildDeps();
+    const { deps, findInRange, getManyRemaining } = buildDeps();
     findInRange.mockResolvedValue([row]);
-    getRemaining.mockResolvedValue(5);
+    // eslint-disable-next-line @typescript-eslint/require-await
+    getManyRemaining.mockImplementation(async (ids) => ids.map(() => 5));
 
     const [first] = await listClasses(STUDIO_ID, WINDOW_7D, deps);
     expect(first?.coachId).toBeNull();
@@ -179,9 +184,10 @@ describe('listClasses — happy path (Req 7.1, 7.2)', () => {
 describe('listClasses — counter fallbacks (Req 7.2)', () => {
   it('falls back to capacity when the counter returns null (key not seeded yet)', async () => {
     const row = makeRow({ capacity: 20 });
-    const { deps, findInRange, getRemaining } = buildDeps();
+    const { deps, findInRange, getManyRemaining } = buildDeps();
     findInRange.mockResolvedValue([row]);
-    getRemaining.mockResolvedValue(null);
+    // eslint-disable-next-line @typescript-eslint/require-await
+    getManyRemaining.mockImplementation(async (ids) => ids.map(() => null));
 
     const [first] = await listClasses(STUDIO_ID, WINDOW_7D, deps);
     expect(first?.remaining).toBe(20);
@@ -192,9 +198,10 @@ describe('listClasses — counter fallbacks (Req 7.2)', () => {
     // losing DECR and its compensating INCR. The public API must
     // never surface a negative value (violates the schema).
     const row = makeRow({ capacity: 20 });
-    const { deps, findInRange, getRemaining } = buildDeps();
+    const { deps, findInRange, getManyRemaining } = buildDeps();
     findInRange.mockResolvedValue([row]);
-    getRemaining.mockResolvedValue(-3);
+    // eslint-disable-next-line @typescript-eslint/require-await
+    getManyRemaining.mockImplementation(async (ids) => ids.map(() => -3));
 
     const [first] = await listClasses(STUDIO_ID, WINDOW_7D, deps);
     expect(first?.remaining).toBe(0);
@@ -204,9 +211,10 @@ describe('listClasses — counter fallbacks (Req 7.2)', () => {
     // `0 ?? capacity` must still evaluate to 0 (regression guard
     // against using `||` instead of `??`).
     const row = makeRow({ capacity: 20 });
-    const { deps, findInRange, getRemaining } = buildDeps();
+    const { deps, findInRange, getManyRemaining } = buildDeps();
     findInRange.mockResolvedValue([row]);
-    getRemaining.mockResolvedValue(0);
+    // eslint-disable-next-line @typescript-eslint/require-await
+    getManyRemaining.mockImplementation(async (ids) => ids.map(() => 0));
 
     const [first] = await listClasses(STUDIO_ID, WINDOW_7D, deps);
     expect(first?.remaining).toBe(0);
@@ -219,7 +227,7 @@ describe('listClasses — counter fallbacks (Req 7.2)', () => {
 
 describe('listClasses — range validation (Req 7.3)', () => {
   it('throws range_inverted when to <= from', async () => {
-    const { deps, findInRange, getRemaining } = buildDeps();
+    const { deps, findInRange, getManyRemaining } = buildDeps();
 
     await expect(
       listClasses(
@@ -236,7 +244,7 @@ describe('listClasses — range validation (Req 7.3)', () => {
     });
 
     expect(findInRange).not.toHaveBeenCalled();
-    expect(getRemaining).not.toHaveBeenCalled();
+    expect(getManyRemaining).not.toHaveBeenCalled();
   });
 
   it('throws range_inverted when to === from', async () => {
@@ -254,7 +262,7 @@ describe('listClasses — range validation (Req 7.3)', () => {
   });
 
   it('throws range_too_large when the span exceeds 90 days', async () => {
-    const { deps, findInRange, getRemaining } = buildDeps();
+    const { deps, findInRange, getManyRemaining } = buildDeps();
 
     // 91 days, one past the 90-day cap.
     await expect(
@@ -272,13 +280,12 @@ describe('listClasses — range validation (Req 7.3)', () => {
     });
 
     expect(findInRange).not.toHaveBeenCalled();
-    expect(getRemaining).not.toHaveBeenCalled();
+    expect(getManyRemaining).not.toHaveBeenCalled();
   });
 
   it('accepts a range exactly at the 90-day boundary', async () => {
-    const { deps, findInRange, getRemaining } = buildDeps();
+    const { deps, findInRange } = buildDeps();
     findInRange.mockResolvedValue([]);
-    getRemaining.mockResolvedValue(null);
 
     // Exactly 90 days → still valid per the `<=` comparison.
     const result = await listClasses(
@@ -356,13 +363,13 @@ describe('listClasses — range validation (Req 7.3)', () => {
 
 describe('listClasses — empty result', () => {
   it('returns [] and does not touch the counter when the repo is empty', async () => {
-    const { deps, findInRange, getRemaining } = buildDeps();
+    const { deps, findInRange, getManyRemaining } = buildDeps();
     findInRange.mockResolvedValue([]);
 
     const result = await listClasses(STUDIO_ID, WINDOW_7D, deps);
 
     expect(result).toStrictEqual([]);
     expect(findInRange).toHaveBeenCalledTimes(1);
-    expect(getRemaining).not.toHaveBeenCalled();
+    expect(getManyRemaining).not.toHaveBeenCalled();
   });
 });
