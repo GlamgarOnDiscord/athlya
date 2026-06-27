@@ -63,7 +63,6 @@ import {
 } from '@athlya/shared/events';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
 
 import { lazyDlqAuditWriter, lazyJwtRotateAuditWriter } from './adapters/audit-log-wiring.js';
@@ -806,20 +805,6 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     })(c, next);
   });
-
-  // 6.5. B5.3 — Compress /v1/* responses via Accept-Encoding negotiation.
-  //      Uses CompressionStream (Cloudflare Workers + Node 20) to serve
-  //      gzip or deflate. Cloudflare CDN also compresses at the edge for
-  //      cached responses; this middleware covers direct API clients (mobile,
-  //      CI, preview environments) that bypass CDN. Skips HEAD requests,
-  //      already-encoded bodies, and Cache-Control: no-transform.
-  //      Note: the built-in 1 KB threshold only fires when the response
-  //      carries a Content-Length header. Workers responses from c.json()
-  //      typically omit Content-Length, so small JSON bodies will also be
-  //      compressed when Accept-Encoding is present — acceptable given
-  //      compression overhead is negligible at this scale. Strong ETags are
-  //      weakened to W/ETag per RFC 7232.
-  app.use('/v1/*', compress());
 
   // 7. Tenant claim guard — Sprint 1 / Slice 1.4 (Sprint-1 SP1.5,
   //    audit finding S2-007). Refuses requests where the host- or
