@@ -1,0 +1,138 @@
+name: External Synthetics
+
+# =====================================================================
+# Issue #330 — external synthetic health checks every 5 minutes.
+#
+# Pings /health/ready and /health/live on the production API. A non-2xx
+# response or a timeout (30 s) opens a GitHub issue labelled `incident`
+# for immediate triage. The issue is not re-opened if one already exists
+# with the same title (idempotent on same-run failures).
+#
+# Gating
+# -------
+# Skips cleanly when SYNTHETIC_TARGET_URL is not set. Populate the
+# variable (Settings → Variables) once the production API is live:
+#   SYNTHETIC_TARGET_URL=https://api.athlya.app
+#
+# Manual runs
+# -----------
+# workflow_dispatch lets on-call engineers trigger an immediate check
+# outside the 5-minute cadence, with an optional target override.
+#
+# Alert lifecycle
+# ---------------
+# Issues created here are labelled `incident` + `synthetics`. Close
+# them manually once the service is restored. A follow-up incident
+# report should capture the root cause (see docs/runbooks/).
+# =====================================================================
+
+on:
+  schedule:
+    # Every 5 minutes — the minimum GitHub Actions cron interval.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Optional override for vars.SYNTHETIC_TARGET_URL (base URL, no trailing slash)'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  health-check:
+    name: synthetic health check
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Resolve target URL
+        id: target
+        env:
+          VAR_TARGET: ${{ vars.SYNTHETIC_TARGET_URL }}
+          INPUT_TARGET: ${{ github.event.inputs.target_url }}
+        run: |
+          set -euo pipefail
+          TARGET="${INPUT_TARGET:-$VAR_TARGET}"
+          if [ -z "$TARGET" ]; then
+            echo "::notice title=Synthetics skipped::SYNTHETIC_TARGET_URL is not set. Set it in Settings → Variables once the production API is live."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "url=$TARGET" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ping /health/ready
+        id: ready
+        if: steps.target.outputs.skip == 'false'
+        env:
+          TARGET: ${{ steps.target.outputs.url }}
+        run: |
+          set -euo pipefail
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${TARGET}/health/ready" || echo "000")
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [[ "$STATUS" -lt 200 || "$STATUS" -ge 300 ]]; then
+            echo "::error::/health/ready returned $STATUS (expected 2xx)"
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ping /health/live
+        id: live
+        if: steps.target.outputs.skip == 'false'
+        env:
+          TARGET: ${{ steps.target.outputs.url }}
+        run: |
+          set -euo pipefail
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${TARGET}/health/live" || echo "000")
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [[ "$STATUS" -lt 200 || "$STATUS" -ge 300 ]]; then
+            echo "::error::/health/live returned $STATUS (expected 2xx)"
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open incident issue on failure
+        if: |
+          steps.target.outputs.skip == 'false' &&
+          (steps.ready.outputs.failed == 'true' || steps.live.outputs.failed == 'true')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET: ${{ steps.target.outputs.url }}
+          READY_STATUS: ${{ steps.ready.outputs.status }}
+          LIVE_STATUS: ${{ steps.live.outputs.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE="[incident] API health check failed — $(date -u +%Y-%m-%dT%H:%MZ)"
+
+          # Do not re-open if a recent unresolved incident issue already exists.
+          EXISTING=$(gh issue list --label incident --label synthetics --state open --limit 1 --json number --jq '.[0].number // ""')
+          if [ -n "$EXISTING" ]; then
+            echo "::warning::Open incident issue #$EXISTING already exists — not creating a duplicate. Adding a comment."
+            gh issue comment "$EXISTING" --body "$(printf '**Synthetic check failed again** (%s)\n\n| Endpoint | Status |\n|---|---|\n| %s/health/ready | %s |\n| %s/health/live | %s |\n\nRun: %s' \
+              "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              "$TARGET" "$READY_STATUS" \
+              "$TARGET" "$LIVE_STATUS" \
+              "$RUN_URL")"
+            exit 0
+          fi
+
+          gh issue create \
+            --title "$TITLE" \
+            --label "incident" \
+            --label "synthetics" \
+            --body "$(printf '## Synthetic health check failure\n\nThe external synthetic monitor detected a health-check failure.\n\n| Endpoint | HTTP Status |\n|---|---|\n| `%s/health/ready` | **%s** |\n| `%s/health/live` | **%s** |\n\n**Time (UTC):** %s  \n**Run:** %s\n\n## Action\n\n1. Check the API logs in Axiom / Sentry\n2. Verify the Cloudflare Worker is running (`wrangler tail --env production`)\n3. If the issue is transient, close this issue with a brief note\n4. If persistent, page on-call and open a post-mortem issue\n\n---\n_Opened automatically by the [External Synthetics](%s) workflow._' \
+              "$TARGET" "$READY_STATUS" \
+              "$TARGET" "$LIVE_STATUS" \
+              "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              "$RUN_URL" \
+              "$RUN_URL")"
