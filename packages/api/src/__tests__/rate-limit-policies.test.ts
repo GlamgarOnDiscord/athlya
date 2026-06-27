@@ -20,9 +20,9 @@ describe('rate-limit-policies (#133)', () => {
     expect(row?.failPolicy).toBe('fail-closed');
   });
 
-  it('global limiter uses fail-closed-soft', () => {
+  it('global limiter uses fail-open (issue #322)', () => {
     const global = RATE_LIMIT_COVERAGE.find((r) => r.id === 'global-v1');
-    expect(global?.failPolicy).toBe('fail-closed-soft');
+    expect(global?.failPolicy).toBe('fail-open');
   });
 
   it('expensive read rows are fail-closed', () => {
