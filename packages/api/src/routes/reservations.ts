@@ -340,18 +340,19 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
     // is shorter than for the public class listing (5 s vs.
     // 10 s in B5.1).
     //
-    // The fingerprint covers the state-tracking fields a
-    // refetch needs to see change: `id`, `status` (the live
-    // state), `cancelledAt` and `checkedInAt` (the two
-    // timestamps the state machine stamps on transitions).
-    // `updatedAt` is not part of the projection — the two
-    // timestamps cover every transition the wire surface
-    // exposes.
+    // Issue #314 — class fields (startsAt, title, durationMin) are
+    // included so ETag changes when an admin updates a class, forcing
+    // clients to refetch instead of serving a 304 with stale data.
     const items = [...result.items] as ReadonlyArray<{
       id?: string | number | null;
       status?: string | null;
       cancelledAt?: string | null;
       checkedInAt?: string | null;
+      class?: {
+        startsAt?: string | null;
+        title?: string | null;
+        durationMin?: number | null;
+      } | null;
     }>;
     const fingerprint = items
       .map((item) => {
@@ -359,7 +360,10 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
         const status = String(item.status ?? '');
         const cancelledAt = String(item.cancelledAt ?? '');
         const checkedInAt = String(item.checkedInAt ?? '');
-        return `${id}:${status}:${cancelledAt}:${checkedInAt}`;
+        const startsAt = String(item.class?.startsAt ?? '');
+        const title = String(item.class?.title ?? '');
+        const durationMin = String(item.class?.durationMin ?? '');
+        return `${id}:${status}:${cancelledAt}:${checkedInAt}:${startsAt}:${title}:${durationMin}`;
       })
       .join('|');
     const etag = await computeListEtag(fingerprint);
