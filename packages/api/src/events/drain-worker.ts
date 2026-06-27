@@ -76,6 +76,11 @@ export interface ClaimedRow {
   readonly occurredAt: Date;
   /** Monotonically increasing attempt counter bumped by the store. */
   readonly attempts: number;
+  /**
+   * Tenant scope. NULL for rows predating migration 0014 — the drain logs
+   * a warning but still processes the row (migration 0020 backfills most).
+   */
+  readonly studioId?: string | null;
 }
 
 /**
@@ -236,6 +241,15 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
   let failed = 0;
 
   for (const row of rows) {
+    if (row.studioId === null || row.studioId === undefined) {
+      logger.warn('outbox drain: row has null studio_id (pre-migration-0014 row)', {
+        id: row.id,
+        eventId: row.eventId,
+        eventType: row.eventType,
+        attempts: row.attempts,
+      });
+    }
+
     const queue = resolveQueue(row.eventType);
     const sendOk = await trySend(queue, row, logger);
     if (!sendOk) {
