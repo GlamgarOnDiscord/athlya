@@ -158,14 +158,31 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_SHA:0:7}"
-          # Main gateway (scheduled + queue handlers, /health, /openapi.json)
-          pnpm --filter @athlya/api exec wrangler deploy --env staging --var "VERSION=${VERSION}" --outdir dist
-          # Bulkhead sub-workers (issue #230): deploy in sequence so route
-          # ownership transfers atomically — auth first (lowest risk), then
-          # reservations, then billing.
+          # Issue #333 — sub-workers FIRST, gateway LAST.
+          #
+          # The old order (gateway → sub-workers) causes 100% failure on routes
+          # that depend on new sub-worker behaviour during the 2-3 minute window
+          # between the gateway and sub-worker deploys: the new gateway calls
+          # sub-worker APIs that don't exist yet on v(n).
+          #
+          # Correct order (issue #333):
+          #   1. Auth sub-worker  — lowest risk, no upstream dependencies
+          #   2. Reservations sub-worker
+          #   3. Billing sub-worker
+          #   4. Health-check the old gateway + new sub-workers — confirms the
+          #      existing traffic path is still healthy before promoting the
+          #      gateway to v(n+1).
+          #   5. Main gateway — promoted last; by this point all sub-workers
+          #      already expose the new contract so 0% of requests see a
+          #      version-skew window.
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env staging --var "VERSION=${VERSION}"
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env staging --var "VERSION=${VERSION}"
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env staging --var "VERSION=${VERSION}"
+          # Health-check via the old gateway + new sub-workers before promoting
+          # the gateway. A failure here rolls back all sub-workers.
+          bash scripts/wait-health-ready.sh "${STAGING_API_URL}"
+          # Main gateway (scheduled + queue handlers, /health, /openapi.json)
+          pnpm --filter @athlya/api exec wrangler deploy --env staging --var "VERSION=${VERSION}" --outdir dist
           bash scripts/wait-health-ready.sh "${STAGING_API_URL}"
 
       # Smoke each route group after staging deploy — verifies no sub-worker
@@ -186,12 +203,18 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_SHA:0:7}"
-          # Main gateway
-          pnpm --filter @athlya/api exec wrangler deploy --env production --var "VERSION=${VERSION}" --outdir dist
-          # Bulkhead sub-workers (issue #230)
+          # Issue #333 — sub-workers FIRST, gateway LAST (same rationale as
+          # staging above). Sub-workers are backwards-compatible per the
+          # expand/contract pattern (CLAUDE.md); the old gateway routes to
+          # them safely until it is replaced.
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env production --var "VERSION=${VERSION}"
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production --var "VERSION=${VERSION}"
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production --var "VERSION=${VERSION}"
+          # Pre-gateway health check — old gateway + new sub-workers must be
+          # healthy before the gateway is promoted.
+          bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}"
+          # Main gateway promoted last (issue #333).
+          pnpm --filter @athlya/api exec wrangler deploy --env production --var "VERSION=${VERSION}" --outdir dist
           bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}"
 
       # Smoke all route groups after production deploy — issue #301.
@@ -259,28 +282,31 @@ jobs:
             --wait-min "${{ inputs.wait_minutes }}" \
             --steps "5,25,100"
 
-      # Issue #276 — roll back sub-workers when a staging or production
-      # deploy step fails mid-sequence (e.g. billing fails after auth and
-      # reservations have already been promoted). Issue #331: || true removed
-      # so a failing rollback surfaces immediately instead of silently leaving
-      # workers on mismatched versions.
-      - name: Rollback staging sub-workers on failure
+      # Issue #276 — roll back all workers when a staging or production
+      # deploy step fails mid-sequence. Issue #331: || true removed so a
+      # failing rollback surfaces immediately.
+      # Issue #333: gateway is rolled back FIRST (it was promoted last),
+      # then sub-workers in reverse deploy order, so the old gateway is
+      # never left routing to a partially-rolled-back sub-worker set.
+      - name: Rollback staging workers on failure
         if: failure() && inputs.phase == 'staging-deploy'
         run: |
-          echo "::warning::Staging deploy failed — rolling back staging sub-workers"
-          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.auth.toml --env staging
-          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.reservations.toml --env staging
+          echo "::warning::Staging deploy failed — rolling back all staging workers (gateway first)"
+          pnpm --filter @athlya/api exec wrangler rollback --env staging
           pnpm --filter @athlya/api exec wrangler rollback -c wrangler.billing.toml --env staging
-          echo "::error::Staging sub-workers rolled back."
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.reservations.toml --env staging
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.auth.toml --env staging
+          echo "::error::Staging workers rolled back."
 
-      - name: Rollback production sub-workers on failure
+      - name: Rollback production workers on failure
         if: failure() && inputs.phase == 'production-deploy'
         run: |
-          echo "::warning::Production deploy failed — rolling back production sub-workers"
-          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.auth.toml --env production
-          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.reservations.toml --env production
+          echo "::warning::Production deploy failed — rolling back all production workers (gateway first)"
+          pnpm --filter @athlya/api exec wrangler rollback --env production
           pnpm --filter @athlya/api exec wrangler rollback -c wrangler.billing.toml --env production
-          echo "::error::Production sub-workers rolled back."
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.reservations.toml --env production
+          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.auth.toml --env production
+          echo "::error::Production workers rolled back."
 
       - name: Rollback production
         if: inputs.phase == 'rollback'
