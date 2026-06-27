@@ -61,6 +61,9 @@ export const MUTATION_BUDGETS = {
   export: { userLimit: 1, ipLimit: 1, windowSec: 86400 },
 } as const satisfies Record<string, RateLimitBudget>;
 
+/** Issue #338 — a member cannot physically attend more than 5 classes per hour. */
+export const CHECKIN_BUDGET: RateLimitBudget = { userLimit: 5, windowSec: 3600 };
+
 /**
  * Authoritative coverage matrix. Keep in sync with `worker.ts` mounts and
  * `studioRateLimit()` on domain routers.
@@ -192,6 +195,16 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     wiredIn: 'domain-router',
     notes: 'studioRateLimit() after jwtAuth — 1000/min/studio',
   },
+  {
+    id: 'checkin-post',
+    route: '/v1/checkins',
+    methods: 'POST',
+    budget: CHECKIN_BUDGET,
+    failPolicy: 'fail-closed',
+    bucket: 'user',
+    wiredIn: 'domain-router',
+    notes: 'Issue #338 — 5/hour per user; a member cannot attend >5 classes/hour',
+  },
 ];
 
 /** Explicit fail-closed rows — tests fail if an id is removed or policy regresses. */
@@ -207,6 +220,7 @@ export const REQUIRED_FAIL_CLOSED_IDS = [
   'members-list',
   'audit-list',
   'admin-stats',
+  'checkin-post',
 ] as const;
 
 /** Rows that must stay fail-closed (mutations + expensive reads + auth). */

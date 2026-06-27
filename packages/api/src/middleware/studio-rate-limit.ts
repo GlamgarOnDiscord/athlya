@@ -112,6 +112,14 @@ export function __resetStudioRateLimitRedisCache(): void {
   redisCache.clear();
 }
 
+export function __primeStudioRateLimitRedisForTests(
+  url: string,
+  token: string,
+  redis: Redis,
+): void {
+  redisCache.set(`${url}|${token}`, redis);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                             */
 /* ------------------------------------------------------------------ */

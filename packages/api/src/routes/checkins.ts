@@ -27,15 +27,18 @@ import { CheckInRequestSchema } from '@athlya/shared/schemas/api';
 import { Hono } from 'hono';
 
 import { jwtAuth } from '../middleware/auth.js';
+import { CHECKIN_BUDGET } from '../middleware/rate-limit-policies.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 import { studioRateLimit } from '../middleware/studio-rate-limit.js';
 import { zValidator } from '../middleware/validator.js';
 
 import { idempotency, projectUserIdFromClaims, readValidated, traceOperation } from './helpers.js';
 
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
+import type { RateLimitOptions } from '../middleware/rate-limit.js';
 import type { HonoEnv } from '../types.js';
 import type { CheckInRequest } from '@athlya/shared/schemas/api';
-import type { Context } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 
 /* ------------------------------------------------------------------ */
 /*  Outcome                                                            */
@@ -67,6 +70,8 @@ export interface CheckinsDeps {
   checkIn(studioId: string, input: CheckInRequest): Promise<CheckInOutcome>;
 
   readonly idempotency?: IdempotencyMiddlewareDeps;
+  /** Redis options forwarded to the per-user rate limiter. Inject a fake in tests. */
+  readonly rateLimitOpts?: RateLimitOptions;
 }
 
 /* ------------------------------------------------------------------ */
@@ -119,8 +124,21 @@ export function buildCheckinsRouter(deps: CheckinsDeps): Hono<HonoEnv> {
   // Sprint 12 / Slice 12.14 (Epic B4.4) — per-studio burst cap.
   router.use('*', studioRateLimit() as Parameters<typeof router.use>[1]);
 
+  // Issue #338 — per-user hourly cap: a member cannot physically attend
+  // more than 5 classes in 60 min. Fail-closed: Redis outage blocks the
+  // endpoint (same policy as reservation mutations).
+  const checkinLimiter = rateLimit({ ...CHECKIN_BUDGET, ...deps.rateLimitOpts });
+  const checkinRateLimit: MiddlewareHandler<HonoEnv> = async (c, next) => {
+    if (c.env.ENVIRONMENT === 'dev') {
+      await next();
+      return;
+    }
+    return (await checkinLimiter(c, next)) ?? undefined;
+  };
+
   router.post(
     '/',
+    checkinRateLimit,
     projectUserIdFromClaims(),
     zValidator('json', CheckInRequestSchema),
     ...(idem ? [idempotency(idem)] : []),
