@@ -171,9 +171,11 @@ jobs:
             --duration "${K6_SOAK_DURATION}" \
             --summary-export=k6-staging-gate-summary.json
 
-      - name: '[5/5] k6 gate skipped'
+      - name: '[5/5] k6 gate missing K6_STAGING_BASE_URL'
         if: steps.prereq.outputs.skip != 'true' && vars.K6_STAGING_BASE_URL == ''
-        run: echo "::notice::k6 perf gate skipped — set K6_STAGING_BASE_URL, K6_STAGING_AUTH_TOKEN, K6_STAGING_STUDIO_ID, K6_STAGING_CLASS_IDS in GitHub vars/secrets to enable"
+        run: |
+          echo "::error::K6_STAGING_BASE_URL is required for the staging perf gate. Set it in Settings > Variables along with K6_STAGING_AUTH_TOKEN, K6_STAGING_STUDIO_ID, and K6_STAGING_CLASS_IDS."
+          exit 1
 
       - name: Upload k6 summary
         if: steps.prereq.outputs.skip != 'true' && vars.K6_STAGING_BASE_URL != '' && always()
