@@ -94,6 +94,8 @@ interface ConcurrencyEnv {
    * to mirror the rate-limit and turnstile middlewares.
    */
   readonly ENVIRONMENT?: string;
+  /** Optional key prefix for preview-PR isolation (issue #317). */
+  readonly REDIS_KEY_PREFIX?: string;
 }
 
 /** Minimal context shape this middleware reads. */
@@ -207,7 +209,8 @@ export function concurrencyLimit(opts: ConcurrencyLimitOptions = {}): Concurrenc
       return buildDependencyUnavailableResponse(traceId);
     }
 
-    const key = `${CONCURRENCY_BUCKET_PREFIX}:${userId}`;
+    const globalPrefix = env.REDIS_KEY_PREFIX ?? '';
+    const key = `${globalPrefix}${CONCURRENCY_BUCKET_PREFIX}:${userId}`;
     let count: number;
     try {
       count = await redis.incr(key);

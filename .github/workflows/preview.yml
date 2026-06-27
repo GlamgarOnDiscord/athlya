@@ -157,6 +157,7 @@ jobs:
             --env preview \
             --name "${PREVIEW_WORKER_NAME}" \
             --var "VERSION=${VERSION}" \
+            --var "REDIS_KEY_PREFIX=pr-${{ github.event.pull_request.number }}:" \
             --message "PR #${{ github.event.pull_request.number }} — ${GITHUB_SHA:0:7}" \
             2>&1)
           echo "$DEPLOY_OUT"
@@ -273,3 +274,40 @@ jobs:
             -H "Authorization: Bearer ${NEON_API_KEY}"
 
           echo "Deleted Neon branch ${BRANCH_NAME} (${BRANCH_ID})"
+
+      - name: Flush preview Redis keys (pr-{N}:*)
+        continue-on-error: true
+        env:
+          PREVIEW_REDIS_URL: ${{ secrets.PREVIEW_REDIS_URL }}
+          PREVIEW_REDIS_TOKEN: ${{ secrets.PREVIEW_REDIS_TOKEN }}
+        run: |
+          PR_N="${{ github.event.pull_request.number }}"
+          PREFIX="pr-${PR_N}:"
+
+          if [ -z "${PREVIEW_REDIS_URL}" ] || [ -z "${PREVIEW_REDIS_TOKEN}" ]; then
+            echo "PREVIEW_REDIS_URL/TOKEN not set — skipping Redis flush"
+            exit 0
+          fi
+
+          # SCAN for all keys matching the PR prefix, then DEL them in
+          # batches. Uses the Upstash REST API directly (no wrangler needed).
+          # The loop terminates when cursor returns to "0".
+          CURSOR=0
+          DELETED=0
+          while true; do
+            RESULT=$(curl -sf "${PREVIEW_REDIS_URL}/scan/${CURSOR}?match=${PREFIX}*&count=200" \
+              -H "Authorization: Bearer ${PREVIEW_REDIS_TOKEN}")
+            CURSOR=$(echo "${RESULT}" | jq -r '.[0]')
+            KEYS=$(echo "${RESULT}" | jq -r '.[1][]' | tr '\n' ' ')
+            if [ -n "${KEYS}" ]; then
+              KEY_ARGS=$(echo "${KEYS}" | sed 's/ $//' | xargs -I{} echo '"{}"' | tr '\n' ',' | sed 's/,$//')
+              curl -sf -X POST "${PREVIEW_REDIS_URL}/del" \
+                -H "Authorization: Bearer ${PREVIEW_REDIS_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "[${KEY_ARGS}]" > /dev/null
+              COUNT=$(echo "${KEYS}" | wc -w | tr -d ' ')
+              DELETED=$((DELETED + COUNT))
+            fi
+            if [ "${CURSOR}" = "0" ]; then break; fi
+          done
+          echo "Flushed ${DELETED} Redis keys with prefix '${PREFIX}'"
