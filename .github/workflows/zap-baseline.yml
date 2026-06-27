@@ -51,7 +51,7 @@ concurrency:
 
 jobs:
   zap:
-    name: ZAP baseline scan
+    name: ZAP baseline scan (passive only)
     runs-on: ubuntu-latest
     timeout-minutes: 20
 

@@ -1,0 +1,115 @@
+name: OWASP ZAP Active Scan
+
+# =====================================================================
+# Issue #340 — weekly active scan against a dedicated scanning env.
+#
+# IMPORTANT — this job sends real attack payloads (SQLi, XSS, path
+# traversal, etc.). NEVER point it at a shared staging environment
+# that serves real or production-adjacent data. Set
+# ZAP_ACTIVE_TARGET_URL only after provisioning a throwaway scanning
+# env seeded with synthetic data.
+#
+# How it differs from zap-baseline.yml
+# -------------------------------------
+# zap-baseline.yml  — passive; spiders the site, reads responses,
+#                     no attack payloads; safe on shared staging.
+# zap-active.yml    — active; replays and mutates requests with
+#                     attack strings; dedicated env only.
+#
+# Gating
+# -------
+# The job is skipped cleanly when ZAP_ACTIVE_TARGET_URL is not set.
+# Once a dedicated scanning env exists, populate the variable and the
+# scan activates without any workflow change.
+#
+# Finding lifecycle
+# -----------------
+# allow_issue_writing: true creates a GitHub issue for each new
+# HIGH/MEDIUM finding. Close or label issues as they are triaged.
+# WARN-level findings are captured in the uploaded report but do not
+# open issues (noise). The job does NOT fail the branch build.
+#
+# SHA pinning
+# -----------
+# Pin the action SHA before enabling in production. Use:
+#   gh api repos/zaproxy/action-full-scan/git/refs/tags/v0.10.0 \
+#     --jq '.object.sha'
+# and replace the @v0.10.0 tag below with @<sha> # v0.10.0
+# =====================================================================
+
+on:
+  schedule:
+    # Every Monday at 02:00 UTC — low-traffic window.
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Optional override for vars.ZAP_ACTIVE_TARGET_URL (full https URL)'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  zap-active:
+    name: ZAP active scan (scheduled)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Resolve target URL and guard on empty configuration
+        id: guard
+        env:
+          VAR_TARGET: ${{ vars.ZAP_ACTIVE_TARGET_URL }}
+          INPUT_TARGET: ${{ github.event.inputs.target_url }}
+        run: |
+          set -euo pipefail
+          TARGET="${INPUT_TARGET:-$VAR_TARGET}"
+
+          if [ -z "$TARGET" ]; then
+            echo "::notice title=ZAP active scan skipped::ZAP_ACTIVE_TARGET_URL is not set. Provision a dedicated scanning environment and set the variable to enable weekly active scans."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            echo "target=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "ZAP active scan target: $TARGET"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+
+      - name: Run ZAP active scan
+        if: steps.guard.outputs.skipped == 'false'
+        # TODO: pin to a commit SHA before enabling in production.
+        # See the header comment for the gh api command to retrieve it.
+        uses: zaproxy/action-full-scan@v0.10.0
+        with:
+          target: ${{ steps.guard.outputs.target }}
+          rules_file_name: '.zap/rules.tsv'
+          # Issue writing ON: each HIGH/MEDIUM finding becomes a GitHub
+          # issue automatically. WARN-level findings appear only in the
+          # uploaded report to keep issue noise manageable.
+          allow_issue_writing: true
+          # Do not fail the workflow — active scan findings should be
+          # triaged as issues, not treated as a hard gate. This mirrors
+          # the intent of issue #340: track, not block.
+          fail_action: false
+
+      - name: Upload ZAP active scan report
+        if: always() && steps.guard.outputs.skipped == 'false'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: zap-active-report-${{ github.run_id }}
+          path: |
+            report_html.html
+            report_json.json
+          retention-days: 90
+          if-no-files-found: warn
