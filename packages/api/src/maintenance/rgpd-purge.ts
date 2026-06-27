@@ -93,8 +93,11 @@ export const DEFAULT_EXPORT_JOBS_RETENTION_DAYS = 90;
  * job firing once-a-week on a large backlog from hot-blocking the
  * primary for minutes; the cron will simply re-fire on the next
  * tick until the backlog is drained.
+ *
+ * Issue #323 — 100 rows/tick keeps single-batch Neon transactions
+ * well under the 30s CPU budget even during mass-churn events.
  */
-export const DEFAULT_BATCH_LIMIT = 500;
+export const DEFAULT_BATCH_LIMIT = 100;
 
 /* ------------------------------------------------------------------ */
 /*  S5-004 — anonymise expired soft-deleted users                      */
@@ -110,6 +113,8 @@ export const DEFAULT_BATCH_LIMIT = 500;
  */
 export interface AnonymizeUsersResult {
   readonly anonymizedCount: number;
+  /** True when the batch was full — indicates a backlog requiring more ticks. */
+  readonly hasMore: boolean;
 }
 
 /**
@@ -180,7 +185,7 @@ export async function anonymizeExpiredUsers(
     `;
 
   const anonymizedCount = await deps.execute(query, [cutoff, limit]);
-  return { anonymizedCount };
+  return { anonymizedCount, hasMore: anonymizedCount === limit };
 }
 
 /* ------------------------------------------------------------------ */
@@ -291,6 +296,8 @@ export async function purgeExpiredExportJobs(
  */
 export interface RgpdMaintenanceResult {
   readonly anonymizedUsers: number;
+  /** True when the anonymization batch was full — signals a backlog. */
+  readonly anonymizedUsersHasMore: boolean;
   readonly purgedOutbox: number;
   readonly purgedExportJobs: number;
 }
@@ -318,6 +325,7 @@ export async function runRgpdMaintenanceCycle(
   const errors: Error[] = [];
 
   let anonymizedUsers = 0;
+  let anonymizedUsersHasMore = false;
   try {
     const r = await anonymizeExpiredUsers(deps, {
       ...(options.anonymizeAfterDays !== undefined
@@ -327,6 +335,7 @@ export async function runRgpdMaintenanceCycle(
       ...(options.clock !== undefined ? { clock: options.clock } : {}),
     });
     anonymizedUsers = r.anonymizedCount;
+    anonymizedUsersHasMore = r.hasMore;
   } catch (err) {
     errors.push(err instanceof Error ? err : new Error(String(err)));
   }
@@ -375,5 +384,5 @@ export async function runRgpdMaintenanceCycle(
     );
   }
 
-  return { anonymizedUsers, purgedOutbox, purgedExportJobs };
+  return { anonymizedUsers, anonymizedUsersHasMore, purgedOutbox, purgedExportJobs };
 }

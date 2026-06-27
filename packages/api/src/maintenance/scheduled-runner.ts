@@ -77,6 +77,7 @@ export interface ScheduledRgpdDeps {
 export interface ScheduledRgpdResult {
   readonly purge: {
     readonly anonymizedUsers: number;
+    readonly anonymizedUsersHasMore: boolean;
     readonly purgedOutbox: number;
     readonly purgedExportJobs: number;
     readonly error?: string;
@@ -118,6 +119,7 @@ export async function runScheduledRgpdMaintenance(
 
   let purge: ScheduledRgpdResult['purge'] = {
     anonymizedUsers: 0,
+    anonymizedUsersHasMore: false,
     purgedOutbox: 0,
     purgedExportJobs: 0,
   };
@@ -125,6 +127,7 @@ export async function runScheduledRgpdMaintenance(
     const r = await runRgpdMaintenanceCycle(deps.executeSql);
     purge = {
       anonymizedUsers: r.anonymizedUsers,
+      anonymizedUsersHasMore: r.anonymizedUsersHasMore,
       purgedOutbox: r.purgedOutbox,
       purgedExportJobs: r.purgedExportJobs,
     };
