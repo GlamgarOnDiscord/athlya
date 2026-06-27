@@ -2,10 +2,11 @@
  * Unit tests for the `/v1/checkins/*` domain router (task 8.11).
  *
  * Covers:
- *   1. POST / without Authorization â†’ 401 missing_authorization.
+ *   1. POST / without Authorization → 401 missing_authorization.
  *   2. POST / with invalid body still surfaces 401 (chain order).
- *   3. Unsupported GET â†’ 404 Problem Details.
+ *   3. Unsupported GET → 404 Problem Details.
  *   4. Problem Details 401 body + trace id echo.
+ *   5. Issue #338 — per-user rate limit: 5/hour, 6th → 429 Retry-After.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,7 +25,7 @@ afterEach(() => {
 });
 
 describe('/v1/checkins', () => {
-  it('POST / â†’ 401 missing_authorization without Authorization header', async () => {
+  it('POST / -> 401 missing_authorization without Authorization header', async () => {
     const deps = buildStubDeps();
     const app = buildTestApp(deps);
 
@@ -59,11 +60,11 @@ describe('/v1/checkins', () => {
       env(),
     );
 
-    // 401 wins over 422 â€” auth middleware is mounted first.
+    // 401 wins over 422 -- auth middleware is mounted first.
     expect(res.status).toBe(401);
   });
 
-  it('GET / (no such handler) with no Authorization â†’ 401 first (auth applies to the entire router)', async () => {
+  it('GET / (no such handler) with no Authorization -> 401 first (auth applies to the entire router)', async () => {
     const deps = buildStubDeps();
     const app = buildTestApp(deps);
 
