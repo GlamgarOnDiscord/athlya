@@ -1098,6 +1098,19 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       return { status: 'skipped', error: 'CRON_DB_URL missing' };
     }
 
+    // Issue #326 — SENTRY_DSN required in staging/prod: without it, 5xx errors
+    // are logged locally but never forwarded to an alert channel. `skipped`
+    // triggers 503 in staging/prod via the `failed()` helper below.
+    function probeSentryDsn(): ProbeResult {
+      if (env.SENTRY_DSN !== undefined && env.SENTRY_DSN !== '') {
+        return { status: 'ok', latencyMs: 0 };
+      }
+      return {
+        status: 'skipped',
+        error: 'SENTRY_DSN missing — 5xx errors not forwarded to Sentry',
+      };
+    }
+
     // R2 binding checks — issue #300. Absent bindings are treated as
     // `skipped` in dev (acceptable) but trigger not-ready in staging/prod.
     // Without AVATARS_BUCKET, RGPD cascade silently skips avatar purge.
@@ -1177,6 +1190,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       ]);
     const avatarsBucketProbe = probeAvatarsBucket();
     const exportsBucketProbe = probeExportsBucket();
+    const sentryDsnProbe = probeSentryDsn();
 
     // Dev: any `skipped` is acceptable (= no real binding wired).
     // Staging/prod: `skipped` is a configuration bug → not ready.
@@ -1190,7 +1204,8 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       !failed(hyperdriveProbe) &&
       !failed(avatarsBucketProbe) &&
       !failed(exportsBucketProbe) &&
-      !failed(auditPartitionProbe);
+      !failed(auditPartitionProbe) &&
+      !failed(sentryDsnProbe);
     const httpStatus = ready ? 200 : 503;
 
     return c.json(
@@ -1207,6 +1222,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
           avatarsBucket: avatarsBucketProbe,
           exportsBucket: exportsBucketProbe,
           auditLogPartitions: auditPartitionProbe,
+          sentryDsn: sentryDsnProbe,
         },
       },
       httpStatus,
