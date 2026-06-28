@@ -58,6 +58,7 @@ const ListMyReservationsQuerySchema = z
   .object({
     from: z.string().datetime().optional(),
     to: z.string().datetime().optional(),
+    cursor: z.string().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
   })
   .strict();
@@ -106,7 +107,7 @@ export interface ReservationsDeps {
     userId: string,
     query: ListMyReservationsQuery,
     claims: AuthClaims,
-  ): Promise<{ items: ReadonlyArray<unknown> }>;
+  ): Promise<{ items: ReadonlyArray<unknown>; nextCursor: string | null }>;
   getRemainingSeats(classId: string): Promise<number | null>;
 
   readonly idempotency?: IdempotencyMiddlewareDeps;
@@ -381,7 +382,7 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
     c.header('etag', etag);
     c.header('cache-control', 'private, max-age=5, must-revalidate');
     c.header('vary', 'authorization');
-    return c.json({ items: items as unknown[] }, 200);
+    return c.json({ items: items as unknown[], nextCursor: result.nextCursor }, 200);
   });
 
   return router;
