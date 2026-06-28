@@ -98,6 +98,8 @@ export interface ClaimedOutboxRow {
   readonly payload: Record<string, unknown>;
   readonly occurredAt: Date;
   readonly attempts: number;
+  /** NULL for rows predating migration 0014. Drain handler should log a warning. */
+  readonly studioId: string | null;
 }
 
 /**
@@ -118,6 +120,7 @@ interface ClaimedOutboxRowRaw {
   payload: Record<string, unknown>;
   occurred_at: Date;
   attempts: number;
+  studio_id: string | null;
   [key: string]: unknown;
 }
 
@@ -200,7 +203,8 @@ export async function claimBatch(
                   outbox.event_type,
                   outbox.payload,
                   outbox.occurred_at,
-                  outbox.attempts
+                  outbox.attempts,
+                  outbox.studio_id
     `);
 
   const rows = result as unknown as readonly ClaimedOutboxRowRaw[];
@@ -211,6 +215,7 @@ export async function claimBatch(
     payload: row.payload,
     occurredAt: row.occurred_at,
     attempts: row.attempts,
+    studioId: row.studio_id,
   }));
 }
 
