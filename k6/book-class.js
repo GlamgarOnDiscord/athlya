@@ -44,17 +44,44 @@ const bookingDuration = new Trend('booking_duration_ms', true);
 const confirmedDuration = new Trend('booking_confirmed_ms', true);
 const waitlistedDuration = new Trend('booking_waitlisted_ms', true);
 
-export const options = {
-  scenarios: {
-    nominal_load: {
-      executor: 'constant-arrival-rate',
-      rate: 100,
-      timeUnit: '1s',
-      duration: '60s',
-      preAllocatedVUs: 50,
-      maxVUs: 200,
-    },
+// K6_SCENARIO selects which load profile to run.
+// nominal_load — 100 req/s for 60 s (PR CI, default)
+// soak         — 50 VUs sustained for 30 min (production gate)
+// spike        — 200 VU burst for 60 s (regression check)
+const SCENARIO = __ENV.K6_SCENARIO ?? 'nominal_load';
+
+const SCENARIOS = {
+  nominal_load: {
+    executor: 'constant-arrival-rate',
+    rate: 100,
+    timeUnit: '1s',
+    duration: '60s',
+    preAllocatedVUs: 50,
+    maxVUs: 200,
   },
+  soak: {
+    executor: 'constant-vus',
+    vus: 50,
+    duration: '30m',
+  },
+  spike: {
+    executor: 'constant-arrival-rate',
+    rate: 200,
+    timeUnit: '1s',
+    duration: '60s',
+    preAllocatedVUs: 200,
+    maxVUs: 400,
+  },
+};
+
+if (!(SCENARIO in SCENARIOS)) {
+  throw new Error(
+    `Unknown K6_SCENARIO "${SCENARIO}". Valid values: ${Object.keys(SCENARIOS).join(', ')}`,
+  );
+}
+
+export const options = {
+  scenarios: { [SCENARIO]: SCENARIOS[SCENARIO] },
   thresholds: {
     // SLO S1 : p99 < 500ms on successful bookings (201 confirmed,
     // 202 waitlisted). Previously measured on status:200 which

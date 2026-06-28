@@ -31,6 +31,15 @@ on:
         options:
           - staging
           - production
+      scenario:
+        description: 'k6 scenario (nominal_load | soak | spike)'
+        required: false
+        default: 'nominal_load'
+        type: choice
+        options:
+          - nominal_load
+          - soak
+          - spike
 
 permissions:
   contents: read
@@ -39,12 +48,16 @@ jobs:
   k6-book-class:
     name: book-class load test
     runs-on: ubuntu-latest
-    # Skip when secrets aren't provisioned (free tier without
-    # staging URL setup). The job still runs in lint mode below.
-    if: ${{ vars.K6_STAGING_BASE_URL != '' }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Require K6_STAGING_BASE_URL
+        run: |
+          if [ -z "${{ vars.K6_STAGING_BASE_URL }}" ]; then
+            echo "::error::K6_STAGING_BASE_URL must be set as a GitHub variable. Set it in Settings > Variables to enable load tests."
+            exit 1
+          fi
 
       - name: Install k6
         run: |
@@ -75,10 +88,16 @@ jobs:
   k6-list-classes:
     name: list-classes load test
     runs-on: ubuntu-latest
-    if: ${{ vars.K6_STAGING_BASE_URL != '' }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Require K6_STAGING_BASE_URL
+        run: |
+          if [ -z "${{ vars.K6_STAGING_BASE_URL }}" ]; then
+            echo "::error::K6_STAGING_BASE_URL must be set as a GitHub variable. Set it in Settings > Variables to enable load tests."
+            exit 1
+          fi
 
       - name: Install k6
         run: |
@@ -120,4 +139,63 @@ jobs:
         run: |
           k6 archive k6/book-class.js -O /tmp/book.tar
           k6 archive k6/list-classes.js -O /tmp/list.tar
-          echo "✅ k6 scripts parse cleanly"
+          echo "k6 scripts parse cleanly"
+
+  # Soak + spike gate — only on workflow_dispatch targeting production.
+  # Must pass before any production deploy. Runs the long-duration soak
+  # (30 min, 50 VUs) followed by a spike (200 VU burst) to verify the
+  # API holds under sustained load and sudden traffic surges.
+  staging-perf-gate:
+    name: staging perf gate (soak + spike)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'production'
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Require K6_STAGING_BASE_URL
+        run: |
+          if [ -z "${{ vars.K6_STAGING_BASE_URL }}" ]; then
+            echo "::error::K6_STAGING_BASE_URL must be set as a GitHub variable before running the production perf gate."
+            exit 1
+          fi
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Soak test (30 min, 50 VUs)
+        env:
+          K6_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
+          K6_AUTH_TOKEN: ${{ secrets.K6_STAGING_AUTH_TOKEN }}
+          K6_STUDIO_ID: ${{ secrets.K6_STAGING_STUDIO_ID }}
+          K6_CLASS_IDS: ${{ secrets.K6_STAGING_CLASS_IDS }}
+          K6_SCENARIO: soak
+        run: |
+          k6 run k6/book-class.js \
+            --summary-export=k6-soak-summary.json
+
+      - name: Spike test (200 VU burst)
+        env:
+          K6_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
+          K6_AUTH_TOKEN: ${{ secrets.K6_STAGING_AUTH_TOKEN }}
+          K6_STUDIO_ID: ${{ secrets.K6_STAGING_STUDIO_ID }}
+          K6_CLASS_IDS: ${{ secrets.K6_STAGING_CLASS_IDS }}
+          K6_SCENARIO: spike
+        run: |
+          k6 run k6/book-class.js \
+            --summary-export=k6-spike-summary.json
+
+      - name: Upload perf gate summaries
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: k6-perf-gate-summaries
+          path: |
+            k6-soak-summary.json
+            k6-spike-summary.json
+          retention-days: 30

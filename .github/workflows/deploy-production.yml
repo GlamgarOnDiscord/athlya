@@ -16,6 +16,11 @@ name: Deploy API
 # GitHub Environments (recommended):
 #   staging    — no approval
 #   production — required reviewers before prod-canary / rollback
+#
+# IMPORTANT — production deploy gate (issue #308):
+# Before running `production-canary`, trigger the load-test workflow with
+# target=production. It runs a 30-min soak (50 VUs) + spike (200 VUs burst)
+# against staging. Both must pass before the canary proceeds.
 
 on:
   workflow_dispatch:
