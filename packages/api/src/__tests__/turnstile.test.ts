@@ -5,27 +5,33 @@
  * Exercises the behaviour described in the file header of
  * `middleware/turnstile.ts`:
  *
- *   1. Happy path â€” valid token + `success: true` siteverify â†’ next()
+ *   1. Happy path — valid token + `success: true` siteverify → next()
  *      called, no response emitted.
- *   2. Missing `cf-turnstile-token` header â†’ 403 `bot_challenge_failed`,
+ *   2. Missing `cf-turnstile-token` header → 403 `bot_challenge_failed`,
  *      next() NOT called.
- *   3. Empty `cf-turnstile-token` header â†’ 403.
- *   4. Siteverify returns `success: false` â†’ 403, warn logged with
+ *   3. Empty `cf-turnstile-token` header → 403.
+ *   4. Siteverify returns `success: false` → 403, warn logged with
  *      the Cloudflare error-codes.
- *   5. Siteverify returns non-2xx â†’ 403.
- *   6. Fetch rejects (simulated network down) â†’ 403 (fail closed).
- *   7. Fetch times out â†’ 403, error logged as timeout.
- *   8. Dev env without `TURNSTILE_SECRET` â†’ warn logged, next() called.
- *   9. Staging env without `TURNSTILE_SECRET` â†’ 500 `configuration_error`.
- *  10. Production env without `TURNSTILE_SECRET` â†’ 500.
- *  11. Request body contract â€” `secret`, `response`, `remoteip`
+ *   5. Siteverify returns non-2xx → 403.
+ *   6. Fetch rejects (simulated network down) → 403 (fail closed).
+ *   7. Fetch times out → 403, error logged as timeout.
+ *   8. Dev env without `TURNSTILE_SECRET` → warn logged, next() called.
+ *   9. Staging env without `TURNSTILE_SECRET` → 500 `configuration_error`.
+ *  10. Production env without `TURNSTILE_SECRET` → 500.
+ *  11. Request body contract — `secret`, `response`, `remoteip`
  *      (from CF-Connecting-IP) are posted as form fields.
  *  12. Every error response carries `content-type:
  *      application/problem+json`.
+ *  13. Integration — real HTTP to Cloudflare siteverify with always-pass
+ *      test keys (issue #337). Exercises the production code path end-to-end
+ *      without a CAPTCHA interaction. Uses ENVIRONMENT=’staging’ so the dev
+ *      bypass never fires. The test key pair:
+ *        - secret: 1x0000000000000000000000000000000AA (always pass)
+ *        - any non-empty token value passes validation
  *
- * Every test injects `fetch` through the factory option. `vi.stubGlobal`
- * is deliberately avoided so we can run multiple middleware instances
- * in the same file with independent fakes.
+ * Every test (except #13) injects `fetch` through the factory option.
+ * `vi.stubGlobal` is deliberately avoided so we can run multiple middleware
+ * instances in the same file with independent fakes.
  *
  * Validates: Requirements 26.1, 26.2, 26.3.
  */
@@ -92,7 +98,7 @@ function fakeContext(args: {
   const variables = args.variables ?? {};
 
   // `body` must return a real Response instance because Hono's
-  // contract does â€” the middleware chains on that assumption.
+  // contract does — the middleware chains on that assumption.
   const body = vi.fn((data: string, status: number, respHeaders: Record<string, string>) => {
     return new Response(data, {
       status,
@@ -124,7 +130,7 @@ function fakeFetch(response: Response): typeof fetch {
 }
 
 /**
- * Build a `fetch` fake that throws synchronously after being awaited â€”
+ * Build a `fetch` fake that throws synchronously after being awaited —
  * emulates a network / DNS / TLS failure.
  */
 function rejectingFetch(err: unknown): typeof fetch {
@@ -136,7 +142,7 @@ function rejectingFetch(err: unknown): typeof fetch {
  * Build a `fetch` fake that waits indefinitely, giving the middleware's
  * AbortController time to fire. The returned spy captures the abort
  * signal and rejects with an `AbortError` the moment `signal.abort()`
- * is observed â€” this mirrors the real `fetch` behaviour on Workers
+ * is observed — this mirrors the real `fetch` behaviour on Workers
  * without relying on wall-clock time.
  */
 function hangingFetch(): typeof fetch {
@@ -198,7 +204,7 @@ async function readProblemBody(
 /*  Happy path                                                         */
 /* ------------------------------------------------------------------ */
 
-describe('turnstile â€” happy path', () => {
+describe('turnstile — happy path', () => {
   it('calls next() when siteverify returns success:true and does NOT emit a response', async () => {
     const c = fakeContext({
       environment: 'production',
@@ -226,7 +232,7 @@ describe('turnstile â€” happy path', () => {
 /*  Missing / empty token                                              */
 /* ------------------------------------------------------------------ */
 
-describe('turnstile â€” missing or empty token', () => {
+describe('turnstile — missing or empty token', () => {
   it('returns 403 bot_challenge_failed when cf-turnstile-token header is absent, and does NOT call next()', async () => {
     const logger = fakeLogger();
     const c = fakeContext({
@@ -282,7 +288,7 @@ describe('turnstile â€” missing or empty token', () => {
 /*  Siteverify rejection                                               */
 /* ------------------------------------------------------------------ */
 
-describe('turnstile â€” siteverify rejection', () => {
+describe('turnstile — siteverify rejection', () => {
   it('returns 403 when Cloudflare responds with success:false and logs the error-codes at warn level', async () => {
     const logger = fakeLogger();
     const c = fakeContext({
@@ -343,8 +349,8 @@ describe('turnstile â€” siteverify rejection', () => {
 /*  Fetch failure modes                                                */
 /* ------------------------------------------------------------------ */
 
-describe('turnstile â€” fetch failure modes', () => {
-  it('returns 403 when fetch rejects (network / DNS / TLS error) â€” fails closed', async () => {
+describe('turnstile — fetch failure modes', () => {
+  it('returns 403 when fetch rejects (network / DNS / TLS error) — fails closed', async () => {
     const logger = fakeLogger();
     const c = fakeContext({
       environment: 'production',
@@ -396,7 +402,7 @@ describe('turnstile â€” fetch failure modes', () => {
 /*  Missing secret behaviour                                           */
 /* ------------------------------------------------------------------ */
 
-describe('turnstile â€” missing TURNSTILE_SECRET', () => {
+describe('turnstile — missing TURNSTILE_SECRET', () => {
   it('dev env: warn logged and next() called (bypass)', async () => {
     const logger = fakeLogger();
     const c = fakeContext({
@@ -472,7 +478,7 @@ describe('turnstile â€” missing TURNSTILE_SECRET', () => {
 /*  Request body contract                                              */
 /* ------------------------------------------------------------------ */
 
-describe('turnstile â€” siteverify request shape', () => {
+describe('turnstile — siteverify request shape', () => {
   it('posts secret, response and remoteip (from CF-Connecting-IP) as application/x-www-form-urlencoded', async () => {
     const c = fakeContext({
       environment: 'production',
@@ -531,7 +537,7 @@ describe('turnstile â€” siteverify request shape', () => {
 /*  Content-type invariant                                             */
 /* ------------------------------------------------------------------ */
 
-describe('turnstile â€” response content-type', () => {
+describe('turnstile — response content-type', () => {
   it('every error response is application/problem+json', async () => {
     const scenarios: Array<{
       name: string;
@@ -593,4 +599,54 @@ describe('turnstile â€” response content-type', () => {
       );
     }
   });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Integration — real Cloudflare siteverify with test keys (issue #337) */
+/* ------------------------------------------------------------------ */
+
+// Cloudflare publishes a set of always-pass test credentials that exercise
+// the real siteverify HTTP round-trip without a CAPTCHA widget. Using them
+// here ensures the middleware's production code path (fetch → parse → allow)
+// is covered by at least one test that cannot be satisfied by the dev bypass.
+//
+// Docs: https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+const CF_TEST_SECRET = '1x0000000000000000000000000000000AA';
+// Any non-empty token value is accepted when using the always-pass test secret.
+const CF_TEST_TOKEN = 'integration-test-token';
+
+describe('turnstile — integration with Cloudflare test keys', () => {
+  it('calls next() after a real siteverify round-trip using the always-pass test secret', async () => {
+    // Wrap globalThis.fetch so we can assert the call was made without
+    // intercepting or mocking the response. If this assertion fails it means
+    // the dev bypass fired — which must never happen when ENVIRONMENT is not dev.
+    const fetchSpy = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      globalThis.fetch(input, init),
+    ) as unknown as typeof fetch;
+
+    const c = fakeContext({
+      // staging: dev bypass must NOT fire; real siteverify call must happen.
+      environment: 'staging',
+      secret: CF_TEST_SECRET,
+      headers: {
+        [TURNSTILE_TOKEN_HEADER]: CF_TEST_TOKEN,
+        'CF-Connecting-IP': '203.0.113.1',
+      },
+      variables: { traceId: 't-integration', logger: fakeLogger() },
+    });
+    const next = vi.fn().mockResolvedValue(undefined);
+
+    const mw = turnstile({ fetch: fetchSpy });
+    const out = await mw(c, next);
+
+    // Verify the real siteverify endpoint was hit (not bypassed).
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const firstCall = (fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(firstCall[0]).toBe(CLOUDFLARE_SITEVERIFY_URL);
+
+    // Cloudflare returned success: true → middleware must call next().
+    expect(out).toBeUndefined();
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(c.body).not.toHaveBeenCalled();
+  }, 10_000); // Allow up to 10 s for the real HTTPS round-trip to Cloudflare.
 });
