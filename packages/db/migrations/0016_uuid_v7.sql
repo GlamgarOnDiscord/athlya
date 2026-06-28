@@ -20,6 +20,17 @@
 --   - All nine tables that previously defaulted to gen_random_uuid() are
 --     updated in one migration to keep the DB schema in sync with the
 --     Drizzle schema change in packages/db/src/schema/_shared.ts.
+--
+-- Keyset pagination note (issue #334):
+--   Existing rows keep v4 UUIDs. Any paginated endpoint that uses
+--   `ORDER BY id` as the sole cursor key will produce inconsistent pages
+--   because v4 UUIDs sort lexicographically relative to v7 UUIDs in an
+--   unpredictable order. All cursor-paginated queries must use a stable
+--   timestamp column as the primary sort key (e.g. `created_at` or
+--   `starts_at`) and treat `id` only as a tie-breaker. The tie-breaking
+--   order within a single timestamp bucket may mix v4 and v7 values, but
+--   the `(timestamp, id)` pair remains a unique, stable sort key so
+--   pagination is always correct and gap-free.
 -- =====================================================================
 
 -- UUID v7 generator (RFC 9562 §5.7).

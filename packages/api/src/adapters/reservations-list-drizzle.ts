@@ -17,23 +17,25 @@
  *   WHERE r.user_id = $userId
  *     AND ($from IS NULL OR c.starts_at >= $from)
  *     AND ($to   IS NULL OR c.starts_at <= $to)
- *   ORDER BY c.starts_at ASC
- *   LIMIT $limit;
+ *     AND ($cursor IS NULL OR (c.starts_at, r.id) > ($cursor.startsAt, $cursor.id))
+ *   ORDER BY c.starts_at ASC, r.id ASC
+ *   LIMIT $limit + 1;     -- +1 to detect hasMore
+ *
+ * Cursor encoding: opaque base64url of `{ startsAt: string; id: string }`.
+ * Primary key is `starts_at` (timestamp); `id` is the tie-breaker within
+ * the same class slot. This `(startsAt, id)` tuple is safe for mixed
+ * UUID v4/v7 rows — see migration 0016 note (issue #334).
  *
  * The default window (90 days ending now + 90 days from now) is the
  * same as the one `@athlya/reservations/list` applies to class
  * listings — keeping the two client-facing endpoints symmetric.
- *
- * Returned items match the shape the `/v1/reservations/me` handler
- * emits: a reservation record flattened with selected class fields
- * so the mobile / web UI does not need a second round-trip.
  *
  * @see Requirements 7.4, 10.1.
  */
 
 import { withTenantHttp } from '@athlya/db';
 import { classes, reservations } from '@athlya/db/schema';
-import { and, asc, eq, gte, lte } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, lte, or, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
@@ -48,6 +50,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export interface ListMyReservationsQuery {
   readonly from?: string | undefined;
   readonly to?: string | undefined;
+  readonly cursor?: string | undefined;
   readonly limit?: number | undefined;
 }
 
@@ -73,6 +76,35 @@ export interface ListMyReservationsDeps {
   readonly claims?: TenantClaims;
 }
 
+/** Cursor shape encoded into a base64url-safe string. */
+interface ReservationCursor {
+  readonly startsAt: string;
+  readonly id: string;
+}
+
+function encodeCursor(c: ReservationCursor): string {
+  return Buffer.from(JSON.stringify(c), 'utf8').toString('base64url');
+}
+
+function decodeCursor(raw: string): ReservationCursor | null {
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+    if (
+      parsed !== null &&
+      typeof parsed === 'object' &&
+      'startsAt' in parsed &&
+      'id' in parsed &&
+      typeof (parsed as Record<string, unknown>).startsAt === 'string' &&
+      typeof (parsed as Record<string, unknown>).id === 'string'
+    ) {
+      return parsed as ReservationCursor;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Fetch one page of the authenticated member's reservations,
  * flattened with the owning class metadata.
@@ -85,7 +117,7 @@ export async function listMyReservations(
   userId: string,
   query: ListMyReservationsQuery,
   deps: ListMyReservationsDeps,
-): Promise<{ items: ReservationListItem[] }> {
+): Promise<{ items: ReservationListItem[]; nextCursor: string | null }> {
   const nowMs = Date.now();
   const from =
     query.from !== undefined
@@ -96,6 +128,18 @@ export async function listMyReservations(
       ? new Date(query.to)
       : new Date(nowMs + DEFAULT_LOOKAHEAD_DAYS * MS_PER_DAY);
   const limit = Math.min(Math.max(query.limit ?? 50, 1), 100);
+  const cursor = query.cursor !== undefined ? decodeCursor(query.cursor) : null;
+
+  const cursorCondition =
+    cursor !== null
+      ? or(
+          gt(classes.startsAt, new Date(cursor.startsAt)),
+          and(
+            sql`${classes.startsAt} = ${new Date(cursor.startsAt)}`,
+            gt(reservations.id, cursor.id),
+          ),
+        )
+      : undefined;
 
   const selectQuery = deps.db
     .select({
@@ -113,10 +157,15 @@ export async function listMyReservations(
     .from(reservations)
     .innerJoin(classes, eq(classes.id, reservations.classId))
     .where(
-      and(eq(reservations.userId, userId), gte(classes.startsAt, from), lte(classes.startsAt, to)),
+      and(
+        eq(reservations.userId, userId),
+        gte(classes.startsAt, from),
+        lte(classes.startsAt, to),
+        cursorCondition,
+      ),
     )
-    .orderBy(asc(classes.startsAt))
-    .limit(limit);
+    .orderBy(asc(classes.startsAt), asc(reservations.id))
+    .limit(limit + 1);
 
   const rows =
     deps.claims !== undefined
@@ -125,7 +174,10 @@ export async function listMyReservations(
         )
       : await withConnectionRetry(() => selectQuery);
 
-  const items: ReservationListItem[] = rows.map((row) => ({
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+  const items: ReservationListItem[] = pageRows.map((row) => ({
     id: row.id,
     classId: row.classId,
     userId: row.userId,
@@ -141,5 +193,11 @@ export async function listMyReservations(
     },
   }));
 
-  return { items };
+  const lastRow = pageRows[pageRows.length - 1];
+  const nextCursor =
+    hasMore && lastRow !== undefined
+      ? encodeCursor({ startsAt: lastRow.classStartsAt.toISOString(), id: lastRow.id })
+      : null;
+
+  return { items, nextCursor };
 }

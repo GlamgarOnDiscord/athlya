@@ -416,7 +416,7 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
       for (const r of state.reservationsById.values()) {
         if (r.userId === userId) items.push(r);
       }
-      return { items };
+      return { items, nextCursor: null };
     }),
     getRemainingSeats: vi.fn(async (_classId: string) => null),
   };
