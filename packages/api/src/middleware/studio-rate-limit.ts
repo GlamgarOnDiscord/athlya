@@ -70,6 +70,8 @@ interface StudioRateLimitEnv {
    * `ENVIRONMENT === 'dev'`.
    */
   readonly ENVIRONMENT?: string;
+  /** Optional key prefix for preview-PR isolation (issue #317). */
+  readonly REDIS_KEY_PREFIX?: string;
 }
 
 /** Minimal context shape this middleware reads. */
@@ -199,7 +201,8 @@ export function studioRateLimit(opts: StudioRateLimitOptions = {}): StudioRateLi
       return undefined;
     }
 
-    const key = `${STUDIO_BUCKET_PREFIX}:${studioId}`;
+    const globalPrefix = env.REDIS_KEY_PREFIX ?? '';
+    const key = `${globalPrefix}${STUDIO_BUCKET_PREFIX}:${studioId}`;
     let decision: Awaited<ReturnType<typeof rateLimitSlidingWindow>>;
     try {
       decision = await rateLimitSlidingWindow({ redis }, key, limit, windowSec);

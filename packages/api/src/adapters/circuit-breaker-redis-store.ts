@@ -41,9 +41,9 @@ export class RedisCircuitBreakerStore implements CircuitBreakerStore {
   private readonly keyProbe: string;
   private readonly cleanupTtlMs: number;
 
-  constructor(redis: Redis, name: string, resetTimeoutMs: number) {
+  constructor(redis: Redis, name: string, resetTimeoutMs: number, globalPrefix = '') {
     this.redis = redis;
-    const prefix = `cb:${name}`;
+    const prefix = `${globalPrefix}cb:${name}`;
     this.keyOpenUntil = `${prefix}:open_until`;
     this.keyFailures = `${prefix}:failures`;
     this.keyProbe = `${prefix}:probe`;

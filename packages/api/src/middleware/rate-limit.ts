@@ -197,6 +197,8 @@ interface RateLimitRequest {
 interface RateLimitEnv {
   readonly REDIS_URL: string;
   readonly REDIS_TOKEN: string;
+  /** Optional key prefix for preview-PR isolation (issue #317). */
+  readonly REDIS_KEY_PREFIX?: string;
 }
 
 /**
@@ -428,11 +430,12 @@ export function rateLimit(opts: RateLimitOptions = {}): RateLimitMiddleware {
   return async (c, next) => {
     const redis = injectedRedis ?? getCachedRedis(c.env);
 
+    const globalPrefix = c.env.REDIS_KEY_PREFIX ?? '';
     const userId = readUserId(c);
     const isAuthenticated = userId !== undefined;
     const key = isAuthenticated
-      ? `${USER_BUCKET_PREFIX}:${userId}`
-      : `${ipPrefix}:${deriveClientIp(c.req)}`;
+      ? `${globalPrefix}${USER_BUCKET_PREFIX}:${userId}`
+      : `${globalPrefix}${ipPrefix}:${deriveClientIp(c.req)}`;
     const limit = isAuthenticated ? userLimit : ipLimit;
 
     const decision = await rateLimitSlidingWindow({ redis }, key, limit, windowSec);

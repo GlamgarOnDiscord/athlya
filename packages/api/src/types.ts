@@ -182,6 +182,16 @@ export interface AthlyaBindings {
   readonly REDIS_TOKEN: string;
 
   /**
+   * Optional key prefix prepended to every Redis key. Used by preview
+   * Workers (`REDIS_KEY_PREFIX=pr-{N}:`) so concurrent PRs that share
+   * one Upstash database cannot contaminate each other's rate-limit
+   * buckets, idempotency keys, or session tokens (issue #317).
+   *
+   * Empty string / absent = no prefix (production and staging).
+   */
+  readonly REDIS_KEY_PREFIX?: string;
+
+  /**
    * JWKS endpoint of the identity provider (Clerk / Auth.js).
    * Task 8.2 caches the keys returned by this URL.
    */
