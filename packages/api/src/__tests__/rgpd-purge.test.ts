@@ -252,6 +252,7 @@ describe('runRgpdMaintenanceCycle', () => {
 
     expect(result).toEqual({
       anonymizedUsers: 0,
+      anonymizedUsersHasMore: false,
       purgedOutbox: 0,
       purgedExportJobs: 0,
     });
