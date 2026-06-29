@@ -88,13 +88,9 @@ export function ExportPanel({ t: tProp, client: clientProp }: ExportPanelProps):
 
       {isRequested && jobId !== null ? (
         <div className="flex flex-col gap-2">
-          <span
-            role="status"
-            aria-live="polite"
-            className="text-sm text-emerald-600 dark:text-emerald-400"
-          >
+          <output aria-live="polite" className="text-sm text-emerald-600 dark:text-emerald-400">
             {t('rgpd.export.pending')}
-          </span>
+          </output>
           <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
             <dt className="font-medium">{t('rgpd.export.jobId')}</dt>
             <dd>{jobId}</dd>
