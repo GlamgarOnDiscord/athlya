@@ -6,6 +6,10 @@ terraform {
       source  = "cloudflare/cloudflare"
       version = "~> 4.0"
     }
+    sentry = {
+      source  = "jianyuan/sentry"
+      version = "~> 0.12"
+    }
   }
 
   # Remote state — replace with your Terraform Cloud / S3 backend.
