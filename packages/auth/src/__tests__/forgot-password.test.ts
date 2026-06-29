@@ -12,7 +12,7 @@
  *   3. Single-use — `confirmReset` only succeeds against the row
  *      with a matching active `tokenHash`.
  *   4. TTL — expired tokens reject with `token_expired`.
- *   5. HIBP fail-closed (mirror Sprint-3 SP3.2).
+ *   5. HIBP fail-open (issue #233, matches register): HIBP down → reset proceeds.
  *   6. Family revoke — every active session destroyed on success.
  */
 
