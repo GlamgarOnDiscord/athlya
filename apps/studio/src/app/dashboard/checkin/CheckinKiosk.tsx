@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 
+import Image from 'next/image';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -121,10 +123,12 @@ function SuccessBanner({ member, countdown, t }: SuccessBannerProps): ReactEleme
       className="flex flex-col items-center gap-4 rounded-xl border border-green-500 bg-green-50 p-8 text-center dark:bg-green-950"
     >
       {member.avatarUrl !== null && member.avatarUrl !== '' ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <Image
           src={member.avatarUrl}
           alt=""
+          width={80}
+          height={80}
+          unoptimized
           className="size-20 rounded-full border-2 border-green-500 object-cover"
         />
       ) : (
