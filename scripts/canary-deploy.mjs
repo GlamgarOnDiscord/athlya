@@ -180,10 +180,47 @@ async function stagingSmoke(baseUrl) {
   return versionId;
 }
 
+/**
+ * Poll /health/ready once per minute during the canary bake window.
+ * Returns the number of consecutive readiness failures seen (≥ 2 → abort).
+ * Issue #415: gates on live health signal instead of a blind sleep.
+ */
+async function monitorCanaryWindow(baseUrl, waitMs) {
+  const pollIntervalMs = 60_000;
+  const polls = Math.max(1, Math.floor(waitMs / pollIntervalMs));
+  let consecutiveFailures = 0;
+
+  for (let i = 1; i <= polls; i++) {
+    await sleep(Math.min(pollIntervalMs, waitMs / polls));
+    const url = `${baseUrl.replace(/\/$/, '')}/health/ready`;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body?.status === 'ready') {
+        consecutiveFailures = 0;
+        console.log(`canary monitor [${i}/${polls}]: ready`);
+      } else {
+        consecutiveFailures++;
+        console.warn(
+          `canary monitor [${i}/${polls}]: HTTP ${res.status} status=${body?.status ?? 'unknown'} (failure #${consecutiveFailures})`,
+        );
+      }
+    } catch (err) {
+      consecutiveFailures++;
+      console.warn(
+        `canary monitor [${i}/${polls}]: ${err instanceof Error ? err.message : String(err)} (failure #${consecutiveFailures})`,
+      );
+    }
+    if (consecutiveFailures >= 2) {
+      return consecutiveFailures;
+    }
+  }
+  return consecutiveFailures;
+}
+
 async function productionCanary({ baseUrl, stagingUrl, waitMin, steps }) {
   if (!baseUrl) throw new Error('--base-url is required');
-  const waitMinutes =
-    Number.isFinite(waitMin) && waitMin > 0 ? waitMin : 10;
+  const waitMinutes = Number.isFinite(waitMin) && waitMin > 0 ? waitMin : 10;
   if (stagingUrl) {
     console.log('Pre-flight: staging /health/ready…');
     await waitHealthReady(stagingUrl);
@@ -194,8 +231,14 @@ async function productionCanary({ baseUrl, stagingUrl, waitMin, steps }) {
   for (const pct of steps) {
     promoteVersion('production', versionId, pct);
     if (pct < 100) {
-      console.log(`Monitoring ${waitMinutes} min at ${pct}% before next step…`);
-      await sleep(waitMs);
+      console.log(`Monitoring ${waitMinutes} min at ${pct}% — polling /health/ready every 60 s…`);
+      const failures = await monitorCanaryWindow(baseUrl, waitMs);
+      if (failures >= 2) {
+        throw new Error(
+          `Canary aborted at ${pct}%: /health/ready failed ${failures} times consecutively. ` +
+            'Run: node scripts/canary-deploy.mjs rollback --env production',
+        );
+      }
     }
   }
 

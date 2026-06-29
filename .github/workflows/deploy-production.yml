@@ -7,11 +7,12 @@ name: Deploy API
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
 #   MIGRATION_DB_URL_STAGING    — neondb_owner URL for staging Neon branch (DDL access)
 #   MIGRATION_DB_URL_PRODUCTION — neondb_owner URL for production Neon branch (DDL access)
-#   SENTRY_AUTH_TOKEN  (optional — #138 source map upload; skipped if unset)
+#   SENTRY_AUTH_TOKEN  — required for production-canary (#415); skipped for staging
+#   SENTRY_DSN         — required for production-canary (#415)
 # Required vars:
 #   STAGING_API_URL   (e.g. https://staging.api.athlya.app)
 #   PRODUCTION_API_URL (e.g. https://api.athlya.app)
-#   SENTRY_ORG, SENTRY_PROJECT (optional — #138 source map upload)
+#   SENTRY_ORG, SENTRY_PROJECT — required for production-canary; optional for staging
 #
 # GitHub Environments (recommended):
 #   staging    — no approval
@@ -274,6 +275,27 @@ jobs:
         env:
           STAGING_API_URL: ${{ vars.STAGING_API_URL }}
         run: node scripts/canary-deploy.mjs staging-smoke --base-url "${STAGING_API_URL}"
+
+      - name: Require Sentry config for production canary
+        if: inputs.phase == 'production-canary'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -z "${SENTRY_AUTH_TOKEN:-}" ] && missing+=("SENTRY_AUTH_TOKEN")
+          [ -z "${SENTRY_ORG:-}" ]        && missing+=("SENTRY_ORG")
+          [ -z "${SENTRY_PROJECT:-}" ]    && missing+=("SENTRY_PROJECT")
+          [ -z "${SENTRY_DSN:-}" ]        && missing+=("SENTRY_DSN")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Production canary requires Sentry telemetry. Missing: ${missing[*]}"
+            echo "::error::Without error attribution and source maps, a bad rollout cannot be diagnosed quickly. Provision the secrets before proceeding (issue #415)."
+            exit 1
+          fi
+          echo "Sentry config present — proceeding with canary."
 
       - name: Production canary (5% → 25% → 100%)
         if: inputs.phase == 'production-canary'
