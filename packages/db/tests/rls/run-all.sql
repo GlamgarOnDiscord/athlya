@@ -33,3 +33,4 @@
 \i tests/rls/idempotency_keys.sql
 \i tests/rls/outbox.sql
 \i tests/rls/cron_role.sql
+\i tests/rls/constraints.sql
