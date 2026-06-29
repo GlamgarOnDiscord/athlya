@@ -729,6 +729,7 @@ beforeAll(async () => {
     '0022_reservation_rls_studio_isolation.sql',
     '0023_restrict_null_studio_admin_policy.sql',
     '0024_classes_scalar_constraints.sql',
+    '0025_reservations_confirmed_idx.sql',
   ];
   for (const name of migrations) {
     await applyMigration(rootClient, readMigration(name));
