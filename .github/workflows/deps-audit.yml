@@ -93,6 +93,31 @@ jobs:
         # only affects devDependencies, see .github/READ_ME.md.
         run: pnpm audit --prod --audit-level=high
 
+      - name: Verify pnpm overrides are documented and not stale
+        # check-overrides exits 0 always but prints warnings. We run it here
+        # so the output surfaces in the CI log alongside the audit report.
+        # If undocumented overrides or stale CVE pins are found, the warnings
+        # appear in the step summary for triage.
+        run: node scripts/check-overrides.mjs
+
+      - name: Check pnpm version matches packageManager field
+        # Drift between the installed pnpm and packageManager in package.json
+        # can cause pnpm.overrides to be silently ignored or misapplied.
+        # We fail if the installed version does not exactly match the pin.
+        run: |
+          set -euo pipefail
+          EXPECTED=$(node -e "const p=require('./package.json'); console.log((p.packageManager||'').split('@')[1]||'')")
+          ACTUAL=$(pnpm --version)
+          if [ -z "$EXPECTED" ]; then
+            echo "::warning::packageManager field not set in package.json — cannot verify pnpm version pin"
+          elif [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::pnpm version mismatch: packageManager pins $EXPECTED but $ACTUAL is installed"
+            echo "::error::pnpm.overrides may be silently misapplied. Update or re-pin the version."
+            exit 1
+          else
+            echo "pnpm version OK: $ACTUAL == $EXPECTED"
+          fi
+
   socket-security:
     name: Socket.dev supply-chain scan
     runs-on: ubuntu-latest

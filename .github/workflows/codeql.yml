@@ -45,6 +45,8 @@ jobs:
         uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
         with:
           category: '/language:${{ matrix.language }}'
-          # SARIF upload requires GitHub Code Security (Team/Enterprise).
-          # Findings are visible in job logs.
-          upload: false
+          # SARIF upload: enabled for public repos (free) and for repos with
+          # GitHub Advanced Security. On private repos without Advanced Security
+          # this step will fail with "Advanced Security must be enabled"; in
+          # that case set upload: false and review findings in the job logs.
+          upload: true
