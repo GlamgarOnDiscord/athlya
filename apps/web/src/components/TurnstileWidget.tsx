@@ -165,6 +165,7 @@ export function TurnstileWidget({
   useEffect(() => {
     if (!keyConfigured) return;
     let cancelled = false;
+    let localWidgetId: string | null = null;
 
     loadTurnstileScript(nonce)
       .then(() => {
@@ -222,6 +223,7 @@ export function TurnstileWidget({
           },
         });
         if (typeof id === 'string') {
+          localWidgetId = id;
           widgetIdRef.current = id;
         }
       })
@@ -239,9 +241,9 @@ export function TurnstileWidget({
       if (
         typeof window !== 'undefined' &&
         window.turnstile !== undefined &&
-        widgetIdRef.current !== null
+        localWidgetId !== null
       ) {
-        window.turnstile.remove(widgetIdRef.current);
+        window.turnstile.remove(localWidgetId);
         widgetIdRef.current = null;
       }
       // Drop any token captured by the destroyed widget so the
