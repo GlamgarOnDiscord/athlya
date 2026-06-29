@@ -98,13 +98,10 @@ export function ForgotPasswordForm({ nonce }: ForgotPasswordFormProps): ReactEle
 
   if (state.kind === 'sent') {
     return (
-      <div
-        role="status"
-        className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
-      >
+      <output className="block rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
         <p>{t('auth.forgotPassword.sent')}</p>
         <p className="mt-2">{t('auth.forgotPassword.sentSpam')}</p>
-      </div>
+      </output>
     );
   }
 

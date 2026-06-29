@@ -169,13 +169,12 @@ export function TurnstileWidget({
 
   if (!keyConfigured) {
     return (
-      <div
-        role="status"
-        className="rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
+      <output
+        className="block rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
         data-testid="turnstile-widget-devwarning"
       >
         {t('web.turnstile.notConfigured')}
-      </div>
+      </output>
     );
   }
 

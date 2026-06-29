@@ -267,13 +267,9 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
         ) : null}
 
         {form.submittedAt !== null ? (
-          <span
-            role="status"
-            aria-live="polite"
-            className="text-sm text-emerald-600 dark:text-emerald-400"
-          >
+          <output aria-live="polite" className="text-sm text-emerald-600 dark:text-emerald-400">
             {t('profile.updateSuccess')}
-          </span>
+          </output>
         ) : null}
 
         <Button type="submit" disabled={form.pending} className="self-start">

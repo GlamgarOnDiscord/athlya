@@ -97,12 +97,9 @@ export function ResetPasswordForm({ token, nonce }: ResetPasswordFormProps): Rea
 
   if (state.kind === 'success') {
     return (
-      <div
-        role="status"
-        className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
-      >
+      <output className="block rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
         <p>{t('auth.resetPassword.success')}</p>
-      </div>
+      </output>
     );
   }
 
