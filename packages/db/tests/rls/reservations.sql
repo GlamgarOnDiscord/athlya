@@ -6,6 +6,7 @@
 --   - reservations_read_admin_same_studio  SELECT USING role IN ('admin','coach')
 --                                                    AND EXISTS(class.studio_id = app_studio_id())
 --   - reservations_insert_own              INSERT WITH CHECK user_id = app_user_id()
+--                                                    AND EXISTS(class.studio_id = app_studio_id())
 --   - reservations_update_own              UPDATE USING+CHECK user_id = app_user_id()
 --   - reservations_update_admin            UPDATE USING+CHECK role='admin' AND class.studio_id matches
 --
@@ -96,6 +97,19 @@ SELECT throws_ok(
     '42501',
     NULL,
     'reservations_insert_own: member A2 cannot INSERT reservation with user_id = member B (SQLSTATE 42501)'
+);
+
+-- ---------- reservations_insert_own (cross-studio class denied) ----------
+-- Regression: original policy only checked user_id. A member token from studio A
+-- could book a class owned by studio B. The policy now requires class.studio_id
+-- to match app_studio_id(). (Migration 0022.)
+
+SELECT throws_ok(
+    $$INSERT INTO "reservations" (class_id, user_id, status)
+      VALUES ('cccccccc-cccc-4ccc-8ccc-cccccccccccb', '11111111-1111-4111-8111-111111111112', 'confirmed')$$,
+    '42501',
+    NULL,
+    'reservations_insert_own: member A2 (studio A) cannot INSERT reservation for a studio-B class (SQLSTATE 42501)'
 );
 
 -- ---------- reservations_update_own ----------
