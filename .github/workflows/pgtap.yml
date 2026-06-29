@@ -194,4 +194,5 @@ jobs:
             packages/db/tests/rls/push_tokens.sql \
             packages/db/tests/rls/idempotency_keys.sql \
             packages/db/tests/rls/outbox.sql \
-            packages/db/tests/rls/cron_role.sql
+            packages/db/tests/rls/cron_role.sql \
+            packages/db/tests/rls/constraints.sql
