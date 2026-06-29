@@ -82,6 +82,13 @@ class FakeRedis implements RedisLike {
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
+  async setnx(key: string, value: string | number): Promise<number> {
+    if (this.store.has(key)) return 0;
+    this.store.set(key, String(value));
+    return 1;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
   async mget(...keys: string[]): Promise<unknown[]> {
     return keys.map((k) => {
       const v = this.store.get(k);
@@ -315,5 +322,55 @@ describe('getManyRemaining', () => {
     await counter.reset(CLASS_ID_2, 7);
 
     await expect(counter.getManyRemaining([CLASS_ID, CLASS_ID_2])).resolves.toStrictEqual([12, 7]);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  decrOrInit — issue #412 (missing/evicted key guard)                */
+/* ------------------------------------------------------------------ */
+
+describe('decrOrInit', () => {
+  it('seeds the key to capacity and decrements when the key is absent', async () => {
+    const redis = new FakeRedis();
+    const counter = createRedisRemainingCounter(redis);
+    // Key does not exist: without decrOrInit, plain decr would return -1
+    // (Redis creates the key at 0, then decrements). With decrOrInit, the
+    // key is seeded to capacity=20 first, then decremented to 19.
+    await expect(counter.decrOrInit(CLASS_ID, 20)).resolves.toBe(19);
+    expect(redis.store.get(`class:${CLASS_ID}:remaining`)).toBe('19');
+  });
+
+  it('does NOT re-seed an existing key — just decrements', async () => {
+    const redis = new FakeRedis();
+    const counter = createRedisRemainingCounter(redis);
+    await counter.reset(CLASS_ID, 5);
+    // Key already exists with value 5; SETNX is a noop; DECR → 4.
+    await expect(counter.decrOrInit(CLASS_ID, 99)).resolves.toBe(4);
+    expect(redis.store.get(`class:${CLASS_ID}:remaining`)).toBe('4');
+  });
+
+  it('returns a positive value for the first booking on an evicted key (issue #412 regression)', async () => {
+    // Simulates the eviction scenario from issue #412: the key was
+    // evicted between class creation and this booking. A plain decr
+    // would return -1 → waitlisted. decrOrInit seeds from capacity
+    // and returns a non-negative value so the booking proceeds.
+    const redis = new FakeRedis();
+    const counter = createRedisRemainingCounter(redis);
+    const remaining = await counter.decrOrInit(CLASS_ID, 30);
+    expect(remaining).toBeGreaterThanOrEqual(0);
+  });
+
+  it('handles the "capacity = 1" boundary: first booking returns 0 (last seat)', async () => {
+    const redis = new FakeRedis();
+    const counter = createRedisRemainingCounter(redis);
+    await expect(counter.decrOrInit(CLASS_ID, 1)).resolves.toBe(0);
+  });
+
+  it('handles the "capacity = 0" class: first booking returns -1 → waitlist', async () => {
+    // A class with capacity=0 is effectively closed. decrOrInit seeds
+    // to 0 then decrements to -1, correctly signalling full capacity.
+    const redis = new FakeRedis();
+    const counter = createRedisRemainingCounter(redis);
+    await expect(counter.decrOrInit(CLASS_ID, 0)).resolves.toBe(-1);
   });
 });

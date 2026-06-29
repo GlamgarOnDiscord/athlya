@@ -378,6 +378,14 @@ class AtomicCounter implements BookingCounter {
     this.remaining -= 1;
     return Promise.resolve(this.remaining);
   }
+  public async decrRemainingOrInit(_classId: string, capacity: number): Promise<number> {
+    // In the property test the counter is always initialised (seeded via
+    // the constructor), so SETNX is always a noop. Delegate to decrRemaining
+    // which uses the already-seeded value. The capacity param is unused but
+    // required by the interface (issue #412).
+    void capacity;
+    return this.decrRemaining();
+  }
   public async incrRemaining(): Promise<number> {
     this.remaining += 1;
     return Promise.resolve(this.remaining);

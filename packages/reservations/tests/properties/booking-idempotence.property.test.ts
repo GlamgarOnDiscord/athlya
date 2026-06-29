@@ -245,6 +245,10 @@ function buildFakeCounter(capacity: number): BookingCounter {
       remaining -= 1;
       return remaining;
     },
+    decrRemainingOrInit: async (_classId: string, _capacity: number) => {
+      remaining -= 1;
+      return remaining;
+    },
     incrRemaining: async () => {
       remaining += 1;
       return remaining;

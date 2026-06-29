@@ -79,6 +79,28 @@ export interface RemainingCounter extends RemainingCounterReader {
   decr(classId: string): Promise<number>;
 
   /**
+   * Seed the counter to `capacity` via SETNX (only when absent),
+   * then atomically DECR and return the new value.
+   *
+   * Use this instead of {@link decr} when the key may be missing or
+   * evicted. A plain DECR on an absent key creates the key at 0 and
+   * returns -1, falsely signalling "capacity exhausted" even when the
+   * class has seats available. SETNX + DECR seeds the key to the DB
+   * capacity before decrementing, so the first booking on an
+   * uninitialized counter correctly claims a seat (issue #412).
+   *
+   * The seeded value is the class's total capacity, not its remaining
+   * confirmed count. If confirmed seats already exist the counter will
+   * be temporarily optimistic. The PostgreSQL capacity trigger
+   * (`enforce_class_capacity`) remains the authoritative last-line
+   * guard: it rejects any insert that would exceed capacity, and the
+   * `ClassCapacityExceededError` path in `bookClass` compensates with
+   * INCR and falls through to the waitlist branch. The scheduled
+   * reconcile job corrects the counter for subsequent bookings.
+   */
+  decrOrInit(classId: string, capacity: number): Promise<number>;
+
+  /**
    * Atomically increment the counter and return the new value. Used
    * both as the compensating action of a failed {@link decr} and as
    * the happy-path cancellation bump (Requirement 9.4).
@@ -118,6 +140,13 @@ export interface RedisLike {
   get(key: string): Promise<unknown>;
   mget(...keys: string[]): Promise<unknown[]>;
   set(key: string, value: string | number): Promise<unknown>;
+  /**
+   * SETNX — set key to value only when the key does not exist.
+   * Returns 1 if the key was set, 0 if it already existed.
+   * Used by `decrRemainingOrInit` to seed an absent counter atomically
+   * before decrementing (issue #412).
+   */
+  setnx(key: string, value: string | number): Promise<number>;
   incr(key: string): Promise<number>;
   decr(key: string): Promise<number>;
 }
@@ -185,6 +214,16 @@ export function createRedisRemainingCounter(
 
     async decr(classId: string): Promise<number> {
       return client.decr(key(classId));
+    },
+
+    async decrOrInit(classId: string, capacity: number): Promise<number> {
+      const k = key(classId);
+      // SETNX seeds the key to `capacity` only when absent; noop when
+      // present. The subsequent DECR is always atomic in Redis. Two
+      // concurrent "first bookings" may both call SETNX — one wins
+      // (sets to capacity) and one is a noop; both then DECR safely.
+      await client.setnx(k, capacity);
+      return client.decr(k);
     },
 
     async incr(classId: string): Promise<number> {

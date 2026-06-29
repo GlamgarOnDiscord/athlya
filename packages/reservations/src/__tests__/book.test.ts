@@ -138,6 +138,7 @@ interface Doubles {
   insertOutbox: Mock<BookingRepo['insertOutbox']>;
   countWaitlistAhead: Mock<BookingRepo['countWaitlistAhead']>;
   decrRemaining: Mock<BookingCounter['decrRemaining']>;
+  decrRemainingOrInit: Mock<BookingCounter['decrRemainingOrInit']>;
   incrRemaining: Mock<BookingCounter['incrRemaining']>;
   buildCreated: Mock<BookingEventPublisher['buildReservationCreated']>;
   buildWaitlisted: Mock<BookingEventPublisher['buildReservationWaitlisted']>;
@@ -168,6 +169,7 @@ function buildDoubles(): Doubles {
   });
 
   const decrRemaining = vi.fn<BookingCounter['decrRemaining']>();
+  const decrRemainingOrInit = vi.fn<BookingCounter['decrRemainingOrInit']>();
   const incrRemaining = vi
     .fn<BookingCounter['incrRemaining']>()
     // `incrRemaining` is called for compensating actions only; the
@@ -192,7 +194,7 @@ function buildDoubles(): Doubles {
     insertOutbox,
     countWaitlistAhead,
   };
-  const counter: BookingCounter = { decrRemaining, incrRemaining };
+  const counter: BookingCounter = { decrRemaining, decrRemainingOrInit, incrRemaining };
   const publisher: BookingEventPublisher = {
     buildReservationCreated: buildCreated,
     buildReservationWaitlisted: buildWaitlisted,
@@ -207,6 +209,7 @@ function buildDoubles(): Doubles {
     insertOutbox,
     countWaitlistAhead,
     decrRemaining,
+    decrRemainingOrInit,
     incrRemaining,
     buildCreated,
     buildWaitlisted,
@@ -237,7 +240,7 @@ describe('bookClass — happy path (confirmed booking)', () => {
     d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
     // DECR returns a non-negative value → we successfully claimed
     // a seat.
-    d.decrRemaining.mockResolvedValueOnce(5);
+    d.decrRemainingOrInit.mockResolvedValueOnce(5);
     d.insertReservation.mockResolvedValueOnce(CONFIRMED_ROW);
     d.insertOutbox.mockResolvedValueOnce(undefined);
 
@@ -249,9 +252,9 @@ describe('bookClass — happy path (confirmed booking)', () => {
       remaining: 5,
     });
 
-    // Redis DECR runs exactly once; no compensating INCR on the
-    // happy path.
-    expect(d.decrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+    // decrRemainingOrInit runs exactly once with the class capacity;
+    // no compensating INCR on the happy path.
+    expect(d.decrRemainingOrInit).toHaveBeenCalledExactlyOnceWith(CLASS_ID, FUTURE_CLASS.capacity);
     expect(d.incrRemaining).not.toHaveBeenCalled();
 
     // The INSERT runs inside the transaction started by
@@ -287,7 +290,7 @@ describe('bookClass — happy path (confirmed booking)', () => {
       order.push('findClass');
       return Promise.resolve(FUTURE_CLASS);
     });
-    d.decrRemaining.mockImplementationOnce(() => {
+    d.decrRemainingOrInit.mockImplementationOnce(() => {
       order.push('decr');
       return Promise.resolve(0);
     });
@@ -315,7 +318,7 @@ describe('bookClass — waitlist branch (DECR < 0)', () => {
     const d = buildDoubles();
     d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
     // DECR returned a negative value → class is full.
-    d.decrRemaining.mockResolvedValueOnce(-1);
+    d.decrRemainingOrInit.mockResolvedValueOnce(-1);
     d.insertReservation.mockResolvedValueOnce(WAITLIST_ROW);
     // 2 people ahead → our position is 3.
     d.countWaitlistAhead.mockResolvedValueOnce(2);
@@ -369,7 +372,7 @@ describe('bookClass — waitlist branch (DECR < 0)', () => {
   it('returns position = 1 when the waitlist is empty', async () => {
     const d = buildDoubles();
     d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
-    d.decrRemaining.mockResolvedValueOnce(-1);
+    d.decrRemainingOrInit.mockResolvedValueOnce(-1);
     d.insertReservation.mockResolvedValueOnce(WAITLIST_ROW);
     d.countWaitlistAhead.mockResolvedValueOnce(0);
 
@@ -391,7 +394,7 @@ describe('bookClass — UniqueViolation on confirmed insert', () => {
   it('compensates with INCR, looks up the existing row, returns already_booked, no duplicate outbox', async () => {
     const d = buildDoubles();
     d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
-    d.decrRemaining.mockResolvedValueOnce(10);
+    d.decrRemainingOrInit.mockResolvedValueOnce(10);
     // First insert inside the tx throws the unique-violation.
     d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
     // Then the flow opens a fresh tx and reads back the existing
@@ -427,7 +430,7 @@ describe('bookClass — UniqueViolation on confirmed insert', () => {
     // `.code === 'UNIQUE_VIOLATION'`. Both must be handled.
     const d = buildDoubles();
     d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
-    d.decrRemaining.mockResolvedValueOnce(5);
+    d.decrRemainingOrInit.mockResolvedValueOnce(5);
 
     const adapterError: Error & { code: string } = Object.assign(
       new Error('duplicate key value violates unique constraint'),
@@ -454,7 +457,7 @@ describe('bookClass — UniqueViolation on confirmed insert', () => {
     // inventing a success.
     const d = buildDoubles();
     d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
-    d.decrRemaining.mockResolvedValueOnce(5);
+    d.decrRemainingOrInit.mockResolvedValueOnce(5);
     d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
     d.findExisting.mockResolvedValueOnce(null);
 
@@ -474,7 +477,7 @@ describe('bookClass — UniqueViolation on waitlist insert (DECR < 0)', () => {
     const d = buildDoubles();
     d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
     // DECR goes negative → waitlist branch
-    d.decrRemaining.mockResolvedValueOnce(-1);
+    d.decrRemainingOrInit.mockResolvedValueOnce(-1);
     // The waitlist INSERT throws UniqueViolationError (duplicate replay)
     d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
     // The fallback lookup returns the pre-existing waitlist row
@@ -505,7 +508,7 @@ describe('bookClass — UniqueViolation on waitlist insert (DECR < 0)', () => {
   it('throws when the waitlist unique-violation lookup returns null', async () => {
     const d = buildDoubles();
     d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
-    d.decrRemaining.mockResolvedValueOnce(-1);
+    d.decrRemainingOrInit.mockResolvedValueOnce(-1);
     d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
     d.findExisting.mockResolvedValueOnce(null);
 
@@ -519,7 +522,7 @@ describe('bookClass — UniqueViolation on waitlist insert (DECR < 0)', () => {
   it('rethrows non-unique errors from the waitlist INSERT without INCR', async () => {
     const d = buildDoubles();
     d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
-    d.decrRemaining.mockResolvedValueOnce(-1);
+    d.decrRemainingOrInit.mockResolvedValueOnce(-1);
     const boom = new Error('db outage');
     d.insertReservation.mockRejectedValueOnce(boom);
 
@@ -539,7 +542,7 @@ describe('bookClass — ClassCapacityExceeded on confirmed insert', () => {
   it('compensates with INCR and falls through to waitlist when PG rejects capacity', async () => {
     const d = buildDoubles();
     d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
-    d.decrRemaining.mockResolvedValueOnce(3);
+    d.decrRemainingOrInit.mockResolvedValueOnce(3);
     d.insertReservation
       .mockRejectedValueOnce(new ClassCapacityExceededError())
       .mockResolvedValueOnce(WAITLIST_ROW);
@@ -580,7 +583,7 @@ describe('bookClass — class_in_past (Req 8.6)', () => {
     // request MUST NOT perturb the seat counter — otherwise
     // replay-happy clients could grief the counter with
     // in-the-past class IDs.
-    expect(d.decrRemaining).not.toHaveBeenCalled();
+    expect(d.decrRemainingOrInit).not.toHaveBeenCalled();
     expect(d.incrRemaining).not.toHaveBeenCalled();
     expect(d.withTransaction).not.toHaveBeenCalled();
   });
@@ -598,7 +601,7 @@ describe('bookClass — class_in_past (Req 8.6)', () => {
     const result = await invoke(d.deps);
 
     expect(result).toEqual({ code: 'class_in_past' });
-    expect(d.decrRemaining).not.toHaveBeenCalled();
+    expect(d.decrRemainingOrInit).not.toHaveBeenCalled();
   });
 });
 
@@ -614,7 +617,7 @@ describe('bookClass — class_not_found', () => {
     const result = await invoke(d.deps);
 
     expect(result).toEqual({ code: 'class_not_found' });
-    expect(d.decrRemaining).not.toHaveBeenCalled();
+    expect(d.decrRemainingOrInit).not.toHaveBeenCalled();
     expect(d.withTransaction).not.toHaveBeenCalled();
   });
 });
@@ -627,7 +630,7 @@ describe('bookClass — arbitrary error inside the tx', () => {
   it('compensates with INCR and rethrows on a non-unique DB error', async () => {
     const d = buildDoubles();
     d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
-    d.decrRemaining.mockResolvedValueOnce(3);
+    d.decrRemainingOrInit.mockResolvedValueOnce(3);
     const boom = new Error('neon down');
     d.insertReservation.mockRejectedValueOnce(boom);
 
@@ -648,7 +651,7 @@ describe('bookClass — arbitrary error inside the tx', () => {
     // rejection like any other internal error.
     const d = buildDoubles();
     d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
-    d.decrRemaining.mockResolvedValueOnce(5);
+    d.decrRemainingOrInit.mockResolvedValueOnce(5);
     d.insertReservation.mockResolvedValueOnce(CONFIRMED_ROW);
     const boom = new Error('outbox constraint violation');
     d.insertOutbox.mockRejectedValueOnce(boom);
