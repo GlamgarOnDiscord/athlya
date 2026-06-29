@@ -727,6 +727,7 @@ beforeAll(async () => {
     '0020_outbox_backfill_studio_id.sql',
     '0021_classes_fts_composite_gin.sql',
     '0022_reservation_rls_studio_isolation.sql',
+    '0023_restrict_null_studio_admin_policy.sql',
   ];
   for (const name of migrations) {
     await applyMigration(rootClient, readMigration(name));
