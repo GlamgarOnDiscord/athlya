@@ -1,11 +1,13 @@
 # Runbook — Preview environments per PR (CN.7.2)
 
-Each pull request automatically gets an isolated API preview:
+Each pull request automatically gets a fully isolated API preview (issues #237, #419):
 
-- **Neon branch** — a DB fork created from the project primary branch. Schema + seed data are copied; writes are fully isolated from staging/production.
-- **Cloudflare Worker** — `athlya-api-pr-<N>` with secrets scoped to that Worker (including per-PR `DB_URL`). Redis, queues and R2 are shared with staging.
+- **Neon branch** — a DB fork created from the project primary branch. Schema + seed data are copied; writes are fully isolated from staging/production. Migrations are applied automatically after the branch is created.
+- **Cloudflare Worker** — `athlya-api-pr-<N>` with secrets scoped to that Worker (including per-PR `DB_URL`). Redis is shared with the dedicated preview database.
+- **Queues** — per-PR `athlya-events-preview-pr-<N>*` queues, provisioned on PR open/synchronize and deleted on PR close. Concurrent PRs never share a queue.
+- **R2** — shared preview buckets (`athlya-avatars-preview`, `athlya-exports-preview`).
 
-The Neon branch and Worker are deleted when the PR closes.
+The Neon branch, Worker, and queue set are deleted when the PR closes.
 
 ---
 
@@ -20,8 +22,8 @@ In **Settings → Secrets → Actions**, add:
 | `CLOUDFLARE_API_TOKEN`     | CF API token with **Workers:Edit** scope                |
 | `CLOUDFLARE_ACCOUNT_ID`    | CF account ID (visible in the Cloudflare dashboard URL) |
 | `NEON_API_KEY`             | Neon project API key (Project settings → API keys)      |
-| `PREVIEW_REDIS_URL`        | Upstash Redis URL — staging instance                    |
-| `PREVIEW_REDIS_TOKEN`      | Upstash Redis token — staging instance                  |
+| `PREVIEW_REDIS_URL`        | Upstash Redis URL — dedicated preview instance          |
+| `PREVIEW_REDIS_TOKEN`      | Upstash Redis token — dedicated preview instance        |
 | `PREVIEW_JWT_JWKS_URL`     | JWKS endpoint for preview JWT verification              |
 | `PREVIEW_TURNSTILE_SECRET` | Cloudflare Turnstile secret (staging key is fine)       |
 
@@ -43,16 +45,7 @@ pnpm --filter @athlya/api exec wrangler r2 bucket create athlya-avatars-preview 
 pnpm --filter @athlya/api exec wrangler r2 bucket create athlya-exports-preview --env preview
 ```
 
-### 4. Provision Cloudflare queues
-
-If the staging queues (`athlya-events-staging`, `athlya-events-staging-dlq`) do not yet exist:
-
-```bash
-pnpm --filter @athlya/api exec wrangler queues create athlya-events-staging
-pnpm --filter @athlya/api exec wrangler queues create athlya-events-staging-dlq
-```
-
-The preview env reuses these queues.
+R2 buckets are shared across all preview PRs (not per-PR) and are not deleted on PR close.
 
 ---
 
@@ -65,45 +58,40 @@ PR opened / commit pushed
 Create Neon branch "preview-pr-{N}"
        │
        ▼
-wrangler secret put * --env preview --name athlya-api-pr-{N}
-  (DB_URL = Neon branch URI; Redis/JWT/Turnstile = staging preview secrets)
+Run DB migrations on the Neon branch (idempotent — migrate.mjs)
        │
        ▼
-wrangler versions upload --env preview --name athlya-api-pr-{N}
+Generate wrangler.preview-pr.toml (queue names patched to pr-{N} variants)
+       │
+       ▼
+wrangler secret put * --env preview --name athlya-api-pr-{N}
+  (DB_URL = Neon branch URI; Redis/JWT/Turnstile = preview secrets)
+       │
+       ▼
+Provision per-PR queues: athlya-events-preview-pr-{N},
+  athlya-events-preview-pr-{N}-dlq,
+  athlya-events-notifications-preview-pr-{N}, ...
+       │
+       ▼
+wrangler versions upload --config wrangler.preview-pr.toml
+  --env preview --name athlya-api-pr-{N}
        │
        ▼
 https://athlya-api-pr-{N}.<subdomain>.workers.dev
        │
        ▼
-Post/update PR comment with preview URL + branch name
+Post/update PR comment with preview URL, Worker name, Neon branch, queues
        │
 PR closed (merged or abandoned)
        │
        ▼
 wrangler delete --name athlya-api-pr-{N}
+Delete per-PR queues: athlya-events-preview-pr-{N}* (6 queues)
 Delete Neon branch "preview-pr-{N}"
+Flush Redis keys "pr-{N}:*"
 ```
 
-Concurrent PRs are safe: each PR owns a dedicated Worker name and `DB_URL` secret namespace.
-
----
-
-## Known limitations
-
-**Preview uses staging Redis / queues / R2.**
-Events, exports and avatars written during preview testing land in the staging stores. This is intentional to keep setup simple. Clean up manually if needed:
-
-```bash
-# List preview exports in R2
-wrangler r2 object list athlya-exports-preview --env preview
-```
-
-**Legacy shared Worker `athlya-api-preview`.**
-Older PRs may have deployed to the shared Worker before per-PR isolation. Delete it manually if unused:
-
-```bash
-pnpm --filter @athlya/api exec wrangler delete --name athlya-api-preview --force
-```
+Concurrent PRs are fully safe: each PR owns a dedicated Worker name, `DB_URL` secret namespace, Neon branch, and queue set.
 
 ---
 
@@ -119,4 +107,16 @@ curl -sf "https://api.neon.tech/v1/projects/${NEON_PROJECT_ID}/branches" \
 
 # Worker
 pnpm --filter @athlya/api exec wrangler delete --name athlya-api-pr-<N> --force
+
+# Queues (replace N with the PR number)
+N=<N>
+for Q in \
+  "athlya-events-preview-pr-${N}" \
+  "athlya-events-preview-pr-${N}-dlq" \
+  "athlya-events-notifications-preview-pr-${N}" \
+  "athlya-events-notifications-preview-pr-${N}-dlq" \
+  "athlya-events-rgpd-preview-pr-${N}" \
+  "athlya-events-rgpd-preview-pr-${N}-dlq"; do
+  pnpm --filter @athlya/api exec wrangler queues delete "$Q" || true
+done
 ```
