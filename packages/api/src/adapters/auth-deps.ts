@@ -17,10 +17,12 @@
  *   - Uses `env.EVENTS_QUEUE` (Cloudflare Queues producer binding) to
  *     publish `auth.user.registered` / `auth.user.deleted` events
  *     via the `publish` helper from `@athlya/api/events/publish`.
- *   - Best-effort: publish failures are logged but do NOT fail the
- *     request — the outbox would catch them if we were inside a
- *     transaction, but the auth service emits events AFTER its own
- *     inserts commit so outbox attachment is out of scope here.
+ *   - Durability: compliance-critical events (auth.user.*) rethrow
+ *     outbox failures so the caller returns 500 and the client retries.
+ *     Advisory events (login.suspicious, session.*) log at error level
+ *     for Sentry capture and continue to best-effort queue delivery.
+ *   - DB_URL MUST be a role with BYPASSRLS — the outbox table has no
+ *     FOR INSERT policy and will reject inserts from athlya_app.
  *
  * Cloudflare Workers caching strategy (Vague 18 — slice B1)
  * ---------------------------------------------------------
@@ -258,51 +260,7 @@ async function getAuthState(env: AthlyaBindings): Promise<AuthServiceState> {
       jwtAudience:
         (env as { JWT_AUDIENCE?: string }).JWT_AUDIENCE ?? `athlya-api-${env.ENVIRONMENT}`,
     },
-    publishEvent: async (event: AthlyaEvent) => {
-      // Step 1 — write to outbox for durability. Not in the same
-      // transaction as the user mutation (issue #298 tracks the full
-      // transactional outbox as follow-up), but this closes the
-      // "queue-publish failure = event silently lost" gap: if step 2
-      // fails, the drain worker picks up from the outbox on the next
-      // cron tick. ON CONFLICT DO NOTHING makes re-publishes idempotent.
-      const dbHttp = getOrCreateDbHttp(env.DB_URL);
-      try {
-        await dbHttp
-          .insert(outbox)
-          .values({
-            eventId: event.id,
-            eventType: event.type,
-            payload: event as Record<string, unknown>,
-            occurredAt: new Date(event.occurredAt),
-          })
-          .onConflictDoNothing();
-      } catch (outboxErr) {
-        // Outbox write failed — event may be lost if step 2 also
-        // fails. Log at error level so Sentry captures it.
-        console.error('[auth-deps] publishEvent: outbox write failed', {
-          eventId: event.id,
-          eventType: event.type,
-          error: outboxErr instanceof Error ? outboxErr.message : String(outboxErr),
-        });
-      }
-
-      // Step 2 — publish directly to queue for low-latency delivery.
-      // If this fails the outbox row (written above) ensures the drain
-      // picks up the event. Best-effort: a double-publish is safe
-      // because queue consumers are idempotent on event.id.
-      try {
-        await publish(event, undefined, buildRoutedPublishDeps(env));
-      } catch (err) {
-        console.warn(
-          '[auth-deps] publishEvent: queue publish failed — drain will retry from outbox',
-          {
-            eventId: event.id,
-            eventType: event.type,
-            error: err instanceof Error ? err.message : String(err),
-          },
-        );
-      }
-    },
+    publishEvent: (event: AthlyaEvent) => buildPublishEvent(env)(event),
   };
 
   return {
@@ -312,6 +270,73 @@ async function getAuthState(env: AthlyaBindings): Promise<AuthServiceState> {
     passwordResetRepo,
     emailTransport,
     resetLinkBaseUrl,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Auth event publisher (exported for unit testing — issue #411)     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Returns a `publishEvent` function bound to the supplied env.
+ *
+ * Durability policy:
+ *   - Compliance-critical events (auth.user.*): outbox failure rethrows
+ *     so the caller returns 500 and the client can retry. The user
+ *     mutation is idempotent (soft delete / unique constraint).
+ *   - Advisory events (auth.login.suspicious, auth.session.*): outbox
+ *     failure is logged at error level for Sentry; execution continues
+ *     to step 2 (direct queue publish).
+ *
+ * REQUIREMENT: env.DB_URL must point to a role with BYPASSRLS (e.g.
+ * athlya_owner). The outbox table has no FOR INSERT policy and will
+ * reject inserts from athlya_app (NOBYPASSRLS) with SQLSTATE 42501.
+ */
+export function buildPublishEvent(env: AthlyaBindings): (event: AthlyaEvent) => Promise<void> {
+  const COMPLIANCE_CRITICAL_PREFIXES = ['auth.user.'] as const;
+
+  return async (event: AthlyaEvent) => {
+    const isCritical = COMPLIANCE_CRITICAL_PREFIXES.some((p) =>
+      (event.type as string).startsWith(p),
+    );
+
+    const dbHttp = getOrCreateDbHttp(env.DB_URL);
+    try {
+      await dbHttp
+        .insert(outbox)
+        .values({
+          eventId: event.id,
+          eventType: event.type,
+          payload: event as Record<string, unknown>,
+          occurredAt: new Date(event.occurredAt),
+        })
+        .onConflictDoNothing();
+    } catch (outboxErr) {
+      console.error('[auth-deps] publishEvent: outbox write failed', {
+        eventId: event.id,
+        eventType: event.type,
+        critical: isCritical,
+        error: outboxErr instanceof Error ? outboxErr.message : String(outboxErr),
+      });
+      if (isCritical) {
+        throw outboxErr;
+      }
+    }
+
+    // Direct queue publish for low-latency delivery. If this fails the
+    // outbox row ensures the drain worker retries on the next cron tick.
+    try {
+      await publish(event, undefined, buildRoutedPublishDeps(env));
+    } catch (err) {
+      console.warn(
+        '[auth-deps] publishEvent: queue publish failed — drain will retry from outbox',
+        {
+          eventId: event.id,
+          eventType: event.type,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      );
+    }
   };
 }
 
