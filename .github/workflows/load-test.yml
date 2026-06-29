@@ -1,18 +1,18 @@
 name: Load test (k6)
 
-# Sprint 14 / Slice 14.2 (Epic CN.2.3) — déclenchement conditionnel
-# sur les PRs qui touchent les paths critiques (reservations + api),
-# plus un trigger manuel via workflow_dispatch pour les ops.
+# Runs k6 against staging on PRs touching reservations/api/k6 paths.
+# Manual dispatch supports staging and production perf gates.
 #
-# Le workflow tourne k6 contre le staging URL et fail le build si
-# les thresholds définis dans `k6/book-class.js` sont violés (SLO
-# S1 p99 < 500ms + error rate < 0.1%).
+# Required secrets / variables (Settings > Secrets / Variables):
+#   K6_STAGING_BASE_URL    (variable) staging API gateway URL
+#   K6_STAGING_AUTH_TOKENS (secret)   CSV of JWTs — one per simulated user
+#   K6_STAGING_STUDIO_ID   (secret)   test studio UUID
+#   K6_STAGING_CLASS_IDS   (secret)   CSV of class UUIDs (>= 10)
 #
-# Secrets requis (à provisionner via GitHub Settings > Secrets) :
-#   - K6_STAGING_BASE_URL : ex `https://staging.api.athlya.app`
-#   - K6_STAGING_AUTH_TOKEN : JWT valide pour un user de test
-#   - K6_STAGING_STUDIO_ID : UUID du studio de test
-#   - K6_STAGING_CLASS_IDS : CSV d'UUIDs de classes (≥10)
+# K6_STAGING_AUTH_TOKEN (singular) is accepted for backward compatibility
+# but triggers a warning in the k6 script because a single token causes
+# all VUs to share one identity, producing 409 duplicates instead of
+# real booking contention (issue #414).
 
 on:
   pull_request:
@@ -70,12 +70,12 @@ jobs:
       - name: Run book-class load test
         env:
           K6_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
+          K6_AUTH_TOKENS: ${{ secrets.K6_STAGING_AUTH_TOKENS }}
           K6_AUTH_TOKEN: ${{ secrets.K6_STAGING_AUTH_TOKEN }}
           K6_STUDIO_ID: ${{ secrets.K6_STAGING_STUDIO_ID }}
           K6_CLASS_IDS: ${{ secrets.K6_STAGING_CLASS_IDS }}
-        run: |
-          k6 run k6/book-class.js \
-            --summary-export=k6-book-class-summary.json
+          K6_SCENARIO: ${{ github.event.inputs.scenario || 'nominal_load' }}
+        run: k6 run k6/book-class.js --summary-export=k6-book-class-summary.json
 
       - name: Upload k6 summary
         if: always()
@@ -114,9 +114,6 @@ jobs:
         run: k6 run k6/list-classes.js
 
   k6-syntax-lint:
-    # Syntax/threshold sanity even when staging secrets aren't
-    # set. Catches a malformed k6 script before the next ops
-    # provisioning step ships staging URLs.
     name: k6 syntax lint
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -133,7 +130,7 @@ jobs:
 
       - name: k6 archive (parses without running)
         env:
-          K6_AUTH_TOKEN: 'lint-token'
+          K6_AUTH_TOKENS: 'lint-token-1,lint-token-2'
           K6_STUDIO_ID: '00000000-0000-4000-8000-000000000000'
           K6_CLASS_IDS: '00000000-0000-4000-8000-000000000001'
         run: |
@@ -141,10 +138,6 @@ jobs:
           k6 archive k6/list-classes.js -O /tmp/list.tar
           echo "k6 scripts parse cleanly"
 
-  # Soak + spike gate — only on workflow_dispatch targeting production.
-  # Must pass before any production deploy. Runs the long-duration soak
-  # (30 min, 50 VUs) followed by a spike (200 VU burst) to verify the
-  # API holds under sustained load and sudden traffic surges.
   staging-perf-gate:
     name: staging perf gate (soak + spike)
     runs-on: ubuntu-latest
@@ -171,24 +164,22 @@ jobs:
       - name: Soak test (30 min, 50 VUs)
         env:
           K6_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
+          K6_AUTH_TOKENS: ${{ secrets.K6_STAGING_AUTH_TOKENS }}
           K6_AUTH_TOKEN: ${{ secrets.K6_STAGING_AUTH_TOKEN }}
           K6_STUDIO_ID: ${{ secrets.K6_STAGING_STUDIO_ID }}
           K6_CLASS_IDS: ${{ secrets.K6_STAGING_CLASS_IDS }}
           K6_SCENARIO: soak
-        run: |
-          k6 run k6/book-class.js \
-            --summary-export=k6-soak-summary.json
+        run: k6 run k6/book-class.js --summary-export=k6-soak-summary.json
 
       - name: Spike test (200 VU burst)
         env:
           K6_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
+          K6_AUTH_TOKENS: ${{ secrets.K6_STAGING_AUTH_TOKENS }}
           K6_AUTH_TOKEN: ${{ secrets.K6_STAGING_AUTH_TOKEN }}
           K6_STUDIO_ID: ${{ secrets.K6_STAGING_STUDIO_ID }}
           K6_CLASS_IDS: ${{ secrets.K6_STAGING_CLASS_IDS }}
           K6_SCENARIO: spike
-        run: |
-          k6 run k6/book-class.js \
-            --summary-export=k6-spike-summary.json
+        run: k6 run k6/book-class.js --summary-export=k6-spike-summary.json
 
       - name: Upload perf gate summaries
         if: always()
