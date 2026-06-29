@@ -53,6 +53,7 @@ const REQUIRED = {
     'JWT_PUBLIC_KEY_PEM',
     'JWKS_JSON',
     'JWT_JWKS_URL',
+    'RESEND_API_KEY',
   ],
   reservations: [
     'DB_URL',

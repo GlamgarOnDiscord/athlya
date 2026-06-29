@@ -519,11 +519,24 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
  * keeps `null` as a future option for "transport refused — refuse
  * the route" if a stricter posture lands.
  */
-function buildPasswordResetEmailTransport(env: AthlyaBindings): PasswordResetEmailTransport {
+export function buildPasswordResetEmailTransport(env: AthlyaBindings): PasswordResetEmailTransport {
   const apiKey = env.RESEND_API_KEY;
   const fromAddress = env.RESEND_FROM || 'Athlya <noreply@athlya.app>';
 
   if (apiKey === undefined || apiKey.length === 0) {
+    if (env.ENVIRONMENT !== 'dev') {
+      return {
+        sendResetEmail() {
+          return Promise.reject(
+            new Error(
+              `[auth-deps] RESEND_API_KEY is not configured in ${env.ENVIRONMENT}. ` +
+                'Password reset emails cannot be sent. Set the secret with: ' +
+                `wrangler secret put RESEND_API_KEY --env ${env.ENVIRONMENT}`,
+            ),
+          );
+        },
+      };
+    }
     return {
       sendResetEmail(input) {
         console.warn(
