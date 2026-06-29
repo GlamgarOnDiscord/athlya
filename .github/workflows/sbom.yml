@@ -1,0 +1,73 @@
+name: SBOM + provenance
+
+# Generates a Software Bill of Materials (SBOM) and a GitHub artifact
+# attestation on every push to master and for every release tag.
+#
+# The SBOM is in SPDX 2.3 format and lists all production and development
+# dependencies resolved at build time. It is uploaded as a workflow artifact
+# (retention 90 days) and attested via sigstore so the provenance chain is
+# anchored to the specific commit SHA.
+#
+# Issue #420: supply-chain hardening.
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  sbom:
+    name: Generate SBOM + attest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate SBOM (anchore/sbom-action)
+        uses: anchore/sbom-action@f325610c9f50a54015d37c8d16cb3b0d2c8b2b0e # v0.20.0
+        with:
+          format: spdx-json
+          output-file: sbom.spdx.json
+          # Include dev dependencies — we attest the full build environment.
+          dependency-snapshot: true
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-${{ github.sha }}
+          path: sbom.spdx.json
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Attest SBOM provenance
+        # Sigstore-based attestation — binds the SBOM to the commit SHA and
+        # the OIDC identity of this GitHub Actions run. Verifiable with:
+        #   gh attestation verify sbom.spdx.json --repo GlamgarOnDiscord/athlya
+        uses: actions/attest-sbom@de37e3af5d0dc6e7e19b35de94b33e1c6e7dec84 # v2
+        with:
+          subject-path: sbom.spdx.json
+          sbom-path: sbom.spdx.json
