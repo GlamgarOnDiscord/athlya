@@ -149,14 +149,13 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
    * is disabled, but the shape leaves room for it) reuses the same
    * key. The entry is released on resolve.
    */
-  const keysInFlightRef = useRef<Map<string, string>>(new Map());
+  const keysInFlightRef = useRef(new Map<string, string>());
 
   /* --------------------------- fetch ------------------------------ */
 
   useEffect(() => {
     if (!bootResolved) return;
     let cancelled = false;
-    setState((s) => ({ ...s, status: { kind: 'loading' } }));
 
     const { from, to } = buildRange(new Date());
     const qs = new URLSearchParams({ from, to }).toString();
@@ -186,7 +185,7 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
   /* --------------------------- helpers ---------------------------- */
 
   const retry = useCallback(() => {
-    setState((s) => ({ ...s, reloadNonce: s.reloadNonce + 1 }));
+    setState((s) => ({ ...s, status: { kind: 'loading' }, reloadNonce: s.reloadNonce + 1 }));
   }, []);
 
   /** Apply a pure `remaining` delta to the ready list, no-op otherwise. */
