@@ -302,6 +302,8 @@ export function buildReservationsDeps(
         // concrete Redis primitive names.
         counter: {
           decrRemaining: (classId: string) => counter.decr(classId),
+          decrRemainingOrInit: (classId: string, capacity: number) =>
+            counter.decrOrInit(classId, capacity),
           incrRemaining: (classId: string) => counter.incr(classId),
         },
         publisher,

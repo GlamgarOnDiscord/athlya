@@ -275,8 +275,22 @@ export interface BookingRepo {
  * pulling the full interface.
  */
 export interface BookingCounter {
-  /** Atomically decrement `class:{classId}:remaining`; return the new value (may be negative). */
+  /**
+   * Atomically decrement `class:{classId}:remaining`; return the new value (may be negative).
+   *
+   * WARNING: a plain DECR on an absent key creates it at 0 and returns
+   * -1, falsely signalling "capacity exhausted". Prefer
+   * {@link decrRemainingOrInit} unless the key is guaranteed to exist.
+   */
   decrRemaining(classId: string): Promise<number>;
+  /**
+   * Seed the counter to `capacity` via SETNX (absent key only), then
+   * atomically DECR and return the new value. Prevents an absent/evicted
+   * Redis key from forcing waitlist while PostgreSQL capacity is available
+   * (issue #412). The PostgreSQL capacity trigger remains the authoritative
+   * guard; an optimistic counter is corrected by the reconcile job.
+   */
+  decrRemainingOrInit(classId: string, capacity: number): Promise<number>;
   /** Atomically increment `class:{classId}:remaining`; return the new value. */
   incrRemaining(classId: string): Promise<number>;
 }
@@ -572,7 +586,13 @@ export async function bookClass(input: BookClassInput): Promise<BookResult> {
   // rather than an opaque 5xx, and the capacity invariant is preserved.
   let remaining: number;
   try {
-    remaining = await counter.decrRemaining(classId);
+    // Use decrRemainingOrInit so an absent/evicted key does not falsely
+    // route to waitlist. Seeds the counter to classRow.capacity via SETNX
+    // before decrementing. If the class already has confirmed seats the
+    // counter will be temporarily optimistic; the PostgreSQL trigger is
+    // the authoritative guard and ClassCapacityExceededError falls through
+    // to the waitlist branch. The reconcile job corrects the counter. (#412)
+    remaining = await counter.decrRemainingOrInit(classId, classRow.capacity);
   } catch {
     return { code: 'counter_unavailable' };
   }
