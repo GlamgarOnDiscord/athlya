@@ -225,13 +225,13 @@ function useCameraScanner({ videoRef, onDetected, enabled }: UseCameraScannerOpt
     return () => {
       cancelled = true;
       detectedRef.current = false;
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-      if (streamRef.current !== null) {
-        for (const track of streamRef.current.getTracks()) track.stop();
-        streamRef.current = null;
+      const rafId = rafRef.current;
+      rafRef.current = null;
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      const stream = streamRef.current;
+      streamRef.current = null;
+      if (stream !== null) {
+        for (const track of stream.getTracks()) track.stop();
       }
     };
   }, [enabled, onDetected, videoRef]);
