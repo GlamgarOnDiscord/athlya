@@ -10,7 +10,7 @@
  */
 import type { ProblemDetails } from '@athlya/shared/schemas';
 
-export class ApiAuthError extends Error {
+class ApiAuthError extends Error {
   public readonly status: number;
   public readonly problem: ProblemDetails | undefined;
 

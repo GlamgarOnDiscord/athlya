@@ -26,7 +26,7 @@ export const REFRESH_COOKIE_NAME = 'athlya.refresh.studio';
  *
  * Sprint 1 / Slice 1.2 — Finding S4-006.
  */
-export const REFRESH_COOKIE_PATH = '/api/auth';
+const REFRESH_COOKIE_PATH = '/api/auth';
 
 export interface SetRefreshCookieOptions {
   readonly token: string;
