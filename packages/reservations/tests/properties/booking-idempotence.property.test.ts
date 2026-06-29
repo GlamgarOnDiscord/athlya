@@ -45,20 +45,16 @@
  *
  * Note on the waitlist replay path
  * --------------------------------
- * The confirmed-booking branch of `bookClass` explicitly catches
- * `UniqueViolationError` and returns `already_booked`. The waitlist
- * branch (entered when the Redis counter is already ≤ 0) does NOT:
- * a double-tap replay whose first call landed on the waitlist will
- * throw the unique-violation out of the second call. That exception
- * path is still spec-compliant — the SQL unique constraint is
- * upheld, no second row is written, the in-flight transaction rolls
- * back so no second outbox event is written. The property body
- * therefore swallows thrown exceptions: the spec bound is about the
- * committed state, not about the success/error disposition of the
- * replays. A future hardening task (tracked against Req 20.1) may
- * unify the two branches behind a single `already_booked` return;
- * until it does, the property is phrased so it stays green against
- * the current algorithm AND against the future one.
+ * Both the confirmed and waitlist branches of `bookClass` now catch
+ * `UniqueViolationError` and return `already_booked` (Req 8.5, 20.1).
+ * The property body previously swallowed thrown `UniqueViolationError`
+ * exceptions for the waitlist path. It still does so for compatibility
+ * with the fake repo — the fake's `withTransaction` rollback means the
+ * exception surfaces here when capacity=1 and the counter drives into
+ * negative territory on a replay, but only if the fake's in-memory
+ * `Map` key is already present (i.e. first call was waitlisted). The
+ * property remains correct because both outcomes (exception caught here,
+ * or `already_booked` returned) leave the committed state with ≤ 1 row.
  *
  * Why fast-check rather than a hand-written example loop?
  *   The universal claim — "any N, any capacity, any interleaving of
@@ -523,10 +519,10 @@ describe('bookClass — Property 2 (idempotence)', () => {
    * must hold.
    *
    * When `capacity = 1`, the second call's `DECR` reaches `-1`,
-   * entering the waitlist branch, where the current implementation
-   * does not catch `UniqueViolationError` (see module header).
-   * That path is already covered by P2.1 and P2.2, so excluding
-   * it here is sound.
+   * entering the waitlist branch. With the fix in place, the waitlist
+   * branch now returns `already_booked` on a unique violation. That
+   * path is covered by P2.1 and P2.2, so excluding it here is sound
+   * — this property focuses on the confirmed-replay regime.
    */
   it.prop([capacityArb, replayCountArb, uuidArb, uuidArb, uuidArb, idempotencyKeyArb], RUN_OPTS)(
     'after a confirmed first call, replays return already_booked and publish no further events (Req 8.5, 20.1)',

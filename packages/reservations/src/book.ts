@@ -495,29 +495,48 @@ async function completeWaitlistBooking(input: {
   readonly studioId: string;
   readonly repo: BookingRepo;
   readonly publisher: BookingEventPublisher;
-}): Promise<Extract<BookResult, { code: 'waitlisted' }>> {
+}): Promise<Extract<BookResult, { code: 'waitlisted' | 'already_booked' }>> {
   const { classId, userId, studioId, repo, publisher } = input;
 
-  const { reservation: waitlisted, position } = await repo.withTransaction(async (tx) => {
-    const row = await repo.insertReservation(tx, {
-      classId,
-      userId,
-      status: 'waitlist',
+  try {
+    const { reservation: waitlisted, position } = await repo.withTransaction(async (tx) => {
+      const row = await repo.insertReservation(tx, {
+        classId,
+        userId,
+        status: 'waitlist',
+      });
+      const ahead = await repo.countWaitlistAhead(tx, classId, row.createdAt);
+      const pos = ahead + 1;
+      const event = publisher.buildReservationWaitlisted({
+        reservationId: row.id,
+        classId,
+        userId,
+        studioId,
+        position: pos,
+      });
+      await repo.insertOutbox(tx, event);
+      return { reservation: row, position: pos };
     });
-    const ahead = await repo.countWaitlistAhead(tx, classId, row.createdAt);
-    const pos = ahead + 1;
-    const event = publisher.buildReservationWaitlisted({
-      reservationId: row.id,
-      classId,
-      userId,
-      studioId,
-      position: pos,
-    });
-    await repo.insertOutbox(tx, event);
-    return { reservation: row, position: pos };
-  });
 
-  return { code: 'waitlisted', reservation: waitlisted, position };
+    return { code: 'waitlisted', reservation: waitlisted, position };
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      // The user already holds a waitlist row (double-tap / retry).
+      // The transaction rolled back so no second outbox event is committed.
+      // Fetch the existing row and return already_booked — same idempotence
+      // contract as the confirmed branch.
+      const existing = await repo.withTransaction((tx) =>
+        repo.findExistingConfirmedOrWaitlistReservation(tx, classId, userId),
+      );
+      if (existing === null) {
+        throw new Error(
+          `bookClass: unique-violation on waitlist (${classId}, ${userId}) but no existing reservation found`,
+        );
+      }
+      return { code: 'already_booked', reservation: existing };
+    }
+    throw err;
+  }
 }
 
 export async function bookClass(input: BookClassInput): Promise<BookResult> {

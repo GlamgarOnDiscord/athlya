@@ -703,9 +703,34 @@ beforeAll(async () => {
   const rootConnString = started.getConnectionUri();
   rootClient = postgres(rootConnString, { max: 2, prepare: false });
 
-  await applyMigration(rootClient, readMigration('0000_init.sql'));
-  await applyMigration(rootClient, readMigration('0001_rls.sql'));
-  await applyMigration(rootClient, readMigration('0007_classes_fts.sql'));
+  const migrations = [
+    '0000_init.sql',
+    '0001_rls.sql',
+    '0002_export_jobs.sql',
+    '0003_audit_anonymization.sql',
+    '0004_rls_hardening.sql',
+    '0005_password_reset_audit_anonymize.sql',
+    '0006_anonymize_audit_scalar_guard.sql',
+    '0007_classes_fts.sql',
+    '0008_capacity_guard.sql',
+    '0009_audit_cron_grants.sql',
+    '0010_stripe_webhook_events.sql',
+    '0011_audit_log_app_insert.sql',
+    '0012_revoke_cron_audit_grant.sql',
+    '0013_reservations_waitlist_idx.sql',
+    '0014_outbox_studio_id.sql',
+    '0015_audit_log_studio_id.sql',
+    '0016_uuid_v7.sql',
+    '0017_audit_log_partition.sql',
+    '0018_reservations_user_id_idx.sql',
+    '0019_cron_role_nobypassrls.sql',
+    '0020_outbox_backfill_studio_id.sql',
+    '0021_classes_fts_composite_gin.sql',
+    '0022_reservation_rls_studio_isolation.sql',
+  ];
+  for (const name of migrations) {
+    await applyMigration(rootClient, readMigration(name));
+  }
 
   await bootstrapBookingRole(rootClient);
 
@@ -752,10 +777,7 @@ const RUN_OPTS = { numRuns: 20, seed: 0xc0ffee01 } as const;
 // Property — only registered when Docker is reachable. The
 // describe.skipIf matches the RLS suite's pattern exactly.
 //
-// SKIP (SP16.6) — confirmedCount stays 0; hypothesis: withTenant SET LOCAL falls out of scope inside the BYPASSRLS tenantClient transaction, causing findClass to return null.
-// ---------------------------------------------------------------------
-
-describe.skip('bookClass — Property 1 (capacity invariant)', () => {
+describe.skipIf(!dockerReady)('bookClass — Property 1 (capacity invariant)', () => {
   it('concurrent bookings never exceed class.capacity (Req 8.1, 8.2, 8.3, 8.4)', async () => {
     if (!rootClient || !tenantDb) {
       throw new Error('test infrastructure not initialised');

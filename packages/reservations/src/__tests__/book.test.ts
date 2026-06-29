@@ -466,6 +466,72 @@ describe('bookClass — UniqueViolation on confirmed insert', () => {
 });
 
 /* ------------------------------------------------------------------ */
+/*  UniqueViolation on waitlist insert — Req 8.4, 8.5                  */
+/* ------------------------------------------------------------------ */
+
+describe('bookClass — UniqueViolation on waitlist insert (DECR < 0)', () => {
+  it('looks up the existing row and returns already_booked, no duplicate outbox', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    // DECR goes negative → waitlist branch
+    d.decrRemaining.mockResolvedValueOnce(-1);
+    // The waitlist INSERT throws UniqueViolationError (duplicate replay)
+    d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
+    // The fallback lookup returns the pre-existing waitlist row
+    d.findExisting.mockResolvedValueOnce(WAITLIST_ROW);
+
+    const result = await invoke(d.deps);
+
+    expect(result).toEqual({
+      code: 'already_booked',
+      reservation: WAITLIST_ROW,
+    });
+
+    // Compensating INCR (for DECR < 0) was done before entering the
+    // waitlist branch — exactly once.
+    expect(d.incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+
+    // No second outbox event.
+    expect(d.insertOutbox).not.toHaveBeenCalled();
+    expect(d.buildWaitlisted).not.toHaveBeenCalled();
+    expect(d.buildCreated).not.toHaveBeenCalled();
+
+    // Two withTransaction calls: one for the failed waitlist insert,
+    // one for the fallback lookup.
+    expect(d.withTransaction).toHaveBeenCalledTimes(2);
+    expect(d.findExisting).toHaveBeenCalledExactlyOnceWith(d.txSeen[1], CLASS_ID, USER_ID);
+  });
+
+  it('throws when the waitlist unique-violation lookup returns null', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemaining.mockResolvedValueOnce(-1);
+    d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
+    d.findExisting.mockResolvedValueOnce(null);
+
+    await expect(invoke(d.deps)).rejects.toThrow(
+      /unique-violation.*waitlist.*no existing reservation/,
+    );
+
+    expect(d.incrRemaining).toHaveBeenCalledOnce();
+  });
+
+  it('rethrows non-unique errors from the waitlist INSERT without INCR', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemaining.mockResolvedValueOnce(-1);
+    const boom = new Error('db outage');
+    d.insertReservation.mockRejectedValueOnce(boom);
+
+    await expect(invoke(d.deps)).rejects.toBe(boom);
+
+    // The compensating INCR for the DECR < 0 happened before entering
+    // completeWaitlistBooking — so it was called exactly once.
+    expect(d.incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+  });
+});
+
+/* ------------------------------------------------------------------ */
 /*  ClassCapacityExceeded — Req 8.3 (PostgreSQL guard)                 */
 /* ------------------------------------------------------------------ */
 
