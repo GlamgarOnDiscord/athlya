@@ -3,7 +3,8 @@
 --
 -- Covered policies (Req 13.4, 22.2, 22.3):
 --   - audit_admin_only   SELECT USING app_role() = 'admin'
---                        AND (studio_id IS NULL OR studio_id = app_studio_id())
+--                        AND studio_id = app_studio_id()
+--                        (Migration 0023 removed the IS NULL fallback)
 --   - audit_app_insert   INSERT WITH CHECK true    (0011 — athlya_app path)
 --   - audit_no_update    UPDATE USING false        (belt-and-braces)
 --   - audit_no_delete    DELETE USING false        (belt-and-braces)
@@ -36,7 +37,7 @@ BEGIN;
 -- before narrowing to the tenant test role. They rely on pg_class which
 -- is not filtered by RLS.
 
-SELECT plan(14);
+SELECT plan(15);
 
 SELECT is(
     (SELECT relkind::text FROM pg_class c
@@ -51,11 +52,13 @@ SELECT lives_ok(
     'partition: ensure_next_audit_log_partition(now()) is callable and idempotent'
 );
 
--- Insert studio-scoped audit rows as superuser (bypasses RLS) to enable
--- cross-tenant isolation assertions below. These are rolled back at end.
+-- Insert studio-scoped and platform-level audit rows as superuser
+-- (bypasses RLS) to enable cross-tenant and NULL-studio isolation
+-- assertions below. These are rolled back at end.
 INSERT INTO "audit_log" (actor_id, action, studio_id, metadata) VALUES
     (NULL, 'rls.violation', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '{}'::jsonb),
-    (NULL, 'rls.violation', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '{}'::jsonb);
+    (NULL, 'rls.violation', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '{}'::jsonb),
+    (NULL, 'platform.key_rotation', NULL, '{"src":"platform"}'::jsonb);
 
 -- Switch to the non-superuser test role so RLS policies actually
 -- apply. The session role (postgres) is a superuser and therefore
@@ -117,6 +120,16 @@ SELECT cmp_ok(
     '>',
     0,
     'audit_admin_only: admin_A can read own studio-scoped audit rows'
+);
+
+-- ---------- NULL-studio isolation (migration 0023) ----------
+-- Platform-level events (studio_id IS NULL) must not be readable by
+-- any tenant admin after migration 0023 removed the IS NULL fallback.
+
+SELECT is(
+    (SELECT count(*)::int FROM "audit_log" WHERE studio_id IS NULL),
+    0,
+    'audit_admin_only (0023): tenant admin cannot read NULL-studio platform rows'
 );
 
 -- ---------- cross-tenant isolation: admin_A cannot see studio_B rows ----------

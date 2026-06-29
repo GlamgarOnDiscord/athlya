@@ -3,13 +3,15 @@
 --
 -- Covered policies (Req 16.x, 22.3):
 --   - outbox_admin_only  SELECT USING app_role() = 'admin'
---                        AND (studio_id IS NULL OR studio_id = app_studio_id())
+--                        AND studio_id = app_studio_id()
+--                        (Migration 0023 removed the IS NULL fallback)
 --
 -- The drain worker runs under a BYPASSRLS service role; no application
 -- role has INSERT / UPDATE / DELETE. We assert that:
 --   * member / coach see zero rows
 --   * admin sees seeded rows for their own studio
 --   * admin cannot see another studio's outbox rows (cross-tenant isolation)
+--   * admin cannot see NULL-studio (platform-level) outbox rows (0023)
 --   * no INSERT policy exists for a member (INSERT from tenant context
 --     must fail regardless of user_id because there is no matching
 --     WITH CHECK).
@@ -17,14 +19,16 @@
 
 BEGIN;
 
--- Insert studio-scoped outbox rows as superuser (bypasses RLS) so
--- cross-tenant isolation can be tested. These are rolled back at the end.
+-- Insert studio-scoped and platform-level outbox rows as superuser
+-- (bypasses RLS) so cross-tenant and NULL-studio isolation can be
+-- tested. These are rolled back at the end.
 INSERT INTO "outbox" (id, event_id, event_type, payload, occurred_at, studio_id) VALUES
     ('ffffffff-ffff-4fff-8fff-ffffffffff11', 'evt-scope-a', 'test.isolation', '{"s":"a"}'::jsonb, '2026-01-01 12:00:00+00', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
-    ('ffffffff-ffff-4fff-8fff-ffffffffff12', 'evt-scope-b', 'test.isolation', '{"s":"b"}'::jsonb, '2026-01-01 12:00:00+00', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+    ('ffffffff-ffff-4fff-8fff-ffffffffff12', 'evt-scope-b', 'test.isolation', '{"s":"b"}'::jsonb, '2026-01-01 12:00:00+00', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
+    ('ffffffff-ffff-4fff-8fff-ffffffffff13', 'evt-platform', 'platform.op', '{"src":"platform"}'::jsonb, '2026-01-01 12:00:00+00', NULL);
 
 SET LOCAL ROLE athlya_tenant_test;
-SELECT plan(6);
+SELECT plan(7);
 
 -- ---------- outbox_admin_only: member ----------
 
@@ -91,6 +95,22 @@ SELECT is(
      WHERE studio_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
     0,
     'outbox_admin_only: admin_B cannot read studio_A outbox rows (cross-tenant isolation)'
+);
+
+-- ---------- NULL-studio isolation (migration 0023) ----------
+-- Platform-level events (studio_id IS NULL) must not be readable
+-- by any tenant admin after migration 0023 removed the IS NULL fallback.
+
+SELECT public.test_set_tenant(
+    '11111111-1111-4111-8111-111111111113',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'admin'
+);
+
+SELECT is(
+    (SELECT count(*)::int FROM "outbox" WHERE studio_id IS NULL),
+    0,
+    'outbox_admin_only (0023): tenant admin cannot read NULL-studio platform rows'
 );
 
 -- ---------- no INSERT policy: tenant role is blocked ----------
