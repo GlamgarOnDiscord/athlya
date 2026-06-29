@@ -30,10 +30,11 @@
  *      after consumption hits `token_invalid`.
  *   4. **Short TTL**: default 1 hour. Audit recommends ≤ 24h; we
  *      pick 1h to align with the access-token lifetime philosophy.
- *   5. **HIBP re-check**: same fail-closed posture as register.
- *      A user choosing a breached password during reset gets
- *      `password_breached` (NOT `hibp_unavailable`, which surfaces
- *      separately as 503 since Sprint-3 SP3.2).
+ *   5. **HIBP re-check**: fail-open posture, matching `register()` (issue #233).
+ *      A user choosing a breached password gets `password_breached`.
+ *      When HIBP is unreachable, the reset proceeds and a
+ *      `athlya.hibp.degraded` metric is emitted for alerting — a
+ *      transient HIBP outage must not block account recovery.
  *   6. **Family revoke**: after a successful reset, every active
  *      session of the user is destroyed via
  *      `sessionStore.revokeAllForUser` — the assumption is that
@@ -273,9 +274,9 @@ export interface ConfirmResetDeps {
  *   3. Expiry guard (defence-in-depth — the SQL filter already
  *      rejects expired rows but the in-memory check covers a
  *      `now()` skew between DB and Worker isolate).
- *   4. HIBP check — fail-closed if unavailable
- *      (`hibp_unavailable`), reject if breached
- *      (`password_breached`).
+ *   4. HIBP check — fail-open if unavailable (issue #233, matches
+ *      `register()`): reset proceeds, `athlya.hibp.degraded` metric
+ *      emitted. Reject with `password_breached` if the password is known.
  *   5. Bcrypt the new password.
  *   6. Atomic consume + reset via the repo.
  *   7. `revokeAllForUser` — every active session destroyed.
@@ -283,7 +284,7 @@ export interface ConfirmResetDeps {
  *      re-authenticates on every device.
  *
  * @throws {@link AuthError} with one of `token_invalid`,
- *   `token_expired`, `hibp_unavailable`, `password_breached`.
+ *   `token_expired`, `password_breached`.
  */
 export async function confirmReset(
   input: ConfirmResetInput,
