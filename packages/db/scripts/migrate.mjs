@@ -10,7 +10,16 @@
  *    in lexicographic order.
  *  • Maintains a `_athlya_migrations(name text primary key, applied_at
  *    timestamptz default now())` table so re-running is idempotent.
- *  • Each migration file is wrapped in a single transaction so a
+ *  • Migrations whose body contains `CONCURRENTLY` (e.g. `CREATE INDEX
+ *    CONCURRENTLY`) are executed outside a transaction — PostgreSQL forbids
+ *    CONCURRENTLY inside a transaction block. These migrations are run with
+ *    `sql.unsafe()` directly, then the tracking row is inserted in a
+ *    separate transaction. Note: there is a narrow atomicity gap between
+ *    the `sql.unsafe()` call and the tracking INSERT — a crash between
+ *    them leaves the migration applied but untracked. Mitigate by
+ *    writing CONCURRENTLY migrations with `IF NOT EXISTS` so a retry
+ *    is safe.
+ *  • All other migration files are wrapped in a single transaction so a
  *    partial failure leaves the schema untouched.
  *
  * Usage
@@ -125,11 +134,24 @@ async function main() {
         console.log(`[skip] ${name} (already applied)`);
         continue;
       }
-      console.log(`[apply] ${name} ...`);
-      await sql.begin(async (tx) => {
-        await tx.unsafe(body);
-        await tx`INSERT INTO _athlya_migrations (name) VALUES (${name})`;
-      });
+      const requiresNoTx = /\bCONCURRENTLY\b/i.test(body);
+      console.log(`[apply] ${name}${requiresNoTx ? ' (no-transaction)' : ''}...`);
+      if (requiresNoTx) {
+        // CONCURRENTLY DDL cannot run inside a transaction block, so
+        // we execute the body outside a transaction and then record it
+        // in a separate transaction. There is a narrow atomicity gap:
+        // a crash between these two steps leaves the migration applied
+        // but untracked; the next run will retry and fail if the object
+        // already exists. Mitigation: write CONCURRENTLY migrations with
+        // IF NOT EXISTS so a retry is idempotent.
+        await sql.unsafe(body);
+        await sql.begin((tx) => tx`INSERT INTO _athlya_migrations (name) VALUES (${name})`);
+      } else {
+        await sql.begin(async (tx) => {
+          await tx.unsafe(body);
+          await tx`INSERT INTO _athlya_migrations (name) VALUES (${name})`;
+        });
+      }
       console.log(`[ok]    ${name}`);
     }
     console.log('[done] all migrations applied');
