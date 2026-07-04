@@ -52,6 +52,10 @@ export const ADMIN_STATS_BUDGET: RateLimitBudget = {
 
 export const AUTH_BUDGET = { ipLimit: 20, windowSec: 60 } as const satisfies RateLimitBudget;
 
+export const LOGIN_BUDGET: RateLimitBudget = { ipLimit: 5, windowSec: 60 };
+export const REGISTER_BUDGET: RateLimitBudget = { ipLimit: 10, windowSec: 60 };
+export const FORGOT_PASSWORD_BUDGET: RateLimitBudget = { ipLimit: 3, windowSec: 60 };
+
 /** Issue #240 — per-user refresh throttle (10 per 15-min window). */
 export const REFRESH_BUDGET: RateLimitBudget = { userLimit: 10, windowSec: 900 };
 
@@ -88,7 +92,37 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     failPolicy: 'fail-closed',
     bucket: 'ip',
     wiredIn: 'worker.ts',
-    notes: 'Issue #65',
+    notes: 'Issue #65 — general auth surface; tighter per-endpoint limits overlay this',
+  },
+  {
+    id: 'auth-login',
+    route: '/v1/auth/login',
+    methods: 'POST',
+    budget: LOGIN_BUDGET,
+    failPolicy: 'fail-closed',
+    bucket: 'ip',
+    wiredIn: 'worker.ts',
+    notes: 'Issue #466 — tighter overlay on login to limit credential brute force',
+  },
+  {
+    id: 'auth-register',
+    route: '/v1/auth/register',
+    methods: 'POST',
+    budget: REGISTER_BUDGET,
+    failPolicy: 'fail-closed',
+    bucket: 'ip',
+    wiredIn: 'worker.ts',
+    notes: 'Issue #466 — tighter overlay on register to limit account farming',
+  },
+  {
+    id: 'auth-forgot-password',
+    route: '/v1/auth/password-reset/request',
+    methods: 'POST',
+    budget: FORGOT_PASSWORD_BUDGET,
+    failPolicy: 'fail-closed',
+    bucket: 'ip',
+    wiredIn: 'worker.ts',
+    notes: 'Issue #466 — tighter overlay to limit email enumeration and reset spam',
   },
   {
     id: 'auth-refresh',
@@ -210,6 +244,9 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
 /** Explicit fail-closed rows — tests fail if an id is removed or policy regresses. */
 export const REQUIRED_FAIL_CLOSED_IDS = [
   'auth',
+  'auth-login',
+  'auth-register',
+  'auth-forgot-password',
   'auth-refresh',
   'reservation-mutation',
   'reservation-cancel',

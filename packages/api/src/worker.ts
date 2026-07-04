@@ -97,12 +97,15 @@ import { tracing } from './middleware/otel.js';
 import { registerErrorHandlers } from './middleware/problem-details.js';
 import {
   ADMIN_STATS_BUDGET,
+  AUTH_BUDGET,
   EXPENSIVE_READ_BUDGET,
+  FORGOT_PASSWORD_BUDGET,
   isAdminStatsGetPath,
   isMembersListGetPath,
+  LOGIN_BUDGET,
   MEMBERS_LIST_BUDGET,
   MUTATION_BUDGETS,
-  AUTH_BUDGET,
+  REGISTER_BUDGET,
 } from './middleware/rate-limit-policies.js';
 import { rateLimit, HOST_PROBE_BUCKET_PREFIX, deriveClientIp } from './middleware/rate-limit.js';
 import { securityHeaders } from './middleware/security-headers.js';
@@ -647,6 +650,41 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   app.use(
     '/v1/auth/*',
     guardLimiterWithDevBypass('auth', authLimiter, 'fail-closed') as Parameters<typeof app.use>[1],
+  );
+
+  // Issue #466 — per-endpoint overlays on the /v1/auth/* general budget.
+  // These tighter limits stack ON TOP of authLimiter (both buckets are
+  // decremented on each request). A login attempt must clear the 5/min
+  // IP bucket AND the 20/min general auth bucket — the per-endpoint
+  // limit is what actually throttles brute force.
+  const loginLimiter = rateLimit(LOGIN_BUDGET);
+  const registerLimiter = rateLimit(REGISTER_BUDGET);
+  const forgotPasswordLimiter = rateLimit(FORGOT_PASSWORD_BUDGET);
+
+  const guardAuthEndpointLimiter = (inner: ReturnType<typeof rateLimit>) => {
+    const guarded = guardLimiterWithDevBypass('auth-endpoint', inner, 'fail-closed');
+    return async (c: { req: { method: string } }, next: () => Promise<void>) => {
+      if (c.req.method !== 'POST') {
+        await next();
+        return undefined;
+      }
+      return (
+        guarded as unknown as (ctx: typeof c, n: typeof next) => Promise<Response | undefined>
+      )(c, next);
+    };
+  };
+
+  app.use(
+    '/v1/auth/login',
+    guardAuthEndpointLimiter(loginLimiter) as Parameters<typeof app.use>[1],
+  );
+  app.use(
+    '/v1/auth/register',
+    guardAuthEndpointLimiter(registerLimiter) as Parameters<typeof app.use>[1],
+  );
+  app.use(
+    '/v1/auth/password-reset/request',
+    guardAuthEndpointLimiter(forgotPasswordLimiter) as Parameters<typeof app.use>[1],
   );
 
   // Req 26.1–26.3 — Turnstile on pre-auth mutations wired in auth router
