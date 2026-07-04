@@ -47,15 +47,15 @@ Les communications marketing et la documentation technique doivent utiliser la f
 
 ## DPA et transferts hors UE — état
 
-| Sous-traitant | Base légale transfert          | Région données                         | Statut DPA                               |
-| ------------- | ------------------------------ | -------------------------------------- | ---------------------------------------- |
-| Cloudflare    | SCCs (Data Localization Suite) | PoP global (compute) / EU (R2, Queues) | À confirmer : Data Localization Addendum |
-| Neon          | SCCs AWS EU                    | `aws-eu-central-1`                     | ✅ AWS DPA EU couvre Neon                |
-| Upstash       | SCCs                           | `eu-west-1`                            | À confirmer : DPA Upstash                |
-| Sentry        | SCCs                           | `*.de.sentry.io`                       | ✅ Sentry EU — endpoint DE               |
-| Axiom         | SCCs                           | EU dataset                             | À confirmer : DPA Axiom EU               |
-| Resend        | SCCs                           | EU infra                               | À confirmer : DPA Resend                 |
-| Stripe        | SCCs                           | EU (Stripe Atlas)                      | À confirmer : Stripe DPA Art. 28         |
+| Sous-traitant | Base légale transfert          | Région données                         | Statut DPA                                                                       |
+| ------------- | ------------------------------ | -------------------------------------- | -------------------------------------------------------------------------------- |
+| Cloudflare    | SCCs (Data Localization Suite) | PoP global (compute) / EU (R2, Queues) | À confirmer : Data Localization Addendum                                         |
+| Neon          | SCCs (Neon DPA)                | `aws-eu-central-1`                     | À confirmer : DPA Neon (AWS ne couvre pas Neon — le contrat est avec Neon, Inc.) |
+| Upstash       | SCCs                           | `eu-west-1`                            | À confirmer : DPA Upstash                                                        |
+| Sentry        | SCCs                           | `*.de.sentry.io`                       | ✅ Sentry EU — endpoint DE                                                       |
+| Axiom         | SCCs                           | EU dataset                             | À confirmer : DPA Axiom EU                                                       |
+| Resend        | SCCs                           | EU infra                               | À confirmer : DPA Resend                                                         |
+| Stripe        | SCCs                           | EU (Stripe Atlas)                      | À confirmer : Stripe DPA Art. 28                                                 |
 
 Les DPA « À confirmer » doivent être signés avant toute mise en production RGPD-déclarée.
 Documenter les signatures dans `docs/security/dpia-template.md`.
