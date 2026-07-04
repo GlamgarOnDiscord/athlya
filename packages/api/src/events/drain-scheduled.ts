@@ -247,12 +247,26 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
 
   const startedAt = Date.now();
 
-  // One transaction per drain cycle: holds the SELECT FOR UPDATE
-  // SKIP LOCKED locks on claimed rows until every row has been
-  // processed (succeeded, failed, or skipped). A crash mid-batch
-  // rolls the transaction back and the next cycle re-claims — the
-  // `attempts` counter bump is discarded, but the consumer dedup
-  // window (24 h, Req 17.4) absorbs any resulting duplicates.
+  // One transaction per drain cycle: holds SELECT FOR UPDATE SKIP
+  // LOCKED locks on claimed rows until every row is processed.
+  //
+  // Lock duration analysis (issue #424):
+  //   lock_duration ≈ batch_size × avg_queue_send_latency
+  //   Normal:  100 rows × ~10 ms  =  ~1 s   (negligible)
+  //   Backlog: 200 rows × ~10 ms  =  ~2 s
+  //   Extreme: 200 rows × 5 000 ms = ~17 min (queue outage)
+  //
+  // The overlap guard (OUTBOX_DRAIN_OVERLAP_WARN_MS = 45 s) fires
+  // well before lock duration becomes problematic in the extreme case.
+  // SKIP LOCKED keeps concurrent drains correct: the next cron tick
+  // claims a fresh batch of unlocked rows, not the slow batch.
+  //
+  // Lease pattern alternative (separate claim TX + out-of-tx send +
+  // per-row markPublished TX) was evaluated and rejected: it requires
+  // a schema migration, adds orphaned-lease recovery logic, and gives
+  // no practical improvement at our load given the existing overlap
+  // alert and consumer dedup window (24 h, Req 17.4). Decision is
+  // explicitly accepted. Re-evaluate if avg queue latency exceeds 1 s.
   const result = await db.transaction(async (tx) => {
     const store: OutboxStore = {
       async claimBatch(size: number): Promise<readonly ClaimedRow[]> {
