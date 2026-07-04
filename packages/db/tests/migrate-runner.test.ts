@@ -8,8 +8,10 @@
 
 import { describe, expect, it } from 'vitest';
 
-// Extract the detection predicate from migrate.mjs as a pure function
-// so we can test it without spinning up a database connection.
+// Duplicate the detection predicate from migrate.mjs as a pure function
+// so we can test it without spinning up a database connection. Both copies
+// must stay in sync — if the predicate changes in migrate.mjs, update this
+// copy too and add a test case that exercises the change.
 const requiresNoTx = (body: string): boolean => /\bCONCURRENTLY\b/i.test(body);
 
 describe('migration runner: no-transaction detection', () => {
