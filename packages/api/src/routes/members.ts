@@ -149,7 +149,7 @@ const PROBLEM_JSON = 'application/problem+json';
 
 function avatarProblem(
   c: Context<HonoEnv>,
-  status: 400 | 413 | 415 | 422 | 503,
+  status: 400 | 411 | 413 | 415 | 422 | 503,
   detail: string,
   code: string,
 ): Response {
@@ -165,7 +165,9 @@ function avatarProblem(
               ? 'Unsupported Media Type'
               : status === 413
                 ? 'Content Too Large'
-                : 'Bad Request',
+                : status === 411
+                  ? 'Length Required'
+                  : 'Bad Request',
       status,
       detail,
       code,
@@ -243,8 +245,25 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
       );
     }
 
-    const contentLength = parseInt(c.req.header('content-length') ?? '0', 10);
-    if (!isNaN(contentLength) && contentLength > AVATAR_MAX_BYTES) {
+    const rawContentLength = c.req.header('content-length');
+    if (rawContentLength === undefined || rawContentLength === null) {
+      return avatarProblem(
+        c,
+        411,
+        'Content-Length is required for avatar uploads',
+        'length_required',
+      );
+    }
+    if (!/^\d+$/.test(rawContentLength)) {
+      return avatarProblem(
+        c,
+        400,
+        'Content-Length must be a non-negative decimal integer',
+        'invalid_content_length',
+      );
+    }
+    const contentLength = Number(rawContentLength);
+    if (contentLength > AVATAR_MAX_BYTES) {
       return avatarProblem(
         c,
         413,
