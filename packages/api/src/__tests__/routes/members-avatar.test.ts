@@ -4,10 +4,11 @@
  * Covers:
  *   1. No Authorization header → 401.
  *   2. Unsupported Content-Type → 415 `unsupported_media_type`.
- *   3. Body exceeds 5 MB → 413 `avatar_too_large`.
- *   4. Empty body → 400 `empty_body`.
- *   5. `uploadAvatar` throws `AvatarUploadNotConfiguredError` → 503.
- *   6. Happy path (image/jpeg, 1 KB body) → 200 with `{ avatarUrl }`.
+ *   3. Missing Content-Length → 411 `length_required`.
+ *   4. Body exceeds 5 MB → 413 `avatar_too_large`.
+ *   5. Empty body → 400 `empty_body`.
+ *   6. `uploadAvatar` throws `AvatarUploadNotConfiguredError` → 503.
+ *   7. Happy path (image/jpeg, 1 KB body) → 200 with `{ avatarUrl }`.
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -124,12 +125,37 @@ describe('PUT /v1/members/me/avatar', () => {
     expect(deps.members.uploadAvatar).not.toHaveBeenCalled();
   });
 
+  it('returns 411 when Content-Length is absent', async () => {
+    const token = await mintJwt();
+    const deps = buildStubDeps();
+    const app = buildAppWithDeps(deps);
+
+    const res = await app.request(
+      '/v1/members/me/avatar',
+      {
+        method: 'PUT',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'image/jpeg',
+        },
+        body: TINY_JPEG,
+      },
+      env(),
+    );
+
+    expect(res.status).toBe(411);
+    const body = (await res.json()) as any;
+    expect(body.code).toBe('length_required');
+    expect(deps.members.uploadAvatar).not.toHaveBeenCalled();
+  });
+
   it('returns 413 when body exceeds 5 MB', async () => {
     const token = await mintJwt();
     const deps = buildStubDeps();
     const app = buildAppWithDeps(deps);
 
-    const bigBody = new Uint8Array(5 * 1024 * 1024 + 1).buffer;
+    const bigBodySize = 5 * 1024 * 1024 + 1;
+    const bigBody = new Uint8Array(bigBodySize).buffer;
 
     const res = await app.request(
       '/v1/members/me/avatar',
@@ -138,6 +164,7 @@ describe('PUT /v1/members/me/avatar', () => {
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'image/png',
+          'content-length': String(bigBodySize),
         },
         body: bigBody,
       },
@@ -161,6 +188,7 @@ describe('PUT /v1/members/me/avatar', () => {
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'image/webp',
+          'content-length': '0',
         },
         body: new ArrayBuffer(0),
       },
@@ -190,6 +218,7 @@ describe('PUT /v1/members/me/avatar', () => {
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'image/jpeg',
+          'content-length': String(TINY_JPEG.byteLength),
         },
         body: TINY_JPEG,
       },
@@ -218,6 +247,7 @@ describe('PUT /v1/members/me/avatar', () => {
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'image/jpeg',
+          'content-length': String(TINY_JPEG.byteLength),
         },
         body: TINY_JPEG,
       },
