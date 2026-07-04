@@ -3,11 +3,11 @@
 --
 -- Issue #467. The existing `users_email_unique` index is global:
 --   UNIQUE(email)
--- Users are soft-deleted (deleted_at IS NOT NULL) and their email is
--- nulled 30 days later by the RGPD anonymisation cron. During that
--- 30-day window the deleted email blocks re-registration with the same
--- address, violating RGPD Art 17 (right to erasure must not silently
--- prevent future re-use by a new, unrelated data subject).
+-- Users are soft-deleted (deleted_at IS NOT NULL); their email is
+-- retained until the 30-day RGPD audit-log anonymisation pass. During
+-- that window the soft-deleted email blocks re-registration with the
+-- same address, violating RGPD Art 17 (right to erasure must not
+-- silently prevent future re-use by a new, unrelated data subject).
 --
 -- Fix: replace the global unique with a partial unique that covers
 -- only active (non-deleted) rows:

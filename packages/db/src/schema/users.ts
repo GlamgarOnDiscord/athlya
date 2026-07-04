@@ -20,7 +20,7 @@
  *     `ConsentsSchema` on every write.
  *   - `users_email_active_unique` is a PARTIAL unique index (WHERE
  *     deleted_at IS NULL). Soft-deleted users' emails are eventually
- *     nulled by the RGPD anonymisation cron after 30 days, but during
+ *     retained until the 30-day RGPD audit-log anonymisation pass, but during
  *     that window a new user must be able to re-register with the same
  *     address (RGPD Art 17 — right to erasure must not silently prevent
  *     future re-use). The global `users_email_unique` index was dropped
