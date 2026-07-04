@@ -14,7 +14,7 @@ import { NextResponse } from 'next/server';
 
 import { buildClearRefreshCookie } from '../../../../lib/auth/cookies';
 import { assertSameOrigin } from '../../../../lib/auth/same-origin';
-import { getPublicApiUrl } from '../../../../lib/env';
+import { getPublicApiUrl, isSecureCookieEnv } from '../../../../lib/env';
 
 import type { NextRequest } from 'next/server';
 
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const denied = assertSameOrigin(request);
   if (denied !== null) return denied;
 
-  const isProduction = process.env['APP_ENV'] === 'production';
+  const isProduction = isSecureCookieEnv();
   const authHeader = request.headers.get('authorization');
   if (authHeader !== null && authHeader !== '') {
     const apiUrl = getPublicApiUrl();

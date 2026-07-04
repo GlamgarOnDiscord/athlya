@@ -21,3 +21,15 @@ export function getCspReportUri(): string | undefined {
   if (raw === undefined || raw === '') return undefined;
   return raw;
 }
+
+/**
+ * Returns true when the cookie `Secure` flag should be set.
+ *
+ * Defaults to true (fail-closed) so a missing or mistyped APP_ENV does
+ * not silently downgrade cookie security in a deployed environment.
+ * Only `APP_ENV=development` (local dev / CI) skips the flag.
+ */
+export function isSecureCookieEnv(): boolean {
+  const env = process.env['APP_ENV'];
+  return env !== 'development';
+}

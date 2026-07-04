@@ -20,7 +20,7 @@ import {
   buildRefreshCookie,
 } from '../../../../lib/auth/cookies';
 import { assertSameOrigin } from '../../../../lib/auth/same-origin';
-import { getPublicApiUrl } from '../../../../lib/env';
+import { getPublicApiUrl, isSecureCookieEnv } from '../../../../lib/env';
 
 import type { ProblemDetails } from '@athlya/shared/schemas';
 import type { NextRequest } from 'next/server';
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const denied = assertSameOrigin(request);
   if (denied !== null) return denied;
 
-  const isProduction = process.env['APP_ENV'] === 'production';
+  const isProduction = isSecureCookieEnv();
   const refreshToken = request.cookies.get(REFRESH_COOKIE_NAME)?.value;
   if (refreshToken === undefined || refreshToken === '') {
     return problemJson(
