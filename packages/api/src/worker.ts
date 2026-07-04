@@ -51,6 +51,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+import { assertRlsRole } from '@athlya/db/client';
 import { createNeonHttpSql } from '@athlya/db';
 import { handleUserDeleted, runExportJob } from '@athlya/members';
 import { HANDLED_EVENT_TYPES, handleEvent as handleNotificationEvent } from '@athlya/notifications';
@@ -1340,8 +1341,18 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       // (issue #303). latestEnv is safe at closure scope because c.env is
       // the same bindings object for every request in one isolate.
       const cfStorage = new AsyncLocalStorage<{ readonly continent?: string } | undefined>();
+
+      // Per-isolate BYPASSRLS guard (issue #461). Runs once on the first
+      // request and caches the result for the lifetime of the isolate.
+      // Throws if the DB role has BYPASSRLS in any non-dev environment,
+      // preventing a misconfigured DATABASE_URL from bypassing RLS silently.
+      let rlsCheckPromise: Promise<void> | undefined;
       app.use('/v1/*', async (c, next) => {
         latestEnv = c.env;
+        if (typeof c.env.DB_URL === 'string' && c.env.DB_URL.length > 0) {
+          rlsCheckPromise ??= assertRlsRole(c.env.DB_URL, c.env.ENVIRONMENT ?? '');
+          await rlsCheckPromise;
+        }
         const cf = (c.req.raw.cf as { continent?: string } | undefined) ?? undefined;
         await cfStorage.run(cf, () => next());
       });

@@ -388,6 +388,43 @@ export async function pingDb(connectionString: string): Promise<number> {
 }
 
 /**
+ * Assert that the DB connection does not use a BYPASSRLS role.
+ *
+ * Queries `pg_roles` for the current user and throws if `rolbypassrls`
+ * is true. Must be called once per Worker isolate cold start (issue #461).
+ *
+ * Skips only when `environment` is explicitly one of the known non-production
+ * labels: 'dev', 'test', 'local', 'ci'. Any other value — including an empty
+ * string from a missing ENVIRONMENT binding — causes the check to run, so a
+ * misconfigured deploy fails-closed rather than silently bypassing RLS.
+ */
+const SKIP_RLS_CHECK_ENVS = new Set(['dev', 'test', 'local', 'ci']);
+
+export async function assertRlsRole(connectionString: string, environment: string): Promise<void> {
+  if (SKIP_RLS_CHECK_ENVS.has(environment.toLowerCase())) return;
+
+  const sqlClient = neon(connectionString);
+  const rows = await sqlClient`
+    SELECT rolname::text AS name, rolbypassrls AS bypass
+    FROM pg_roles
+    WHERE rolname = current_user
+  `;
+  const row = (rows as Array<{ name: string; bypass: boolean }>)[0];
+  if (row === undefined) {
+    throw new Error('[boot] assertRlsRole: could not resolve current_user from pg_roles');
+  }
+  if (row.bypass) {
+    throw new Error(
+      `[boot] assertRlsRole: connected as "${row.name}" which has BYPASSRLS. ` +
+        'Switch DB_URL to athlya_app (rolbypassrls=false) before serving traffic.',
+    );
+  }
+  console.log(
+    JSON.stringify({ event: 'rls-role-check', role: row.name, bypassrls: false, ok: true }),
+  );
+}
+
+/**
  * Build a raw Neon HTTP SQL caller — bypass Drizzle entirely.
  *
  * Sprint 13 / Slice 13.2 — used by the cron handler in
