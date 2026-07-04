@@ -40,14 +40,51 @@ Options non implémentées (à activer sur données d'incident) :
 2. **SSE agrégé studio-wide** : un flux par studio plutôt qu'un WS par cours, en lecture seule.
 3. Polling pur si le temps réel n'est pas critique pour le tier concerné.
 
-## Load test (staging — critère d'acceptation)
+## Cap rationale — CLASS_CAPACITY_MAX_WS = 500 (issue #423)
 
-1. Ouvrir N connexions WS simultanées vers `…/capacity/ws` d'un même `classId` (N > cap).
-2. Vérifier : les `cap` premières reçoivent les `capacity_update`, les suivantes reçoivent `503 + X-Capacity-Fallback: poll`.
-3. Mesurer latence broadcast p95 à `cap` connexions sous charge de booking → valider/ajuster `CLASS_CAPACITY_MAX_WS`.
+The 500-connection default was chosen based on the following bounds:
+
+| Constraint                | Bound                        | Source                              |
+| ------------------------- | ---------------------------- | ----------------------------------- |
+| DO max WebSocket count    | ~1 000 (CF undocumented)     | Community reports + hibernation API |
+| broadcast O(n) at 500     | ~5–50 ms per update (est.)   | Depends on DO CPU slice scheduling  |
+| Memory per WS connection  | ~10 KB                       | CF isolate overhead                 |
+| Memory at 500 connections | ~5 MB (well under 128 MB DO) | —                                   |
+| Realistic hot-class peak  | < 50 concurrent watchers     | UX: most users don't keep WS open   |
+
+**500 is deliberately conservative.** It was not measured against a live CF
+environment — see the benchmark script (`k6/do-fanout.js`) to obtain actual
+p95 broadcast latency numbers before raising the cap.
+
+**Product launch guidance**: a class with > 500 simultaneous open WebSocket
+connections is extremely unlikely at current scale. The shed + poll fallback
+protects availability. Monitor `do_connections_failed` and `do_shed_rate`
+(emitted by the benchmark) via Axiom when real traffic is flowing.
+
+## Running the benchmark (issue #423)
+
+```bash
+# Requires a staging class ID with at least 1 confirmed booking.
+K6_BASE_URL=https://staging.api.athlya.app \
+K6_CLASS_ID=<uuid> \
+K6_WS_CAP=500 \
+K6_BOOKING_TOKEN=<bearer-token> \
+k6 run k6/do-fanout.js
+```
+
+**Acceptance criteria (from the benchmark report):**
+
+- p95 broadcast latency < 500 ms at cap connections
+- Shed rate ≥ 80 % for the `above_cap` scenario
+- Connection failures < 10
+
+If p95 latency is well under 100 ms at cap=500, raise `CLASS_CAPACITY_MAX_WS`
+to 750 or 1 000 and re-run. If p95 > 500 ms, reduce the cap or consider
+sharding (see below).
 
 ## Related
 
 - `packages/api/src/durable-objects/class-capacity.ts` — cap + shed
 - `packages/api/src/routes/capacity.ts` — proxy upgrade (forward le 503)
 - `packages/api/src/__tests__/durable-objects/class-capacity.test.ts` — tests cap/fallback
+- `k6/do-fanout.js` — WebSocket fanout benchmark script
