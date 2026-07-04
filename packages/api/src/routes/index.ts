@@ -337,6 +337,17 @@ export function buildDefaultDeps(
         confirmPasswordReset: () => notImplemented('auth.confirmPasswordReset'),
       };
 
+  // Fail-fast: idempotency must be wired for all mutation routes in
+  // non-dev environments. A missing idempotency dep means duplicate
+  // requests (double-click, proxy retry) can create duplicate accounts
+  // or trigger double-deletions silently. Issue #460.
+  if (auth.idempotency === undefined && env.ENVIRONMENT !== 'dev') {
+    throw new Error(
+      `[boot] idempotency middleware not wired for environment="${env.ENVIRONMENT}". ` +
+        'Ensure DB_URL is set and buildAuthDeps returns an idempotency dep.',
+    );
+  }
+
   // Members reuses the same DB_URL guard as auth — when present it
   // is safe to assume Drizzle is usable; otherwise fall back to
   // the stub bundle so unit tests that boot the worker without

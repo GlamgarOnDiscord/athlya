@@ -37,7 +37,7 @@
 
 import { lookup, store } from '@athlya/db/idempotency';
 
-import type { AthlyaDb, AthlyaTx } from '@athlya/db/client';
+import type { IdempotencyDb } from '@athlya/db/idempotency';
 import type { Context, MiddlewareHandler } from 'hono';
 
 /** Default retention — exactly 24 h, the minimum mandated by Req 20.2. */
@@ -60,11 +60,11 @@ export interface IdempotencyLogger {
 
 export interface IdempotencyMiddlewareDeps {
   /**
-   * Drizzle handle — typically the app-scoped {@link AthlyaDb} client
-   * from `createDb()`. A {@link AthlyaTx} is accepted too so callers
-   * can share a transaction with a surrounding scope during tests.
+   * Drizzle handle — postgres-js, Neon HTTP, or a transaction.
+   * All three support `.execute(sql\`...\`)` which is the only operation
+   * the idempotency store uses.
    */
-  readonly db: AthlyaDb | AthlyaTx;
+  readonly db: IdempotencyDb;
   /** Retention in seconds. Defaults to {@link DEFAULT_IDEMPOTENCY_TTL_SEC}. */
   readonly ttlSec?: number;
   /** HTTP methods considered mutations. Defaults to POST/PUT/PATCH/DELETE. */
