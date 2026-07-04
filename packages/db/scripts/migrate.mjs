@@ -14,7 +14,11 @@
  *    CONCURRENTLY`) are executed outside a transaction — PostgreSQL forbids
  *    CONCURRENTLY inside a transaction block. These migrations are run with
  *    `sql.unsafe()` directly, then the tracking row is inserted in a
- *    separate immediate transaction.
+ *    separate transaction. Note: there is a narrow atomicity gap between
+ *    the `sql.unsafe()` call and the tracking INSERT — a crash between
+ *    them leaves the migration applied but untracked. Mitigate by
+ *    writing CONCURRENTLY migrations with `IF NOT EXISTS` so a retry
+ *    is safe.
  *  • All other migration files are wrapped in a single transaction so a
  *    partial failure leaves the schema untouched.
  *
