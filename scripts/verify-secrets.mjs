@@ -11,7 +11,13 @@
  * This script NEVER prints secret values — it only checks presence via
  * `wrangler secret list`, which returns secret names only.
  *
- * Issue #328.
+ * Issues #328, #410.
+ *
+ * Secret tiers
+ * ------------
+ * REQUIRED   — missing in either env fails the check immediately.
+ * PRODUCTION — missing only on production fails the check.
+ *              On staging, missing secrets are warned but not fatal.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -29,52 +35,49 @@ if (env !== 'staging' && env !== 'production') {
   process.exit(1);
 }
 
-// Required secrets per worker. Keyed by wrangler config file (undefined = main wrangler.toml).
+const isProduction = env === 'production';
+
+// Core secrets required in every environment.
+const CORE_JWT = [
+  'JWT_KID',
+  'JWT_PRIVATE_KEY_PEM',
+  'JWT_PUBLIC_KEY_PEM',
+  'JWKS_JSON',
+  'JWT_JWKS_URL',
+];
+const CORE_DB = ['DB_URL'];
+const CORE_REDIS = ['REDIS_URL', 'REDIS_TOKEN'];
+
+// Required in both staging and production.
 const REQUIRED = {
   main: [
-    'DB_URL',
-    'REDIS_URL',
-    'REDIS_TOKEN',
-    'JWT_KID',
-    'JWT_PRIVATE_KEY_PEM',
-    'JWT_PUBLIC_KEY_PEM',
-    'JWKS_JSON',
-    'JWT_JWKS_URL',
+    ...CORE_DB,
+    ...CORE_REDIS,
+    ...CORE_JWT,
     'STRIPE_SECRET_KEY',
     'STRIPE_WEBHOOK_SECRET',
     'CRON_DB_URL',
+    'TURNSTILE_SECRET',
+    'CORS_ORIGIN',
   ],
-  auth: [
-    'DB_URL',
-    'REDIS_URL',
-    'REDIS_TOKEN',
-    'JWT_KID',
-    'JWT_PRIVATE_KEY_PEM',
-    'JWT_PUBLIC_KEY_PEM',
-    'JWKS_JSON',
-    'JWT_JWKS_URL',
-    'RESEND_API_KEY',
+  auth: [...CORE_DB, ...CORE_REDIS, ...CORE_JWT, 'RESEND_API_KEY'],
+  reservations: [...CORE_DB, ...CORE_REDIS, ...CORE_JWT],
+  billing: [...CORE_DB, ...CORE_JWT, 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+};
+
+// Additional secrets required in production only.
+// Missing on staging emits ::warning:: but does not fail.
+const PRODUCTION_REQUIRED = {
+  main: [
+    'SENTRY_DSN',
+    'OTEL_EXPORTER_OTLP_ENDPOINT',
+    'OTEL_EXPORTER_OTLP_HEADERS',
+    'CF_ACCESS_AUD',
+    'CF_ACCESS_CERTS_URL',
   ],
-  reservations: [
-    'DB_URL',
-    'REDIS_URL',
-    'REDIS_TOKEN',
-    'JWT_KID',
-    'JWT_PRIVATE_KEY_PEM',
-    'JWT_PUBLIC_KEY_PEM',
-    'JWKS_JSON',
-    'JWT_JWKS_URL',
-  ],
-  billing: [
-    'DB_URL',
-    'STRIPE_SECRET_KEY',
-    'STRIPE_WEBHOOK_SECRET',
-    'JWT_KID',
-    'JWT_PRIVATE_KEY_PEM',
-    'JWT_PUBLIC_KEY_PEM',
-    'JWKS_JSON',
-    'JWT_JWKS_URL',
-  ],
+  auth: ['SENTRY_DSN', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_HEADERS'],
+  reservations: ['SENTRY_DSN', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_HEADERS'],
+  billing: ['SENTRY_DSN', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_HEADERS'],
 };
 
 const CONFIG_FILES = {
@@ -94,18 +97,18 @@ function listSecrets(configFile, envName) {
   if (configFile !== undefined) wranglerArgs.unshift('-c', configFile);
 
   try {
-    // Use execFileSync with an argument array — no shell interpolation, safe for user-supplied envName.
     const output = execFileSync(
       'pnpm',
       ['--filter', '@athlya/api', 'exec', 'wrangler', ...wranglerArgs],
       { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
     );
-    // wrangler outputs JSON array of { name: string, type: string }
     const parsed = JSON.parse(output.trim());
     if (!Array.isArray(parsed)) return new Set();
     return new Set(parsed.map((s) => s.name));
   } catch (err) {
-    console.error(`[verify-secrets] Failed to list secrets for ${configFile ?? 'main'} --env ${envName}`);
+    console.error(
+      `[verify-secrets] Failed to list secrets for ${configFile ?? 'main'} --env ${envName}`,
+    );
     console.error(String(err));
     return new Set();
   }
@@ -116,19 +119,42 @@ let anyMissing = false;
 for (const [worker, required] of Object.entries(REQUIRED)) {
   const configFile = CONFIG_FILES[worker];
   const present = listSecrets(configFile, env);
-  const missing = required.filter((name) => !present.has(name));
 
+  const missing = required.filter((name) => !present.has(name));
   if (missing.length > 0) {
     console.error(`[verify-secrets] MISSING on ${worker} (${env}): ${missing.join(', ')}`);
     anyMissing = true;
   } else {
-    console.log(`[verify-secrets] OK    ${worker} (${env}): all ${required.length} secrets present`);
+    console.log(`[verify-secrets] OK    ${worker} (${env}): all ${required.length} required secrets present`);
+  }
+
+  const productionRequired = PRODUCTION_REQUIRED[worker] ?? [];
+  if (productionRequired.length > 0) {
+    const missingProd = productionRequired.filter((name) => !present.has(name));
+    if (missingProd.length > 0) {
+      if (isProduction) {
+        console.error(
+          `[verify-secrets] MISSING (production-required) on ${worker}: ${missingProd.join(', ')}`,
+        );
+        anyMissing = true;
+      } else {
+        console.warn(
+          `[verify-secrets] WARN  ${worker} (staging): not set (optional on staging, required on production): ${missingProd.join(', ')}`,
+        );
+      }
+    } else {
+      console.log(
+        `[verify-secrets] OK    ${worker} (${env}): all ${productionRequired.length} observability/access secrets present`,
+      );
+    }
   }
 }
 
 if (anyMissing) {
-  console.error('[verify-secrets] One or more secrets are missing. Run: wrangler secret put <NAME> --env ' + env);
+  console.error(
+    '[verify-secrets] One or more secrets are missing. Run: wrangler secret put <NAME> --env ' + env,
+  );
   process.exit(1);
 }
 
-console.log(`[verify-secrets] All secrets verified for ${env}`);
+console.log(`[verify-secrets] All secrets verified for ${env}.`);
