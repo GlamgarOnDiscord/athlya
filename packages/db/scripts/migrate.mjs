@@ -131,10 +131,15 @@ async function main() {
         continue;
       }
       const requiresNoTx = /\bCONCURRENTLY\b/i.test(body);
-      console.log(`[apply] ${name} ${requiresNoTx ? '(no-transaction)' : ''}...`);
+      console.log(`[apply] ${name}${requiresNoTx ? ' (no-transaction)' : ''}...`);
       if (requiresNoTx) {
+        // CONCURRENTLY DDL cannot run inside a transaction block. The
+        // tracking INSERT runs in its own transaction immediately after.
+        // A crash between the two leaves the migration applied but
+        // untracked — the next run will retry and fail with "already
+        // exists". Fix: add IF NOT EXISTS to the CONCURRENTLY statement.
         await sql.unsafe(body);
-        await sql`INSERT INTO _athlya_migrations (name) VALUES (${name})`;
+        await sql.begin((tx) => tx`INSERT INTO _athlya_migrations (name) VALUES (${name})`);
       } else {
         await sql.begin(async (tx) => {
           await tx.unsafe(body);

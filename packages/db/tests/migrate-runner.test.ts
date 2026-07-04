@@ -36,10 +36,11 @@ describe('migration runner: no-transaction detection', () => {
     expect(requiresNoTx(body)).toBe(true);
   });
 
-  it('does not match "concurrently" inside a comment if keyword appears later', () => {
-    // Even in a comment, the runner must detect it — running a migration
-    // with CONCURRENTLY in the executable SQL (not just comments) would
-    // fail inside a transaction. Conservative: flag if keyword appears anywhere.
+  it('flags migration with CONCURRENTLY in executable SQL even when also present in a comment', () => {
+    // Conservative: flag if keyword appears anywhere in the body.
+    // The real constraint is that the DDL statement itself contains CONCURRENTLY;
+    // a comment alone would not matter, but the regex doesn't parse SQL so it
+    // matches on any occurrence — that is correct and safe.
     const body = `
       -- Cannot run inside a transaction; the migrator must execute this
       -- statement outside an open transaction block.
