@@ -39,7 +39,7 @@
 import { EmailTakenError, type UserRepo, type UserRow } from '@athlya/auth';
 import { isPostgresUniqueViolation } from '@athlya/db/errors';
 import { studios, users } from '@athlya/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
@@ -55,7 +55,11 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
   return {
     async findUserByEmail(email) {
       const rows = await withConnectionRetry(() =>
-        db.select().from(users).where(eq(users.email, email)).limit(1),
+        db
+          .select()
+          .from(users)
+          .where(and(eq(users.email, email), isNull(users.deletedAt)))
+          .limit(1),
       );
       const row = rows[0];
       return row === undefined ? null : toUserRow(row);
