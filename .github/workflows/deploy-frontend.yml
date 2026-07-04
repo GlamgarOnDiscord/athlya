@@ -1,0 +1,254 @@
+name: Deploy Frontend
+
+# Production delivery pipeline for apps/web and apps/studio (issue #422).
+#
+# Hosting: OpenNext → Cloudflare Workers (see docs/runbooks/deploy-unified.md
+# and docs/security/deploy-web-adr.md). The web app deploys as `athlya-web`
+# and studio as `athlya-studio` on the same CF account as the API.
+#
+# Required secrets:
+#   CLOUDFLARE_API_TOKEN        — Workers:Edit + Pages:Edit permission
+#   CLOUDFLARE_ACCOUNT_ID       — CF account ID
+#   SENTRY_AUTH_TOKEN           — Sentry API token (optional; skipped if absent)
+#
+# Required vars:
+#   STAGING_WEB_URL             — e.g. https://staging.athlya.app
+#   STAGING_STUDIO_URL          — e.g. https://staging.studio.athlya.app
+#   PRODUCTION_WEB_URL          — e.g. https://app.athlya.app
+#   PRODUCTION_STUDIO_URL       — e.g. https://studio.athlya.app
+#   SENTRY_ORG, SENTRY_PROJECT  — Sentry org/project slugs (optional)
+#
+# Deployment order (aligns with deploy-unified.md):
+#   1. API must be deployed first when the PR changes the API contract.
+#   2. Web (athlya-web) — serves members.
+#   3. Studio (athlya-studio) — serves studio owners.
+#
+# Run phases:
+#   staging-deploy    — build → deploy staging → smoke E2E
+#   production-deploy — build → deploy production → smoke E2E + Sentry release
+#   rollback          — wrangler rollback web + studio
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Deploy phase
+        required: true
+        type: choice
+        options:
+          - staging-deploy
+          - production-deploy
+          - rollback
+      apps:
+        description: Which apps to deploy (comma-separated, or "all")
+        required: false
+        default: all
+        type: string
+
+concurrency:
+  group: deploy-frontend-${{ inputs.phase }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: ${{ inputs.phase }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.phase == 'staging-deploy' && 'staging' || 'production' }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Assert Cloudflare credentials
+        if: inputs.phase != 'rollback'
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set"
+            exit 1
+          fi
+
+      # Build both apps before any deploy step. SKIP_ENV_VALIDATION prevents
+      # Next.js from crashing when runtime secrets are absent in CI.
+      - name: Build @athlya/shared
+        if: inputs.phase != 'rollback'
+        run: pnpm --filter @athlya/shared build
+
+      - name: Build @athlya/web
+        if: inputs.phase != 'rollback' && (inputs.apps == 'all' || contains(inputs.apps, 'web'))
+        env:
+          SKIP_ENV_VALIDATION: '1'
+        run: pnpm --filter @athlya/web build
+
+      - name: Build @athlya/studio
+        if: inputs.phase != 'rollback' && (inputs.apps == 'all' || contains(inputs.apps, 'studio'))
+        env:
+          SKIP_ENV_VALIDATION: '1'
+        run: pnpm --filter @athlya/studio build
+
+      # Deploy web to staging —————————————————————————————————————————————
+      - name: Deploy @athlya/web (staging)
+        if: inputs.phase == 'staging-deploy' && (inputs.apps == 'all' || contains(inputs.apps, 'web'))
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_SHA:0:7}"
+          pnpm --filter @athlya/web exec wrangler deploy \
+            --env staging \
+            --var "VERSION=${VERSION}"
+
+      - name: Deploy @athlya/studio (staging)
+        if: inputs.phase == 'staging-deploy' && (inputs.apps == 'all' || contains(inputs.apps, 'studio'))
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_SHA:0:7}"
+          pnpm --filter @athlya/studio exec wrangler deploy \
+            --env staging \
+            --var "VERSION=${VERSION}"
+
+      # Smoke E2E — staging ————————————————————————————————————————————————
+      - name: Install Chromium for Playwright
+        if: inputs.phase == 'staging-deploy'
+        run: pnpm --filter @athlya/web e2e:install
+
+      - name: Run Playwright E2E smoke (staging web)
+        if: inputs.phase == 'staging-deploy' && (inputs.apps == 'all' || contains(inputs.apps, 'web'))
+        env:
+          BASE_URL: ${{ vars.STAGING_WEB_URL }}
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_URL}" ]; then
+            echo "::error::vars.STAGING_WEB_URL is not set"
+            exit 1
+          fi
+          pnpm --filter @athlya/web exec playwright test \
+            --config e2e/playwright.config.ts e2e/axe.spec.ts e2e/flows
+
+      # Deploy web to production ———————————————————————————————————————————
+      - name: Deploy @athlya/web (production)
+        if: inputs.phase == 'production-deploy' && (inputs.apps == 'all' || contains(inputs.apps, 'web'))
+        env:
+          PRODUCTION_WEB_URL: ${{ vars.PRODUCTION_WEB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PRODUCTION_WEB_URL}" ]; then
+            echo "::error::vars.PRODUCTION_WEB_URL is not set"
+            exit 1
+          fi
+          VERSION="${GITHUB_SHA:0:7}"
+          pnpm --filter @athlya/web exec wrangler deploy \
+            --env production \
+            --var "VERSION=${VERSION}"
+          # Readiness gate — wait for the prod URL to serve 200.
+          bash scripts/wait-health-ready.sh "${PRODUCTION_WEB_URL}"
+
+      - name: Deploy @athlya/studio (production)
+        if: inputs.phase == 'production-deploy' && (inputs.apps == 'all' || contains(inputs.apps, 'studio'))
+        env:
+          PRODUCTION_STUDIO_URL: ${{ vars.PRODUCTION_STUDIO_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PRODUCTION_STUDIO_URL}" ]; then
+            echo "::error::vars.PRODUCTION_STUDIO_URL is not set"
+            exit 1
+          fi
+          VERSION="${GITHUB_SHA:0:7}"
+          pnpm --filter @athlya/studio exec wrangler deploy \
+            --env production \
+            --var "VERSION=${VERSION}"
+          bash scripts/wait-health-ready.sh "${PRODUCTION_STUDIO_URL}"
+
+      # Sentry release + source maps (production only) ————————————————————
+      - name: Sentry release + source maps
+        if: inputs.phase == 'production-deploy'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SENTRY_AUTH_TOKEN:-}" ] || [ -z "${SENTRY_ORG:-}" ] || [ -z "${SENTRY_PROJECT:-}" ]; then
+            echo "::warning::Sentry credentials not configured — skipping source map upload"
+            exit 0
+          fi
+          RELEASE="${GITHUB_SHA:0:7}"
+          SENTRY_CLI="pnpm exec sentry-cli"
+          for BUILD_DIR in apps/web/.next apps/studio/.next; do
+            [ -d "$BUILD_DIR" ] || continue
+            $SENTRY_CLI releases new "$RELEASE"
+            $SENTRY_CLI sourcemaps inject "$BUILD_DIR"
+            $SENTRY_CLI sourcemaps upload --release "$RELEASE" "$BUILD_DIR"
+            $SENTRY_CLI releases set-commits "$RELEASE" --auto --ignore-missing
+            $SENTRY_CLI releases finalize "$RELEASE"
+            $SENTRY_CLI releases deploys "$RELEASE" new -e production
+          done
+
+      # Smoke E2E — production —————————————————————————————————————————————
+      - name: Install Chromium for Playwright (production smoke)
+        if: inputs.phase == 'production-deploy'
+        run: pnpm --filter @athlya/web e2e:install
+
+      - name: Run Playwright E2E smoke (production web)
+        if: inputs.phase == 'production-deploy' && (inputs.apps == 'all' || contains(inputs.apps, 'web'))
+        env:
+          BASE_URL: ${{ vars.PRODUCTION_WEB_URL }}
+          API_URL: ${{ vars.PRODUCTION_API_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_URL}" ]; then
+            echo "::error::vars.PRODUCTION_WEB_URL is not set"
+            exit 1
+          fi
+          # Smoke covers auth, classes list, booking, and cancel flows.
+          pnpm --filter @athlya/web exec playwright test \
+            --config e2e/playwright.config.ts e2e/axe.spec.ts e2e/flows
+
+      # Rollback ——————————————————————————————————————————————————————————
+      - name: Rollback @athlya/web
+        if: inputs.phase == 'rollback' && (inputs.apps == 'all' || contains(inputs.apps, 'web'))
+        continue-on-error: true
+        run: |
+          pnpm --filter @athlya/web exec wrangler rollback --env production -y \
+            -m "frontend rollback (issue #422)"
+          echo "::warning::@athlya/web rolled back to previous version"
+
+      - name: Rollback @athlya/studio
+        if: inputs.phase == 'rollback' && (inputs.apps == 'all' || contains(inputs.apps, 'studio'))
+        continue-on-error: true
+        run: |
+          pnpm --filter @athlya/studio exec wrangler rollback --env production -y \
+            -m "frontend rollback (issue #422)"
+          echo "::warning::@athlya/studio rolled back to previous version"
+
+      # On failure — auto-rollback production deploys ——————————————————————
+      - name: Rollback @athlya/web on failure
+        if: failure() && inputs.phase == 'production-deploy' && (inputs.apps == 'all' || contains(inputs.apps, 'web'))
+        run: |
+          echo "::warning::Production deploy failed — rolling back athlya-web"
+          pnpm --filter @athlya/web exec wrangler rollback --env production -y \
+            -m "auto-rollback after deploy failure" || true
+
+      - name: Rollback @athlya/studio on failure
+        if: failure() && inputs.phase == 'production-deploy' && (inputs.apps == 'all' || contains(inputs.apps, 'studio'))
+        run: |
+          echo "::warning::Production deploy failed — rolling back athlya-studio"
+          pnpm --filter @athlya/studio exec wrangler rollback --env production -y \
+            -m "auto-rollback after deploy failure" || true
