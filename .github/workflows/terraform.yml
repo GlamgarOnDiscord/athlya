@@ -78,6 +78,9 @@ jobs:
       TF_VAR_environment: ${{ inputs.environment || 'staging' }}
       # HCP Terraform remote state token (see versions.tf backend block).
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_app_terraform_io }}
+      # Select the correct HCP Terraform workspace for this environment so
+      # staging and production state are never mixed (Copilot review #455).
+      TF_WORKSPACE: athlya-${{ inputs.environment || 'staging' }}
 
     steps:
       - name: Check prerequisites

@@ -28,12 +28,15 @@ Choose one backend:
 ### Option A — HCP Terraform (recommended, free tier)
 
 1. Create a free account at <https://app.terraform.io>.
-2. Create an organisation and a workspace named `athlya-production`.
-3. Set workspace execution mode to **Local** (Terraform runs in CI, not HCP).
-4. Generate an API token: User Settings → Tokens → Create an API token.
-5. Add `TF_TOKEN_app_terraform_io` to the **production** GitHub Environment secret.
-6. Uncomment the `cloud {}` block in `infra/terraform/versions.tf`.
-7. Run `terraform init` locally to migrate existing state (if any).
+2. Create an organisation and **two** workspaces: `athlya-staging` and `athlya-production`.
+   Set execution mode to **Local** on both (Terraform runs in CI, not HCP).
+3. Generate an API token: User Settings → Tokens → Create an API token.
+4. Add `TF_TOKEN_app_terraform_io` to **both** the `staging` and `production` GitHub Environment secrets.
+5. Uncomment the `cloud {}` block in `infra/terraform/versions.tf`.
+6. Run `terraform init` locally to migrate existing state (if any).
+
+CI sets `TF_WORKSPACE=athlya-<environment>` automatically, so staging and
+production state are always isolated.
 
 ### Option B — S3 + DynamoDB
 
