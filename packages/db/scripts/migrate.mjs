@@ -10,7 +10,12 @@
  *    in lexicographic order.
  *  • Maintains a `_athlya_migrations(name text primary key, applied_at
  *    timestamptz default now())` table so re-running is idempotent.
- *  • Each migration file is wrapped in a single transaction so a
+ *  • Migrations whose body contains `CONCURRENTLY` (e.g. `CREATE INDEX
+ *    CONCURRENTLY`) are executed outside a transaction — PostgreSQL forbids
+ *    CONCURRENTLY inside a transaction block. These migrations are run with
+ *    `sql.unsafe()` directly, then the tracking row is inserted in a
+ *    separate immediate transaction.
+ *  • All other migration files are wrapped in a single transaction so a
  *    partial failure leaves the schema untouched.
  *
  * Usage
@@ -125,11 +130,17 @@ async function main() {
         console.log(`[skip] ${name} (already applied)`);
         continue;
       }
-      console.log(`[apply] ${name} ...`);
-      await sql.begin(async (tx) => {
-        await tx.unsafe(body);
-        await tx`INSERT INTO _athlya_migrations (name) VALUES (${name})`;
-      });
+      const requiresNoTx = /\bCONCURRENTLY\b/i.test(body);
+      console.log(`[apply] ${name} ${requiresNoTx ? '(no-transaction)' : ''}...`);
+      if (requiresNoTx) {
+        await sql.unsafe(body);
+        await sql`INSERT INTO _athlya_migrations (name) VALUES (${name})`;
+      } else {
+        await sql.begin(async (tx) => {
+          await tx.unsafe(body);
+          await tx`INSERT INTO _athlya_migrations (name) VALUES (${name})`;
+        });
+      }
       console.log(`[ok]    ${name}`);
     }
     console.log('[done] all migrations applied');
