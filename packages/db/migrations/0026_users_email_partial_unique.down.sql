@@ -1,11 +1,14 @@
 -- Rollback: restore the global unique index on users.email.
 --
--- WARNING: if any (active + soft-deleted) user pair share the same email
--- (valid after 0026 was applied), this CREATE will fail with a duplicate-key
--- error. Pre-emptively anonymise those rows before running this rollback:
+-- WARNING: after 0026 was applied, the same email may appear in both an
+-- active and a soft-deleted row (that is the whole point of the partial
+-- index). Recreating a global UNIQUE(email) will fail with a duplicate-key
+-- error if any such pair exists. Hard-delete the soft-deleted duplicates
+-- before running this rollback:
 --
---   UPDATE users SET email = NULL WHERE deleted_at IS NOT NULL
---   AND email IN (SELECT email FROM users WHERE deleted_at IS NULL);
+--   DELETE FROM users
+--   WHERE deleted_at IS NOT NULL
+--     AND email IN (SELECT email FROM users WHERE deleted_at IS NULL);
 --
 -- CONCURRENTLY avoids a table lock during build. IF NOT EXISTS is idempotent
 -- in case a partial rollback left the index behind.
