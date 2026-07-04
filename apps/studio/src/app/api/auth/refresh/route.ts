@@ -49,7 +49,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const denied = assertSameOrigin(request);
   if (denied !== null) return denied;
 
-  const isProduction = process.env['NODE_ENV'] === 'production';
+  const isProduction = process.env['APP_ENV'] === 'production';
   const refreshToken = request.cookies.get(REFRESH_COOKIE_NAME)?.value;
   if (refreshToken === undefined || refreshToken === '') {
     return problemJson(

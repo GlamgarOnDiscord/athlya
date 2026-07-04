@@ -144,7 +144,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const cookie = buildRefreshCookie({
     token: session.refreshToken,
     maxAgeSec: session.refreshTokenExpiresIn,
-    isProduction: process.env['NODE_ENV'] === 'production',
+    isProduction: process.env['APP_ENV'] === 'production',
   });
 
   return new NextResponse(JSON.stringify(client), {

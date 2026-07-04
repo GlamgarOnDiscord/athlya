@@ -23,7 +23,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const denied = assertSameOrigin(request);
   if (denied !== null) return denied;
 
-  const isProduction = process.env['NODE_ENV'] === 'production';
+  const isProduction = process.env['APP_ENV'] === 'production';
   const authHeader = request.headers.get('authorization');
   if (authHeader !== null && authHeader !== '') {
     const apiUrl = getPublicApiUrl();
