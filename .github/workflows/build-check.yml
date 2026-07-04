@@ -84,12 +84,17 @@ jobs:
         run: |
           set -euo pipefail
           MAX_KB=8192
-          for dist in packages/api/.wrangler/dist/*.js 2>/dev/null; do
-            [ -f "$dist" ] || continue
-            size_kb=$(du -k "$dist" | cut -f1)
-            echo "$(basename "$dist"): ${size_kb}KB"
-            if [ "$size_kb" -gt "$MAX_KB" ]; then
-              echo "ERROR: $(basename "$dist") exceeds ${MAX_KB}KB Worker bundle budget"
-              exit 1
-            fi
-          done || echo "No Worker bundles found (wrangler build may use a different output path)"
+          shopt -s nullglob
+          dists=(packages/api/.wrangler/dist/*.js)
+          if [ "${#dists[@]}" -eq 0 ]; then
+            echo "No Worker bundles found (wrangler build may use a different output path)"
+          else
+            for dist in "${dists[@]}"; do
+              size_kb=$(du -k "$dist" | cut -f1)
+              echo "$(basename "$dist"): ${size_kb}KB"
+              if [ "$size_kb" -gt "$MAX_KB" ]; then
+                echo "ERROR: $(basename "$dist") exceeds ${MAX_KB}KB Worker bundle budget"
+                exit 1
+              fi
+            done
+          fi
