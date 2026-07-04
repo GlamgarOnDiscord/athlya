@@ -149,6 +149,40 @@ describe('PUT /v1/members/me/avatar', () => {
     expect(deps.members.uploadAvatar).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['abc', 'non-numeric string'],
+    ['1e6', 'scientific notation'],
+    ['10abc', 'partial numeric'],
+    ['0x10', 'hex notation'],
+    ['-1', 'negative value'],
+  ])(
+    'returns 400 invalid_content_length for malformed Content-Length "%s" (%s)',
+    async (badValue) => {
+      const token = await mintJwt();
+      const deps = buildStubDeps();
+      const app = buildAppWithDeps(deps);
+
+      const res = await app.request(
+        '/v1/members/me/avatar',
+        {
+          method: 'PUT',
+          headers: {
+            authorization: `Bearer ${token}`,
+            'content-type': 'image/jpeg',
+            'content-length': badValue,
+          },
+          body: TINY_JPEG,
+        },
+        env(),
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as any;
+      expect(body.code).toBe('invalid_content_length');
+      expect(deps.members.uploadAvatar).not.toHaveBeenCalled();
+    },
+  );
+
   it('returns 413 when body exceeds 5 MB', async () => {
     const token = await mintJwt();
     const deps = buildStubDeps();

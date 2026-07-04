@@ -254,15 +254,15 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
         'length_required',
       );
     }
-    const contentLength = parseInt(rawContentLength, 10);
-    if (isNaN(contentLength) || contentLength < 0) {
+    if (!/^\d+$/.test(rawContentLength)) {
       return avatarProblem(
         c,
         400,
-        'Content-Length must be a non-negative integer',
+        'Content-Length must be a non-negative decimal integer',
         'invalid_content_length',
       );
     }
+    const contentLength = Number(rawContentLength);
     if (contentLength > AVATAR_MAX_BYTES) {
       return avatarProblem(
         c,
