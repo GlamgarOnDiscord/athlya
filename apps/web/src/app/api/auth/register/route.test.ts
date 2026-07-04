@@ -156,6 +156,82 @@ describe('POST /api/auth/register', () => {
     expect(res.headers.get('set-cookie')).toBeNull();
   });
 
+  it('sets Secure cookie attribute when APP_ENV=production (issue #465)', async () => {
+    vi.stubEnv('APP_ENV', 'production');
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          user: { id: 'u1', email: 'alice@example.com' },
+          accessToken: 'access.jwt',
+          refreshToken: 'refresh.jwt',
+          accessTokenExpiresIn: 900,
+          refreshTokenExpiresIn: 2_592_000,
+        },
+        201,
+      ),
+    );
+    const res = await POST(buildRequest(validBody(), { 'cf-turnstile-token': 'tts.token' }));
+    expect(res.headers.get('set-cookie')).toContain('Secure');
+    vi.unstubAllEnvs();
+  });
+
+  it('sets Secure cookie attribute when APP_ENV=staging (issue #465)', async () => {
+    vi.stubEnv('APP_ENV', 'staging');
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          user: { id: 'u1', email: 'alice@example.com' },
+          accessToken: 'access.jwt',
+          refreshToken: 'refresh.jwt',
+          accessTokenExpiresIn: 900,
+          refreshTokenExpiresIn: 2_592_000,
+        },
+        201,
+      ),
+    );
+    const res = await POST(buildRequest(validBody(), { 'cf-turnstile-token': 'tts.token' }));
+    expect(res.headers.get('set-cookie')).toContain('Secure');
+    vi.unstubAllEnvs();
+  });
+
+  it('omits Secure cookie attribute when APP_ENV=development (issue #465)', async () => {
+    vi.stubEnv('APP_ENV', 'development');
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          user: { id: 'u1', email: 'alice@example.com' },
+          accessToken: 'access.jwt',
+          refreshToken: 'refresh.jwt',
+          accessTokenExpiresIn: 900,
+          refreshTokenExpiresIn: 2_592_000,
+        },
+        201,
+      ),
+    );
+    const res = await POST(buildRequest(validBody(), { 'cf-turnstile-token': 'tts.token' }));
+    expect(res.headers.get('set-cookie')).not.toContain('Secure');
+    vi.unstubAllEnvs();
+  });
+
+  it('sets Secure cookie attribute when APP_ENV is unset (fail-closed, issue #465)', async () => {
+    vi.stubEnv('APP_ENV', '');
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          user: { id: 'u1', email: 'alice@example.com' },
+          accessToken: 'access.jwt',
+          refreshToken: 'refresh.jwt',
+          accessTokenExpiresIn: 900,
+          refreshTokenExpiresIn: 2_592_000,
+        },
+        201,
+      ),
+    );
+    const res = await POST(buildRequest(validBody(), { 'cf-turnstile-token': 'tts.token' }));
+    expect(res.headers.get('set-cookie')).toContain('Secure');
+    vi.unstubAllEnvs();
+  });
+
   it('forwards an empty cf-turnstile-token header when the client omits it', async () => {
     // Prime the upstream to return 403 so we can inspect the header
     // the route passed through without having to keep going.

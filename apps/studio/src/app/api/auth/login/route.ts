@@ -20,7 +20,7 @@ import { NextResponse } from 'next/server';
 
 import { buildRefreshCookie } from '../../../../lib/auth/cookies';
 import { assertSameOrigin } from '../../../../lib/auth/same-origin';
-import { getPublicApiUrl } from '../../../../lib/env';
+import { getPublicApiUrl, isSecureCookieEnv } from '../../../../lib/env';
 
 import type { ProblemDetails } from '@athlya/shared/schemas';
 import type { NextRequest } from 'next/server';
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const cookie = buildRefreshCookie({
     token: session.refreshToken,
     maxAgeSec: session.refreshTokenExpiresIn,
-    isProduction: process.env['NODE_ENV'] === 'production',
+    isProduction: isSecureCookieEnv(),
   });
 
   return new NextResponse(JSON.stringify(client), {
