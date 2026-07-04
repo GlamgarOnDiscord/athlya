@@ -1,15 +1,28 @@
-name: Terraform plan
+name: Terraform
 
-# Issue #305 — run terraform plan on PRs that touch infra/*.
-# Blocks merge if the plan errors. Does NOT auto-apply.
+# Issue #305 — run terraform plan on PRs that touch infra/terraform/.
+# Issue #405 — fix plan/apply split so apply always re-plans on the
+#              same runner before applying (no stale tfplan artifact).
 #
-# Required secrets (GitHub environment: staging):
-#   TF_VAR_cloudflare_api_token   — Cloudflare API token (Workers:Read, Queue:Read, R2:Read)
+# Flow:
+#   pull_request          → plan only (blocks merge on error; posts diff to PR)
+#   workflow_dispatch plan → plan only (can target staging or production)
+#   workflow_dispatch apply → plan THEN apply in the same job (required reviewer
+#                            gate via GitHub Environment before the job runs)
+#
+# Required secrets (GitHub Environment: staging / production):
+#   TF_VAR_cloudflare_api_token   — Cloudflare API token (Workers, Queue, R2, WAF)
 #   TF_VAR_cloudflare_account_id  — Cloudflare account ID
 #   TF_VAR_cloudflare_zone_id     — Cloudflare zone ID for athlya.app
+#   TF_VAR_sentry_auth_token      — Sentry API auth token (metric alerts)
+#   TF_VAR_sentry_org             — Sentry organisation slug
+#   TF_VAR_sentry_project         — Sentry project slug
 #
-# The plan is scoped to the staging environment by default.
-# Production apply requires a manual workflow_dispatch + required reviewer.
+# Remote state (HCP Terraform / Terraform Cloud):
+#   TF_TOKEN_app_terraform_io     — HCP Terraform API token
+#
+# See infra/terraform/versions.tf for backend configuration.
+# See docs/runbooks/terraform-ops.md for apply runbook.
 
 on:
   pull_request:
@@ -20,25 +33,25 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Target environment'
+        description: Target environment
         required: true
-        default: 'staging'
+        default: staging
         type: choice
         options:
           - staging
           - production
       action:
-        description: 'Terraform action'
+        description: Terraform action
         required: true
-        default: 'plan'
+        default: plan
         type: choice
         options:
           - plan
           - apply
 
 concurrency:
-  group: terraform-${{ github.ref }}
-  cancel-in-progress: true
+  group: terraform-${{ inputs.environment || 'staging' }}-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -48,7 +61,7 @@ jobs:
   terraform:
     name: Terraform ${{ inputs.action || 'plan' }} (${{ inputs.environment || 'staging' }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: ${{ inputs.environment || 'staging' }}
 
     defaults:
@@ -59,14 +72,22 @@ jobs:
       TF_VAR_cloudflare_api_token: ${{ secrets.TF_VAR_cloudflare_api_token }}
       TF_VAR_cloudflare_account_id: ${{ secrets.TF_VAR_cloudflare_account_id }}
       TF_VAR_cloudflare_zone_id: ${{ secrets.TF_VAR_cloudflare_zone_id }}
+      TF_VAR_sentry_auth_token: ${{ secrets.TF_VAR_sentry_auth_token }}
+      TF_VAR_sentry_org: ${{ secrets.TF_VAR_sentry_org }}
+      TF_VAR_sentry_project: ${{ secrets.TF_VAR_sentry_project }}
       TF_VAR_environment: ${{ inputs.environment || 'staging' }}
+      # HCP Terraform remote state token (see versions.tf backend block).
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_app_terraform_io }}
+      # Select the correct HCP Terraform workspace for this environment so
+      # staging and production state are never mixed (Copilot review #455).
+      TF_WORKSPACE: athlya-${{ inputs.environment || 'staging' }}
 
     steps:
-      - name: Check infra prerequisites
+      - name: Check prerequisites
         id: prereq
         run: |
           if [ -z "${TF_VAR_cloudflare_api_token}" ]; then
-            echo "::notice::TF_VAR_cloudflare_api_token not set — terraform plan skipped. Set it in the '${{ inputs.environment || 'staging' }}' GitHub environment."
+            echo "::notice::TF_VAR_cloudflare_api_token not set — terraform skipped. Set it in the '${{ inputs.environment || 'staging' }}' GitHub environment."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -91,8 +112,11 @@ jobs:
         if: steps.prereq.outputs.skip != 'true'
         run: terraform validate
 
+      # Plan always runs — for both 'plan' and 'apply' actions.
+      # This ensures the apply step always consumes a fresh plan produced
+      # in the same job, never a stale artifact from a prior run (#405).
       - name: terraform plan
-        if: steps.prereq.outputs.skip != 'true' && (inputs.action == 'plan' || github.event_name == 'pull_request')
+        if: steps.prereq.outputs.skip != 'true'
         id: plan
         run: terraform plan -input=false -no-color -out=tfplan
         continue-on-error: false
@@ -124,6 +148,10 @@ jobs:
               body: output
             });
 
+      # Apply only runs on explicit workflow_dispatch action=apply.
+      # The plan above already ran and produced tfplan in this same job.
+      # GitHub Environment required-reviewers gate fires before this job
+      # starts, so a human approves before any resources are touched.
       - name: terraform apply
         if: steps.prereq.outputs.skip != 'true' && inputs.action == 'apply' && github.event_name == 'workflow_dispatch'
         run: terraform apply -input=false tfplan
