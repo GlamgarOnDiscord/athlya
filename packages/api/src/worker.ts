@@ -72,6 +72,7 @@ import { buildCronSqlExecutor } from './adapters/cron-sql-executor.js';
 import { getOrCreateRedis } from './adapters/deps-cache.js';
 import { buildExportDeps } from './adapters/export-deps.js';
 import { buildNotificationsDeps } from './adapters/notifications-deps.js';
+import { AVATAR_MAX_BYTES } from './adapters/avatar-upload-store-r2.js';
 import { buildStudioSlugResolver } from './adapters/studio-slug-resolver.js';
 import { buildDlqRouter } from './admin/dlq-routes.js';
 import { buildJwtRotateRouter } from './admin/jwt-rotate-routes.js';
@@ -781,30 +782,29 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   //    /.well-known/*) are read-only and not exposed to user
   //    input. The 413 response is shaped as RFC 9457 Problem
   //    Details so the failure mode matches the rest of the API.
-  // The avatar upload route (`PUT /v1/members/me/avatar`) accepts up to 5 MB
-  // and enforces its own size guard inside the handler. Exclude it from the
-  // 256 KiB global cap so the platform-level limit does not fire first.
+  // Body size limits. All /v1/* routes are capped at 256 KiB except the
+  // avatar upload, which uses the 5 MB avatar-specific cap. Both limits
+  // fire before the body is buffered, providing defence-in-depth on top
+  // of the handler-level Content-Length check (issue #463).
+  const makeBodyLimitOnError =
+    (code: string) =>
+    (ctx: Context<HonoEnv>): Response => {
+      const traceId = ctx.get('traceId');
+      const body = JSON.stringify({
+        type: 'about:blank',
+        title: 'Payload Too Large',
+        status: 413,
+        code,
+        traceId,
+      });
+      return ctx.body(body, 413, { 'content-type': PROBLEM_JSON });
+    };
   app.use('/v1/*', async (c, next) => {
-    if (c.req.method === 'PUT' && c.req.path.endsWith('/members/me/avatar')) {
-      return next();
-    }
-    return bodyLimit({
-      maxSize: 256 * 1024,
-      onError: (ctx: Context<HonoEnv>) => {
-        const traceId = ctx.get('traceId');
-        const body = JSON.stringify({
-          type: 'about:blank',
-          title: 'Payload Too Large',
-          status: 413,
-          code: 'payload_too_large',
-          traceId,
-        });
-        return ctx.body(body, 413, {
-          'content-type': PROBLEM_JSON,
-        });
-      },
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    })(c, next);
+    const isAvatarUpload = c.req.method === 'PUT' && c.req.path.endsWith('/members/me/avatar');
+    const maxSize = isAvatarUpload ? AVATAR_MAX_BYTES : 256 * 1024;
+    const onError = makeBodyLimitOnError(isAvatarUpload ? 'avatar_too_large' : 'payload_too_large');
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    return bodyLimit({ maxSize, onError })(c, next);
   });
 
   // 7. Tenant claim guard — Sprint 1 / Slice 1.4 (Sprint-1 SP1.5,
