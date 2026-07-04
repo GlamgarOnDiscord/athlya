@@ -296,6 +296,21 @@ describe('register', () => {
     );
   });
 
+  it('rejects with hibp_unavailable when HIBP is unreachable and hibpFailClosed is true (issue #464)', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { deps, repo } = makeDeps({ hibpFail: true });
+    repo.findStudioBySlug.mockResolvedValue({
+      id: STUDIO_ID,
+      slug: 'athlya-studio',
+      name: 'Athlya',
+    });
+
+    await expect(register(REGISTER_INPUT, { ...deps, hibpFailClosed: true })).rejects.toMatchObject(
+      { code: 'hibp_unavailable' },
+    );
+    expect(repo.createUser).not.toHaveBeenCalled();
+  });
+
   it('rejects with email_taken when the repo reports a unique-email collision', async () => {
     const { deps, repo } = makeDeps();
     repo.findStudioBySlug.mockResolvedValue({

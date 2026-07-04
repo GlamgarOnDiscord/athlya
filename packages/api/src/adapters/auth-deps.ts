@@ -261,6 +261,7 @@ async function getAuthState(env: AthlyaBindings): Promise<AuthServiceState> {
         (env as { JWT_AUDIENCE?: string }).JWT_AUDIENCE ?? `athlya-api-${env.ENVIRONMENT}`,
     },
     publishEvent: (event: AthlyaEvent) => buildPublishEvent(env)(event),
+    hibpFailClosed: env.ENVIRONMENT === 'production',
   };
 
   return {
@@ -486,6 +487,7 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
       await svcConfirmReset(input, {
         passwordResetRepo: state.passwordResetRepo,
         sessionStore: state.sessionStore,
+        hibpFailClosed: env.ENVIRONMENT === 'production',
       });
     },
     checkPasswordResetRateLimit: async (email: string) => {

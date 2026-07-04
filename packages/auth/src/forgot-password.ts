@@ -261,6 +261,11 @@ export interface ConfirmResetDeps {
   readonly sessionStore: AuthServiceDeps['sessionStore'];
   /** Optional HIBP `fetch` override (mirror of register's). */
   readonly hibpFetch?: typeof fetch;
+  /**
+   * When `true`, a HIBP outage causes password-reset to reject with
+   * `AuthError('hibp_unavailable')`. Mirrors `AuthServiceDeps.hibpFailClosed`.
+   */
+  readonly hibpFailClosed?: boolean;
   /** Optional clock for tests. */
   readonly now?: () => number;
 }
@@ -274,17 +279,20 @@ export interface ConfirmResetDeps {
  *   3. Expiry guard (defence-in-depth — the SQL filter already
  *      rejects expired rows but the in-memory check covers a
  *      `now()` skew between DB and Worker isolate).
- *   4. HIBP check — fail-open if unavailable (issue #233, matches
- *      `register()`): reset proceeds, `athlya.hibp.degraded` metric
- *      emitted. Reject with `password_breached` if the password is known.
+ *   4. HIBP check — fail-open by default (issue #233); emit
+ *      `athlya.hibp.degraded` metric on outage and proceed.
+ *      When `deps.hibpFailClosed` is `true`, reject with
+ *      `hibp_unavailable` (HTTP 503) instead of proceeding.
+ *      Reject with `password_breached` if the password is known.
  *   5. Bcrypt the new password.
  *   6. Atomic consume + reset via the repo.
  *   7. `revokeAllForUser` — every active session destroyed.
  *      Pattern is "password reset = security event"; the user
  *      re-authenticates on every device.
  *
- * @throws {@link AuthError} with one of `token_invalid`,
- *   `token_expired`, `password_breached`.
+ * @throws {\@link AuthError} with one of `token_invalid`,
+ *   `token_expired`, `password_breached`,
+ *   `hibp_unavailable` (only when `deps.hibpFailClosed` is `true`).
  */
 export async function confirmReset(
   input: ConfirmResetInput,
@@ -308,8 +316,7 @@ export async function confirmReset(
     throw new AuthError('token_expired');
   }
 
-  // Issue #233: fail-open — allow password reset to proceed when HIBP
-  // is unreachable, matching the same policy as register().
+  // Fail-open by default; pass `hibpFailClosed: true` in production.
   let breached: boolean;
   try {
     breached = await defaultIsBreached(
@@ -324,6 +331,9 @@ export async function confirmReset(
         op: 'confirmReset',
         error: err.message,
       });
+      if (deps.hibpFailClosed === true) {
+        throw new AuthError('hibp_unavailable');
+      }
       breached = false;
     } else {
       throw err;
