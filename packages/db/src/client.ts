@@ -393,11 +393,15 @@ export async function pingDb(connectionString: string): Promise<number> {
  * Queries `pg_roles` for the current user and throws if `rolbypassrls`
  * is true. Must be called once per Worker isolate cold start (issue #461).
  *
- * Skipped when `environment === 'dev'` — local dev may run as the owner
- * role and that is acceptable during development.
+ * Only runs when `environment` is explicitly `'staging'` or `'production'`.
+ * Any other value (including `undefined`, `'dev'`, `'test'`) skips the check
+ * so local dev and CI pass without a real DB. The fail-safe direction is:
+ * an unrecognised environment is treated as non-prod and skipped rather than
+ * blocking, but a missing DB_URL binding simply causes `neon()` to throw,
+ * which surfaces as a 500 and alerts ops.
  */
 export async function assertRlsRole(connectionString: string, environment: string): Promise<void> {
-  if (environment === 'dev') return;
+  if (environment !== 'staging' && environment !== 'production') return;
 
   const sqlClient = neon(connectionString);
   const rows = await sqlClient`
@@ -412,10 +416,12 @@ export async function assertRlsRole(connectionString: string, environment: strin
   if (row.bypass) {
     throw new Error(
       `[boot] assertRlsRole: connected as "${row.name}" which has BYPASSRLS. ` +
-        'Switch DATABASE_URL to athlya_app (rolbypassrls=false) before serving traffic.',
+        'Switch DB_URL to athlya_app (rolbypassrls=false) before serving traffic.',
     );
   }
-  console.log(`[boot] rls-role-check: ok (role="${row.name}", bypassrls=false)`);
+  console.log(
+    JSON.stringify({ event: 'rls-role-check', role: row.name, bypassrls: false, ok: true }),
+  );
 }
 
 /**

@@ -1350,7 +1350,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       app.use('/v1/*', async (c, next) => {
         latestEnv = c.env;
         if (typeof c.env.DB_URL === 'string' && c.env.DB_URL.length > 0) {
-          rlsCheckPromise ??= assertRlsRole(c.env.DB_URL, c.env.ENVIRONMENT ?? 'dev');
+          rlsCheckPromise ??= assertRlsRole(c.env.DB_URL, c.env.ENVIRONMENT ?? '');
           await rlsCheckPromise;
         }
         const cf = (c.req.raw.cf as { continent?: string } | undefined) ?? undefined;
