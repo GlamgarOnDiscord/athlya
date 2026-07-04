@@ -16,7 +16,7 @@
  *   6. Family revoke — every active session destroyed on success.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_RESET_TOKEN_TTL_SEC, confirmReset, requestReset } from '../forgot-password.js';
 import type { PasswordResetEmailTransport, PasswordResetRepo } from '../forgot-password.js';
@@ -178,6 +178,10 @@ describe('requestReset (Sprint-6 SP6.3 — S2-006)', () => {
 /* ================================================================== */
 
 describe('confirmReset (Sprint-6 SP6.3 — S2-006)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('rejects an unknown token with token_invalid', async () => {
     const passwordResetRepo = makeResetRepo();
     const sessionStore = makeSessionStore();

@@ -433,7 +433,7 @@ export interface AuthServiceDeps {
   readonly hibpFetch?: typeof fetch;
   /**
    * When `true`, a HIBP outage causes registration and password-reset
-   * to reject with `AuthError('hibp_unavailable')` (HTTP 422) rather
+   * to reject with `AuthError('hibp_unavailable')` (HTTP 503) rather
    * than silently proceeding. Set to `true` in production to prevent
    * a HIBP outage from allowing breached passwords through.
    * Defaults to `false` (fail-open).
@@ -649,7 +649,8 @@ function buildUserDeletedEvent(
  * before passing it to the repo.
  *
  * @throws {@link AuthError} with one of:
- *   `studio_not_found`, `password_breached`, `email_taken`.
+ *   `studio_not_found`, `password_breached`, `email_taken`,
+ *   `hibp_unavailable` (only when `deps.hibpFailClosed` is `true`).
  */
 export async function register(input: RegisterRequest, deps: AuthServiceDeps): Promise<Session> {
   const email = normaliseEmail(input.email);

@@ -279,17 +279,20 @@ export interface ConfirmResetDeps {
  *   3. Expiry guard (defence-in-depth — the SQL filter already
  *      rejects expired rows but the in-memory check covers a
  *      `now()` skew between DB and Worker isolate).
- *   4. HIBP check — fail-open if unavailable (issue #233, matches
- *      `register()`): reset proceeds, `athlya.hibp.degraded` metric
- *      emitted. Reject with `password_breached` if the password is known.
+ *   4. HIBP check — fail-open by default (issue #233); emit
+ *      `athlya.hibp.degraded` metric on outage and proceed.
+ *      When `deps.hibpFailClosed` is `true`, reject with
+ *      `hibp_unavailable` (HTTP 503) instead of proceeding.
+ *      Reject with `password_breached` if the password is known.
  *   5. Bcrypt the new password.
  *   6. Atomic consume + reset via the repo.
  *   7. `revokeAllForUser` — every active session destroyed.
  *      Pattern is "password reset = security event"; the user
  *      re-authenticates on every device.
  *
- * @throws {@link AuthError} with one of `token_invalid`,
- *   `token_expired`, `password_breached`.
+ * @throws {\@link AuthError} with one of `token_invalid`,
+ *   `token_expired`, `password_breached`,
+ *   `hibp_unavailable` (only when `deps.hibpFailClosed` is `true`).
  */
 export async function confirmReset(
   input: ConfirmResetInput,
