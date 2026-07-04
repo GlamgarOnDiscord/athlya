@@ -510,6 +510,9 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
       }
       return count <= 3;
     },
+    idempotency: {
+      db: getOrCreateDbHttp(env.DB_URL),
+    },
   };
 }
 

@@ -39,7 +39,10 @@ import { sql } from 'drizzle-orm';
 
 import { DbError } from './errors.js';
 
-import type { AthlyaDb, AthlyaTx } from './client.js';
+import type { AthlyaDb, AthlyaDbHttp, AthlyaTx } from './client.js';
+
+/** Union of every Drizzle handle that supports `.execute(sql\`...\`)`. */
+export type IdempotencyDb = AthlyaDb | AthlyaDbHttp | AthlyaTx;
 
 /** RFC 4122 UUID v1–8 with variant bits. */
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -120,7 +123,7 @@ interface IdempotencyRowRaw {
  * clock is the single source of truth.
  */
 export async function lookup(
-  tx: AthlyaTx | AthlyaDb,
+  tx: IdempotencyDb,
   key: string,
   userId: string,
 ): Promise<IdempotencyEntry | null> {
@@ -168,7 +171,7 @@ export async function lookup(
  * parameterised and side-steps string concatenation into the SQL text.
  */
 export async function store(
-  tx: AthlyaTx | AthlyaDb,
+  tx: IdempotencyDb,
   key: string,
   userId: string,
   response: { readonly body: Record<string, unknown>; readonly statusCode: number },
