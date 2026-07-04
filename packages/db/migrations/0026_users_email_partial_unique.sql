@@ -32,7 +32,9 @@
 -- =====================================================================
 
 -- Step 1: build the replacement partial index without a table lock.
-CREATE UNIQUE INDEX CONCURRENTLY "users_email_active_unique"
+-- IF NOT EXISTS makes this idempotent: if a previous run created the
+-- index but crashed before recording the migration, a retry skips it.
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "users_email_active_unique"
     ON "users" ("email")
     WHERE "deleted_at" IS NULL;
 
