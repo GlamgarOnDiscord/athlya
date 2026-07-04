@@ -261,6 +261,11 @@ export interface ConfirmResetDeps {
   readonly sessionStore: AuthServiceDeps['sessionStore'];
   /** Optional HIBP `fetch` override (mirror of register's). */
   readonly hibpFetch?: typeof fetch;
+  /**
+   * When `true`, a HIBP outage causes password-reset to reject with
+   * `AuthError('hibp_unavailable')`. Mirrors `AuthServiceDeps.hibpFailClosed`.
+   */
+  readonly hibpFailClosed?: boolean;
   /** Optional clock for tests. */
   readonly now?: () => number;
 }
@@ -308,8 +313,7 @@ export async function confirmReset(
     throw new AuthError('token_expired');
   }
 
-  // Issue #233: fail-open — allow password reset to proceed when HIBP
-  // is unreachable, matching the same policy as register().
+  // Fail-open by default; pass `hibpFailClosed: true` in production.
   let breached: boolean;
   try {
     breached = await defaultIsBreached(
@@ -324,6 +328,9 @@ export async function confirmReset(
         op: 'confirmReset',
         error: err.message,
       });
+      if (deps.hibpFailClosed === true) {
+        throw new AuthError('hibp_unavailable');
+      }
       breached = false;
     } else {
       throw err;

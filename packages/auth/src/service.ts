@@ -432,6 +432,14 @@ export interface AuthServiceDeps {
    */
   readonly hibpFetch?: typeof fetch;
   /**
+   * When `true`, a HIBP outage causes registration and password-reset
+   * to reject with `AuthError('hibp_unavailable')` (HTTP 422) rather
+   * than silently proceeding. Set to `true` in production to prevent
+   * a HIBP outage from allowing breached passwords through.
+   * Defaults to `false` (fail-open).
+   */
+  readonly hibpFailClosed?: boolean;
+  /**
    * Optional injected OAuth verifier. Defaults to one built from
    * `jose.createRemoteJWKSet` using the provider endpoints in
    * {@link AuthServiceOptions}. Tests override this to short-circuit
@@ -651,12 +659,9 @@ export async function register(input: RegisterRequest, deps: AuthServiceDeps): P
     throw new AuthError('studio_not_found');
   }
 
-  // Issue #233: fail-open when HIBP is unreachable so a third-party
-  // outage does not block all new registrations. The security
-  // trade-off (a breached password may slip through during an outage)
-  // is acceptable compared to a total registration blackout.
-  // A console.warn is emitted unconditionally so Axiom always records
-  // the degraded event for alerting.
+  // Fail-open by default (issue #233) so a HIBP outage never blocks
+  // all registrations. Pass `hibpFailClosed: true` in production to
+  // reject with `hibp_unavailable` instead of silently proceeding.
   let breached: boolean;
   try {
     breached = await defaultIsBreached(
@@ -671,6 +676,9 @@ export async function register(input: RegisterRequest, deps: AuthServiceDeps): P
         op: 'register',
         error: err.message,
       });
+      if (deps.hibpFailClosed === true) {
+        throw new AuthError('hibp_unavailable');
+      }
       breached = false;
     } else {
       throw err;

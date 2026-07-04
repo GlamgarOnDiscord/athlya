@@ -260,6 +260,29 @@ describe('confirmReset (Sprint-6 SP6.3 — S2-006)', () => {
     expect(sessionStore.revokeAllForUser).toHaveBeenCalledWith(USER_ID);
   });
 
+  it('rejects with hibp_unavailable when HIBP is unreachable and hibpFailClosed is true (issue #464)', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const passwordResetRepo = makeResetRepo();
+    const sessionStore = makeSessionStore();
+    passwordResetRepo.findActiveTokenByHash.mockResolvedValueOnce({
+      userId: USER_ID,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    await expect(
+      confirmReset(
+        { token: 'good', newPassword: 'new-correct-horse-staple-1' },
+        {
+          passwordResetRepo,
+          sessionStore,
+          hibpFetch: hibpDown,
+          hibpFailClosed: true,
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'hibp_unavailable' });
+    expect(passwordResetRepo.consumeAndResetPassword).not.toHaveBeenCalled();
+  });
+
   it('happy path consumes the token, updates the password and revokes every session', async () => {
     const passwordResetRepo = makeResetRepo();
     const sessionStore = makeSessionStore();
