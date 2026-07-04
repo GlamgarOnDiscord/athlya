@@ -1,24 +1,28 @@
 name: Preview environments
 
-# Deploys an isolated API preview for every PR:
-#   • Neon branch  — fresh DB fork from the project primary branch.
+# Deploys an isolated API preview for every PR (issue #419):
+#   • Neon branch  — fresh DB fork from the project primary branch; migrations
+#     are applied automatically after branch creation.
 #   • Cloudflare Worker — `athlya-api-pr-<N>` (one Worker per PR, isolated DB_URL).
-#   • Queues — dedicated `athlya-events-preview*` set, provisioned here and
-#     deleted on PR close so preview events never contaminate staging (issue #237).
+#   • Queues — per-PR `athlya-events-preview-pr-<N>*` queues provisioned on
+#     open/synchronize and deleted on close, so concurrent PRs never share a
+#     queue and preview events never contaminate staging (issues #237, #419).
 #   • Redis — dedicated Upstash `athlya-preview` database (PREVIEW_REDIS_URL /
 #     PREVIEW_REDIS_TOKEN secrets), isolated from the staging namespace (issue #237).
 #
 # Required GitHub secrets:
-#   CLOUDFLARE_API_TOKEN      — Workers:Edit permission
-#   CLOUDFLARE_ACCOUNT_ID     — CF account ID
-#   NEON_API_KEY              — Neon project API key
-#   PREVIEW_REDIS_URL         — Upstash Redis URL (dedicated preview database)
-#   PREVIEW_REDIS_TOKEN       — Upstash Redis token (dedicated preview database)
-#   PREVIEW_JWT_JWKS_URL      — JWKS endpoint for preview (can reuse staging)
-#   PREVIEW_TURNSTILE_SECRET  — Turnstile secret (staging site key is fine)
+#   CLOUDFLARE_API_TOKEN        — Workers:Edit permission
+#   CLOUDFLARE_ACCOUNT_ID       — CF account ID
+#   NEON_API_KEY                — Neon project API key
+#   PREVIEW_MIGRATION_DB_URL    — neondb_owner connection string for DDL
+#                                 (set each PR by the Create Neon branch step)
+#   PREVIEW_REDIS_URL           — Upstash Redis URL (dedicated preview database)
+#   PREVIEW_REDIS_TOKEN         — Upstash Redis token (dedicated preview database)
+#   PREVIEW_JWT_JWKS_URL        — JWKS endpoint for preview (can reuse staging)
+#   PREVIEW_TURNSTILE_SECRET    — Turnstile secret (staging site key is fine)
 #
 # Required GitHub variables:
-#   NEON_PROJECT_ID           — Neon project ID (e.g. "proud-dream-12345678")
+#   NEON_PROJECT_ID              — Neon project ID (e.g. "proud-dream-12345678")
 #   CLOUDFLARE_WORKERS_SUBDOMAIN — CF workers.dev subdomain (e.g. "athlya")
 #
 # See docs/runbooks/preview-pr.md for full setup instructions.
@@ -114,6 +118,43 @@ jobs:
           echo "::add-mask::${DB_URL}"
           echo "db_url=${DB_URL}" >> "$GITHUB_OUTPUT"
 
+      - name: Run DB migrations on preview branch
+        env:
+          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
+        run: |
+          set -euo pipefail
+          # Apply all pending migrations to the freshly-forked Neon branch so
+          # the preview Worker always starts with an up-to-date schema.
+          # The Neon fork inherits the parent's data; idempotent — already-
+          # applied migrations are skipped by the _athlya_migrations table.
+          node packages/db/scripts/migrate.mjs
+          echo "::notice::Preview branch migrations applied"
+
+      - name: Generate per-PR wrangler config
+        env:
+          PR_N: ${{ github.event.pull_request.number }}
+        run: |
+          # Replace hardcoded `athlya-events-*-preview` queue names in
+          # wrangler.toml with per-PR variants so concurrent PRs each have
+          # their own isolated queue set (issue #419).
+          # Longer/more-specific strings are replaced first to avoid
+          # partial matches (e.g. -preview-dlq before -preview).
+          node -e "
+          const fs = require('fs');
+          const pr = process.env.PR_N;
+          const replacements = [
+            ['athlya-events-notifications-preview-dlq', \`athlya-events-notifications-preview-pr-\${pr}-dlq\`],
+            ['athlya-events-rgpd-preview-dlq',          \`athlya-events-rgpd-preview-pr-\${pr}-dlq\`],
+            ['athlya-events-preview-dlq',               \`athlya-events-preview-pr-\${pr}-dlq\`],
+            ['athlya-events-notifications-preview',     \`athlya-events-notifications-preview-pr-\${pr}\`],
+            ['athlya-events-rgpd-preview',              \`athlya-events-rgpd-preview-pr-\${pr}\`],
+            ['athlya-events-preview',                   \`athlya-events-preview-pr-\${pr}\`],
+          ];
+          let src = fs.readFileSync('packages/api/wrangler.toml', 'utf8');
+          for (const [from, to] of replacements) src = src.replaceAll(from, to);
+          fs.writeFileSync('packages/api/wrangler.preview-pr.toml', src);
+          "
+
       - name: Set preview secrets
         run: |
           VERSION="pr${{ github.event.pull_request.number }}-${GITHUB_SHA:0:7}"
@@ -134,31 +175,37 @@ jobs:
           printf '%s' "${{ secrets.PREVIEW_TURNSTILE_SECRET }}" | \
             pnpm --filter @athlya/api exec wrangler secret put TURNSTILE_SECRET "${WRANGLER_NAME_FLAGS[@]}"
 
-      - name: Provision preview queues
+      - name: Provision per-PR preview queues
+        env:
+          PR_N: ${{ github.event.pull_request.number }}
         run: |
           # Idempotent — `wrangler queues create` exits 0 if the queue already
-          # exists, so re-runs on `synchronize` are safe (issue #237).
+          # exists, so re-runs on `synchronize` are safe (issues #237, #419).
           for Q in \
-            athlya-events-preview \
-            athlya-events-preview-dlq \
-            athlya-events-notifications-preview \
-            athlya-events-notifications-preview-dlq \
-            athlya-events-rgpd-preview \
-            athlya-events-rgpd-preview-dlq; do
+            "athlya-events-preview-pr-${PR_N}" \
+            "athlya-events-preview-pr-${PR_N}-dlq" \
+            "athlya-events-notifications-preview-pr-${PR_N}" \
+            "athlya-events-notifications-preview-pr-${PR_N}-dlq" \
+            "athlya-events-rgpd-preview-pr-${PR_N}" \
+            "athlya-events-rgpd-preview-pr-${PR_N}-dlq"; do
             pnpm --filter @athlya/api exec wrangler queues create "$Q" || true
             echo "Queue $Q ready"
           done
 
       - name: Deploy Worker
         id: deploy
+        env:
+          PR_N: ${{ github.event.pull_request.number }}
         run: |
-          VERSION="pr${{ github.event.pull_request.number }}-${GITHUB_SHA:0:7}"
+          VERSION="pr${PR_N}-${GITHUB_SHA:0:7}"
+          # Use the per-PR wrangler config (queue names patched in the previous step).
           DEPLOY_OUT=$(pnpm --filter @athlya/api exec wrangler versions upload \
+            --config wrangler.preview-pr.toml \
             --env preview \
             --name "${PREVIEW_WORKER_NAME}" \
             --var "VERSION=${VERSION}" \
-            --var "REDIS_KEY_PREFIX=pr-${{ github.event.pull_request.number }}:" \
-            --message "PR #${{ github.event.pull_request.number }} — ${GITHUB_SHA:0:7}" \
+            --var "REDIS_KEY_PREFIX=pr-${PR_N}:" \
+            --message "PR #${PR_N} — ${GITHUB_SHA:0:7}" \
             2>&1)
           echo "$DEPLOY_OUT"
 
@@ -170,18 +217,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          PR_N="${{ github.event.pull_request.number }}"
           BODY="<!-- athlya-preview-env -->
-          ## API Preview — PR #${{ github.event.pull_request.number }}
+          ## API Preview — PR #${PR_N}
 
           | | |
           |---|---|
           | **Endpoint** | \`${{ steps.deploy.outputs.preview_url }}\` |
-          | **Worker** | \`athlya-api-pr-${{ github.event.pull_request.number }}\` |
+          | **Worker** | \`athlya-api-pr-${PR_N}\` |
           | **Neon branch** | \`${{ steps.neon.outputs.branch_name }}\` |
+          | **Queues** | \`athlya-events-preview-pr-${PR_N}*\` |
           | **Commit** | \`${GITHUB_SHA:0:7}\` |
 
-          > One Worker + Neon branch per PR. Queues and Redis are isolated from staging (issue #237). R2 uses dedicated preview buckets.
-          > The Neon branch and preview queues are deleted automatically when this PR closes."
+          > One Worker + Neon branch + queue set per PR (issues #237, #419). Concurrent PRs are fully isolated. Redis is shared (dedicated preview database). R2 uses dedicated preview buckets.
+          > Neon branch, Worker, and queues are deleted automatically when this PR closes."
 
           # Update an existing preview comment rather than spamming new ones.
           COMMENT_ID=$(gh api \
@@ -235,19 +284,21 @@ jobs:
             --force
           echo "Deleted Worker ${PREVIEW_WORKER_NAME} (or already absent)"
 
-      - name: Delete preview queues
+      - name: Delete per-PR preview queues
         continue-on-error: true
+        env:
+          PR_N: ${{ github.event.pull_request.number }}
         run: |
           # Delete in reverse dependency order (DLQs last so consumers can drain).
           # `continue-on-error: true` keeps teardown going if a queue was never
           # provisioned (e.g. the deploy step failed before queue creation).
           for Q in \
-            athlya-events-notifications-preview \
-            athlya-events-rgpd-preview \
-            athlya-events-preview \
-            athlya-events-notifications-preview-dlq \
-            athlya-events-rgpd-preview-dlq \
-            athlya-events-preview-dlq; do
+            "athlya-events-notifications-preview-pr-${PR_N}" \
+            "athlya-events-rgpd-preview-pr-${PR_N}" \
+            "athlya-events-preview-pr-${PR_N}" \
+            "athlya-events-notifications-preview-pr-${PR_N}-dlq" \
+            "athlya-events-rgpd-preview-pr-${PR_N}-dlq" \
+            "athlya-events-preview-pr-${PR_N}-dlq"; do
             pnpm --filter @athlya/api exec wrangler queues delete "$Q" && \
               echo "Deleted queue $Q" || \
               echo "Queue $Q not found — skipping"
