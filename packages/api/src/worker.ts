@@ -657,12 +657,17 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
   // decremented on each request). A login attempt must clear the 5/min
   // IP bucket AND the 20/min general auth bucket — the per-endpoint
   // limit is what actually throttles brute force.
-  const loginLimiter = rateLimit(LOGIN_BUDGET);
-  const registerLimiter = rateLimit(REGISTER_BUDGET);
-  const forgotPasswordLimiter = rateLimit(FORGOT_PASSWORD_BUDGET);
+  // Each per-route limiter gets its own Redis key namespace (keyPrefix) so
+  // it does not share a bucket with the broader /v1/auth/* IP limiter.
+  const loginLimiter = rateLimit({ ...LOGIN_BUDGET, keyPrefix: 'rl:ip:auth-login' });
+  const registerLimiter = rateLimit({ ...REGISTER_BUDGET, keyPrefix: 'rl:ip:auth-register' });
+  const forgotPasswordLimiter = rateLimit({
+    ...FORGOT_PASSWORD_BUDGET,
+    keyPrefix: 'rl:ip:auth-forgot-pw',
+  });
 
-  const guardAuthEndpointLimiter = (inner: ReturnType<typeof rateLimit>) => {
-    const guarded = guardLimiterWithDevBypass('auth-endpoint', inner, 'fail-closed');
+  const guardAuthEndpointLimiter = (scope: string, inner: ReturnType<typeof rateLimit>) => {
+    const guarded = guardLimiterWithDevBypass(scope, inner, 'fail-closed');
     return async (c: { req: { method: string } }, next: () => Promise<void>) => {
       if (c.req.method !== 'POST') {
         await next();
@@ -676,15 +681,17 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
 
   app.use(
     '/v1/auth/login',
-    guardAuthEndpointLimiter(loginLimiter) as Parameters<typeof app.use>[1],
+    guardAuthEndpointLimiter('auth-login', loginLimiter) as Parameters<typeof app.use>[1],
   );
   app.use(
     '/v1/auth/register',
-    guardAuthEndpointLimiter(registerLimiter) as Parameters<typeof app.use>[1],
+    guardAuthEndpointLimiter('auth-register', registerLimiter) as Parameters<typeof app.use>[1],
   );
   app.use(
     '/v1/auth/password-reset/request',
-    guardAuthEndpointLimiter(forgotPasswordLimiter) as Parameters<typeof app.use>[1],
+    guardAuthEndpointLimiter('auth-forgot-pw', forgotPasswordLimiter) as Parameters<
+      typeof app.use
+    >[1],
   );
 
   // Req 26.1–26.3 — Turnstile on pre-auth mutations wired in auth router
