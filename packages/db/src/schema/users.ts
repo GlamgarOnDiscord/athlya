@@ -18,6 +18,13 @@
  *     (e.g. the Notifications consumer queries `consents->>'marketing'`
  *     before sending a campaign). The shape is validated by
  *     `ConsentsSchema` on every write.
+ *   - `users_email_active_unique` is a PARTIAL unique index (WHERE
+ *     deleted_at IS NULL). Soft-deleted users' emails are eventually
+ *     nulled by the RGPD anonymisation cron after 30 days, but during
+ *     that window a new user must be able to re-register with the same
+ *     address (RGPD Art 17 — right to erasure must not silently prevent
+ *     future re-use). The global `users_email_unique` index was dropped
+ *     in migration 0026.
  *   - Partial index `(studio_id) WHERE deleted_at IS NULL` accelerates the
  *     admin-side "list my studio's active members" query without bloating
  *     the index with soft-deleted rows.
@@ -57,7 +64,7 @@ export const users = pgTable(
     deletedAt: deletedAt(),
   },
   (table) => [
-    uniqueIndex('users_email_unique').on(table.email),
+    uniqueIndex('users_email_active_unique').on(table.email).where(sqlIsNull('deleted_at')),
     /**
      * Partial index on the active (non-deleted) slice. Matches the
      * query shape "list active members in my studio" executed by
