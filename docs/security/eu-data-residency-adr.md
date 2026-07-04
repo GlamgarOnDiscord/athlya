@@ -1,7 +1,7 @@
-# ADR — EU data residency (issue #66)
+# ADR — EU data residency (issues #66, #327)
 
-**Statut** : accepté (MVP)  
-**Date** : 2026-05-27  
+**Statut** : accepté (v1.0 — EU-preferred, not EU-guaranteed)  
+**Date** : 2026-05-27 · Mis à jour : 2026-07-04  
 **Décideurs** : CTO / DPO (validation DPIA §8)
 
 ## Contexte
@@ -33,14 +33,44 @@ Athlya promet une résidence des **données au repos** en UE (Neon `aws-eu-centr
 2. **API gateway EU-only (Fly.io, etc.)** — éjection path documentée ; coût ops + perte intégration CF Queues/DO.
 3. **Désactiver Smart Placement** — latence p99 réservation dégradée sans gain légal clair tant que les données au repos restent EU.
 
+## Déclaration de conformité (issue #327)
+
+Le traitement des données personnelles Athlya repose sur le principe suivant :
+
+> **Les données au repos sont hébergées exclusivement dans des datacenters UE.
+> Le compute Workers Cloudflare est EU-optimisé (Smart Placement), pas EU-garanti.
+> Aucune affirmation publique ne peut présenter l'exécution edge comme EU-exclusive
+> tant que Workers Enterprise `region_exclusive_eu` n'est pas activé.**
+
+Les communications marketing et la documentation technique doivent utiliser la formulation :
+« Données stockées en UE — traitement edge Cloudflare (EU-optimisé, Smart Placement) ».
+
+## DPA et transferts hors UE — état
+
+| Sous-traitant | Base légale transfert          | Région données                         | Statut DPA                                                                       |
+| ------------- | ------------------------------ | -------------------------------------- | -------------------------------------------------------------------------------- |
+| Cloudflare    | SCCs (Data Localization Suite) | PoP global (compute) / EU (R2, Queues) | À confirmer : Data Localization Addendum                                         |
+| Neon          | SCCs (Neon DPA)                | `aws-eu-central-1`                     | À confirmer : DPA Neon (AWS ne couvre pas Neon — le contrat est avec Neon, Inc.) |
+| Upstash       | SCCs                           | `eu-west-1`                            | À confirmer : DPA Upstash                                                        |
+| Sentry        | SCCs                           | `*.de.sentry.io`                       | ✅ Sentry EU — endpoint DE                                                       |
+| Axiom         | SCCs                           | EU dataset                             | À confirmer : DPA Axiom EU                                                       |
+| Resend        | SCCs                           | EU infra                               | À confirmer : DPA Resend                                                         |
+| Stripe        | SCCs                           | EU (Stripe Atlas)                      | À confirmer : Stripe DPA Art. 28                                                 |
+
+Les DPA « À confirmer » doivent être signés avant toute mise en production RGPD-déclarée.
+Documenter les signatures dans `docs/security/dpia-template.md`.
+
 ## Actions ops
 
-- [ ] DPA Cloudflare : confirmer Data Localization Addendum / clauses transfert edge.
-- [ ] Axiom : dataset EU + DPA (logs OTLP `OTEL_EXPORTER_OTLP_*`).
-- [ ] Stripe Atlas EU / Resend EU : valider contrats (DPIA §2).
-- [ ] Enterprise : activer `region_exclusive_eu` staging + prod dans `wrangler.toml` quand budget OK.
+- [ ] DPA Cloudflare : signer le Data Localization Addendum (Data Localization Suite).
+- [ ] Axiom : valider dataset EU + DPA (logs OTLP `OTEL_EXPORTER_OTLP_*`).
+- [ ] Upstash : valider DPA EU.
+- [ ] Stripe : valider DPA Art. 28 et clauses SCCs.
+- [ ] Resend : valider DPA EU.
+- [ ] Enterprise (future) : activer `region_exclusive_eu` staging + prod dans `wrangler.toml` après souscription Workers Enterprise.
 
 ## Références
 
 - `packages/api/wrangler.toml` — commentaire « EU-only placement »
-- Issue #66, finding S5-012
+- Issue #66, issue #327, finding S5-012
+- `docs/security/dpia-template.md` — DPIA §2, §8
