@@ -393,15 +393,15 @@ export async function pingDb(connectionString: string): Promise<number> {
  * Queries `pg_roles` for the current user and throws if `rolbypassrls`
  * is true. Must be called once per Worker isolate cold start (issue #461).
  *
- * Only runs when `environment` is explicitly `'staging'` or `'production'`.
- * Any other value (including `undefined`, `'dev'`, `'test'`) skips the check
- * so local dev and CI pass without a real DB. The fail-safe direction is:
- * an unrecognised environment is treated as non-prod and skipped rather than
- * blocking, but a missing DB_URL binding simply causes `neon()` to throw,
- * which surfaces as a 500 and alerts ops.
+ * Skips only when `environment` is explicitly one of the known non-production
+ * labels: 'dev', 'test', 'local', 'ci'. Any other value — including an empty
+ * string from a missing ENVIRONMENT binding — causes the check to run, so a
+ * misconfigured deploy fails-closed rather than silently bypassing RLS.
  */
+const SKIP_RLS_CHECK_ENVS = new Set(['dev', 'test', 'local', 'ci']);
+
 export async function assertRlsRole(connectionString: string, environment: string): Promise<void> {
-  if (environment !== 'staging' && environment !== 'production') return;
+  if (SKIP_RLS_CHECK_ENVS.has(environment.toLowerCase())) return;
 
   const sqlClient = neon(connectionString);
   const rows = await sqlClient`
