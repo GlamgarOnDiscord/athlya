@@ -200,17 +200,17 @@ const BOOKING_PASSWORD = 'booking_test';
 // protocol does not choke on the multi-statement SQL drizzle-kit emits.
 // ---------------------------------------------------------------------
 
-async function applyMigration(client: Sql, sqlText: string): Promise<void> {
-  if (/\bCONCURRENTLY\b/i.test(sqlText)) {
-    const chunks = sqlText.split(/-->\s*statement-breakpoint/g).flatMap((chunk) =>
-      chunk
-        .split(/;[ \t]*\n/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0)
-        .map((s) => (s.endsWith(';') ? s : s + ';')),
-    );
-    for (const stmt of chunks) {
-      await client.unsafe(stmt);
+async function applyMigration(client: Sql, sqlText: string, connStr?: string): Promise<void> {
+  // CONCURRENTLY DDL cannot run inside a transaction block. postgres-js
+  // with max>1 may reuse a connection whose implicit-transaction state is
+  // unclear. Mirror the migrate.mjs strategy: open a dedicated max:1
+  // connection so the statement always runs on a fresh, idle connection.
+  if (/\bCONCURRENTLY\b/i.test(sqlText) && connStr) {
+    const dedicated = postgres(connStr, { max: 1, prepare: false });
+    try {
+      await dedicated.unsafe(sqlText);
+    } finally {
+      await dedicated.end({ timeout: 5 });
     }
   } else {
     const statements = sqlText
@@ -753,7 +753,7 @@ beforeAll(async () => {
     '0025_reservations_confirmed_idx.sql',
   ];
   for (const name of migrations) {
-    await applyMigration(rootClient, readMigration(name));
+    await applyMigration(rootClient, readMigration(name), rootConnString);
   }
 
   await bootstrapBookingRole(rootClient);

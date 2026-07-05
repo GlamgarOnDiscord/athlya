@@ -140,17 +140,13 @@ const ROOT_ROLE = 'postgres';
 /*  `packages/db/tests/properties/rls.property.test.ts`.               */
 /* ================================================================= */
 
-async function applyMigration(client: Sql, sqlText: string): Promise<void> {
-  if (/\bCONCURRENTLY\b/i.test(sqlText)) {
-    const chunks = sqlText.split(/-->\s*statement-breakpoint/g).flatMap((chunk) =>
-      chunk
-        .split(/;[ \t]*\n/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0)
-        .map((s) => (s.endsWith(';') ? s : s + ';')),
-    );
-    for (const stmt of chunks) {
-      await client.unsafe(stmt);
+async function applyMigration(client: Sql, sqlText: string, connStr?: string): Promise<void> {
+  if (/\bCONCURRENTLY\b/i.test(sqlText) && connStr) {
+    const dedicated = postgres(connStr, { max: 1, prepare: false });
+    try {
+      await dedicated.unsafe(sqlText);
+    } finally {
+      await dedicated.end({ timeout: 5 });
     }
   } else {
     const statements = sqlText
@@ -767,7 +763,8 @@ beforeAll(async () => {
     },
   };
 
-  rootClient = postgres(started.getConnectionUri(), {
+  const rootConnStr = started.getConnectionUri();
+  rootClient = postgres(rootConnStr, {
     max: 4,
     prepare: false,
   });
@@ -776,13 +773,21 @@ beforeAll(async () => {
   // `anonymize_user_audit(uuid)` from 0003 (SECURITY DEFINER, runs as
   // `athlya_owner` which satisfies the trigger's `current_user` check).
   // 0006 adds the scalar guard needed to tolerate non-object metadata rows.
-  await applyMigration(rootClient, readMigration('0000_init.sql'));
-  await applyMigration(rootClient, readMigration('0001_rls.sql'));
-  await applyMigration(rootClient, readMigration('0002_export_jobs.sql'));
-  await applyMigration(rootClient, readMigration('0003_audit_anonymization.sql'));
-  await applyMigration(rootClient, readMigration('0004_rls_hardening.sql'));
-  await applyMigration(rootClient, readMigration('0005_password_reset_audit_anonymize.sql'));
-  await applyMigration(rootClient, readMigration('0006_anonymize_audit_scalar_guard.sql'));
+  await applyMigration(rootClient, readMigration('0000_init.sql'), rootConnStr);
+  await applyMigration(rootClient, readMigration('0001_rls.sql'), rootConnStr);
+  await applyMigration(rootClient, readMigration('0002_export_jobs.sql'), rootConnStr);
+  await applyMigration(rootClient, readMigration('0003_audit_anonymization.sql'), rootConnStr);
+  await applyMigration(rootClient, readMigration('0004_rls_hardening.sql'), rootConnStr);
+  await applyMigration(
+    rootClient,
+    readMigration('0005_password_reset_audit_anonymize.sql'),
+    rootConnStr,
+  );
+  await applyMigration(
+    rootClient,
+    readMigration('0006_anonymize_audit_scalar_guard.sql'),
+    rootConnStr,
+  );
 }, 180_000);
 
 afterAll(async () => {
