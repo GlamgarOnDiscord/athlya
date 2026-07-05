@@ -113,10 +113,7 @@ export type WebhookOutcome =
  *                             valid JSON or lacks `id` / `type`.
  */
 export type SignatureFailureReason =
-  | 'malformed_header'
-  | 'timestamp_stale'
-  | 'hmac_mismatch'
-  | 'malformed_payload';
+  'malformed_header' | 'timestamp_stale' | 'hmac_mismatch' | 'malformed_payload';
 
 /* ------------------------------------------------------------------ */
 /*  Parsed event                                                       */

@@ -30,8 +30,7 @@ import type { Redis } from '@upstash/redis';
 
 /** Outcome of a rate-limit decision. */
 export type RateLimitDecision =
-  | { kind: 'allow'; remaining: number }
-  | { kind: 'deny'; retryAfterSec: number };
+  { kind: 'allow'; remaining: number } | { kind: 'deny'; retryAfterSec: number };
 
 /**
  * Dependencies accepted by the rate limiter. Kept as a plain record so

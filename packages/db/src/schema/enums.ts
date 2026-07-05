@@ -86,10 +86,7 @@ type _RoleAligned = User['role'] extends 'member' | 'coach' | 'admin'
     : false
   : false;
 type _StatusAligned = Reservation['status'] extends
-  | 'confirmed'
-  | 'waitlist'
-  | 'cancelled'
-  | 'no_show'
+  'confirmed' | 'waitlist' | 'cancelled' | 'no_show'
   ? 'confirmed' | 'waitlist' | 'cancelled' | 'no_show' extends Reservation['status']
     ? true
     : false

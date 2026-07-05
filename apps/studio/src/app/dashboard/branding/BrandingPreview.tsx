@@ -73,10 +73,7 @@ function contrastForeground(hex: string): '#FFFFFF' | '#000000' {
 const HEX_RE = /^#[0-9A-Fa-f]{6}$/u;
 
 type Status =
-  | { kind: 'idle' }
-  | { kind: 'saving' }
-  | { kind: 'success' }
-  | { kind: 'error'; message: string };
+  { kind: 'idle' } | { kind: 'saving' } | { kind: 'success' } | { kind: 'error'; message: string };
 
 export function BrandingPreview({ color }: BrandingPreviewProps): ReactElement {
   const locale = useLocale();
