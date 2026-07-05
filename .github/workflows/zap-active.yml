@@ -90,7 +90,7 @@ jobs:
         if: steps.guard.outputs.skipped == 'false'
         # TODO: pin to a commit SHA before enabling in production.
         # See the header comment for the gh api command to retrieve it.
-        uses: zaproxy/action-full-scan@v0.10.0
+        uses: zaproxy/action-full-scan@v0.13.0
         with:
           target: ${{ steps.guard.outputs.target }}
           rules_file_name: '.zap/rules.tsv'
