@@ -98,9 +98,9 @@ Suite complète (10 packages, Docker absent sur ce poste — `pnpm -r test` reto
 
 **Total : ~1043 tests verts** (+20 CN.6.4 chaos, +8 CN.8.3 EU read-replica cache, +6 B5.3 compress middleware). Suites P4 (5.6) et P7 (2.7) s'exécutent désormais localement sans Docker via PGlite (CN.9.3) — Testcontainers réservé au CI Linux. P1 (6.8 booking) reste `describe.skip` (bug withTenant hors scope CN.9.3). Playwright E2E (axe + flows) s'exécute dans `.github/workflows/axe.yml` avec 4 jobs parallèles : `a11y`, `e2e-flows`, `studio-a11y`, `studio-e2e-flows`.
 
-## PBT validées (9/10)
+## PBT validées (10/10)
 
-P1 capacity, P2 idempotence, P3 state-machine, P4 RGPD cascade, P6 JWT non-forge/replay, P7 tenant isolation, P8 ratelimit (déplacée dans @athlya/ratelimit), Round-trip serialization, property test circuit breaker H3 "open state short-circuits fn", **property test brand-color 15.2** (every valid hex yields well-formed tokens).
+P1 capacity, P2 idempotence, P3 state-machine, P4 RGPD cascade, P6 JWT non-forge/replay, P7 tenant isolation, P8 ratelimit (déplacée dans @athlya/ratelimit), Round-trip serialization, property test circuit breaker H3 "open state short-circuits fn", **property test brand-color 15.2** (every valid hex yields well-formed tokens), **P1 booking capacity** (`booking.property.test.ts` — confirmedCount ≤ capacity, no duplicates, waitlist ordering; unblocked by #481 fixing undici/Node-20 compat + Date ISO serialization in outbox).
 Reste : **P5 FIFO offline drain** (11.12 — bloquée par scaffolding mobile).
 
 ## Prochaine priorité
