@@ -5,7 +5,7 @@
   "description": "Athlya — open-source, multi-tenant, RGPD-first fitness platform",
   "packageManager": "pnpm@9.15.9",
   "engines": {
-    "node": ">=20 <21",
+    "node": ">=20.18.1 <21",
     "pnpm": ">=9"
   },
   "scripts": {
@@ -48,7 +48,7 @@
       "js-yaml": ">=4.2.0",
       "@babel/core": ">=7.29.6",
       "@sentry/cli>undici": "6.27.0",
-      "testcontainers>undici": "8.5.0",
+      "testcontainers>undici": "^7",
       "jsdom>ws": "^8.21.0"
     }
   }

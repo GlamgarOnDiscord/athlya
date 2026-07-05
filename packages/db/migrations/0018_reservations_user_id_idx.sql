@@ -6,15 +6,14 @@
 -- that degrades non-linearly as the reservations table grows.
 --
 -- Index strategy:
---   (user_id, created_at DESC) WHERE deleted_at IS NULL
+--   (user_id, created_at DESC)
 --
--- The partial index on non-deleted rows matches the WHERE clause in the
--- listMyReservations query and keeps the index footprint small. Covering
--- created_at allows index-only scans for the ORDER BY clause.
+-- Covering created_at allows index-only scans for the ORDER BY clause.
+-- reservations does not use a deleted_at soft-delete column (rows are
+-- cancelled via status transitions, not removed), so no partial predicate.
 --
 -- CONCURRENTLY avoids a full table lock on a live production database.
 -- =====================================================================
 
 CREATE INDEX CONCURRENTLY "reservations_user_id_created_at_idx"
-    ON "reservations" USING btree ("user_id", "created_at" DESC)
-    WHERE "deleted_at" IS NULL;
+    ON "reservations" USING btree ("user_id", "created_at" DESC);

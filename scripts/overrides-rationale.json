@@ -65,12 +65,12 @@
       "remove_when": "@sentry/cli ships with undici >=6.27.0"
     },
     "testcontainers>undici": {
-      "pinned": "8.5.0",
-      "reason": "undici header smuggling / SSRF (same CVE-2025-22150 family, testcontainers pins an older undici major)",
-      "cve": "CVE-2025-22150",
-      "ghsa": "GHSA-3m2p-5qmv-gg22",
-      "added": "2026-01-01",
-      "remove_when": "testcontainers ships with undici >=8.5.0"
+      "pinned": "^7",
+      "reason": "undici 8 requires Node >=22; this repo targets Node 20. Downgraded to undici 7 (latest Node-20-compatible major) to unblock Testcontainers CI.",
+      "cve": null,
+      "ghsa": null,
+      "added": "2026-07-05",
+      "remove_when": "testcontainers ships with a Node-20-compatible undici major (or repo drops Node 20 support)"
     },
     "jsdom>ws": {
       "pinned": "^8.21.0",

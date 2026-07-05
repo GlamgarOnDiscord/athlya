@@ -152,13 +152,30 @@ let pgliteDb: PgliteAthlyaDb | null = null;
 // server-side.
 // ---------------------------------------------------------------------
 
-async function applyMigration(client: Sql, sqlText: string): Promise<void> {
-  const statements = sqlText
-    .split(/-->\s*statement-breakpoint/g)
-    .map((chunk) => chunk.trim())
-    .filter((chunk) => chunk.length > 0);
-  for (const stmt of statements) {
-    await client.unsafe(stmt);
+async function applyMigration(client: Sql, sqlText: string, connStr?: string): Promise<void> {
+  if (/\bCONCURRENTLY\b/i.test(sqlText) && connStr) {
+    const dedicated = postgres(connStr, { max: 1, prepare: false });
+    try {
+      const stmts = sqlText
+        .split(/-->\s*statement-breakpoint/g)
+        .flatMap((chunk) => chunk.split(/;[ \t]*\n/))
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .map((s) => (s.endsWith(';') ? s : `${s};`));
+      for (const stmt of stmts) {
+        await dedicated.unsafe(stmt);
+      }
+    } finally {
+      await dedicated.end({ timeout: 5 });
+    }
+  } else {
+    const statements = sqlText
+      .split(/-->\s*statement-breakpoint/g)
+      .map((chunk) => chunk.trim())
+      .filter((chunk) => chunk.length > 0);
+    for (const stmt of statements) {
+      await client.unsafe(stmt);
+    }
   }
 }
 
@@ -548,9 +565,9 @@ beforeAll(async () => {
   rootClient = postgres(rootConnString, { max: 2, prepare: false });
 
   // Apply schema + RLS.
-  await applyMigration(rootClient, readMigration('0000_init.sql'));
-  await applyMigration(rootClient, readMigration('0001_rls.sql'));
-  await applyMigration(rootClient, readMigration('0007_classes_fts.sql'));
+  await applyMigration(rootClient, readMigration('0000_init.sql'), rootConnString);
+  await applyMigration(rootClient, readMigration('0001_rls.sql'), rootConnString);
+  await applyMigration(rootClient, readMigration('0007_classes_fts.sql'), rootConnString);
 
   // Create the NOBYPASSRLS tenant role + grants.
   await bootstrapTenantRole(rootClient);

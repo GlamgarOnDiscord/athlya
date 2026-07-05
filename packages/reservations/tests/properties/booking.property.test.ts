@@ -200,13 +200,35 @@ const BOOKING_PASSWORD = 'booking_test';
 // protocol does not choke on the multi-statement SQL drizzle-kit emits.
 // ---------------------------------------------------------------------
 
-async function applyMigration(client: Sql, sqlText: string): Promise<void> {
-  const statements = sqlText
-    .split(/-->\s*statement-breakpoint/g)
-    .map((chunk) => chunk.trim())
-    .filter((chunk) => chunk.length > 0);
-  for (const stmt of statements) {
-    await client.unsafe(stmt);
+async function applyMigration(client: Sql, sqlText: string, connStr?: string): Promise<void> {
+  if (/\bCONCURRENTLY\b/i.test(sqlText) && connStr) {
+    // CONCURRENTLY DDL cannot run inside a transaction block. Sending two
+    // CONCURRENTLY statements in a single Query message causes PostgreSQL to
+    // wrap them in one implicit transaction, making CONCURRENTLY fail. Split
+    // into individual statements and dispatch each on a dedicated max:1
+    // connection so every statement runs in its own autocommit transaction.
+    const dedicated = postgres(connStr, { max: 1, prepare: false });
+    try {
+      const stmts = sqlText
+        .split(/-->\s*statement-breakpoint/g)
+        .flatMap((chunk) => chunk.split(/;[ \t]*\n/))
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .map((s) => (s.endsWith(';') ? s : `${s};`));
+      for (const stmt of stmts) {
+        await dedicated.unsafe(stmt);
+      }
+    } finally {
+      await dedicated.end({ timeout: 5 });
+    }
+  } else {
+    const statements = sqlText
+      .split(/-->\s*statement-breakpoint/g)
+      .map((chunk) => chunk.trim())
+      .filter((chunk) => chunk.length > 0);
+    for (const stmt of statements) {
+      await client.unsafe(stmt);
+    }
   }
 }
 
@@ -584,7 +606,7 @@ function buildBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
                   FROM "reservations"
                  WHERE class_id = ${classId}
                    AND status = 'waitlist'
-                   AND created_at < ${reservationCreatedAt}
+                   AND created_at < ${reservationCreatedAt.toISOString()}
             `);
       const rows = result as unknown as readonly { count: string }[];
       const raw = rows[0]?.count ?? '0';
@@ -740,7 +762,7 @@ beforeAll(async () => {
     '0025_reservations_confirmed_idx.sql',
   ];
   for (const name of migrations) {
-    await applyMigration(rootClient, readMigration(name));
+    await applyMigration(rootClient, readMigration(name), rootConnString);
   }
 
   await bootstrapBookingRole(rootClient);

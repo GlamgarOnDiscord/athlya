@@ -68,7 +68,7 @@ describe('insertOutbox', () => {
       EVENT.eventId,
       EVENT.eventType,
       JSON.stringify(EVENT.payload),
-      EVENT.occurredAt,
+      EVENT.occurredAt.toISOString(),
     ]);
   });
 
