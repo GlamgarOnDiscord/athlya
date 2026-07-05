@@ -201,14 +201,23 @@ const BOOKING_PASSWORD = 'booking_test';
 // ---------------------------------------------------------------------
 
 async function applyMigration(client: Sql, sqlText: string, connStr?: string): Promise<void> {
-  // CONCURRENTLY DDL cannot run inside a transaction block. postgres-js
-  // with max>1 may reuse a connection whose implicit-transaction state is
-  // unclear. Mirror the migrate.mjs strategy: open a dedicated max:1
-  // connection so the statement always runs on a fresh, idle connection.
   if (/\bCONCURRENTLY\b/i.test(sqlText) && connStr) {
+    // CONCURRENTLY DDL cannot run inside a transaction block. Sending two
+    // CONCURRENTLY statements in a single Query message causes PostgreSQL to
+    // wrap them in one implicit transaction, making CONCURRENTLY fail. Split
+    // into individual statements and dispatch each on a dedicated max:1
+    // connection so every statement runs in its own autocommit transaction.
     const dedicated = postgres(connStr, { max: 1, prepare: false });
     try {
-      await dedicated.unsafe(sqlText);
+      const stmts = sqlText
+        .split(/-->\s*statement-breakpoint/g)
+        .flatMap((chunk) => chunk.split(/;[ \t]*\n/))
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .map((s) => (s.endsWith(';') ? s : `${s};`));
+      for (const stmt of stmts) {
+        await dedicated.unsafe(stmt);
+      }
     } finally {
       await dedicated.end({ timeout: 5 });
     }

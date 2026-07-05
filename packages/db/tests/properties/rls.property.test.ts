@@ -156,7 +156,15 @@ async function applyMigration(client: Sql, sqlText: string, connStr?: string): P
   if (/\bCONCURRENTLY\b/i.test(sqlText) && connStr) {
     const dedicated = postgres(connStr, { max: 1, prepare: false });
     try {
-      await dedicated.unsafe(sqlText);
+      const stmts = sqlText
+        .split(/-->\s*statement-breakpoint/g)
+        .flatMap((chunk) => chunk.split(/;[ \t]*\n/))
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .map((s) => (s.endsWith(';') ? s : `${s};`));
+      for (const stmt of stmts) {
+        await dedicated.unsafe(stmt);
+      }
     } finally {
       await dedicated.end({ timeout: 5 });
     }
