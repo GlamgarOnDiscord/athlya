@@ -153,15 +153,30 @@ let pgliteDb: PgliteAthlyaDb | null = null;
 // ---------------------------------------------------------------------
 
 async function applyMigration(client: Sql, sqlText: string): Promise<void> {
-  const chunks = sqlText.split(/-->\s*statement-breakpoint/g).flatMap((chunk) =>
-    chunk
-      .split(/;[ \t]*\n/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-      .map((s) => (s.endsWith(';') ? s : s + ';')),
-  );
-  for (const stmt of chunks) {
-    await client.unsafe(stmt);
+  // Migrations containing CONCURRENTLY cannot run inside a transaction
+  // block. postgres-js wraps multi-statement unsafe() strings in an
+  // implicit transaction, so we must split them into individual calls.
+  // We only do this for CONCURRENTLY migrations (pure DDL, no dollar-
+  // quoted strings) to avoid misparting $$ bodies in RLS trigger files.
+  if (/\bCONCURRENTLY\b/i.test(sqlText)) {
+    const chunks = sqlText.split(/-->\s*statement-breakpoint/g).flatMap((chunk) =>
+      chunk
+        .split(/;[ \t]*\n/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .map((s) => (s.endsWith(';') ? s : s + ';')),
+    );
+    for (const stmt of chunks) {
+      await client.unsafe(stmt);
+    }
+  } else {
+    const statements = sqlText
+      .split(/-->\s*statement-breakpoint/g)
+      .map((chunk) => chunk.trim())
+      .filter((chunk) => chunk.length > 0);
+    for (const stmt of statements) {
+      await client.unsafe(stmt);
+    }
   }
 }
 
