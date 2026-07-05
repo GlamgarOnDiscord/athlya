@@ -150,7 +150,7 @@ export async function insertOutbox(tx: AthlyaTx, event: OutboxEvent): Promise<vo
             ${event.eventId},
             ${event.eventType},
             ${serialisedPayload}::jsonb,
-            ${event.occurredAt},
+            ${event.occurredAt.toISOString()},
             NULL,
             0
         )

@@ -606,7 +606,7 @@ function buildBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
                   FROM "reservations"
                  WHERE class_id = ${classId}
                    AND status = 'waitlist'
-                   AND created_at < ${reservationCreatedAt}
+                   AND created_at < ${reservationCreatedAt.toISOString()}
             `);
       const rows = result as unknown as readonly { count: string }[];
       const raw = rows[0]?.count ?? '0';
@@ -652,12 +652,6 @@ async function fireAllBookings(db: AthlyaDb, scenario: SeededScenario): Promise<
   });
 
   const outcomes = await Promise.allSettled(calls);
-  for (const outcome of outcomes) {
-    if (outcome.status === 'rejected') {
-      const err = outcome.reason as { code?: unknown; message?: unknown };
-      console.error('[booking-property] rejected:', err?.code, err?.message, outcome.reason);
-    }
-  }
   return { outcomes };
 }
 
@@ -901,7 +895,6 @@ describe.skipIf(!dockerReady)('bookClass — Property 1 (capacity invariant)', (
     await fireAllBookings(db, scenario);
 
     const state = await snapshotDbState(root, classId);
-    console.log('[booking-property] regression anchor state:', JSON.stringify(state));
     expect(state.confirmedCount).toBe(3);
     expect(state.waitlistCount).toBe(7);
     expect(state.distinctConfirmedUsers).toBe(3);
