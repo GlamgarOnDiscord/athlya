@@ -67,6 +67,9 @@ jobs:
         # Sigstore-based attestation — binds the SBOM to the commit SHA and
         # the OIDC identity of this GitHub Actions run. Verifiable with:
         #   gh attestation verify sbom.spdx.json --repo GlamgarOnDiscord/athlya
+        # Attestation requires a public repo or GitHub Enterprise; skip silently
+        # on private user-owned repos.
+        continue-on-error: true
         uses: actions/attest-sbom@10926c72720ffc3f7b666661c8e55b1344e2a365 # v2
         with:
           subject-path: sbom.spdx.json
