@@ -10,10 +10,7 @@ import { createTranslator } from '../../lib/i18n/t';
 import type { FormEvent, ReactElement } from 'react';
 
 type SubmitState =
-  | { kind: 'idle' }
-  | { kind: 'submitting' }
-  | { kind: 'sent' }
-  | { kind: 'error'; message: string };
+  { kind: 'idle' } | { kind: 'submitting' } | { kind: 'sent' } | { kind: 'error'; message: string };
 
 export interface ForgotPasswordFormProps {
   /**

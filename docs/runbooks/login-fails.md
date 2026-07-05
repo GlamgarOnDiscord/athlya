@@ -23,9 +23,7 @@ Troubleshooting des échecs de login côté API `/v1/auth/login` et côté web `
 ```ts
 const token = turnstileToken; // capture
 setTurnstileToken(null); // clear avant fetch
-await fetch('/v1/auth/login', {
-  /* envoyer `token` */
-});
+await fetch('/v1/auth/login', {/* envoyer `token` */});
 ```
 
 ## Symptôme : 401 `invalid_credentials`

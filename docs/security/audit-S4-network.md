@@ -115,12 +115,7 @@ Détail :
 - **Mitigation** :
   ```ts
   // dans buildApp(), AVANT mountDomainRoutes() :
-  app.use(
-    '/v1/*',
-    rateLimit({
-      /* defaults Req 14.3/14.4 */
-    }),
-  );
+  app.use('/v1/*', rateLimit({/* defaults Req 14.3/14.4 */}));
   ```
   Idéalement après `jwtAuth` pour que les utilisateurs authentifiés tombent sur leur quota par-user, mais avant le routage métier.
   Compléter avec une règle Cloudflare WAF "rate limit /v1/auth/\* à 30 rps par IP" en defense-in-depth.

@@ -26,8 +26,7 @@ import { newIdempotencyKey } from '../../../lib/idempotency';
 import type { ApiClient } from '../../../lib/api/client';
 
 export type ClassFormMode =
-  | { readonly kind: 'create' }
-  | { readonly kind: 'edit'; readonly cls: ClassWithRemaining };
+  { readonly kind: 'create' } | { readonly kind: 'edit'; readonly cls: ClassWithRemaining };
 
 export interface ClassFormDialogProps {
   readonly mode: ClassFormMode;

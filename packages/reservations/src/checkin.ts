@@ -84,12 +84,7 @@ export const CHECKIN_WINDOW_HALF_MS = 30 * MINUTE_MS;
  * can show actionable UI.
  */
 export type QRVerifyFailReason =
-  | 'invalid_signature'
-  | 'token_expired'
-  | 'replay'
-  | 'wrong_studio'
-  | 'wrong_kind'
-  | 'malformed';
+  'invalid_signature' | 'token_expired' | 'replay' | 'wrong_studio' | 'wrong_kind' | 'malformed';
 
 /**
  * Success envelope returned by the verifier. Matches the three pieces
@@ -283,9 +278,7 @@ export type CheckInBusinessFailure =
  *   - The success branch carries the fully-updated reservation.
  */
 export type CheckInResult =
-  | CheckInOk
-  | { readonly code: QRVerifyFailReason }
-  | CheckInBusinessFailure;
+  CheckInOk | { readonly code: QRVerifyFailReason } | CheckInBusinessFailure;
 
 /* ------------------------------------------------------------------ */
 /*  Service input                                                      */

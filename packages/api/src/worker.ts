@@ -428,8 +428,7 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
         const allowed = athlyaEnv.CORS_ORIGIN;
         if (allowed === undefined || allowed === '') {
           const logger = (c as { get: (k: string) => unknown }).get('logger') as
-            | { error: (msg: string, ctx?: unknown) => void }
-            | undefined;
+            { error: (msg: string, ctx?: unknown) => void } | undefined;
           const ctx = {
             code: 'configuration_error',
             env,

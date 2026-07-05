@@ -39,9 +39,7 @@ interface StudioMe {
 const FALLBACK_COLOR = '#0EA5E9';
 
 type Status =
-  | { kind: 'loading' }
-  | { kind: 'ready'; color: string }
-  | { kind: 'error'; message: string };
+  { kind: 'loading' } | { kind: 'ready'; color: string } | { kind: 'error'; message: string };
 
 export function BrandingPanel(): ReactElement {
   const locale = useLocale();

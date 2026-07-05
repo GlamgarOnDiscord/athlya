@@ -47,17 +47,17 @@ prod" — il faut un track record stable AVANT submission.
 
 À cocher après 6 mois de prod stable :
 
-| Check                                                                                                 | Tool                         | OK ?            |
+| Check | Tool | OK ? |
 | ----------------------------------------------------------------------------------------------------- | ---------------------------- | --------------- | --- |
-| Certif HTTPS sur `athlya.app` valide                                                                  | `curl -I https://athlya.app` | ⏳              |
-| Redirect HTTP → HTTPS                                                                                 | `curl -I http://athlya.app`  | ⏳              |
-| HSTS header présent sur racine                                                                        | `curl -sI https://athlya.app | grep -i strict` | ⏳  |
-| `max-age >= 31536000`                                                                                 | manual check                 | ⏳              |
-| `includeSubDomains` flag                                                                              | manual check                 | ⏳              |
-| `preload` flag                                                                                        | manual check                 | ⏳              |
-| Tous les sous-domaines en HTTPS (test : `app.athlya.app`, `staging.api.athlya.app`, `api.athlya.app`) | curl chacun                  | ⏳              |
-| Aucun service interne HTTP-only sur `*.athlya.app` (intranet, monitoring, etc.)                       | review DNS records           | ⏳              |
-| 6 mois prod stable sans rollback HSTS                                                                 | git log                      | ⏳              |
+| Certif HTTPS sur `athlya.app` valide | `curl -I https://athlya.app` | ⏳ |
+| Redirect HTTP → HTTPS | `curl -I http://athlya.app` | ⏳ |
+| HSTS header présent sur racine | `curl -sI https://athlya.app | grep -i strict` | ⏳ |
+| `max-age >= 31536000` | manual check | ⏳ |
+| `includeSubDomains` flag | manual check | ⏳ |
+| `preload` flag | manual check | ⏳ |
+| Tous les sous-domaines en HTTPS (test : `app.athlya.app`, `staging.api.athlya.app`, `api.athlya.app`) | curl chacun | ⏳ |
+| Aucun service interne HTTP-only sur `*.athlya.app` (intranet, monitoring, etc.) | review DNS records | ⏳ |
+| 6 mois prod stable sans rollback HSTS | git log | ⏳ |
 
 ## Submission step
 
