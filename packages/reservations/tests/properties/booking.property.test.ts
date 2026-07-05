@@ -201,11 +201,18 @@ const BOOKING_PASSWORD = 'booking_test';
 // ---------------------------------------------------------------------
 
 async function applyMigration(client: Sql, sqlText: string): Promise<void> {
-  const statements = sqlText
-    .split(/-->\s*statement-breakpoint/g)
-    .map((chunk) => chunk.trim())
-    .filter((chunk) => chunk.length > 0);
-  for (const stmt of statements) {
+  // Split on the Drizzle statement-breakpoint marker first, then fall
+  // back to splitting on semicolons so that migrations containing
+  // CREATE/DROP INDEX CONCURRENTLY (which cannot run inside a
+  // transaction block) are each executed as a separate simple query.
+  const chunks = sqlText.split(/-->\s*statement-breakpoint/g).flatMap((chunk) =>
+    chunk
+      .split(/;[ \t]*\n/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .map((s) => (s.endsWith(';') ? s : s + ';')),
+  );
+  for (const stmt of chunks) {
     await client.unsafe(stmt);
   }
 }
