@@ -152,7 +152,7 @@
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",
     "@athlya/tsconfig": "workspace:*",
-    "@cloudflare/workers-types": "^4.20260626.1",
+    "@cloudflare/workers-types": "^5.20260705.1",
     "@sentry/cli": "3.6.0",
     "@types/node": "^20.19.43",
     "eslint": "^9.39.1",
