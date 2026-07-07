@@ -55,17 +55,20 @@ import { cn } from '@/lib/utils';
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://athlya.app';
+const WEB_BASE_URL = (
+  process.env.NEXT_PUBLIC_WEB_BASE_URL ??
+  process.env.NEXT_PUBLIC_BASE_URL ??
+  'https://athlya.app'
+).replace(/\/$/, '');
 const DESCRIPTION = 'Plateforme fitness open-source, multi-tenant, RGPD-first.';
 
 export const metadata: Metadata = {
-  metadataBase: new URL(BASE_URL),
+  metadataBase: new URL(WEB_BASE_URL),
   title: {
     template: '%s — Athlya',
     default: 'Athlya — Réservez vos cours de fitness',
   },
   description: DESCRIPTION,
-  alternates: { canonical: '/' },
   openGraph: {
     title: 'Athlya',
     description: DESCRIPTION,

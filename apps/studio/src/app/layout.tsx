@@ -32,7 +32,11 @@ import { cn } from '@/lib/utils';
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 
-const STUDIO_BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://studio.athlya.app';
+const STUDIO_BASE_URL = (
+  process.env.NEXT_PUBLIC_STUDIO_BASE_URL ??
+  process.env.NEXT_PUBLIC_BASE_URL ??
+  'https://studio.athlya.app'
+).replace(/\/$/, '');
 
 export const metadata: Metadata = {
   metadataBase: new URL(STUDIO_BASE_URL),

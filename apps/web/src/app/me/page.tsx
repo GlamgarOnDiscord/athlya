@@ -26,7 +26,7 @@ import { ProfileSection } from './ProfileSection';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Mon profil — Athlya' };
+export const metadata: Metadata = { title: 'Mon profil' };
 
 export default async function MePage(): Promise<ReactElement> {
   const locale = await getLocale();

@@ -22,7 +22,7 @@ import { DeletePanel } from './DeletePanel';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Supprimer mon compte — Athlya' };
+export const metadata: Metadata = { title: 'Supprimer mon compte' };
 
 export default async function MeDeletePage(): Promise<ReactElement> {
   const locale = await getLocale();

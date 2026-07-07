@@ -24,7 +24,7 @@ import { ClassesList } from './ClassesList';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Cours disponibles — Athlya' };
+export const metadata: Metadata = { title: 'Cours disponibles' };
 
 export default async function ClassesPage(): Promise<ReactElement> {
   const locale = await getLocale();

@@ -12,7 +12,7 @@ import { createTranslator } from '../lib/i18n/t';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Page introuvable — Athlya Studio' };
+export const metadata: Metadata = { title: 'Page introuvable' };
 
 export default async function NotFound(): Promise<ReactElement> {
   const locale = await getLocale();

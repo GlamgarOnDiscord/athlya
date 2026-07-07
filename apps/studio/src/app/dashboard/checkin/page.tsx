@@ -6,7 +6,7 @@ import { CheckinKiosk } from './CheckinKiosk';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Check-in — Athlya Studio' };
+export const metadata: Metadata = { title: 'Check-in' };
 
 export default async function CheckinPage(): Promise<ReactElement> {
   const locale = await getLocale();

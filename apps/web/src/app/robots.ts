@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://athlya.app';
+const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://athlya.app').replace(/\/$/, '');
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -8,7 +8,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/me/', '/api/'],
+        disallow: ['/me', '/me/', '/api', '/api/'],
       },
     ],
     sitemap: `${BASE_URL}/sitemap.xml`,

@@ -20,7 +20,7 @@ import { ClassesAdminList } from './ClassesAdminList';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Cours — Athlya Studio' };
+export const metadata: Metadata = { title: 'Cours' };
 
 export default async function ClassesAdminPage(): Promise<ReactElement> {
   const locale = await getLocale();

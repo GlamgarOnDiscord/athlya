@@ -26,7 +26,7 @@ import { BillingPlansClient } from './BillingPlansClient';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Facturation — Athlya Studio' };
+export const metadata: Metadata = { title: 'Facturation' };
 
 export default async function BillingPage(): Promise<ReactElement> {
   const locale = await getLocale();
