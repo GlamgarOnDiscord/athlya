@@ -45,8 +45,16 @@ jobs:
         uses: github/codeql-action/analyze@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
         with:
           category: '/language:${{ matrix.language }}'
-          # SARIF upload: enabled for public repos (free) and for repos with
-          # GitHub Advanced Security. On private repos without Advanced Security
-          # this step will fail with "Advanced Security must be enabled"; in
-          # that case set upload: false and review findings in the job logs.
-          upload: true
+          upload: never
+          output: sarif-results
+
+      - name: Upload SARIF results
+        # Requires GitHub Advanced Security (free on public repos, paid on
+        # private). Allowed to fail so PRs are not blocked on private repos
+        # without Advanced Security — the analysis above still runs and findings
+        # appear in the job logs.
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
+        with:
+          sarif_file: sarif-results
+          category: '/language:${{ matrix.language }}'
