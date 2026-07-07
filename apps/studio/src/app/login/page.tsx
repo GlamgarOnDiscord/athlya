@@ -15,7 +15,7 @@ import { LoginForm } from './LoginForm';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Connexion — Athlya Studio' };
+export const metadata: Metadata = { title: 'Connexion' };
 
 export default async function LoginPage(): Promise<ReactElement> {
   const h = await headers();

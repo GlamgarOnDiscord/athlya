@@ -27,9 +27,10 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Politique de confidentialité — Athlya',
+  title: 'Politique de confidentialité',
   description:
     'Informations RGPD : comment Athlya traite vos données personnelles, vos droits, et comment les exercer.',
+  alternates: { canonical: '/privacy' },
 };
 
 export default function PrivacyPolicyPage() {

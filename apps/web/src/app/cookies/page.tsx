@@ -14,8 +14,9 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Politique cookies — Athlya',
+  title: 'Politique cookies',
   description: 'Quels cookies Athlya utilise et pourquoi.',
+  alternates: { canonical: '/cookies' },
 };
 
 export default function CookiePolicyPage() {

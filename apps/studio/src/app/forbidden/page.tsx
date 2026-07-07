@@ -16,7 +16,7 @@ import { ForbiddenActions } from './ForbiddenActions';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Accès refusé — Athlya Studio' };
+export const metadata: Metadata = { title: 'Accès refusé' };
 
 export default async function ForbiddenPage(): Promise<ReactElement> {
   const locale = await getLocale();

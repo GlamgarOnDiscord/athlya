@@ -19,7 +19,11 @@ import { RegisterForm } from './RegisterForm';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Inscription — Athlya' };
+export const metadata: Metadata = {
+  title: 'Inscription',
+  alternates: { canonical: '/register' },
+  robots: { index: false, follow: false },
+};
 
 export default async function RegisterPage(): Promise<ReactElement> {
   const h = await headers();

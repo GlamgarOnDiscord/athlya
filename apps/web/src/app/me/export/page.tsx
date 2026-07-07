@@ -21,7 +21,7 @@ import { ExportPanel } from './ExportPanel';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Exporter mes données — Athlya' };
+export const metadata: Metadata = { title: 'Exporter mes données' };
 
 export default async function MeExportPage(): Promise<ReactElement> {
   const locale = await getLocale();

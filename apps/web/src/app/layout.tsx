@@ -55,15 +55,36 @@ import { cn } from '@/lib/utils';
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 
+const WEB_BASE_URL = (
+  process.env.NEXT_PUBLIC_WEB_BASE_URL ??
+  process.env.NEXT_PUBLIC_BASE_URL ??
+  'https://athlya.app'
+).replace(/\/$/, '');
+const DESCRIPTION = 'Plateforme fitness open-source, multi-tenant, RGPD-first.';
+
 export const metadata: Metadata = {
-  title: 'Athlya',
-  description: 'Plateforme fitness open-source, multi-tenant, RGPD-first.',
+  metadataBase: new URL(WEB_BASE_URL),
+  title: {
+    template: '%s — Athlya',
+    default: 'Athlya — Réservez vos cours de fitness',
+  },
+  description: DESCRIPTION,
   openGraph: {
     title: 'Athlya',
-    description: 'Plateforme fitness open-source, multi-tenant, RGPD-first.',
+    description: DESCRIPTION,
     type: 'website',
     locale: 'fr_FR',
+    url: '/',
+    siteName: 'Athlya',
+    images: [{ url: '/images/athlya-og.png', width: 1200, height: 630, alt: 'Athlya' }],
   },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Athlya',
+    description: DESCRIPTION,
+    images: ['/images/athlya-og.png'],
+  },
+  robots: { index: true, follow: true },
 };
 
 export default async function RootLayout({

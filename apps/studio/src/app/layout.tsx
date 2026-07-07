@@ -32,14 +32,20 @@ import { cn } from '@/lib/utils';
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 
+const STUDIO_BASE_URL = (
+  process.env.NEXT_PUBLIC_STUDIO_BASE_URL ??
+  process.env.NEXT_PUBLIC_BASE_URL ??
+  'https://studio.athlya.app'
+).replace(/\/$/, '');
+
 export const metadata: Metadata = {
-  title: 'Athlya Studio',
-  description: "Console d'administration des studios Athlya.",
-  openGraph: {
-    title: 'Athlya Studio',
-    description: "Console d'administration des studios Athlya.",
-    type: 'website',
+  metadataBase: new URL(STUDIO_BASE_URL),
+  title: {
+    template: '%s — Athlya Studio',
+    default: 'Athlya Studio',
   },
+  description: "Console d'administration des studios Athlya.",
+  robots: { index: false, follow: false },
 };
 
 export default async function RootLayout({
