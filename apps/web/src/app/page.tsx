@@ -21,7 +21,10 @@ import { HomeActions } from './HomeActions';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Athlya — Réservez vos cours' };
+export const metadata: Metadata = {
+  title: 'Réservez vos cours de fitness',
+  alternates: { canonical: '/' },
+};
 
 export default async function HomePage(): Promise<ReactElement> {
   const locale = await getLocale();

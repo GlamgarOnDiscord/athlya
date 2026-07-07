@@ -12,8 +12,9 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Mentions légales — Athlya',
+  title: 'Mentions légales',
   description: "Identification de l'éditeur, de l'hébergeur et du directeur de la publication.",
+  alternates: { canonical: '/legal' },
 };
 
 export default function LegalNoticePage() {
