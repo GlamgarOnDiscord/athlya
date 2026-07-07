@@ -42,11 +42,19 @@ jobs:
           queries: security-extended
 
       - name: Perform CodeQL analysis
-        # SARIF upload requires GitHub Advanced Security (free on public repos,
-        # paid on private). continue-on-error lets the workflow report findings
-        # in the logs without blocking PRs on private repos.
-        continue-on-error: true
         uses: github/codeql-action/analyze@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
         with:
           category: '/language:${{ matrix.language }}'
-          upload: true
+          upload: never
+          output: sarif-results
+
+      - name: Upload SARIF results
+        # Requires GitHub Advanced Security (free on public repos, paid on
+        # private). Allowed to fail so PRs are not blocked on private repos
+        # without Advanced Security — the analysis above still runs and findings
+        # appear in the job logs.
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
+        with:
+          sarif_file: sarif-results
+          category: '/language:${{ matrix.language }}'
