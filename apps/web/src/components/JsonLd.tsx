@@ -4,7 +4,7 @@ interface JsonLdProps {
   readonly data: Record<string, unknown>;
 }
 
-function safeJsonLd(data: Record<string, unknown>): string {
+export function safeJsonLd(data: Record<string, unknown>): string {
   return JSON.stringify(data)
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
