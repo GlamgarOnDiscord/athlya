@@ -41,6 +41,7 @@ import { Toaster } from '@/components/ui/sonner';
 
 import { AppNav } from '../components/AppNav';
 import { CookieBanner } from '../components/CookieBanner';
+import { JsonLd } from '../components/JsonLd';
 import { AuthProvider } from '../lib/auth/AuthContext';
 import { getLocale } from '../lib/i18n/getLocale';
 import { LocaleProvider } from '../lib/i18n/LocaleContext';
@@ -97,6 +98,17 @@ export default async function RootLayout({
   return (
     <html lang={locale} suppressHydrationWarning className={cn('font-sans', geist.variable)}>
       <body>
+        <JsonLd
+          data={{
+            '@context': 'https://schema.org',
+            '@type': 'Organization',
+            name: 'Athlya',
+            description: DESCRIPTION,
+            url: WEB_BASE_URL,
+            logo: `${WEB_BASE_URL}/images/athlya-logo.png`,
+            sameAs: [],
+          }}
+        />
         <LocaleProvider locale={locale}>
           <AuthProvider>
             <AppNav />
