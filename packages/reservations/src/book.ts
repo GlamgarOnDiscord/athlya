@@ -216,7 +216,7 @@ export interface BookingRepo {
    *
    * Implementations SHOULD accept rows in any non-cancelled status;
    * since migration 0028 replaced the global unique index with a
-   * partial one (`WHERE status IN ('confirmed', 'waitlisted')`),
+   * partial one (`WHERE status IN ('confirmed', 'waitlist')`),
    * cancelled rows no longer block the INSERT and this method is
    * only reached on a genuine double-tap or idempotent retry.
    */
@@ -230,7 +230,7 @@ export interface BookingRepo {
    * Insert a new reservation row for `(classId, userId)` with the
    * given `status`. Throws {@link UniqueViolationError} (or any
    * error with `.code === 'UNIQUE_VIOLATION'`) on the
-   * `UNIQUE(class_id, user_id) WHERE status IN ('confirmed', 'waitlisted')` collision.
+   * `UNIQUE(class_id, user_id) WHERE status IN ('confirmed', 'waitlist')` collision.
    *
    * Any OTHER error (deadlock, DB outage, RLS rejection, …) is
    * propagated to the book flow which compensates the Redis DECR

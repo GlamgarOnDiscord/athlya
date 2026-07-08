@@ -2,7 +2,7 @@
  * `reservations` — the per-(user, class) booking record.
  *
  * Column choices:
- *   - `UNIQUE(class_id, user_id) WHERE status IN ('confirmed', 'waitlisted')`
+ *   - `UNIQUE(class_id, user_id) WHERE status IN ('confirmed', 'waitlist')`
  *     is the authoritative anti-double-booking guard (migration 0028). The
  *     partial index excludes cancelled rows so users can re-book a class
  *     after cancelling their reservation (issue #468). Under a race where
@@ -56,7 +56,7 @@ export const reservations = pgTable(
      */
     uniqueIndex('reservations_class_user_active_unique')
       .on(table.classId, table.userId)
-      .where(sql`status IN ('confirmed', 'waitlisted')`),
+      .where(sql`status IN ('confirmed', 'waitlist')`),
     index('reservations_class_status_created_at_idx')
       .on(table.classId, table.status, table.createdAt)
       .where(sql`status = 'waitlist'`),
