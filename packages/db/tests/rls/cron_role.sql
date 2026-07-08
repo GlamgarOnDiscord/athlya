@@ -70,7 +70,7 @@ VALUES
     )
 ON CONFLICT (id) DO NOTHING;
 
-SELECT plan(8);
+SELECT plan(7);
 
 -- ------------------------------------------------------------------ --
 -- 1. athlya_cron must have rolbypassrls = false after migration 0019  --
