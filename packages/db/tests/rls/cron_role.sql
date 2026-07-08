@@ -14,14 +14,14 @@ BEGIN;
 
 -- Seed data as superuser (bypasses RLS). Use deterministic UUIDs so
 -- the test is idempotent on repeated runs.
-INSERT INTO studios (id, name, slug, created_at, updated_at)
+INSERT INTO studios (id, name, slug, created_at)
 VALUES
-    ('cccccccc-cc01-4ccc-8ccc-cccccccccc01', 'Cron Test Studio A', 'cron-studio-a', NOW(), NOW()),
-    ('cccccccc-cc02-4ccc-8ccc-cccccccccc02', 'Cron Test Studio B', 'cron-studio-b', NOW(), NOW())
+    ('cccccccc-cc01-4ccc-8ccc-cccccccccc01', 'Cron Test Studio A', 'cron-studio-a', NOW()),
+    ('cccccccc-cc02-4ccc-8ccc-cccccccccc02', 'Cron Test Studio B', 'cron-studio-b', NOW())
 ON CONFLICT (id) DO NOTHING;
 
 -- Soft-deleted user eligible for anonymization (deleted > 30 days ago)
-INSERT INTO users (id, studio_id, email, display_name, password_hash, role, deleted_at, created_at, updated_at)
+INSERT INTO users (id, studio_id, email, display_name, password_hash, role, consents, deleted_at, created_at)
 VALUES
     (
         'dddddddd-dd01-4ddd-8ddd-dddddddddd01',
@@ -30,9 +30,9 @@ VALUES
         'Old User A',
         'hash',
         'member',
+        '{"marketing":false,"analytics":false,"thirdParty":false,"version":1,"updatedAt":"2026-01-01T00:00:00Z"}'::jsonb,
         NOW() - INTERVAL '35 days',
-        NOW() - INTERVAL '40 days',
-        NOW()
+        NOW() - INTERVAL '40 days'
     ),
     (
         'dddddddd-dd02-4ddd-8ddd-dddddddddd02',
@@ -41,9 +41,9 @@ VALUES
         'Old User B',
         'hash',
         'member',
+        '{"marketing":false,"analytics":false,"thirdParty":false,"version":1,"updatedAt":"2026-01-01T00:00:00Z"}'::jsonb,
         NOW() - INTERVAL '35 days',
-        NOW() - INTERVAL '40 days',
-        NOW()
+        NOW() - INTERVAL '40 days'
     )
 ON CONFLICT (id) DO NOTHING;
 
@@ -70,7 +70,7 @@ VALUES
     )
 ON CONFLICT (id) DO NOTHING;
 
-SELECT plan(8);
+SELECT plan(7);
 
 -- ------------------------------------------------------------------ --
 -- 1. athlya_cron must have rolbypassrls = false after migration 0019  --
@@ -99,7 +99,7 @@ SELECT is(
 -- 4. athlya_cron can UPDATE users (anonymization path)                --
 -- ------------------------------------------------------------------ --
 UPDATE users
-SET email = NULL,
+SET email = 'deleted.dddddddd-dd01-4ddd-8ddd-dddddddddd01@deleted.invalid',
     display_name = '[deleted]',
     avatar_url = NULL,
     consents = '{}'::jsonb,
@@ -107,8 +107,8 @@ SET email = NULL,
 WHERE id = 'dddddddd-dd01-4ddd-8ddd-dddddddddd01';
 
 SELECT is(
-    (SELECT email FROM users WHERE id = 'dddddddd-dd01-4ddd-8ddd-dddddddddd01'),
-    NULL,
+    (SELECT display_name FROM users WHERE id = 'dddddddd-dd01-4ddd-8ddd-dddddddddd01'),
+    '[deleted]',
     'athlya_cron can anonymize users (UPDATE cross-tenant)'
 );
 
