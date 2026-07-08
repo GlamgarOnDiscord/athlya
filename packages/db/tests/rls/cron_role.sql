@@ -21,7 +21,7 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Soft-deleted user eligible for anonymization (deleted > 30 days ago)
-INSERT INTO users (id, studio_id, email, display_name, password_hash, role, deleted_at, created_at)
+INSERT INTO users (id, studio_id, email, display_name, password_hash, role, consents, deleted_at, created_at)
 VALUES
     (
         'dddddddd-dd01-4ddd-8ddd-dddddddddd01',
@@ -30,6 +30,7 @@ VALUES
         'Old User A',
         'hash',
         'member',
+        '{"marketing":false,"analytics":false,"thirdParty":false,"version":1,"updatedAt":"2026-01-01T00:00:00Z"}'::jsonb,
         NOW() - INTERVAL '35 days',
         NOW() - INTERVAL '40 days'
     ),
@@ -40,6 +41,7 @@ VALUES
         'Old User B',
         'hash',
         'member',
+        '{"marketing":false,"analytics":false,"thirdParty":false,"version":1,"updatedAt":"2026-01-01T00:00:00Z"}'::jsonb,
         NOW() - INTERVAL '35 days',
         NOW() - INTERVAL '40 days'
     )
