@@ -99,7 +99,7 @@ SELECT is(
 -- 4. athlya_cron can UPDATE users (anonymization path)                --
 -- ------------------------------------------------------------------ --
 UPDATE users
-SET email = NULL,
+SET email = 'deleted.dddddddd-dd01-4ddd-8ddd-dddddddddd01@deleted.invalid',
     display_name = '[deleted]',
     avatar_url = NULL,
     consents = '{}'::jsonb,
@@ -107,8 +107,8 @@ SET email = NULL,
 WHERE id = 'dddddddd-dd01-4ddd-8ddd-dddddddddd01';
 
 SELECT is(
-    (SELECT email FROM users WHERE id = 'dddddddd-dd01-4ddd-8ddd-dddddddddd01'),
-    NULL,
+    (SELECT display_name FROM users WHERE id = 'dddddddd-dd01-4ddd-8ddd-dddddddddd01'),
+    '[deleted]',
     'athlya_cron can anonymize users (UPDATE cross-tenant)'
 );
 
