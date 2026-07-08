@@ -2,11 +2,14 @@
  * `reservations` — the per-(user, class) booking record.
  *
  * Column choices:
- *   - `UNIQUE(class_id, user_id)` is the authoritative anti-double-booking
- *     guard. Even under a race where two concurrent `bookClass` calls both
- *     read capacity and attempt to insert, PostgreSQL rejects one with a
- *     `unique_violation` (23505) which the service layer catches and
- *     converts into an idempotent success (Requirement 8.4, 8.5).
+ *   - `UNIQUE(class_id, user_id) WHERE status IN ('confirmed', 'waitlist')`
+ *     is the authoritative anti-double-booking guard (migration 0028). The
+ *     partial index excludes cancelled rows so users can re-book a class
+ *     after cancelling their reservation (issue #468). Under a race where
+ *     two concurrent `bookClass` calls both read capacity and attempt to
+ *     insert, PostgreSQL rejects one with a `unique_violation` (23505)
+ *     which the service layer catches and converts into an idempotent
+ *     success (Requirement 8.4, 8.5).
  *   - `status` uses a dedicated enum (`reservation_status`) rather than a
  *     `CHECK (status IN (...))` text column so the domain invariant is
  *     visible in `pg_catalog` to ops tooling and migrations are safer.
@@ -44,12 +47,16 @@ export const reservations = pgTable(
   },
   (table) => [
     /**
-     * The anti-double-booking invariant. Enforced in the database so
-     * that even a buggy caller cannot violate it — see Requirement
-     * 8.4 and the `UniqueViolation` branch of Algorithm 1 in the
-     * design document.
+     * The anti-double-booking invariant: at-most-one active
+     * reservation per (class, user) pair. Partial on the active
+     * statuses only so cancelled rows do not block re-booking
+     * (issue #468). Enforced in the database so that even a buggy
+     * caller cannot violate it — see Requirement 8.4 and the
+     * `UniqueViolation` branch of Algorithm 1 in the design document.
      */
-    uniqueIndex('reservations_class_user_unique').on(table.classId, table.userId),
+    uniqueIndex('reservations_class_user_active_unique')
+      .on(table.classId, table.userId)
+      .where(sql`status IN ('confirmed', 'waitlist')`),
     index('reservations_class_status_created_at_idx')
       .on(table.classId, table.status, table.createdAt)
       .where(sql`status = 'waitlist'`),
