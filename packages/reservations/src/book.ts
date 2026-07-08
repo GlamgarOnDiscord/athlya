@@ -214,10 +214,11 @@ export interface BookingRepo {
    * surfaces it as a generic internal error — the invariant "a
    * unique-violation means a pre-existing row" is trusted.
    *
-   * Implementations SHOULD accept rows in any status; the booking
-   * flow treats a `cancelled` row as "user re-booked after
-   * cancellation" which is a legitimate success and returns the
-   * existing row unchanged.
+   * Implementations SHOULD accept rows in any non-cancelled status;
+   * since migration 0028 replaced the global unique index with a
+   * partial one (`WHERE status IN ('confirmed', 'waitlisted')`),
+   * cancelled rows no longer block the INSERT and this method is
+   * only reached on a genuine double-tap or idempotent retry.
    */
   findExistingConfirmedOrWaitlistReservation(
     tx: BookingTx,
@@ -229,7 +230,7 @@ export interface BookingRepo {
    * Insert a new reservation row for `(classId, userId)` with the
    * given `status`. Throws {@link UniqueViolationError} (or any
    * error with `.code === 'UNIQUE_VIOLATION'`) on the
-   * `UNIQUE(class_id, user_id)` collision.
+   * `UNIQUE(class_id, user_id) WHERE status IN ('confirmed', 'waitlisted')` collision.
    *
    * Any OTHER error (deadlock, DB outage, RLS rejection, …) is
    * propagated to the book flow which compensates the Redis DECR

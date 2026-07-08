@@ -469,6 +469,36 @@ describe('bookClass — UniqueViolation on confirmed insert', () => {
 });
 
 /* ------------------------------------------------------------------ */
+/*  Re-book after cancellation — issue #468                            */
+/* ------------------------------------------------------------------ */
+
+describe('bookClass — re-booking after cancellation (partial unique index)', () => {
+  it('succeeds with code ok when INSERT does not raise a UniqueViolationError', async () => {
+    // With the partial unique index (migration 0028) covering only
+    // confirmed / waitlisted rows, an INSERT for a user who previously
+    // cancelled does NOT throw a UniqueViolationError. The booking
+    // flow therefore proceeds as a fresh booking and returns code 'ok'.
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(2);
+    // INSERT succeeds — no unique-violation from the DB layer.
+    d.insertReservation.mockResolvedValueOnce(CONFIRMED_ROW);
+    d.countWaitlistAhead.mockResolvedValueOnce(0);
+
+    const result = await invoke(d.deps);
+
+    expect(result).toEqual({ code: 'ok', reservation: CONFIRMED_ROW, remaining: 2 });
+    // No compensating INCR — the seat is legitimately claimed.
+    expect(d.incrRemaining).not.toHaveBeenCalled();
+    // Exactly one transaction and one outbox write.
+    expect(d.withTransaction).toHaveBeenCalledOnce();
+    expect(d.insertOutbox).toHaveBeenCalledOnce();
+    // findExisting must never be called on a clean rebook path.
+    expect(d.findExisting).not.toHaveBeenCalled();
+  });
+});
+
+/* ------------------------------------------------------------------ */
 /*  UniqueViolation on waitlist insert — Req 8.4, 8.5                  */
 /* ------------------------------------------------------------------ */
 
