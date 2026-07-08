@@ -6,17 +6,16 @@
  * to one SQL statement; the state transitions themselves are
  * enforced by the service (pending → running → completed | failed).
  *
- * Dedup lookup (`findActiveByUser`) uses the partial index
- * `export_jobs_user_active_idx` on the `pending` / `running` slice,
+ * Dedup lookup (`findActiveByUser`) uses the unique partial index
+ * `export_jobs_user_active_uniq` on the `pending` / `running` slice,
  * so the query is O(1) even on a table with years of history.
  *
  * Idempotency:
- *   - `create` is NOT retry-safe; the service guards against a
- *     duplicate insert via `findActiveByUser` before calling
- *     `create`, and the `users_export_active_idx` tracks only the
- *     pending/running rows so we never race with a completed/failed
- *     clone. The small (1-RTT) race window is documented in the
- *     service and considered acceptable.
+ *   - `create` catches SQLSTATE 23505 from the unique partial index
+ *     and converts it into an idempotent dedup: it re-reads the
+ *     existing active row via `findActiveByUser` and returns that id
+ *     so the caller can short-circuit without publishing a duplicate
+ *     event (issue #462).
  *   - `markRunning` / `markCompleted` / `markFailed` are idempotent
  *     by design — re-running a transition that already landed is a
  *     no-op because the WHERE clause filters on the source state.
@@ -25,6 +24,7 @@
  */
 
 import { withTenantHttp } from '@athlya/db';
+import { isPostgresUniqueViolation } from '@athlya/db/errors';
 import { exportJobs } from '@athlya/db/schema';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 
@@ -38,16 +38,25 @@ import type { ExportJobRecord, ExportJobStore } from '@athlya/members';
  * Drizzle instance.
  */
 export function createDrizzleExportJobStore(db: AthlyaDbAny): ExportJobStore {
-  return {
+  const store: ExportJobStore = {
     async create(jobId, userId, requestedAt) {
-      await withConnectionRetry(async () => {
-        await db.insert(exportJobs).values({
-          id: jobId,
-          userId,
-          status: 'pending',
-          requestedAt,
+      try {
+        await withConnectionRetry(async () => {
+          await db.insert(exportJobs).values({
+            id: jobId,
+            userId,
+            status: 'pending',
+            requestedAt,
+          });
         });
-      });
+        return jobId;
+      } catch (err) {
+        if (isPostgresUniqueViolation(err)) {
+          const existing = await store.findActiveByUser(userId);
+          if (existing !== null) return existing;
+        }
+        throw err;
+      }
     },
 
     async markRunning(jobId, startedAt) {
@@ -104,6 +113,7 @@ export function createDrizzleExportJobStore(db: AthlyaDbAny): ExportJobStore {
       return rows[0]?.id ?? null;
     },
   };
+  return store;
 }
 
 /* ------------------------------------------------------------------ */
@@ -119,20 +129,29 @@ export function createDrizzleExportJobStoreHttp(
   db: AthlyaDbHttp,
   claims: TenantClaims,
 ): ExportJobStore {
-  return {
+  const store: ExportJobStore = {
     async create(jobId, userId, requestedAt) {
-      await withConnectionRetry(() =>
-        withTenantHttp(
-          db,
-          claims,
-          db.insert(exportJobs).values({
-            id: jobId,
-            userId,
-            status: 'pending',
-            requestedAt,
-          }),
-        ),
-      );
+      try {
+        await withConnectionRetry(() =>
+          withTenantHttp(
+            db,
+            claims,
+            db.insert(exportJobs).values({
+              id: jobId,
+              userId,
+              status: 'pending',
+              requestedAt,
+            }),
+          ),
+        );
+        return jobId;
+      } catch (err) {
+        if (isPostgresUniqueViolation(err)) {
+          const existing = await store.findActiveByUser(userId);
+          if (existing !== null) return existing;
+        }
+        throw err;
+      }
     },
 
     async markRunning(jobId, startedAt) {
@@ -214,6 +233,7 @@ export function createDrizzleExportJobStoreHttp(
       return rows[0]?.id ?? null;
     },
   };
+  return store;
 }
 
 /* ------------------------------------------------------------------ */

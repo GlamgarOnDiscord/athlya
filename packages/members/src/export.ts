@@ -173,10 +173,17 @@ export interface ArchiveResult {
  */
 export interface ExportJobStore {
   /**
-   * Insert a new `pending` row. Must throw on unique-violation so
-   * the caller can decide whether to dedup.
+   * Insert a new `pending` row and return the effective job id.
+   *
+   * On a concurrent enqueue the unique partial index
+   * (`export_jobs_user_active_uniq`) fires SQLSTATE 23505. The
+   * adapter catches that violation, reads the existing active job
+   * via `findActiveByUser`, and returns *that* id instead of
+   * propagating the error. The caller detects the race by comparing
+   * the returned id against the generated `jobId` and short-circuits
+   * to `{ kind: 'deduped' }` without publishing a duplicate event.
    */
-  create(jobId: string, userId: string, requestedAt: Date): Promise<void>;
+  create(jobId: string, userId: string, requestedAt: Date): Promise<string>;
 
   /**
    * Transition the row from `pending` → `running`. Idempotent: a
@@ -495,12 +502,13 @@ function toErrorReason(err: unknown, maxLen = 500): string {
  *    `members.export.requested` event on QStash and return the new
  *    id (`kind: 'ok'`).
  *
- * The dedup check is a soft guarantee: a race between two
- * concurrent enqueues can result in two active rows for the same
- * user. The price is at most one duplicate archive — the second
- * worker will simply produce the same bytes and the user never
- * sees a failure. Hardening beyond that (unique partial index) is
- * intentionally deferred until we see the collision in logs.
+ * The dedup check is backed by a unique partial index
+ * (`export_jobs_user_active_uniq`, migration 0027). A race between
+ * two concurrent enqueues hits SQLSTATE 23505; the adapter catches
+ * it, re-reads the winning row, and returns its id so the service
+ * can short-circuit to `{ kind: 'deduped' }` without publishing a
+ * duplicate event. The first `findActiveByUser` call is a fast-path
+ * that avoids the round-trip to Postgres on the common case.
  *
  * Related requirements: 4.1 (async enqueue returning a job id),
  * 20.1 (idempotency posture for repeated mutation calls).
@@ -518,7 +526,10 @@ export async function enqueueExport(
   const jobId = deps.uuid();
   const requestedAt = new Date(deps.clock.now());
 
-  await deps.jobs.create(jobId, userId, requestedAt);
+  const effectiveJobId = await deps.jobs.create(jobId, userId, requestedAt);
+  if (effectiveJobId !== jobId) {
+    return { kind: 'deduped', jobId: effectiveJobId };
+  }
 
   const event: MembersExportRequestedEvent = {
     id: deps.uuid(),

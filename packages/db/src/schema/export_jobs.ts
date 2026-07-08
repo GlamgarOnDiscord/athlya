@@ -30,7 +30,7 @@
  */
 
 import { sql } from 'drizzle-orm';
-import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import { createdAt, uuidPrimaryKey } from './_shared.js';
 import { exportJobStatusEnum } from './enums.js';
@@ -75,13 +75,15 @@ export const exportJobs = pgTable(
   },
   (table) => [
     /**
-     * Dedup lookup: "does this user have an active export in
-     * flight?". Partial index on the `pending` / `running` slice
-     * keeps the index tiny (completed/failed rows dominate the
-     * table after a few weeks).
+     * Unique partial index: at-most-one active export per user.
+     * Turns the race window between `findActiveByUser` and `create`
+     * into a DB-level uniqueness violation (SQLSTATE 23505) that
+     * the adapter catches and converts into an idempotent dedup
+     * (issue #462). Covers only the `pending` / `running` slice so
+     * completed / failed rows never block new exports.
      */
-    index('export_jobs_user_active_idx')
-      .on(table.userId, table.requestedAt)
+    uniqueIndex('export_jobs_user_active_uniq')
+      .on(table.userId)
       .where(sql`status in ('pending', 'running')`),
   ],
 );

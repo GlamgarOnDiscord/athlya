@@ -276,7 +276,7 @@ describe('enqueueExport', () => {
     const store = buildJobStore();
     const { events, publish } = buildEvents();
     store.findActiveByUser.mockResolvedValueOnce(null);
-    store.create.mockResolvedValueOnce(undefined);
+    store.create.mockResolvedValueOnce(JOB_ID);
     publish.mockResolvedValue(undefined);
 
     const result = await enqueueExport(USER_ID, {
@@ -326,6 +326,26 @@ describe('enqueueExport', () => {
 
     expect(result).toEqual({ kind: 'deduped', jobId: existingJobId });
     expect(store.create).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('deduplicates when create() loses the race (unique-index violation at DB level)', async () => {
+    const racingJobId = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c901';
+    const store = buildJobStore();
+    const { events, publish } = buildEvents();
+    // findActiveByUser returns null (no active job before INSERT)
+    store.findActiveByUser.mockResolvedValueOnce(null);
+    // create() returns the racing winner's id instead of the generated one
+    store.create.mockResolvedValueOnce(racingJobId);
+
+    const result = await enqueueExport(USER_ID, {
+      jobs: store.jobs,
+      events,
+      clock: buildClock([FROZEN_REQUEST_TIME]),
+      uuid: buildUuid(JOB_ID, REQUEST_EVENT_ID),
+    });
+
+    expect(result).toEqual({ kind: 'deduped', jobId: racingJobId });
     expect(publish).not.toHaveBeenCalled();
   });
 });
