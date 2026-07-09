@@ -28,6 +28,7 @@ import {
   exportObjectKey,
   runExportJob,
   type ArchiveBuilder,
+  type ArchiveEntry,
   type BlobStore,
   type CheckinRecord,
   type Clock,
@@ -170,6 +171,22 @@ function buildJobStore(): {
   };
 }
 
+/** Wrap a single page as an AsyncIterable for data source mocks. */
+function asyncPage<T>(items: T[]): AsyncIterable<T[]> {
+  return {
+    [Symbol.asyncIterator]() {
+      let done = false;
+      return {
+        next(): Promise<IteratorResult<T[]>> {
+          if (done) return Promise.resolve({ value: undefined as unknown as T[], done: true });
+          done = true;
+          return Promise.resolve({ value: items, done: false });
+        },
+      };
+    },
+  };
+}
+
 function buildDataSource(): {
   data: MemberDataSource;
   fetchProfile: Mock<MemberDataSource['fetchProfile']>;
@@ -215,15 +232,28 @@ function buildBlob(): {
   return { blob, put, signedUrl };
 }
 
+/**
+ * Archive builder double that drains the async entry iterable into a
+ * local array (so tests can inspect which entries were passed) and
+ * returns a stub ZIP payload.
+ */
 function buildArchiveDouble(
   bytes = new Uint8Array([
     0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   ]),
-): { archive: ArchiveBuilder; build: Mock<ArchiveBuilder['build']> } {
-  const build = vi.fn<ArchiveBuilder['build']>();
-  build.mockResolvedValue({ bytes, sizeBytes: bytes.byteLength });
+): {
+  archive: ArchiveBuilder;
+  build: Mock<ArchiveBuilder['build']>;
+  getEntries: () => ArchiveEntry[];
+} {
+  let captured: ArchiveEntry[] = [];
+  const build = vi.fn<ArchiveBuilder['build']>().mockImplementation(async (iter) => {
+    captured = [];
+    for await (const e of iter) captured.push(e);
+    return { bytes, sizeBytes: bytes.byteLength };
+  });
   const archive: ArchiveBuilder = { build };
-  return { archive, build };
+  return { archive, build, getEntries: () => captured };
 }
 
 function buildEvents(): {
@@ -359,7 +389,7 @@ describe('runExportJob', () => {
     const store = buildJobStore();
     const source = buildDataSource();
     const { blob, put, signedUrl } = buildBlob();
-    const { archive, build } = buildArchiveDouble();
+    const { archive, build, getEntries } = buildArchiveDouble();
     const { events, publish } = buildEvents();
 
     store.get.mockResolvedValueOnce(STORED_JOB);
@@ -368,10 +398,10 @@ describe('runExportJob', () => {
 
     source.fetchProfile.mockResolvedValueOnce(PROFILE);
     source.fetchConsents.mockResolvedValueOnce([CONSENTS_ROW]);
-    source.listReservations.mockResolvedValueOnce([RESERVATION_ROW]);
-    source.listSessions.mockResolvedValueOnce([SESSION_ROW]);
-    source.listCheckins.mockResolvedValueOnce([CHECKIN_ROW]);
-    source.listInvoices.mockResolvedValueOnce([INVOICE_ROW]);
+    source.listReservations.mockReturnValueOnce(asyncPage([RESERVATION_ROW]));
+    source.listSessions.mockReturnValueOnce(asyncPage([SESSION_ROW]));
+    source.listCheckins.mockReturnValueOnce(asyncPage([CHECKIN_ROW]));
+    source.listInvoices.mockReturnValueOnce(asyncPage([INVOICE_ROW]));
 
     put.mockResolvedValueOnce(undefined);
     const signedUrlStr =
@@ -412,8 +442,7 @@ describe('runExportJob', () => {
 
     // Archive was built with entries covering every collection.
     expect(build).toHaveBeenCalledTimes(1);
-    const entries = build.mock.calls[0]![0];
-    const names = entries.map((e) => e.name);
+    const names = getEntries().map((e) => e.name);
     expect(names).toContain('profile.json');
     expect(names).toContain('consents.json');
     expect(names).toContain('reservations.json');
@@ -477,10 +506,10 @@ describe('runExportJob', () => {
 
     source.fetchProfile.mockResolvedValueOnce(PROFILE);
     source.fetchConsents.mockRejectedValueOnce(new Error('consents repo offline'));
-    source.listReservations.mockResolvedValueOnce([]);
-    source.listSessions.mockResolvedValueOnce([]);
-    source.listCheckins.mockResolvedValueOnce([]);
-    source.listInvoices.mockResolvedValueOnce([]);
+    source.listReservations.mockReturnValue(asyncPage([]));
+    source.listSessions.mockReturnValue(asyncPage([]));
+    source.listCheckins.mockReturnValue(asyncPage([]));
+    source.listInvoices.mockReturnValue(asyncPage([]));
 
     const result = await runExportJob(JOB_ID, {
       jobs: store.jobs,
@@ -573,14 +602,20 @@ describe('runExportJob', () => {
 /* ------------------------------------------------------------------ */
 
 describe('buildArchiveEntries', () => {
-  it('emits JSON + CSV pairs for each listed collection and JSON-only for profile/consents', () => {
-    const entries = buildArchiveEntries({
+  async function collectEntries(data: Parameters<typeof buildArchiveEntries>[0]) {
+    const out: ArchiveEntry[] = [];
+    for await (const e of buildArchiveEntries(data)) out.push(e);
+    return out;
+  }
+
+  it('emits JSON + CSV pairs for each listed collection and JSON-only for profile/consents', async () => {
+    const entries = await collectEntries({
       profile: PROFILE,
       consents: [CONSENTS_ROW],
-      reservations: [RESERVATION_ROW],
-      sessions: [SESSION_ROW],
-      checkins: [CHECKIN_ROW],
-      invoices: [INVOICE_ROW],
+      reservations: asyncPage([RESERVATION_ROW]),
+      sessions: asyncPage([SESSION_ROW]),
+      checkins: asyncPage([CHECKIN_ROW]),
+      invoices: asyncPage([INVOICE_ROW]),
     });
     const names = entries.map((e) => e.name);
 
@@ -603,14 +638,14 @@ describe('buildArchiveEntries', () => {
     }
   });
 
-  it('produces valid JSON for the profile entry', () => {
-    const entries = buildArchiveEntries({
+  it('produces valid JSON for the profile entry', async () => {
+    const entries = await collectEntries({
       profile: PROFILE,
       consents: [],
-      reservations: [],
-      sessions: [],
-      checkins: [],
-      invoices: [],
+      reservations: asyncPage([]),
+      sessions: asyncPage([]),
+      checkins: asyncPage([]),
+      invoices: asyncPage([]),
     });
     const profileEntry = entries.find((e) => e.name === 'profile.json')!;
     const text = new TextDecoder().decode(profileEntry.bytes);

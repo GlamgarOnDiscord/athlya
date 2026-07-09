@@ -59,11 +59,11 @@ import { buildRoutedPublishDeps } from '../events/publish-deps.js';
 import { publish } from '../events/publish.js';
 
 import { getOrCreateDbHttp } from './deps-cache.js';
+import { createFflateArchiveBuilder } from './fflate-archive.js';
 import { createDrizzleExportJobStore } from './members-export-job-store-drizzle.js';
 
 import type { AthlyaBindings } from '../types.js';
 import type {
-  ArchiveBuilder,
   BlobStore,
   EventPublisher,
   MemberDataSource,
@@ -153,6 +153,18 @@ function buildBlobStore(bucket: R2Bucket | undefined, env: AthlyaBindings): Blob
 /*  Stub MemberDataSource                                              */
 /* ------------------------------------------------------------------ */
 
+function throwingIterable<T>(reason: string): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        next(): Promise<IteratorResult<T>> {
+          return Promise.reject(new Error(reason));
+        },
+      };
+    },
+  };
+}
+
 /**
  * Build a {@link MemberDataSource} that throws on every method.
  *
@@ -179,35 +191,16 @@ function buildStubDataSource(): MemberDataSource {
       throw new Error(reason);
     },
     listReservations() {
-      throw new Error(reason);
+      return throwingIterable(reason);
     },
     listSessions() {
-      throw new Error(reason);
+      return throwingIterable(reason);
     },
     listCheckins() {
-      throw new Error(reason);
+      return throwingIterable(reason);
     },
     listInvoices() {
-      throw new Error(reason);
-    },
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/*  Stub ArchiveBuilder                                                */
-/* ------------------------------------------------------------------ */
-
-/**
- * Stub {@link ArchiveBuilder}. Never reached because the upstream
- * data source throws first, but kept on the bundle so the
- * RunExportJobDeps shape remains type-correct. Replaced in the
- * follow-up slice by an `fflate`-backed adapter producing a real
- * ZIP archive.
- */
-function buildStubArchiveBuilder(): ArchiveBuilder {
-  return {
-    build() {
-      throw new Error(EXPORT_DATA_SOURCE_NOT_WIRED_REASON);
+      return throwingIterable(reason);
     },
   };
 }
@@ -260,7 +253,7 @@ export function buildExportDeps(env: AthlyaBindings): RunExportJobDeps {
   const jobs = createDrizzleExportJobStore(db);
   const blob = buildBlobStore(env.EXPORTS_BUCKET, env);
   const data = buildStubDataSource();
-  const archive = buildStubArchiveBuilder();
+  const archive = createFflateArchiveBuilder();
   const events = buildEventPublisher(env);
 
   return {

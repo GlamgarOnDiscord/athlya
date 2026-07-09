@@ -114,24 +114,26 @@ export interface InvoiceRecord {
 }
 
 /**
- * Bundle of data returned by the data source port. All collections
- * are eager (not async iterators) because the archive format (ZIP)
- * requires knowing the byte size of every entry up-front.
+ * Bundle of data returned by the data source port. Profile and
+ * consents are single-value (fetched eagerly); every list-shaped
+ * collection is an `AsyncIterable` of pages so each collection is
+ * fetched and serialised one page at a time without accumulating all
+ * rows in memory simultaneously (issue #469).
  */
 export interface MemberExportData {
   profile: ExportProfile;
   consents: ReadonlyArray<Consents>;
-  reservations: ReadonlyArray<Reservation>;
-  sessions: ReadonlyArray<WorkoutSession>;
-  checkins: ReadonlyArray<CheckinRecord>;
-  invoices: ReadonlyArray<InvoiceRecord>;
+  reservations: AsyncIterable<ReadonlyArray<Reservation>>;
+  sessions: AsyncIterable<ReadonlyArray<WorkoutSession>>;
+  checkins: AsyncIterable<ReadonlyArray<CheckinRecord>>;
+  invoices: AsyncIterable<ReadonlyArray<InvoiceRecord>>;
   /**
    * Audit rows referencing the user. Optional — the exporter
    * includes it only when the data source exposes it. Some
    * deployments gate audit visibility behind an admin role even
    * for the subject; the unit tests cover both modes.
    */
-  auditTrail?: ReadonlyArray<AuditLog>;
+  auditTrail?: AsyncIterable<ReadonlyArray<AuditLog>>;
 }
 
 /**
@@ -234,28 +236,31 @@ export interface ExportJobRecord {
 
 /**
  * Read-only view of every personal data store that must land in the
- * archive (Requirement 4.4). Each method fetches one collection so
- * tests can stub them independently; the service calls them in
- * parallel for throughput.
+ * archive (Requirement 4.4). Profile and consents are single-value;
+ * every list method yields pages of at most PAGE_SIZE rows so the
+ * service can serialise one collection at a time without loading all
+ * rows into memory simultaneously (issue #469).
  */
 export interface MemberDataSource {
   fetchProfile(userId: string): Promise<ExportProfile>;
   fetchConsents(userId: string): Promise<ReadonlyArray<Consents>>;
-  listReservations(userId: string): Promise<ReadonlyArray<Reservation>>;
-  listSessions(userId: string): Promise<ReadonlyArray<WorkoutSession>>;
-  listCheckins(userId: string): Promise<ReadonlyArray<CheckinRecord>>;
-  listInvoices(userId: string): Promise<ReadonlyArray<InvoiceRecord>>;
+  listReservations(userId: string): AsyncIterable<ReadonlyArray<Reservation>>;
+  listSessions(userId: string): AsyncIterable<ReadonlyArray<WorkoutSession>>;
+  listCheckins(userId: string): AsyncIterable<ReadonlyArray<CheckinRecord>>;
+  listInvoices(userId: string): AsyncIterable<ReadonlyArray<InvoiceRecord>>;
   /** Optional — audit trail visible to the subject. */
-  listAuditTrail?(userId: string): Promise<ReadonlyArray<AuditLog>>;
+  listAuditTrail?(userId: string): AsyncIterable<ReadonlyArray<AuditLog>>;
 }
 
 /**
  * Port that assembles {@link ArchiveEntry} items into a ZIP payload.
- * The production implementation uses `fflate`; test doubles return a
- * stub `Uint8Array` without actually compressing.
+ * Entries are consumed lazily from an `AsyncIterable` so the builder
+ * can pipeline compression with data collection. The production
+ * implementation uses `fflate`; test doubles drain the iterable and
+ * return a stub `Uint8Array` without actually compressing.
  */
 export interface ArchiveBuilder {
-  build(entries: ReadonlyArray<ArchiveEntry>): Promise<ArchiveResult>;
+  build(entries: AsyncIterable<ArchiveEntry>): Promise<ArchiveResult>;
 }
 
 /**
@@ -387,25 +392,26 @@ function toCsvBytes<T>(
 }
 
 /**
- * Build the list of archive entries from a populated
- * {@link MemberExportData} bundle. Profile and consents are JSON-only
- * (nested shapes don't flatten cleanly to CSV); every list-shaped
- * collection is emitted in both JSON and CSV form to match
- * Requirement 4.2 ("JSON and CSV").
+ * Async generator that yields {@link ArchiveEntry} items one at a
+ * time, processing each list collection serially so at most one
+ * collection's rows are held in memory at any given moment (issue
+ * #469). Profile and consents are emitted first (eagerly, single
+ * rows). Each paginated collection is fully drained into a temporary
+ * array before its JSON and CSV entries are yielded; the temporary
+ * array is released before the next collection begins.
  */
-export function buildArchiveEntries(data: MemberExportData): ArchiveEntry[] {
-  const entries: ArchiveEntry[] = [];
+export async function* buildArchiveEntries(data: MemberExportData): AsyncGenerator<ArchiveEntry> {
+  yield { name: 'profile.json', bytes: toJsonBytes(data.profile) };
+  yield { name: 'consents.json', bytes: toJsonBytes(data.consents) };
 
-  entries.push({ name: 'profile.json', bytes: toJsonBytes(data.profile) });
-  entries.push({ name: 'consents.json', bytes: toJsonBytes(data.consents) });
-
-  entries.push({
-    name: 'reservations.json',
-    bytes: toJsonBytes(data.reservations),
-  });
-  entries.push({
+  const reservations: Reservation[] = [];
+  for await (const page of data.reservations) {
+    for (const row of page) reservations.push(row);
+  }
+  yield { name: 'reservations.json', bytes: toJsonBytes(reservations) };
+  yield {
     name: 'reservations.csv',
-    bytes: toCsvBytes(data.reservations, [
+    bytes: toCsvBytes(reservations, [
       ['id', (r) => r.id],
       ['classId', (r) => r.classId],
       ['userId', (r) => r.userId],
@@ -414,15 +420,16 @@ export function buildArchiveEntries(data: MemberExportData): ArchiveEntry[] {
       ['cancelledAt', (r) => r.cancelledAt],
       ['checkedInAt', (r) => r.checkedInAt],
     ]),
-  });
+  };
 
-  entries.push({
-    name: 'workout_sessions.json',
-    bytes: toJsonBytes(data.sessions),
-  });
-  entries.push({
+  const sessions: WorkoutSession[] = [];
+  for await (const page of data.sessions) {
+    for (const row of page) sessions.push(row);
+  }
+  yield { name: 'workout_sessions.json', bytes: toJsonBytes(sessions) };
+  yield {
     name: 'workout_sessions.csv',
-    bytes: toCsvBytes(data.sessions, [
+    bytes: toCsvBytes(sessions, [
       ['id', (s) => s.id],
       ['userId', (s) => s.userId],
       ['studioId', (s) => s.studioId],
@@ -432,22 +439,30 @@ export function buildArchiveEntries(data: MemberExportData): ArchiveEntry[] {
       ['notes', (s) => s.notes],
       ['createdAt', (s) => s.createdAt],
     ]),
-  });
+  };
 
-  entries.push({ name: 'checkins.json', bytes: toJsonBytes(data.checkins) });
-  entries.push({
+  const checkins: CheckinRecord[] = [];
+  for await (const page of data.checkins) {
+    for (const row of page) checkins.push(row);
+  }
+  yield { name: 'checkins.json', bytes: toJsonBytes(checkins) };
+  yield {
     name: 'checkins.csv',
-    bytes: toCsvBytes(data.checkins, [
+    bytes: toCsvBytes(checkins, [
       ['reservationId', (c) => c.reservationId],
       ['classId', (c) => c.classId],
       ['checkedInAt', (c) => c.checkedInAt],
     ]),
-  });
+  };
 
-  entries.push({ name: 'invoices.json', bytes: toJsonBytes(data.invoices) });
-  entries.push({
+  const invoices: InvoiceRecord[] = [];
+  for await (const page of data.invoices) {
+    for (const row of page) invoices.push(row);
+  }
+  yield { name: 'invoices.json', bytes: toJsonBytes(invoices) };
+  yield {
     name: 'invoices.csv',
-    bytes: toCsvBytes(data.invoices, [
+    bytes: toCsvBytes(invoices, [
       ['id', (i) => i.id],
       ['issuedAt', (i) => i.issuedAt],
       ['amountCents', (i) => i.amountCents],
@@ -455,16 +470,15 @@ export function buildArchiveEntries(data: MemberExportData): ArchiveEntry[] {
       ['description', (i) => i.description],
       ['pdfUrl', (i) => i.pdfUrl],
     ]),
-  });
+  };
 
   if (data.auditTrail !== undefined) {
-    entries.push({
-      name: 'audit_trail.json',
-      bytes: toJsonBytes(data.auditTrail),
-    });
+    const auditTrail: AuditLog[] = [];
+    for await (const page of data.auditTrail) {
+      for (const row of page) auditTrail.push(row);
+    }
+    yield { name: 'audit_trail.json', bytes: toJsonBytes(auditTrail) };
   }
-
-  return entries;
 }
 
 /** Build the R2 object key for `jobId`. */
@@ -586,31 +600,23 @@ export async function runExportJob(
 
   await deps.jobs.markRunning(jobId, new Date(deps.clock.now()));
 
-  // Step 1: collect data. If any source throws, abort the job.
+  // Step 1: fetch scalar sources eagerly; any throw here aborts before
+  // the archive builder is started so the builder is never invoked on a
+  // partial data set.
   let data: MemberExportData;
   try {
-    const [profile, consents, reservations, sessions, checkins, invoices] = await Promise.all([
-      deps.data.fetchProfile(job.userId),
-      deps.data.fetchConsents(job.userId),
-      deps.data.listReservations(job.userId),
-      deps.data.listSessions(job.userId),
-      deps.data.listCheckins(job.userId),
-      deps.data.listInvoices(job.userId),
-    ]);
-
-    const auditTrail =
-      deps.data.listAuditTrail !== undefined
-        ? await deps.data.listAuditTrail(job.userId)
-        : undefined;
-
+    const profile = await deps.data.fetchProfile(job.userId);
+    const consents = await deps.data.fetchConsents(job.userId);
     data = {
       profile,
       consents,
-      reservations,
-      sessions,
-      checkins,
-      invoices,
-      ...(auditTrail === undefined ? {} : { auditTrail }),
+      reservations: deps.data.listReservations(job.userId),
+      sessions: deps.data.listSessions(job.userId),
+      checkins: deps.data.listCheckins(job.userId),
+      invoices: deps.data.listInvoices(job.userId),
+      ...(deps.data.listAuditTrail !== undefined
+        ? { auditTrail: deps.data.listAuditTrail(job.userId) }
+        : {}),
     };
   } catch (err) {
     const reason = toErrorReason(err);
@@ -623,10 +629,10 @@ export async function runExportJob(
     return { kind: 'failed', reason };
   }
 
-  // Step 2: build archive + upload + publish completion.
+  // Step 2: build archive + upload + publish completion. Errors from
+  // the paginated list iterables surface here (inside archive.build).
   try {
-    const entries = buildArchiveEntries(data);
-    const { bytes, sizeBytes } = await deps.archive.build(entries);
+    const { bytes, sizeBytes } = await deps.archive.build(buildArchiveEntries(data));
 
     const objectKey = exportObjectKey(jobId);
     await deps.blob.put(objectKey, bytes);
