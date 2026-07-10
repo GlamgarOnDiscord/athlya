@@ -138,6 +138,7 @@
     "@hono/zod-openapi": "^1.4.0",
     "@upstash/redis": "^1.35.6",
     "drizzle-orm": "^0.45.2",
+    "fflate": "^0.8.3",
     "jose": "^6.2.3",
     "zod": "^4.4.3"
   },
