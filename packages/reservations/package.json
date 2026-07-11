@@ -78,11 +78,11 @@
     "@testcontainers/postgresql": "^12.0.3",
     "@types/node": "^20.19.43",
     "drizzle-orm": "^0.45.2",
-    "eslint": "^9.39.1",
+    "eslint": "^9.39.5",
     "fast-check": "^3.23.2",
     "postgres": "^3.4.5",
     "rimraf": "^6.0.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }

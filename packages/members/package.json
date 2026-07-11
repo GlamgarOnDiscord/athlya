@@ -55,10 +55,10 @@
     "@electric-sql/pglite": "^0.5.4",
     "@testcontainers/postgresql": "^12.0.3",
     "@types/node": "^20.19.43",
-    "eslint": "^9.39.1",
+    "eslint": "^9.39.5",
     "postgres": "^3.4.5",
     "rimraf": "^6.0.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }
