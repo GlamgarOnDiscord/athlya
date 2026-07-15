@@ -47,7 +47,7 @@ Understand the real shape before touching anything.
 ## 5. ⭐ Local preflight (BEFORE pushing)
 
 ```
-pnpm preflight        # = install --frozen-lockfile && format:check && lint && typecheck
+pnpm preflight        # = install --frozen-lockfile && format:check && lint && typecheck && test && build:ci
 ```
 
 This mirrors the required CI job's fast gates exactly (~38s, Turbo-cached).
