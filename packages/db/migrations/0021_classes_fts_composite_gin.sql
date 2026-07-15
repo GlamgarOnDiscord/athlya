@@ -32,7 +32,8 @@ CREATE EXTENSION IF NOT EXISTS btree_gin;
 
 -- Composite GIN index: covers studio_id equality + tsvector FTS in one scan.
 -- Partial on deleted_at IS NULL — indexes only active classes (~20% of rows).
-CREATE INDEX CONCURRENTLY "classes_studio_fts_idx"
+-- IF NOT EXISTS: safe to replay if the migration runner crashes after creation.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "classes_studio_fts_idx"
     ON "classes" USING GIN ("studio_id", "search_vector")
     WHERE "deleted_at" IS NULL;
 

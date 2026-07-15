@@ -32,6 +32,7 @@
 -- statement outside an open transaction block.
 -- =====================================================================
 
-CREATE INDEX CONCURRENTLY "reservations_class_confirmed_idx"
+-- IF NOT EXISTS: safe to replay if the migration runner crashes after creation.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "reservations_class_confirmed_idx"
     ON "reservations" USING btree ("class_id")
     WHERE "status" = 'confirmed';

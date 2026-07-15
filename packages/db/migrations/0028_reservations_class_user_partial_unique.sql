@@ -8,9 +8,14 @@
 -- The new partial index covers only the active statuses: 'confirmed' and
 -- 'waitlist'. Cancelled rows are excluded, so an INSERT on rebook
 -- succeeds outright rather than bouncing through the idempotency branch.
+--
+-- CONCURRENTLY: avoids an exclusive table lock on reservations during deploy.
+-- IF NOT EXISTS: safe to replay if the runner crashes after the DROP but before
+-- the CREATE succeeds (non-transactional DDL cannot roll back atomically).
+-- Cannot run inside a transaction block.
 
 DROP INDEX IF EXISTS "reservations_class_user_unique";
 --> statement-breakpoint
-CREATE UNIQUE INDEX "reservations_class_user_active_unique"
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "reservations_class_user_active_unique"
     ON "reservations" ("class_id", "user_id")
     WHERE status IN ('confirmed', 'waitlist');
