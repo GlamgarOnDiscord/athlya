@@ -82,7 +82,7 @@
     "fast-check": "^3.23.2",
     "postgres": "^3.4.5",
     "rimraf": "^6.0.1",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }
 }
