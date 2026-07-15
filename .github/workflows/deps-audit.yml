@@ -1,32 +1,34 @@
 name: Daily dependency audit
 
 # =====================================================================
-# Task 13.3 / Requirement 29.2 — run a daily dependency scan against
-# the lockfile and fail the nightly build on any critical vulnerability.
+# Requirement 29.2 — dependency and supply-chain vulnerability gate.
 #
-# Two complementary jobs run in parallel:
+# Replaces the broken pnpm audit job (npm /v1/security/audits HTTP 410)
+# with google/osv-scanner-action, which queries the OSV database directly
+# from the committed pnpm-lock.yaml without calling the retired endpoint.
 #
-# 1. `pnpm-audit` — vendor-agnostic, works on forks with zero secrets.
-#    Uses pnpm's built-in audit against the lockfile, scoped to
-#    production dependencies only (`--prod`) so that devtool advisories
-#    from Turborepo / Vitest / ESLint — which never ship to users —
-#    don't block the build. Fails on `high` or `critical` advisories.
+# Two jobs:
 #
-# 2. `socket-security` — enhanced supply-chain scan that runs ONLY when
-#    the `SOCKET_SECURITY_API_KEY` secret is configured. On forks
-#    without the secret the job is skipped entirely, so external
-#    contributors never see a spurious red X.
+# 1. osv-scan — scans all dependencies (runtime + dev) via OSV database.
+#    Uploads a JSON report on every run. Fails closed on any finding or
+#    scanner error. No secrets required; safe for forks.
+#
+# 2. pnpm-overrides-check — verifies that every pnpm.overrides entry is
+#    documented in scripts/overrides-rationale.json and under 6 months
+#    old. Also confirms the installed pnpm version matches packageManager.
+#
+# Socket Security supply-chain scanning is handled by the Socket GitHub
+# App integration (separate checks: "Socket Security: Pull Request Alerts"
+# and "Socket Security: Project Report"). The empty socket-security job
+# that previously lived here has been removed — it contained no scanner
+# step and granted pull-requests: write for no purpose.
 # =====================================================================
 
 on:
   schedule:
-    # 06:00 UTC every day — runs before the European workday starts so
-    # any critical advisory is visible on the first coffee.
+    # 06:00 UTC every day — visible before the European workday starts.
     - cron: '0 6 * * *'
   pull_request:
-    # Re-audit whenever anything that influences the resolved dependency
-    # graph changes. Lockfile is the primary input; workspace manifests
-    # drive resolution; this workflow file itself should be self-linting.
     paths:
       - '**/package.json'
       - 'pnpm-lock.yaml'
@@ -38,12 +40,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pnpm-audit:
-    name: pnpm audit (lockfile)
+  osv-scan:
+    name: OSV vulnerability scan (lockfile)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
-    # No secrets required — this job runs green on forks out of the box.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Run OSV-Scanner against pnpm lockfile
+        # Scans pnpm-lock.yaml against the OSV database (osv.dev).
+        # Exit codes: 0 = clean, 1 = vulnerabilities found, 2+ = scanner
+        # error (network, malformed lockfile, etc.). All non-zero outcomes
+        # fail this step — scanner outage is not a silent pass.
+        # continue-on-error so we can upload the report before re-failing.
+        id: osv
+        uses: google/osv-scanner-action/osv-scanner-action@e69cc6c86b31f1e7e23935bbe7031b50e51082de # v2.0.2
+        continue-on-error: true
+        with:
+          scan-args: |-
+            --lockfile=pnpm-lock.yaml
+
+      - name: Export machine-readable JSON report
+        # osv-scanner binary is in PATH after the action step above.
+        # `|| true` ensures the export never masks the real failure reason.
+        if: always()
+        run: |
+          osv-scanner --lockfile=pnpm-lock.yaml --format=json --output=osv-report.json || true
+
+      - name: Upload OSV report artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: osv-vulnerability-report
+          path: osv-report.json
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Fail on vulnerability findings or scanner error
+        if: steps.osv.outcome == 'failure'
+        run: |
+          echo "::error::OSV-Scanner reported findings or a scanner error — see the osv-vulnerability-report artifact for details."
+          exit 1
+
+  pnpm-overrides-check:
+    name: pnpm overrides documentation check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     permissions:
       contents: read
 
@@ -63,47 +111,14 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        # We install (rather than audit the bare lockfile) so pnpm has the
-        # full resolved package set in its store, which produces more
-        # accurate audit output across workspaces.
         run: pnpm install --frozen-lockfile
 
-      - name: Capture machine-readable audit report
-        # `|| true` so the artifact is always captured, even when the
-        # subsequent failing command stops the job. This report is handy
-        # for triage when the nightly build breaks.
-        run: pnpm audit --prod --json > audit-report.json || true
-
-      - name: Upload audit report artifact
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: pnpm-audit-report
-          path: audit-report.json
-          retention-days: 30
-          if-no-files-found: warn
-
-      - name: Fail on high or critical advisories
-        # `--audit-level=high` fails the job on any advisory of severity
-        # `high` or `critical`. `--prod` excludes devDependencies —
-        # Turborepo / Vitest / ESLint advisories don't ship to users, and
-        # gating production releases on them produces noisy false alarms.
-        #
-        # To temporarily tolerate an unpatched low-severity advisory that
-        # only affects devDependencies, see .github/READ_ME.md.
-        run: pnpm audit --prod --audit-level=high
-
       - name: Verify pnpm overrides are documented and not stale
-        # check-overrides exits 0 always but prints warnings. We run it here
-        # so the output surfaces in the CI log alongside the audit report.
-        # If undocumented overrides or stale CVE pins are found, the warnings
-        # appear in the step summary for triage.
         run: node scripts/check-overrides.mjs
 
       - name: Check pnpm version matches packageManager field
         # Drift between the installed pnpm and packageManager in package.json
         # can cause pnpm.overrides to be silently ignored or misapplied.
-        # We fail if the installed version does not exactly match the pin.
         run: |
           set -euo pipefail
           EXPECTED=$(node -e "const p=require('./package.json'); console.log((p.packageManager||'').split('@')[1]||'')")
@@ -117,25 +132,3 @@ jobs:
           else
             echo "pnpm version OK: $ACTUAL == $EXPECTED"
           fi
-
-  socket-security:
-    name: Socket.dev supply-chain scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    permissions:
-      contents: read
-      pull-requests: write
-
-    env:
-      SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-
-      - name: Note when Socket is not configured
-        if: ${{ env.SOCKET_SECURITY_API_KEY == '' }}
-        run: |
-          echo "SOCKET_SECURITY_API_KEY is not configured — skipping Socket.dev scan."
-          echo "The pnpm-audit job is the source of truth."
