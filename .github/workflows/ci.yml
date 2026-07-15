@@ -79,3 +79,12 @@ jobs:
         # Fast path: unit tests + PGlite-backed properties. Docker-backed PBT
         # (P4/P7/reservations properties) runs in integration-docker.yml.
         run: pnpm test
+
+      - name: Production build (Next.js + Workers)
+        # Validates that Next.js apps and Cloudflare Worker bundles compile.
+        # SKIP_ENV_VALIDATION prevents Next.js from crashing when runtime
+        # secrets are absent in CI. cross-env ensures Windows/Linux portability.
+        env:
+          SKIP_ENV_VALIDATION: '1'
+          WRANGLER_SEND_METRICS: 'false'
+        run: pnpm build
