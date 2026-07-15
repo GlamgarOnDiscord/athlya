@@ -32,5 +32,7 @@
 \i tests/rls/push_tokens.sql
 \i tests/rls/idempotency_keys.sql
 \i tests/rls/outbox.sql
+\i tests/rls/export_jobs.sql
+\i tests/rls/email_partial_unique.sql
 \i tests/rls/cron_role.sql
 \i tests/rls/constraints.sql

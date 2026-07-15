@@ -70,7 +70,18 @@ VALUES
     )
 ON CONFLICT (id) DO NOTHING;
 
-SELECT plan(7);
+-- export_jobs row for cron SELECT/DELETE tests
+INSERT INTO export_jobs (id, user_id, status, requested_at)
+VALUES
+    (
+        'ffffffff-ff01-4fff-8fff-ffffffffffff01',
+        'dddddddd-dd01-4ddd-8ddd-dddddddddd01',
+        'completed',
+        NOW() - INTERVAL '8 days'
+    )
+ON CONFLICT (id) DO NOTHING;
+
+SELECT plan(9);
 
 -- ------------------------------------------------------------------ --
 -- 1. athlya_cron must have rolbypassrls = false after migration 0019  --
@@ -82,7 +93,7 @@ SELECT is(
 );
 
 -- ------------------------------------------------------------------ --
--- 2–3. athlya_cron can SELECT users cross-tenant                      --
+-- 2. athlya_cron can SELECT users cross-tenant (policy: users_cron_select) --
 -- ------------------------------------------------------------------ --
 SET LOCAL ROLE athlya_cron;
 
@@ -92,11 +103,11 @@ SELECT is(
        AND deleted_at < NOW() - INTERVAL '30 days'
        AND email IS NOT NULL),
     2,
-    'athlya_cron sees both expired users across studios (cross-tenant SELECT)'
+    'users_cron_select: athlya_cron sees both expired users across studios'
 );
 
 -- ------------------------------------------------------------------ --
--- 4. athlya_cron can UPDATE users (anonymization path)                --
+-- 3. athlya_cron can UPDATE users (policy: users_cron_update)         --
 -- ------------------------------------------------------------------ --
 UPDATE users
 SET email = 'deleted.dddddddd-dd01-4ddd-8ddd-dddddddddd01@deleted.invalid',
@@ -109,33 +120,54 @@ WHERE id = 'dddddddd-dd01-4ddd-8ddd-dddddddddd01';
 SELECT is(
     (SELECT display_name FROM users WHERE id = 'dddddddd-dd01-4ddd-8ddd-dddddddddd01'),
     '[deleted]',
-    'athlya_cron can anonymize users (UPDATE cross-tenant)'
+    'users_cron_update: athlya_cron can anonymize users (UPDATE cross-tenant)'
 );
 
 -- ------------------------------------------------------------------ --
--- 5. athlya_cron can SELECT outbox cross-tenant                       --
+-- 4. athlya_cron can SELECT outbox cross-tenant (policy: outbox_cron_select) --
 -- ------------------------------------------------------------------ --
 SELECT is(
     (SELECT COUNT(*)::int FROM outbox
      WHERE event_type = 'test.cron'
        AND published_at IS NOT NULL),
     2,
-    'athlya_cron sees outbox rows from all studios (cross-tenant SELECT)'
+    'outbox_cron_select: athlya_cron sees outbox rows from all studios'
 );
 
 -- ------------------------------------------------------------------ --
--- 6. athlya_cron can DELETE from outbox                               --
+-- 5. athlya_cron can DELETE from outbox (policy: outbox_cron_delete)  --
 -- ------------------------------------------------------------------ --
 DELETE FROM outbox WHERE id = 'eeeeeeee-ee01-4eee-8eee-eeeeeeeeee01';
 
 SELECT is(
     (SELECT COUNT(*)::int FROM outbox WHERE id = 'eeeeeeee-ee01-4eee-8eee-eeeeeeeeee01'),
     0,
-    'athlya_cron can purge outbox rows (DELETE cross-tenant)'
+    'outbox_cron_delete: athlya_cron can purge outbox rows (DELETE cross-tenant)'
 );
 
 -- ------------------------------------------------------------------ --
--- 7. athlya_cron cannot read audit_log (revoked in 0012)              --
+-- 6. athlya_cron can SELECT export_jobs (policy: export_jobs_cron_select) --
+-- ------------------------------------------------------------------ --
+SELECT is(
+    (SELECT COUNT(*)::int FROM export_jobs
+     WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffffff01'),
+    1,
+    'export_jobs_cron_select: athlya_cron can read export_jobs cross-tenant'
+);
+
+-- ------------------------------------------------------------------ --
+-- 7. athlya_cron can DELETE export_jobs (policy: export_jobs_cron_delete) --
+-- ------------------------------------------------------------------ --
+DELETE FROM export_jobs WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffffff01';
+
+SELECT is(
+    (SELECT COUNT(*)::int FROM export_jobs WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffffff01'),
+    0,
+    'export_jobs_cron_delete: athlya_cron can purge completed export_jobs'
+);
+
+-- ------------------------------------------------------------------ --
+-- 8. athlya_cron cannot read audit_log (revoked in 0012)              --
 -- ------------------------------------------------------------------ --
 SELECT throws_ok(
     $$ SELECT COUNT(*) FROM audit_log $$,
@@ -145,7 +177,7 @@ SELECT throws_ok(
 );
 
 -- ------------------------------------------------------------------ --
--- 8. athlya_cron cannot read classes (not in granted tables)          --
+-- 9. athlya_cron cannot read classes (not in granted tables)          --
 -- ------------------------------------------------------------------ --
 SELECT throws_ok(
     $$ SELECT COUNT(*) FROM classes $$,
