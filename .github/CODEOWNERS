@@ -1,0 +1,12 @@
+# CODEOWNERS — mandatory review for sensitive paths.
+# The owning team/user must approve before merge (enforced by branch protection).
+# Fallback owner: the sole maintainer covers everything not matched below.
+
+* @GlamgarOnDiscord
+
+# Security-critical: auth, billing, RLS migrations, CI/CD workflows
+.github/workflows/         @GlamgarOnDiscord
+packages/auth/             @GlamgarOnDiscord
+packages/billing/          @GlamgarOnDiscord
+packages/db/migrations/    @GlamgarOnDiscord
+terraform/                 @GlamgarOnDiscord
