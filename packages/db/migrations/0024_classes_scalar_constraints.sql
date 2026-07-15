@@ -25,6 +25,12 @@
 -- the duration of the scan. On the empty/tiny datasets we have (no prod
 -- traffic yet), the lock window is negligible. All existing seed data
 -- satisfies these bounds so no existing rows will be rejected.
+--
+-- NOT VALID + VALIDATE CONSTRAINT (the online-safe pattern for large tables)
+-- is intentionally skipped here: the table is pre-production with negligible
+-- row count, making the lock window immaterial. These statements also run
+-- inside a transaction, so a crash rolls back the whole migration atomically —
+-- idempotence is handled by the transaction, not by individual statement guards.
 
 ALTER TABLE "classes"
     ADD CONSTRAINT "classes_capacity_positive" CHECK (capacity > 0),
