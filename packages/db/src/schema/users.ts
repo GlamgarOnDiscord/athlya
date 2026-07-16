@@ -33,7 +33,7 @@
  * delete), 13.2 (tenant isolation), 17.1 (consent gating).
  */
 
-import { index, jsonb, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import { createdAt, deletedAt, sqlIsNull, uuidPrimaryKey } from './_shared.js';
 import { userRoleEnum } from './enums.js';
@@ -60,6 +60,14 @@ export const users = pgTable(
      */
     consents: jsonb('consents').$type<Consents>().notNull(),
     passwordHash: text('password_hash'),
+    /**
+     * Monotonic counter incremented on every security-critical event:
+     * password reset, logout-all, account deletion, role/studio change.
+     * Embedded in access tokens as the `cv` claim; jwtAuth rejects
+     * mutation requests whose `cv` is older than the stored value.
+     * See issue #520 and migration 0030.
+     */
+    credentialsVersion: integer('credentials_version').notNull().default(1),
     createdAt: createdAt(),
     deletedAt: deletedAt(),
   },

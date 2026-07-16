@@ -39,7 +39,7 @@
 import { EmailTakenError, type UserRepo, type UserRow } from '@athlya/auth';
 import { isPostgresUniqueViolation } from '@athlya/db/errors';
 import { studios, users } from '@athlya/db/schema';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
@@ -124,8 +124,20 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
       await withConnectionRetry(async () => {
         await db
           .update(users)
-          .set({ deletedAt: new Date() })
+          .set({
+            deletedAt: new Date(),
+            credentialsVersion: sql`${users.credentialsVersion} + 1`,
+          })
           .where(and(eq(users.id, id)));
+      });
+    },
+
+    async bumpCredentialsVersion(id) {
+      await withConnectionRetry(async () => {
+        await db
+          .update(users)
+          .set({ credentialsVersion: sql`${users.credentialsVersion} + 1` })
+          .where(eq(users.id, id));
       });
     },
 
@@ -168,5 +180,6 @@ function toUserRow(row: typeof users.$inferSelect): UserRow {
     role: row.role,
     passwordHash: row.passwordHash,
     deletedAt: row.deletedAt,
+    credentialsVersion: row.credentialsVersion,
   };
 }

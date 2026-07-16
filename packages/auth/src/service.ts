@@ -180,6 +180,8 @@ export interface UserRow {
   readonly role: 'member' | 'coach' | 'admin';
   readonly passwordHash: string | null;
   readonly deletedAt: Date | null;
+  /** Monotonic revocation counter — included in access tokens as `cv`. */
+  readonly credentialsVersion: number;
 }
 
 /** Minimum shape the service needs from the `studios` table. */
@@ -244,6 +246,8 @@ export interface UserRepo {
   findStudioBySlug(slug: string): Promise<StudioRow | null>;
   createUser(input: CreateUserInput): Promise<UserRow>;
   softDeleteUser(id: string): Promise<void>;
+  /** Atomically increment `credentials_version` for `id`. */
+  bumpCredentialsVersion(id: string): Promise<void>;
   findOrCreateOAuthUser(
     provider: 'apple' | 'google',
     sub: string,
@@ -561,7 +565,7 @@ async function mintSession(user: UserRow, deps: AuthServiceDeps): Promise<Sessio
 
   const [accessToken, refreshToken] = await Promise.all([
     signAccess(
-      { sub: user.id, studio: user.studioId, role: user.role },
+      { sub: user.id, studio: user.studioId, role: user.role, cv: user.credentialsVersion },
       {
         signingKey,
         ttlSec: accessTtl(deps),
@@ -1131,7 +1135,7 @@ export async function refresh(refreshToken: string, deps: AuthServiceDeps): Prom
 
   const [accessToken, newRefreshToken] = await Promise.all([
     signAccess(
-      { sub: user.id, studio: user.studioId, role: user.role },
+      { sub: user.id, studio: user.studioId, role: user.role, cv: user.credentialsVersion },
       {
         signingKey,
         ttlSec: accessTtl(deps),
@@ -1235,7 +1239,10 @@ export async function logoutAll(userId: string, deps: AuthServiceDeps): Promise<
   if (typeof userId !== 'string' || userId.length === 0) {
     throw new AuthError('token_invalid');
   }
-  await deps.sessionStore.revokeAllForUser(userId);
+  await Promise.all([
+    deps.sessionStore.revokeAllForUser(userId),
+    deps.userRepo.bumpCredentialsVersion(userId),
+  ]);
 }
 
 /**
