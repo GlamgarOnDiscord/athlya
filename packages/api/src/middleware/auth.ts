@@ -99,6 +99,12 @@ export interface AuthClaims {
   userId: string;
   studioId: string;
   role: 'member' | 'admin' | 'coach';
+  /**
+   * credentials_version at sign time — used for revocation checks (issue
+   * #520). Absent on tokens issued before this claim was added; the
+   * revocation check is skipped for those legacy tokens.
+   */
+  credentialsVersion?: number;
 }
 
 /**
@@ -268,17 +274,21 @@ function extractClaims(payload: JWTPayload): AuthClaims | null {
   const sub = payload.sub;
   const studio = payload['studio'];
   const role = payload['role'];
+  const cv = payload['cv'];
 
   if (typeof sub !== 'string' || sub.length === 0) return null;
   if (typeof studio !== 'string' || studio.length === 0) return null;
   if (typeof role !== 'string') return null;
-
   if (!VALID_ROLES.has(role as AuthClaims['role'])) return null;
 
+  const validCv = typeof cv === 'number' && Number.isInteger(cv) && cv >= 1 ? cv : undefined;
   return {
     userId: sub,
     studioId: studio,
     role: role as AuthClaims['role'],
+    // `cv` is absent on tokens issued before issue #520. Accept them during
+    // the rollout window; the revocation check is skipped when undefined.
+    ...(validCv !== undefined ? { credentialsVersion: validCv } : {}),
   };
 }
 

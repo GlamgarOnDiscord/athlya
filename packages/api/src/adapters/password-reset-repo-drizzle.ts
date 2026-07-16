@@ -139,7 +139,8 @@ export function createDrizzlePasswordResetRepo(db: AthlyaDbHttp): PasswordResetR
           ),
           updated AS (
             UPDATE users
-            SET    password_hash = ${input.newPasswordHash}
+            SET    password_hash        = ${input.newPasswordHash},
+                   credentials_version = credentials_version + 1
             FROM   target
             WHERE  users.id = target.user_id
             RETURNING users.id

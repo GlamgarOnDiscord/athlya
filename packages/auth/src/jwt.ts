@@ -74,11 +74,14 @@ export const DEFAULT_ROTATION_GRACE_SEC = 24 * 60 * 60;
  * - `sub` — user id (UUID).
  * - `studio` — tenant id (UUID); drives RLS and cross-tenant checks.
  * - `role` — user role within the studio (`member`, `coach`, `admin`).
+ * - `cv` — credentials_version at sign time; jwtAuth rejects mutation
+ *   requests when the stored version has since advanced (issue #520).
  */
 export interface AccessClaims extends JWTPayload {
   readonly sub: string;
   readonly studio: string;
   readonly role: 'member' | 'coach' | 'admin';
+  readonly cv: number;
 }
 
 /**
@@ -210,6 +213,7 @@ export async function signAccess(claims: AccessClaims, opts: SignAccessOptions):
   assertNonEmpty(claims.sub, 'claims.sub');
   assertNonEmpty(claims.studio, 'claims.studio');
   assertNonEmpty(claims.role, 'claims.role');
+  assertPositiveInt(claims.cv, 'claims.cv');
 
   const ttl = opts.ttlSec ?? DEFAULT_ACCESS_TTL_SEC;
   assertPositiveInt(ttl, 'opts.ttlSec');

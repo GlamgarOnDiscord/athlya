@@ -79,7 +79,7 @@ describe('Property P-JWT.1 — signAccess/verify round-trip preserves claims and
   it('verify(signAccess(claims, keyA), jwksA) = claims for any valid input', async () => {
     await fc.assert(
       fc.asyncProperty(uuidArb, uuidArb, roleArb, ttlArb, async (sub, studio, role, ttlSec) => {
-        const claims: AccessClaims = { sub, studio, role };
+        const claims: AccessClaims = { sub, studio, role, cv: 1 };
         const token = await signAccess(claims, {
           signingKey: keyA,
           ttlSec,

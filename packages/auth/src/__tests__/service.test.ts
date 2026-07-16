@@ -136,6 +136,7 @@ interface MockedRepo extends UserRepo {
   findStudioBySlug: MockedFunction<UserRepo['findStudioBySlug']>;
   createUser: MockedFunction<UserRepo['createUser']>;
   softDeleteUser: MockedFunction<UserRepo['softDeleteUser']>;
+  bumpCredentialsVersion: MockedFunction<UserRepo['bumpCredentialsVersion']>;
   findOrCreateOAuthUser: MockedFunction<UserRepo['findOrCreateOAuthUser']>;
 }
 
@@ -146,6 +147,7 @@ function makeRepo(): MockedRepo {
     findStudioBySlug: vi.fn(),
     createUser: vi.fn(),
     softDeleteUser: vi.fn(),
+    bumpCredentialsVersion: vi.fn().mockResolvedValue(undefined),
     findOrCreateOAuthUser: vi.fn(),
   };
 }
@@ -187,6 +189,7 @@ function makeUserRow(overrides: Partial<UserRow> = {}): UserRow {
     role: 'member',
     passwordHash: null,
     deletedAt: null,
+    credentialsVersion: 1,
     ...overrides,
   };
 }
@@ -349,6 +352,7 @@ describe('register', () => {
           role: input.role,
           passwordHash: input.passwordHash,
           deletedAt: null,
+          credentialsVersion: 1,
         }),
     );
 
@@ -405,6 +409,7 @@ describe('register', () => {
           role: input.role,
           passwordHash: input.passwordHash,
           deletedAt: null,
+          credentialsVersion: 1,
         }),
     );
 

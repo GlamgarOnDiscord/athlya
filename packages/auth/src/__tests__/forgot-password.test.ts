@@ -59,6 +59,7 @@ function makeUserRepo(user: UserRow | null = null) {
     findStudioBySlug: vi.fn(),
     createUser: vi.fn(),
     softDeleteUser: vi.fn(),
+    bumpCredentialsVersion: vi.fn().mockResolvedValue(undefined),
     findOrCreateOAuthUser: vi.fn(),
   } satisfies UserRepo;
 }
