@@ -119,6 +119,21 @@ requis), threads de review résolus. Les bumps dependabot minor/patch sont
 **groupés et auto-mergés** ; les majors sont testés en local puis revus
 manuellement.
 
+#### Break-glass (bypass admin)
+
+`enforce_admins: true` est actif — les admins sont soumis aux mêmes règles de
+protection que les autres contributeurs. En cas de flake CI **prouvé** (timeout
+registre Docker, seed aléatoire du test `round-trip`, billing block), et
+uniquement dans ce cas :
+
+```bash
+gh pr merge <n> --squash --delete-branch --admin
+```
+
+Chaque utilisation doit être **documentée** (commentaire PR, lien vers le run
+flake) pour préserver la traçabilité. Ne jamais l'utiliser pour contourner un
+échec de code réel.
+
 ---
 
 ## Standards de code
