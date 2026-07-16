@@ -312,6 +312,54 @@ describe('confirmReset (Sprint-6 SP6.3 — S2-006)', () => {
     // Family revoke fired — every active session destroyed.
     expect(sessionStore.revokeAllForUser).toHaveBeenCalledWith(USER_ID);
   });
+
+  it('stale sibling token (A/B replay) is rejected after B is consumed — repo contract', async () => {
+    // Simulates: user requests link A, then link B. Uses B. Attempts to
+    // replay link A. The service layer sees a null from findActiveTokenByHash
+    // because the repo (real adapter) marks siblings consumed on insertToken
+    // and on consumeAndResetPassword. This test verifies the service raises
+    // token_invalid for a consumed/missing token.
+    const passwordResetRepo = makeResetRepo();
+    const sessionStore = makeSessionStore();
+    // Simulate: A is gone (consumed by the sibling-invalidation on insertToken
+    // of B, or by consumeAndResetPassword of B) — findActiveTokenByHash returns null.
+    passwordResetRepo.findActiveTokenByHash.mockResolvedValueOnce(null);
+
+    await expect(
+      confirmReset(
+        { token: 'stale-link-A', newPassword: 'new-correct-horse-staple-1' },
+        { passwordResetRepo, sessionStore, hibpFetch: hibpOk },
+      ),
+    ).rejects.toMatchObject({ code: 'token_invalid' });
+
+    // Repo consume must NOT be called when the token lookup fails.
+    expect(passwordResetRepo.consumeAndResetPassword).not.toHaveBeenCalled();
+    // Sessions must not be revoked when no valid token was presented.
+    expect(sessionStore.revokeAllForUser).not.toHaveBeenCalled();
+  });
+
+  it('consumeAndResetPassword receives the exact tokenHash from findActiveTokenByHash lookup', async () => {
+    // Validates that the tokenHash forwarded to consumeAndResetPassword is
+    // the SHA-256 of the presented plain token (not the plain token itself)
+    // so the adapter CTE's WHERE token_hash = $hash condition is correct.
+    const passwordResetRepo = makeResetRepo();
+    const sessionStore = makeSessionStore();
+    passwordResetRepo.findActiveTokenByHash.mockResolvedValueOnce({
+      userId: USER_ID,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    await confirmReset(
+      { token: 'raw-plain-token', newPassword: 'new-correct-horse-staple-1' },
+      { passwordResetRepo, sessionStore, hibpFetch: hibpOk },
+    );
+
+    const consumeCall = passwordResetRepo.consumeAndResetPassword.mock.calls[0]![0]!;
+    // The hash must be 64 hex chars (SHA-256) — never the raw token.
+    expect(consumeCall.tokenHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(consumeCall.tokenHash).not.toBe('raw-plain-token');
+    expect(consumeCall.userId).toBe(USER_ID);
+  });
 });
 
 /* ------------------------------------------------------------------ */

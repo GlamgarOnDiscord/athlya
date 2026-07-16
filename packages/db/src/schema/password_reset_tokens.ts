@@ -22,7 +22,7 @@
 
 import { index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
-import { uuidPrimaryKey } from './_shared.js';
+import { sqlIsNull, uuidPrimaryKey } from './_shared.js';
 import { users } from './users.js';
 
 export const passwordResetTokens = pgTable(
@@ -58,6 +58,13 @@ export const passwordResetTokens = pgTable(
     // and the GDPR cascade
     // (`DELETE password_reset_tokens WHERE user_id = $1`).
     index('password_reset_tokens_user_idx').on(table.userId),
+    // Partial unique index: at most one active (unconsumed) token per
+    // user. Consumed tokens are excluded so forensic history is preserved.
+    // Mirrors migration 0029; enforces the DB-level boundary for the
+    // sibling-invalidation invariant from issue #522.
+    uniqueIndex('password_reset_tokens_user_active_uidx')
+      .on(table.userId)
+      .where(sqlIsNull('consumed_at')),
   ],
 );
 
