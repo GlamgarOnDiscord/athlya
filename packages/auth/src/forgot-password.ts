@@ -88,8 +88,12 @@ const TOKEN_RAW_BYTES = 32; // 256-bit
  */
 export interface PasswordResetRepo {
   /**
-   * Insert a new token row keyed on `tokenHash`. The plain
-   * token is NEVER persisted — the repo only sees the hash.
+   * Insert a new token row keyed on `tokenHash`, atomically invalidating
+   * any existing active tokens for the same user first (issue #522).
+   * The plain token is NEVER persisted — the repo only sees the hash.
+   *
+   * Implementations MUST guarantee that at most one active token exists
+   * per user after this call returns, even under concurrent invocations.
    */
   insertToken(input: {
     readonly userId: string;
@@ -108,10 +112,15 @@ export interface PasswordResetRepo {
   } | null>;
 
   /**
-   * Atomically (a) mark the token consumed and (b) update the
-   * user's password hash. Implementations MUST run both writes
-   * in a single transaction so a partial failure does not
-   * leave a "consumed token but old password" state.
+   * Atomically (a) mark the presented token consumed, (b) invalidate
+   * ALL other active tokens for the same user (sibling invalidation,
+   * issue #522), and (c) update the user's password hash. All three
+   * writes MUST be one atomic operation so no partial failure can leave
+   * a "consumed token but old password" or "password updated but siblings
+   * still valid" state.
+   *
+   * Throws an error (`'password_reset_token_already_consumed'`) when the
+   * token was already consumed or belongs to a different user.
    */
   consumeAndResetPassword(input: {
     readonly tokenHash: string;

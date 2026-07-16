@@ -47,12 +47,24 @@ import type { AthlyaDbHttp } from '@athlya/db/client';
 export function createDrizzlePasswordResetRepo(db: AthlyaDbHttp): PasswordResetRepo {
   return {
     async insertToken(input) {
+      // Atomically invalidate any existing active tokens for this user
+      // before inserting the new one. The CTE and the INSERT run in the
+      // same server-side statement so no concurrent request can slip a
+      // second active token in between the invalidation and the insert.
+      // The partial unique index `password_reset_tokens_user_active_uidx`
+      // (migration 0029) is the DB-level safety net for the narrow window
+      // where two concurrent issuance requests reach the DB simultaneously.
       await withConnectionRetry(() =>
-        db.insert(passwordResetTokens).values({
-          userId: input.userId,
-          tokenHash: input.tokenHash,
-          expiresAt: input.expiresAt,
-        }),
+        db.execute(sql`
+          WITH invalidated AS (
+            UPDATE password_reset_tokens
+            SET    consumed_at = NOW()
+            WHERE  user_id     = ${input.userId}::uuid
+              AND  consumed_at IS NULL
+          )
+          INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+          VALUES (${input.userId}::uuid, ${input.tokenHash}, ${input.expiresAt.toISOString()}::timestamptz)
+        `),
       );
     },
 
@@ -87,28 +99,53 @@ export function createDrizzlePasswordResetRepo(db: AthlyaDbHttp): PasswordResetR
     },
 
     async consumeAndResetPassword(input) {
-      // Atomic CTE: stamps consumed_at and updates the password in
-      // one server-side statement. The `FROM consumed` join makes
-      // the users UPDATE a no-op when the token UPDATE matched zero
-      // rows (already consumed or wrong user). NeonHttpDatabase does
-      // not support interactive transactions; a CTE is atomic on the
-      // database side without needing one.
+      // Atomic CTE: stamps consumed_at on the presented token, invalidates
+      // all sibling active tokens for the same user, then updates the
+      // password — all in one server-side statement (issue #522).
+      //
+      // CTE execution order:
+      //   1. `target` — marks the presented token consumed.  Returns its
+      //      user_id + id so downstream CTEs can reference it.  Returns
+      //      zero rows when the token was already consumed or belongs to a
+      //      different user; in that case the whole statement is a no-op.
+      //   2. `siblings` — marks every other active token for the same user
+      //      consumed.  The FROM join against `target` means this runs only
+      //      when step 1 matched a row.  Data-modifying CTEs execute even
+      //      when their output is not referenced by the final SELECT.
+      //   3. `updated` — updates the password.  Also gated on `target`.
+      //
+      // Concurrent confirmation race: if two requests present different
+      // tokens for the same user concurrently, the first UPDATE to commit
+      // wins (its consumed_at IS NULL guard succeeds); the second UPDATE
+      // finds the row already consumed and returns 0 rows → the CTE is a
+      // no-op → the password is not double-updated.
       const result = await withConnectionRetry(() =>
         db.execute<{ id: string }>(sql`
-                    WITH consumed AS (
-                        UPDATE password_reset_tokens
-                        SET consumed_at = NOW()
-                        WHERE token_hash = ${input.tokenHash}
-                          AND consumed_at IS NULL
-                          AND user_id = ${input.userId}::uuid
-                        RETURNING id
-                    )
-                    UPDATE users
-                    SET password_hash = ${input.newPasswordHash}
-                    FROM consumed
-                    WHERE users.id = ${input.userId}::uuid
-                    RETURNING users.id
-                `),
+          WITH target AS (
+            UPDATE password_reset_tokens
+            SET    consumed_at = NOW()
+            WHERE  token_hash  = ${input.tokenHash}
+              AND  consumed_at IS NULL
+              AND  user_id     = ${input.userId}::uuid
+            RETURNING user_id, id
+          ),
+          siblings AS (
+            UPDATE password_reset_tokens
+            SET    consumed_at = NOW()
+            FROM   target
+            WHERE  password_reset_tokens.user_id     = target.user_id
+              AND  password_reset_tokens.id          != target.id
+              AND  password_reset_tokens.consumed_at IS NULL
+          ),
+          updated AS (
+            UPDATE users
+            SET    password_hash = ${input.newPasswordHash}
+            FROM   target
+            WHERE  users.id = target.user_id
+            RETURNING users.id
+          )
+          SELECT id FROM updated
+        `),
       );
       if (result.rows.length === 0) {
         throw new Error('password_reset_token_already_consumed');
