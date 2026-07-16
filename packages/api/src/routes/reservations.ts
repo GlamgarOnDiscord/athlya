@@ -56,8 +56,8 @@ import type { Context } from 'hono';
  */
 const ListMyReservationsQuerySchema = z
   .object({
-    from: z.string().datetime().optional(),
-    to: z.string().datetime().optional(),
+    from: z.iso.datetime().optional(),
+    to: z.iso.datetime().optional(),
     cursor: z.string().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
   })
