@@ -312,11 +312,18 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
   const PasswordResetConfirmSchema = z
     .object({
       token: z.string().min(1).max(256),
-      // Same length bounds as RegisterRequest — bcrypt hard
-      // cap at 72 bytes, minimum 8 chars per OWASP Password
-      // Storage Cheatsheet (looser than register's 12 because
+      // Byte-length cap matches bcrypt's hard 72-byte input limit.
+      // .max(N) counts chars, not bytes; multi-byte UTF-8 passwords
+      // (emoji, CJK) would pass a char-72 check but still be silently
+      // truncated by bcrypt. Minimum 8 chars per OWASP Password
+      // Storage Cheatsheet (looser than register's 12 because a
       // forced reset is itself a friction point).
-      newPassword: z.string().min(8).max(72),
+      newPassword: z
+        .string()
+        .min(8)
+        .refine((v) => new TextEncoder().encode(v).length <= 72, {
+          message: 'Password must be at most 72 bytes when UTF-8 encoded',
+        }),
     })
     .strict();
 

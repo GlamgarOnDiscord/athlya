@@ -334,6 +334,55 @@ describe('POST /v1/auth/password-reset/confirm', () => {
     expect(body.code).toBe('bot_challenge_failed');
     expect(deps.auth.confirmPasswordReset).not.toHaveBeenCalled();
   });
+
+  it('rejects a multi-byte UTF-8 password that exceeds 72 bytes with 400', async () => {
+    // 37 × 'é' = 37 chars, 74 bytes (é is 2 bytes in UTF-8)
+    const oversizedPassword = 'é'.repeat(37);
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
+
+    const res = await app.request(
+      '/v1/auth/password-reset/confirm',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'cf-turnstile-token': 'test-token',
+        },
+        body: JSON.stringify({ token: 'reset-token', newPassword: oversizedPassword }),
+      },
+      env(),
+    );
+
+    expect(res.status).toBe(422);
+    expect(deps.auth.confirmPasswordReset).not.toHaveBeenCalled();
+  });
+
+  it('accepts a password within the 72-byte limit and calls confirmPasswordReset', async () => {
+    // 72 ASCII chars = 72 bytes exactly
+    const validPassword = 'A'.repeat(72);
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
+
+    const res = await app.request(
+      '/v1/auth/password-reset/confirm',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'cf-turnstile-token': 'test-token',
+        },
+        body: JSON.stringify({ token: 'reset-token', newPassword: validPassword }),
+      },
+      env(),
+    );
+
+    expect(res.status).toBe(204);
+    expect(deps.auth.confirmPasswordReset).toHaveBeenCalledWith({
+      token: 'reset-token',
+      newPassword: validPassword,
+    });
+  });
 });
 
 describe('OAuth routes (removed in B8.4)', () => {
