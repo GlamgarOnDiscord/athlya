@@ -16,6 +16,8 @@
 
 import postgres from 'postgres';
 
+import { guardConnectionString } from './_guard.mjs';
+
 const STUDIO_SLUG = 'athlya-demo';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -47,6 +49,8 @@ if (!connectionString) {
   console.error('DATABASE_URL is required');
   process.exit(1);
 }
+
+guardConnectionString(connectionString, { destructive: true });
 
 const sql = postgres(connectionString, { max: 1, prepare: false });
 

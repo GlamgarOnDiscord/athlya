@@ -16,11 +16,15 @@
 
 import postgres from 'postgres';
 
+import { guardConnectionString } from './_guard.mjs';
+
 const connectionString = process.env.DATABASE_URL;
 if (connectionString === undefined || connectionString === '') {
   console.error('DATABASE_URL is required');
   process.exit(1);
 }
+
+guardConnectionString(connectionString, { destructive: true });
 
 const sql = postgres(connectionString, { max: 1, prepare: false });
 try {
