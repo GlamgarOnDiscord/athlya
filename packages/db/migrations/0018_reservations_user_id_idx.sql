@@ -13,7 +13,9 @@
 -- cancelled via status transitions, not removed), so no partial predicate.
 --
 -- CONCURRENTLY avoids a full table lock on a live production database.
+-- IF NOT EXISTS: safe to replay if the runner crashes after index creation
+-- but before the migration record is written (issue #490).
 -- =====================================================================
 
-CREATE INDEX CONCURRENTLY "reservations_user_id_created_at_idx"
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "reservations_user_id_created_at_idx"
     ON "reservations" USING btree ("user_id", "created_at" DESC);

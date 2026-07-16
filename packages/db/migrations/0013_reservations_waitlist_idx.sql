@@ -27,12 +27,14 @@
 -- hot-path tables. CONCURRENTLY cannot run inside a transaction block;
 -- run this migration outside an open transaction (psql -f or a
 -- migrator that supports non-transactional DDL).
+-- IF NOT EXISTS: safe to replay if the runner crashes after index creation
+-- but before the migration record is written (issue #490).
 -- =====================================================================
 
-CREATE INDEX CONCURRENTLY "reservations_class_status_created_at_idx"
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "reservations_class_status_created_at_idx"
     ON "reservations" USING btree ("class_id", "status", "created_at")
     WHERE "status" = 'waitlist';
 
-CREATE INDEX CONCURRENTLY "classes_id_studio_idx"
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "classes_id_studio_idx"
     ON "classes" USING btree ("id", "studio_id")
     WHERE "deleted_at" IS NULL;
