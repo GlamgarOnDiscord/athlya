@@ -4,27 +4,34 @@
  * forgot the password they used at register time.
  *
  * Usage (PowerShell):
- *   $env:DATABASE_URL = 'postgresql://...'
- *   node scripts/reset-password.mjs alice@athlya.test 'NewPassword-1!'
+ *   $env:DATABASE_URL = 'postgresql://localhost/athlya_dev'
+ *   node scripts/reset-password.mjs alice@athlya.test
+ *   # prompted for password interactively
  *
- * Writes exactly one row. Refuses to run against a connection string
- * that does NOT resolve to a Neon host by default — edit the guard
- * if you need to run against a different provider.
+ * Non-interactive (CI/break-glass):
+ *   ATHLYA_SCRIPT_PASSWORD='...' node scripts/reset-password.mjs <email>
+ *
+ * SAFETY (issue #509):
+ *   - Refuses to run against a non-local DATABASE_URL unless
+ *     ATHLYA_ALLOW_DANGEROUS_WRITE=1 is set.
+ *   - Password is read from stdin or ATHLYA_SCRIPT_PASSWORD, never
+ *     from process.argv, to keep plaintext out of shell history and
+ *     process listings.
+ *   - Validates byte-length against bcrypt's 72-byte limit.
  */
 
-import postgres from 'postgres';
 import { createRequire } from 'node:module';
+
+import postgres from 'postgres';
+
+import { guardConnectionString, readPasswordFromStdin } from './_guard.mjs';
 
 const require = createRequire(new URL('../../auth/package.json', import.meta.url));
 const bcrypt = require('bcryptjs');
 
-const [, , emailArg, passwordArg] = process.argv;
-if (!emailArg || !passwordArg) {
-  console.error('usage: node scripts/reset-password.mjs <email> <password>');
-  process.exit(2);
-}
-if (passwordArg.length > 72) {
-  console.error('password must be <= 72 bytes (bcrypt limit)');
+const [, , emailArg] = process.argv;
+if (!emailArg) {
+  console.error('usage: node scripts/reset-password.mjs <email>');
   process.exit(2);
 }
 
@@ -34,17 +41,27 @@ if (!connectionString) {
   process.exit(1);
 }
 
+guardConnectionString(connectionString);
+
+const passwordPlain = await readPasswordFromStdin('New password: ');
+
+const encoder = new TextEncoder();
+if (encoder.encode(passwordPlain).length > 72) {
+  console.error('password must be <= 72 bytes when UTF-8 encoded (bcrypt limit)');
+  process.exit(2);
+}
+
 const sql = postgres(connectionString, { max: 1, prepare: false });
 
 async function main() {
   const email = emailArg.trim().toLowerCase();
-  const hash = await bcrypt.hash(passwordArg, 12);
+  const hash = await bcrypt.hash(passwordPlain, 12);
   const rows = await sql`
-        UPDATE users
-        SET password_hash = ${hash}
-        WHERE email = ${email}
-        RETURNING id, email
-    `;
+    UPDATE users
+    SET password_hash = ${hash}
+    WHERE email = ${email}
+    RETURNING id, email
+  `;
   if (rows.length === 0) {
     console.log(JSON.stringify({ result: 'no user', email }));
     return;

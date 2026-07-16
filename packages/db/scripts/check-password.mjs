@@ -1,10 +1,14 @@
 /**
  * Diagnostic helper — verify that a plaintext password matches the
- * bcrypt hash stored for a given user in the local Neon database.
+ * bcrypt hash stored for a given user in the local database.
  *
  * Usage (PowerShell):
- *   $env:DATABASE_URL = 'postgresql://...'
- *   node scripts/check-password.mjs alice@athlya.test 'Alice-Password-Test-1!'
+ *   $env:DATABASE_URL = 'postgresql://localhost/athlya_dev'
+ *   node scripts/check-password.mjs alice@athlya.test
+ *   # prompted for password interactively
+ *
+ * Non-interactive:
+ *   ATHLYA_SCRIPT_PASSWORD='...' node scripts/check-password.mjs <email>
  *
  * Prints one of:
  *   - "no user" if the email does not match any row (active or soft-deleted)
@@ -13,19 +17,22 @@
  *   - "match" or "mismatch" for regular bcrypt verify results
  *
  * Read-only: performs no writes against the database.
+ *
+ * SAFETY (issue #509): password is read from stdin, not process.argv.
  */
 
-import postgres from 'postgres';
-// Use createRequire to load bcryptjs from the @athlya/auth node_modules
-// — @athlya/db does not depend on bcryptjs directly but we want to
-// verify against the exact same hashing lib the service uses.
 import { createRequire } from 'node:module';
+
+import postgres from 'postgres';
+
+import { guardConnectionString, readPasswordFromStdin } from './_guard.mjs';
+
 const require = createRequire(new URL('../../auth/package.json', import.meta.url));
 const bcrypt = require('bcryptjs');
 
-const [, , emailArg, passwordArg] = process.argv;
-if (!emailArg || !passwordArg) {
-  console.error('usage: node scripts/check-password.mjs <email> <password>');
+const [, , emailArg] = process.argv;
+if (!emailArg) {
+  console.error('usage: node scripts/check-password.mjs <email>');
   process.exit(2);
 }
 
@@ -35,15 +42,19 @@ if (!connectionString) {
   process.exit(1);
 }
 
+guardConnectionString(connectionString);
+
+const passwordArg = await readPasswordFromStdin('Password to check: ');
+
 const sql = postgres(connectionString, { max: 1, prepare: false });
 
 async function main() {
   const rows = await sql`
-        SELECT id, email, password_hash, deleted_at
-        FROM users
-        WHERE email = ${emailArg.trim().toLowerCase()}
-        LIMIT 1
-    `;
+    SELECT id, email, password_hash, deleted_at
+    FROM users
+    WHERE email = ${emailArg.trim().toLowerCase()}
+    LIMIT 1
+  `;
   const row = rows[0];
   if (!row) {
     console.log(JSON.stringify({ result: 'no user', email: emailArg }));
