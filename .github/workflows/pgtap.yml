@@ -156,6 +156,12 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Lint RLS policy coverage
+        # Fails if any CREATE POLICY statement in the migrations lacks a
+        # matching reference in tests/rls/ (issue #499). Run before the
+        # database is seeded so the check is cheap and always visible.
+        run: node packages/db/scripts/lint-rls-coverage.mjs
+
       - name: Enable pgTAP extension in the test database
         run: |
           psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d athlya_test \
@@ -170,11 +176,17 @@ jobs:
                -f packages/db/tests/rls/00_bootstrap.sql
 
       - name: Run pgTAP RLS test suite via pg_prove
-        # We list files explicitly (rather than globbing the directory) to
-        # exclude `00_bootstrap.sql` — which is a seed script, not a test —
-        # and `run-all.sql` — which is a `\i` dispatcher meant for interactive
-        # use, not for pg_prove's one-file-per-connection model.
+        # Discover test files automatically by convention: every .sql file
+        # under tests/rls/ except the seed script (00_bootstrap.sql) and the
+        # interactive \i dispatcher (run-all.sql). New test files are picked
+        # up automatically without needing to update this workflow (issue #499).
         run: |
+          TEST_FILES=$(find packages/db/tests/rls -name '*.sql' \
+            ! -name '00_bootstrap.sql' \
+            ! -name 'run-all.sql' \
+            | sort)
+          echo "Running pgTAP files:"
+          echo "$TEST_FILES"
           pg_prove \
             --host localhost \
             --port 5432 \
@@ -182,19 +194,4 @@ jobs:
             --dbname athlya_test \
             --ext .sql \
             --verbose \
-            packages/db/tests/rls/studios.sql \
-            packages/db/tests/rls/users.sql \
-            packages/db/tests/rls/classes.sql \
-            packages/db/tests/rls/reservations.sql \
-            packages/db/tests/rls/capacity_guard.sql \
-            packages/db/tests/rls/workout_sessions.sql \
-            packages/db/tests/rls/audit_log.sql \
-            packages/db/tests/rls/audit_anonymization.sql \
-            packages/db/tests/rls/audit_anonymization_scalar_guard.sql \
-            packages/db/tests/rls/push_tokens.sql \
-            packages/db/tests/rls/idempotency_keys.sql \
-            packages/db/tests/rls/outbox.sql \
-            packages/db/tests/rls/export_jobs.sql \
-            packages/db/tests/rls/email_partial_unique.sql \
-            packages/db/tests/rls/cron_role.sql \
-            packages/db/tests/rls/constraints.sql
+            $TEST_FILES
