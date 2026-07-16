@@ -351,7 +351,33 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
           );
         }
       }
-      await deps.requestPasswordReset(body.email);
+      // Detach account-dependent work (DB write + email transport) from the
+      // HTTP response to eliminate the timing and error-status enumeration
+      // oracles described in issue #521. The 204 is returned before any
+      // account lookup; the caller cannot distinguish a registered address
+      // from an unregistered one through response time or failure status.
+      //
+      // waitUntil guarantees the async work runs to completion in the CF
+      // isolate after the response is sent. Errors are caught and logged
+      // with a non-PII code; they never surface to the requester.
+      //
+      // TODO(#521): upgrade to a durable outbox (QStash) for retry/DLQ
+      // observability on production delivery failures.
+      const work = Promise.resolve(deps.requestPasswordReset(body.email)).catch((err: unknown) => {
+        console.error('auth.password-reset.request: async dispatch failed', {
+          code: 'reset_dispatch_error',
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      });
+      try {
+        // In a Cloudflare Worker isolate, detach work from the HTTP response
+        // so dispatch latency and errors are invisible to the requester.
+        // Accessing c.executionCtx throws in non-Worker environments (tests,
+        // Node.js) — the catch falls back to awaiting the promise directly.
+        c.executionCtx.waitUntil(work);
+      } catch {
+        await work;
+      }
       return c.body(null, 204);
     },
   );

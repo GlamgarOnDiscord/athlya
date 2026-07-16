@@ -312,6 +312,34 @@ describe('POST /v1/auth/password-reset/request', () => {
     expect(checkPasswordResetRateLimit).toHaveBeenCalledWith('ada@example.com');
     expect(deps.auth.requestPasswordReset).toHaveBeenCalledWith('ada@example.com');
   });
+
+  it('returns 204 even when requestPasswordReset rejects (error enumeration guard)', async () => {
+    // Simulates a DB/transport failure for an existing account. Before
+    // issue #521 the error would bubble to a 500; now it is swallowed
+    // async so the requester cannot distinguish an account-dependent
+    // failure from a no-op unknown-email path.
+    const checkPasswordResetRateLimit = vi.fn().mockResolvedValue(true);
+    const requestPasswordReset = vi.fn().mockRejectedValue(new Error('resend down'));
+    const deps = buildStubDeps({ auth: { checkPasswordResetRateLimit, requestPasswordReset } });
+    const app = buildTestApp(deps);
+
+    const res = await app.request(
+      '/v1/auth/password-reset/request',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'cf-turnstile-token': 'test-token',
+        },
+        body: JSON.stringify({ email: 'ada@example.com' }),
+      },
+      env(),
+    );
+
+    // Must still return 204 — error is swallowed, never surfaced.
+    expect(res.status).toBe(204);
+    expect(requestPasswordReset).toHaveBeenCalledWith('ada@example.com');
+  });
 });
 
 describe('POST /v1/auth/password-reset/confirm', () => {
