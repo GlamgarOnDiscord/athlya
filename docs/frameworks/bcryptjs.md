@@ -17,7 +17,7 @@ _Last updated: 2026-05-14_
 
 Native `bcrypt` (npm `bcrypt`) requires N-API/nan bindings — unavailable on Cloudflare Workers. `bcryptjs` is a pure JavaScript implementation that runs identically on:
 
-- Node 20 (tests)
+- Node 22 (tests)
 - Cloudflare Workers (production)
 
 ---
