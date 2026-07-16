@@ -1,5 +1,7 @@
 # Athlya Stack Audit — 2026-05-14
 
+> **Archive snapshot — 2026-05-14.** Ce document est un audit daté ; ne pas l'utiliser comme documentation opérationnelle courante. Plusieurs action items listés ici sont résolus (flat ESLint config, `next lint` retiré, etc.). Vérifier le code source pour l'état actuel.
+
 ## Architecture Overview
 
 **Type**: pnpm monorepo (workspaces) + Turborepo  

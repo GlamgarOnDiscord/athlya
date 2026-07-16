@@ -1,17 +1,17 @@
 # Stack technique — Athlya
 
-> Dernière mise à jour : mai 2026
+> Généré depuis les manifestes du dépôt. Pour les versions exactes, voir `package.json` et `pnpm-lock.yaml`.
 
 ---
 
 ## Monorepo
 
-| Outil                            | Version    | Rôle                                  |
-| -------------------------------- | ---------- | ------------------------------------- |
-| [Turborepo](https://turbo.build) | `^2.9.12`  | Orchestration builds, cache de tâches |
-| [pnpm](https://pnpm.io)          | `9.15.9`   | Gestionnaire de paquets, workspaces   |
-| Node.js                          | `>=20 <21` | Runtime local (LTS)                   |
-| TypeScript                       | `^5.9.3`   | Typage strict, mode `bundler`         |
+| Outil                            | Version    | Rôle                                                                          |
+| -------------------------------- | ---------- | ----------------------------------------------------------------------------- |
+| [Turborepo](https://turbo.build) | `^2.10.4`  | Orchestration builds, cache de tâches                                         |
+| [pnpm](https://pnpm.io)          | `9.15.9`   | Gestionnaire de paquets, workspaces                                           |
+| Node.js                          | `>=20 <21` | Runtime CI/CD — **EOL 2026-03-24**, migration vers Node 22/24 en cours (#511) |
+| TypeScript                       | `^5.9.3`   | Typage strict, mode `bundler`                                                 |
 
 ---
 
@@ -19,28 +19,27 @@
 
 ### `apps/web` — Interface membres
 
-| Dépendance                      | Version   |
-| ------------------------------- | --------- |
-| Next.js (App Router, Turbopack) | `^16.2.6` |
-| React / React DOM               | `^19.2.0` |
-| Tailwind CSS 4 (CSS-first)      | `^4.3.0`  |
-| @base-ui/react (headless UI)    | `^1.4.1`  |
-| shadcn                          | `^4.7.0`  |
-| lucide-react                    | `^1.14.0` |
-| next-themes                     | `^0.4.6`  |
-| sonner (toasts)                 | `^2.0.7`  |
-| tailwind-merge                  | `^3.6.0`  |
-| class-variance-authority        | `^0.7.1`  |
-| zod                             | `^4.4.3`  |
+| Dépendance                      | Version    |
+| ------------------------------- | ---------- |
+| Next.js (App Router, Turbopack) | `^16.2.10` |
+| React / React DOM               | `^19.2.7`  |
+| Tailwind CSS 4 (CSS-first)      | `^4.3.2`   |
+| @base-ui/react (headless UI)    | `^1.6.0`   |
+| shadcn                          | `^4.13.0`  |
+| lucide-react                    | `^1.24.0`  |
+| next-themes                     | `^0.4.6`   |
+| sonner (toasts)                 | `^2.0.7`   |
+| tailwind-merge                  | `^3.6.0`   |
+| class-variance-authority        | `^0.7.1`   |
+| zod                             | `^4.4.3`   |
 
 ### `apps/studio` — Dashboard propriétaires de salles
 
 Même stack que `apps/web`, avec en plus :
 
-| Dépendance       | Version   |
-| ---------------- | --------- |
-| date-fns         | `^4.1.0`  |
-| react-day-picker | `^10.0.0` |
+| Dépendance | Version  |
+| ---------- | -------- |
+| date-fns   | `^4.4.0` |
 
 Les deux apps tournent sur Next.js 16 avec proxy-middleware (`src/proxy.ts`) qui injecte un nonce CSP par requête.
 
@@ -67,22 +66,22 @@ Les deux apps tournent sur Next.js 16 avec proxy-middleware (`src/proxy.ts`) qui
 
 ## Infrastructure & cloud
 
-| Couche              | Technologie                                                                |
-| ------------------- | -------------------------------------------------------------------------- |
-| API runtime         | [Cloudflare Workers](https://workers.cloudflare.com) via Wrangler `^4.0.0` |
-| Framework HTTP      | [Hono](https://hono.dev) `^4.12.18`                                        |
-| Base de données     | PostgreSQL (Neon serverless ou instance dédiée)                            |
-| ORM                 | [Drizzle ORM](https://orm.drizzle.team) `^0.45.2`                          |
-| Driver SQL          | postgres.js `^3.4.5` + `@neondatabase/serverless ^1.0.0`                   |
-| Cache / rate-limit  | [Upstash Redis](https://upstash.com) `^1.35.6`                             |
-| Event bus           | Cloudflare Queues (DLQ configuré) + QStash (reminders 1h avant cours)      |
-| Notifications email | [Resend](https://resend.com)                                               |
-| Notifications push  | [Expo](https://expo.dev) push service                                      |
-| Paiement            | Stripe Connect (SDK absent à runtime, HTTP natif)                          |
-| Observabilité       | OpenTelemetry → [Axiom](https://axiom.co) (OTLP, endpoint configurable)    |
-| Erreurs runtime     | Sentry (enveloppe minimale, pas de SDK lourd)                              |
-| Déploiement apps    | [Vercel](https://vercel.com)                                               |
-| Placement Workers   | EU uniquement (`[placement] mode = "smart"`)                               |
+| Couche              | Technologie                                                                                                                                                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| API runtime         | [Cloudflare Workers](https://workers.cloudflare.com) via Wrangler `^4.0.0`                                                                                                                                                                                         |
+| Framework HTTP      | [Hono](https://hono.dev) `^4.12.18`                                                                                                                                                                                                                                |
+| Base de données     | PostgreSQL (Neon serverless ou instance dédiée)                                                                                                                                                                                                                    |
+| ORM                 | [Drizzle ORM](https://orm.drizzle.team) `^0.45.2`                                                                                                                                                                                                                  |
+| Driver SQL          | postgres.js `^3.4.5` + `@neondatabase/serverless ^1.0.0`                                                                                                                                                                                                           |
+| Cache / rate-limit  | [Upstash Redis](https://upstash.com) `^1.35.6`                                                                                                                                                                                                                     |
+| Event bus           | Cloudflare Queues (DLQ configuré) + QStash (reminders 1h avant cours)                                                                                                                                                                                              |
+| Notifications email | [Resend](https://resend.com)                                                                                                                                                                                                                                       |
+| Notifications push  | [Expo](https://expo.dev) push service                                                                                                                                                                                                                              |
+| Paiement            | Stripe Connect (SDK absent à runtime, HTTP natif)                                                                                                                                                                                                                  |
+| Observabilité       | OpenTelemetry → [Axiom](https://axiom.co) (OTLP, endpoint configurable)                                                                                                                                                                                            |
+| Erreurs runtime     | Sentry (enveloppe minimale, pas de SDK lourd)                                                                                                                                                                                                                      |
+| Déploiement apps    | [Vercel](https://vercel.com)                                                                                                                                                                                                                                       |
+| Placement Workers   | Smart Placement (`[placement] mode = "smart"`) — optimisation latence, **pas un pin région légal** ; les données au repos sont en UE (Neon `eu-central-1`, R2/Queues EU). Voir [`docs/security/eu-data-residency-adr.md`](docs/security/eu-data-residency-adr.md). |
 
 ---
 

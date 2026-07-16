@@ -1,5 +1,7 @@
 # ESLint — Framework Audit
 
+> **Archive snapshot — 2026-05-14.** Les action items de ce document sont en partie résolus : `apps/web/.eslintrc.json` a été supprimé, `apps/web/eslint.config.js` (flat config) est en place. Ne pas réappliquer ces migrations. Vérifier le code source pour l'état actuel.
+
 _Last updated: 2026-05-14_
 
 ## Version Status
