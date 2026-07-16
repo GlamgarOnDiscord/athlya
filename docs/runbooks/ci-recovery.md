@@ -39,7 +39,7 @@ Symptomes quota billing :
 
 ## Option B — Self-hosted runners (Docker lourds)
 
-1. VM EU (Ubuntu 22.04+) avec Docker + Node 20
+1. VM EU (Ubuntu 22.04+) avec Docker + Node 22
 2. **Settings → Actions → Runners → New self-hosted**
 3. Labels : `self-hosted`, `linux`, `athlya-docker`
 4. Adapter `integration-docker.yml` et `pgtap.yml` :
