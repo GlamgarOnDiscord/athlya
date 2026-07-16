@@ -201,7 +201,7 @@ const passwordResetRequestRoute = createRoute({
     body: {
       content: {
         'application/json': {
-          schema: z.object({ email: z.string().email() }),
+          schema: z.object({ email: z.email() }),
         },
       },
       required: true,
@@ -450,7 +450,7 @@ const updateClassRoute = createRoute({
   summary: 'Update a class (admin only)',
   security: [{ bearerAuth: [] }],
   request: {
-    params: z.object({ id: z.string().uuid() }),
+    params: z.object({ id: z.uuid() }),
     body: {
       content: { 'application/json': { schema: UpdateClassRequestSchema } },
       required: true,
@@ -487,7 +487,7 @@ const deleteClassRoute = createRoute({
   summary: 'Delete a class (admin only)',
   security: [{ bearerAuth: [] }],
   request: {
-    params: z.object({ id: z.string().uuid() }),
+    params: z.object({ id: z.uuid() }),
   },
   responses: {
     204: { description: 'Class deleted' },
@@ -582,9 +582,7 @@ const myReservationsRoute = createRoute({
       content: {
         'application/json': {
           schema: z.object({
-            items: z.array(
-              z.object({ id: z.string().uuid(), classId: z.string().uuid(), status: z.string() }),
-            ),
+            items: z.array(z.object({ id: z.uuid(), classId: z.uuid(), status: z.string() })),
             nextCursor: z.string().nullable(),
           }),
         },
@@ -678,7 +676,7 @@ const logSessionRoute = createRoute({
   responses: {
     201: {
       description: 'Session logged',
-      content: { 'application/json': { schema: z.object({ id: z.string().uuid() }) } },
+      content: { 'application/json': { schema: z.object({ id: z.uuid() }) } },
     },
     401: {
       description: 'Not authenticated',
@@ -704,7 +702,7 @@ const listSessionsRoute = createRoute({
       content: {
         'application/json': {
           schema: z.object({
-            items: z.array(z.object({ id: z.string().uuid() })),
+            items: z.array(z.object({ id: z.uuid() })),
             nextCursor: z.string().nullable(),
           }),
         },

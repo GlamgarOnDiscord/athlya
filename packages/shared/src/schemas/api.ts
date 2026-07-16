@@ -114,7 +114,6 @@ export type ConsentsInput = z.infer<typeof ConsentsInputSchema>;
 export const RegisterRequestSchema = z
   .object({
     email: z
-      .string()
       .email()
       .max(254)
       .transform((v) => v.toLowerCase()),
@@ -139,7 +138,6 @@ export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
 export const LoginRequestSchema = z
   .object({
     email: z
-      .string()
       .email()
       .max(254)
       .transform((v) => v.toLowerCase()),
@@ -641,7 +639,7 @@ export type InvoicesPage = z.infer<typeof InvoicesPageSchema>;
 export const AuditListItemSchema = z
   .object({
     id: z.string().min(1),
-    actorId: z.string().uuid().nullable(),
+    actorId: z.uuid().nullable(),
     action: z.string().min(1).max(120),
     targetType: z.string().max(60).nullable(),
     targetId: z.string().max(80).nullable(),

@@ -35,7 +35,7 @@ export const UuidSchema = z
  * `timestamptz` emits when we `SET TIMEZONE 'UTC'`. Used for every
  * `createdAt`, `startsAt`, `updatedAt`, `cancelledAt`, … field.
  */
-export const IsoDateTimeSchema = z.string().datetime({ offset: true });
+export const IsoDateTimeSchema = z.iso.datetime({ offset: true });
 
 /**
  * URL-safe studio slug. 3–50 chars, lowercase letters, digits and `-`.
