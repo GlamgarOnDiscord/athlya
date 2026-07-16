@@ -55,6 +55,25 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Guard — no tracked ignored files or large binaries
+        run: |
+          # Fail if any file tracked by git is also matched by .gitignore.
+          bad=$(git ls-files | git check-ignore --stdin 2>/dev/null || true)
+          if [ -n "$bad" ]; then
+            echo "ERROR: tracked files matched by .gitignore:"
+            echo "$bad"
+            exit 1
+          fi
+          # Fail if any tracked non-text file exceeds 500 KiB.
+          large=$(git ls-files | xargs -I{} sh -c \
+            'size=$(git cat-file -s "HEAD:{}" 2>/dev/null || echo 0); [ "$size" -gt 512000 ] && echo "{} ($size bytes)"' \
+            2>/dev/null || true)
+          if [ -n "$large" ]; then
+            echo "ERROR: tracked files exceed 500 KiB (add to .gitignore or use Git LFS):"
+            echo "$large"
+            exit 1
+          fi
+
       - name: Guard — no raw AthlyaDbHttp usage outside withTenantHttp
         run: |
           # Flag adapter files that make direct db.select/insert/update/execute calls
