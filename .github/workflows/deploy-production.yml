@@ -126,6 +126,13 @@ jobs:
         if: inputs.phase == 'production-deploy'
         run: node scripts/verify-secrets.mjs --env production
 
+      - name: Check legal page placeholders (production)
+        # Fails if bracket placeholders ([forme juridique], [numéro], etc.)
+        # are still present in apps/web/src/app/legal/page.tsx or privacy/page.tsx.
+        # Real legal metadata must be filled in before any production deploy (issue #516).
+        if: inputs.phase == 'production-deploy'
+        run: node scripts/check-legal-placeholders.mjs
+
       # Run DB migrations before deploying the Worker so the schema is
       # always ahead of the code, never behind. Uses the neondb_owner
       # connection string (BYPASSRLS) for DDL access; the app role
