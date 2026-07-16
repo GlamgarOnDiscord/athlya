@@ -49,6 +49,7 @@ Lire dans cet ordre :
 git clone https://github.com/GlamgarOnDiscord/athlya.git athlya
 cd athlya
 pnpm install
+git config core.hooksPath .githooks   # câble le hook pre-push (une seule fois par clone)
 pnpm -r typecheck   # doit passer vert avant toute modification
 pnpm -r test        # ~807 tests en ~30 s
 ```
@@ -86,8 +87,9 @@ pnpm preflight   # install --frozen-lockfile && format:check && lint && typechec
 **pas** la suite de tests, qui ne tourne qu'en CI). Un rouge déterministe est
 donc attrapé en local en ~30 s au lieu d'un aller-retour CI de ~5 min ; lance
 `pnpm -r test` toi-même si ton changement touche de la logique. Le hook
-`.githooks/pre-push` (câblé par le script `prepare` au `pnpm install`) le
-lance automatiquement — bypass ponctuel : `git push --no-verify`.
+`.githooks/pre-push` (câblé par `git config core.hooksPath .githooks` lors du
+setup initial — voir _Installation_ ci-dessus) le lance automatiquement —
+bypass ponctuel : `git push --no-verify`.
 
 Rappels :
 
