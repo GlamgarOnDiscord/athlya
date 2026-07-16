@@ -57,8 +57,9 @@ export default function LegalNoticePage() {
         <h2>Hébergement</h2>
         <p>
           Cloudflare Workers — Cloudflare, Inc., 101 Townsend St, San Francisco, CA 94107,
-          États-Unis. Les données personnelles sont hébergées exclusivement sur des centres de
-          données situés dans l&apos;Union européenne (Smart Placement EU-pinned).
+          États-Unis. Le compute edge (Workers) utilise Smart Placement pour optimiser la latence ;
+          ce n&apos;est pas un pin région légal. Les données au repos (base de données, cache,
+          stockage objet) sont hébergées dans l&apos;Union européenne.
           <br />
           Neon Postgres — Neon Inc., région <code>aws-eu-central-1</code>.<br />
           Upstash Redis — Upstash Inc., région <code>eu-west-1</code>.
