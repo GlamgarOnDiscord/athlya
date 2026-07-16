@@ -136,6 +136,11 @@ export function TurnstileWidget({
    * accepts. Stash it so the imperative handle can forward it.
    */
   const widgetIdRef = useRef<string | null>(null);
+  // Stable ref so the effect and imperative handle always call the
+  // latest `onToken` without listing it as a dependency (which would
+  // tear down and remount the widget on every parent re-render).
+  const onTokenRef = useRef(onToken);
+  onTokenRef.current = onToken;
   const locale = useLocale();
   const t = useMemo(() => createTranslator(locale), [locale]);
 
@@ -156,10 +161,10 @@ export function TurnstileWidget({
         // `reset` invalidates the currently-held token; mirror
         // that on the React side so the form's submit guard
         // blocks until the user clears the fresh challenge.
-        onToken('');
+        onTokenRef.current('');
       },
     }),
-    [onToken],
+    [],
   );
 
   useEffect(() => {
@@ -179,17 +184,17 @@ export function TurnstileWidget({
           // expired one.
           'refresh-expired': 'auto',
           callback: (token: string) => {
-            onToken(token);
+            onTokenRef.current(token);
           },
           'error-callback': () => {
             // Challenge failed to load / evaluate — drop
             // any stale token so the submit guard blocks.
-            onToken('');
+            onTokenRef.current('');
           },
           'expired-callback': () => {
             // Cloudflare expires tokens after ~5 min.
             // Mirror on our side so the form re-asks.
-            onToken('');
+            onTokenRef.current('');
             // Proactively ask Cloudflare to issue a fresh
             // token so the user doesn't have to click
             // "retry" on an expired challenge.
@@ -208,7 +213,7 @@ export function TurnstileWidget({
           'timeout-callback': () => {
             // Challenge UI timed out before the user
             // solved it. Same cleanup + reset as expired.
-            onToken('');
+            onTokenRef.current('');
             if (
               typeof window !== 'undefined' &&
               window.turnstile !== undefined &&
@@ -253,9 +258,9 @@ export function TurnstileWidget({
       // in React state and the next submit ships a token whose
       // widget no longer exists — Cloudflare then rejects with
       // `invalid-input-response`.
-      onToken('');
+      onTokenRef.current('');
     };
-  }, [keyConfigured, siteKey, nonce, onToken]);
+  }, [keyConfigured, siteKey, nonce]);
 
   if (!keyConfigured) {
     return (
