@@ -1,15 +1,16 @@
 # TypeScript — Framework Audit
 
+> **Archive snapshot — 2026-05-14.** TypeScript 7.0 est sorti depuis (réécriture Go) ; ce projet reste sur `^5.9.3` (stable, compatible). La migration vers une version majeure ultérieure est hors scope pour l'instant.
+
 _Last updated: 2026-05-14_
 
 ## Version Status
 
-|                     | Value                                         |
-| ------------------- | --------------------------------------------- |
-| **Utilisé**         | ^5.9.3                                        |
-| **Dernière stable** | **6.0** (17 mars 2026)                        |
-| **Beta**            | 7.0 (réécriture Go — ne pas utiliser en prod) |
-| **Action**          | Planifier migration vers 6.0                  |
+|                     | Value                                                           |
+| ------------------- | --------------------------------------------------------------- |
+| **Utilisé**         | ^5.9.3                                                          |
+| **Dernière stable** | voir registry — le tableau ci-dessus est un snapshot 2026-05-14 |
+| **Action**          | Aucun — version actuelle supportée et stable                    |
 
 ---
 

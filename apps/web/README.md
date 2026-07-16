@@ -9,7 +9,7 @@ Application web orientée membres pour la plateforme Athlya.
 - **Tailwind 4** (CSS-first via `@tailwindcss/postcss`)
 - **TypeScript 5.9**
 
-> **Note sur la résolution des versions.** La tâche 10.1 a épinglé ces dépendances aux dernières versions stables publiées sur le registry au moment du scaffolding (`next@^16.2.6`, `react@^19.2.0`, `tailwindcss@^4.3.0`, `eslint-config-next@^16.2.6`). Lors de la régénération du `pnpm-lock.yaml`, mettre à jour ces pins ici.
+> Les versions listées ci-dessus sont des instantanés de scaffolding. La source de vérité est `apps/web/package.json`.
 
 ## Commandes
 
@@ -18,7 +18,7 @@ pnpm --filter @athlya/web dev        # serveur de dev local
 pnpm --filter @athlya/web build      # build de production
 pnpm --filter @athlya/web test       # vitest
 pnpm --filter @athlya/web typecheck  # tsc --noEmit
-pnpm --filter @athlya/web lint       # next lint
+pnpm --filter @athlya/web lint       # eslint . (flat config via eslint.config.js)
 ```
 
 ## Scaffolding sécurité (tâche 10.1)

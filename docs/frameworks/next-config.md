@@ -1,5 +1,7 @@
 # eslint-config-next / next.config.ts — Framework Audit
 
+> **Archive snapshot — 2026-05-14.** Les action items de ce document sont résolus : `next lint` a été remplacé par `eslint .`, `apps/web/.eslintrc.json` supprimé, `apps/web/eslint.config.js` en place. Ne pas réappliquer ces migrations.
+
 _Last updated: 2026-05-14_
 
 ## Version Status
