@@ -39,7 +39,7 @@
     "@athlya/tsconfig": "workspace:*",
     "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.61.1",
-    "@tailwindcss/postcss": "^4.3.2",
+    "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^20.19.43",
@@ -53,7 +53,7 @@
     "lighthouse": "^13.4.0",
     "postcss": "^8.5.19",
     "rimraf": "^6.0.1",
-    "tailwindcss": "^4.3.2",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   }
