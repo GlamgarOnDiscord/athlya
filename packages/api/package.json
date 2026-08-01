@@ -139,7 +139,7 @@
     "@upstash/redis": "^1.35.6",
     "drizzle-orm": "^0.45.2",
     "fflate": "^0.8.3",
-    "jose": "^6.2.3",
+    "jose": "^6.2.4",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
