@@ -41,7 +41,7 @@
   },
   "prettier": "@athlya/prettier-config",
   "dependencies": {
-    "postcss": "^8.5.19"
+    "postcss": "^8.5.25"
   },
   "pnpm": {
     "overrides": {
