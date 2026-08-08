@@ -153,16 +153,16 @@
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",
     "@athlya/tsconfig": "workspace:*",
-    "@cloudflare/workers-types": "^5.20260711.1",
-    "@sentry/cli": "3.6.0",
+    "@cloudflare/workers-types": "^5.20260804.1",
+    "@sentry/cli": "3.6.2",
     "@types/node": "^20.19.43",
     "eslint": "^9.39.5",
     "fast-check": "^3.23.2",
-    "hono": "^4.12.29",
+    "hono": "^4.13.0",
     "openapi-typescript": "^7.13.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10",
-    "wrangler": "^4.110.0"
+    "wrangler": "^4.118.0"
   }
 }
