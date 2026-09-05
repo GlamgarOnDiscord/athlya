@@ -110,7 +110,7 @@
     "clean": "rimraf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",

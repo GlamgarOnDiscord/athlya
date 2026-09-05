@@ -135,12 +135,12 @@
     "@athlya/ratelimit": "workspace:*",
     "@athlya/reservations": "workspace:*",
     "@athlya/shared": "workspace:*",
-    "@hono/zod-openapi": "^1.5.1",
-    "@upstash/redis": "^1.35.6",
+    "@hono/zod-openapi": "^1.6.1",
+    "@upstash/redis": "^1.38.3",
     "drizzle-orm": "^0.45.2",
     "fflate": "^0.8.3",
-    "jose": "^6.2.3",
-    "zod": "^4.4.3"
+    "jose": "^6.2.10",
+    "zod": "^4.5.4"
   },
   "peerDependencies": {
     "hono": "^4.0.0"
