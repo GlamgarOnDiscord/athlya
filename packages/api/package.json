@@ -162,7 +162,7 @@
     "openapi-typescript": "^7.13.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.11",
     "wrangler": "^4.110.0"
   }
 }
