@@ -56,7 +56,7 @@
   "dependencies": {
     "@athlya/shared": "workspace:*",
     "@neondatabase/serverless": "^1.0.0",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.3",
     "postgres": "^3.4.5"
   },
   "devDependencies": {
