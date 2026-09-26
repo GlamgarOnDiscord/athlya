@@ -40,7 +40,7 @@
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",
     "@athlya/tsconfig": "workspace:*",
-    "@fast-check/vitest": "^0.4.1",
+    "@fast-check/vitest": "^0.5.0",
     "@types/node": "^20.19.43",
     "eslint": "^9.39.5",
     "fast-check": "^3.23.2",
