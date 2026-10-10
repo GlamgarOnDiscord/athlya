@@ -58,9 +58,9 @@
   "dependencies": {
     "@athlya/ratelimit": "workspace:*",
     "@athlya/shared": "workspace:*",
-    "@upstash/redis": "^1.35.6",
+    "@upstash/redis": "^1.39.0",
     "bcryptjs": "^3.0.2",
-    "jose": "^6.2.3"
+    "jose": "^6.2.12"
   },
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",

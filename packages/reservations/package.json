@@ -69,7 +69,7 @@
   "dependencies": {
     "@athlya/db": "workspace:*",
     "@athlya/shared": "workspace:*",
-    "@upstash/redis": "^1.35.6"
+    "@upstash/redis": "^1.39.0"
   },
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",
@@ -77,7 +77,7 @@
     "@fast-check/vitest": "^0.4.1",
     "@testcontainers/postgresql": "^12.0.3",
     "@types/node": "^20.19.43",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.3",
     "eslint": "^9.39.5",
     "fast-check": "^3.23.2",
     "postgres": "^3.4.5",
