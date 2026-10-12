@@ -28,29 +28,43 @@ via the corresponding runbook, not Terraform.
 
 ## Remote state (one-time setup)
 
-Terraform state must be remote with locking before production applies.
-Choose one backend:
-
-### Option A — HCP Terraform (recommended, free tier)
+State is remote with locking on **HCP Terraform** — the `cloud {}` block in
+`infra/terraform/versions.tf` is active (issue #405). There is no local-state
+fallback: `terraform init` without a backend fails instead of writing state
+on a throwaway runner.
 
 1. Create a free account at <https://app.terraform.io>.
-2. Create an organisation and **two** workspaces: `athlya-staging` and `athlya-production`.
-   Set execution mode to **Local** on both (Terraform runs in CI, not HCP).
+2. Create an organisation and **two** workspaces tagged `athlya`:
+   `athlya-staging` and `athlya-production`, execution mode **Local**.
 3. Generate an API token: User Settings → Tokens → Create an API token.
-4. Add `TF_TOKEN_app_terraform_io` to **both** the `staging` and `production` GitHub Environment secrets.
-5. Uncomment the `cloud {}` block in `infra/terraform/versions.tf`.
-6. Run `terraform init` locally to migrate existing state (if any).
+4. GitHub: secret `TF_TOKEN_app_terraform_io` in both the `staging` and
+   `production` environments, and the repository variable
+   `TF_CLOUD_ORGANIZATION` (organisation slug).
+5. Import the resources that already exist in Cloudflare/Sentry into each
+   workspace (`terraform import …`, see the header of each `.tf` file) before
+   the first apply, otherwise Terraform will try to recreate them.
 
-CI sets `TF_WORKSPACE=athlya-<environment>` automatically, so staging and
-production state are always isolated.
+CI sets `TF_WORKSPACE=athlya-<environment>`, so staging and production state
+are always isolated. Locally: `export TF_CLOUD_ORGANIZATION=<org>
+TF_WORKSPACE=athlya-staging` then `terraform init`.
 
-### Option B — S3 + DynamoDB
+## CI checks
 
-1. Create an S3 bucket (`athlya-tf-state`) in `eu-central-1` with versioning enabled.
-2. Create a DynamoDB table (`athlya-tf-locks`) with partition key `LockID` (String).
-3. Add AWS credentials to GitHub Environment secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`).
-4. Uncomment the `backend "s3" {}` block in `infra/terraform/versions.tf`.
-5. Add the AWS env vars to `.github/workflows/terraform.yml`.
+- **validate** (every PR / push touching infra, no credentials): lock file
+  pins every provider, `fmt -check`, `init -backend=false -lockfile=readonly`,
+  `validate`.
+- **plan** on PRs (skipped with a notice when the environment is not
+  provisioned), **drift** daily at 06:17 UTC on production
+  (`-detailed-exitcode`: exit 2 fails the run), **apply** on dispatch.
+  Scheduled and dispatched runs **fail** when credentials or the backend are
+  missing.
+
+Updating providers: `terraform init -upgrade` then
+`terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64 -platform=windows_amd64`
+and commit `.terraform.lock.hcl`.
+
+Cloudflare provider v5 is a breaking rewrite: migrate with Cloudflare's
+`tf-migrate`, review the plan per workspace, then bump `~> 4.52` to `~> 5`.
 
 ## Plan → apply workflow
 
