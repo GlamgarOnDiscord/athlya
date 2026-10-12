@@ -220,6 +220,89 @@ export async function claimBatch(
 }
 
 /**
+ * Claim up to `limit` pending rows under a lease (issue #424).
+ *
+ * One autocommit statement: rows are selected with `FOR UPDATE SKIP
+ * LOCKED`, get `attempts + 1` and `lease_until = now() + leaseSeconds`,
+ * and the locks are released as soon as the statement commits. The
+ * caller sends OUTSIDE any transaction; until the lease expires no
+ * other drain can claim the rows, and a drain that dies mid-batch
+ * simply lets the lease lapse.
+ */
+export async function claimLeasedBatch(
+  db: AthlyaDb,
+  limit: number,
+  leaseSeconds: number,
+): Promise<ClaimedOutboxRow[]> {
+  validateLimit(limit);
+  if (!Number.isInteger(leaseSeconds) || leaseSeconds < 1 || leaseSeconds > 3600) {
+    throw new InvalidOutboxInputError('leaseSeconds', 'must be an integer in [1, 3600]');
+  }
+
+  const result = await db.execute<ClaimedOutboxRowRaw>(sql`
+        WITH claimed AS (
+            SELECT id
+              FROM outbox
+             WHERE published_at IS NULL
+               AND (lease_until IS NULL OR lease_until <= now())
+             ORDER BY occurred_at ASC
+             LIMIT ${limit}
+             FOR UPDATE SKIP LOCKED
+        )
+        UPDATE outbox
+           SET attempts = outbox.attempts + 1,
+               lease_until = now() + make_interval(secs => ${leaseSeconds})
+          FROM claimed
+         WHERE outbox.id = claimed.id
+        RETURNING outbox.id,
+                  outbox.event_id,
+                  outbox.event_type,
+                  outbox.payload,
+                  outbox.occurred_at,
+                  outbox.attempts,
+                  outbox.studio_id
+    `);
+
+  const rows = result as unknown as readonly ClaimedOutboxRowRaw[];
+  return rows.map((row) => ({
+    id: row.id,
+    eventId: row.event_id,
+    eventType: row.event_type,
+    payload: row.payload,
+    occurredAt: row.occurred_at,
+    attempts: row.attempts,
+    studioId: row.studio_id,
+  }));
+}
+
+/** Stamp `published_at` on every delivered row of a leased batch in one statement. */
+export async function markPublishedMany(db: AthlyaDb, ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  ids.forEach(validateId);
+  await db.execute(sql`
+        UPDATE outbox
+           SET published_at = now(), lease_until = NULL
+         WHERE id = ANY(${`{${ids.join(',')}}`}::uuid[])
+    `);
+}
+
+/**
+ * Release the lease of rows the drain claimed but did not attempt (cycle
+ * deadline reached), so the next cycle can claim them without waiting
+ * for the lease to lapse.
+ */
+export async function releaseLeases(db: AthlyaDb, ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  ids.forEach(validateId);
+  await db.execute(sql`
+        UPDATE outbox
+           SET lease_until = NULL
+         WHERE id = ANY(${`{${ids.join(',')}}`}::uuid[])
+           AND published_at IS NULL
+    `);
+}
+
+/**
  * Stamp `published_at = now()` on the row, removing it from the
  * `outbox_pending_idx` partial index and therefore from the drain
  * worker's working set.

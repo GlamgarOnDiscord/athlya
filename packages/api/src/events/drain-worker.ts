@@ -97,6 +97,16 @@ export interface ClaimedRow {
 export interface OutboxStore {
   claimBatch(size: number): Promise<readonly ClaimedRow[]>;
   markPublished(id: string): Promise<void>;
+  /**
+   * Leased stores (issue #424): stamp every delivered row of the batch
+   * in one statement instead of one `markPublished` per row.
+   */
+  markPublishedMany?(ids: readonly string[]): Promise<void>;
+  /**
+   * Leased stores: give back rows the cycle claimed but did not attempt
+   * before its deadline, so the next cycle can claim them immediately.
+   */
+  release?(ids: readonly string[]): Promise<void>;
 }
 
 /**
@@ -152,6 +162,17 @@ export interface DrainOutboxOptions {
    * {@link DEFAULT_QUEUE_SEND_TIMEOUT_MS}.
    */
   readonly sendTimeoutMs?: number;
+  /**
+   * Number of rows sent in parallel (issue #424). Defaults to 1 (strict
+   * claim order). The scheduled drain uses a bounded pool.
+   */
+  readonly concurrency?: number;
+  /**
+   * Cycle deadline in milliseconds (issue #424): no new send starts past
+   * it; unattempted rows are released and counted as failed. Unbounded
+   * when omitted.
+   */
+  readonly deadlineMs?: number;
 }
 
 /** Tally returned by {@link drainOutbox}. See module docstring. */
@@ -250,29 +271,80 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
 
   let succeeded = 0;
   let failed = 0;
+  const delivered: string[] = [];
+  const released: string[] = [];
+  const pending = [...rows];
+  const deadlineAt =
+    options.deadlineMs === undefined
+      ? Number.POSITIVE_INFINITY
+      : startedAt.getTime() + options.deadlineMs;
+  const batchMark = store.markPublishedMany !== undefined;
 
-  for (const row of rows) {
-    if (row.studioId === null || row.studioId === undefined) {
-      logger.warn('outbox drain: row has null studio_id (pre-migration-0014 row)', {
-        id: row.id,
-        eventId: row.eventId,
-        eventType: row.eventType,
-        attempts: row.attempts,
+  const sendNext = async (): Promise<void> => {
+    for (let row = pending.shift(); row !== undefined; row = pending.shift()) {
+      if (clock.now().getTime() >= deadlineAt) {
+        released.push(row.id);
+        continue;
+      }
+
+      if (row.studioId === null || row.studioId === undefined) {
+        logger.warn('outbox drain: row has null studio_id (pre-migration-0014 row)', {
+          id: row.id,
+          eventId: row.eventId,
+          eventType: row.eventType,
+          attempts: row.attempts,
+        });
+      }
+
+      const queue = resolveQueue(row.eventType);
+      const sendOk = await trySend(queue, row, logger, sendTimeoutMs);
+      if (!sendOk) {
+        failed += 1;
+        continue;
+      }
+
+      if (batchMark) {
+        delivered.push(row.id);
+        continue;
+      }
+      const markOk = await tryMarkPublished(store, row, logger);
+      if (markOk) {
+        succeeded += 1;
+      } else {
+        failed += 1;
+      }
+    }
+  };
+
+  const workers = Math.min(normaliseConcurrency(options.concurrency), rows.length);
+  await Promise.all(Array.from({ length: workers }, () => sendNext()));
+
+  if (delivered.length > 0) {
+    try {
+      await store.markPublishedMany!(delivered);
+      succeeded += delivered.length;
+    } catch (err) {
+      failed += delivered.length;
+      logger.error('outbox drain: markPublishedMany failed after successful queue sends', {
+        count: delivered.length,
+        error: errToDetail(err),
       });
     }
+  }
 
-    const queue = resolveQueue(row.eventType);
-    const sendOk = await trySend(queue, row, logger, sendTimeoutMs);
-    if (!sendOk) {
-      failed += 1;
-      continue;
-    }
-
-    const markOk = await tryMarkPublished(store, row, logger);
-    if (markOk) {
-      succeeded += 1;
-    } else {
-      failed += 1;
+  if (released.length > 0) {
+    failed += released.length;
+    logger.warn('outbox drain: cycle deadline reached; releasing unattempted rows', {
+      released: released.length,
+      deadlineMs: options.deadlineMs,
+    });
+    try {
+      await store.release?.(released);
+    } catch (err) {
+      logger.error('outbox drain: lease release failed; rows retry after lease expiry', {
+        count: released.length,
+        error: errToDetail(err),
+      });
     }
   }
 
@@ -281,6 +353,7 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
     processed: rows.length,
     succeeded,
     failed,
+    released: released.length,
     durationMs,
   });
 
@@ -388,6 +461,15 @@ function normaliseBatchSize(raw: number | undefined): number {
     throw new RangeError(`drainOutbox: batchSize must be a positive integer, got ${String(raw)}`);
   }
   return raw;
+}
+
+/** Bound the send pool: positive integer, default 1, capped at 32. */
+function normaliseConcurrency(raw: number | undefined): number {
+  if (raw === undefined) return 1;
+  if (!Number.isInteger(raw) || raw < 1) {
+    throw new RangeError(`drainOutbox: concurrency must be a positive integer, got ${String(raw)}`);
+  }
+  return Math.min(raw, 32);
 }
 
 /**

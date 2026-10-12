@@ -22,12 +22,10 @@
  *   • Bridge the Cloudflare `ScheduledEvent` / `ExecutionContext` shape
  *     onto the pure {@link drainOutbox} function defined in
  *     `./drain-worker.ts`.
- *   • Build the {@link OutboxStore} adapter by wrapping the db helpers
- *     (`claimBatch`, `markPublished`) in a single Drizzle transaction
- *     per drain cycle. `claimBatch` needs a transaction because it
- *     holds `FOR UPDATE SKIP LOCKED` locks on the claimed rows; those
- *     locks are released when the transaction commits after the
- *     batch is processed.
+ *   • Build the leased {@link OutboxStore} adapter (issue #424):
+ *     `claimLeasedBatch` stamps a lease and commits at once, sends run
+ *     outside any transaction with a bounded pool and deadlines, and
+ *     delivered rows are stamped by one `markPublishedMany`.
  *   • Hand the `EVENTS_QUEUE` Worker binding to {@link drainOutbox} as
  *     its {@link QueueProducer}.
  *   • Register the drain as a background task via `ctx.waitUntil` so
@@ -41,10 +39,18 @@
  * isolation for unit tests.
  */
 
-import { claimBatch, countPendingOutbox, markPublished } from '@athlya/db/outbox';
+import {
+  claimBatch,
+  claimLeasedBatch,
+  countPendingOutbox,
+  markPublished,
+  markPublishedMany,
+  releaseLeases,
+} from '@athlya/db/outbox';
 
 import {
   DEFAULT_BATCH_SIZE,
+  DEFAULT_QUEUE_SEND_TIMEOUT_MS,
   drainOutbox,
   type ClaimedRow,
   type DrainResult,
@@ -65,13 +71,33 @@ export const ADAPTIVE_BATCH_SIZE = 200;
 
 /**
  * Overlap guard. Cron fires once per minute; a drain that runs longer
- * than this risks colliding with the next tick. The transaction's
- * `FOR UPDATE SKIP LOCKED` already makes overlap *correct* (the second
- * drain just skips locked rows), but a long drain is a backlog signal,
+ * than this risks colliding with the next tick. The claim lease
+ * already makes overlap *correct* (the second drain skips leased rows), but a long drain is a backlog signal,
  * so we emit a structured warning metric instead of relying on a
  * distributed lock. Keep this comfortably under the 60 s cron period.
  */
 export const OUTBOX_DRAIN_OVERLAP_WARN_MS = 45_000;
+
+/**
+ * Issue #424 — lease-based drain. No transaction or row lock is held
+ * while sending: the claim is one short statement that stamps a lease.
+ *
+ *   - {@link DRAIN_SEND_CONCURRENCY} sends run in parallel, each bounded
+ *     by `DEFAULT_QUEUE_SEND_TIMEOUT_MS` (5 s).
+ *   - No new send starts after {@link DRAIN_CYCLE_DEADLINE_MS}; the
+ *     unattempted rows are released for the next tick.
+ *   - {@link DRAIN_LEASE_SECONDS} must outlive the longest cycle
+ *     (deadline + one send timeout + the final mark) so a live drain
+ *     never has its rows re-claimed underneath it; a dead drain's rows
+ *     come back once the lease lapses.
+ *
+ * Worst case per cycle with a fully hung queue: 200 rows / 8 workers ×
+ * 5 s = 125 s of sends, cut at 40 s → ≤ 45 s wall clock, no DB
+ * connection or lock held meanwhile.
+ */
+export const DRAIN_SEND_CONCURRENCY = 8;
+export const DRAIN_CYCLE_DEADLINE_MS = 40_000;
+export const DRAIN_LEASE_SECONDS = 120;
 
 /* ------------------------------------------------------------------ */
 /*  Minimal Cloudflare Workers shapes                                  */
@@ -247,60 +273,66 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
 
   const startedAt = Date.now();
 
-  // One transaction per drain cycle: holds SELECT FOR UPDATE SKIP
-  // LOCKED locks on claimed rows until every row is processed.
-  //
-  // Lock duration analysis (issue #424):
-  //   lock_duration ≈ batch_size × avg_queue_send_latency
-  //   Normal:  100 rows × ~10 ms  =  ~1 s   (negligible)
-  //   Backlog: 200 rows × ~10 ms  =  ~2 s
-  //   Extreme: 200 rows × 5 000 ms = ~17 min (queue outage)
-  //
-  // The overlap guard (OUTBOX_DRAIN_OVERLAP_WARN_MS = 45 s) fires
-  // well before lock duration becomes problematic in the extreme case.
-  // SKIP LOCKED keeps concurrent drains correct: the next cron tick
-  // claims a fresh batch of unlocked rows, not the slow batch.
-  //
-  // Lease pattern alternative (separate claim TX + out-of-tx send +
-  // per-row markPublished TX) was evaluated and rejected: it requires
-  // a schema migration, adds orphaned-lease recovery logic, and gives
-  // no practical improvement at our load given the existing overlap
-  // alert and consumer dedup window (24 h, Req 17.4). Decision is
-  // explicitly accepted. Re-evaluate if avg queue latency exceeds 1 s.
-  const result = await db.transaction(async (tx) => {
-    const store: OutboxStore = {
-      async claimBatch(size: number): Promise<readonly ClaimedRow[]> {
-        return claimBatch(tx, size);
-      },
-      async markPublished(id: string): Promise<void> {
-        await markPublished(tx, id);
-      },
-    };
+  // Lease-based cycle (issue #424): claim commits immediately, sends
+  // run outside any transaction, delivered rows are stamped in one
+  // statement at the end.
+  const store: OutboxStore = {
+    claimBatch: (size) => claimLeasedBatch(db, size, DRAIN_LEASE_SECONDS),
+    markPublished: (id) => markPublishedMany(db, [id]),
+    markPublishedMany: (ids) => markPublishedMany(db, ids),
+    release: (ids) => releaseLeases(db, ids),
+  };
 
-    // Build the options bag conditionally so `exactOptionalPropertyTypes`
-    // is respected: we only add `batchSize` / `logger` when the env
-    // actually provides them. Spreading `undefined` into a property
-    // would violate the strict optional semantics drainOutbox's
-    // `DrainOutboxOptions` declares.
-    const opts: Parameters<typeof drainOutbox>[0] = {
-      store,
-      resolveQueue: (eventType) => resolveEventQueueProducer(env, eventType) as QueueProducer,
-      batchSize,
-      ...(logger !== undefined ? { logger } : {}),
-    };
+  // Build the options bag conditionally so `exactOptionalPropertyTypes`
+  // is respected: `logger` is only added when the env provides one.
+  const opts: Parameters<typeof drainOutbox>[0] = {
+    store,
+    resolveQueue: (eventType) => resolveEventQueueProducer(env, eventType) as QueueProducer,
+    batchSize,
+    concurrency: DRAIN_SEND_CONCURRENCY,
+    deadlineMs: DRAIN_CYCLE_DEADLINE_MS,
+    sendTimeoutMs: DEFAULT_QUEUE_SEND_TIMEOUT_MS,
+    ...(logger !== undefined ? { logger } : {}),
+  };
 
-    return drainOutbox(opts);
-  });
+  const result = await drainOutbox(opts);
+  const durationMs = Date.now() - startedAt;
+  emitOutboxDrainCycleMetric(durationMs, result, batchSize, logger);
 
   // Overlap guard: a drain slower than the warn threshold risks
   // colliding with the next cron tick. SKIP LOCKED keeps that safe,
   // but we surface it as a metric (alert A16) so ops can bump cron
   // frequency or investigate a stuck consumer.
-  warnOnDrainOverlapRisk(Date.now() - startedAt, result, batchSize, logger);
+  warnOnDrainOverlapRisk(durationMs, result, batchSize, logger);
 
   emitOutboxDrainErrorsMetric(result, logger);
 
   return result;
+}
+
+/**
+ * Emit one `outbox_drain_cycle` data point per cycle (issue #424) so the
+ * drain duration, throughput and failures are alertable even when they
+ * stay under the overlap threshold.
+ */
+export function emitOutboxDrainCycleMetric(
+  durationMs: number,
+  result: DrainResult,
+  batchSize: number,
+  logger?: Logger,
+): void {
+  const meta = {
+    metric: 'outbox_drain_cycle',
+    durationMs,
+    processed: result.processed,
+    succeeded: result.succeeded,
+    failed: result.failed,
+    batchSize,
+    concurrency: DRAIN_SEND_CONCURRENCY,
+    deadlineMs: DRAIN_CYCLE_DEADLINE_MS,
+  };
+  console.log('outbox.drain_cycle', meta);
+  logger?.info('outbox drain: cycle', meta);
 }
 
 /**

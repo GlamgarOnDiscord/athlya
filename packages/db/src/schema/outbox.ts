@@ -54,6 +54,12 @@ export const outbox = pgTable(
     occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'date' }).notNull(),
     publishedAt: timestamp('published_at', { withTimezone: true, mode: 'date' }),
     attempts: integer('attempts').notNull().default(0),
+    /**
+     * Claim lease (migration 0035, issue #424). A row whose lease is in
+     * the future belongs to an in-flight drain; NULL or past means
+     * claimable. Cleared when the row is published or released.
+     */
+    leaseUntil: timestamp('lease_until', { withTimezone: true, mode: 'date' }),
     createdAt: createdAt(),
   },
   (table) => [
