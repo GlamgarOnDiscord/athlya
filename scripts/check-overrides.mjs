@@ -16,9 +16,24 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 const rationale = JSON.parse(readFileSync(join(HERE, 'overrides-rationale.json'), 'utf8'));
-const pkg = JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8'));
+const workspace = readFileSync(join(HERE, '..', 'pnpm-workspace.yaml'), 'utf8');
 
-const packageOverrides = new Set(Object.keys(pkg.pnpm?.overrides ?? {}));
+/** Keys of the top-level `overrides:` map in pnpm-workspace.yaml. */
+function readOverrideKeys(yaml) {
+  const keys = [];
+  let inOverrides = false;
+  for (const line of yaml.split('\n')) {
+    if (/^\S/.test(line)) {
+      inOverrides = line.startsWith('overrides:');
+      continue;
+    }
+    const match = inOverrides && /^ {2}(?:'([^']+)'|"([^"]+)"|([^\s:#][^:]*)):/.exec(line);
+    if (match) keys.push(match[1] ?? match[2] ?? match[3]);
+  }
+  return keys;
+}
+
+const packageOverrides = new Set(readOverrideKeys(workspace));
 const documented = new Set(Object.keys(rationale.overrides));
 
 const SIX_MONTHS_MS = 6 * 30 * 24 * 60 * 60 * 1000;
@@ -28,14 +43,18 @@ let warnings = 0;
 
 for (const key of packageOverrides) {
   if (!documented.has(key)) {
-    console.warn(`[check-overrides] WARN undocumented override "${key}" — add it to scripts/overrides-rationale.json`);
+    console.warn(
+      `[check-overrides] WARN undocumented override "${key}" — add it to scripts/overrides-rationale.json`,
+    );
     warnings++;
   }
 }
 
 for (const key of documented) {
   if (!packageOverrides.has(key)) {
-    console.warn(`[check-overrides] WARN rationale entry "${key}" has no matching pnpm.override — remove it from scripts/overrides-rationale.json`);
+    console.warn(
+      `[check-overrides] WARN rationale entry "${key}" has no matching pnpm.override — remove it from scripts/overrides-rationale.json`,
+    );
     warnings++;
   }
 }

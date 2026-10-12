@@ -2,9 +2,13 @@ packages:
   - 'apps/*'
   - 'packages/*'
 
-# Security overrides — duplicate of package.json#pnpm.overrides for pnpm 11+
-# compatibility (pnpm 11 reads from this file; pnpm 9 reads from package.json).
-# Both locations are kept in sync until pnpm 9 support is retired (issue #511).
+autoInstallPeers: true
+# Dependency lifecycle scripts never run (supply-chain hardening); pnpm 11
+# reads this from the workspace file, `.npmrc` is only for auth/registry.
+ignoreScripts: true
+
+# Security overrides — each entry is documented in
+# scripts/overrides-rationale.json (checked by `pnpm check:overrides`).
 overrides:
   dockerode>uuid: '11.1.1'
   testcontainers>tmp: '^0.2.6'
