@@ -32,6 +32,7 @@ import { passwordResetTokens } from '@athlya/db/schema';
 import { and, eq, gt, isNull, lt, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
+import { queryRows, serviceFn } from './service-functions.js';
 
 import type { PasswordResetRepo } from '@athlya/auth';
 import type { AthlyaDbHttp } from '@athlya/db/client';
@@ -99,56 +100,17 @@ export function createDrizzlePasswordResetRepo(db: AthlyaDbHttp): PasswordResetR
     },
 
     async consumeAndResetPassword(input) {
-      // Atomic CTE: stamps consumed_at on the presented token, invalidates
-      // all sibling active tokens for the same user, then updates the
-      // password — all in one server-side statement (issue #522).
-      //
-      // CTE execution order:
-      //   1. `target` — marks the presented token consumed.  Returns its
-      //      user_id + id so downstream CTEs can reference it.  Returns
-      //      zero rows when the token was already consumed or belongs to a
-      //      different user; in that case the whole statement is a no-op.
-      //   2. `siblings` — marks every other active token for the same user
-      //      consumed.  The FROM join against `target` means this runs only
-      //      when step 1 matched a row.  Data-modifying CTEs execute even
-      //      when their output is not referenced by the final SELECT.
-      //   3. `updated` — updates the password.  Also gated on `target`.
-      //
-      // Concurrent confirmation race: if two requests present different
-      // tokens for the same user concurrently, the first UPDATE to commit
-      // wins (its consumed_at IS NULL guard succeeds); the second UPDATE
-      // finds the row already consumed and returns 0 rows → the CTE is a
-      // no-op → the password is not double-updated.
-      const result = await withConnectionRetry(() =>
-        db.execute<{ id: string }>(sql`
-          WITH target AS (
-            UPDATE password_reset_tokens
-            SET    consumed_at = NOW()
-            WHERE  token_hash  = ${input.tokenHash}
-              AND  consumed_at IS NULL
-              AND  user_id     = ${input.userId}::uuid
-            RETURNING user_id, id
-          ),
-          siblings AS (
-            UPDATE password_reset_tokens
-            SET    consumed_at = NOW()
-            FROM   target
-            WHERE  password_reset_tokens.user_id     = target.user_id
-              AND  password_reset_tokens.id          != target.id
-              AND  password_reset_tokens.consumed_at IS NULL
-          ),
-          updated AS (
-            UPDATE users
-            SET    password_hash        = ${input.newPasswordHash},
-                   credentials_version = credentials_version + 1
-            FROM   target
-            WHERE  users.id = target.user_id
-            RETURNING users.id
-          )
-          SELECT id FROM updated
-        `),
+      // `auth_consume_password_reset` (migration 0032, issue #224) runs the
+      // atomic consume + sibling invalidation + password rotation of issue
+      // #522 as one statement. It is a SECURITY DEFINER function because
+      // the `users` UPDATE happens pre-authentication: under `athlya_app`
+      // FORCE RLS a raw UPDATE would match zero rows while still consuming
+      // the token. No row back = token already consumed or not this user's.
+      const rows = await queryRows<{ id: string }>(
+        db,
+        serviceFn.consumePasswordReset(input.tokenHash, input.userId, input.newPasswordHash),
       );
-      if (result.rows.length === 0) {
+      if (rows.length === 0) {
         throw new Error('password_reset_token_already_consumed');
       }
     },
