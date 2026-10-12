@@ -6,7 +6,7 @@
   "description": "Reservations domain primitives for Athlya — state-machine guard, booking + cancellation flows, QR check-in integration",
   "license": "AGPL-3.0-only",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "sideEffects": false,
   "exports": {
@@ -76,7 +76,7 @@
     "@athlya/tsconfig": "workspace:*",
     "@fast-check/vitest": "^0.4.1",
     "@testcontainers/postgresql": "^12.2.0",
-    "@types/node": "^22.20.5",
+    "@types/node": "^24.19.2",
     "drizzle-orm": "^0.45.4",
     "eslint": "^9.39.5",
     "fast-check": "^3.23.2",

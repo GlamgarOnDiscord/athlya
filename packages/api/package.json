@@ -6,7 +6,7 @@
   "description": "Athlya API gateway primitives: rate limiter, idempotency middleware, Hono wiring and shared HTTP helpers",
   "license": "AGPL-3.0-only",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "sideEffects": false,
   "exports": {
@@ -155,7 +155,7 @@
     "@athlya/tsconfig": "workspace:*",
     "@cloudflare/workers-types": "^5.20261012.1",
     "@sentry/cli": "3.8.0",
-    "@types/node": "^22.20.5",
+    "@types/node": "^24.19.2",
     "eslint": "^9.39.5",
     "fast-check": "^3.23.2",
     "hono": "^4.13.13",

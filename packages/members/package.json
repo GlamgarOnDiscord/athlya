@@ -6,7 +6,7 @@
   "description": "Members domain use cases for Athlya — profile read/update, consent history, RGPD export + deletion cascade, workout session logging",
   "license": "AGPL-3.0-only",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "sideEffects": false,
   "exports": {
@@ -54,7 +54,7 @@
     "@athlya/tsconfig": "workspace:*",
     "@electric-sql/pglite": "^0.5.9",
     "@testcontainers/postgresql": "^12.2.0",
-    "@types/node": "^22.20.5",
+    "@types/node": "^24.19.2",
     "eslint": "^9.39.5",
     "postgres": "^3.4.9",
     "rimraf": "^6.1.3",

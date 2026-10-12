@@ -6,7 +6,7 @@
   "description": "Authentication primitives for Athlya — password hashing, HIBP breached-password check, JWT signing/verification and QR check-in tokens",
   "license": "AGPL-3.0-only",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "sideEffects": false,
   "exports": {
@@ -65,7 +65,7 @@
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",
     "@athlya/tsconfig": "workspace:*",
-    "@types/node": "^22.20.5",
+    "@types/node": "^24.19.2",
     "eslint": "^9.39.5",
     "fast-check": "^3.23.2",
     "rimraf": "^6.1.3",

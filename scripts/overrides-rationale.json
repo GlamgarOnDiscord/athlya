@@ -64,14 +64,6 @@
       "added": "2026-01-01",
       "remove_when": "@sentry/cli ships with undici >=6.27.0"
     },
-    "testcontainers>undici": {
-      "pinned": "^7",
-      "reason": "undici 8 requires Node >=22; this repo targets Node 20. Downgraded to undici 7 (latest Node-20-compatible major) to unblock Testcontainers CI.",
-      "cve": null,
-      "ghsa": null,
-      "added": "2026-07-05",
-      "remove_when": "testcontainers ships with a Node-20-compatible undici major (or repo drops Node 20 support)"
-    },
     "jsdom>ws": {
       "pinned": "^8.21.0",
       "reason": "Unchecked header size causes unbounded memory allocation (DoS)",

@@ -6,7 +6,7 @@
   "description": "Shared design tokens, i18n bundles, branded identifier types and Zod schemas for Athlya",
   "license": "AGPL-3.0-only",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "sideEffects": false,
   "exports": {
@@ -116,7 +116,7 @@
     "@athlya/eslint-config": "workspace:*",
     "@athlya/tsconfig": "workspace:*",
     "@fast-check/vitest": "^0.4.1",
-    "@types/node": "^22.20.5",
+    "@types/node": "^24.19.2",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^9.39.5",
     "fast-check": "^3.23.2",

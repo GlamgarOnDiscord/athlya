@@ -14,5 +14,4 @@ overrides:
   js-yaml: '>=4.2.0'
   '@babel/core': '>=7.29.6'
   '@sentry/cli>undici': '6.27.0'
-  testcontainers>undici: '^7'
   jsdom>ws: '^8.21.0'
