@@ -6,3 +6,5 @@ cloudflare_account_id = "TODO: from Cloudflare dashboard → Workers → Account
 cloudflare_zone_id    = "TODO: from Cloudflare dashboard → athlya.app zone"
 environment           = "staging"  # or "production"
 sentry_alert_team_id  = "TODO: Sentry → Settings → Teams → team id"
+cloudflare_zone_plan  = "pro"      # free | pro | business | enterprise
+waf_bot_fight_mode    = false
