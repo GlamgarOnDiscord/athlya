@@ -444,9 +444,20 @@ describe('neutralizeCsvFormula', () => {
 
   it('escapes CSV cells but keeps the raw value in JSON', async () => {
     const payload = '=HYPERLINK("http://evil","x")';
-    async function* one<T>(rows: T[]): AsyncGenerator<T[]> {
-      yield rows;
-    }
+    const one = <T>(rows: T[]): AsyncIterable<T[]> => ({
+      [Symbol.asyncIterator]: () => {
+        let done = false;
+        return {
+          next: () => {
+            const result: IteratorResult<T[]> = done
+              ? { done: true, value: undefined }
+              : { done: false, value: rows };
+            done = true;
+            return Promise.resolve(result);
+          },
+        };
+      },
+    });
     const entries: ArchiveEntry[] = [];
     for await (const entry of buildArchiveEntries({
       profile: PROFILE,
@@ -472,7 +483,8 @@ describe('neutralizeCsvFormula', () => {
 
     expect(text('invoices.csv')).toContain(`"'=HYPERLINK(""http://evil"",""x"")"`);
     expect(text('invoices.csv')).toContain(`"'@evil"`);
-    expect(JSON.parse(text('invoices.json'))[0].description).toBe(payload);
+    const invoicesJson = JSON.parse(text('invoices.json')) as InvoiceRecord[];
+    expect(invoicesJson[0]?.description).toBe(payload);
   });
 });
 
