@@ -38,8 +38,8 @@ Lire dans cet ordre :
 
 ### Prérequis
 
-- **Node 22 LTS** — voir `.nvmrc`
-- **pnpm ≥ 9** — `corepack enable` suffit
+- **Node 24 LTS** — voir `.nvmrc`
+- **pnpm 11** — `corepack enable` suffit (version lue dans `packageManager`)
 - **Git** — avec configuration `user.name` et `user.email`
 - **Docker** _optionnel_ — nécessaire uniquement pour les suites Testcontainers (RLS, cascade RGPD, booking property). Sans Docker, ces suites se skippent proprement
 

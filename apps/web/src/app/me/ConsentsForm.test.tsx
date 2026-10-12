@@ -79,9 +79,6 @@ describe('<ConsentsForm />', () => {
     // surrounding form submit sees the value). Both are siblings of the shared
     // `<label>`, so `getByLabelText` matches twice — query by role to pin the
     // assertion to the user-visible trigger and read `aria-checked` from it.
-    //
-    // PointerEvent is polyfilled in `vitest.setup.ts` because jsdom 26 does
-    // not provide it natively and base-ui's click handler expects it.
     const trigger = screen.getByRole('checkbox', { name: t('consents.marketing') });
     expect(trigger.getAttribute('aria-checked')).toBe('false');
 

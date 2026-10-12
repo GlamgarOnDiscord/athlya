@@ -31,7 +31,13 @@ Watch CI with the **`Monitor`** tool, never `sleep`. Rerun known flakes
 - Code, comments, identifiers, commits: **English only**. No scaffolding comments.
 - Commits: conventional, **no Claude attribution**; use the repo's configured
   git identity (`git config user.name` / `user.email`).
-- Node 20 (`.nvmrc`, `engines`). pnpm ≥ 9. Don't bump `@types/node` past 20.
+- Node 24 LTS (`.nvmrc`, `engines`). pnpm 11 (`packageManager`; settings and
+  overrides live in `pnpm-workspace.yaml`, not `package.json`/`.npmrc`).
+  Keep `@types/node` on the `.nvmrc` major.
+- pnpm 11 enforces a 24h `minimumReleaseAge`: don't add
+  `minimumReleaseAgeExclude` entries — pick the previous release instead.
+- Security overrides use the scoped form `pkg@<fixed>: ^fixed`, never an
+  open-ended `>=` (it silently jumps consumers to new majors).
 - `format:check` is repo-wide — keep every tracked file prettier-clean.
 - In `packages/api` tests, read responses with the `readJson<T>(res)` helper,
   not an inline `(await res.json()) as T` (typescript-eslint vs tsc disagree).

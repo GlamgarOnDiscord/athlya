@@ -142,6 +142,9 @@ polyfill, tout test qui clique un Checkbox crash avec
 Fix appliqué : `apps/web/vitest.setup.ts` polyfill (étend MouseEvent
 avec les props PointerEventInit).
 
+**Mise à jour 2026-10 :** jsdom 30 implémente `PointerEvent` nativement ;
+le polyfill et `vitest.setup.ts` ont été supprimés.
+
 ### c) pnpm strict mode ne hoist pas les transitives
 
 `lighthouse 12` embarque `chrome-launcher` en transitive, mais pnpm

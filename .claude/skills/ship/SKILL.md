@@ -129,7 +129,8 @@ The `.githooks/pre-push` hook runs it automatically on push — let it.
 - Safe minor/patch dev-deps are **grouped + auto-merged** (see
   `.github/dependabot.yml` + `dependabot-auto-merge.yml`).
 - **Majors are isolated**: test locally first. If a plugin/runtime breaks
-  (e.g. ESLint 10 ✗ eslint-plugin-import; @types/node 25 ✗ Node-20 pin),
+  (e.g. ESLint 10 ✗ eslint-config-next/eslint-plugin-import; TypeScript 7 ✗
+  typescript-eslint `<6.1`; @types/node must match the `.nvmrc` major),
   close with a concrete rationale + `@dependabot ignore this major version`.
 
 ## Quick reference
