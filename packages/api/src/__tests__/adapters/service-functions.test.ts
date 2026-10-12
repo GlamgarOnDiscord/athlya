@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { createDrizzleUserRepo } from '../../adapters/auth-user-repo-drizzle.js';
 import { createDrizzleDeletionRepo } from '../../adapters/cascade-repo-drizzle.js';
 import { buildRecipientRepo } from '../../adapters/notifications-deps.js';
-import { queryRows, serviceFn } from '../../adapters/service-functions.js';
+import { queryRows, serviceFn, uuidV7 } from '../../adapters/service-functions.js';
 
 import type { AthlyaDbAny } from '@athlya/db/client';
 import type { SQL } from 'drizzle-orm';
@@ -21,10 +21,9 @@ import type { SQL } from 'drizzle-orm';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const apiSrc = resolve(here, '../..');
-const migration = readFileSync(
-  resolve(here, '../../../../db/migrations/0032_service_definer_functions.sql'),
-  'utf8',
-);
+const migration = ['0032_service_definer_functions.sql', '0033_auth_event_recording.sql']
+  .map((file) => readFileSync(resolve(here, '../../../../db/migrations', file), 'utf8'))
+  .join('\n');
 const dialect = new PgDialect();
 
 interface Call {
@@ -63,11 +62,11 @@ describe('service function contract with migration 0032', () => {
   const source = readFileSync(resolve(apiSrc, 'adapters/service-functions.ts'), 'utf8');
   const used = [...source.matchAll(/\b((?:auth|rgpd|notification)_[a-z_]+)\(/gu)].map((m) => m[1]);
 
-  it('references at least the 13 service functions', () => {
-    expect(new Set(used).size).toBe(13);
+  it('references the 16 service functions', () => {
+    expect(new Set(used).size).toBe(16);
   });
 
-  it.each([...new Set(used)])('%s is created and granted to athlya_app by the migration', (fn) => {
+  it.each([...new Set(used)])('%s is created and granted to athlya_app by the migrations', (fn) => {
     expect(migration).toMatch(new RegExp(`CREATE OR REPLACE FUNCTION ${fn}\\(`, 'u'));
     expect(migration).toMatch(new RegExp(`'${fn}\\(`, 'u'));
   });
@@ -200,6 +199,63 @@ describe('createDrizzleUserRepo', () => {
       expect.stringContaining('auth_soft_delete_user('),
       expect.stringContaining('auth_bump_credentials_version('),
     ]);
+  });
+});
+
+describe('uuidV7', () => {
+  it('is an RFC 9562 version-7 UUID carrying the timestamp', () => {
+    const id = uuidV7(0x0193f0000000);
+    expect(id).toMatch(/^0193f000-0000-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
+  });
+
+  it('sorts by creation time', () => {
+    expect(uuidV7(1_000) < uuidV7(2_000)).toBe(true);
+  });
+});
+
+describe('createDrizzleUserRepo — durable auth events (issue #411)', () => {
+  const input = {
+    studioId: userRow.studio_id,
+    email: userRow.email,
+    displayName: userRow.display_name,
+    passwordHash: 'hash',
+    role: 'member' as const,
+    consents: {} as never,
+  };
+
+  it('creates the member and its registered event in one call, with a matching user id', async () => {
+    const { db, calls } = fakeDb((call) => [{ ...userRow, id: call.params[0] as string }]);
+    const user = await createDrizzleUserRepo(db).createUserWithEvent!(input, (created) => {
+      return {
+        id: 'evt-1',
+        type: 'auth.user.registered',
+        occurredAt: '2026-10-12T00:00:00.000Z',
+        studioId: created.studioId,
+        payload: { userId: created.id },
+      } as never;
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.sql).toContain('auth_create_member_with_event(');
+    const [userId, , , , , , eventJson] = calls[0]!.params as string[];
+    expect(user.id).toBe(userId);
+    expect(JSON.parse(eventJson!)).toMatchObject({ payload: { userId } });
+  });
+
+  it('maps a duplicate email to EmailTakenError', async () => {
+    const { db } = fakeDb(() => Object.assign(new Error('duplicate'), { code: '23505' }));
+    await expect(
+      createDrizzleUserRepo(db).createUserWithEvent!(input, () => ({}) as never),
+    ).rejects.toBeInstanceOf(EmailTakenError);
+  });
+
+  it('soft-deletes with its event in one call', async () => {
+    const { db, calls } = fakeDb(() => []);
+    const event = { id: 'evt-2', type: 'auth.user.deleted' };
+    await createDrizzleUserRepo(db).softDeleteUserWithEvent!(userRow.id, event as never);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.sql).toContain('auth_soft_delete_user_with_event(');
+    expect(calls[0]?.params).toEqual([userRow.id, JSON.stringify(event)]);
   });
 });
 
