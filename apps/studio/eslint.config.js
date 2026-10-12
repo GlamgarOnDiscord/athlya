@@ -17,6 +17,7 @@ const config = [
       '**/node_modules/**',
       '**/.next/**',
       '**/.open-next/**',
+      '**/.wrangler/**',
       'open-next.config.ts',
       '**/dist/**',
       '**/coverage/**',

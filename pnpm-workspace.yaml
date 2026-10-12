@@ -16,6 +16,7 @@ overrides:
   'js-yaml@<4.2.0': '^4.2.0'
   '@babel/core@<7.29.6': '^7.29.6'
   '@sentry/cli>undici': '6.27.0'
+  'glob@>=10.2.0 <10.5.0': '^10.5.0'
 
 # Next.js 16.4 loads `.next/server/preview-props.json` unconditionally; the
 # OpenNext manifest inliner only globs `*-manifest`, `required-server-files`
