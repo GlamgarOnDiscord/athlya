@@ -43,6 +43,7 @@ import {
   claimBatch,
   claimLeasedBatch,
   countPendingOutbox,
+  countPendingOutboxByType,
   markPublished,
   markPublishedMany,
   releaseLeases,
@@ -58,7 +59,13 @@ import {
   type OutboxStore,
   type QueueProducer,
 } from './drain-worker.js';
-import { resolveEventQueueProducer, type EventQueueBindings } from './route-queue.js';
+import {
+  COMPLIANCE_EVENT_TYPES,
+  resolveEventQueueLane,
+  resolveEventQueueProducer,
+  type EventQueueBindings,
+  type EventQueueLane,
+} from './route-queue.js';
 
 import type { AthlyaDb } from '@athlya/db/client';
 import type { OutboxPendingSnapshot } from '@athlya/db/outbox';
@@ -98,6 +105,16 @@ export const OUTBOX_DRAIN_OVERLAP_WARN_MS = 45_000;
 export const DRAIN_SEND_CONCURRENCY = 8;
 export const DRAIN_CYCLE_DEADLINE_MS = 40_000;
 export const DRAIN_LEASE_SECONDS = 120;
+
+/**
+ * Issue #311 — a cycle keeps claiming batches until the backlog is
+ * empty, the cycle deadline is reached, or a whole batch failed (queue
+ * unhealthy: stop instead of spinning). Caps one cycle at
+ * `DRAIN_MAX_ROUNDS × batch` rows (10 000 at the adaptive size), so a
+ * 10k burst empties within one or two ticks at normal queue latency
+ * instead of ~50 minutes at 200 rows/min.
+ */
+export const DRAIN_MAX_ROUNDS = 50;
 
 /* ------------------------------------------------------------------ */
 /*  Minimal Cloudflare Workers shapes                                  */
@@ -264,11 +281,13 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
   // backlog metric — the previous code queried `countPendingOutbox`
   // twice per cycle. Skipped entirely when `batchSize` is overridden
   // (explicit/test path), which also short-circuits the metric.
-  const snapshot = env.batchSize !== undefined ? null : await countPendingOutbox(db);
+  const lanes = env.batchSize !== undefined ? null : await countPendingOutboxByType(db);
+  const snapshot = lanes === null ? null : totalSnapshot(lanes);
   const batchSize = env.batchSize ?? pickBatchSize(snapshot?.pending ?? 0);
 
-  if (snapshot !== null) {
+  if (snapshot !== null && lanes !== null) {
     emitOutboxBacklogMetric(snapshot, batchSize, logger);
+    emitOutboxLaneMetrics(lanes, logger);
   }
 
   const startedAt = Date.now();
@@ -277,7 +296,7 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
   // run outside any transaction, delivered rows are stamped in one
   // statement at the end.
   const store: OutboxStore = {
-    claimBatch: (size) => claimLeasedBatch(db, size, DRAIN_LEASE_SECONDS),
+    claimBatch: (size) => claimLeasedBatch(db, size, DRAIN_LEASE_SECONDS, COMPLIANCE_EVENT_TYPES),
     markPublished: (id) => markPublishedMany(db, [id]),
     markPublishedMany: (ids) => markPublishedMany(db, ids),
     release: (ids) => releaseLeases(db, ids),
@@ -295,9 +314,23 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
     ...(logger !== undefined ? { logger } : {}),
   };
 
-  const result = await drainOutbox(opts);
+  const cycleDeadline = startedAt + DRAIN_CYCLE_DEADLINE_MS;
+  let result: DrainResult = { processed: 0, succeeded: 0, failed: 0 };
+  let rounds = 0;
+  while (rounds < DRAIN_MAX_ROUNDS) {
+    const remainingMs = cycleDeadline - Date.now();
+    if (remainingMs <= 0) break;
+    const round = await drainOutbox({ ...opts, deadlineMs: remainingMs });
+    rounds += 1;
+    result = {
+      processed: result.processed + round.processed,
+      succeeded: result.succeeded + round.succeeded,
+      failed: result.failed + round.failed,
+    };
+    if (round.processed < batchSize || round.succeeded === 0) break;
+  }
   const durationMs = Date.now() - startedAt;
-  emitOutboxDrainCycleMetric(durationMs, result, batchSize, logger);
+  emitOutboxDrainCycleMetric(durationMs, result, batchSize, logger, rounds);
 
   // Overlap guard: a drain slower than the warn threshold risks
   // colliding with the next cron tick. SKIP LOCKED keeps that safe,
@@ -310,6 +343,53 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
   return result;
 }
 
+/** Sum the per-type pending rows into the global snapshot. */
+export function totalSnapshot(
+  lanes: ReadonlyArray<{ pending: number; oldestOccurredAt: Date | null }>,
+): OutboxPendingSnapshot {
+  let pending = 0;
+  let oldest: Date | null = null;
+  for (const lane of lanes) {
+    pending += lane.pending;
+    if (lane.oldestOccurredAt !== null && (oldest === null || lane.oldestOccurredAt < oldest)) {
+      oldest = lane.oldestOccurredAt;
+    }
+  }
+  return { pending, oldestOccurredAt: oldest };
+}
+
+/**
+ * Emit one `outbox_lane_backlog` data point per queue lane (issue #311):
+ * pending depth and oldest-event age, so a starved lane is alertable on
+ * its own rather than hidden in the global count.
+ */
+export function emitOutboxLaneMetrics(
+  types: ReadonlyArray<{ eventType: string; pending: number; oldestOccurredAt: Date | null }>,
+  logger?: Logger,
+): void {
+  const lanes = new Map<EventQueueLane, { pending: number; oldest: Date | null }>();
+  for (const t of types) {
+    const lane = resolveEventQueueLane(t.eventType);
+    const acc = lanes.get(lane) ?? { pending: 0, oldest: null };
+    acc.pending += t.pending;
+    if (t.oldestOccurredAt !== null && (acc.oldest === null || t.oldestOccurredAt < acc.oldest)) {
+      acc.oldest = t.oldestOccurredAt;
+    }
+    lanes.set(lane, acc);
+  }
+  const now = Date.now();
+  for (const [lane, acc] of lanes) {
+    const meta = {
+      metric: 'outbox_lane_backlog',
+      lane,
+      pending: acc.pending,
+      oldestAgeMs: acc.oldest === null ? 0 : now - acc.oldest.getTime(),
+    };
+    console.log('outbox.lane_backlog', meta);
+    logger?.info('outbox drain: lane backlog', meta);
+  }
+}
+
 /**
  * Emit one `outbox_drain_cycle` data point per cycle (issue #424) so the
  * drain duration, throughput and failures are alertable even when they
@@ -320,10 +400,13 @@ export function emitOutboxDrainCycleMetric(
   result: DrainResult,
   batchSize: number,
   logger?: Logger,
+  rounds = 1,
 ): void {
   const meta = {
     metric: 'outbox_drain_cycle',
     durationMs,
+    rounds,
+    throughputPerSec: durationMs > 0 ? Math.round((result.succeeded * 1000) / durationMs) : 0,
     processed: result.processed,
     succeeded: result.succeeded,
     failed: result.failed,

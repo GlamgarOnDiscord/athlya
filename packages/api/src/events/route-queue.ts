@@ -38,6 +38,19 @@ export function resolveEventQueueLane(eventType: string): EventQueueLane {
   return 'legacy';
 }
 
+/**
+ * Compliance-critical events (issue #311): RGPD erasure / export and
+ * account lifecycle, plus billing. The outbox drain claims them before
+ * any other pending row, so a notification backlog cannot starve them.
+ */
+export const COMPLIANCE_EVENT_TYPES: readonly string[] = [
+  'auth.user.deleted',
+  'members.export.requested',
+  'auth.user.registered',
+  'billing.subscription.started',
+  'billing.subscription.failed',
+];
+
 /** Pick the Cloudflare Queues producer for `eventType`. */
 export function resolveEventQueueProducer(
   env: EventQueueBindings,
