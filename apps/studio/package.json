@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Athlya studio admin app \u2014 calendar/members/branding/billing for studio owners (Next.js 16 + React 19 + Tailwind 4)",
+  "description": "Athlya studio admin app — calendar/members/branding/billing for studio owners (Next.js 16 + React 19 + Tailwind 4)",
   "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "next dev --port 3001",
@@ -51,7 +51,7 @@
     "postcss": "^8.5.29",
     "rimraf": "^6.1.3",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "vitest": "^5.0.4"
   }
 }
