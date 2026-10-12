@@ -1,7 +1,7 @@
 # Stripe production — provisioning (issue #122)
 
 **Owner:** Backend / billing ops  
-**Prerequis:** API deployee staging + production, migration `0010_stripe_webhook_events.sql` appliquee.
+**Prerequis:** API deployee staging + production, migrations `0010_stripe_webhook_events.sql` et `0036_billing_runtime.sql` appliquees.
 
 ---
 
@@ -22,9 +22,13 @@ Activer checkout + webhooks Stripe en staging puis production. Sans secrets `STR
    - `customer.subscription.created`
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
+   - `invoice.paid`, `invoice.finalized`, `invoice.updated`, `invoice.voided`,
+     `invoice.marked_uncollectible`
    - `invoice.payment_failed`
 4. Copier **Signing secret** (`whsec_...`) par environnement.
 5. **API keys** : secret key `sk_test_...` / `sk_live_...` selon env.
+6. **Product catalog** : produit « Athlya Pro » avec un prix recurrent ; copier le
+   `price_...` (`STRIPE_PRICE_ID_PRO`).
 
 Connect onboarding studio : voir [billing.md](./billing.md) § Connect.
 
@@ -37,15 +41,39 @@ cd packages/api
 
 pnpm exec wrangler secret put STRIPE_SECRET_KEY --env staging
 pnpm exec wrangler secret put STRIPE_WEBHOOK_SECRET --env staging
+pnpm exec wrangler secret put STRIPE_PRICE_ID_PRO --env staging
+pnpm exec wrangler secret put BILLING_REDIRECT_URL --env staging   # https://<studio app origin>
 
 pnpm exec wrangler secret put STRIPE_SECRET_KEY --env production
 pnpm exec wrangler secret put STRIPE_WEBHOOK_SECRET --env production
+pnpm exec wrangler secret put STRIPE_PRICE_ID_PRO --env production
+pnpm exec wrangler secret put BILLING_REDIRECT_URL --env production
 
 pnpm exec wrangler deploy --env staging
 pnpm exec wrangler deploy --env production
 ```
 
 Ne jamais committer les cles. Stocker dans le vault ops.
+
+Sans `STRIPE_SECRET_KEY` + `STRIPE_PRICE_ID_PRO` + une origine de redirection
+`https://` (`BILLING_REDIRECT_URL`, sinon `WEB_APP_URL`), `POST /v1/billing/checkout`
+reste en 503 `billing_not_configured` (toujours en `dev`).
+
+## Fonctionnement (issue #122)
+
+- **Checkout** : session Stripe en mode `subscription` sur le compte plateforme,
+  `client_reference_id` = studio, `metadata` + `subscription_data.metadata` =
+  `{ studioId, userId }` (admin initiateur), `Idempotency-Key` par requete. L'URL
+  renvoyee est refusee si elle n'est pas `https://checkout.stripe.com/...`.
+- **Webhook** : apres verification de signature, **une seule instruction SQL**
+  (`billing_apply_stripe_event`) reclame l'evenement Stripe, met a jour
+  `studio_subscriptions` / `studio_invoices`, ecrit l'evenement bus dans l'outbox
+  (`billing.subscription.started` a la creation de l'abonnement,
+  `billing.subscription.failed` sur `invoice.payment_failed`) et la ligne d'audit.
+  Un echec annule aussi la reclamation : la relance Stripe est retraitee au lieu
+  d'etre ignoree comme doublon. Un rejeu est un no-op.
+- **Factures** : `GET /v1/billing/invoices` (admin) pagine `studio_invoices`
+  (curseur opaque `created_at|id`).
 
 ---
 
@@ -66,6 +94,22 @@ SELECT * FROM _athlya_migrations WHERE name = '0010_stripe_webhook_events.sql';
 ---
 
 ## Phase 4 — Validation
+
+### E2E test mode (staging)
+
+1. Admin studio : `POST /v1/billing/checkout {"plan":"pro"}` → `checkoutUrl`
+   `https://checkout.stripe.com/...` ; payer avec `4242 4242 4242 4242`.
+2. Verifier :
+   ```sql
+   SELECT status, current_period_end, initiated_by FROM studio_subscriptions WHERE studio_id = '<studio>';
+   SELECT stripe_invoice_id, status, amount_due FROM studio_invoices WHERE studio_id = '<studio>';
+   SELECT event_type, published_at FROM outbox WHERE event_type LIKE 'billing.%' ORDER BY occurred_at DESC LIMIT 5;
+   ```
+3. Rejeu : Dashboard → Webhooks → evenement → **Resend** → reponse 200, aucune
+   nouvelle ligne (`stripe_webhook_events` inchange, pas de second evenement outbox).
+4. Echec : `stripe trigger invoice.payment_failed` (carte `4000 0000 0000 0341`) →
+   facture `open` + `billing.subscription.failed` dans l'outbox → email de relance.
+5. `GET /v1/billing/invoices` (admin) liste la facture ; un membre recoit 403.
 
 ### Config webhook (sans signature valide)
 
@@ -129,9 +173,14 @@ validation spécifique.
 
 ## Rollback
 
-1. Desactiver webhook dans Stripe Dashboard (pause deliveries).
-2. Retirer secrets (optionnel) ou laisser fail-closed 500.
-3. `wrangler deploy` si changement de code.
+1. Desactiver webhook dans Stripe Dashboard (pause deliveries) — Stripe garde les
+   evenements et les relivre a la reactivation (retries jusqu'a 3 jours).
+2. Retirer `STRIPE_PRICE_ID_PRO` pour couper le checkout (503) sans toucher aux
+   webhooks, ou retirer `STRIPE_WEBHOOK_SECRET` pour le fail-closed 500.
+3. `wrangler rollback` vers la version precedente si regression de code ; la
+   migration `0036` est additive et peut rester en place.
+4. Rattrapage : reactiver le webhook, puis **Resend** des evenements manques ; les
+   rejeux deja appliques sont des no-op.
 
 ---
 

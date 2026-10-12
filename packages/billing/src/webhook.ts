@@ -237,6 +237,17 @@ export interface WebhookDeps {
   readonly appendAudit: (entry: WebhookAuditEntry) => Promise<void>;
   readonly publish: (event: WebhookPublishEnvelope) => Promise<void>;
   readonly withTransaction: <T>(fn: () => Promise<T>) => Promise<T>;
+  /**
+   * Atomic application path (issue #122). When provided it replaces the
+   * claim → publish → audit sequence: the adapter claims the Stripe
+   * event, applies the billing change, records the bus event and the
+   * audit row in ONE statement, so a failure after the claim can no
+   * longer make Stripe's retry look like a duplicate.
+   *   - `applied`   — first delivery, state changed.
+   *   - `duplicate` — already applied; acknowledge.
+   *   - `ignored`   — type not tracked or object malformed; acknowledge.
+   */
+  readonly applyEvent?: (event: StripeEvent) => Promise<'applied' | 'duplicate' | 'ignored'>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -616,8 +627,16 @@ export async function handleStripeWebhook(
     return { kind: 'signature_invalid', reason };
   }
 
-  // Step 2 — idempotent claim (issue #69).
   const { event } = verifyResult;
+
+  if (deps.applyEvent !== undefined) {
+    const applied = await deps.applyEvent(event);
+    return applied === 'ignored'
+      ? { kind: 'unknown_event_type', eventType: event.type }
+      : { kind: 'processed', eventType: event.type, eventId: event.id };
+  }
+
+  // Step 2 — idempotent claim (issue #69).
   const isNew = await deps.claimStripeEvent(event.id, event.type);
   if (!isNew) {
     return {

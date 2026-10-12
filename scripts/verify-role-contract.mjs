@@ -22,7 +22,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-/** Functions the runtime needs from migrations 0032–0034. */
+/** Functions the runtime needs from migrations 0032–0036. */
 export const REQUIRED_FUNCTIONS = [
   'auth_find_active_user_by_email',
   'auth_find_user_by_id',
@@ -41,6 +41,8 @@ export const REQUIRED_FUNCTIONS = [
   'export_job_get',
   'export_job_profile',
   'export_job_rows',
+  'billing_apply_stripe_event',
+  'billing_list_invoices',
 ];
 
 const ROLLBACK = Symbol('role-contract-rollback');
@@ -178,6 +180,9 @@ export async function runRoleContract({ app, cron, studioSlug, log = console.log
              rgpd_restamp_user_deleted(${userId}::uuid, now())
     `;
     ok('RGPD cascade functions run for the deleted account');
+
+    await tx`SELECT * FROM billing_list_invoices(${studio.id}::uuid, NULL, NULL, 1)`;
+    ok('billing invoice listing runs without claims');
   });
   ok('app workloads rolled back — nothing persisted');
 

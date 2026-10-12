@@ -16,3 +16,6 @@
 
 export * from './service.js';
 export * from './webhook.js';
+export * from './stripe-client.js';
+export * from './studio-checkout.js';
+export * from './stripe-effects.js';
