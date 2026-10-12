@@ -10,12 +10,9 @@ ignoreScripts: true
 # Security overrides — each entry is documented in
 # scripts/overrides-rationale.json (checked by `pnpm check:overrides`).
 overrides:
-  dockerode>uuid: '11.1.1'
-  testcontainers>tmp: '^0.2.6'
-  '@grpc/grpc-js': '>=1.14.4'
-  esbuild: '>=0.28.1'
-  postcss: '>=8.5.10'
-  js-yaml: '>=4.2.0'
-  '@babel/core': '>=7.29.6'
+  '@grpc/grpc-js@<1.14.4': '^1.14.4'
+  'esbuild@<0.28.1': '^0.28.1'
+  'postcss@<8.5.10': '^8.5.10'
+  'js-yaml@<4.2.0': '^4.2.0'
+  '@babel/core@<7.29.6': '^7.29.6'
   '@sentry/cli>undici': '6.27.0'
-  jsdom>ws: '^8.21.0'
