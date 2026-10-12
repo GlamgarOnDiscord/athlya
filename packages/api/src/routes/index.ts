@@ -225,6 +225,8 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
       uploadAvatar: forward('members', 'uploadAvatar'),
       updateConsents: forward('members', 'updateConsents'),
       enqueueExport: forward('members', 'enqueueExport'),
+      getExportJob: forward('members', 'getExportJob'),
+      openExportDownload: forward('members', 'openExportDownload'),
       listMembersByStudio: forward('members', 'listMembersByStudio'),
     },
     classes: {
@@ -361,6 +363,8 @@ export function buildDefaultDeps(
         uploadAvatar: () => notImplemented('members.uploadAvatar'),
         updateConsents: () => notImplemented('members.updateConsents'),
         enqueueExport: () => notImplemented('members.enqueueExport'),
+        getExportJob: () => notImplemented('members.getExportJob'),
+        openExportDownload: () => notImplemented('members.openExportDownload'),
         listMembersByStudio: () => notImplemented('members.listMembersByStudio'),
       };
 

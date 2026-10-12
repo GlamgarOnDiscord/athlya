@@ -26,6 +26,7 @@ import {
   buildArchiveEntries,
   enqueueExport,
   exportObjectKey,
+  neutralizeCsvFormula,
   runExportJob,
   type ArchiveBuilder,
   type ArchiveEntry,
@@ -336,6 +337,10 @@ describe('enqueueExport', () => {
       userId: USER_ID,
       exportJobId: JOB_ID,
     });
+
+    // Issue #498 — the same event is handed to create() so the adapter
+    // records it in the outbox together with the row.
+    expect(createArgs[3]).toBe(event);
   });
 
   it('reuses an active job when the user already has one in flight (dedup)', async () => {
@@ -381,6 +386,97 @@ describe('enqueueExport', () => {
 });
 
 /* ------------------------------------------------------------------ */
+/*  runExportJob — claim (issue #498)                                  */
+/* ------------------------------------------------------------------ */
+
+describe('runExportJob claim', () => {
+  it('returns in_progress without reading data when another delivery holds the claim', async () => {
+    const store = buildJobStore();
+    const source = buildDataSource();
+    const { blob, put } = buildBlob();
+    const { archive, build } = buildArchiveDouble();
+    const { events, publish } = buildEvents();
+    store.get.mockResolvedValueOnce({ ...STORED_JOB, status: 'running' });
+    store.markRunning.mockResolvedValueOnce(false);
+
+    const result = await runExportJob(JOB_ID, {
+      jobs: store.jobs,
+      data: source.data,
+      archive,
+      blob,
+      events,
+      clock: buildClock([FROZEN_REQUEST_TIME]),
+      uuid: buildUuid(),
+    });
+
+    expect(result).toEqual({ kind: 'in_progress', jobId: JOB_ID });
+    expect(source.fetchProfile).not.toHaveBeenCalled();
+    expect(build).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+    expect(store.markFailed).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  CSV formula injection (issue #498)                                 */
+/* ------------------------------------------------------------------ */
+
+describe('neutralizeCsvFormula', () => {
+  it.each([
+    '=HYPERLINK("http://evil")',
+    '+1+1',
+    '-2+3',
+    '@SUM(A1)',
+    '\tcmd',
+    '\rcmd',
+    '\uFF1D1+1',
+    '\uFF0B1',
+    '\uFF0D1',
+    '\uFF20SUM(A1)',
+  ])('prefixes %j with a quote', (value) => {
+    expect(neutralizeCsvFormula(value)).toBe(`'${value}`);
+  });
+
+  it.each(['plain note', '', '42', 'a=b', ' =not-leading'])('leaves %j untouched', (value) => {
+    expect(neutralizeCsvFormula(value)).toBe(value);
+  });
+
+  it('escapes CSV cells but keeps the raw value in JSON', async () => {
+    const payload = '=HYPERLINK("http://evil","x")';
+    async function* one<T>(rows: T[]): AsyncGenerator<T[]> {
+      yield rows;
+    }
+    const entries: ArchiveEntry[] = [];
+    for await (const entry of buildArchiveEntries({
+      profile: PROFILE,
+      consents: [CONSENTS_ROW],
+      reservations: one<Reservation>([]),
+      sessions: one<WorkoutSession>([]),
+      checkins: one<CheckinRecord>([]),
+      invoices: one<InvoiceRecord>([
+        {
+          id: 'inv_1',
+          issuedAt: '2026-01-01T00:00:00.000Z',
+          amountCents: 100,
+          currency: 'eur',
+          description: payload,
+          pdfUrl: '@evil',
+        },
+      ]),
+    })) {
+      entries.push(entry);
+    }
+    const text = (name: string) =>
+      new TextDecoder().decode(entries.find((e) => e.name === name)!.bytes);
+
+    expect(text('invoices.csv')).toContain(`"'=HYPERLINK(""http://evil"",""x"")"`);
+    expect(text('invoices.csv')).toContain(`"'@evil"`);
+    expect(JSON.parse(text('invoices.json'))[0].description).toBe(payload);
+  });
+});
+
+/* ------------------------------------------------------------------ */
 /*  runExportJob — happy path                                          */
 /* ------------------------------------------------------------------ */
 
@@ -393,7 +489,7 @@ describe('runExportJob', () => {
     const { events, publish } = buildEvents();
 
     store.get.mockResolvedValueOnce(STORED_JOB);
-    store.markRunning.mockResolvedValueOnce(undefined);
+    store.markRunning.mockResolvedValueOnce(true);
     store.markCompleted.mockResolvedValueOnce(undefined);
 
     source.fetchProfile.mockResolvedValueOnce(PROFILE);
@@ -433,12 +529,12 @@ describe('runExportJob', () => {
     }
 
     // Data sources were fetched.
-    expect(source.fetchProfile).toHaveBeenCalledWith(USER_ID);
-    expect(source.fetchConsents).toHaveBeenCalledWith(USER_ID);
-    expect(source.listReservations).toHaveBeenCalledWith(USER_ID);
-    expect(source.listSessions).toHaveBeenCalledWith(USER_ID);
-    expect(source.listCheckins).toHaveBeenCalledWith(USER_ID);
-    expect(source.listInvoices).toHaveBeenCalledWith(USER_ID);
+    expect(source.fetchProfile).toHaveBeenCalledWith(USER_ID, JOB_ID);
+    expect(source.fetchConsents).toHaveBeenCalledWith(USER_ID, JOB_ID);
+    expect(source.listReservations).toHaveBeenCalledWith(USER_ID, JOB_ID);
+    expect(source.listSessions).toHaveBeenCalledWith(USER_ID, JOB_ID);
+    expect(source.listCheckins).toHaveBeenCalledWith(USER_ID, JOB_ID);
+    expect(source.listInvoices).toHaveBeenCalledWith(USER_ID, JOB_ID);
 
     // Archive was built with entries covering every collection.
     expect(build).toHaveBeenCalledTimes(1);
@@ -501,7 +597,7 @@ describe('runExportJob', () => {
     const { events, publish } = buildEvents();
 
     store.get.mockResolvedValueOnce(STORED_JOB);
-    store.markRunning.mockResolvedValueOnce(undefined);
+    store.markRunning.mockResolvedValueOnce(true);
     store.markFailed.mockResolvedValueOnce(undefined);
 
     source.fetchProfile.mockResolvedValueOnce(PROFILE);

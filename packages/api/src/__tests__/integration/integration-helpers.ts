@@ -463,6 +463,8 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
     uploadAvatar: vi.fn(async () => ({ avatarUrl: 'https://avatars.athlya.app/test.jpg' })),
     updateConsents: vi.fn(async () => ({})),
     enqueueExport: vi.fn(async () => ({ jobId: makeUuid(9999) })),
+    getExportJob: vi.fn(async () => null),
+    openExportDownload: vi.fn(async () => ({ kind: 'not_found' as const })),
     listMembersByStudio: vi.fn(async () => ({ items: [], nextCursor: null })),
   };
 

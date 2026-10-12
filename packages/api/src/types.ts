@@ -350,6 +350,14 @@ export interface AthlyaBindings {
    * for the full fallback rationale.
    */
   readonly EXPORTS_BUCKET?: R2Bucket;
+  /**
+   * HMAC key (>= 32 chars) signing RGPD export download links (issue
+   * #498). Without it, export jobs fail with
+   * `export_download_not_configured` instead of completing.
+   */
+  readonly EXPORT_URL_SIGNING_KEY?: string;
+  /** Public origin of this API, used to build export download links. */
+  readonly API_PUBLIC_URL?: string;
 
   /**
    * Durable Object namespace for per-class WebSocket capacity fanout

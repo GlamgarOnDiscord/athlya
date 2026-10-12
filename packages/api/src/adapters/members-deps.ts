@@ -9,7 +9,7 @@
  *   - `createDrizzleConsentsRepo`     — `ConsentsRepo`
  *     (`findConsents`, `updateConsents`).
  *   - `createDrizzleAuditLogWriter`   — `AuditLogWriter.append`.
- *   - `createDrizzleExportJobStore`   — `ExportJobStore.*`
+ *   - `createDrizzleExportJobStoreHttp` — `ExportJobStore.*` (tenant-scoped)
  *
  * Plus the event publisher — events go through the Cloudflare Queues
  * `EVENTS_QUEUE` binding via `publish` from
@@ -34,6 +34,7 @@ import {
   updateConsents as svcUpdateConsents,
   updateProfile as svcUpdateProfile,
   enqueueExport as svcEnqueueExport,
+  exportObjectKey,
   type EnqueueExportResult,
   type MemberProfile,
   type MembersPage,
@@ -49,6 +50,7 @@ import {
   primeDbHttpForTests,
   resetAllDepsCachesForTests,
 } from './deps-cache.js';
+import { verifyExportDownload } from './export-download.js';
 import { createDrizzleAuditLogWriterHttp } from './members-audit-writer-drizzle.js';
 import { createDrizzleConsentsRepoHttp } from './members-consents-repo-drizzle.js';
 import { createDrizzleExportJobStoreHttp } from './members-export-job-store-drizzle.js';
@@ -196,6 +198,47 @@ export function buildMembersDeps(
       // map to 202). The `kind` is logged by the gateway's
       // request log for observability.
       return { jobId: result.jobId };
+    },
+
+    async getExportJob(jobId, claims) {
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
+      const job = await createDrizzleExportJobStoreHttp(db, claims).get(jobId);
+      if (job === null || job.userId !== claims.userId) return null;
+      const linkLive =
+        job.downloadExpiresAt !== null && Date.parse(job.downloadExpiresAt) > Date.now();
+      return {
+        jobId: job.id,
+        status: job.status,
+        requestedAt: job.requestedAt,
+        completedAt: job.completedAt,
+        error: job.error,
+        downloadUrl: linkLive ? job.downloadUrl : null,
+        downloadExpiresAt: job.downloadExpiresAt,
+      };
+    },
+
+    async openExportDownload(jobId, exp, sig, claims) {
+      const secret = env.EXPORT_URL_SIGNING_KEY ?? '';
+      if (secret.length < 32 || env.EXPORTS_BUCKET === undefined) {
+        return { kind: 'not_configured' };
+      }
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (!(await verifyExportDownload(secret, jobId, exp, sig, nowSec))) {
+        return { kind: 'invalid_link' };
+      }
+      // Owner check through RLS (`export_jobs_read_own`): another
+      // user's job id reads as absent even with a valid signature.
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
+      const job = await createDrizzleExportJobStoreHttp(db, claims).get(jobId);
+      if (job === null || job.userId !== claims.userId || job.status !== 'completed') {
+        return { kind: 'not_found' };
+      }
+      if (job.downloadExpiresAt === null || Date.parse(job.downloadExpiresAt) <= Date.now()) {
+        return { kind: 'invalid_link' };
+      }
+      const object = await env.EXPORTS_BUCKET.get(exportObjectKey(jobId));
+      if (object === null) return { kind: 'not_found' };
+      return { kind: 'ok', body: object.body as unknown as ReadableStream, size: object.size };
     },
 
     async listMembersByStudio(

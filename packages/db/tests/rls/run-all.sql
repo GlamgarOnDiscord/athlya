@@ -39,5 +39,6 @@
 \i tests/rls/password_reset_one_active.sql
 \i tests/rls/service_functions.sql
 \i tests/rls/auth_event_recording.sql
+\i tests/rls/export_runtime.sql
 \i tests/rls/cron_role.sql
 \i tests/rls/constraints.sql

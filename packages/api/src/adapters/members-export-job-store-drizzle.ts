@@ -18,7 +18,8 @@
  *     event (issue #462).
  *   - `markRunning` / `markCompleted` / `markFailed` are idempotent
  *     by design — re-running a transition that already landed is a
- *     no-op because the WHERE clause filters on the source state.
+ *     no-op because the WHERE clause filters on the source state;
+ *     `markRunning` reports whether this caller won the claim.
  *
  * @see Requirements 4.1, 4.2, 4.3, 20.1.
  */
@@ -26,94 +27,61 @@
 import { withTenantHttp } from '@athlya/db';
 import { isPostgresUniqueViolation } from '@athlya/db/errors';
 import { exportJobs } from '@athlya/db/schema';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
+import { queryRows, toDateOrNull } from './service-functions.js';
 
 import type { AthlyaDbAny, AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
 import type { ExportJobRecord, ExportJobStore } from '@athlya/members';
 
 /**
- * Factory — produces an `ExportJobStore` bound to the supplied
- * Drizzle instance.
+ * Worker-side `ExportJobStore` for the `members.export.requested` queue
+ * consumer (issue #498). The consumer runs as `athlya_app` with no
+ * tenant claims, so every transition goes through the SECURITY DEFINER
+ * functions of migration 0034: `export_job_claim` is the atomic
+ * `pending → running` claim with a 15 min lease, and completion / failure
+ * only move a job out of the state the worker owns. The worker never
+ * enqueues, so `create` / `findActiveByUser` refuse.
  */
-export function createDrizzleExportJobStore(db: AthlyaDbAny): ExportJobStore {
-  const store: ExportJobStore = {
-    async create(jobId, userId, requestedAt) {
-      try {
-        await withConnectionRetry(async () => {
-          await db.insert(exportJobs).values({
-            id: jobId,
-            userId,
-            status: 'pending',
-            requestedAt,
-          });
-        });
-        return jobId;
-      } catch (err) {
-        if (isPostgresUniqueViolation(err)) {
-          const existing = await store.findActiveByUser(userId);
-          if (existing !== null) return existing;
-        }
-        throw err;
-      }
+export function createExportJobWorkerStore(db: AthlyaDbAny): ExportJobStore {
+  return {
+    create() {
+      return Promise.reject(new Error('export worker store cannot enqueue jobs'));
     },
 
-    async markRunning(jobId, startedAt) {
-      await withConnectionRetry(async () => {
-        await db
-          .update(exportJobs)
-          .set({ status: 'running', startedAt })
-          .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'pending')));
-      });
+    async markRunning(jobId) {
+      const rows = await queryRows<{ claimed: boolean }>(
+        db,
+        sql`SELECT export_job_claim(${jobId}::uuid) AS claimed`,
+      );
+      return rows[0]?.claimed === true;
     },
 
-    async markCompleted(jobId, completedAt, downloadUrl, downloadExpiresAt) {
-      await withConnectionRetry(async () => {
-        await db
-          .update(exportJobs)
-          .set({
-            status: 'completed',
-            completedAt,
-            downloadUrl,
-            downloadExpiresAt,
-          })
-          .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'running')));
-      });
+    async markCompleted(jobId, _completedAt, downloadUrl, downloadExpiresAt) {
+      await queryRows(
+        db,
+        sql`SELECT export_job_complete(${jobId}::uuid, ${downloadUrl}, ${downloadExpiresAt.toISOString()}::timestamptz)`,
+      );
     },
 
     async markFailed(jobId, error) {
-      await withConnectionRetry(async () => {
-        await db
-          .update(exportJobs)
-          .set({ status: 'failed', error })
-          .where(and(eq(exportJobs.id, jobId), inArray(exportJobs.status, ['pending', 'running'])));
-      });
+      await queryRows(db, sql`SELECT export_job_fail(${jobId}::uuid, ${error})`);
     },
 
     async get(jobId) {
-      const rows = await withConnectionRetry(() =>
-        db.select().from(exportJobs).where(eq(exportJobs.id, jobId)).limit(1),
+      const rows = await queryRows<WorkerJobRow>(
+        db,
+        sql`SELECT * FROM export_job_get(${jobId}::uuid)`,
       );
       const row = rows[0];
-      return row === undefined ? null : toExportJobRecord(row);
+      return row === undefined ? null : workerRowToRecord(row);
     },
 
-    async findActiveByUser(userId) {
-      const rows = await withConnectionRetry(() =>
-        db
-          .select({ id: exportJobs.id })
-          .from(exportJobs)
-          .where(
-            and(eq(exportJobs.userId, userId), inArray(exportJobs.status, ['pending', 'running'])),
-          )
-          .orderBy(desc(exportJobs.requestedAt))
-          .limit(1),
-      );
-      return rows[0]?.id ?? null;
+    findActiveByUser() {
+      return Promise.reject(new Error('export worker store cannot look up jobs by user'));
     },
   };
-  return store;
 }
 
 /* ------------------------------------------------------------------ */
@@ -130,20 +98,44 @@ export function createDrizzleExportJobStoreHttp(
   claims: TenantClaims,
 ): ExportJobStore {
   const store: ExportJobStore = {
-    async create(jobId, userId, requestedAt) {
+    async create(jobId, userId, requestedAt, requestedEvent) {
       try {
-        await withConnectionRetry(() =>
-          withTenantHttp(
-            db,
-            claims,
-            db.insert(exportJobs).values({
-              id: jobId,
-              userId,
-              status: 'pending',
-              requestedAt,
-            }),
-          ),
-        );
+        if (requestedEvent === undefined) {
+          await withConnectionRetry(() =>
+            withTenantHttp(
+              db,
+              claims,
+              db.insert(exportJobs).values({
+                id: jobId,
+                userId,
+                status: 'pending',
+                requestedAt,
+              }),
+            ),
+          );
+        } else {
+          // Issue #498 — the job row and its `members.export.requested`
+          // outbox event are one statement in one tenant transaction
+          // (`export_jobs_insert_own` + `outbox_insert_tenant`), so a
+          // queue outage can no longer strand the job in `pending`.
+          await withConnectionRetry(() =>
+            withTenantHttp(
+              db,
+              claims,
+              db.execute(sql`
+                WITH job AS (
+                  INSERT INTO export_jobs (id, user_id, status, requested_at)
+                  VALUES (${jobId}::uuid, ${userId}::uuid, 'pending', ${requestedAt.toISOString()}::timestamptz)
+                  RETURNING id
+                )
+                INSERT INTO outbox (event_id, event_type, payload, occurred_at)
+                SELECT ${requestedEvent.id}, ${requestedEvent.type}, ${JSON.stringify(requestedEvent)}::jsonb,
+                       ${requestedEvent.occurredAt}::timestamptz
+                  FROM job
+              `),
+            ),
+          );
+        }
         return jobId;
       } catch (err) {
         if (isPostgresUniqueViolation(err)) {
@@ -155,16 +147,18 @@ export function createDrizzleExportJobStoreHttp(
     },
 
     async markRunning(jobId, startedAt) {
-      await withConnectionRetry(() =>
+      const rows = await withConnectionRetry(() =>
         withTenantHttp(
           db,
           claims,
           db
             .update(exportJobs)
             .set({ status: 'running', startedAt })
-            .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'pending'))),
+            .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'pending')))
+            .returning({ id: exportJobs.id }),
         ),
       );
+      return rows.length > 0;
     },
 
     async markCompleted(jobId, completedAt, downloadUrl, downloadExpiresAt) {
@@ -251,5 +245,36 @@ function toExportJobRecord(row: typeof exportJobs.$inferSelect): ExportJobRecord
     error: row.error,
     downloadUrl: row.downloadUrl,
     downloadExpiresAt: row.downloadExpiresAt?.toISOString() ?? null,
+  };
+}
+
+/** Row returned by `export_job_get` (snapshot of `export_jobs`). */
+interface WorkerJobRow {
+  readonly id: string;
+  readonly user_id: string;
+  readonly status: ExportJobRecord['status'];
+  readonly requested_at: Date | string;
+  readonly started_at: Date | string | null;
+  readonly completed_at: Date | string | null;
+  readonly error: string | null;
+  readonly download_url: string | null;
+  readonly download_expires_at: Date | string | null;
+}
+
+function isoOrNull(value: Date | string | null): string | null {
+  return toDateOrNull(value)?.toISOString() ?? null;
+}
+
+function workerRowToRecord(row: WorkerJobRow): ExportJobRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    status: row.status,
+    requestedAt: isoOrNull(row.requested_at) ?? '',
+    startedAt: isoOrNull(row.started_at),
+    completedAt: isoOrNull(row.completed_at),
+    error: row.error,
+    downloadUrl: row.download_url,
+    downloadExpiresAt: isoOrNull(row.download_expires_at),
   };
 }
