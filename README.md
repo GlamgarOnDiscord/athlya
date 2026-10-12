@@ -138,9 +138,9 @@ graph TD
 
 | Couche                         | Technologie                        | Version |
 | ------------------------------ | ---------------------------------- | ------- |
-| Langage                        | TypeScript                         | 5.9     |
-| Runtime serveur                | Node 20 LTS / Cloudflare Workers   | —       |
-| Gestionnaire                   | pnpm workspaces                    | 9.15    |
+| Langage                        | TypeScript                         | 6.0     |
+| Runtime serveur                | Node 24 LTS / Cloudflare Workers   | —       |
+| Gestionnaire                   | pnpm workspaces                    | 11      |
 | Build                          | Turborepo                          | 2.x     |
 | Framework API                  | Hono                               | 4.x     |
 | ORM                            | Drizzle                            | dernier |
@@ -188,8 +188,8 @@ graph TD
 
 ### Prérequis
 
-- **Node 20 LTS** (voir `.nvmrc`)
-- **pnpm ≥ 9** (`corepack enable` suffit)
+- **Node 24 LTS** (voir `.nvmrc`)
+- **pnpm 11** (`corepack enable` suffit — version lue dans `packageManager`)
 - **Docker** optionnel — requis uniquement pour les suites Testcontainers (RLS, cascade, booking property). Sans Docker, ces suites se skippent proprement via `describe.skipIf(!dockerReady)`.
 
 ### Installation
@@ -459,8 +459,8 @@ Le vendor lock-in est un des griefs principaux adressés aux SaaS concurrents. C
 ## Conventions du monorepo
 
 - **pnpm workspaces** + **Turborepo 2.x**
-- **Node 20 LTS** pinné via `.nvmrc` + `engines`
-- **TypeScript 5.9** strict, **ESLint 9** flat config, **Prettier 3**
+- **Node 24 LTS** pinné via `.nvmrc` + `engines`
+- **TypeScript 6.0** strict, **ESLint 9** flat config, **Prettier 3**
 - Packages domaine **framework-free** avec DI ports (Repo, Counter, Publisher, Store)
 - **Hono** est peerDependency optionnelle de `@athlya/api` ; les middlewares sont duck-typés sur un contexte minimal `{ header(k,v); set; get; req; env }`
 - **Zod `.strict()`** sur tous les bodies de requête sauf `AuditLog.metadata`

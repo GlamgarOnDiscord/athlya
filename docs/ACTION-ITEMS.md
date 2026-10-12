@@ -113,6 +113,34 @@ Lockfile resolves to `4.20260509.1` (latest). The `^4.20241218.0` range in packa
 
 ---
 
+## Priority 4b: Toolchain upgrades blocked upstream (2026-10-12)
+
+Stack upgraded on 2026-10-12 (Node 24, pnpm 11, TS 6.0, Vitest 5, Vite 8, fast-check 4, jsdom 30, Next 16.4, React 19.3). Remaining majors are blocked by the ecosystem — re-check on each Dependabot major PR.
+
+### U1. ESLint 10
+
+**Blocked by**: `eslint-config-next@16.4` depends on `eslint-plugin-react@7.37`, `eslint-plugin-import@2.32`, `eslint-plugin-jsx-a11y@6.10` — all peer-capped at ESLint 9. Our own config also uses `eslint-plugin-import`.
+**Unblock when**: those plugins release ESLint 10 support and `eslint-config-next` adopts them. Then consider `eslint-plugin-import-x` (already ESLint 10 ready). ESLint 10 also changes config lookup (per-file) and adds `no-useless-assignment` / `preserve-caught-error` to `recommended`.
+
+### U2. TypeScript 7 (native `tsgo`)
+
+**Blocked by**: typescript-eslint peer `typescript <6.1.0`; TS 7.0 ships no programmatic API (expected in 7.1), which `next build` and typescript-eslint need.
+**Option meanwhile**: run TS 7 for the `typecheck` task only via the `@typescript/native` alias. The presets already avoid every option TS 6 deprecated.
+
+### U3. pnpm 12
+
+pnpm 12 (Rust rewrite) keeps pnpm 11's config and lockfile. Evaluate once `pnpm/action-setup` and Dependabot document support.
+
+### U4. Node 26
+
+Node 26 becomes LTS late October 2026. Node 24 (current pin) is supported until April 2028 — no urgency.
+
+### U5. Pre-existing `pnpm check:dead` (knip) findings
+
+Not a CI gate. 15 unused exports (mostly `packages/api` adapters/workers kept for wiring), unused root `postcss`/`vite` deps, `@sentry/cli` used only from CI scripts, unlisted `wrangler` binary in `scripts/canary-deploy.mjs`. Triage and either wire or delete.
+
+---
+
 ## Priority 5: Technical Debt (Low Priority)
 
 ### ~~D1. Login form maxLength vs Zod~~ RESOLVED (2026-05-27)
@@ -144,8 +172,8 @@ Lockfile resolves to `4.20260509.1` (latest). The `^4.20241218.0` range in packa
 | Tailwind 4 CSS-first          | Already using new @theme + @import pattern                            |
 | Next.js 16 proxy.ts           | Already on new convention                                             |
 | Async `headers()`             | Already awaited (React 19 requirement)                                |
-| Hono 4.12.18                  | Latest stable with all security patches                               |
-| `@cloudflare/workers-types`   | Resolved to 4.20260509.1 (current)                                    |
+| Hono 4.13.x                   | Latest stable with all security patches (2026-10-12)                  |
+| `@cloudflare/workers-types`   | v5, kept current by Dependabot (declares `Buffer` as `any`)           |
 | Login throttle (5/15min)      | Implemented in `packages/auth/src/throttle.ts`                        |
 | HIBP breached-password check  | K-anonymity implementation, fail-closed policy                        |
 | Turnstile middleware          | register, login, password-reset request/confirm (issue #131)          |
@@ -153,7 +181,7 @@ Lockfile resolves to `4.20260509.1` (latest). The `^4.20241218.0` range in packa
 | QR replay protection          | Redis-backed with jti + TTL matching token lifetime                   |
 | Timing-safe login             | Dummy bcrypt on missing/OAuth-only users (oracle prevention)          |
 | OAuth verification            | Apple + Google JWKS with proper issuer/audience checks                |
-| Drizzle ORM 0.45.2            | Latest stable with SQL injection fix                                  |
+| Drizzle ORM 0.45.4            | Latest stable with SQL injection fix                                  |
 
 ---
 
