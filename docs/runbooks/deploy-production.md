@@ -38,12 +38,15 @@ Prérequis du gate (environnement GitHub `staging`) :
 - Secrets : `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
   `MIGRATION_DB_URL_STAGING`, `STAGING_SMOKE_EMAIL`, `STAGING_SMOKE_PASSWORD`
   (compte de smoke dédié), optionnel `STAGING_SMOKE_TURNSTILE_TOKEN`
-- Vars : `STAGING_API_URL`, `K6_STAGING_BASE_URL`, optionnel
-  `STAGING_SMOKE_STUDIO_SLUG`
+- Vars : `STAGING_API_URL`, `K6_STAGING_BASE_URL`,
+  `STAGING_SMOKE_STUDIO_SLUG` (studio seedé avec des cours à venir)
 
 Le smoke authentifié (`smoke-routes.mjs --require-auth`) se connecte avec le
 compte de smoke puis exige `200` sur `/v1/members/me` et
 `/v1/reservations/me` (et `/v1/classes` si le slug studio est fourni).
+Puis `scripts/smoke-e2e-login-booking.mjs` (issue #470) joue le parcours
+membre : connexion → liste des cours → réservation d'une place libre →
+annulation (toujours nettoyée, même en cas d'échec).
 
 ## Local (ops)
 
