@@ -35,6 +35,13 @@ In **Settings → Variables → Actions**, add:
 | ------------------------------ | ---------------------------------------------------------- |
 | `NEON_PROJECT_ID`              | `proud-dream-12345678` (Neon dashboard → Project settings) |
 | `CLOUDFLARE_WORKERS_SUBDOMAIN` | `athlya` (CF dashboard → Workers → your account subdomain) |
+| `NEON_DATABASE_NAME`           | optional, defaults to `neondb`                             |
+
+The Neon parent branch must contain the `athlya_app` role (no `BYPASSRLS`)
+with a password: each preview branch inherits it, and the workflow fetches
+its connection URI through the Neon `connection_uri` API. The branch owner
+URI is only used for migrations, because the Worker refuses to boot on a
+`BYPASSRLS` role outside `dev`.
 
 ### 3. Provision R2 preview buckets
 
@@ -65,7 +72,8 @@ Generate wrangler.preview-pr.toml (queue names patched to pr-{N} variants)
        │
        ▼
 wrangler secret put * --env preview --name athlya-api-pr-{N}
-  (DB_URL = Neon branch URI; Redis/JWT/Turnstile = preview secrets)
+  (DB_URL = athlya_app URI of the branch; CORS_ORIGIN = the preview URL;
+   Redis/JWT/Turnstile = preview secrets)
        │
        ▼
 Provision per-PR queues: athlya-events-preview-pr-{N},
@@ -73,11 +81,12 @@ Provision per-PR queues: athlya-events-preview-pr-{N},
   athlya-events-notifications-preview-pr-{N}, ...
        │
        ▼
-wrangler versions upload --config wrangler.preview-pr.toml
-  --env preview --name athlya-api-pr-{N}
+wrangler deploy --config wrangler.preview-pr.toml
+  --env preview --name athlya-api-pr-{N} --var VERSION:pr{N}-<sha7>
        │
        ▼
 https://athlya-api-pr-{N}.<subdomain>.workers.dev
+  /health must report version pr{N}-<sha7>, otherwise the job fails
        │
        ▼
 Post/update PR comment with preview URL, Worker name, Neon branch, queues
@@ -91,7 +100,11 @@ Delete Neon branch "preview-pr-{N}"
 Flush Redis keys "pr-{N}:*"
 ```
 
-Concurrent PRs are fully safe: each PR owns a dedicated Worker name, `DB_URL` secret namespace, Neon branch, and queue set.
+Isolation: each PR owns a dedicated Worker, `DB_URL`, Neon branch and queue
+set. **Shared** across previews: the preview Redis database (keys prefixed
+`pr-{N}:`) and the preview R2 buckets. The Worker runs with
+`ENVIRONMENT=preview`, whose Host guard only accepts
+`athlya-api-pr-<N>.<subdomain>.workers.dev`.
 
 ---
 

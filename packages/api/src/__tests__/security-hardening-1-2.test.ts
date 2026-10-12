@@ -404,6 +404,40 @@ describe('Host check', () => {
     expect([200, 404]).toContain(res.status);
   });
 
+  it('accepts the per-PR preview Worker hostname on preview (issue #419)', async () => {
+    const app = buildAppNoDomainRoutes();
+    const res = await app.request(
+      '/health',
+      {
+        method: 'GET',
+        headers: { host: 'athlya-api-pr-42.athlya-team.workers.dev' },
+      },
+      mockEnv({
+        ENVIRONMENT: 'preview',
+        CORS_ORIGIN: 'https://athlya-api-pr-42.athlya-team.workers.dev',
+      }),
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  it.each(['api.athlya.app', 'evil.workers.dev', 'athlya-api-preview.workers.dev'])(
+    'rejects %s on preview with 404',
+    async (host) => {
+      const app = buildAppNoDomainRoutes();
+      const res = await app.request(
+        '/health',
+        { method: 'GET', headers: { host } },
+        mockEnv({
+          ENVIRONMENT: 'preview',
+          CORS_ORIGIN: 'https://athlya-api-pr-42.athlya-team.workers.dev',
+        }),
+      );
+
+      expect(res.status).toBe(404);
+    },
+  );
+
   it('accepts the canonical *.workers.dev preview hostname on dev', async () => {
     const app = buildAppNoDomainRoutes();
     const res = await app.request(

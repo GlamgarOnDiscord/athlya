@@ -3,7 +3,10 @@ name: Preview environments
 # Deploys an isolated API preview for every PR (issue #419):
 #   • Neon branch  — fresh DB fork from the project primary branch; migrations
 #     are applied automatically after branch creation.
-#   • Cloudflare Worker — `athlya-api-pr-<N>` (one Worker per PR, isolated DB_URL).
+#   • Cloudflare Worker — `athlya-api-pr-<N>` (one Worker per PR) deployed with
+#     `wrangler deploy` (100 % of its traffic), ENVIRONMENT=preview, connected
+#     as the non-BYPASSRLS `athlya_app` role. The job fails unless /health
+#     serves the commit's VERSION (issue #419).
 #   • Queues — per-PR `athlya-events-preview-pr-<N>*` queues provisioned on
 #     open/synchronize and deleted on close, so concurrent PRs never share a
 #     queue and preview events never contaminate staging (issues #237, #419).
@@ -14,8 +17,6 @@ name: Preview environments
 #   CLOUDFLARE_API_TOKEN        — Workers:Edit permission
 #   CLOUDFLARE_ACCOUNT_ID       — CF account ID
 #   NEON_API_KEY                — Neon project API key
-#   PREVIEW_MIGRATION_DB_URL    — neondb_owner connection string for DDL
-#                                 (set each PR by the Create Neon branch step)
 #   PREVIEW_REDIS_URL           — Upstash Redis URL (dedicated preview database)
 #   PREVIEW_REDIS_TOKEN         — Upstash Redis token (dedicated preview database)
 #   PREVIEW_JWT_JWKS_URL        — JWKS endpoint for preview (can reuse staging)
@@ -24,6 +25,11 @@ name: Preview environments
 # Required GitHub variables:
 #   NEON_PROJECT_ID              — Neon project ID (e.g. "proud-dream-12345678")
 #   CLOUDFLARE_WORKERS_SUBDOMAIN — CF workers.dev subdomain (e.g. "athlya")
+#   NEON_DATABASE_NAME           — optional, defaults to "neondb"
+#
+# The Neon branch owner URL is only used to run migrations; the Worker gets
+# an `athlya_app` URL from the Neon connection_uri API so the boot-time RLS
+# role check passes and previews exercise RLS like production.
 #
 # See docs/runbooks/preview-pr.md for full setup instructions.
 
@@ -54,6 +60,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       PREVIEW_WORKER_NAME: athlya-api-pr-${{ github.event.pull_request.number }}
+      PREVIEW_URL: https://athlya-api-pr-${{ github.event.pull_request.number }}.${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}.workers.dev
 
     steps:
       - name: Checkout
@@ -70,6 +77,15 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Assert preview configuration
+        env:
+          WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+        run: |
+          if [ -z "${WORKERS_SUBDOMAIN}" ]; then
+            echo "::error::vars.CLOUDFLARE_WORKERS_SUBDOMAIN is required to address the preview Worker"
+            exit 1
+          fi
 
       - name: Create Neon branch
         id: neon
@@ -110,15 +126,31 @@ jobs:
             exit 1
           fi
 
+          # Runtime connection as athlya_app (no BYPASSRLS) — the owner URL
+          # above is only used for migrations.
+          APP_DB_URL=$(curl -sf -G \
+            "https://api.neon.tech/v1/projects/${{ vars.NEON_PROJECT_ID }}/connection_uri" \
+            --data-urlencode "branch_id=${BRANCH_ID}" \
+            --data-urlencode "database_name=${{ vars.NEON_DATABASE_NAME || 'neondb' }}" \
+            --data-urlencode "role_name=athlya_app" \
+            -H "Authorization: Bearer ${NEON_API_KEY}" | jq -r '.uri // empty')
+
+          if [ -z "$APP_DB_URL" ]; then
+            echo "::error::Failed to obtain the athlya_app connection URI for ${BRANCH_NAME}"
+            exit 1
+          fi
+
           echo "branch_id=${BRANCH_ID}" >> "$GITHUB_OUTPUT"
           echo "branch_name=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
-          # Mask the connection string so it never appears in logs.
+          # Mask the connection strings so they never appear in logs.
           echo "::add-mask::${DB_URL}"
-          echo "db_url=${DB_URL}" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::${APP_DB_URL}"
+          echo "migration_db_url=${DB_URL}" >> "$GITHUB_OUTPUT"
+          echo "app_db_url=${APP_DB_URL}" >> "$GITHUB_OUTPUT"
 
       - name: Run DB migrations on preview branch
         env:
-          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
+          DATABASE_URL: ${{ steps.neon.outputs.migration_db_url }}
         run: |
           set -euo pipefail
           # Apply all pending migrations to the freshly-forked Neon branch so
@@ -155,11 +187,15 @@ jobs:
 
       - name: Set preview secrets
         run: |
-          VERSION="pr${{ github.event.pull_request.number }}-${GITHUB_SHA:0:7}"
           WRANGLER_NAME_FLAGS=(--env preview --name "${PREVIEW_WORKER_NAME}")
 
-          printf '%s' "${{ steps.neon.outputs.db_url }}" | \
+          printf '%s' "${{ steps.neon.outputs.app_db_url }}" | \
             pnpm --filter @athlya/api exec wrangler secret put DB_URL "${WRANGLER_NAME_FLAGS[@]}"
+
+          # No browser app talks to a preview API; allow its own origin only
+          # so the non-dev CORS guard does not reject every request.
+          printf '%s' "${PREVIEW_URL}" | \
+            pnpm --filter @athlya/api exec wrangler secret put CORS_ORIGIN "${WRANGLER_NAME_FLAGS[@]}"
 
           printf '%s' "${{ secrets.PREVIEW_REDIS_URL }}" | \
             pnpm --filter @athlya/api exec wrangler secret put REDIS_URL "${WRANGLER_NAME_FLAGS[@]}"
@@ -195,21 +231,35 @@ jobs:
         env:
           PR_N: ${{ github.event.pull_request.number }}
         run: |
+          set -euo pipefail
           VERSION="pr${PR_N}-${GITHUB_SHA:0:7}"
-          # Use the per-PR wrangler config (queue names patched in the previous step).
-          DEPLOY_OUT=$(pnpm --filter @athlya/api exec wrangler versions upload \
+          # `wrangler deploy` (not `versions upload`): the new version must
+          # receive 100 % of the preview Worker's traffic (issue #419).
+          pnpm --filter @athlya/api exec wrangler deploy \
             --config wrangler.preview-pr.toml \
             --env preview \
             --name "${PREVIEW_WORKER_NAME}" \
             --var "VERSION:${VERSION}" \
-            --var "REDIS_KEY_PREFIX:pr-${PR_N}:" \
-            --message "PR #${PR_N} — ${GITHUB_SHA:0:7}" \
-            2>&1)
-          echo "$DEPLOY_OUT"
-
-          # Deterministic per-PR workers.dev URL (no shared DB_URL secret race).
-          PREVIEW_URL="https://${PREVIEW_WORKER_NAME}.${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}.workers.dev"
+            --var "REDIS_KEY_PREFIX:pr-${PR_N}:"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "preview_url=${PREVIEW_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the preview serves this commit
+        env:
+          EXPECTED_VERSION: ${{ steps.deploy.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            SERVED=$(curl -sf --max-time 10 "${PREVIEW_URL}/health" | jq -r '.version // empty' || true)
+            if [ "${SERVED}" = "${EXPECTED_VERSION}" ]; then
+              echo "Preview serves ${SERVED} (attempt ${attempt})"
+              exit 0
+            fi
+            echo "attempt ${attempt}: served '${SERVED:-none}', expected '${EXPECTED_VERSION}'"
+            sleep 5
+          done
+          echo "::error::${PREVIEW_URL}/health never served ${EXPECTED_VERSION}"
+          exit 1
 
       - name: Comment on PR
         env:
@@ -225,9 +275,9 @@ jobs:
           | **Worker** | \`athlya-api-pr-${PR_N}\` |
           | **Neon branch** | \`${{ steps.neon.outputs.branch_name }}\` |
           | **Queues** | \`athlya-events-preview-pr-${PR_N}*\` |
-          | **Commit** | \`${GITHUB_SHA:0:7}\` |
+          | **Version** | \`${{ steps.deploy.outputs.version }}\` (verified on \`/health\`) |
 
-          > One Worker + Neon branch + queue set per PR (issues #237, #419). Concurrent PRs are fully isolated. Redis is shared (dedicated preview database). R2 uses dedicated preview buckets.
+          > Per PR (issues #237, #419): its own Worker, Neon branch (\`athlya_app\` role) and queue set. **Shared across all previews:** the preview Redis database (keys prefixed \`pr-${PR_N}:\`) and the preview R2 buckets — do not store anything a concurrent PR must not see.
           > Neon branch, Worker, and queues are deleted automatically when this PR closes."
 
           # Update an existing preview comment rather than spamming new ones.

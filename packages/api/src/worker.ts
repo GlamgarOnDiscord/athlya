@@ -169,6 +169,11 @@ const ALLOWED_HOSTS_STAGING: readonly string[] = ['staging.api.athlya.app'];
  * match instead of static list so local port choices and PR
  * preview hostnames stay frictionless.
  */
+/**
+ * Per-PR preview Workers (`.github/workflows/preview.yml`) are served on
+ * `athlya-api-pr-<N>.<account-subdomain>.workers.dev` — issue #419.
+ */
+const ALLOWED_HOSTS_PREVIEW_PATTERN = /^athlya-api-pr-\d+\.[a-z0-9-]+\.workers\.dev$/u;
 const ALLOWED_HOSTS_DEV_PATTERNS: readonly RegExp[] = [
   /^localhost(?::\d+)?$/u,
   /^127\.0\.0\.1(?::\d+)?$/u,
@@ -325,6 +330,8 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       allowed = ALLOWED_HOSTS_PROD.includes(host);
     } else if (env === 'staging') {
       allowed = ALLOWED_HOSTS_STAGING.includes(host);
+    } else if (env === 'preview') {
+      allowed = ALLOWED_HOSTS_PREVIEW_PATTERN.test(host);
     } else if (env === 'dev') {
       allowed = ALLOWED_HOSTS_DEV_PATTERNS.some((re) => re.test(host));
     }
