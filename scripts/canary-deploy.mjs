@@ -16,6 +16,13 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
+import {
+  evaluateErrorBudget,
+  fetchReleaseErrorCount,
+  readErrorBudgetConfig,
+} from './canary-error-budget.mjs';
+import { runSmoke } from './smoke-routes.mjs';
+
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const API_DIR = path.join(ROOT, 'packages', 'api');
 
@@ -104,7 +111,11 @@ function uploadVersion(env, message) {
       ? message
       : `canary-${env}-${new Date().toISOString()}`;
   console.log(`Uploading Worker version (${env})…`);
-  runWrangler(['versions', 'upload', '--env', env, '--message', msg, '-y'], { capture: false });
+  const args = ['versions', 'upload', '--env', env, '--message', msg, '-y'];
+  // wrangler parses `--var KEY:VALUE` (a `=` would create a key named
+  // "VERSION=…"). VERSION is the Sentry release the error budget queries.
+  if (process.env.VERSION) args.push('--var', `VERSION:${process.env.VERSION}`);
+  runWrangler(args, { capture: false });
   const versionId = latestVersionId(env);
   console.log(`Uploaded version id: ${versionId}`);
   return versionId;
@@ -218,18 +229,59 @@ async function monitorCanaryWindow(baseUrl, waitMs) {
   return consecutiveFailures;
 }
 
+/**
+ * Route-level smoke after a traffic shift. The authenticated pass runs when
+ * a production smoke account is configured.
+ */
+async function smokeOrThrow(baseUrl, label) {
+  const { ok, failures } = await runSmoke({
+    baseUrl,
+    email: process.env.PRODUCTION_SMOKE_EMAIL,
+    password: process.env.PRODUCTION_SMOKE_PASSWORD,
+    turnstileToken: process.env.PRODUCTION_SMOKE_TURNSTILE_TOKEN,
+  });
+  if (!ok) {
+    throw new Error(`Route smoke failed at ${label}: ${failures.join('; ')}`);
+  }
+}
+
+async function errorBudgetOrThrow(budget, windowStart, label) {
+  const errorCount = await fetchReleaseErrorCount({
+    org: budget.org,
+    project: budget.project,
+    release: budget.release,
+    token: budget.token,
+    start: windowStart,
+    end: new Date(),
+  });
+  const { ok, reason } = evaluateErrorBudget({ errorCount, maxErrors: budget.maxErrors });
+  console.log(`error budget at ${label}: ${reason}`);
+  if (!ok) {
+    throw new Error(`Canary aborted at ${label}: ${reason}`);
+  }
+}
+
 async function productionCanary({ baseUrl, stagingUrl, waitMin, steps }) {
   if (!baseUrl) throw new Error('--base-url is required');
+  const budgetConfig = readErrorBudgetConfig(process.env);
+  if (!budgetConfig.ok) {
+    throw new Error(
+      `Canary needs a live error signal; missing ${budgetConfig.missing.join(', ')} (issue #404)`,
+    );
+  }
+  const budget = budgetConfig.config;
   const waitMinutes = Number.isFinite(waitMin) && waitMin > 0 ? waitMin : 10;
   if (stagingUrl) {
     console.log('Pre-flight: staging /health/ready…');
     await waitHealthReady(stagingUrl);
   }
-  const versionId = uploadVersion('production', `production-canary-${Date.now()}`);
+  const versionId = uploadVersion('production', `production-canary-${budget.release}`);
   const waitMs = waitMinutes * 60 * 1000;
 
   for (const pct of steps) {
     promoteVersion('production', versionId, pct);
+    const windowStart = new Date();
+    await smokeOrThrow(baseUrl, `${pct}%`);
     if (pct < 100) {
       console.log(`Monitoring ${waitMinutes} min at ${pct}% — polling /health/ready every 60 s…`);
       const failures = await monitorCanaryWindow(baseUrl, waitMs);
@@ -239,11 +291,14 @@ async function productionCanary({ baseUrl, stagingUrl, waitMin, steps }) {
             'Run: node scripts/canary-deploy.mjs rollback --env production',
         );
       }
+      await errorBudgetOrThrow(budget, windowStart, `${pct}%`);
     }
   }
 
   await waitHealthReady(baseUrl);
-  console.log(JSON.stringify({ phase: 'production-canary', versionId, steps, baseUrl }));
+  console.log(
+    JSON.stringify({ phase: 'production-canary', versionId, release: budget.release, steps, baseUrl }),
+  );
   return versionId;
 }
 
@@ -278,14 +333,14 @@ async function main() {
       if (steps.length === 0 || steps[steps.length - 1] !== 100) {
         throw new Error('--steps must end with 100 (e.g. 5,25,100)');
       }
-  const rawWaitMin = Number(flags['wait-min'] ?? 10);
-  const waitMin = Number.isFinite(rawWaitMin) && rawWaitMin > 0 ? rawWaitMin : 10;
-  await productionCanary({
-    baseUrl: flags['base-url'],
-    stagingUrl: flags['staging-url'],
-    waitMin,
-    steps,
-  });
+      const rawWaitMin = Number(flags['wait-min'] ?? 10);
+      const waitMin = Number.isFinite(rawWaitMin) && rawWaitMin > 0 ? rawWaitMin : 10;
+      await productionCanary({
+        baseUrl: flags['base-url'],
+        stagingUrl: flags['staging-url'],
+        waitMin,
+        steps,
+      });
       break;
     }
     case 'rollback':

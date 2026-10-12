@@ -321,6 +321,14 @@ jobs:
         env:
           STAGING_API_URL: ${{ vars.STAGING_API_URL }}
           PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+          # Error-budget gate (#404): the canary release is the commit SHA.
+          VERSION: ${{ github.sha }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          CANARY_MAX_ERRORS: ${{ vars.CANARY_MAX_ERRORS }}
+          PRODUCTION_SMOKE_EMAIL: ${{ secrets.PRODUCTION_SMOKE_EMAIL }}
+          PRODUCTION_SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
         run: |
           node scripts/canary-deploy.mjs production-canary \
             --base-url "${PRODUCTION_API_URL}" \
