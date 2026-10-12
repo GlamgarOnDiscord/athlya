@@ -182,7 +182,7 @@ jobs:
           STAGING_API_URL: ${{ vars.STAGING_API_URL }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_SHA:0:7}"
+          VERSION="${GITHUB_SHA}"
           # Issue #333 — sub-workers FIRST, gateway LAST.
           #
           # The old order (gateway → sub-workers) causes 100% failure on routes
@@ -200,14 +200,14 @@ jobs:
           #   5. Main gateway — promoted last; by this point all sub-workers
           #      already expose the new contract so 0% of requests see a
           #      version-skew window.
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env staging --var "VERSION=${VERSION}"
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env staging --var "VERSION=${VERSION}"
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env staging --var "VERSION=${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env staging --var "VERSION:${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env staging --var "VERSION:${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env staging --var "VERSION:${VERSION}"
           # Health-check via the old gateway + new sub-workers before promoting
           # the gateway. A failure here rolls back all sub-workers.
           bash scripts/wait-health-ready.sh "${STAGING_API_URL}"
           # Main gateway (scheduled + queue handlers, /health, /openapi.json)
-          pnpm --filter @athlya/api exec wrangler deploy --env staging --var "VERSION=${VERSION}" --outdir dist
+          pnpm --filter @athlya/api exec wrangler deploy --env staging --var "VERSION:${VERSION}" --outdir dist
           bash scripts/wait-health-ready.sh "${STAGING_API_URL}"
 
       # Smoke each route group after staging deploy — verifies no sub-worker
@@ -227,19 +227,19 @@ jobs:
           PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_SHA:0:7}"
+          VERSION="${GITHUB_SHA}"
           # Issue #333 — sub-workers FIRST, gateway LAST (same rationale as
           # staging above). Sub-workers are backwards-compatible per the
           # expand/contract pattern (CLAUDE.md); the old gateway routes to
           # them safely until it is replaced.
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env production --var "VERSION=${VERSION}"
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production --var "VERSION=${VERSION}"
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production --var "VERSION=${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env production --var "VERSION:${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production --var "VERSION:${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production --var "VERSION:${VERSION}"
           # Pre-gateway health check — old gateway + new sub-workers must be
           # healthy before the gateway is promoted.
           bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}"
           # Main gateway promoted last (issue #333).
-          pnpm --filter @athlya/api exec wrangler deploy --env production --var "VERSION=${VERSION}" --outdir dist
+          pnpm --filter @athlya/api exec wrangler deploy --env production --var "VERSION:${VERSION}" --outdir dist
           bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}"
 
       # Smoke all route groups after production deploy — issue #301.
@@ -253,12 +253,12 @@ jobs:
 
       # Issue #138 — upload source maps to Sentry + record the release so
       # prod stack traces de-minify to file:line. The release name is the
-      # 7-char git sha, identical to the `VERSION` var tagged on every
+      # full git sha, identical to the `VERSION` var tagged on every
       # captured event (see packages/api/src/sentry.ts → event.release),
       # so Sentry matches the uploaded map to the incoming event.
       #
-      # Soft-gated on SENTRY_AUTH_TOKEN: skips cleanly when the secret is
-      # absent (e.g. fork PRs) rather than failing the deploy.
+      # Mandatory for production-deploy (issue #415): a production release
+      # without source maps cannot be diagnosed. Staging only warns.
       - name: Sentry release + source maps
         if: inputs.phase == 'staging-deploy' || inputs.phase == 'production-deploy'
         env:
@@ -268,14 +268,18 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${SENTRY_AUTH_TOKEN:-}" ] || [ -z "${SENTRY_ORG:-}" ] || [ -z "${SENTRY_PROJECT:-}" ]; then
-            echo "::warning::SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT not configured — skipping source map upload (#138)"
+            if [ "${{ inputs.phase }}" = "production-deploy" ]; then
+              echo "::error::SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT are required for production source maps (#415)"
+              exit 1
+            fi
+            echo "::warning::SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT not configured — skipping staging source map upload (#138)"
             exit 0
           fi
           if [ ! -d dist ]; then
             echo "::error::dist/ not produced by wrangler deploy --outdir dist"
             exit 1
           fi
-          RELEASE="${GITHUB_SHA:0:7}"
+          RELEASE="${GITHUB_SHA}"
           ENV_NAME="${{ inputs.phase == 'production-deploy' && 'production' || 'staging' }}"
           # Pinned CLI (devDependency @sentry/cli, exact version) invoked
           # through pnpm so CI runs a lockfile-reviewed artifact rather

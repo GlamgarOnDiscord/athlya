@@ -110,7 +110,7 @@ jobs:
           VERSION="${GITHUB_SHA:0:7}"
           pnpm --filter @athlya/web exec wrangler deploy \
             --env staging \
-            --var "VERSION=${VERSION}"
+            --var "VERSION:${VERSION}"
 
       - name: Deploy @athlya/studio (staging)
         if: inputs.phase == 'staging-deploy' && (inputs.apps == 'all' || contains(inputs.apps, 'studio'))
@@ -119,7 +119,7 @@ jobs:
           VERSION="${GITHUB_SHA:0:7}"
           pnpm --filter @athlya/studio exec wrangler deploy \
             --env staging \
-            --var "VERSION=${VERSION}"
+            --var "VERSION:${VERSION}"
 
       # Smoke E2E — staging ————————————————————————————————————————————————
       - name: Install Chromium for Playwright
@@ -154,7 +154,7 @@ jobs:
           VERSION="${GITHUB_SHA:0:7}"
           pnpm --filter @athlya/web exec wrangler deploy \
             --env production \
-            --var "VERSION=${VERSION}"
+            --var "VERSION:${VERSION}"
           # Readiness gate — wait for the prod URL to serve 200.
           bash scripts/wait-health-ready.sh "${PRODUCTION_WEB_URL}"
 
@@ -171,7 +171,7 @@ jobs:
           VERSION="${GITHUB_SHA:0:7}"
           pnpm --filter @athlya/studio exec wrangler deploy \
             --env production \
-            --var "VERSION=${VERSION}"
+            --var "VERSION:${VERSION}"
           bash scripts/wait-health-ready.sh "${PRODUCTION_STUDIO_URL}"
 
       # Sentry release + source maps (production only) ————————————————————

@@ -2,20 +2,20 @@
 
 ## IaC coverage
 
-| Resource              | Managed by Terraform     | Notes                                                                        |
-| --------------------- | ------------------------ | ---------------------------------------------------------------------------- |
-| Cloudflare Queues     | Yes (`queues.tf`)        | All envs                                                                     |
-| Cloudflare R2 buckets | Yes (`r2.tf`)            | All envs                                                                     |
-| Sentry metric alerts  | Yes (`sentry-alerts.tf`) | 5 alerts provisioned (error rate, p99, queue lag, outbox backlog, readiness) |
-| WAF custom rules      | Yes (`waf.tf`)           | Scanner block + Bot Fight Mode                                               |
-| Cloudflare Workers    | No — wrangler            | Managed by `deploy-production.yml`                                           |
-| CF Workers routes     | No — wrangler            | Managed by wrangler.toml `[routes]`                                          |
-| CF Access rules       | No — dashboard           | Covered by `docs/runbooks/cf-access-admin.md`                                |
-| CF Hyperdrive         | No — dashboard           | Covered by `docs/runbooks/hyperdrive-provision.md`                           |
-| Neon (DB)             | No — Neon console        | Branching handled by preview/deploy workflows                                |
-| Upstash Redis         | No — Upstash console     | Manual provisioning; keys stored as GH secrets                               |
-| Axiom alerts          | No — Axiom dashboard     | Covered by `docs/runbooks/axiom-alerts-provision.md`                         |
-| DNS records           | No — CF dashboard        | Pending domain provisioning (#339)                                           |
+| Resource              | Managed by Terraform     | Notes                                                                                 |
+| --------------------- | ------------------------ | ------------------------------------------------------------------------------------- |
+| Cloudflare Queues     | Yes (`queues.tf`)        | All envs                                                                              |
+| Cloudflare R2 buckets | Yes (`r2.tf`)            | All envs                                                                              |
+| Sentry metric alerts  | Yes (`sentry-alerts.tf`) | Error-volume alert on emitted error events; latency/queue/outbox stay in Axiom (#415) |
+| WAF custom rules      | Yes (`waf.tf`)           | Scanner block + Bot Fight Mode                                                        |
+| Cloudflare Workers    | No — wrangler            | Managed by `deploy-production.yml`                                                    |
+| CF Workers routes     | No — wrangler            | Managed by wrangler.toml `[routes]`                                                   |
+| CF Access rules       | No — dashboard           | Covered by `docs/runbooks/cf-access-admin.md`                                         |
+| CF Hyperdrive         | No — dashboard           | Covered by `docs/runbooks/hyperdrive-provision.md`                                    |
+| Neon (DB)             | No — Neon console        | Branching handled by preview/deploy workflows                                         |
+| Upstash Redis         | No — Upstash console     | Manual provisioning; keys stored as GH secrets                                        |
+| Axiom alerts          | No — Axiom dashboard     | Covered by `docs/runbooks/axiom-alerts-provision.md`                                  |
+| DNS records           | No — CF dashboard        | Pending domain provisioning (#339)                                                    |
 
 Intentionally manual resources are noted above. Drift in those is detected
 via the corresponding runbook, not Terraform.

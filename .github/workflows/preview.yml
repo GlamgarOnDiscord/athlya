@@ -201,8 +201,8 @@ jobs:
             --config wrangler.preview-pr.toml \
             --env preview \
             --name "${PREVIEW_WORKER_NAME}" \
-            --var "VERSION=${VERSION}" \
-            --var "REDIS_KEY_PREFIX=pr-${PR_N}:" \
+            --var "VERSION:${VERSION}" \
+            --var "REDIS_KEY_PREFIX:pr-${PR_N}:" \
             --message "PR #${PR_N} — ${GITHUB_SHA:0:7}" \
             2>&1)
           echo "$DEPLOY_OUT"
