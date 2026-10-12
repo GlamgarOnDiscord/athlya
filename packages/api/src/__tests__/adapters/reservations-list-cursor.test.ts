@@ -101,7 +101,9 @@ describe('listMyReservations cursor pagination (issue #334)', () => {
     const result = await listMyReservations(USER_ID, { limit: 1 }, { db: db as never });
 
     expect(result.nextCursor).not.toBeNull();
-    const decoded = JSON.parse(Buffer.from(result.nextCursor!, 'base64url').toString('utf8')) as {
+    expect(result.nextCursor).toMatch(/^[A-Za-z0-9_-]+$/);
+    const b64 = result.nextCursor!.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = JSON.parse(atob(b64 + '==='.slice((b64.length + 3) % 4))) as {
       startsAt: string;
       id: string;
     };

@@ -82,13 +82,27 @@ interface ReservationCursor {
   readonly id: string;
 }
 
+// Web-standard base64url (UTF-8 safe) so the cursor codec does not depend
+// on the `nodejs_compat` Buffer polyfill.
+function toBase64Url(text: string): string {
+  let binary = '';
+  for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(raw: string): string {
+  const padded = raw.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(padded + '==='.slice((padded.length + 3) % 4));
+  return new TextDecoder().decode(Uint8Array.from(binary, (ch) => ch.charCodeAt(0)));
+}
+
 function encodeCursor(c: ReservationCursor): string {
-  return Buffer.from(JSON.stringify(c), 'utf8').toString('base64url');
+  return toBase64Url(JSON.stringify(c));
 }
 
 function decodeCursor(raw: string): ReservationCursor | null {
   try {
-    const parsed: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+    const parsed: unknown = JSON.parse(fromBase64Url(raw));
     if (
       parsed !== null &&
       typeof parsed === 'object' &&
