@@ -6,6 +6,10 @@ updates:
       interval: weekly
     open-pull-requests-limit: 10
     versioning-strategy: increase
+    # pnpm 11 rejects packages published < 24h ago (minimumReleaseAge), so
+    # a fresher bump would only produce a red `--frozen-lockfile` install.
+    cooldown:
+      default-days: 1
     labels:
       - dependencies
       - npm
