@@ -11,38 +11,21 @@
  * traffic — those are served by separate Workers.
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
-
-import { buildBaseApp } from '../worker.js';
-import { buildDefaultDeps, buildLazyDomainDeps } from '../routes/index.js';
+import { buildBaseApp } from '../base-app.js';
+import { installDomainScope } from '../domain-scope.js';
 import { buildAuditRouter } from '../routes/audit.js';
 import { buildBillingRouter } from '../routes/billing.js';
 
-import type { AthlyaBindings } from '../types.js';
-
-const app = buildBaseApp();
-
-let latestEnv: AthlyaBindings | undefined;
-
-// Per-request cf via AsyncLocalStorage — prevents continent routing cross-
-// contamination between concurrent requests in the same isolate (issue #303).
-const cfStorage = new AsyncLocalStorage<{ readonly continent?: string } | undefined>();
-
-app.use('/v1/*', async (c, next) => {
-  latestEnv = c.env;
-  const cf = (c.req.raw.cf as { continent?: string } | undefined) ?? undefined;
-  await cfStorage.run(cf, () => next());
+const app = buildBaseApp({
+  // Mounted through the base app hook so the routes sit at the same point
+  // of the chain as in the monolith, behind the shared /v1/* scope (env
+  // capture, BYPASSRLS guard, per-request cf).
+  mountDomain: (base) => {
+    const deps = installDomainScope(base, 'billing worker');
+    base.route('/v1/billing', buildBillingRouter(deps.billing));
+    base.route('/v1/audit', buildAuditRouter(deps.audit));
+  },
 });
-
-const lazyDeps = buildLazyDomainDeps(() => {
-  if (latestEnv === undefined) {
-    throw new Error('billing worker: env not yet captured — /v1/* middleware must run first');
-  }
-  return buildDefaultDeps(latestEnv, cfStorage.getStore());
-});
-
-app.route('/v1/billing', buildBillingRouter(lazyDeps.billing));
-app.route('/v1/audit', buildAuditRouter(lazyDeps.audit));
 
 export { app };
 

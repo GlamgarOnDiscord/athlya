@@ -7,8 +7,8 @@
  *   • /v1/members/*      — profile, consents, export
  *   • /v1/studios/*      — studio read/update
  *
- * /v1/checkins/* is not mounted — the check-in adapter is not yet
- * implemented. Routes are added once the adapter ships (issue #302).
+ * /v1/checkins/* is not routed to this Worker: the check-in adapter is
+ * not implemented yet (issue #302), so its wrangler route was removed.
  *
  * Owns the ClassCapacityDO Durable Object (real-time class capacity via
  * WebSocket). The `[[migrations]]` tag in `wrangler.reservations.toml`
@@ -19,49 +19,31 @@
  * auth or billing latency.
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
-
-import { buildBaseApp } from '../worker.js';
-import { buildDefaultDeps, buildLazyDomainDeps } from '../routes/index.js';
+import { buildBaseApp } from '../base-app.js';
+import { installDomainScope } from '../domain-scope.js';
 import { buildCapacityRouter } from '../routes/capacity.js';
 import { buildClassesRouter } from '../routes/classes.js';
 import { buildMembersRouter } from '../routes/members.js';
 import { buildReservationsRouter } from '../routes/reservations.js';
 import { buildStudiosRouter } from '../routes/studios.js';
 
-import type { AthlyaBindings } from '../types.js';
-
 export { ClassCapacityDO } from '../durable-objects/class-capacity.js';
 
-const app = buildBaseApp();
-
-let latestEnv: AthlyaBindings | undefined;
-
-// Per-request cf via AsyncLocalStorage — prevents continent routing cross-
-// contamination between concurrent requests in the same isolate (issue #303).
-const cfStorage = new AsyncLocalStorage<{ readonly continent?: string } | undefined>();
-
-app.use('/v1/*', async (c, next) => {
-  latestEnv = c.env;
-  const cf = (c.req.raw.cf as { continent?: string } | undefined) ?? undefined;
-  await cfStorage.run(cf, () => next());
+const app = buildBaseApp({
+  // Mounted through the base app hook so the routes sit at the same point
+  // of the chain as in the monolith, behind the shared /v1/* scope (env
+  // capture, BYPASSRLS guard, per-request cf).
+  mountDomain: (base) => {
+    const deps = installDomainScope(base, 'reservations worker');
+    // Capacity WebSocket mounts first: /v1/classes/:classId/capacity/ws
+    // must match before the JWT-guarded classes router shadows it.
+    base.route('/v1/classes', buildCapacityRouter());
+    base.route('/v1/classes', buildClassesRouter(deps.classes));
+    base.route('/v1/reservations', buildReservationsRouter(deps.reservations));
+    base.route('/v1/members', buildMembersRouter(deps.members));
+    base.route('/v1/studios', buildStudiosRouter(deps.studios));
+  },
 });
-
-const lazyDeps = buildLazyDomainDeps(() => {
-  if (latestEnv === undefined) {
-    throw new Error('reservations worker: env not yet captured — /v1/* middleware must run first');
-  }
-  return buildDefaultDeps(latestEnv, cfStorage.getStore());
-});
-
-// Capacity WebSocket mounts first: /v1/classes/:classId/capacity/ws must
-// be matched before the authenticated classes router so the public WS
-// upgrade path is not shadowed by the JWT guard on the class CRUD routes.
-app.route('/v1/classes', buildCapacityRouter());
-app.route('/v1/classes', buildClassesRouter(lazyDeps.classes));
-app.route('/v1/reservations', buildReservationsRouter(lazyDeps.reservations));
-app.route('/v1/members', buildMembersRouter(lazyDeps.members));
-app.route('/v1/studios', buildStudiosRouter(lazyDeps.studios));
 
 export { app };
 

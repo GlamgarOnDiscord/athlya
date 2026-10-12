@@ -3,9 +3,7 @@
 #
 # Routes:
 #   staging:    staging.api.athlya.app/v1/auth/*
-#               staging.api.athlya.app/v1/sessions/*
 #   production: api.athlya.app/v1/auth/*
-#               api.athlya.app/v1/sessions/*
 #
 # More-specific patterns take priority over the catch-all /*  on the
 # main athlya-api Worker. Cloudflare evaluates routes from most- to
@@ -52,10 +50,6 @@ mode = "smart"
 pattern = "staging.api.athlya.app/v1/auth/*"
 zone_name = "athlya.app"
 
-[[env.staging.routes]]
-pattern = "staging.api.athlya.app/v1/sessions/*"
-zone_name = "athlya.app"
-
 # ============================================================================
 # Production
 # ============================================================================
@@ -77,10 +71,6 @@ mode = "smart"
 
 [[env.production.routes]]
 pattern = "api.athlya.app/v1/auth/*"
-zone_name = "athlya.app"
-
-[[env.production.routes]]
-pattern = "api.athlya.app/v1/sessions/*"
 zone_name = "athlya.app"
 
 # ============================================================================
