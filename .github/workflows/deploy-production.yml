@@ -18,6 +18,9 @@ name: Deploy API
 #   staging    — no approval
 #   production — required reviewers before prod-canary / rollback
 #
+# Production phases (production-deploy, production-canary) refuse to run
+# unless the "Staging gate" check succeeded on the same commit (#343).
+#
 # IMPORTANT — production deploy gate (issue #308):
 # Before running `production-canary`, trigger the load-test workflow with
 # target=production. It runs a 30-min soak (50 VUs) + spike (200 VUs burst)
@@ -56,6 +59,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment: ${{ (inputs.phase == 'staging-deploy' || inputs.phase == 'staging-smoke') && 'staging' || 'production' }}
+    permissions:
+      contents: read
+      checks: read
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -75,6 +81,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Issue #343 — production phases only ship a commit whose staging gate
+      # (deploy + authenticated smoke + migration check + k6) succeeded.
+      - name: Require green staging gate for this commit
+        if: inputs.phase == 'production-deploy' || inputs.phase == 'production-canary'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/require-check-success.mjs --repo "${GITHUB_REPOSITORY}" --sha "${GITHUB_SHA}" --check "Staging gate"
 
       - name: Assert Cloudflare credentials
         run: |
