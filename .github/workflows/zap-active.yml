@@ -18,9 +18,9 @@ name: OWASP ZAP Active Scan
 #
 # Gating
 # -------
-# The job is skipped cleanly when ZAP_ACTIVE_TARGET_URL is not set.
-# Once a dedicated scanning env exists, populate the variable and the
-# scan activates without any workflow change.
+# Scheduled and manual runs are always trusted, so a missing
+# ZAP_ACTIVE_TARGET_URL FAILS the job instead of reporting a green run
+# that scanned nothing (issue #340).
 #
 # Finding lifecycle
 # -----------------
@@ -28,13 +28,6 @@ name: OWASP ZAP Active Scan
 # HIGH/MEDIUM finding. Close or label issues as they are triaged.
 # WARN-level findings are captured in the uploaded report but do not
 # open issues (noise). The job does NOT fail the branch build.
-#
-# SHA pinning
-# -----------
-# Pin the action SHA before enabling in production. Use:
-#   gh api repos/zaproxy/action-full-scan/git/refs/tags/v0.10.0 \
-#     --jq '.object.sha'
-# and replace the @v0.10.0 tag below with @<sha> # v0.10.0
 # =====================================================================
 
 on:
@@ -76,10 +69,9 @@ jobs:
           TARGET="${INPUT_TARGET:-$VAR_TARGET}"
 
           if [ -z "$TARGET" ]; then
-            echo "::notice title=ZAP active scan skipped::ZAP_ACTIVE_TARGET_URL is not set. Provision a dedicated scanning environment and set the variable to enable weekly active scans."
-            echo "skipped=true" >> "$GITHUB_OUTPUT"
-            echo "target=" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "::error title=ZAP active scan not configured::vars.ZAP_ACTIVE_TARGET_URL is empty, so no active scan ran. Provision the dedicated synthetic-data scanning environment and set the variable (docs/operations/zap-activation.md)."
+            echo "### ZAP active scan: FAILED — no target configured (vars.ZAP_ACTIVE_TARGET_URL)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
 
           echo "ZAP active scan target: $TARGET"
