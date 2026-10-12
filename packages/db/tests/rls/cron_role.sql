@@ -74,7 +74,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO export_jobs (id, user_id, status, requested_at)
 VALUES
     (
-        'ffffffff-ff01-4fff-8fff-ffffffffffff01',
+        'ffffffff-ff01-4fff-8fff-ffffffffff01',
         'dddddddd-dd01-4ddd-8ddd-dddddddddd01',
         'completed',
         NOW() - INTERVAL '8 days'
@@ -150,7 +150,7 @@ SELECT is(
 -- ------------------------------------------------------------------ --
 SELECT is(
     (SELECT COUNT(*)::int FROM export_jobs
-     WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffffff01'),
+     WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffff01'),
     1,
     'export_jobs_cron_select: athlya_cron can read export_jobs cross-tenant'
 );
@@ -158,10 +158,10 @@ SELECT is(
 -- ------------------------------------------------------------------ --
 -- 7. athlya_cron can DELETE export_jobs (policy: export_jobs_cron_delete) --
 -- ------------------------------------------------------------------ --
-DELETE FROM export_jobs WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffffff01';
+DELETE FROM export_jobs WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffff01';
 
 SELECT is(
-    (SELECT COUNT(*)::int FROM export_jobs WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffffff01'),
+    (SELECT COUNT(*)::int FROM export_jobs WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffff01'),
     0,
     'export_jobs_cron_delete: athlya_cron can purge completed export_jobs'
 );
