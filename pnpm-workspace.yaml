@@ -16,3 +16,10 @@ overrides:
   'js-yaml@<4.2.0': '^4.2.0'
   '@babel/core@<7.29.6': '^7.29.6'
   '@sentry/cli>undici': '6.27.0'
+
+# Next.js 16.4 loads `.next/server/preview-props.json` unconditionally; the
+# OpenNext manifest inliner only globs `*-manifest`, `required-server-files`
+# and `prefetch-hints`, so every route 500s in the Worker (issue #422). Same
+# class of fix as upstream 1.17.3 (prefetch-hints). Drop once released upstream.
+patchedDependencies:
+  '@opennextjs/cloudflare@1.20.10': patches/@opennextjs__cloudflare@1.20.10.patch

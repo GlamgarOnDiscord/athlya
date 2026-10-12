@@ -16,6 +16,8 @@ const config = [
     ignores: [
       '**/node_modules/**',
       '**/.next/**',
+      '**/.open-next/**',
+      'open-next.config.ts',
       '**/dist/**',
       '**/coverage/**',
       '**/.turbo/**',
