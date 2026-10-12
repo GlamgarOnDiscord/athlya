@@ -21,6 +21,7 @@
     "clean": "turbo run clean && rimraf node_modules .turbo",
     "seed:all": "node packages/db/scripts/migrate.mjs && node packages/db/scripts/seed-dev.mjs && node packages/db/scripts/seed-classes.mjs",
     "check:dead": "knip --exclude duplicates",
+    "verify:role-contract": "node scripts/verify-role-contract.mjs",
     "check:overrides": "node scripts/check-overrides.mjs",
     "check:legal": "node scripts/check-legal-placeholders.mjs",
     "check:labels": "node scripts/check-labels.mjs",
