@@ -44,7 +44,7 @@ on:
         required: false
         type: string
       wait_minutes:
-        description: Minutes between canary steps, 1-30 (production-canary only)
+        description: Bake minutes per canary step, 1-20 (production-canary only)
         required: false
         default: '10'
         type: string
@@ -204,14 +204,14 @@ jobs:
           #   5. Main gateway — promoted last; by this point all sub-workers
           #      already expose the new contract so 0% of requests see a
           #      version-skew window.
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env staging --var "VERSION=${VERSION}"
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env staging --var "VERSION=${VERSION}"
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env staging --var "VERSION=${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env staging --var "VERSION:${VERSION}" --outdir dist/auth
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env staging --var "VERSION:${VERSION}" --outdir dist/reservations
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env staging --var "VERSION:${VERSION}" --outdir dist/billing
           # Health-check via the old gateway + new sub-workers before promoting
           # the gateway. A failure here rolls back all sub-workers.
           bash scripts/wait-health-ready.sh "${STAGING_API_URL}"
           # Main gateway (scheduled + queue handlers, /health, /openapi.json)
-          pnpm --filter @athlya/api exec wrangler deploy --env staging --var "VERSION=${VERSION}" --outdir dist
+          pnpm --filter @athlya/api exec wrangler deploy --env staging --var "VERSION:${VERSION}" --outdir dist
           bash scripts/wait-health-ready.sh "${STAGING_API_URL}"
 
       # Smoke each route group after staging deploy — verifies no sub-worker
@@ -236,14 +236,14 @@ jobs:
           # staging above). Sub-workers are backwards-compatible per the
           # expand/contract pattern (CLAUDE.md); the old gateway routes to
           # them safely until it is replaced.
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env production --var "VERSION=${VERSION}"
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production --var "VERSION=${VERSION}"
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production --var "VERSION=${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env production --var "VERSION:${VERSION}" --outdir dist/auth
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production --var "VERSION:${VERSION}" --outdir dist/reservations
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production --var "VERSION:${VERSION}" --outdir dist/billing
           # Pre-gateway health check — old gateway + new sub-workers must be
           # healthy before the gateway is promoted.
           bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}"
           # Main gateway promoted last (issue #333).
-          pnpm --filter @athlya/api exec wrangler deploy --env production --var "VERSION=${VERSION}" --outdir dist
+          pnpm --filter @athlya/api exec wrangler deploy --env production --var "VERSION:${VERSION}" --outdir dist
           bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}"
 
       # Smoke all route groups after production deploy — issue #301.
@@ -259,7 +259,11 @@ jobs:
       # prod stack traces de-minify to file:line. The release name is the
       # 7-char git sha, identical to the `VERSION` var tagged on every
       # captured event (see packages/api/src/sentry.ts → event.release),
-      # so Sentry matches the uploaded map to the incoming event.
+      # so Sentry matches the uploaded map to the incoming event. The var
+      # must be passed as `--var VERSION:<sha7>`: wrangler splits on `:`.
+      # The gateway bundles into packages/api/dist and each sub-worker into
+      # packages/api/dist/<worker>; inject + upload walk the tree, so every
+      # Worker sharing the release gets its maps.
       #
       # Soft-gated on SENTRY_AUTH_TOKEN: skips cleanly when the secret is
       # absent (e.g. fork PRs) rather than failing the deploy.
@@ -276,8 +280,10 @@ jobs:
             echo "::warning::SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT not configured — skipping source map upload (#138)"
             exit 0
           fi
-          if [ ! -d dist ]; then
-            echo "::error::dist/ not produced by wrangler deploy --outdir dist"
+          # `pnpm --filter @athlya/api exec` runs in packages/api, so that is
+          # where wrangler wrote --outdir dist.
+          if [ ! -d packages/api/dist ]; then
+            echo "::error::packages/api/dist not produced by wrangler deploy --outdir dist"
             exit 1
           fi
           RELEASE="${GITHUB_SHA:0:7}"
@@ -326,20 +332,20 @@ jobs:
         env:
           STAGING_API_URL: ${{ vars.STAGING_API_URL }}
           PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
-          # Error-budget gate (#404): the canary release is the commit SHA.
-          VERSION: ${{ github.sha }}
+          # Error-budget gate (#404): the canary release is the 7-char commit
+          # SHA, the same release direct deploys tag and upload source maps under.
+          RELEASE_SHA: ${{ github.sha }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
           CANARY_MAX_ERRORS: ${{ vars.CANARY_MAX_ERRORS }}
-          PRODUCTION_SMOKE_EMAIL: ${{ secrets.PRODUCTION_SMOKE_EMAIL }}
-          PRODUCTION_SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
           WAIT_MINUTES: ${{ inputs.wait_minutes }}
         run: |
           set -euo pipefail
-          # Two bake windows (5% and 25%) must fit in the 90-minute job.
-          if ! [[ "${WAIT_MINUTES}" =~ ^([1-9]|[12][0-9]|30)$ ]]; then
-            echo "::error::wait_minutes must be an integer between 1 and 30"
+          export VERSION="${RELEASE_SHA:0:7}"
+          # Three bake windows (5%, 25% and 100%) must fit in the 90-minute job.
+          if ! [[ "${WAIT_MINUTES}" =~ ^([1-9]|1[0-9]|20)$ ]]; then
+            echo "::error::wait_minutes must be an integer between 1 and 20"
             exit 1
           fi
           node scripts/canary-deploy.mjs production-canary \

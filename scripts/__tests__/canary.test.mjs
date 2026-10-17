@@ -1,12 +1,24 @@
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   evaluateErrorBudget,
   fetchReleaseErrorCount,
   readErrorBudgetConfig,
 } from '../canary-error-budget.mjs';
-import { findUncovered, parsePushPaths, runtimeClosure } from '../check-canary-paths.mjs';
+import {
+  findUncovered,
+  localImports,
+  parsePushPaths,
+  runtimeClosure,
+  scriptClosure,
+  workflowScripts,
+} from '../check-canary-paths.mjs';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 describe('evaluateErrorBudget', () => {
   it('passes within the budget and fails above it', () => {
@@ -40,8 +52,12 @@ describe('fetchReleaseErrorCount', () => {
     });
     assert.equal(count, 3);
     assert.equal(requested.url.pathname, '/api/0/organizations/athlya/events/');
-    assert.match(requested.url.searchParams.get('query'), /release:"abc123"/);
+    const query = requested.url.searchParams.get('query');
+    assert.match(query, /release:"abc123"/);
+    assert.match(query, /(^|\s)project:api(\s|$)/);
+    assert.match(query, /event\.type:error/);
     assert.equal(requested.url.searchParams.get('start'), '2026-10-12T10:00:00.000Z');
+    assert.equal(requested.url.searchParams.get('end'), '2026-10-12T10:10:00.000Z');
     assert.equal(requested.auth, 'Bearer tok');
   });
 
@@ -71,15 +87,45 @@ describe('readErrorBudgetConfig', () => {
     ]);
   });
 
+  const complete = {
+    SENTRY_ORG: 'o',
+    SENTRY_PROJECT: 'p',
+    SENTRY_AUTH_TOKEN: 't',
+    VERSION: 'v',
+  };
+
   it('defaults the budget to 5 errors', () => {
-    const result = readErrorBudgetConfig({
-      SENTRY_ORG: 'o',
-      SENTRY_PROJECT: 'p',
-      SENTRY_AUTH_TOKEN: 't',
-      VERSION: 'v',
-    });
+    const result = readErrorBudgetConfig(complete);
     assert.equal(result.ok, true);
     assert.equal(result.config.maxErrors, 5);
+  });
+
+  it('treats an empty CANARY_MAX_ERRORS (unset repository variable) as the default', () => {
+    for (const value of ['', '  ']) {
+      const result = readErrorBudgetConfig({ ...complete, CANARY_MAX_ERRORS: value });
+      assert.equal(result.ok, true);
+      assert.equal(result.config.maxErrors, 5);
+    }
+  });
+
+  it('accepts a non-negative integer budget, zero included', () => {
+    assert.equal(
+      readErrorBudgetConfig({ ...complete, CANARY_MAX_ERRORS: '0' }).config.maxErrors,
+      0,
+    );
+    assert.equal(
+      readErrorBudgetConfig({ ...complete, CANARY_MAX_ERRORS: '12' }).config.maxErrors,
+      12,
+    );
+  });
+
+  it('fails validation on a malformed budget instead of falling back', () => {
+    for (const value of ['abc', '-1', '1.5', '5e2', 'Infinity', '9'.repeat(400)]) {
+      const result = readErrorBudgetConfig({ ...complete, CANARY_MAX_ERRORS: value });
+      assert.equal(result.ok, false, value);
+      assert.deepEqual(result.missing, []);
+      assert.match(result.invalid[0], /CANARY_MAX_ERRORS/);
+    }
   });
 });
 
@@ -97,6 +143,83 @@ describe('check-canary-paths', () => {
       'packages/db',
       'packages/shared',
     ]);
+  });
+
+  it('fails closed on a package missing from the workspace', () => {
+    assert.throws(
+      () =>
+        runtimeClosure(
+          { '@athlya/api': { dir: 'packages/api', dependencies: ['@athlya/ghost'] } },
+          '@athlya/api',
+        ),
+      /@athlya\/ghost not found/,
+    );
+    assert.throws(() => runtimeClosure({}, '@athlya/api'), /@athlya\/api not found/);
+  });
+
+  it('follows build-config devDependencies but not lint-only ones', () => {
+    assert.deepEqual(
+      runtimeClosure(
+        {
+          '@athlya/api': {
+            dir: 'packages/api',
+            dependencies: [],
+            devDependencies: ['@athlya/tsconfig', '@athlya/eslint-config'],
+          },
+          '@athlya/tsconfig': { dir: 'packages/tsconfig', dependencies: [] },
+          '@athlya/eslint-config': { dir: 'packages/eslint-config', dependencies: [] },
+        },
+        '@athlya/api',
+      ),
+      ['packages/api', 'packages/tsconfig'],
+    );
+  });
+
+  it('collects the scripts a workflow runs and their local imports', () => {
+    const yaml = [
+      '# header mentioning scripts/not-run.mjs',
+      '      - run: node scripts/a.mjs --flag',
+      '        run: bash scripts/wait.sh "$URL"',
+    ].join('\n');
+    assert.deepEqual(workflowScripts(yaml), ['scripts/a.mjs', 'scripts/wait.sh']);
+    assert.deepEqual(
+      localImports(
+        [
+          "import { x } from './b.mjs';",
+          "import fs from 'node:fs';",
+          "import './side-effect.mjs';",
+          "const lazy = await import('../lib/lazy.mjs');",
+          "export { y } from './b.mjs';",
+          "await import('node:path');",
+        ].join('\n'),
+      ),
+      ['./b.mjs', './side-effect.mjs', '../lib/lazy.mjs'],
+    );
+    const files = {
+      'scripts/a.mjs': "import { b } from './b.mjs';\nimport './setup.mjs';",
+      'scripts/b.mjs': "export { c } from './lib/c.mjs';\nawait import('./lib/d.mjs');",
+      'scripts/setup.mjs': '',
+      'scripts/lib/c.mjs': '',
+      'scripts/lib/d.mjs': '',
+    };
+    assert.deepEqual(scriptClosure(['scripts/a.mjs', 'scripts/wait.sh'], (f) => files[f]), [
+      'scripts/a.mjs',
+      'scripts/b.mjs',
+      'scripts/lib/c.mjs',
+      'scripts/lib/d.mjs',
+      'scripts/setup.mjs',
+      'scripts/wait.sh',
+    ]);
+  });
+
+  it('treats nested files as files, not directories', () => {
+    assert.deepEqual(
+      findUncovered(
+        ['scripts/a.mjs', 'packages/api/**'],
+        ['scripts/a.mjs', 'scripts/b.mjs', 'packages/api'],
+      ),
+      ['scripts/b.mjs'],
+    );
   });
 
   it('parses push paths and reports uncovered inputs', () => {
@@ -118,5 +241,24 @@ describe('check-canary-paths', () => {
       findUncovered(triggers, ['packages/api', 'packages/db', 'packages/shared', 'pnpm-lock.yaml']),
       ['packages/shared'],
     );
+  });
+});
+
+describe('workflow wrangler --var syntax', () => {
+  // wrangler splits `--var` on ':' — `--var KEY=VALUE` silently creates a
+  // variable literally named "KEY=VALUE" and leaves KEY unchanged.
+  it('never passes --var KEY=VALUE', () => {
+    const dir = path.join(ROOT, '.github', 'workflows');
+    const offenders = [];
+    for (const file of readdirSync(dir).filter((name) => /\.ya?ml$/.test(name))) {
+      readFileSync(path.join(dir, file), 'utf8')
+        .split('\n')
+        .forEach((line, index) => {
+          if (/--var[\s=]+["']?[A-Za-z_][A-Za-z0-9_]*=/.test(line)) {
+            offenders.push(`${file}:${index + 1}`);
+          }
+        });
+    }
+    assert.deepEqual(offenders, []);
   });
 });
