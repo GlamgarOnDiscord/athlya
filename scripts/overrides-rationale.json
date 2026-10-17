@@ -41,12 +41,12 @@
       "remove_when": "babel ecosystem aligns on >=7.29.6 in its own deps"
     },
     "@sentry/cli>undici": {
-      "pinned": "6.27.0",
-      "reason": "undici header smuggling / SSRF",
-      "cve": "CVE-2025-22150",
-      "ghsa": "GHSA-3m2p-5qmv-gg22",
-      "added": "2026-01-01",
-      "remove_when": "@sentry/cli ships with undici >=6.27.0"
+      "pinned": "6.29.1",
+      "reason": "undici WebSocket DoS, retry-interceptor response splitting/desync, CRLF and cookie attribute injection",
+      "cve": null,
+      "ghsa": "GHSA-rfgv-xxqx-mfg5, GHSA-3wwx-pv8p-q78v, GHSA-8xcm-r25x-g524, GHSA-m8rv-5g2x-5cg5, GHSA-r53p-7pc4-xj5r, GHSA-v3r7-h72x-cjcm (previously GHSA-3m2p-5qmv-gg22)",
+      "added": "2026-10-17",
+      "remove_when": "@sentry/cli ships with undici >=6.28.1"
     },
     "glob@>=10.2.0 <10.5.0": {
       "pinned": "^10.5.0",

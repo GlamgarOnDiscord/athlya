@@ -51,7 +51,7 @@ cd athlya
 pnpm install
 git config core.hooksPath .githooks   # câble le hook pre-push (une seule fois par clone)
 pnpm -r typecheck   # doit passer vert avant toute modification
-pnpm -r test        # ~807 tests en ~30 s
+pnpm -r test        # suites Docker-gated auto-skippées sans Docker
 ```
 
 ### Par package
@@ -79,14 +79,17 @@ git checkout -b docs/description-courte
 ### Avant de pusher — `pnpm preflight`
 
 ```bash
-pnpm preflight   # install --frozen-lockfile && format:check && lint && typecheck
+pnpm preflight   # install --frozen-lockfile && format:check && lint && typecheck && test && build:ci
 ```
 
-`preflight` reproduit les gates **rapides et déterministes** du job CI requis
-`Lint, typecheck, and tests` — soit `format:check`, `lint`, `typecheck` (mais
-**pas** la suite de tests, qui ne tourne qu'en CI). Un rouge déterministe est
-donc attrapé en local en ~30 s au lieu d'un aller-retour CI de ~5 min ; lance
-`pnpm -r test` toi-même si ton changement touche de la logique. Le hook
+`preflight` couvre les gates principales du job CI requis
+`Lint, typecheck, and tests` : `format:check`, `lint`, `typecheck`, la suite de
+tests (les suites Docker-gated s'auto-skippent sans Docker) et le build
+(`build:ci` = `SKIP_ENV_VALIDATION=1 pnpm build`, comme en CI). Les deux guards
+du job (fichiers ignorés trackés / gros binaires, usage brut
+d'`AthlyaDbHttp` hors `withTenantHttp`) ne tournent qu'en CI. Un rouge est donc
+attrapé en local (Turbo-caché) dans la plupart des cas, au lieu d'un
+aller-retour CI de ~5 min. Le hook
 `.githooks/pre-push` (câblé par `git config core.hooksPath .githooks` lors du
 setup initial — voir _Installation_ ci-dessus) le lance automatiquement —
 bypass ponctuel : `git push --no-verify`.
@@ -97,6 +100,23 @@ Rappels :
   `pnpm format` corrige.
 - Une dépendance retirée ⇒ `pnpm install` pour resynchroniser le lockfile
   (la CI utilise `--frozen-lockfile`).
+- Derrière un proxy TLS d'entreprise / sandbox (`NODE_EXTRA_CA_CERTS`) :
+  préfixer le push par `TURBO_ENV_MODE=loose`. Le mode env `strict` de Turbo
+  (défaut) ne transmet aux tâches que les variables déclarées dans
+  `turbo.json` et `PATH`/`SHELL`/`SYSTEMROOT`, donc le certificat CA est perdu.
+
+### Dépôt public
+
+Le dépôt est **public** :
+
+- **Aucun secret** commité — `.dev.vars`, `.env*`, tokens, DSN, clés JWT.
+  `gitleaks` tourne en CI (`secret-scan.yml`). Un secret poussé par erreur
+  doit être **révoqué/roté**, pas seulement retiré de l'historique (voir
+  [`docs/runbooks/rotate-secrets.md`](docs/runbooks/rotate-secrets.md)).
+- Les workflows `pull_request_target` (ex. `dependabot-auto-merge.yml`)
+  s'exécutent avec un token en écriture et les secrets : ils ne doivent
+  **jamais** checkout ni exécuter le code de la PR. Utiliser `pull_request`
+  pour tout ce qui build/teste du code contributeur.
 
 ### Ouvrir la PR
 
@@ -181,8 +201,10 @@ flake) pour préserver la traçabilité. Ne jamais l'utiliser pour contourner un
 
 ### Framework
 
-- **Vitest 3** pour tout (unit, integration, PBT)
-- **fast-check ^3.23.2** avec `@fast-check/vitest` pour les PBT
+- **Vitest 5** pour tout (unit, integration, PBT)
+- **fast-check ^4** avec `@fast-check/vitest` pour les PBT
+- **Playwright** + `@axe-core/playwright` pour l'E2E et l'accessibilité
+  (`apps/*/e2e`, workflow `axe.yml`)
 - Seeds hex fixes dans les PBT pour reproduction déterministe
 - **Pas de mock réseau réel** — injecter les ports
 
@@ -252,24 +274,27 @@ Référence : `security-headers.ts` pour le pattern de base, `auth.ts` pour un m
 
 ### Messages de commit
 
-Format libre mais concis. Préférer l'impératif :
+[Conventional Commits](https://www.conventionalcommits.org/) en anglais,
+à l'impératif — c'est aussi le format des titres de PR squash-mergées :
 
 ```
-Add JWT auth middleware (task 8.2)
-Fix race condition in waitlist promotion
-Update README with hardening phase summary
+feat(api): add JWT auth middleware (task 8.2)
+fix(reservations): race condition in waitlist promotion
+docs(readme): add hardening phase summary
 ```
 
-Pas besoin de Conventional Commits — le projet n'utilise pas de semantic-release.
+Pas de semantic-release : le préfixe sert à la lisibilité de l'historique et du
+CHANGELOG, pas à versionner.
 
 ### Titre de PR
 
-Court (< 70 caractères), descriptif, préfixé par la tâche ou l'épic si applicable :
+Court (< 70 caractères), au format Conventional Commits (il devient le message
+du squash-merge) ; la tâche ou l'épic va entre parenthèses si applicable :
 
 ```
-[Epic 8.9] Turnstile verification middleware
-[H5] Extract @athlya/ratelimit to break api↔auth cycle
-[docs] Add LICENSE, SECURITY.md, CONTRIBUTING.md
+feat(api): Turnstile verification middleware (Epic 8.9)
+refactor(ratelimit): extract @athlya/ratelimit to break api↔auth cycle (H5)
+docs: add LICENSE, SECURITY.md, CONTRIBUTING.md
 ```
 
 ### Corps de PR
@@ -316,6 +341,6 @@ internes (`workspace:*`) jamais publiés sur npm, donc rien à versionner/publie
 
 - Pour une discussion technique : ouvrir une issue avec le tag `discussion`
 - Pour un rapport de bug : ouvrir une issue avec le template bug
-- Pour une vulnérabilité de sécurité : **ne pas** ouvrir d'issue, écrire à security@athlya.app (voir [`SECURITY.md`](SECURITY.md))
+- Pour une vulnérabilité de sécurité : **ne pas** ouvrir d'issue publique, ouvrir un [GitHub Security Advisory privé](https://github.com/GlamgarOnDiscord/athlya/security/advisories/new) (voir [`SECURITY.md`](SECURITY.md))
 
 Merci de contribuer.

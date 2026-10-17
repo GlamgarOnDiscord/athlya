@@ -10,7 +10,7 @@
 
 ## Overview
 
-This plan converts the Athlya design into a sequence of incremental coding tasks that a code-generation agent can execute. The project is a Turborepo monorepo in TypeScript 5.9, with three client apps (Next.js 16 web, Next.js 16 studio admin, Expo SDK 55 mobile), a Hono 4 edge API on Cloudflare Workers, Drizzle/Neon PostgreSQL 17 with Row-Level Security, Upstash Redis for counters and rate limits, and an event bus combining Cloudflare Queues and Upstash QStash.
+This plan converts the Athlya design into a sequence of incremental coding tasks that a code-generation agent can execute. The project is a Turborepo monorepo in TypeScript 6.0, with three client apps (Next.js 16 web, Next.js 16 studio admin, Expo SDK 55 mobile), a Hono 4 edge API on Cloudflare Workers, Drizzle/Neon PostgreSQL 17 with Row-Level Security, Upstash Redis for counters and rate limits, and an event bus combining Cloudflare Queues and Upstash QStash.
 
 The plan is sequenced to deliver the v0.1 MVP first (single-tenant pilot: auth, profile, class browsing, reservation with no-double-booking, cancellation with waitlist promotion, QR check-in, workout session log, admin dashboard), then v0.2 (multi-tenant with RLS-wide rollout, branding, Stripe subscriptions, waitlist auto-promotion notifications, Apple Health import, full i18n), then v0.3 (AI coach, progression graphs, Bluetooth FTMS, training programs).
 
@@ -28,7 +28,7 @@ Use official CLI to create, init the project .. and recent package version and s
   - [x] 1.1 Initialize the Turborepo monorepo with pnpm workspaces
     - Create `pnpm-workspace.yaml` listing `apps/*` and `packages/*`
     - Create root `package.json`, `turbo.json` with `build`, `lint`, `test`, `typecheck` pipelines
-    - Pin Node 20 LTS via `.nvmrc` and `engines` field
+    - Pin Node LTS (now Node 24) via `.nvmrc` and `engines` field
     - Add `packages/config/tsconfig` with `base.json`, `node.json`, `react.json`, `next.json`
     - Add `packages/config/eslint` with shared flat config and `packages/config/prettier`
     - _Requirements: 29.2_
@@ -682,7 +682,7 @@ Use official CLI to create, init the project .. and recent package version and s
 - Every task references requirement clauses from `requirements.md` for traceability.
 - Property-based tests cover the eight correctness properties P1–P8 from the design and Requirement 21 round-trip. Unit tests and integration tests complement them for example-based and end-to-end validation.
 - Checkpoints at the end of each MVP phase (v0.1, v0.2, v0.3) let you validate incrementally before proceeding.
-- Language: the entire codebase is TypeScript 5.9. No additional language selection is needed because the design specifies concrete TypeScript libraries (Next.js 16, Hono 4, Expo SDK 55, Drizzle, Zod, fast-check).
+- Language: the entire codebase is TypeScript 6.0. No additional language selection is needed because the design specifies concrete TypeScript libraries (Next.js 16, Hono 4, Expo SDK 55, Drizzle, Zod, fast-check).
 
 ## Task Dependency Graph
 
