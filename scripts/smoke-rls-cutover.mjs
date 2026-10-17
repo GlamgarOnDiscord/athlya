@@ -38,7 +38,7 @@ function ok(message) {
 
 try {
   const [roleRow] = await sql`
-    SELECT rolname::text AS name, rolbypassrls AS bypass_rls
+    SELECT rolname::text AS name, rolbypassrls AS bypass_rls, rolsuper AS superuser
     FROM pg_roles
     WHERE rolname = current_user
   `;
@@ -46,11 +46,13 @@ try {
     fail('could not resolve current_user');
   }
 
-  console.log(`[smoke-rls] connected as ${roleRow.name} (bypass_rls=${String(roleRow.bypass_rls)})`);
+  console.log(
+    `[smoke-rls] connected as ${roleRow.name} (bypass_rls=${String(roleRow.bypass_rls)}, superuser=${String(roleRow.superuser)})`,
+  );
 
-  if (roleRow.bypass_rls === true) {
+  if (roleRow.bypass_rls !== false || roleRow.superuser !== false) {
     fail(
-      'current role has BYPASSRLS — DB_URL likely still neondb_owner. Switch to athlya_app first.',
+      'current role has BYPASSRLS or SUPERUSER — DB_URL likely still neondb_owner. Switch to athlya_app first.',
     );
   }
   ok('runtime role does not bypass RLS');

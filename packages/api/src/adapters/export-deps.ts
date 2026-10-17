@@ -22,6 +22,8 @@
  * @see Requirements 4.1, 4.2, 4.4 ; audit finding S5-001.
  */
 
+import { exportJobPrefix } from '@athlya/members';
+
 import { buildRoutedPublishDeps } from '../events/publish-deps.js';
 import { publish } from '../events/publish.js';
 
@@ -54,9 +56,15 @@ export const EXPORTS_BUCKET_MISSING_REASON = 'exports_bucket_missing';
 /*  R2 BlobStore                                                       */
 /* ------------------------------------------------------------------ */
 
-/** Object key layout from `exportObjectKey`: `exports/members/{jobId}/{claimToken}.zip`. */
-function jobIdFromObjectKey(key: string): string {
-  const match = /^exports\/members\/([0-9a-f-]{36})\/[0-9a-f-]{36}\.zip$/u.exec(key);
+/** Page size for listing the archives of one job (R2 caps it at 1000). */
+const ARCHIVE_LIST_LIMIT = 100;
+
+/**
+ * Object key layout from `exportObjectKey`: `exports/members/{jobId}/{claimToken}.zip`.
+ * UUIDs are matched case-insensitively, like the export job id contract.
+ */
+export function jobIdFromObjectKey(key: string): string {
+  const match = /^exports\/members\/([0-9a-f-]{36})\/[0-9a-f-]{36}\.zip$/iu.exec(key);
   if (match?.[1] === undefined) {
     throw new Error(`unexpected export object key: ${key}`);
   }
@@ -81,6 +89,9 @@ export function buildBlobStore(bucket: R2Bucket | undefined, env: AthlyaBindings
     return {
       put: (key) => refuse(key),
       signedUrl: (key) => refuse(key),
+      // Nothing can have been uploaded without the bucket.
+      delete: () => Promise.resolve(),
+      deleteJobArchivesExcept: () => Promise.resolve(),
     };
   }
 
@@ -102,6 +113,23 @@ export function buildBlobStore(bucket: R2Bucket | undefined, env: AthlyaBindings
       }
       const exp = Math.floor(Date.now() / 1000) + expiresSec;
       return buildExportDownloadUrl(baseUrl, secret, jobIdFromObjectKey(key), exp);
+    },
+    async delete(key) {
+      await bucket.delete(key);
+    },
+    async deleteJobArchivesExcept(jobId, keepKey) {
+      const prefix = exportJobPrefix(jobId);
+      let cursor: string | undefined;
+      do {
+        const listing = await bucket.list({
+          prefix,
+          limit: ARCHIVE_LIST_LIMIT,
+          ...(cursor === undefined ? {} : { cursor }),
+        });
+        const stale = listing.objects.map((o) => o.key).filter((k) => k !== keepKey);
+        if (stale.length > 0) await bucket.delete(stale);
+        cursor = listing.truncated ? listing.cursor : undefined;
+      } while (cursor !== undefined);
     },
   };
 }

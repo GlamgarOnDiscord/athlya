@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => ({
-  rows: [] as Array<{ name: string; bypass: boolean; superuser: boolean }>,
+  rows: [] as Array<{ name: string; bypass?: boolean; superuser?: boolean }>,
 }));
 
 vi.mock('@neondatabase/serverless', async (importOriginal) => ({
@@ -45,6 +45,18 @@ describe('assertRlsRole', () => {
   it('rejects when current_user is missing from pg_roles', async () => {
     hoisted.rows = [];
     await expect(assertRlsRole(URL, 'production')).rejects.toThrow(/could not resolve/);
+  });
+
+  it('fails closed when a role flag is missing from the row', async () => {
+    hoisted.rows = [{ name: 'athlya_app', bypass: false }];
+    await expect(assertRlsRole(URL, 'production')).rejects.toThrow(/SUPERUSER/);
+    hoisted.rows = [{ name: 'athlya_app', superuser: false }];
+    await expect(assertRlsRole(URL, 'production')).rejects.toThrow(/BYPASSRLS/);
+  });
+
+  it('runs the check when ENVIRONMENT is empty', async () => {
+    hoisted.rows = [{ name: 'neondb_owner', bypass: false, superuser: true }];
+    await expect(assertRlsRole(URL, '')).rejects.toThrow(/SUPERUSER/);
   });
 
   it('skips the check in dev', async () => {
