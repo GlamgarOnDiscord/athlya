@@ -19,6 +19,9 @@ name: Terraform
 #   TF_VAR_sentry_project         — Sentry project slug
 #   TF_VAR_sentry_alert_team_id   — Sentry team id notified by metric alerts
 #
+# Environment variables (vars.*):
+#   CLOUDFLARE_ZONE_PLAN          — free | pro | business | enterprise (default: pro)
+#
 # Remote state (HCP Terraform / Terraform Cloud):
 #   TF_TOKEN_app_terraform_io     — HCP Terraform API token
 #
@@ -78,6 +81,7 @@ jobs:
       TF_VAR_sentry_project: ${{ secrets.TF_VAR_sentry_project }}
       TF_VAR_sentry_alert_team_id: ${{ secrets.TF_VAR_sentry_alert_team_id }}
       TF_VAR_environment: ${{ inputs.environment || 'staging' }}
+      TF_VAR_cloudflare_zone_plan: ${{ vars.CLOUDFLARE_ZONE_PLAN || 'pro' }}
       # HCP Terraform remote state token (see versions.tf backend block).
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_app_terraform_io }}
       # Select the correct HCP Terraform workspace for this environment so
