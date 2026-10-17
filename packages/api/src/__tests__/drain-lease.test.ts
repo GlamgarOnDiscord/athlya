@@ -52,7 +52,7 @@ describe('drainOutbox — leased store', () => {
 
     const result = await drainOutbox({ store, queue, concurrency: 4, logger: silent });
 
-    expect(result).toEqual({ processed: 40, succeeded: 40, failed: 0 });
+    expect(result).toEqual({ processed: 40, succeeded: 40, failed: 0, released: 0 });
     expect(peak).toBe(4);
     expect(markPublishedMany).toHaveBeenCalledTimes(1);
     expect(markPublishedMany.mock.calls[0]![0]).toHaveLength(40);
@@ -91,7 +91,8 @@ describe('drainOutbox — leased store', () => {
     });
 
     expect(queue.send).toHaveBeenCalledTimes(3);
-    expect(result).toEqual({ processed: 10, succeeded: 3, failed: 7 });
+    // Released rows were never sent: they are not failures.
+    expect(result).toEqual({ processed: 10, succeeded: 3, failed: 0, released: 7 });
     expect(markPublishedMany.mock.calls[0]![0]).toEqual(claimed.slice(0, 3).map((r) => r.id));
     expect(release).toHaveBeenCalledWith(claimed.slice(3).map((r) => r.id));
   });
@@ -102,7 +103,7 @@ describe('drainOutbox — leased store', () => {
 
     const result = await drainOutbox({ store, queue: { send: async () => {} }, logger: silent });
 
-    expect(result).toEqual({ processed: 3, succeeded: 0, failed: 3 });
+    expect(result).toEqual({ processed: 3, succeeded: 0, failed: 3, released: 0 });
   });
 
   it('does not stamp rows whose send failed', async () => {
@@ -116,7 +117,7 @@ describe('drainOutbox — leased store', () => {
 
     const result = await drainOutbox({ store, queue, logger: silent });
 
-    expect(result).toEqual({ processed: 3, succeeded: 2, failed: 1 });
+    expect(result).toEqual({ processed: 3, succeeded: 2, failed: 1, released: 0 });
     expect(markPublishedMany.mock.calls[0]![0]).toEqual([claimed[0]!.id, claimed[2]!.id]);
   });
 

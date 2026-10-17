@@ -41,13 +41,15 @@
  *                   markPublished stamp succeeded. These rows are
  *                   durably "done": they will not appear in future
  *                   drains.
- *   • `failed`    — every other row (queue send failed, or queue
- *                   send succeeded but markPublished failed). These
- *                   rows will be re-drained on the next cycle; the
- *                   consumer dedup window absorbs any duplicate
- *                   deliveries.
+ *   • `failed`    — rows whose queue send failed, or whose send
+ *                   succeeded but markPublished failed. These rows
+ *                   will be re-drained on a later cycle; the consumer
+ *                   dedup window absorbs any duplicate deliveries.
+ *   • `released`  — rows claimed but never attempted because the cycle
+ *                   deadline passed (issue #424). Not a failure: they
+ *                   go back to the pending set for the next cycle.
  *
- * `processed === succeeded + failed` always holds.
+ * `processed === succeeded + failed + released` always holds.
  *
  * Related requirements: 16.1, 16.2, 16.3, 16.4, 17.4.
  */
@@ -169,8 +171,8 @@ export interface DrainOutboxOptions {
   readonly concurrency?: number;
   /**
    * Cycle deadline in milliseconds (issue #424): no new send starts past
-   * it; unattempted rows are released and counted as failed. Unbounded
-   * when omitted.
+   * it; unattempted rows are released and counted as `released`, not
+   * `failed`. Unbounded when omitted.
    */
   readonly deadlineMs?: number;
 }
@@ -180,6 +182,7 @@ export interface DrainResult {
   readonly processed: number;
   readonly succeeded: number;
   readonly failed: number;
+  readonly released: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -261,7 +264,7 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
 
   if (rows.length === 0) {
     logger.info('outbox drain: empty batch', { batchSize });
-    return { processed: 0, succeeded: 0, failed: 0 };
+    return { processed: 0, succeeded: 0, failed: 0, released: 0 };
   }
 
   logger.info('outbox drain: claimed rows', {
@@ -333,7 +336,6 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
   }
 
   if (released.length > 0) {
-    failed += released.length;
     logger.warn('outbox drain: cycle deadline reached; releasing unattempted rows', {
       released: released.length,
       deadlineMs: options.deadlineMs,
@@ -357,7 +359,7 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
     durationMs,
   });
 
-  return { processed: rows.length, succeeded, failed };
+  return { processed: rows.length, succeeded, failed, released: released.length };
 }
 
 /* ------------------------------------------------------------------ */

@@ -20,6 +20,7 @@ import {
   insertOutbox,
   markFailed,
   markPublished,
+  releaseLeases,
   type OutboxEvent,
 } from '../src/outbox.js';
 
@@ -234,5 +235,29 @@ describe('markFailed', () => {
   it('still validates the id shape', async () => {
     const { tx } = makeFakeTx();
     await expect(markFailed(tx, 'not-a-uuid')).rejects.toBeInstanceOf(InvalidOutboxInputError);
+  });
+});
+
+describe('releaseLeases', () => {
+  const LEASE = '2026-10-17 12:00:00.123456+00';
+
+  it('undoes the claim attempt and only touches rows still under this lease', async () => {
+    const { tx, calls } = makeFakeTx();
+
+    await releaseLeases(tx, [OUTBOX_ROW_ID], LEASE);
+
+    expect(calls).toHaveLength(1);
+    const call = calls[0];
+    expect(call?.sqlText).toMatch(/set\s+lease_until\s*=\s*null/i);
+    expect(call?.sqlText).toMatch(/attempts\s*=\s*greatest\(outbox\.attempts\s*-\s*1,\s*0\)/i);
+    expect(call?.sqlText).toMatch(/published_at\s+is\s+null/i);
+    expect(call?.sqlText).toMatch(/lease_until\s*=\s*\?::timestamptz/i);
+    expect(call?.params).toEqual([`{${OUTBOX_ROW_ID}}`, LEASE]);
+  });
+
+  it('is a no-op for an empty id list', async () => {
+    const { tx, execute } = makeFakeTx();
+    await releaseLeases(tx, [], LEASE);
+    expect(execute).not.toHaveBeenCalled();
   });
 });

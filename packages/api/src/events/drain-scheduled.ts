@@ -276,11 +276,20 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
   // Lease-based cycle (issue #424): claim commits immediately, sends
   // run outside any transaction, delivered rows are stamped in one
   // statement at the end.
+  // Every row of one claim shares its lease; the token fences the
+  // release so a drain that outlived its lease cannot clear another's.
+  let leaseToken: string | undefined;
   const store: OutboxStore = {
-    claimBatch: (size) => claimLeasedBatch(db, size, DRAIN_LEASE_SECONDS),
+    claimBatch: async (size) => {
+      const rows = await claimLeasedBatch(db, size, DRAIN_LEASE_SECONDS);
+      leaseToken = rows[0]?.leaseToken;
+      return rows;
+    },
     markPublished: (id) => markPublishedMany(db, [id]),
     markPublishedMany: (ids) => markPublishedMany(db, ids),
-    release: (ids) => releaseLeases(db, ids),
+    release: async (ids) => {
+      if (leaseToken !== undefined) await releaseLeases(db, ids, leaseToken);
+    },
   };
 
   // Build the options bag conditionally so `exactOptionalPropertyTypes`
@@ -327,6 +336,7 @@ export function emitOutboxDrainCycleMetric(
     processed: result.processed,
     succeeded: result.succeeded,
     failed: result.failed,
+    released: result.released,
     batchSize,
     concurrency: DRAIN_SEND_CONCURRENCY,
     deadlineMs: DRAIN_CYCLE_DEADLINE_MS,

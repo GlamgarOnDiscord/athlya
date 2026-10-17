@@ -35,7 +35,8 @@ No transaction and no row lock are held while sending:
 2. **Send** — outside any transaction, pool of `DRAIN_SEND_CONCURRENCY = 8`,
    each send bounded by 5 s. No new send starts after
    `DRAIN_CYCLE_DEADLINE_MS = 40 s`; unattempted rows are released
-   (`lease_until = NULL`).
+   (`lease_until = NULL`, claim attempt undone, fenced on the claim's lease)
+   and reported as `released` in `outbox.drain_cycle`, not as failures.
 3. **Mark** — delivered rows are stamped in one `UPDATE … WHERE id = ANY(…)`
    (`published_at = now()`, lease cleared).
 
@@ -44,6 +45,10 @@ drain (isolate killed) loses nothing — rows come back when the lease lapses;
 a failed final stamp means those rows are re-sent after the lease (consumers
 dedup on `event.id`). Invariant (unit-tested): lease > deadline + one send
 timeout + mark.
+
+Canary: an old Worker's lease-unaware claim is skipped by the
+`outbox_skip_leased_claim` trigger on rows under a live lease (0035), so
+old and new drainers never send the same row while both run.
 
 Capacity per cycle (one cron tick): ≤ 200 rows; with a queue at 10 ms/send
 ≈ 0.25 s, at 1 s/send ≈ 25 s, fully hung queue → cut at 40 s with the
