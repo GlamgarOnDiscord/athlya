@@ -18,16 +18,23 @@
  *
  * Slice B9 keeps the surface tight on purpose: no listing, no admin
  * cross-tenant lookup. Every consumer pulls a single studio scoped to
- * the caller's `claims.studioId`, mirroring the post-RLS production
- * predicate (`SET LOCAL app.studio_id = $1`).
+ * the caller's `claims.studioId`.
+ *
+ * RLS (issue #224) — `studios` is FORCE RLS, so every query runs
+ * through `withTenantHttp`: the tenant GUCs and the query share one
+ * Neon HTTP batch, and the `studios_read_own_tenant` /
+ * `studios_admin_update_own` policies (migrations 0001, 0038) decide
+ * what the caller sees and may edit. A raw query on the shared HTTP
+ * handle matches zero rows under the `athlya_app` runtime role.
  */
 
+import { withTenantHttp } from '@athlya/db';
 import { studios } from '@athlya/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
-import type { AthlyaDbAny } from '@athlya/db/client';
+import type { AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
 
 /**
  * Public projection of a studio row. Mirrors the columns
@@ -58,22 +65,29 @@ export interface StudioRepo {
 }
 
 /**
- * Factory — produce a {@link StudioRepo} bound to `db`. Handle is
- * stateless (HTTP driver), so the closure is just over `db`.
+ * Factory — produce a {@link StudioRepo} bound to `db` and the caller's
+ * tenant claims. The handle is stateless (HTTP driver), so the closure
+ * is just over `db` and `claims`.
  */
-export function createDrizzleStudioRepo(db: AthlyaDbAny): StudioRepo {
-  return {
-    async getById(id) {
-      const rows = await withConnectionRetry(() =>
+export function createDrizzleStudioRepoHttp(db: AthlyaDbHttp, claims: TenantClaims): StudioRepo {
+  const readById = async (id: string) => {
+    const rows = await withConnectionRetry(() =>
+      withTenantHttp(
+        db,
+        claims,
         db
           .select()
           .from(studios)
           .where(and(eq(studios.id, id), isNull(studios.deletedAt)))
           .limit(1),
-      );
-      const row = rows[0];
-      return row === undefined ? null : toStudioView(row);
-    },
+      ),
+    );
+    const row = rows[0];
+    return row === undefined ? null : toStudioView(row);
+  };
+
+  return {
+    getById: readById,
 
     async updateById(id, patch) {
       const set: Partial<typeof studios.$inferInsert> = {};
@@ -91,22 +105,20 @@ export function createDrizzleStudioRepo(db: AthlyaDbAny): StudioRepo {
         // the response still echoes the current row. Avoids an
         // empty UPDATE that would silently bump no rows yet
         // touch the WAL.
-        const rows = await withConnectionRetry(() =>
-          db
-            .select()
-            .from(studios)
-            .where(and(eq(studios.id, id), isNull(studios.deletedAt)))
-            .limit(1),
-        );
-        const row = rows[0];
-        return row === undefined ? null : toStudioView(row);
+        return readById(id);
       }
+      // The UPDATE is idempotent (same columns, same values), so a
+      // replay after a dropped connection is safe to retry.
       const [row] = await withConnectionRetry(() =>
-        db
-          .update(studios)
-          .set(set)
-          .where(and(eq(studios.id, id), isNull(studios.deletedAt)))
-          .returning(),
+        withTenantHttp(
+          db,
+          claims,
+          db
+            .update(studios)
+            .set(set)
+            .where(and(eq(studios.id, id), isNull(studios.deletedAt)))
+            .returning(),
+        ),
       );
       return row === undefined ? null : toStudioView(row);
     },

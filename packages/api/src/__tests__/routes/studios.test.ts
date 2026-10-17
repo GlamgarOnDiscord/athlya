@@ -176,7 +176,10 @@ describe('GET /v1/studios/me â€” authenticated', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body).toEqual(studioRow);
-    expect(deps.studios.getStudio).toHaveBeenCalledWith(TEST_STUDIO_ID);
+    expect(deps.studios.getStudio).toHaveBeenCalledWith(
+      TEST_STUDIO_ID,
+      expect.objectContaining({ userId: TEST_USER_ID, studioId: TEST_STUDIO_ID }),
+    );
   });
 
   it('returns 404 when the studio row was deleted', async () => {
@@ -307,9 +310,11 @@ describe('PATCH /v1/studios/me â€” admin only', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(deps.studios.updateStudio).toHaveBeenCalledWith(TEST_STUDIO_ID, {
-      brandColor: '#A0A0A0',
-    });
+    expect(deps.studios.updateStudio).toHaveBeenCalledWith(
+      TEST_STUDIO_ID,
+      { brandColor: '#A0A0A0' },
+      expect.objectContaining({ studioId: TEST_STUDIO_ID, role: 'admin' }),
+    );
   });
 
   it('accepts a high-contrast brandColor and forwards the patch', async () => {
@@ -353,10 +358,11 @@ describe('PATCH /v1/studios/me â€” admin only', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body).toEqual(studioRow);
-    expect(deps.studios.updateStudio).toHaveBeenCalledWith(TEST_STUDIO_ID, {
-      name: 'Athlya Paris',
-      brandColor: '#0EA5E9',
-    });
+    expect(deps.studios.updateStudio).toHaveBeenCalledWith(
+      TEST_STUDIO_ID,
+      { name: 'Athlya Paris', brandColor: '#0EA5E9' },
+      expect.objectContaining({ studioId: TEST_STUDIO_ID, role: 'admin' }),
+    );
   });
 });
 

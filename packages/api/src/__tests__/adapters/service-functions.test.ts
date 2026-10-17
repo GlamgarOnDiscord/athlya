@@ -1,9 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { EmailTakenError } from '@athlya/auth';
 import { PgDialect } from 'drizzle-orm/pg-core';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 import { createDrizzleUserRepo } from '../../adapters/auth-user-repo-drizzle.js';
@@ -26,6 +27,7 @@ const migration = [
   '0032_service_definer_functions.sql',
   '0033_auth_event_recording.sql',
   '0037_auth_outbox_review_fixes.sql',
+  '0038_studios_runtime.sql',
 ]
   .map((file) => readFileSync(resolve(here, '../../../../db/migrations', file), 'utf8'))
   .join('\n');
@@ -65,15 +67,238 @@ const userRow = {
 
 describe('service function contract with migration 0032', () => {
   const source = readFileSync(resolve(apiSrc, 'adapters/service-functions.ts'), 'utf8');
-  const used = [...source.matchAll(/\b((?:auth|rgpd|notification)_[a-z_]+)\(/gu)].map((m) => m[1]);
+  const used = [...source.matchAll(/\b((?:auth|rgpd|notification|studio)_[a-z_]+)\(/gu)].map(
+    (m) => m[1],
+  );
 
-  it('references the 16 service functions', () => {
-    expect(new Set(used).size).toBe(16);
+  it('references the 17 service functions', () => {
+    expect(new Set(used).size).toBe(17);
   });
 
   it.each([...new Set(used)])('%s is created and granted to athlya_app by the migrations', (fn) => {
     expect(migration).toMatch(new RegExp(`CREATE OR REPLACE FUNCTION ${fn}\\(`, 'u'));
-    expect(migration).toMatch(new RegExp(`'${fn}\\(`, 'u'));
+    expect(migration).toMatch(
+      new RegExp(`'${fn}\\(|GRANT EXECUTE ON FUNCTION ${fn}\\([^)]*\\) TO athlya_app;`, 'u'),
+    );
+  });
+});
+
+/*
+ * RLS inventory (issues #224, #117). Every Drizzle query an adapter
+ * issues on a db handle must be tenant-scoped (`withTenantHttp` /
+ * `withTenant`), and every `queryRows` / `writeRows` / `callCount`
+ * outside a tenant scope must call a SECURITY DEFINER function from the
+ * migrations. Anything else is listed in RAW_QUERY_ALLOWLIST with the
+ * reason it is safe, or the issue that tracks it. Entries are keyed
+ * `file#enclosingTopLevelFunction`, so a new raw query elsewhere in an
+ * allowlisted file still fails.
+ */
+
+const QUERY_METHODS = new Set([
+  'select',
+  'selectDistinct',
+  'insert',
+  'update',
+  'delete',
+  'execute',
+  'batch',
+  'transaction',
+]);
+const DB_RECEIVER = /^(?:db|dbHttp|dbWrite|writeDb|tx|client)$/u;
+const TENANT_WRAPPERS = new Set(['withTenantHttp', 'withTenant']);
+const SERVICE_CALLS = new Set(['queryRows', 'writeRows', 'callCount']);
+const CONNECTION_FACTORIES = new Set([
+  'createDb',
+  'createDbHttp',
+  'createNeonHttpSql',
+  'postgres',
+  'neon',
+]);
+
+const SUPERSEDED = 'no production caller (superseded by the Http variant); removal tracked in #117';
+
+const RAW_QUERY_ALLOWLIST: Readonly<Record<string, string>> = {
+  'deps-cache.ts#createWriteDb': 'connection cache; its handles are checked at their query sites',
+  'deps-cache.ts#getOrCreateDbHttp':
+    'connection cache; its handles are checked at their query sites',
+  'deps-cache.ts#getOrCreateDbHttpEu':
+    'connection cache; its handles are checked at their query sites',
+  'drain-db.ts#createDrainDb': 'outbox drainer connects as athlya_cron (CRON_DB_URL)',
+  'cron-sql-executor.ts#buildCronSqlExecutor':
+    'maintenance jobs connect as athlya_cron (CRON_DB_URL)',
+  'billing-deps.ts#buildBillingDeps':
+    'Stripe events are applied as athlya_billing (BILLING_DB_URL), migration 0036',
+  'audit-log-store-drizzle.ts#createDrizzleAuditLogStore':
+    'platform audit rows (JWT rotate, DLQ, billing webhook) have no tenant; audit_app_insert accepts claim-less inserts',
+  'audit-log-wiring.ts#createBillingWebhookAuditAppender':
+    'transaction around the claim-less audit_log append above',
+  'password-reset-repo-drizzle.ts#createDrizzlePasswordResetRepo':
+    'pre-auth, password_reset_tokens has no RLS; known gap (#117): athlya_app lacks INSERT/DELETE on it',
+  'cascade-repo-drizzle.ts#createDrizzleDeletionRepo':
+    'known gap (#117): anonymizeAuditRows updates audit_log without claims, which audit_no_update blocks under athlya_app',
+  'reservations-list-drizzle.ts#listMyReservations':
+    'query is built once and run inside withTenantHttp when claims are set; known gap (#117): claim-less fallback',
+  'classes-repo-drizzle.ts#createDrizzleListClassesRepo': SUPERSEDED,
+  'classes-repo-drizzle.ts#createDrizzleCreateClassRepo': SUPERSEDED,
+  'classes-repo-drizzle.ts#createDrizzleDeleteClassRepo': SUPERSEDED,
+  'classes-repo-drizzle.ts#createDrizzleUpdateClassRepo': SUPERSEDED,
+  'classes-repo-drizzle.ts#createDrizzleSearchClassesRepo': SUPERSEDED,
+  'members-repo-drizzle.ts#createDrizzleMemberRepo': SUPERSEDED,
+  'members-consents-repo-drizzle.ts#createDrizzleConsentsRepo': SUPERSEDED,
+  'members-audit-writer-drizzle.ts#createDrizzleAuditLogWriter': SUPERSEDED,
+};
+
+/** SECURITY DEFINER functions declared by any forward migration. */
+function securityDefinerFunctions(): Set<string> {
+  const dir = resolve(here, '../../../../db/migrations');
+  const names = new Set<string>();
+  const forward = readdirSync(dir).filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'));
+  for (const file of forward) {
+    const text = readFileSync(resolve(dir, file), 'utf8');
+    const headers = text.matchAll(
+      /CREATE (?:OR REPLACE )?FUNCTION\s+(?:public\.)?([a-z_0-9]+)\s*\(([\s\S]*?)\$[a-z_]*\$/giu,
+    );
+    for (const m of headers) {
+      if (/SECURITY DEFINER/iu.test(m[2] ?? '')) names.add((m[1] ?? '').toLowerCase());
+    }
+  }
+  return names;
+}
+
+function enclosingTopLevel(node: ts.Node): string {
+  let name = '<module>';
+  for (let current: ts.Node | undefined = node; current !== undefined; current = current.parent) {
+    if (ts.isFunctionDeclaration(current) && current.name !== undefined) name = current.name.text;
+    if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name)) {
+      name = current.name.text;
+    }
+  }
+  return name;
+}
+
+function receiverName(expr: ts.Expression): string {
+  let e = expr;
+  while (ts.isParenthesizedExpression(e) || ts.isAsExpression(e) || ts.isNonNullExpression(e)) {
+    e = e.expression;
+  }
+  if (ts.isIdentifier(e)) return e.text;
+  if (ts.isPropertyAccessExpression(e)) return e.name.text;
+  return '';
+}
+
+function isServiceFnCall(arg: ts.Expression | undefined): boolean {
+  return (
+    arg !== undefined &&
+    ts.isCallExpression(arg) &&
+    ts.isPropertyAccessExpression(arg.expression) &&
+    ts.isIdentifier(arg.expression.expression) &&
+    arg.expression.expression.text === 'serviceFn'
+  );
+}
+
+function calledSqlFunctions(arg: ts.Expression | undefined, source: ts.SourceFile): string[] {
+  if (arg === undefined || !ts.isTaggedTemplateExpression(arg)) return [];
+  return [...arg.template.getText(source).matchAll(/\b([a-z_][a-z_0-9]*)\s*\(/gu)].map(
+    (m) => m[1] ?? '',
+  );
+}
+
+interface Finding {
+  readonly key: string;
+  readonly where: string;
+}
+
+/** Raw query sites under `adapters/**`, keyed by file and enclosing top-level function. */
+function scanAdapters(definers: ReadonlySet<string>): Finding[] {
+  const adaptersDir = resolve(apiSrc, 'adapters');
+  const files = readdirSync(adaptersDir, { recursive: true })
+    .map(String)
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => f.split(sep).join('/'));
+  const findings: Finding[] = [];
+
+  for (const file of files) {
+    const text = readFileSync(resolve(adaptersDir, file), 'utf8');
+    const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    // A `tx` receiver comes from `withTenant(db, claims, async (tx) => …)`.
+    const fileUsesWithTenant = /\bwithTenant\(/u.test(text);
+    const report = (node: ts.Node, what: string): void => {
+      const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+      findings.push({
+        key: `${file}#${enclosingTopLevel(node)}`,
+        where: `${file}:${line} ${what}`,
+      });
+    };
+
+    const visit = (node: ts.Node, scoped: boolean): void => {
+      let inScope = scoped;
+      if (ts.isCallExpression(node)) {
+        const callee = node.expression;
+        if (ts.isIdentifier(callee) && TENANT_WRAPPERS.has(callee.text)) inScope = true;
+
+        if (ts.isPropertyAccessExpression(callee) && QUERY_METHODS.has(callee.name.text)) {
+          const recv = receiverName(callee.expression);
+          const txFromTenant = recv === 'tx' && fileUsesWithTenant;
+          if (DB_RECEIVER.test(recv) && !inScope && !txFromTenant) {
+            report(node, `${recv}.${callee.name.text}()`);
+          }
+        }
+
+        if (ts.isIdentifier(callee) && CONNECTION_FACTORIES.has(callee.text)) {
+          report(node, `${callee.text}() opens a connection`);
+        }
+
+        if (
+          ts.isIdentifier(callee) &&
+          SERVICE_CALLS.has(callee.text) &&
+          file !== 'service-functions.ts' &&
+          !inScope
+        ) {
+          const arg = node.arguments[1];
+          const viaDefiner = calledSqlFunctions(arg, source).some((fn) => definers.has(fn));
+          if (!isServiceFnCall(arg) && !viaDefiner) {
+            report(node, `${callee.text}() without a SECURITY DEFINER function`);
+          }
+        }
+      }
+      ts.forEachChild(node, (child) => {
+        visit(child, inScope);
+      });
+    };
+    visit(source, false);
+  }
+  return findings;
+}
+
+describe('RLS inventory — every adapter query is tenant-scoped or a service-function call', () => {
+  const definers = securityDefinerFunctions();
+  const findings = scanAdapters(definers);
+
+  it('reads the SECURITY DEFINER functions from the migrations', () => {
+    expect(definers).toContain('studio_id_by_slug');
+    expect(definers).toContain('auth_find_user_by_id');
+    expect(definers).not.toContain('app_studio_id');
+  });
+
+  it('has no raw query outside the allowlist', () => {
+    const unexpected = findings.filter((f) => RAW_QUERY_ALLOWLIST[f.key] === undefined);
+    expect(unexpected.map((f) => f.where)).toEqual([]);
+  });
+
+  it('has no stale allowlist entry', () => {
+    const hit = new Set(findings.map((f) => f.key));
+    expect(Object.keys(RAW_QUERY_ALLOWLIST).filter((key) => !hit.has(key))).toEqual([]);
+  });
+
+  it.each([
+    'studio-slug-resolver.ts',
+    'studios-deps.ts',
+    'studios-repo-drizzle.ts',
+    'auth-user-repo-drizzle.ts',
+    'notifications-deps.ts',
+  ])('%s is not allowlisted', (file) => {
+    const entries = Object.keys(RAW_QUERY_ALLOWLIST).filter((key) => key.startsWith(`${file}#`));
+    expect(entries).toEqual([]);
   });
 });
 
@@ -91,6 +316,7 @@ describe('RLS inventory — claim-less adapters never touch tenant tables direct
     'adapters/notifications-deps.ts',
     'adapters/cascade-repo-drizzle.ts',
     'adapters/password-reset-repo-drizzle.ts',
+    'adapters/studio-slug-resolver.ts',
   ])('%s imports no tenant table from @athlya/db/schema', (file) => {
     const text = readFileSync(resolve(apiSrc, file), 'utf8');
     const imports = [...text.matchAll(/import\s*\{([^}]*)\}\s*from\s*'@athlya\/db\/schema'/gu)]
