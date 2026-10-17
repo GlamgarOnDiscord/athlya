@@ -99,6 +99,34 @@ export interface MembersPageView {
 /** Opaque profile view. The gateway forwards whatever the service returns. */
 export type MemberProfileView = unknown;
 
+/** Export job status as returned by `GET /me/export/:jobId`. */
+export interface ExportJobView {
+  readonly jobId: string;
+  readonly status: 'pending' | 'running' | 'completed' | 'failed';
+  readonly requestedAt: string;
+  readonly completedAt: string | null;
+  readonly error: string | null;
+  readonly downloadUrl: string | null;
+  readonly downloadExpiresAt: string | null;
+}
+
+/** Outcome of {@link MembersDeps.openExportDownload}. */
+export type ExportDownloadResult =
+  | {
+      readonly kind: 'ok';
+      readonly body: ReadableStream;
+      readonly size: number;
+    }
+  | { readonly kind: 'invalid_link' }
+  | { readonly kind: 'not_found' }
+  | { readonly kind: 'not_configured' };
+
+const ExportJobParamSchema = z.object({ jobId: z.uuid() });
+const ExportDownloadQuerySchema = z.object({
+  exp: z.coerce.number().int().positive(),
+  sig: z.string().min(1).max(128),
+});
+
 /**
  * Dependencies injected into {@link buildMembersRouter}. Each method
  * mirrors a use case from `@athlya/members` but stays loosely typed
@@ -130,6 +158,15 @@ export interface MembersDeps {
     claims: AuthClaims,
   ): Promise<unknown>;
   enqueueExport(userId: string, claims: AuthClaims): Promise<{ jobId: string }>;
+  /** Status of one of the caller's export jobs (RLS: own rows only). */
+  getExportJob(jobId: string, claims: AuthClaims): Promise<ExportJobView | null>;
+  /** Resolve a signed download link for one of the caller's archives. */
+  openExportDownload(
+    jobId: string,
+    exp: number,
+    sig: string,
+    claims: AuthClaims,
+  ): Promise<ExportDownloadResult>;
   listMembersByStudio(
     studioId: string,
     requesterRole: 'admin' | 'coach',
@@ -146,6 +183,26 @@ export interface MembersDeps {
 /* ------------------------------------------------------------------ */
 
 const PROBLEM_JSON = 'application/problem+json';
+
+function exportProblem(
+  c: Context<HonoEnv>,
+  status: 403 | 404 | 503,
+  detail: string,
+  code: string,
+): Response {
+  return c.body(
+    JSON.stringify({
+      type: 'about:blank',
+      title: status === 503 ? 'Service Unavailable' : status === 404 ? 'Not Found' : 'Forbidden',
+      status,
+      detail,
+      code,
+      traceId: c.get('traceId'),
+    }),
+    status,
+    { 'content-type': PROBLEM_JSON },
+  );
+}
 
 function avatarProblem(
   c: Context<HonoEnv>,
@@ -341,6 +398,63 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
       const { jobId } = await deps.enqueueExport(claims.userId, claims);
       // 202 Accepted — ZIP assembly runs out-of-band (Req 4.2).
       return c.json({ jobId }, 202);
+    },
+  );
+
+  /* ------------------------------ GET /me/export/:jobId ---------- */
+  router.get('/me/export/:jobId', zValidator('param', ExportJobParamSchema), async (c) => {
+    traceOperation(c, 'members.export-status');
+    const claims = c.get('authClaims');
+    if (claims === undefined) {
+      throw new Error('authClaims unexpectedly missing after jwtAuth');
+    }
+    const { jobId } = readValidated<{ jobId: string }>(c, 'param');
+    const job = await deps.getExportJob(jobId, claims);
+    if (job === null) {
+      return exportProblem(c, 404, 'Export job not found', 'export_not_found');
+    }
+    return c.json(job as unknown as Record<string, unknown>, 200);
+  });
+
+  /* ------------------------------ GET /me/export/:jobId/download - */
+  router.get(
+    '/me/export/:jobId/download',
+    zValidator('param', ExportJobParamSchema),
+    zValidator('query', ExportDownloadQuerySchema),
+    async (c) => {
+      traceOperation(c, 'members.export-download');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const { jobId } = readValidated<{ jobId: string }>(c, 'param');
+      const { exp, sig } = readValidated<{ exp: number; sig: string }>(c, 'query');
+      const result = await deps.openExportDownload(jobId, exp, sig, claims);
+      switch (result.kind) {
+        case 'ok':
+          return c.body(result.body, 200, {
+            'content-type': 'application/zip',
+            'content-length': String(result.size),
+            'content-disposition': `attachment; filename="athlya-export-${jobId}.zip"`,
+            'cache-control': 'private, no-store',
+          });
+        case 'invalid_link':
+          return exportProblem(
+            c,
+            403,
+            'Download link is invalid or expired',
+            'export_link_invalid',
+          );
+        case 'not_found':
+          return exportProblem(c, 404, 'Export archive not found', 'export_not_found');
+        case 'not_configured':
+          return exportProblem(
+            c,
+            503,
+            'Export download is not configured for this environment',
+            'export_download_not_configured',
+          );
+      }
     },
   );
 

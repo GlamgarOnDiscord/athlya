@@ -1,0 +1,101 @@
+name: Frontend Worker build
+
+# Issue #422 — prove on every frontend change that web and studio still
+# produce a deployable Cloudflare Worker: OpenNext build, `wrangler deploy
+# --dry-run`, then serve each bundle in workerd and run the post-deploy
+# smoke against it (real HTTP, no interception).
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'apps/studio/**'
+      - 'packages/shared/**'
+      - 'patches/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'scripts/smoke-frontend.mjs'
+      - 'scripts/__tests__/smoke-frontend.test.mjs'
+      - '.github/workflows/frontend-worker.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'apps/web/**'
+      - 'apps/studio/**'
+      - 'packages/shared/**'
+      - 'patches/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+
+concurrency:
+  group: frontend-worker-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    name: OpenNext build + dry-run + workerd smoke (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: web
+            port: 8787
+          - app: studio
+            port: 8788
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+      SKIP_ENV_VALIDATION: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Smoke script tests
+        run: node --test scripts/__tests__/smoke-frontend.test.mjs
+
+      - name: OpenNext build
+        run: |
+          pnpm --filter @athlya/shared build
+          pnpm --filter "@athlya/${{ matrix.app }}" build:worker
+
+      - name: wrangler deploy --dry-run (production config)
+        run: pnpm --filter "@athlya/${{ matrix.app }}" exec wrangler deploy --dry-run --env production --outdir dist-worker
+
+      - name: Serve the bundle in workerd and smoke it
+        env:
+          APP: ${{ matrix.app }}
+          PORT: ${{ matrix.port }}
+        run: |
+          set -euo pipefail
+          (cd "apps/${APP}" && pnpm exec wrangler dev --port "${PORT}" --ip 127.0.0.1 > /tmp/wrangler-dev.log 2>&1 &)
+          for _ in $(seq 1 90); do
+            if curl -fsS -o /dev/null "http://127.0.0.1:${PORT}/login"; then break; fi
+            sleep 1
+          done
+          if [ "${APP}" = 'web' ]; then
+            WEB_URL="http://127.0.0.1:${PORT}" node scripts/smoke-frontend.mjs
+          else
+            STUDIO_URL="http://127.0.0.1:${PORT}" node scripts/smoke-frontend.mjs
+          fi
+
+      - name: Worker logs
+        if: failure()
+        run: cat /tmp/wrangler-dev.log || true

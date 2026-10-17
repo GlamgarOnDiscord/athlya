@@ -4,8 +4,8 @@ Checklist pour démarrer la stack en local (API Workers + Web Next.js).
 
 ## Prérequis
 
-- Node.js **20+** (voir `.nvmrc`)
-- pnpm **9** (`corepack enable` puis `corepack prepare pnpm@9 --activate`)
+- Node.js **24 LTS** (voir `.nvmrc`)
+- pnpm **11** (`corepack enable` — la version est lue dans `packageManager`)
 - PowerShell sur Windows (les scripts sont cross-platform, mais les exemples sont PS)
 - Docker (optionnel, uniquement si tu veux lancer Postgres/Redis en local au lieu de Neon/Upstash)
 - Comptes SaaS : Neon (Postgres), Upstash (Redis REST), Cloudflare (Turnstile), Sentry (optionnel en dev)

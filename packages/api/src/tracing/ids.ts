@@ -187,7 +187,7 @@ export function newSpanId(): string {
  * in practice means a stripped-down test runner. The fallback path
  * is annotated so production deployments never land on it silently.
  */
-function fillRandom(buffer: Uint8Array): void {
+function fillRandom(buffer: Uint8Array<ArrayBuffer>): void {
   if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
     crypto.getRandomValues(buffer);
     return;

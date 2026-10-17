@@ -94,7 +94,8 @@ export const isoDateTimeArb = fc
  */
 const SLUG_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789-'.split('');
 
-export const slugArb = fc.stringOf(fc.constantFrom(...SLUG_CHARS), {
+export const slugArb = fc.string({
+  unit: fc.constantFrom(...SLUG_CHARS),
   minLength: 3,
   maxLength: 50,
 });
@@ -107,7 +108,7 @@ export const slugArb = fc.stringOf(fc.constantFrom(...SLUG_CHARS), {
 const HEX_CHARS = '0123456789abcdef'.split('');
 
 export const hexColorArb = fc
-  .stringOf(fc.constantFrom(...HEX_CHARS), { minLength: 6, maxLength: 6 })
+  .string({ unit: fc.constantFrom(...HEX_CHARS), minLength: 6, maxLength: 6 })
   .map((s) => `#${s}`);
 
 /**
@@ -125,9 +126,9 @@ const TLD_CHARS = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
 export const emailArb = fc
   .tuple(
-    fc.stringOf(fc.constantFrom(...ALNUM_CHARS), { minLength: 1, maxLength: 30 }),
-    fc.stringOf(fc.constantFrom(...ALNUM_CHARS), { minLength: 1, maxLength: 20 }),
-    fc.stringOf(fc.constantFrom(...TLD_CHARS), { minLength: 2, maxLength: 6 }),
+    fc.string({ unit: fc.constantFrom(...ALNUM_CHARS), minLength: 1, maxLength: 30 }),
+    fc.string({ unit: fc.constantFrom(...ALNUM_CHARS), minLength: 1, maxLength: 20 }),
+    fc.string({ unit: fc.constantFrom(...TLD_CHARS), minLength: 2, maxLength: 6 }),
   )
   .map(([local, domain, tld]) => `${local}@${domain}.${tld}`)
   .filter((e) => e.length <= 254);
@@ -144,7 +145,7 @@ const VISIBLE_NON_WS = (
 ).split('');
 
 export const nonEmptyTrimmedString = (max: number): fc.Arbitrary<string> =>
-  fc.stringOf(fc.constantFrom(...VISIBLE_NON_WS), { minLength: 1, maxLength: max });
+  fc.string({ unit: fc.constantFrom(...VISIBLE_NON_WS), minLength: 1, maxLength: max });
 
 /* ------------------------------------------------------------------ */
 /*  Enums                                                              */

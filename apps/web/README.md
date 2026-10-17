@@ -7,7 +7,7 @@ Application web orientée membres pour la plateforme Athlya.
 - **Next.js 16** (App Router, Turbopack)
 - **React 19**
 - **Tailwind 4** (CSS-first via `@tailwindcss/postcss`)
-- **TypeScript 5.9**
+- **TypeScript 6.0**
 
 > Les versions listées ci-dessus sont des instantanés de scaffolding. La source de vérité est `apps/web/package.json`.
 

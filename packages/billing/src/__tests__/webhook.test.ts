@@ -8,11 +8,10 @@
  *      timestamp and payload. No mocks; the test mints the exact same
  *      signature Stripe would produce and asserts the verifier accepts it.
  *
- *   2. {@link handleStripeWebhook} happy paths. Each of the three Stripe
- *      event types the billing service cares about is dispatched through
- *      injected `vi.fn()` ports; the tests assert the right event envelope
- *      is published and that no audit row is written for valid
- *      signatures.
+ *   2. {@link handleStripeWebhook} happy paths. A verified event is
+ *      handed to the atomic `applyEvent` port exactly once; the tests
+ *      assert the outcome mapping and that no separate audit row or
+ *      transaction is opened for valid signatures.
  *
  *   3. {@link handleStripeWebhook} failure paths. Tampered payloads,
  *      invalid signatures and a failing audit store are all covered. The
@@ -24,7 +23,7 @@
  * Validates: Requirements 18.2, 18.3, 18.4, 18.5, 22.1
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { describe, expect, it, vi, type Mock } from 'vitest';
 
 import {
   DEFAULT_TOLERANCE_SECONDS,
@@ -129,6 +128,18 @@ describe('verifyStripeSignature', () => {
     expect(result.ok).toBe(true);
     expect(result.ok && result.event.id).toBe('evt_test_1234567890');
     expect(result.ok && result.event.type).toBe('checkout.session.completed');
+    expect(result.ok && result.event.created).toBeUndefined();
+  });
+
+  it('carries the Stripe event creation time when present', async () => {
+    const payload = JSON.stringify({ ...JSON.parse(samplePayload()), created: FIXED_EPOCH_SEC });
+    const header = await mintHeader(payload, FIXED_EPOCH_SEC, WEBHOOK_SECRET);
+
+    const result = await verifyStripeSignature(payload, header, WEBHOOK_SECRET, {
+      now: fixedNow(),
+    });
+
+    expect(result.ok && result.event.created).toBe(FIXED_EPOCH_SEC);
   });
 
   it('returns malformed_header for a completely malformed header', async () => {
@@ -267,9 +278,8 @@ describe('verifyStripeSignature', () => {
 
 interface DepsHandles {
   readonly verifySignature: Mock<WebhookDeps['verifySignature']>;
-  readonly claimStripeEvent: Mock<WebhookDeps['claimStripeEvent']>;
   readonly appendAudit: Mock<WebhookDeps['appendAudit']>;
-  readonly publish: Mock<WebhookDeps['publish']>;
+  readonly applyEvent: Mock<WebhookDeps['applyEvent']>;
   /**
    * The transaction port is generic (`<T>(fn: () => Promise<T>) => Promise<T>`)
    * which `vi.fn()` cannot preserve verbatim. We type the mock with
@@ -294,7 +304,6 @@ function buildDeps(
   options: {
     event?: StripeEvent | null;
     appendAuditError?: Error;
-    publishError?: Error;
   } = {},
 ): DepsHandles {
   const verifyResult: VerifyResult =
@@ -304,8 +313,6 @@ function buildDeps(
 
   const verifySignature = vi.fn<WebhookDeps['verifySignature']>().mockResolvedValue(verifyResult);
 
-  const claimStripeEvent = vi.fn<WebhookDeps['claimStripeEvent']>().mockResolvedValue(true);
-
   const appendAudit = vi.fn<WebhookDeps['appendAudit']>();
   if (options.appendAuditError !== undefined) {
     appendAudit.mockRejectedValue(options.appendAuditError);
@@ -313,12 +320,7 @@ function buildDeps(
     appendAudit.mockResolvedValue(undefined);
   }
 
-  const publish = vi.fn<WebhookDeps['publish']>();
-  if (options.publishError !== undefined) {
-    publish.mockRejectedValue(options.publishError);
-  } else {
-    publish.mockResolvedValue(undefined);
-  }
+  const applyEvent = vi.fn<WebhookDeps['applyEvent']>().mockResolvedValue('applied');
 
   // Pass-through tx: runs the callback inline. Tests that need to
   // assert the tx boundary override this behaviour.
@@ -328,15 +330,13 @@ function buildDeps(
 
   return {
     verifySignature,
-    claimStripeEvent,
     appendAudit,
-    publish,
+    applyEvent,
     withTransaction,
     deps: {
       verifySignature,
-      claimStripeEvent,
       appendAudit,
-      publish,
+      applyEvent,
       // Narrow the mock back to the generic `WebhookDeps`
       // signature at the injection site. The mock only ever
       // invokes its callback and returns the callback's
@@ -347,29 +347,15 @@ function buildDeps(
 }
 
 describe('handleStripeWebhook — happy paths', () => {
-  beforeEach(() => {
-    // Pin `new Date().toISOString()` so the test asserts an exact
-    // `occurredAt` value in the published envelope. `useFakeTimers`
-    // traps `Date.now()` AND `new Date()` whereas a plain
-    // `spyOn(Date, 'now')` only traps the static call.
-    vi.useFakeTimers();
-    vi.setSystemTime(FIXED_EPOCH_MS);
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('dispatches checkout.session.completed as billing.subscription.started', async () => {
+  it.each([
+    'checkout.session.completed',
+    'customer.subscription.created',
+    'invoice.payment_failed',
+  ])('applies %s atomically through applyEvent', async (type) => {
     const stripeEvent: StripeEvent = {
-      id: 'evt_checkout_1',
-      type: 'checkout.session.completed',
-      data: {
-        object: {
-          id: 'cs_1',
-          metadata: { studioId: 'studio-1' },
-        },
-      },
+      id: 'evt_1',
+      type,
+      data: { object: { id: 'obj_1' } },
     };
     const handles = buildDeps({ event: stripeEvent });
 
@@ -380,79 +366,22 @@ describe('handleStripeWebhook — happy paths', () => {
       handles.deps,
     );
 
-    expect(outcome).toEqual({
-      kind: 'processed',
-      eventType: 'checkout.session.completed',
-      eventId: 'evt_checkout_1',
-    });
-
-    expect(handles.publish).toHaveBeenCalledTimes(1);
-    const envelope = handles.publish.mock.calls[0]?.[0];
-    expect(envelope?.type).toBe('billing.subscription.started');
-    expect(envelope?.id).toBe('evt_checkout_1');
-    expect(envelope?.occurredAt).toBe(new Date(FIXED_EPOCH_MS).toISOString());
-    expect(envelope?.payload).toMatchObject({
-      stripeEventId: 'evt_checkout_1',
-      stripeEventType: 'checkout.session.completed',
-    });
-    expect(envelope?.payload['session']).toBe(stripeEvent.data);
-
-    // Publish + processed audit ran inside a transaction.
-    expect(handles.withTransaction).toHaveBeenCalledTimes(1);
-    expect(handles.appendAudit).toHaveBeenCalledTimes(1);
-    expect(handles.appendAudit.mock.calls[0]?.[0]).toMatchObject({
-      action: 'billing.webhook.processed',
-      targetId: 'evt_checkout_1',
-      metadata: { stripeEventType: 'checkout.session.completed' },
-    });
+    expect(outcome).toEqual({ kind: 'processed', eventType: type, eventId: 'evt_1' });
+    expect(handles.applyEvent).toHaveBeenCalledTimes(1);
+    expect(handles.applyEvent).toHaveBeenCalledWith(stripeEvent);
+    // The processed audit row is written by applyEvent itself.
+    expect(handles.appendAudit).not.toHaveBeenCalled();
+    expect(handles.withTransaction).not.toHaveBeenCalled();
   });
 
-  it('dispatches customer.subscription.created as billing.subscription.started', async () => {
-    const stripeEvent: StripeEvent = {
-      id: 'evt_sub_created_1',
-      type: 'customer.subscription.created',
-      data: { object: { id: 'sub_1', status: 'active' } },
-    };
-    const handles = buildDeps({ event: stripeEvent });
-
-    const outcome = await handleStripeWebhook('<raw>', 'sig', WEBHOOK_SECRET, handles.deps);
-
-    expect(outcome.kind).toBe('processed');
-    expect(handles.publish).toHaveBeenCalledTimes(1);
-    const envelope = handles.publish.mock.calls[0]?.[0];
-    expect(envelope?.type).toBe('billing.subscription.started');
-    expect(envelope?.payload['subscription']).toBe(stripeEvent.data);
-    expect(handles.appendAudit).toHaveBeenCalledTimes(1);
-    expect(handles.appendAudit.mock.calls[0]?.[0]?.action).toBe('billing.webhook.processed');
-  });
-
-  it('dispatches invoice.payment_failed as billing.subscription.failed', async () => {
-    const stripeEvent: StripeEvent = {
-      id: 'evt_inv_failed_1',
-      type: 'invoice.payment_failed',
-      data: { object: { id: 'in_1', amount_due: 2500 } },
-    };
-    const handles = buildDeps({ event: stripeEvent });
-
-    const outcome = await handleStripeWebhook('<raw>', 'sig', WEBHOOK_SECRET, handles.deps);
-
-    expect(outcome.kind).toBe('processed');
-    expect(handles.publish).toHaveBeenCalledTimes(1);
-    const envelope = handles.publish.mock.calls[0]?.[0];
-    expect(envelope?.type).toBe('billing.subscription.failed');
-    expect(envelope?.payload['invoice']).toBe(stripeEvent.data);
-    expect(handles.appendAudit).toHaveBeenCalledTimes(1);
-    expect(handles.appendAudit.mock.calls[0]?.[0]?.action).toBe('billing.webhook.processed');
-  });
-
-  it('returns processed without publishing when claimStripeEvent reports a duplicate', async () => {
+  it('returns processed when applyEvent reports a duplicate', async () => {
     const stripeEvent: StripeEvent = {
       id: 'evt_dup_1',
       type: 'checkout.session.completed',
       data: { object: { id: 'cs_dup' } },
     };
     const handles = buildDeps({ event: stripeEvent });
-    handles.claimStripeEvent.mockResolvedValue(false);
+    handles.applyEvent.mockResolvedValue('duplicate');
 
     const outcome = await handleStripeWebhook('<raw>', 'sig', WEBHOOK_SECRET, handles.deps);
 
@@ -461,17 +390,16 @@ describe('handleStripeWebhook — happy paths', () => {
       eventType: 'checkout.session.completed',
       eventId: 'evt_dup_1',
     });
-    expect(handles.publish).not.toHaveBeenCalled();
-    expect(handles.withTransaction).not.toHaveBeenCalled();
   });
 
-  it('returns unknown_event_type for unhandled events and does not publish / audit', async () => {
+  it('returns unknown_event_type when applyEvent ignores the event', async () => {
     const stripeEvent: StripeEvent = {
       id: 'evt_unused_1',
       type: 'charge.updated',
       data: { object: { id: 'ch_1' } },
     };
     const handles = buildDeps({ event: stripeEvent });
+    handles.applyEvent.mockResolvedValue('ignored');
 
     const outcome = await handleStripeWebhook('<raw>', 'sig', WEBHOOK_SECRET, handles.deps);
 
@@ -479,9 +407,7 @@ describe('handleStripeWebhook — happy paths', () => {
       kind: 'unknown_event_type',
       eventType: 'charge.updated',
     });
-    expect(handles.publish).not.toHaveBeenCalled();
     expect(handles.appendAudit).not.toHaveBeenCalled();
-    expect(handles.withTransaction).not.toHaveBeenCalled();
   });
 });
 
@@ -501,8 +427,8 @@ describe('handleStripeWebhook — signature failure', () => {
     );
 
     expect(outcome.kind).toBe('signature_invalid');
-    // The failing-signature flow MUST NOT publish.
-    expect(handles.publish).not.toHaveBeenCalled();
+    // The failing-signature flow MUST NOT apply the event.
+    expect(handles.applyEvent).not.toHaveBeenCalled();
 
     // Audit call happened exactly once, inside a transaction.
     expect(handles.withTransaction).toHaveBeenCalledTimes(1);
@@ -571,10 +497,9 @@ describe('handleStripeWebhook — signature failure', () => {
       ),
     ).rejects.toBe(boom);
 
-    // Publish never fired — signature failure path does not
-    // publish even when the audit succeeds, let alone when it
-    // fails.
-    expect(handles.publish).not.toHaveBeenCalled();
+    // The event was never applied — the signature failure path
+    // does not apply even when the audit succeeds.
+    expect(handles.applyEvent).not.toHaveBeenCalled();
   });
 
   it('propagates a withTransaction failure (tx open error)', async () => {

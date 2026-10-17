@@ -14,7 +14,12 @@
 #
 # Secrets (set once per env via `wrangler secret put --config wrangler.billing.toml`):
 #   DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, CORS_ORIGIN,
-#   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+#   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_ID_PRO,
+#   BILLING_REDIRECT_URL, BILLING_DB_URL (athlya_billing — the only role
+#   allowed to apply Stripe events, migration 0036)
+# Optional, same values as the gateway: SENTRY_DSN, OTEL_EXPORTER_OTLP_ENDPOINT,
+#   OTEL_EXPORTER_OTLP_HEADERS, JWT_ISSUER, JWT_AUDIENCE. This Worker inherits
+#   no secret from the gateway (wrangler.toml).
 # ----------------------------------------------------------------------------
 
 name = "athlya-api-billing"

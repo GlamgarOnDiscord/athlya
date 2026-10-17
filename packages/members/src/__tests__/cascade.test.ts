@@ -175,7 +175,7 @@ describe('handleUserDeleted — happy path', () => {
     deleteWorkoutSessionsForUser.mockResolvedValueOnce(7);
     deletePushTokensForUser.mockResolvedValueOnce(2);
     deleteIdempotencyKeysForUser.mockResolvedValueOnce(1);
-    markUserDeleted.mockResolvedValueOnce(undefined);
+    markUserDeleted.mockResolvedValueOnce(true);
     deleteAvatar.mockResolvedValueOnce(undefined);
     scheduleAnonymization.mockResolvedValueOnce(undefined);
 
@@ -230,12 +230,16 @@ describe('handleUserDeleted — happy path', () => {
     expect(error).not.toHaveBeenCalled();
   });
 
-  it('calls each cascade step in the documented order: reservations → sessions → push tokens → idempotencyKeys → markUserDeleted → avatar → scheduler', async () => {
+  it('calls each cascade step in the documented order: markUserDeleted → reservations → sessions → push tokens → idempotencyKeys → avatar → scheduler', async () => {
     const { repo, ...mocks } = buildRepo();
     const { avatars, deleteAvatar } = buildAvatars();
     const { scheduler, scheduleAnonymization } = buildScheduler();
 
     const order: string[] = [];
+    mocks.markUserDeleted.mockImplementationOnce(() => {
+      order.push('markUserDeleted');
+      return Promise.resolve(true);
+    });
     mocks.deleteReservationsForUser.mockImplementationOnce(() => {
       order.push('reservations');
       return Promise.resolve(0);
@@ -251,10 +255,6 @@ describe('handleUserDeleted — happy path', () => {
     mocks.deleteIdempotencyKeysForUser.mockImplementationOnce(() => {
       order.push('idempotencyKeys');
       return Promise.resolve(0);
-    });
-    mocks.markUserDeleted.mockImplementationOnce(() => {
-      order.push('markUserDeleted');
-      return Promise.resolve();
     });
     deleteAvatar.mockImplementationOnce(() => {
       order.push('avatar');
@@ -273,14 +273,50 @@ describe('handleUserDeleted — happy path', () => {
     });
 
     expect(order).toEqual([
+      'markUserDeleted',
       'reservations',
       'sessions',
       'pushTokens',
       'idempotencyKeys',
-      'markUserDeleted',
       'avatar',
       'scheduler',
     ]);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  handleUserDeleted — live account (issue #609)                      */
+/* ------------------------------------------------------------------ */
+
+describe('handleUserDeleted — user not soft-deleted', () => {
+  it('touches nothing, logs a warning and reports skipped for a forged or stale event', async () => {
+    const { repo, ...mocks } = buildRepo();
+    const { avatars, deleteAvatar } = buildAvatars();
+    const { scheduler, scheduleAnonymization } = buildScheduler();
+    const { logger, warn } = buildLogger();
+
+    mocks.markUserDeleted.mockResolvedValueOnce(false);
+
+    const result = await handleUserDeleted(buildEvent(), {
+      repo,
+      avatars,
+      scheduler,
+      clock: buildClock(FROZEN_NOW),
+      logger,
+    });
+
+    expect(result).toEqual({ kind: 'skipped', reason: 'user_not_deleted' });
+    expect(mocks.markUserDeleted).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteReservationsForUser).not.toHaveBeenCalled();
+    expect(mocks.deleteWorkoutSessionsForUser).not.toHaveBeenCalled();
+    expect(mocks.deletePushTokensForUser).not.toHaveBeenCalled();
+    expect(mocks.deleteIdempotencyKeysForUser).not.toHaveBeenCalled();
+    expect(deleteAvatar).not.toHaveBeenCalled();
+    expect(scheduleAnonymization).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/not soft-deleted/u), {
+      userId: USER_ID,
+      eventId: EVENT_ID,
+    });
   });
 });
 
@@ -306,7 +342,7 @@ describe('handleUserDeleted — avatar purge failure', () => {
     deleteWorkoutSessionsForUser.mockResolvedValueOnce(2);
     deletePushTokensForUser.mockResolvedValueOnce(0);
     deleteIdempotencyKeysForUser.mockResolvedValueOnce(0);
-    markUserDeleted.mockResolvedValueOnce(undefined);
+    markUserDeleted.mockResolvedValueOnce(true);
     deleteAvatar.mockRejectedValueOnce(new Error('R2 unreachable'));
     scheduleAnonymization.mockResolvedValueOnce(undefined);
 
@@ -319,13 +355,15 @@ describe('handleUserDeleted — avatar purge failure', () => {
     });
 
     // Cascade completed successfully in spite of the R2 failure.
-    expect(result.kind).toBe('ok');
-    expect(result.counts).toEqual({
-      reservations: 1,
-      sessions: 2,
-      pushTokens: 0,
-      idempotencyKeys: 0,
-      auditAnonymized: 0,
+    expect(result).toMatchObject({
+      kind: 'ok',
+      counts: {
+        reservations: 1,
+        sessions: 2,
+        pushTokens: 0,
+        idempotencyKeys: 0,
+        auditAnonymized: 0,
+      },
     });
 
     // SQL cascade ran end-to-end.
@@ -367,7 +405,7 @@ describe('handleUserDeleted — scheduler failure', () => {
     mocks.deleteWorkoutSessionsForUser.mockResolvedValueOnce(0);
     mocks.deletePushTokensForUser.mockResolvedValueOnce(0);
     mocks.deleteIdempotencyKeysForUser.mockResolvedValueOnce(0);
-    mocks.markUserDeleted.mockResolvedValueOnce(undefined);
+    mocks.markUserDeleted.mockResolvedValueOnce(true);
     deleteAvatar.mockResolvedValueOnce(undefined);
     scheduleAnonymization.mockRejectedValueOnce(new Error('QStash unreachable'));
 
@@ -407,7 +445,7 @@ describe('handleUserDeleted — markUserDeleted', () => {
     mocks.deleteWorkoutSessionsForUser.mockResolvedValueOnce(0);
     mocks.deletePushTokensForUser.mockResolvedValueOnce(0);
     mocks.deleteIdempotencyKeysForUser.mockResolvedValueOnce(0);
-    mocks.markUserDeleted.mockResolvedValueOnce(undefined);
+    mocks.markUserDeleted.mockResolvedValueOnce(true);
     deleteAvatar.mockResolvedValueOnce(undefined);
     scheduleAnonymization.mockResolvedValueOnce(undefined);
 

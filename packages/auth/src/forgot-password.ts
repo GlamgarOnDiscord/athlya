@@ -67,6 +67,19 @@ import { AuthError } from './service.js';
 
 import type { AuthServiceDeps } from './service.js';
 
+/**
+ * Thrown by {@link PasswordResetRepo.consumeAndResetPassword} when the
+ * token can no longer be consumed: already used (concurrent reset),
+ * expired since it was looked up, or not this user's (issue #609).
+ * `confirmReset` maps it to `token_expired` / `token_invalid`.
+ */
+export class PasswordResetTokenUnavailableError extends Error {
+  public constructor() {
+    super('password_reset_token_already_consumed');
+    this.name = 'PasswordResetTokenUnavailableError';
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
@@ -119,8 +132,8 @@ export interface PasswordResetRepo {
    * a "consumed token but old password" or "password updated but siblings
    * still valid" state.
    *
-   * Throws an error (`'password_reset_token_already_consumed'`) when the
-   * token was already consumed or belongs to a different user.
+   * Throws {@link PasswordResetTokenUnavailableError} when the token was
+   * already consumed, has expired, or belongs to a different user.
    */
   consumeAndResetPassword(input: {
     readonly tokenHash: string;
@@ -245,7 +258,7 @@ export async function requestReset(
       expiresAt,
     });
 
-    const link = `${deps.resetLinkBaseUrl.replace(/\/+$/u, '')}/reset-password/${plainToken}`;
+    const link = `${stripTrailingSlashes(deps.resetLinkBaseUrl)}/reset-password/${plainToken}`;
     await deps.emailTransport.sendResetEmail({
       to: user.email,
       link,
@@ -254,6 +267,13 @@ export async function requestReset(
   }
 
   return { kind: 'sent' };
+}
+
+/** Linear-time trailing-slash trim (a `/\/+$/` regex backtracks quadratically). */
+function stripTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 0x2f) end -= 1;
+  return url.slice(0, end);
 }
 
 /* ------------------------------------------------------------------ */
@@ -354,11 +374,23 @@ export async function confirmReset(
 
   const newPasswordHash = await hashPassword(input.newPassword);
 
-  await deps.passwordResetRepo.consumeAndResetPassword({
-    tokenHash,
-    userId: found.userId,
-    newPasswordHash,
-  });
+  try {
+    await deps.passwordResetRepo.consumeAndResetPassword({
+      tokenHash,
+      userId: found.userId,
+      newPasswordHash,
+    });
+  } catch (err) {
+    // The token can expire or be used by a concurrent reset during the
+    // HIBP check and hashing above: a client error, not a 500.
+    if (err instanceof PasswordResetTokenUnavailableError) {
+      const nowAfterMs = deps.now !== undefined ? deps.now() * 1000 : Date.now();
+      throw new AuthError(
+        found.expiresAt.getTime() <= nowAfterMs ? 'token_expired' : 'token_invalid',
+      );
+    }
+    throw err;
+  }
 
   // Security-event posture: tear down every active session on
   // password reset. The user re-authenticates everywhere.

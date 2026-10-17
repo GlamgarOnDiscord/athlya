@@ -39,9 +39,26 @@ Nous respectons une politique de **coordinated disclosure**. Un crédit public v
 
 | Version                      | Sécurité                                                |
 | ---------------------------- | ------------------------------------------------------- |
-| `main` (v1.x)                | ✅ supportée                                            |
+| `master` (v1.x)              | ✅ supportée                                            |
 | `release/*` branches futures | ✅ supportées jusqu'à 12 mois après la release suivante |
 | Forks                        | à la charge du fork                                     |
+
+---
+
+## Dépôt public
+
+Le code source est **public**. En conséquence :
+
+- Aucun secret (`.dev.vars`, `.env*`, token, DSN, clé JWT) n'est commité ;
+  `gitleaks` scanne les PR vers `master`, chaque push sur `master` et le dépôt
+  chaque semaine (`.github/workflows/secret-scan.yml`).
+  Un secret exposé est considéré compromis et **roté**, même après réécriture
+  de l'historique.
+- Les workflows `pull_request_target` s'exécutent avec un token en écriture et
+  les secrets du dépôt : ils ne checkout et n'exécutent **jamais** le code d'une
+  PR. Un workflow qui le ferait est in-scope (voir ci-dessous).
+- Les détails d'une vulnérabilité non corrigée ne doivent pas apparaître dans
+  une issue, une PR ou un commit publics avant la publication de l'advisory.
 
 ---
 

@@ -1,55 +1,39 @@
 {
   "overrides": {
-    "dockerode>uuid": {
-      "pinned": "11.1.1",
-      "reason": "dockerode pins uuid@3 which ships a weak RNG on some platforms; 11.x uses crypto.randomUUID",
-      "cve": null,
-      "ghsa": null,
-      "added": "2025-12-01",
-      "remove_when": "dockerode bumps its own uuid dep to >=11"
-    },
-    "testcontainers>tmp": {
-      "pinned": "^0.2.6",
-      "reason": "testcontainers@10 depends on tmp@0.2.x; older patch has predictable temp-file paths (local dev/CI only, not production)",
-      "cve": null,
-      "ghsa": "GHSA-m4w8-rj3f-3jf8",
-      "added": "2025-12-01",
-      "remove_when": "testcontainers bumps tmp to >=0.2.6"
-    },
-    "@grpc/grpc-js": {
-      "pinned": ">=1.14.4",
+    "@grpc/grpc-js@<1.14.4": {
+      "pinned": "^1.14.4",
       "reason": "Fixes remote memory exhaustion via large metadata headers",
       "cve": "CVE-2024-37168",
       "ghsa": "GHSA-7v5v-9h63-cj86",
       "added": "2025-09-01",
       "remove_when": "direct consumers (@opentelemetry/*, @google-cloud/*) adopt grpc-js >=1.14.4"
     },
-    "esbuild": {
-      "pinned": ">=0.28.1",
+    "esbuild@<0.28.1": {
+      "pinned": "^0.28.1",
       "reason": "Fixes development-server CORS bypass that allows cross-origin reads of local files",
       "cve": "CVE-2025-32395",
       "ghsa": "GHSA-67mh-4wv8-2f99",
       "added": "2025-11-01",
       "remove_when": "wrangler / vitest ship with esbuild >=0.28.1"
     },
-    "postcss": {
-      "pinned": ">=8.5.10",
+    "postcss@<8.5.10": {
+      "pinned": "^8.5.10",
       "reason": "Fixes ReDoS via crafted CSS input in the parser",
       "cve": null,
       "ghsa": "GHSA-7fh8-c7jj-9p5w",
       "added": "2025-12-01",
       "remove_when": "tailwindcss / other direct consumers adopt postcss >=8.5.10"
     },
-    "js-yaml": {
-      "pinned": ">=4.2.0",
+    "js-yaml@<4.2.0": {
+      "pinned": "^4.2.0",
       "reason": "Prototype pollution via __proto__ key in YAML documents",
       "cve": "CVE-2023-2251",
       "ghsa": "GHSA-cchq-frgv-rjh5",
       "added": "2025-09-01",
       "remove_when": "transitive consumers (jest-circus, cosmiconfig, etc.) adopt js-yaml >=4.2.0"
     },
-    "@babel/core": {
-      "pinned": ">=7.29.6",
+    "@babel/core@<7.29.6": {
+      "pinned": "^7.29.6",
       "reason": "Arbitrary code execution via crafted plugin-transform-runtime config",
       "cve": null,
       "ghsa": "GHSA-968p-4wvh-cqc8",
@@ -57,28 +41,20 @@
       "remove_when": "babel ecosystem aligns on >=7.29.6 in its own deps"
     },
     "@sentry/cli>undici": {
-      "pinned": "6.27.0",
-      "reason": "undici header smuggling / SSRF",
-      "cve": "CVE-2025-22150",
-      "ghsa": "GHSA-3m2p-5qmv-gg22",
-      "added": "2026-01-01",
-      "remove_when": "@sentry/cli ships with undici >=6.27.0"
-    },
-    "testcontainers>undici": {
-      "pinned": "^7",
-      "reason": "undici 8 requires Node >=22; this repo targets Node 20. Downgraded to undici 7 (latest Node-20-compatible major) to unblock Testcontainers CI.",
+      "pinned": "6.29.1",
+      "reason": "undici WebSocket DoS, retry-interceptor response splitting/desync, CRLF and cookie attribute injection",
       "cve": null,
-      "ghsa": null,
-      "added": "2026-07-05",
-      "remove_when": "testcontainers ships with a Node-20-compatible undici major (or repo drops Node 20 support)"
+      "ghsa": "GHSA-rfgv-xxqx-mfg5, GHSA-3wwx-pv8p-q78v, GHSA-8xcm-r25x-g524, GHSA-m8rv-5g2x-5cg5, GHSA-r53p-7pc4-xj5r, GHSA-v3r7-h72x-cjcm (previously GHSA-3m2p-5qmv-gg22)",
+      "added": "2026-10-17",
+      "remove_when": "@sentry/cli ships with undici >=6.28.1"
     },
-    "jsdom>ws": {
-      "pinned": "^8.21.0",
-      "reason": "Unchecked header size causes unbounded memory allocation (DoS)",
-      "cve": "CVE-2024-37890",
-      "ghsa": "GHSA-3h5q-q39x-f9x3",
-      "added": "2025-09-01",
-      "remove_when": "jsdom ships with ws >=8.21.0"
+    "glob@>=10.2.0 <10.5.0": {
+      "pinned": "^10.5.0",
+      "reason": "glob CLI command injection via -c/--cmd (pulled by @opennextjs/cloudflare -> glob@10.3.3); range-scoped so glob 7/8/11 consumers are untouched",
+      "cve": null,
+      "ghsa": "GHSA-5j98-mcp5-4vw2",
+      "added": "2026-10-12",
+      "remove_when": "@opennextjs/cloudflare depends on glob >=10.5.0"
     }
   }
 }

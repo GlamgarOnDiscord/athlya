@@ -41,13 +41,15 @@
  *                   markPublished stamp succeeded. These rows are
  *                   durably "done": they will not appear in future
  *                   drains.
- *   • `failed`    — every other row (queue send failed, or queue
- *                   send succeeded but markPublished failed). These
- *                   rows will be re-drained on the next cycle; the
- *                   consumer dedup window absorbs any duplicate
- *                   deliveries.
+ *   • `failed`    — rows whose queue send failed, or whose send
+ *                   succeeded but markPublished failed. These rows
+ *                   will be re-drained on a later cycle; the consumer
+ *                   dedup window absorbs any duplicate deliveries.
+ *   • `released`  — rows claimed but never attempted because the cycle
+ *                   deadline passed (issue #424). Not a failure: they
+ *                   go back to the pending set for the next cycle.
  *
- * `processed === succeeded + failed` always holds.
+ * `processed === succeeded + failed + released` always holds.
  *
  * Related requirements: 16.1, 16.2, 16.3, 16.4, 17.4.
  */
@@ -97,6 +99,16 @@ export interface ClaimedRow {
 export interface OutboxStore {
   claimBatch(size: number): Promise<readonly ClaimedRow[]>;
   markPublished(id: string): Promise<void>;
+  /**
+   * Leased stores (issue #424): stamp every delivered row of the batch
+   * in one statement instead of one `markPublished` per row.
+   */
+  markPublishedMany?(ids: readonly string[]): Promise<void>;
+  /**
+   * Leased stores: give back rows the cycle claimed but did not attempt
+   * before its deadline, so the next cycle can claim them immediately.
+   */
+  release?(ids: readonly string[]): Promise<void>;
 }
 
 /**
@@ -145,6 +157,24 @@ export interface DrainOutboxOptions {
   readonly batchSize?: number;
   readonly logger?: Logger;
   readonly clock?: Clock;
+  /**
+   * Deadline for each `queue.send` (issue #497). A hung queue call must
+   * not hold the claim transaction open: past the deadline the row is
+   * treated as failed and retried by the next drain. Defaults to
+   * {@link DEFAULT_QUEUE_SEND_TIMEOUT_MS}.
+   */
+  readonly sendTimeoutMs?: number;
+  /**
+   * Number of rows sent in parallel (issue #424). Defaults to 1 (strict
+   * claim order). The scheduled drain uses a bounded pool.
+   */
+  readonly concurrency?: number;
+  /**
+   * Cycle deadline in milliseconds (issue #424): no new send starts past
+   * it; unattempted rows are released and counted as `released`, not
+   * `failed`. Unbounded when omitted.
+   */
+  readonly deadlineMs?: number;
 }
 
 /** Tally returned by {@link drainOutbox}. See module docstring. */
@@ -152,6 +182,7 @@ export interface DrainResult {
   readonly processed: number;
   readonly succeeded: number;
   readonly failed: number;
+  readonly released: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -196,19 +227,29 @@ const defaultClock: Clock = {
  *
  * Algorithm (see module docstring for rationale):
  *
- *   1. Call `store.claimBatch(batchSize)`.
- *   2. For each claimed row, in the order returned by the store:
- *      a. Call `queue.send(reconstructed envelope)`.
+ *   1. Validate `batchSize` and `concurrency`, then call
+ *      `store.claimBatch(batchSize)`.
+ *   2. Send the claimed rows through a pool of `concurrency` workers,
+ *      taking rows in the order returned by the store:
+ *      a. Past the cycle deadline, no send starts: the row is set
+ *         aside as `released`.
+ *      b. Call `queue.send(reconstructed envelope)`, bounded by
+ *         `sendTimeoutMs`.
  *         - On failure: log at warn, count as `failed`, move on. The
- *           row is left with `published_at IS NULL` and will be
- *           re-drained on the next cycle.
- *      b. On queue send success, call `store.markPublished(row.id)`.
- *         - On failure: log at error, count as `failed`, move on.
- *           The queue already has the event; the consumer dedup
- *           (Req 17.4) absorbs the eventual redelivery.
- *         - On success: count as `succeeded`.
- *   3. Return `{ processed, succeeded, failed }`.
+ *           row keeps `published_at IS NULL` and is re-drained later.
+ *      c. On send success, stamp the row: collected for one
+ *         `store.markPublishedMany` call when the store has it,
+ *         otherwise `store.markPublished(row.id)` right away.
+ *         - A stamp failure is logged at error and counted as
+ *           `failed`; the consumer dedup (Req 17.4) absorbs the
+ *           redelivery.
+ *   3. Stamp the collected rows with `store.markPublishedMany` and
+ *      give the released rows back with `store.release`.
+ *   4. Return `{ processed, succeeded, failed, released }`.
  */
+/** Default per-row queue send deadline, in milliseconds (issue #497). */
+export const DEFAULT_QUEUE_SEND_TIMEOUT_MS = 5_000;
+
 export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainResult> {
   const { store } = options;
   const resolveQueue =
@@ -222,6 +263,8 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
   const logger = options.logger ?? defaultLogger;
   const clock = options.clock ?? defaultClock;
   const batchSize = normaliseBatchSize(options.batchSize);
+  const concurrency = normaliseConcurrency(options.concurrency);
+  const sendTimeoutMs = options.sendTimeoutMs ?? DEFAULT_QUEUE_SEND_TIMEOUT_MS;
 
   const startedAt = clock.now();
 
@@ -229,7 +272,7 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
 
   if (rows.length === 0) {
     logger.info('outbox drain: empty batch', { batchSize });
-    return { processed: 0, succeeded: 0, failed: 0 };
+    return { processed: 0, succeeded: 0, failed: 0, released: 0 };
   }
 
   logger.info('outbox drain: claimed rows', {
@@ -239,29 +282,79 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
 
   let succeeded = 0;
   let failed = 0;
+  const delivered: string[] = [];
+  const released: string[] = [];
+  const pending = [...rows];
+  const deadlineAt =
+    options.deadlineMs === undefined
+      ? Number.POSITIVE_INFINITY
+      : startedAt.getTime() + options.deadlineMs;
+  const batchMark = store.markPublishedMany !== undefined;
 
-  for (const row of rows) {
-    if (row.studioId === null || row.studioId === undefined) {
-      logger.warn('outbox drain: row has null studio_id (pre-migration-0014 row)', {
-        id: row.id,
-        eventId: row.eventId,
-        eventType: row.eventType,
-        attempts: row.attempts,
+  const sendNext = async (): Promise<void> => {
+    for (let row = pending.shift(); row !== undefined; row = pending.shift()) {
+      if (clock.now().getTime() >= deadlineAt) {
+        released.push(row.id);
+        continue;
+      }
+
+      if (row.studioId === null || row.studioId === undefined) {
+        logger.warn('outbox drain: row has null studio_id (pre-migration-0014 row)', {
+          id: row.id,
+          eventId: row.eventId,
+          eventType: row.eventType,
+          attempts: row.attempts,
+        });
+      }
+
+      const queue = resolveQueue(row.eventType);
+      const sendOk = await trySend(queue, row, logger, sendTimeoutMs);
+      if (!sendOk) {
+        failed += 1;
+        continue;
+      }
+
+      if (batchMark) {
+        delivered.push(row.id);
+        continue;
+      }
+      const markOk = await tryMarkPublished(store, row, logger);
+      if (markOk) {
+        succeeded += 1;
+      } else {
+        failed += 1;
+      }
+    }
+  };
+
+  const workers = Math.min(concurrency, rows.length);
+  await Promise.all(Array.from({ length: workers }, () => sendNext()));
+
+  if (delivered.length > 0) {
+    try {
+      await store.markPublishedMany!(delivered);
+      succeeded += delivered.length;
+    } catch (err) {
+      failed += delivered.length;
+      logger.error('outbox drain: markPublishedMany failed after successful queue sends', {
+        count: delivered.length,
+        error: errToDetail(err),
       });
     }
+  }
 
-    const queue = resolveQueue(row.eventType);
-    const sendOk = await trySend(queue, row, logger);
-    if (!sendOk) {
-      failed += 1;
-      continue;
-    }
-
-    const markOk = await tryMarkPublished(store, row, logger);
-    if (markOk) {
-      succeeded += 1;
-    } else {
-      failed += 1;
+  if (released.length > 0) {
+    logger.warn('outbox drain: cycle deadline reached; releasing unattempted rows', {
+      released: released.length,
+      deadlineMs: options.deadlineMs,
+    });
+    try {
+      await store.release?.(released);
+    } catch (err) {
+      logger.error('outbox drain: lease release failed; rows retry after lease expiry', {
+        count: released.length,
+        error: errToDetail(err),
+      });
     }
   }
 
@@ -270,10 +363,11 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
     processed: rows.length,
     succeeded,
     failed,
+    released: released.length,
     durationMs,
   });
 
-  return { processed: rows.length, succeeded, failed };
+  return { processed: rows.length, succeeded, failed, released: released.length };
 }
 
 /* ------------------------------------------------------------------ */
@@ -286,19 +380,38 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
  * aligned means consumers do not have to special-case "came from the
  * drain" vs "came from the primary publish".
  *
- * The `studioId` field is intentionally not included here: the
- * current `insertOutbox` helper serialises only the payload (not the
- * envelope's `studioId`), so we cannot reconstruct it from the stored
- * row. Reintroducing it is out of scope for task 9.3; consumers that
- * need the tenant scope read it from `payload.*Id` fields.
+ * `outbox.payload` holds the domain payload; `studioId` comes from the
+ * row's `studio_id` column when it is set (issue #609).
  */
-function reconstructEnvelope(row: ClaimedRow): Record<string, unknown> {
+export function reconstructEnvelope(row: ClaimedRow): Record<string, unknown> {
   return {
     id: row.eventId,
     type: row.eventType,
     occurredAt: row.occurredAt.toISOString(),
-    payload: row.payload,
+    ...(typeof row.studioId === 'string' && row.studioId !== '' ? { studioId: row.studioId } : {}),
+    payload: storedDomainPayload(row),
   };
+}
+
+/**
+ * Issue #609 — migration 0033's `auth_outbox_insert` stored the whole
+ * envelope in `outbox.payload`. Such a row is recognised by its stored
+ * `id` / `type` matching the row and an object `payload`; its domain
+ * payload is the inner one. Every other row is returned unchanged.
+ */
+function storedDomainPayload(row: ClaimedRow): Record<string, unknown> {
+  const stored = row.payload;
+  const inner = stored['payload'];
+  if (
+    stored['id'] === row.eventId &&
+    stored['type'] === row.eventType &&
+    typeof inner === 'object' &&
+    inner !== null &&
+    !Array.isArray(inner)
+  ) {
+    return inner as Record<string, unknown>;
+  }
+  return stored;
 }
 
 /**
@@ -307,9 +420,22 @@ function reconstructEnvelope(row: ClaimedRow): Record<string, unknown> {
  * returning. Never re-throws: the whole point of per-row isolation is
  * that one bad row must not abort the rest of the batch.
  */
-async function trySend(queue: QueueProducer, row: ClaimedRow, logger: Logger): Promise<boolean> {
+async function trySend(
+  queue: QueueProducer,
+  row: ClaimedRow,
+  logger: Logger,
+  timeoutMs: number,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await queue.send(reconstructEnvelope(row));
+    await Promise.race([
+      queue.send(reconstructEnvelope(row)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`queue send exceeded ${String(timeoutMs)} ms deadline`));
+        }, timeoutMs);
+      }),
+    ]);
     return true;
   } catch (err) {
     logger.warn('outbox drain: queue send failed; leaving row for next drain', {
@@ -320,6 +446,8 @@ async function trySend(queue: QueueProducer, row: ClaimedRow, logger: Logger): P
       error: errToDetail(err),
     });
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -362,6 +490,15 @@ function normaliseBatchSize(raw: number | undefined): number {
     throw new RangeError(`drainOutbox: batchSize must be a positive integer, got ${String(raw)}`);
   }
   return raw;
+}
+
+/** Bound the send pool: positive integer, default 1, capped at 32. */
+function normaliseConcurrency(raw: number | undefined): number {
+  if (raw === undefined) return 1;
+  if (!Number.isInteger(raw) || raw < 1) {
+    throw new RangeError(`drainOutbox: concurrency must be a positive integer, got ${String(raw)}`);
+  }
+  return Math.min(raw, 32);
 }
 
 /**

@@ -13,16 +13,16 @@ Alternative auto-hébergeable à bsport, Mywellness et Mindbody pour les studios
 [![Daily deps audit](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/deps-audit.yml/badge.svg)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/deps-audit.yml)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-8b5cf6?style=flat-square)](#licence)
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Node](https://img.shields.io/badge/Node-20%20LTS-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
-[![pnpm](https://img.shields.io/badge/pnpm-9.15-f69220?style=flat-square&logo=pnpm&logoColor=white)](https://pnpm.io/)
-[![Turborepo](https://img.shields.io/badge/Turborepo-2.x-ef4444?style=flat-square&logo=turborepo&logoColor=white)](https://turbo.build/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178c6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node](https://img.shields.io/badge/Node-24%20LTS-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-11-f69220?style=flat-square&logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![Turborepo](https://img.shields.io/badge/Turborepo-2.11-ef4444?style=flat-square&logo=turborepo&logoColor=white)](https://turborepo.dev/)
 [![Hono](https://img.shields.io/badge/Hono-4-ff6b00?style=flat-square)](https://hono.dev/)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-f38020?style=flat-square&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Drizzle](https://img.shields.io/badge/Drizzle-ORM-c5f74f?style=flat-square&logo=drizzle&logoColor=black)](https://orm.drizzle.team/)
 [![Zod](https://img.shields.io/badge/Zod-4-3068b7?style=flat-square)](https://zod.dev/)
-[![Vitest](https://img.shields.io/badge/Vitest-4-6e9f18?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-5-6e9f18?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/)
 [![fast-check](https://img.shields.io/badge/fast--check-PBT-8b5cf6?style=flat-square)](https://fast-check.dev/)
 
 [![Tests](https://img.shields.io/badge/tests-1260%20✓-22c55e?style=flat-square)](#état-des-tests)
@@ -138,10 +138,10 @@ graph TD
 
 | Couche                         | Technologie                        | Version |
 | ------------------------------ | ---------------------------------- | ------- |
-| Langage                        | TypeScript                         | 5.9     |
-| Runtime serveur                | Node 20 LTS / Cloudflare Workers   | —       |
-| Gestionnaire                   | pnpm workspaces                    | 9.15    |
-| Build                          | Turborepo                          | 2.x     |
+| Langage                        | TypeScript                         | 6.0     |
+| Runtime serveur                | Node 24 LTS / Cloudflare Workers   | —       |
+| Gestionnaire                   | pnpm workspaces                    | 11      |
+| Build                          | Turborepo                          | 2.11    |
 | Framework API                  | Hono                               | 4.x     |
 | ORM                            | Drizzle                            | dernier |
 | Base de données                | PostgreSQL + RLS                   | 17      |
@@ -174,13 +174,13 @@ graph TD
 
 ### Tests
 
-| Niveau             | Outil                         | Nombre               |
-| ------------------ | ----------------------------- | -------------------- |
-| Unit + intégration | Vitest 4                      | ~1015                |
-| Property-based     | fast-check 3.23               | 9 invariants formels |
-| RLS PostgreSQL     | pgTAP en CI                   | ~60 assertions       |
-| E2E (prévu)        | Playwright                    | —                    |
-| Mobile (prévu)     | Maestro ou EAS Device Testing | —                    |
+| Niveau             | Outil                         | Nombre                   |
+| ------------------ | ----------------------------- | ------------------------ |
+| Unit + intégration | Vitest 5                      | ~1015                    |
+| Property-based     | fast-check 4                  | 9 invariants formels     |
+| RLS PostgreSQL     | pgTAP en CI                   | ~60 assertions           |
+| E2E + a11y         | Playwright 1.64 + axe-core    | CI `axe.yml` (`apps/**`) |
+| Mobile (prévu)     | Maestro ou EAS Device Testing | —                        |
 
 ---
 
@@ -188,8 +188,8 @@ graph TD
 
 ### Prérequis
 
-- **Node 20 LTS** (voir `.nvmrc`)
-- **pnpm ≥ 9** (`corepack enable` suffit)
+- **Node 24 LTS** (voir `.nvmrc`)
+- **pnpm 11** (`corepack enable` suffit — version lue dans `packageManager`)
 - **Docker** optionnel — requis uniquement pour les suites Testcontainers (RLS, cascade, booking property). Sans Docker, ces suites se skippent proprement via `describe.skipIf(!dockerReady)`.
 
 ### Installation
@@ -458,14 +458,14 @@ Le vendor lock-in est un des griefs principaux adressés aux SaaS concurrents. C
 
 ## Conventions du monorepo
 
-- **pnpm workspaces** + **Turborepo 2.x**
-- **Node 20 LTS** pinné via `.nvmrc` + `engines`
-- **TypeScript 5.9** strict, **ESLint 9** flat config, **Prettier 3**
+- **pnpm 11 workspaces** + **Turborepo 2.11**
+- **Node 24 LTS** pinné via `.nvmrc` + `engines`
+- **TypeScript 6.0** strict, **ESLint 9** flat config, **Prettier 3**
 - Packages domaine **framework-free** avec DI ports (Repo, Counter, Publisher, Store)
 - **Hono** est peerDependency optionnelle de `@athlya/api` ; les middlewares sont duck-typés sur un contexte minimal `{ header(k,v); set; get; req; env }`
 - **Zod `.strict()`** sur tous les bodies de requête sauf `AuditLog.metadata`
 - **Branded IDs** via `.transform()` (pas `Zod.brand()`)
-- **fast-check ^3.23.2** + `@fast-check/vitest` pour les PBT, `numRuns` 20-200, seeds hex fixes
+- **fast-check ^4** + `@fast-check/vitest` pour les PBT, `numRuns` 20-200, seeds hex fixes
 - Testcontainers : sonde synchrone `docker info` au module load + `describe.skipIf(!dockerReady)` ; un test "infra probe" toujours enregistré
 - Worker bundle : aucun import Node-only, `crypto.getRandomValues` / `crypto.randomUUID` globaux Web
 
@@ -493,7 +493,7 @@ packages/
 
 1. Lire [`project.md`](project.md) pour le pitch et la rationale de stack
 2. Lire [`.kiro/specs/athlya-platform/requirements.md`](.kiro/specs/athlya-platform/requirements.md) et [`design.md`](.kiro/specs/athlya-platform/design.md) avant tout PR qui touche un invariant formel
-3. `pnpm -r typecheck && pnpm -r test` doivent passer vert
+3. `pnpm preflight` doit passer vert (install figé, format, lint, typecheck, tests, build)
 4. Suivre les conventions ESLint + Prettier (`pnpm format` avant push)
 5. Toute migration SQL doit avoir son `.down.sql`
 6. Tout nouveau middleware doit avoir ses unit tests **et** un cas dans `middleware-chain.test.ts`
