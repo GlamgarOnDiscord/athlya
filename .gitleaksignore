@@ -1,0 +1,3 @@
+# Fake fixture UUID in a test (not a secret), present only in an
+# intermediate commit of PR #589; the fixture was renamed in b614c06.
+69ec9fc78f2f79b7725045cbf454382f8296ed98:packages/members/src/__tests__/export.test.ts:generic-api-key:60
