@@ -66,6 +66,8 @@ describe('axiom-monitors.tf', () => {
       assert.equal(Number(local), Number(deployed), env);
     }
     assert.match(tf, /todouble\(total - errors\) \/ \$\{local\.otel_sample_rate\}/);
+    // /health* spans are sampled at 1 %, not at OTEL_SAMPLE_RATE.
+    assert.match(tf, /where not\(name contains " \/health"\)\n\s*\| summarize total = count\(\)/);
   });
 
   it('pages on-call only through the page flag', () => {

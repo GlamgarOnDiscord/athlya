@@ -72,8 +72,11 @@ athlya-api-production="<version-id>"` header
 (`scripts/canary-latency.mjs`). At 1 % / 5 % ordinary traffic would mostly
 hit the previous version; the override makes every sample measure the new
 one, and each answer must carry the canary `version` (`<sha7>`), otherwise
-the gate fails. `/health/ready` exercises Postgres, Redis, R2 and the cron
-state, so its p95 tracks the latency the release adds. A p95 above
+the gate fails. This is **readiness latency**: `/health/ready` runs the
+request pipeline plus live Postgres and Redis round-trips (R2 and cron are
+configuration checks only), so it catches a canary that is slow or degraded
+as a whole, not a regression confined to one API route. Per-route p95/p99
+SLOs are covered by the Axiom monitors (`infra/terraform/axiom-monitors.tf`). A p95 above
 `CANARY_MAX_P95_MS` (default 1500 ms, measured from the CI runner, network
 included), any non-ready answer, or a sample served by another version
 aborts the canary and rolls back. Both variables are optional repository

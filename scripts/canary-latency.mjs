@@ -6,9 +6,14 @@
  * Each probe therefore pins itself to the canary with Cloudflare's
  * `Cloudflare-Workers-Version-Overrides` header and checks that
  * `/health/ready` answers with the canary's `version` — proof that the
- * sample measured the new version. `/health/ready` exercises every runtime
- * dependency (Postgres, Redis, R2, cron state), so its p95 tracks the
- * latency the new code adds on the hot path.
+ * sample measured the new version.
+ *
+ * Scope: this is **readiness latency** — `/health/ready` runs the canary's
+ * request pipeline plus live Postgres and Redis round-trips (R2 and cron
+ * are configuration checks only). It catches a canary that is slow or
+ * degraded as a whole, not a regression confined to one API route; the
+ * per-route p95/p99 SLOs are watched by the Axiom monitors
+ * (infra/terraform/axiom-monitors.tf).
  *
  * Any sample that is not a ready answer from the canary fails the gate
  * (fail-closed), as does a p95 above the threshold.

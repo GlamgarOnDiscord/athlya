@@ -106,11 +106,14 @@ locals {
   axiom_slo_monitors = {
     # A1 / S3 — 5xx share of requests. Non-5xx spans are scaled back up by
     # 1 / OTEL_SAMPLE_RATE because only 5xx spans are always exported.
+    # /health* probes are sampled at a different rate (1 %), so they are
+    # excluded; their span name is "<METHOD> /health…" (otel.ts).
     api_5xx_rate = {
       name                = "API 5xx rate > 1% / 5 min"
       description         = "A1 / SLO S3 — share of 5xx responses (docs/operations/axiom-alerts.md § A1)"
       apl_query           = <<-APL
         ${local.axiom_spans}
+        | where not(name contains " /health")
         | summarize total = count(), errors = countif(['status.code'] == "ERROR") by bin_auto(_time)
         | extend requests = todouble(errors) + todouble(total - errors) / ${local.otel_sample_rate}
         | extend rate_pct = 100.0 * todouble(errors) / requests
