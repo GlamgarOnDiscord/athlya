@@ -5,7 +5,8 @@
  * is green": route-level smoke checks must pass and the new release must
  * not burn the error budget. The error signal is the Sentry error count
  * for the canary release (the Worker tags every event with
- * `release = VERSION`, which the canary upload sets to the commit SHA).
+ * `release = VERSION`, which every deploy sets to the 7-character commit
+ * SHA — the same name the source maps are uploaded under).
  */
 
 /**
@@ -76,8 +77,13 @@ export async function fetchReleaseErrorCount({
  * Read the gate configuration from the environment. Every value is
  * required: a canary without an error signal must not promote.
  *
+ * `CANARY_MAX_ERRORS` is optional: unset or empty (an unset repository
+ * variable reaches the job as `""`) means the default budget. Any other
+ * value must be a non-negative integer — a typo must not silently change
+ * the budget.
+ *
  * @param {NodeJS.ProcessEnv} env
- * @returns {{ ok: true, config: { org: string, project: string, token: string, release: string, maxErrors: number } } | { ok: false, missing: string[] }}
+ * @returns {{ ok: true, config: { org: string, project: string, token: string, release: string, maxErrors: number } } | { ok: false, missing: string[], invalid: string[] }}
  */
 export function readErrorBudgetConfig(env) {
   const required = {
@@ -95,8 +101,11 @@ export function readErrorBudgetConfig(env) {
   const missing = Object.entries(required)
     .filter(([, value]) => !value)
     .map(([key]) => names[key]);
-  if (missing.length > 0) return { ok: false, missing };
-  const maxErrors = Number(env.CANARY_MAX_ERRORS ?? 5);
+  const maxErrors = parseMaxErrors(env.CANARY_MAX_ERRORS);
+  const invalid = Number.isNaN(maxErrors)
+    ? [`CANARY_MAX_ERRORS="${env.CANARY_MAX_ERRORS}" (expected a non-negative integer)`]
+    : [];
+  if (missing.length > 0 || invalid.length > 0) return { ok: false, missing, invalid };
   return {
     ok: true,
     config: {
@@ -104,7 +113,19 @@ export function readErrorBudgetConfig(env) {
       project: required.project,
       token: required.token,
       release: required.release,
-      maxErrors: Number.isFinite(maxErrors) && maxErrors >= 0 ? maxErrors : 5,
+      maxErrors,
     },
   };
+}
+
+export const DEFAULT_MAX_ERRORS = 5;
+
+/**
+ * @param {string | undefined} raw
+ * @returns {number} the budget, or NaN when `raw` is not a non-negative integer
+ */
+function parseMaxErrors(raw) {
+  const value = raw?.trim() ?? '';
+  if (value === '') return DEFAULT_MAX_ERRORS;
+  return /^\d+$/.test(value) ? Number(value) : Number.NaN;
 }

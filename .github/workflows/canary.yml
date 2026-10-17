@@ -3,17 +3,22 @@ name: Canary Deploy
 # CN.7.1 — automatic canary promotion on every push to master.
 # Runbook: docs/runbooks/canary-deploy.md
 #
-# Required secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, SENTRY_AUTH_TOKEN
+# Required secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, SENTRY_AUTH_TOKEN,
+#                   SENTRY_DSN (plus the Worker-side secrets verify-secrets.mjs checks)
 # Required vars:    PRODUCTION_API_URL, STAGING_API_URL, SENTRY_ORG, SENTRY_PROJECT
-# Optional:         PRODUCTION_SMOKE_EMAIL / PRODUCTION_SMOKE_PASSWORD secrets
-#                   (authenticated route smoke), CANARY_MAX_ERRORS var (default 5)
+# Optional:         CANARY_MAX_ERRORS var (default 5; must be a non-negative integer)
+#
+# The Sentry release is the 7-char commit SHA, set as VERSION on the gateway
+# AND every sub-worker so the error budget covers the whole fleet.
 #
 # The canary-deploy.mjs script handles:
-#   • upload       — wrangler versions upload with VERSION=<sha> (Sentry release)
+#   • upload       — wrangler versions upload with VERSION:<sha7> (Sentry release)
 #   • promote      — wrangler versions deploy --percentage N
-#   • route smoke  — scripts/smoke-routes.mjs after every traffic shift
+#   • reachability — unauthenticated scripts/smoke-routes.mjs after every
+#                    traffic shift (production login is behind Turnstile)
 #   • bake gate    — /health/ready every 60 s, then the Sentry error count
-#                    for the release must stay within CANARY_MAX_ERRORS (#404)
+#                    for the release must stay within CANARY_MAX_ERRORS (#404);
+#                    runs at every step, 100 % included
 #   • rollback     — the workflow rolls back gateway + sub-workers on failure
 #
 # A missing prerequisite FAILS the run: a merge to master must not look
@@ -23,8 +28,9 @@ on:
   push:
     branches:
       - master
-    # Every package @athlya/api reaches through runtime dependencies, plus
-    # the lockfile — checked by scripts/check-canary-paths.mjs (#404).
+    # Every package @athlya/api reaches through runtime dependencies, the
+    # build config they extend, the lockfile, and every script this workflow
+    # runs (with its local imports) — checked by scripts/check-canary-paths.mjs (#404).
     paths:
       - 'packages/api/**'
       - 'packages/auth/**'
@@ -35,10 +41,14 @@ on:
       - 'packages/ratelimit/**'
       - 'packages/reservations/**'
       - 'packages/shared/**'
+      - 'packages/tsconfig/**'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - 'scripts/canary-deploy.mjs'
+      - 'scripts/canary-error-budget.mjs'
       - 'scripts/smoke-routes.mjs'
+      - 'scripts/verify-secrets.mjs'
+      - 'scripts/wait-health-ready.sh'
       - '.github/workflows/canary.yml'
 
 permissions:
@@ -58,6 +68,9 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
       STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+      # Sentry release for every Worker of this rollout — same 7-char SHA the
+      # direct deploys tag and upload source maps under (deploy-production.yml).
+      RELEASE_SHA: ${{ github.sha }}
 
     steps:
       - name: Checkout
@@ -81,6 +94,7 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           set -euo pipefail
           missing=()
@@ -90,12 +104,20 @@ jobs:
           [ -n "${SENTRY_AUTH_TOKEN}" ] || missing+=("secrets.SENTRY_AUTH_TOKEN")
           [ -n "${SENTRY_ORG}" ] || missing+=("vars.SENTRY_ORG")
           [ -n "${SENTRY_PROJECT}" ] || missing+=("vars.SENTRY_PROJECT")
+          [ -n "${SENTRY_DSN}" ] || missing+=("secrets.SENTRY_DSN")
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "### Canary: FAILED — not provisioned: ${missing[*]}" >> "$GITHUB_STEP_SUMMARY"
             echo "::error title=Canary not provisioned::missing ${missing[*]}"
             exit 1
           fi
+          echo "release=${RELEASE_SHA:0:7}" >> "$GITHUB_OUTPUT"
           echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      # The error budget only sees events the Workers actually send: without
+      # their SENTRY_DSN secret it would count zero and promote blind.
+      - name: Verify Worker secrets (production)
+        if: steps.config.outputs.ready == 'true'
+        run: node scripts/verify-secrets.mjs --env production
 
       - name: Pre-flight staging health check
         if: steps.config.outputs.ready == 'true' && env.STAGING_API_URL != ''
@@ -120,34 +142,34 @@ jobs:
       - name: Deploy bulkhead sub-workers (auth / reservations / billing)
         id: deploy_subworkers
         if: steps.config.outputs.ready == 'true'
+        env:
+          VERSION: ${{ steps.config.outputs.release }}
         run: |
           set -euo pipefail
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env production
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production
+          # wrangler parses --var KEY:VALUE (KEY=VALUE would add a key named "VERSION=…").
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env production --var "VERSION:${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production --var "VERSION:${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production --var "VERSION:${VERSION}"
 
       - name: Pre-canary health check (old gateway + new sub-workers)
         if: steps.config.outputs.ready == 'true' && steps.deploy_subworkers.outcome == 'success'
         run: bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}" 10 5
 
-      - name: Route smoke (old gateway + new sub-workers)
+      # Unauthenticated on purpose: production login requires a single-use
+      # Turnstile token CI cannot mint. Authenticated smoke runs on staging.
+      - name: Route reachability (old gateway + new sub-workers)
         if: steps.config.outputs.ready == 'true' && steps.deploy_subworkers.outcome == 'success'
-        env:
-          SMOKE_EMAIL: ${{ secrets.PRODUCTION_SMOKE_EMAIL }}
-          SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
         run: node scripts/smoke-routes.mjs --base-url "${PRODUCTION_API_URL}"
 
       - name: Canary 1% → 10% → 100%
         id: canary
         if: steps.config.outputs.ready == 'true' && steps.deploy_subworkers.outcome == 'success'
         env:
-          VERSION: ${{ github.sha }}
+          VERSION: ${{ steps.config.outputs.release }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
           CANARY_MAX_ERRORS: ${{ vars.CANARY_MAX_ERRORS }}
-          PRODUCTION_SMOKE_EMAIL: ${{ secrets.PRODUCTION_SMOKE_EMAIL }}
-          PRODUCTION_SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
         run: |
           set -euo pipefail
           node scripts/canary-deploy.mjs production-canary \
@@ -160,8 +182,10 @@ jobs:
       # rollback errors, leaving the fleet in an undefined mixed-version state.
       # Each rollback command runs independently; a failure in one is surfaced
       # as a non-zero exit so the step fails and the workflow is marked red.
+      # Only when something was deployed: a failure in the pre-flight checks
+      # must not roll production back from a version this run never touched.
       - name: Rollback on failure
-        if: failure() && steps.config.outputs.ready == 'true'
+        if: failure() && steps.config.outputs.ready == 'true' && (steps.deploy_subworkers.outcome == 'success' || steps.deploy_subworkers.outcome == 'failure')
         run: |
           set +e
           echo "::warning::Deploy failed — rolling back production gateway and sub-workers"
