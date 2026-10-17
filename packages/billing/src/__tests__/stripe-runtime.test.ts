@@ -179,11 +179,17 @@ describe('mapStripeEvent', () => {
         created: 1_760_227_200,
         number: 'A-1',
         hosted_invoice_url: 'https://invoice.stripe.com/i/in_1',
-        parent: { subscription_details: { subscription: 'sub_1' } },
+        parent: {
+          subscription_details: {
+            subscription: 'sub_1',
+            metadata: { studioId: STUDIO, userId: ADMIN },
+          },
+        },
       }),
       fixedId,
       fixedNow,
     );
+    expect(effect).toMatchObject({ studioId: STUDIO, userId: ADMIN });
     expect(effect?.invoice).toMatchObject({
       stripeInvoiceId: 'in_1',
       stripeSubscriptionId: 'sub_1',
@@ -194,6 +200,35 @@ describe('mapStripeEvent', () => {
       type: 'billing.subscription.failed',
       payload: { subscriptionId: 'sub_1', reason: PAYMENT_FAILED_REASON },
     });
+  });
+
+  it('attributes a legacy-shape invoice through subscription_details.metadata', () => {
+    const effect = mapStripeEvent(
+      ev('invoice.paid', {
+        id: 'in_1',
+        status: 'paid',
+        amount_due: 4900,
+        currency: 'eur',
+        created: 1_760_227_200,
+        subscription: 'sub_1',
+        subscription_details: { metadata: { studioId: STUDIO } },
+      }),
+      fixedId,
+    );
+    expect(effect).toMatchObject({ studioId: STUDIO, userId: null });
+    expect(
+      mapStripeEvent(
+        ev('invoice.paid', {
+          id: 'in_1',
+          status: 'paid',
+          amount_due: 4900,
+          currency: 'eur',
+          created: 1_760_227_200,
+          subscription: 'sub_1',
+        }),
+        fixedId,
+      ),
+    ).toMatchObject({ studioId: null, userId: null });
   });
 
   it('ignores last_finalization_error, which is not a payment decline', () => {

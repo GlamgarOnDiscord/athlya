@@ -9,7 +9,7 @@
 -- =====================================================================
 
 BEGIN;
-SELECT plan(28);
+SELECT plan(30);
 
 -- ---------- privileges ----------
 
@@ -172,18 +172,18 @@ SELECT ok(
     'an invoice event stamped with the same second is accepted'
 );
 
--- Stripe does not order deliveries: an invoice of a subscription not
--- recorded yet fails, and is NOT claimed, so Stripe's retry applies it.
-SELECT throws_ok(
-    $$ SELECT billing_apply_stripe_event('evt_122_invoice_early', 'invoice.paid', jsonb_build_object(
+-- Stripe does not order deliveries: an invoice that arrives before its
+-- subscription is attributed through the subscription metadata snapshot.
+SELECT ok(
+    billing_apply_stripe_event('evt_122_invoice_early', 'invoice.paid', jsonb_build_object(
+        'studioId', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'userId', '11111111-1111-4111-8111-111111111113',
         'sourceEventAt', '2026-10-12T00:00:00Z',
         'invoice', jsonb_build_object(
             'stripeInvoiceId', 'in_122_early', 'stripeSubscriptionId', 'sub_122_late',
             'status', 'paid', 'amountDue', 4900, 'currency', 'eur',
-            'createdAt', '2026-10-12T00:00:00Z'))) $$,
-    '55000',
-    NULL,
-    'an invoice of an unknown subscription is rejected'
+            'createdAt', '2026-10-11T00:00:00Z'))),
+    'an invoice that arrives before its subscription is applied from its metadata'
 );
 
 SELECT ok(
@@ -195,14 +195,27 @@ SELECT ok(
     'the subscription is recorded afterwards'
 );
 
+-- Not Athlya's subscription (no metadata, no stored row), or a studio
+-- deleted since checkout (its row cascaded): acknowledged, not retried.
 SELECT ok(
-    billing_apply_stripe_event('evt_122_invoice_early', 'invoice.paid', jsonb_build_object(
+    billing_apply_stripe_event('evt_122_invoice_foreign', 'invoice.paid', jsonb_build_object(
         'sourceEventAt', '2026-10-12T00:00:00Z',
         'invoice', jsonb_build_object(
-            'stripeInvoiceId', 'in_122_early', 'stripeSubscriptionId', 'sub_122_late',
+            'stripeInvoiceId', 'in_122_foreign', 'stripeSubscriptionId', 'sub_122_foreign',
             'status', 'paid', 'amountDue', 4900, 'currency', 'eur',
-            'createdAt', '2026-10-11T00:00:00Z'))),
-    'Stripe''s retry of the early invoice is applied'
+            'createdAt', '2026-10-12T00:00:00Z'))),
+    'an invoice of a subscription Athlya never recorded is acknowledged'
+);
+
+SELECT ok(
+    billing_apply_stripe_event('evt_122_invoice_deleted_studio', 'invoice.paid', jsonb_build_object(
+        'studioId', 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+        'sourceEventAt', '2026-10-12T00:00:00Z',
+        'invoice', jsonb_build_object(
+            'stripeInvoiceId', 'in_122_deleted', 'stripeSubscriptionId', 'sub_122_deleted',
+            'status', 'paid', 'amountDue', 4900, 'currency', 'eur',
+            'createdAt', '2026-10-12T00:00:00Z'))),
+    'an invoice of a deleted studio is acknowledged'
 );
 
 -- Post-claim failure: the whole statement rolls back, claim included.
@@ -222,6 +235,14 @@ SELECT ok(
 );
 
 RESET ROLE;
+
+SELECT is(
+    (SELECT count(*)::int FROM studio_invoices WHERE stripe_invoice_id IN ('in_122_foreign', 'in_122_deleted'))
+      + (SELECT count(*)::int FROM stripe_webhook_events
+          WHERE event_id IN ('evt_122_invoice_foreign', 'evt_122_invoice_deleted_studio')),
+    2,
+    'acknowledged events are claimed and store nothing'
+);
 
 SELECT results_eq(
     $$ SELECT status, hosted_invoice_url FROM studio_invoices WHERE stripe_invoice_id = 'in_122' $$,

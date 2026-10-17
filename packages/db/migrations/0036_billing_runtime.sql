@@ -120,9 +120,12 @@ $$;
 --                  amountDue, currency, hostedInvoiceUrl, createdAt } | null,
 --     "event": Athlya envelope { id, type, occurredAt, payload } | null }
 -- Returns false when the Stripe event was already applied (duplicate).
--- Raises 55000 when the change belongs to a subscription Athlya does
--- not know yet (Stripe does not order deliveries): the claim rolls back
--- and Stripe's retry applies it once the subscription is recorded.
+-- Stripe does not order deliveries: every Athlya subscription and its
+-- invoices carry the studio in their metadata (invoices through the
+-- subscription metadata snapshot), so a change is applied even before
+-- the subscription row exists. A change with no studio in its metadata
+-- and no stored subscription is not Athlya's (or its studio was deleted
+-- and cascaded the row): it is acknowledged, nothing is applied.
 CREATE OR REPLACE FUNCTION billing_apply_stripe_event(
     p_event_id text,
     p_event_type text,
@@ -166,20 +169,14 @@ BEGIN
         RETURN false;
     END IF;
 
-    -- Events without metadata (invoices, later subscription updates)
-    -- resolve their studio / initiating admin from the known
-    -- subscription. Each value is filled only when still missing: a
-    -- studio taken from the event metadata is never lost.
+    -- Values missing from the event metadata are resolved from the
+    -- stored subscription. Each value is filled only when still
+    -- missing: a studio taken from the event metadata is never lost.
     IF v_sub_id IS NOT NULL THEN
         v_studio := COALESCE(v_studio, (
             SELECT s.studio_id FROM studio_subscriptions s WHERE s.stripe_subscription_id = v_sub_id));
         v_user := COALESCE(v_user, (
             SELECT s.initiated_by FROM studio_subscriptions s WHERE s.stripe_subscription_id = v_sub_id));
-    END IF;
-
-    IF v_studio IS NULL AND v_sub_id IS NOT NULL AND (v_sub IS NOT NULL OR v_inv IS NOT NULL) THEN
-        RAISE EXCEPTION 'Stripe subscription % is not known yet', v_sub_id
-            USING ERRCODE = '55000';
     END IF;
 
     -- A studio deleted since checkout: acknowledge, nothing to apply.

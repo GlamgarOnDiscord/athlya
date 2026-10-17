@@ -121,10 +121,15 @@ function subscriptionChange(sub: Obj, forcedStatus?: string): SubscriptionChange
   };
 }
 
+/** API ≥ 2025-03 moved `subscription_details` under `invoice.parent`. */
+function invoiceSubscriptionDetails(inv: Obj): Obj | null {
+  return obj(obj(inv['parent'])?.['subscription_details']) ?? obj(inv['subscription_details']);
+}
+
 function invoiceSubscriptionId(inv: Obj): string | null {
-  // API ≥ 2025-03: invoice.parent.subscription_details.subscription.
-  const details = obj(obj(inv['parent'])?.['subscription_details']);
-  return stripeId(inv['subscription']) ?? stripeId(details?.['subscription']);
+  return (
+    stripeId(inv['subscription']) ?? stripeId(invoiceSubscriptionDetails(inv)?.['subscription'])
+  );
 }
 
 function invoiceChange(inv: Obj): InvoiceChange | null {
@@ -232,8 +237,10 @@ export function mapStripeEvent(
       if (change === null) return null;
       const failed = event.type === 'invoice.payment_failed';
       return {
-        studioId: null,
-        userId: null,
+        // Snapshot of the subscription metadata stamped at checkout: the
+        // invoice is attributed even when it arrives before the
+        // subscription events.
+        ...metadataIds(invoiceSubscriptionDetails(object)),
         sourceEventAt,
         subscription: null,
         invoice: change,

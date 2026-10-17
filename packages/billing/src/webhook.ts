@@ -121,10 +121,11 @@ export type SignatureFailureReason =
 /* ------------------------------------------------------------------ */
 
 /**
- * Minimal projection of a Stripe event — the three fields this
- * handler actually reads. The `data` field is deliberately `unknown`
- * so each downstream branch narrows the shape it needs; we never
- * validate Stripe's full schema here.
+ * Minimal projection of a Stripe event — the fields Athlya needs from
+ * it: `id` / `type` for the claim and dispatch, `data` for the mapping
+ * in `stripe-effects.ts`, and `created` to order late deliveries. The
+ * `data` field is deliberately `unknown` so each consumer narrows the
+ * shape it needs; we never validate Stripe's full schema here.
  */
 export interface StripeEvent {
   readonly id: string;

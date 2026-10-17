@@ -1,7 +1,7 @@
 # Stripe production — provisioning (issue #122)
 
 **Owner:** Backend / billing ops  
-**Prerequis:** API deployee staging + production, migrations `0010_stripe_webhook_events.sql` et `0036_billing_runtime.sql` appliquees et verifiees (Phase 3), role `athlya_billing` en LOGIN (Phase 2).
+**Prerequis:** API deployee staging + production, migrations `0010_stripe_webhook_events.sql` et `0036_billing_runtime.sql` appliquees et verifiees, role `athlya_billing` en LOGIN (Phase 2).
 
 ---
 
@@ -34,26 +34,78 @@ Connect onboarding studio : voir [billing.md](./billing.md) § Connect.
 
 ---
 
-## Phase 2 — Secrets Cloudflare Workers
+## Phase 2 — Migration + role `athlya_billing` (Neon)
 
-`/v1/billing/*` est servi par le Worker **billing** (`wrangler.billing.toml`,
-issue #230) : c'est lui qui doit porter les secrets Stripe et `BILLING_DB_URL`.
-Le gateway (`wrangler.toml`) garde une copie des secrets Stripe pour le
-fallback `*.workers.dev`.
+```powershell
+$env:MIGRATION_DATABASE_URL = "postgresql://neondb_owner:...@..."
+pnpm --filter @athlya/db run migrate
+```
 
-Le webhook applique les evenements Stripe sous le role dedie `athlya_billing`
-(migration 0036) — `athlya_app` ne peut pas les appliquer. Le passer en LOGIN
-une fois par environnement (Neon, role owner) :
+Verifier :
+
+```sql
+SELECT name FROM _athlya_migrations
+ WHERE name IN ('0010_stripe_webhook_events.sql', '0036_billing_runtime.sql');  -- 2 lignes
+\d stripe_webhook_events
+\d studio_subscriptions
+\d studio_invoices
+SELECT has_function_privilege('athlya_billing', 'billing_apply_stripe_event(text, text, jsonb)', 'EXECUTE') AS billing_ok,
+       NOT has_function_privilege('athlya_app', 'billing_apply_stripe_event(text, text, jsonb)', 'EXECUTE') AS app_refused,
+       has_function_privilege('athlya_app', 'billing_list_invoices(uuid, timestamptz, uuid, integer)', 'EXECUTE') AS listing_ok;
+-- 3 x true
+```
+
+La migration cree `athlya_billing` (NOLOGIN). Le webhook applique les
+evenements Stripe sous ce role dedie — `athlya_app` ne peut pas les appliquer.
+Le passer en LOGIN une fois par environnement, **apres** la migration (Neon,
+role owner) :
 
 ```sql
 ALTER ROLE athlya_billing LOGIN PASSWORD '<vault>';
 ```
 
+Puis le contrat de roles (rejoue chaque charge sous son role, tout est annule) :
+
+```powershell
+$env:APP_DATABASE_URL = "postgresql://athlya_app:...@.../athlya"
+$env:CRON_DATABASE_URL = "postgresql://athlya_cron:...@.../athlya"
+$env:BILLING_DATABASE_URL = "postgresql://athlya_billing:...@.../athlya"
+$env:SMOKE_STUDIO_SLUG = "<studio existant>"
+node scripts/verify-role-contract.mjs
+```
+
+---
+
+## Phase 3 — Secrets Cloudflare Workers
+
+`/v1/billing/*` est servi par le Worker **billing** (`wrangler.billing.toml`,
+issue #230), un Worker distinct : il n'herite **d'aucun** secret du gateway.
+Il lui faut ses propres secrets runtime en plus de ceux de Stripe :
+
+| Secret (Worker billing)              | Requis     | Usage                                        |
+| ------------------------------------ | ---------- | -------------------------------------------- |
+| `DB_URL`                             | oui        | `athlya_app` : checkout, factures, audit     |
+| `BILLING_DB_URL`                     | oui        | `athlya_billing` : application des webhooks  |
+| `REDIS_URL`, `REDIS_TOKEN`           | oui        | rate limit, idempotence                      |
+| `JWT_JWKS_URL`                       | oui        | verification des JWT admin                   |
+| `CORS_ORIGIN`                        | oui        | origines du studio app                       |
+| `STRIPE_*`, `BILLING_REDIRECT_URL`   | oui        | checkout + signature webhook                 |
+| `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_*` | prod       | observabilite (memes valeurs que le gateway) |
+| `JWT_ISSUER`, `JWT_AUDIENCE`         | si gateway | memes valeurs que le gateway                 |
+
+Le gateway (`wrangler.toml`) garde une copie des secrets Stripe pour le
+fallback `*.workers.dev`.
+
 ```powershell
 cd packages/api
 
 foreach ($envName in 'staging', 'production') {
-  # Worker billing (routes /v1/billing/*)
+  # Worker billing (routes /v1/billing/*) — runtime partage avec le gateway
+  foreach ($name in 'DB_URL', 'REDIS_URL', 'REDIS_TOKEN', 'JWT_JWKS_URL', 'CORS_ORIGIN',
+                    'SENTRY_DSN', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_HEADERS') {
+    pnpm exec wrangler secret put $name --config wrangler.billing.toml --env $envName
+  }
+  # Worker billing — Stripe
   pnpm exec wrangler secret put STRIPE_SECRET_KEY --config wrangler.billing.toml --env $envName
   pnpm exec wrangler secret put STRIPE_WEBHOOK_SECRET --config wrangler.billing.toml --env $envName
   pnpm exec wrangler secret put STRIPE_PRICE_ID_PRO --config wrangler.billing.toml --env $envName
@@ -95,47 +147,16 @@ reste en 503 `billing_not_configured` (toujours en `dev`).
   `billing.subscription.failed` sur `invoice.payment_failed`) et la ligne d'audit.
   Un echec annule aussi la reclamation : la relance Stripe est retraitee au lieu
   d'etre ignoree comme doublon. Un rejeu est un no-op.
-- **Ordre de livraison** : Stripe n'ordonne pas ses envois. Une facture d'un
-  abonnement pas encore enregistre repond 500 (non reclamee) et la relance
-  Stripe l'applique une fois l'abonnement connu. Un evenement plus ancien livre
+- **Ordre de livraison** : Stripe n'ordonne pas ses envois. Une facture porte
+  le snapshot des metadata de l'abonnement (`studioId`, `userId`) : elle est
+  rattachee au studio meme si elle arrive avant l'abonnement. Sans metadata ni
+  abonnement connu (abonnement hors Athlya, ou studio supprime), l'evenement est
+  acquitte sans effet. Un evenement plus ancien livre
   en retard (`created` Stripe) ne fait jamais reculer un statut (une facture
   `paid` ne redevient pas `open`).
 - **Factures** : `GET /v1/billing/invoices` (admin) pagine `studio_invoices`
   (curseur opaque `created_at|id`) sous les claims du tenant : la RLS limite la
   lecture aux admins du studio.
-
----
-
-## Phase 3 — Migration idempotency (Neon)
-
-```powershell
-$env:MIGRATION_DATABASE_URL = "postgresql://neondb_owner:...@..."
-pnpm --filter @athlya/db run migrate
-```
-
-Verifier :
-
-```sql
-SELECT name FROM _athlya_migrations
- WHERE name IN ('0010_stripe_webhook_events.sql', '0036_billing_runtime.sql');  -- 2 lignes
-\d stripe_webhook_events
-\d studio_subscriptions
-\d studio_invoices
-SELECT has_function_privilege('athlya_billing', 'billing_apply_stripe_event(text, text, jsonb)', 'EXECUTE') AS billing_ok,
-       NOT has_function_privilege('athlya_app', 'billing_apply_stripe_event(text, text, jsonb)', 'EXECUTE') AS app_refused,
-       has_function_privilege('athlya_app', 'billing_list_invoices(uuid, timestamptz, uuid, integer)', 'EXECUTE') AS listing_ok;
--- 3 x true
-```
-
-Puis le contrat de roles (rejoue chaque charge sous son role, tout est annule) :
-
-```powershell
-$env:APP_DATABASE_URL = "postgresql://athlya_app:...@.../athlya"
-$env:CRON_DATABASE_URL = "postgresql://athlya_cron:...@.../athlya"
-$env:BILLING_DATABASE_URL = "postgresql://athlya_billing:...@.../athlya"
-$env:SMOKE_STUDIO_SLUG = "<studio existant>"
-node scripts/verify-role-contract.mjs
-```
 
 ---
 
