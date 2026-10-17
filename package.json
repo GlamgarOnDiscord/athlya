@@ -25,7 +25,8 @@
     "check:overrides": "node scripts/check-overrides.mjs",
     "check:legal": "node scripts/check-legal-placeholders.mjs",
     "check:labels": "node scripts/check-labels.mjs",
-    "check:docs": "node scripts/check-docs-drift.mjs"
+    "check:docs": "node scripts/check-docs-drift.mjs",
+    "check:canary-paths": "node scripts/check-canary-paths.mjs"
   },
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",

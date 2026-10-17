@@ -26,6 +26,25 @@ Actions → **Deploy API** → `workflow_dispatch`
 
 Environment GitHub **`production`** : approbation manuelle obligatoire avant canary/rollback.
 
+## Gates de promotion (issue #404)
+
+À chaque palier (1 % → 10 % → 100 % automatique, 5 → 25 → 100 % manuel) :
+
+1. **Smoke par route** (`scripts/smoke-routes.mjs`) juste après le
+   basculement de trafic — authentifié si `PRODUCTION_SMOKE_EMAIL` /
+   `PRODUCTION_SMOKE_PASSWORD` sont fournis.
+2. **Fenêtre de bake** : `/health/ready` toutes les 60 s (2 échecs
+   consécutifs → abort).
+3. **Budget d'erreurs** : nombre d'erreurs Sentry de la release
+   (`VERSION` = SHA du commit, injecté par `--var VERSION:<sha>`) sur la
+   fenêtre ; au-delà de `CANARY_MAX_ERRORS` (défaut 5) → abort et rollback.
+   Une erreur de l'API Sentry fait échouer le gate (fail-closed).
+
+Prérequis obligatoires (le workflow **échoue** sinon) : `SENTRY_AUTH_TOKEN`,
+`SENTRY_ORG`, `SENTRY_PROJECT`. Les déclencheurs de `canary.yml` couvrent tout
+le graphe runtime de `@athlya/api` + le lockfile, vérifié en CI par
+`pnpm check:canary-paths`.
+
 ## Script local / CI
 
 ```bash
