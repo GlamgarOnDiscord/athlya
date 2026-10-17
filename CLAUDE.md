@@ -12,7 +12,10 @@ Any code/config/docs change goes through the **`/ship`** workflow
 2. **Branch** `fix/issue-XX-…` | `feat/…` | `chore/…` off up-to-date `master`.
 3. **EPCT** — explore → plan → code → test. Add tests for new logic.
 4. ⭐ **`pnpm preflight`** before pushing (the `.githooks/pre-push` hook runs it).
-   = `install --frozen-lockfile && format:check && lint && typecheck`.
+   = `install --frozen-lockfile && format:check && lint && typecheck && test && build:ci`.
+   Behind a TLS-intercepting proxy (sandboxes), push with `TURBO_ENV_MODE=loose`:
+   Turbo's default strict env mode only forwards declared vars, so
+   `NODE_EXTRA_CA_CERTS` is dropped and network-touching tests fail.
 5. **PR** with `Closes #XX`.
 6. ⭐ **AI bot reviews are mandatory**: read ALL CodeRabbit/cubic/Copilot
    feedback — inline (`gh api .../pulls/<n>/comments`), PR conversation
@@ -43,6 +46,13 @@ Watch CI with the **`Monitor`** tool, never `sleep`. Rerun known flakes
   not an inline `(await res.json()) as T` (typescript-eslint vs tsc disagree).
 - Only `Lint, typecheck, and tests` is a required check; pgTAP runs on
   `packages/db/migrations/**`, axe/E2E on `apps/**`.
+- The repo is **public**: never commit secrets, `.dev.vars`, `.env*` or real
+  DSNs (gitleaks runs in CI). `pull_request_target` workflows must never
+  check out or run PR code (they hold write tokens and secrets).
+- postgres-js raw SQL: pass jsonb as `${JSON.stringify(x)}::text::jsonb`; a
+  bare `${JSON.stringify(x)}::jsonb` is double-encoded into a jsonb string.
+  Drizzle's json/jsonb/timestamp column serializers are transparent — pass
+  plain values there.
 
 ## Database migrations — expand/contract required for canary safety
 
@@ -63,6 +73,21 @@ migration that ships with a Worker deploy — the old Worker doesn't send that
 column and every its INSERT fails.
 
 See `docs/runbooks/expand-contract-migrations.md` for worked examples.
+
+**Roles and privileged functions:**
+
+- Runtime roles `athlya_app` (API) and `athlya_cron` (maintenance) are
+  `NOBYPASSRLS`; RLS is the last line of defence, never widen it with
+  `BYPASSRLS`.
+- `SECURITY DEFINER` functions are owned by `athlya_owner`, declare
+  `SET search_path = public, pg_temp`, and are followed by
+  `REVOKE ALL ON FUNCTION … FROM PUBLIC` plus `GRANT EXECUTE` to the single
+  runtime role that calls it (`athlya_app`, or `athlya_cron` for cron-only
+  functions).
+- pgTAP: a `STABLE` function sees the snapshot taken at the start of the
+  calling statement, so an assertion that reads through one right after a
+  write in the same statement sees stale data — split the write and the
+  read-back into separate statements/assertions.
 
 ## Dependencies
 

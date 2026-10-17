@@ -1384,6 +1384,6 @@ test.prop([fc.integer({ min: 1, max: 10 }), fc.array(fc.uuid(), { minLength: 1, 
 
 ### Contraintes d'environnement
 
-- Développement sur **Windows 11** : toute la stack est cross-platform (Node 20 LTS, pnpm 9, Wrangler CLI, EAS CLI).
+- Développement sur **Windows 11** : toute la stack est cross-platform (Node 24 LTS, pnpm 11, Wrangler CLI, EAS CLI).
 - Test iOS gratuit : Expo Go sur iPhone réel via QR code local (Wi-Fi partagé) ; EAS Build cloud pour les IPA de production (pas de Mac requis).
 - Le workspace `apps/mobile` exige EAS Build dès qu'un module natif custom est introduit (post-v0.2).

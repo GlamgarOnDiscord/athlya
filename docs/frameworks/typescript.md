@@ -1,6 +1,6 @@
 # TypeScript — Framework Audit
 
-> **Archive snapshot — 2026-05-14.** TypeScript 7.0 est sorti depuis (réécriture Go) ; ce projet reste sur `^5.9.3` (stable, compatible). La migration vers une version majeure ultérieure est hors scope pour l'instant.
+> **Archive snapshot — 2026-05-14.** Le projet est passé sur TypeScript `^6.0.3` (#574). TypeScript 7.0 (compilateur natif Go) est sorti depuis, mais sans API programmatique stable avant 7.1 et typescript-eslint plafonne à `<6.1` : la migration vers 7.x reste bloquée. Voir `STACK.md` pour l'état courant.
 
 _Last updated: 2026-05-14_
 

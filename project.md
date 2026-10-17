@@ -1072,7 +1072,7 @@ jobs:
 - [ ] Générer clés SSH dev + activer commit signature.
 - [ ] Setup 1Password (ou équivalent) pour secrets.
 - [ ] Valider qu'Expo Go fonctionne sur ton iPhone depuis Windows (scan d'un snack pour tester).
-- [ ] Installer Node 20 LTS + pnpm + Wrangler CLI + EAS CLI.
+- [ ] Installer Node 24 LTS + pnpm 11 + Wrangler CLI + EAS CLI.
 - [ ] Créer compte Apple Developer (99 $/an) **uniquement au moment de la v0.2** (avant c'est inutile).
 
 ---

@@ -141,7 +141,6 @@ No `remoteCache` configured. For solo developer this is fine. For team/CI use, c
 
 ## Sources
 
-- https://turbo.build/repo/docs
-- https://turbo.build/repo/docs/reference/query
-- https://turbo.build/repo/docs/crafting-your-repository/upgrade-to-3
+- https://turborepo.dev/docs
+- https://turborepo.dev/docs/reference/query
 - https://github.com/vercel/turborepo/releases/tag/v2.9.12
