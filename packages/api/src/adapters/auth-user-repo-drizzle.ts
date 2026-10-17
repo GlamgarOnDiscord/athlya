@@ -23,6 +23,9 @@
  *    matches zero rows. The functions are the narrow contract: lookup
  *    by email / id / slug, member-only registration, credential
  *    version bumps and soft delete.
+ *  • Registration and deletion record their `auth.user.*` event in the
+ *    outbox inside the same function call (migration 0033, issue #411),
+ *    so the mutation and its event commit or fail together.
  *
  * @see Requirements 1.1, 1.5, 5.1.
  */
@@ -30,7 +33,13 @@
 import { EmailTakenError, type UserRepo, type UserRow } from '@athlya/auth';
 import { isPostgresUniqueViolation } from '@athlya/db/errors';
 
-import { queryRows, serviceFn, toDateOrNull, type ServiceUserRow } from './service-functions.js';
+import {
+  queryRows,
+  serviceFn,
+  toDateOrNull,
+  uuidV7,
+  type ServiceUserRow,
+} from './service-functions.js';
 
 import type { AthlyaDbAny } from '@athlya/db/client';
 import type { Consents } from '@athlya/shared/schemas';
@@ -97,6 +106,47 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
         }
         throw err;
       }
+    },
+
+    async createUserWithEvent(input, buildEvent) {
+      if (input.role !== 'member') {
+        throw new Error(
+          `createUser: only member self-registration is supported (got ${input.role})`,
+        );
+      }
+      // The id is chosen here so the `auth.user.registered` envelope can
+      // reference it; user row and outbox event commit in one statement
+      // (migration 0033, issue #411).
+      const userId = uuidV7();
+      const event = buildEvent({ id: userId, studioId: input.studioId });
+      try {
+        const rows = await queryRows<ServiceUserRow>(
+          db,
+          serviceFn.createMemberWithEvent({
+            userId,
+            studioId: input.studioId,
+            email: input.email,
+            displayName: input.displayName,
+            passwordHash: input.passwordHash,
+            consents: input.consents satisfies Consents,
+            event,
+          }),
+        );
+        const row = rows[0];
+        if (row === undefined) {
+          throw new Error('createUserWithEvent: auth_create_member_with_event returned no row');
+        }
+        return toUserRow(row);
+      } catch (err) {
+        if (isPostgresUniqueViolation(err)) {
+          throw new EmailTakenError();
+        }
+        throw err;
+      }
+    },
+
+    async softDeleteUserWithEvent(id, event) {
+      await queryRows(db, serviceFn.softDeleteUserWithEvent(id, event));
     },
 
     async softDeleteUser(id) {

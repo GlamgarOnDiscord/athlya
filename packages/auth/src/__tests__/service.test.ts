@@ -636,6 +636,111 @@ describe('deleteMe', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Durable auth events (issue #411)
+// ---------------------------------------------------------------------------
+
+describe('durable auth events (issue #411)', () => {
+  it('register records auth.user.registered with the user, then dispatches it best-effort', async () => {
+    const { deps, repo, publishEvent } = makeDeps();
+    const dispatchRecordedEvent = vi.fn<NonNullable<AuthServiceDeps['dispatchRecordedEvent']>>(() =>
+      Promise.reject(new Error('queue down')),
+    );
+    const durableDeps: AuthServiceDeps = { ...deps, dispatchRecordedEvent };
+    repo.findStudioBySlug.mockResolvedValue({
+      id: STUDIO_ID,
+      slug: 'athlya-studio',
+      name: 'Athlya',
+    });
+    const createUserWithEvent = vi.fn<NonNullable<UserRepo['createUserWithEvent']>>(
+      (input, buildEvent) => {
+        const event = buildEvent({ id: USER_ID, studioId: input.studioId }) as unknown as {
+          type: string;
+          payload: { userId: string };
+        };
+        expect(event.type).toBe('auth.user.registered');
+        expect(event.payload.userId).toBe(USER_ID);
+        return Promise.resolve(makeUserRow({ studioId: input.studioId }));
+      },
+    );
+    const durableRepo: UserRepo = { ...repo, createUserWithEvent };
+
+    const session = await register(REGISTER_INPUT, { ...durableDeps, userRepo: durableRepo });
+
+    expect(session.user.id).toBe(USER_ID);
+    expect(createUserWithEvent).toHaveBeenCalledTimes(1);
+    expect(repo.createUser).not.toHaveBeenCalled();
+    expect(publishEvent).not.toHaveBeenCalled();
+    expect(dispatchRecordedEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'auth.user.registered' }),
+    );
+  });
+
+  it('register fails when the user + event cannot be recorded together', async () => {
+    const { deps, repo, publishEvent, store } = makeDeps();
+    repo.findStudioBySlug.mockResolvedValue({
+      id: STUDIO_ID,
+      slug: 'athlya-studio',
+      name: 'Athlya',
+    });
+    const durableRepo: UserRepo = {
+      ...repo,
+      createUserWithEvent: vi.fn(() => Promise.reject(new Error('outbox unavailable'))),
+    };
+
+    await expect(register(REGISTER_INPUT, { ...deps, userRepo: durableRepo })).rejects.toThrow(
+      'outbox unavailable',
+    );
+    expect(store.create).not.toHaveBeenCalled();
+    expect(publishEvent).not.toHaveBeenCalled();
+  });
+
+  it('deleteMe tombstones and records auth.user.deleted atomically before revoking sessions', async () => {
+    const { deps, repo, store, publishEvent } = makeDeps();
+    repo.findUserById.mockResolvedValue(makeUserRow());
+    const softDeleteUserWithEvent = vi.fn<NonNullable<UserRepo['softDeleteUserWithEvent']>>(() =>
+      Promise.resolve(),
+    );
+    const dispatchRecordedEvent = vi.fn<NonNullable<AuthServiceDeps['dispatchRecordedEvent']>>(() =>
+      Promise.resolve(),
+    );
+
+    await deleteMe(USER_ID, {
+      ...deps,
+      dispatchRecordedEvent,
+      userRepo: { ...repo, softDeleteUserWithEvent },
+    });
+
+    const [id, event] = softDeleteUserWithEvent.mock.calls[0]!;
+    expect(id).toBe(USER_ID);
+    expect(event).toMatchObject({
+      type: 'auth.user.deleted',
+      studioId: STUDIO_ID,
+      payload: { userId: USER_ID },
+    });
+    expect(repo.softDeleteUser).not.toHaveBeenCalled();
+    expect(store.revokeAllForUser).toHaveBeenCalledWith(USER_ID);
+    expect(publishEvent).not.toHaveBeenCalled();
+    expect(dispatchRecordedEvent).toHaveBeenCalledWith(event);
+  });
+
+  it('deleteMe surfaces a recording failure and keeps the sessions', async () => {
+    const { deps, repo, store } = makeDeps();
+    repo.findUserById.mockResolvedValue(makeUserRow());
+
+    await expect(
+      deleteMe(USER_ID, {
+        ...deps,
+        userRepo: {
+          ...repo,
+          softDeleteUserWithEvent: vi.fn(() => Promise.reject(new Error('42501'))),
+        },
+      }),
+    ).rejects.toThrow('42501');
+    expect(store.revokeAllForUser).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // loginWithApple / loginWithGoogle
 // ---------------------------------------------------------------------------
 
