@@ -9,9 +9,10 @@ import { describe, expect, it } from 'vitest';
 import { createDrizzleUserRepo } from '../../adapters/auth-user-repo-drizzle.js';
 import { createDrizzleDeletionRepo } from '../../adapters/cascade-repo-drizzle.js';
 import { buildRecipientRepo } from '../../adapters/notifications-deps.js';
-import { queryRows, serviceFn, uuidV7 } from '../../adapters/service-functions.js';
+import { createDrizzlePasswordResetRepo } from '../../adapters/password-reset-repo-drizzle.js';
+import { queryRows, serviceFn, uuidV7, writeRows } from '../../adapters/service-functions.js';
 
-import type { AthlyaDbAny } from '@athlya/db/client';
+import type { AthlyaDbAny, AthlyaDbHttp } from '@athlya/db/client';
 import type { SQL } from 'drizzle-orm';
 
 /**
@@ -21,7 +22,11 @@ import type { SQL } from 'drizzle-orm';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const apiSrc = resolve(here, '../..');
-const migration = ['0032_service_definer_functions.sql', '0033_auth_event_recording.sql']
+const migration = [
+  '0032_service_definer_functions.sql',
+  '0033_auth_event_recording.sql',
+  '0037_auth_outbox_review_fixes.sql',
+]
   .map((file) => readFileSync(resolve(here, '../../../../db/migrations', file), 'utf8'))
   .join('\n');
 const dialect = new PgDialect();
@@ -104,6 +109,76 @@ describe('queryRows', () => {
       { n: 1 },
     ]);
     await expect(queryRows(pg.db, serviceFn.deleteReservations('u'))).resolves.toEqual([{ n: 1 }]);
+  });
+
+  it('retries a read once when the connection was dropped', async () => {
+    let attempt = 0;
+    const { db, calls } = fakeDb(() => {
+      attempt += 1;
+      return attempt === 1 ? Object.assign(new Error('dropped'), { code: 'ECONNRESET' }) : [];
+    });
+    await expect(queryRows(db, serviceFn.findUserById(userRow.id))).resolves.toEqual([]);
+    expect(calls).toHaveLength(2);
+  });
+});
+
+describe('writeRows — non-idempotent writes are never replayed (issue #609)', () => {
+  const dropped = () => Object.assign(new Error('connection terminated'), { code: 'ECONNRESET' });
+
+  it('surfaces a dropped connection instead of retrying', async () => {
+    const { db, calls } = fakeDb(dropped);
+    await expect(writeRows(db, serviceFn.bumpCredentialsVersion(userRow.id))).rejects.toThrow(
+      'connection terminated',
+    );
+    expect(calls).toHaveLength(1);
+  });
+
+  it.each([
+    [
+      'createUser',
+      (db: AthlyaDbAny) =>
+        createDrizzleUserRepo(db).createUser({
+          studioId: userRow.studio_id,
+          email: userRow.email,
+          displayName: userRow.display_name,
+          passwordHash: 'hash',
+          role: 'member',
+          consents: {} as never,
+        }),
+    ],
+    [
+      'createUserWithEvent',
+      (db: AthlyaDbAny) =>
+        createDrizzleUserRepo(db).createUserWithEvent!(
+          {
+            studioId: userRow.studio_id,
+            email: userRow.email,
+            displayName: userRow.display_name,
+            passwordHash: 'hash',
+            role: 'member',
+            consents: {} as never,
+          },
+          (user) => ({ id: user.id }) as never,
+        ),
+    ],
+    ['softDeleteUser', (db: AthlyaDbAny) => createDrizzleUserRepo(db).softDeleteUser(userRow.id)],
+    [
+      'bumpCredentialsVersion',
+      (db: AthlyaDbAny) => createDrizzleUserRepo(db).bumpCredentialsVersion(userRow.id),
+    ],
+    [
+      'consumeAndResetPassword',
+      (db: AthlyaDbAny) =>
+        createDrizzlePasswordResetRepo(db as AthlyaDbHttp).consumeAndResetPassword({
+          tokenHash: 'h',
+          userId: userRow.id,
+          newPasswordHash: 'new',
+        }),
+    ],
+  ])('%s runs once on a dropped connection', async (_name, run) => {
+    const { db, calls } = fakeDb(dropped);
+    await expect(run(db)).rejects.toThrow('connection terminated');
+    expect(calls).toHaveLength(1);
   });
 });
 
@@ -298,13 +373,26 @@ describe('createDrizzleDeletionRepo', () => {
     await expect(repo.deleteIdempotencyKeysForUser(userRow.id)).resolves.toBe(0);
   });
 
-  it('re-stamps the tombstone through rgpd_restamp_user_deleted', async () => {
-    const { db, calls } = fakeDb(() => []);
-    await createDrizzleDeletionRepo(db).markUserDeleted(
-      userRow.id,
-      new Date('2026-10-12T00:00:00.000Z'),
-    );
-    expect(calls[0]?.sql).toContain('rgpd_restamp_user_deleted(');
+  it('re-stamps the tombstone through rgpd_confirm_user_deleted and reports it', async () => {
+    const { db, calls } = fakeDb(() => [{ deleted: true }]);
+    await expect(
+      createDrizzleDeletionRepo(db).markUserDeleted(
+        userRow.id,
+        new Date('2026-10-12T00:00:00.000Z'),
+      ),
+    ).resolves.toBe(true);
+    expect(calls[0]?.sql).toContain('rgpd_confirm_user_deleted(');
     expect(calls[0]?.params).toEqual([userRow.id, '2026-10-12T00:00:00.000Z']);
+  });
+
+  it('reports a live or unknown account as not deleted (issue #609)', async () => {
+    const live = fakeDb(() => [{ deleted: false }]);
+    const unknown = fakeDb(() => []);
+    await expect(
+      createDrizzleDeletionRepo(live.db).markUserDeleted(userRow.id, new Date()),
+    ).resolves.toBe(false);
+    await expect(
+      createDrizzleDeletionRepo(unknown.db).markUserDeleted(userRow.id, new Date()),
+    ).resolves.toBe(false);
   });
 });

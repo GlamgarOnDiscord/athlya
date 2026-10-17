@@ -38,6 +38,7 @@ import {
   serviceFn,
   toDateOrNull,
   uuidV7,
+  writeRows,
   type ServiceUserRow,
 } from './service-functions.js';
 
@@ -81,7 +82,7 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
         );
       }
       try {
-        const rows = await queryRows<ServiceUserRow>(
+        const rows = await writeRows<ServiceUserRow>(
           db,
           serviceFn.createMember({
             studioId: input.studioId,
@@ -120,7 +121,7 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
       const userId = uuidV7();
       const event = buildEvent({ id: userId, studioId: input.studioId });
       try {
-        const rows = await queryRows<ServiceUserRow>(
+        const rows = await writeRows<ServiceUserRow>(
           db,
           serviceFn.createMemberWithEvent({
             userId,
@@ -146,15 +147,17 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
     },
 
     async softDeleteUserWithEvent(id, event) {
+      // Retry-safe since migration 0037: an already-deleted user is a
+      // no-op that keeps its tombstone and its recorded event.
       await queryRows(db, serviceFn.softDeleteUserWithEvent(id, event));
     },
 
     async softDeleteUser(id) {
-      await queryRows(db, serviceFn.softDeleteUser(id));
+      await writeRows(db, serviceFn.softDeleteUser(id));
     },
 
     async bumpCredentialsVersion(id) {
-      await queryRows(db, serviceFn.bumpCredentialsVersion(id));
+      await writeRows(db, serviceFn.bumpCredentialsVersion(id));
     },
 
     findOrCreateOAuthUser() {

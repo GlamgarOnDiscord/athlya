@@ -267,11 +267,13 @@ function buildRepo(client: Sql): DeletionRepo {
       return rows.length;
     },
     async markUserDeleted(userId, deletedAt) {
-      await client`
+      const rows = await client<{ id: string }[]>`
                 UPDATE users
                    SET deleted_at = ${deletedAt}
                  WHERE id = ${userId}
+                 RETURNING id
             `;
+      return rows.length > 0;
     },
     async anonymizeAuditRows(userId) {
       // Delegate to the SECURITY DEFINER function (0003+0006) — runs as
@@ -512,7 +514,11 @@ function buildRepoPglite(pg: PGlite): DeletionRepo {
       return r.rows.length;
     },
     async markUserDeleted(userId, deletedAt) {
-      await pg.query(`UPDATE users SET deleted_at = $1 WHERE id = $2`, [deletedAt, userId]);
+      const r = await pg.query<{ id: string }>(
+        `UPDATE users SET deleted_at = $1 WHERE id = $2 RETURNING id`,
+        [deletedAt, userId],
+      );
+      return r.rows.length > 0;
     },
     async anonymizeAuditRows(userId) {
       const r = await pg.query<{ n: number }>(`SELECT anonymize_user_audit($1) AS n`, [userId]);
@@ -845,18 +851,20 @@ describe('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', 
       });
 
       /* --- Result contract --------------------------------- */
-      expect(result.kind).toBe('ok');
-      expect(result.counts).toEqual({
-        reservations: 3,
-        sessions: 2,
-        pushTokens: 4,
-        idempotencyKeys: 0,
-        // Anonymisation happens 30 days later — audit rows
-        // are NOT touched during the cascade step itself.
-        auditAnonymized: 0,
-      });
       const expectedDueAt = new Date(TIME_0_MS + THIRTY_DAYS_MS).toISOString();
-      expect(result.scheduledAnonymizationAt).toBe(expectedDueAt);
+      expect(result).toEqual({
+        kind: 'ok',
+        counts: {
+          reservations: 3,
+          sessions: 2,
+          pushTokens: 4,
+          idempotencyKeys: 0,
+          // Anonymisation happens 30 days later — audit rows
+          // are NOT touched during the cascade step itself.
+          auditAnonymized: 0,
+        },
+        scheduledAnonymizationAt: expectedDueAt,
+      });
 
       /* --- SQL-side: Alice is gone ------------------------- */
       const aliceReservations = await sqlQ<{ id: string }>(

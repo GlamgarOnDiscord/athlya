@@ -11,8 +11,9 @@
  * RLS posture (issue #224)
  * -------------------------
  * The queue consumer runs as `athlya_app` with no tenant claims, so the
- * purge goes through the `rgpd_delete_*` / `rgpd_restamp_user_deleted`
- * SECURITY DEFINER functions of migration 0032. They only act on a user
+ * purge goes through the `rgpd_delete_*` (migration 0032) and
+ * `rgpd_confirm_user_deleted` (migration 0037) SECURITY DEFINER
+ * functions. They only act on a user
  * whose `deleted_at` is already set, so a forged or replayed event
  * cannot erase a live account.
  *
@@ -79,8 +80,13 @@ export function createDrizzleDeletionRepo(db: AthlyaDbAny): DeletionRepo {
       // Idempotent: the Auth service already stamped `deleted_at`
       // when it published the event (Req 5.1), so this re-stamps the
       // tombstone with the cascade's clock. The function never
-      // tombstones a live account.
-      await queryRows(db, serviceFn.restampUserDeleted(userId, deletedAt));
+      // tombstones a live account and reports whether the user is
+      // soft-deleted (migration 0037, issue #609).
+      const rows = await queryRows<{ deleted: boolean }>(
+        db,
+        serviceFn.confirmUserDeleted(userId, deletedAt),
+      );
+      return rows[0]?.deleted === true;
     },
 
     async anonymizeAuditRows(userId) {

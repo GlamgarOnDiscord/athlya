@@ -32,7 +32,7 @@ import { passwordResetTokens } from '@athlya/db/schema';
 import { and, eq, gt, isNull, lt, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
-import { queryRows, serviceFn } from './service-functions.js';
+import { serviceFn, writeRows } from './service-functions.js';
 
 import type { PasswordResetRepo } from '@athlya/auth';
 import type { AthlyaDbHttp } from '@athlya/db/client';
@@ -105,8 +105,10 @@ export function createDrizzlePasswordResetRepo(db: AthlyaDbHttp): PasswordResetR
       // #522 as one statement. It is a SECURITY DEFINER function because
       // the `users` UPDATE happens pre-authentication: under `athlya_app`
       // FORCE RLS a raw UPDATE would match zero rows while still consuming
-      // the token. No row back = token already consumed or not this user's.
-      const rows = await queryRows<{ id: string }>(
+      // the token. No row back = token already consumed, expired (migration
+      // 0037) or not this user's. Not retried: a replay after a lost
+      // commit acknowledgement would report a successful reset as consumed.
+      const rows = await writeRows<{ id: string }>(
         db,
         serviceFn.consumePasswordReset(input.tokenHash, input.userId, input.newPasswordHash),
       );

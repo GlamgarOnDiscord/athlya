@@ -87,11 +87,12 @@ export const ANONYMIZATION_DELAY_MS = ANONYMIZATION_DELAY_DAYS * 24 * 60 * 60 * 
  * MUST NOT drive correctness decisions (see the retry posture
  * discussed in the module docblock).
  *
- * `markUserDeleted` soft-deletes the users row itself. The Auth
- * service already stamps `deleted_at` when it emits the
- * `auth.user.deleted` event (Requirement 5.1), so in practice this
- * call is a no-op the first time through; we still invoke it so a
- * replayed event on a corrupted users row will heal the tombstone.
+ * `markUserDeleted` re-stamps the tombstone of the users row and
+ * reports whether the user is soft-deleted. The Auth service stamps
+ * `deleted_at` when it emits the `auth.user.deleted` event
+ * (Requirement 5.1); the cascade runs first thing and stops when it
+ * returns `false`, so a forged or replayed event for a live account
+ * has no effect (issue #609).
  *
  * `anonymizeAuditRows` is the only method that touches `audit_log`.
  * Its implementation is expected to be idempotent — a second call
@@ -115,8 +116,12 @@ export interface DeletionRepo {
    * deletion (issue #52).
    */
   deleteIdempotencyKeysForUser(userId: string): Promise<number>;
-  /** Soft-delete the users row: `deleted_at = deletedAt`. Idempotent. */
-  markUserDeleted(userId: string, deletedAt: Date): Promise<void>;
+  /**
+   * Stamp `deleted_at = deletedAt` on the users row. Idempotent.
+   * Resolves `true` when the user is soft-deleted after the call,
+   * `false` for a live or unknown account.
+   */
+  markUserDeleted(userId: string, deletedAt: Date): Promise<boolean>;
   /**
    * Set `actor_id = NULL` on every `audit_log` row whose
    * `actor_id = userId`, stripping PII from `metadata` in the same
@@ -217,18 +222,23 @@ export interface CascadeCounts {
 }
 
 /**
- * Discriminated result returned by {@link handleUserDeleted}. Only
- * the happy path is modelled — unexpected failures rethrow so the
- * event bus redrives (the consumer dedups on `event.id` one layer
- * up). `scheduledAnonymizationAt` is the ISO string of the wall-clock
- * instant the QStash job is targeting so the caller can log / assert
- * it deterministically.
+ * Discriminated result returned by {@link handleUserDeleted}.
+ * Unexpected failures rethrow so the event bus redrives (the consumer
+ * dedups on `event.id` one layer up). `scheduledAnonymizationAt` is the
+ * ISO string of the wall-clock instant the QStash job is targeting so
+ * the caller can log / assert it deterministically. `skipped` means the
+ * user is not soft-deleted and nothing was touched.
  */
-export type HandleUserDeletedResult = {
-  readonly kind: 'ok';
-  readonly counts: CascadeCounts;
-  readonly scheduledAnonymizationAt: string;
-};
+export type HandleUserDeletedResult =
+  | {
+      readonly kind: 'ok';
+      readonly counts: CascadeCounts;
+      readonly scheduledAnonymizationAt: string;
+    }
+  | {
+      readonly kind: 'skipped';
+      readonly reason: 'user_not_deleted';
+    };
 
 /** Discriminated result returned by {@link anonymizeAuditLog}. */
 export type AnonymizeAuditLogResult = {
@@ -248,16 +258,15 @@ export type AnonymizeAuditLogResult = {
  * failure leaves the system in a state that is safe to re-enter
  * (the event bus will redeliver):
  *
- *   1. `deleteReservationsForUser` — removes FK-joined reservations
- *      first so subsequent reads of the users row never expose an
- *      orphan booking list.
+ *   0. `markUserDeleted` — re-stamp the tombstone and confirm the user
+ *      is soft-deleted (the Auth service stamped `deleted_at` when it
+ *      published this event). When it is not, the event is forged or
+ *      stale: nothing is touched and `skipped` is returned (issue #609).
+ *   1. `deleteReservationsForUser` — FK-joined reservations.
  *   2. `deleteWorkoutSessionsForUser` — personal training history.
- *   3. `deletePushTokensForUser` — device tokens; dropping these
- *      before the soft-delete tombstone prevents the notifications
- *      consumer from pushing to a deleted user if it races us.
- *   4. `markUserDeleted` — soft-delete the users row itself
- *      (idempotent; the Auth service already stamped `deleted_at`
- *      when it published this event).
+ *   3. `deletePushTokensForUser` — device tokens, so the
+ *      notifications consumer cannot push to a deleted user.
+ *   4. `deleteIdempotencyKeysForUser` — cached response bodies.
  *   5. `avatars.deleteAvatar` — best-effort R2 purge. A failure here
  *      is logged at `warn` but does NOT abort the cascade — the
  *      SQL-side compliance invariant is already satisfied and R2
@@ -275,6 +284,18 @@ export async function handleUserDeleted(
 ): Promise<HandleUserDeletedResult> {
   const userId = event.payload.userId;
 
+  // Step 0: only a soft-deleted account may be erased. R2 and QStash
+  // have no tombstone guard of their own, so this check comes first.
+  const now = new Date(deps.clock.now());
+  const tombstoned = await deps.repo.markUserDeleted(userId, now);
+  if (!tombstoned) {
+    deps.logger?.warn('cascade: user is not soft-deleted; skipping erasure', {
+      userId,
+      eventId: event.id,
+    });
+    return { kind: 'skipped', reason: 'user_not_deleted' };
+  }
+
   // Step 1–3: cascade FK-joined rows. Order matters (see docblock).
   const reservations = await deps.repo.deleteReservationsForUser(userId);
   const sessions = await deps.repo.deleteWorkoutSessionsForUser(userId);
@@ -285,11 +306,6 @@ export async function handleUserDeleted(
   // (issue #52). Rows have a 24-hour TTL anyway, but they must not survive
   // an explicit erasure request.
   const idempotencyKeys = await deps.repo.deleteIdempotencyKeysForUser(userId);
-
-  // Step 4: stamp the tombstone on the users row. Idempotent; the
-  // Auth service normally set this already when emitting the event.
-  const now = new Date(deps.clock.now());
-  await deps.repo.markUserDeleted(userId, now);
 
   // Step 5: best-effort R2 avatar purge. Transient blob-store
   // failures must NOT block the SQL-side cascade completing —
