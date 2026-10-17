@@ -39,3 +39,32 @@ export function resolveDrainDbUrl(env: DrainDbEnv): string | null {
 export function createDrainDb(url: string): AthlyaDb {
   return createDb(url, { maxConnections: 1, idleTimeoutSec: 5 });
 }
+
+interface ClosableClient {
+  end(options?: { timeout?: number }): Promise<void>;
+}
+
+/**
+ * Run `fn` with a drain handle and close its postgres-js client
+ * afterwards, whatever the outcome (issue #609): the socket must not
+ * outlive the cron invocation.
+ */
+export async function withDrainDb<T>(
+  url: string,
+  fn: (db: AthlyaDb) => Promise<T>,
+  create: (url: string) => AthlyaDb = createDrainDb,
+): Promise<T> {
+  const db = create(url);
+  try {
+    return await fn(db);
+  } finally {
+    const client = (db as AthlyaDb & { $client?: ClosableClient }).$client;
+    try {
+      await client?.end({ timeout: 1 });
+    } catch (err) {
+      console.warn('[drain-db] closing the drain client failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+}

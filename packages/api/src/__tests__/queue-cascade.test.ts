@@ -97,6 +97,7 @@ vi.mock('../adapters/notifications-deps.js', () => ({
 /*  System under test (imports MUST come after vi.mock)                */
 /* ------------------------------------------------------------------ */
 
+import { drainOutbox, type ClaimedRow } from '../events/drain-worker.js';
 import { handleEventsBatch, handleNotificationsBatch, handleRgpdBatch } from '../worker.js';
 
 import type { AthlyaBindings } from '../types.js';
@@ -408,6 +409,75 @@ describe('worker.queue() — auth.user.deleted dispatch (Slice 1.3 SP1.4)', () =
     await handleEventsBatch(mockBatch('athlya-events', [msg]), mockEnv());
 
     expect(memberMocks.handleUserDeleted).not.toHaveBeenCalled();
+    expect(msg.ack).toHaveBeenCalledTimes(1);
+    expect(msg.retry).not.toHaveBeenCalled();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Outbox drain → RGPD dispatcher (issue #609)                        */
+/* ------------------------------------------------------------------ */
+
+describe('auth.user.deleted delivered by the outbox drain (issue #609)', () => {
+  const USER_ID = '0193f000-0000-7000-8000-000000000609';
+  const STUDIO_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const EVENT_ID = '0193f000-0000-7000-8000-0000000006e9';
+
+  /** Drain one stored row and return the message the queue received. */
+  async function drainOne(payload: Record<string, unknown>): Promise<unknown> {
+    const sent: unknown[] = [];
+    const stored: ClaimedRow = {
+      id: 'outbox-row-609',
+      eventId: EVENT_ID,
+      eventType: 'auth.user.deleted',
+      payload,
+      occurredAt: new Date('2026-10-12T00:00:00.000Z'),
+      attempts: 1,
+      studioId: STUDIO_ID,
+    };
+    await drainOutbox({
+      store: {
+        claimBatch: () => Promise.resolve([stored]),
+        markPublished: () => Promise.resolve(),
+      },
+      queue: {
+        send: (message) => {
+          sent.push(message);
+          return Promise.resolve();
+        },
+      },
+    });
+    expect(sent).toHaveLength(1);
+    return sent[0];
+  }
+
+  it.each([
+    ['domain payload (migration 0037 shape)', { userId: USER_ID }],
+    [
+      'whole envelope (migration 0033 shape)',
+      {
+        id: EVENT_ID,
+        type: 'auth.user.deleted',
+        occurredAt: '2026-10-12T00:00:00.000Z',
+        studioId: STUDIO_ID,
+        payload: { userId: USER_ID },
+      },
+    ],
+  ])('runs the cascade for a row stored as a %s', async (_shape, payload) => {
+    const body = await drainOne(payload);
+
+    const parsed = parseEvent(body);
+    expect(parsed.type).toBe('auth.user.deleted');
+    expect(parsed.studioId).toBe(STUDIO_ID);
+
+    const msg = mockMessage('msg-drained-609', body);
+    await handleRgpdBatch(mockBatch('athlya-events-rgpd', [msg]), mockEnv());
+
+    expect(memberMocks.handleUserDeleted).toHaveBeenCalledTimes(1);
+    const [forwarded] = memberMocks.handleUserDeleted.mock.calls[0]! as [
+      { payload: { userId: string } },
+    ];
+    expect(forwarded.payload.userId).toBe(USER_ID);
     expect(msg.ack).toHaveBeenCalledTimes(1);
     expect(msg.retry).not.toHaveBeenCalled();
   });

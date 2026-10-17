@@ -297,19 +297,38 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
  * aligned means consumers do not have to special-case "came from the
  * drain" vs "came from the primary publish".
  *
- * The `studioId` field is intentionally not included here: the
- * current `insertOutbox` helper serialises only the payload (not the
- * envelope's `studioId`), so we cannot reconstruct it from the stored
- * row. Reintroducing it is out of scope for task 9.3; consumers that
- * need the tenant scope read it from `payload.*Id` fields.
+ * `outbox.payload` holds the domain payload; `studioId` comes from the
+ * row's `studio_id` column when it is set (issue #609).
  */
-function reconstructEnvelope(row: ClaimedRow): Record<string, unknown> {
+export function reconstructEnvelope(row: ClaimedRow): Record<string, unknown> {
   return {
     id: row.eventId,
     type: row.eventType,
     occurredAt: row.occurredAt.toISOString(),
-    payload: row.payload,
+    ...(typeof row.studioId === 'string' && row.studioId !== '' ? { studioId: row.studioId } : {}),
+    payload: storedDomainPayload(row),
   };
+}
+
+/**
+ * Issue #609 — migration 0033's `auth_outbox_insert` stored the whole
+ * envelope in `outbox.payload`. Such a row is recognised by its stored
+ * `id` / `type` matching the row and an object `payload`; its domain
+ * payload is the inner one. Every other row is returned unchanged.
+ */
+function storedDomainPayload(row: ClaimedRow): Record<string, unknown> {
+  const stored = row.payload;
+  const inner = stored['payload'];
+  if (
+    stored['id'] === row.eventId &&
+    stored['type'] === row.eventType &&
+    typeof inner === 'object' &&
+    inner !== null &&
+    !Array.isArray(inner)
+  ) {
+    return inner as Record<string, unknown>;
+  }
+  return stored;
 }
 
 /**

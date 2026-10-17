@@ -40,6 +40,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_BATCH_SIZE,
   drainOutbox,
+  reconstructEnvelope,
   type ClaimedRow,
   type Logger,
   type OutboxStore,
@@ -199,6 +200,54 @@ describe('drainOutbox — happy path', () => {
       occurredAt: '2025-06-01T08:30:00.000Z',
       payload: { userId: 'u-1', email: 'a@b.test' },
     });
+  });
+
+  it('carries the row studio_id as the envelope studioId (issue #609)', () => {
+    const envelope = reconstructEnvelope(
+      row({
+        eventId: 'evt-id',
+        eventType: 'auth.user.deleted',
+        payload: { userId: 'u-1' },
+        studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      }),
+    );
+
+    expect(envelope).toEqual({
+      id: 'evt-id',
+      type: 'auth.user.deleted',
+      occurredAt: '2025-01-01T12:00:00.000Z',
+      studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      payload: { userId: 'u-1' },
+    });
+    expect(reconstructEnvelope(row({ studioId: null }))).not.toHaveProperty('studioId');
+  });
+
+  it('unwraps a row stored as a whole envelope by migration 0033 (issue #609)', () => {
+    const envelope = reconstructEnvelope(
+      row({
+        eventId: 'evt-legacy',
+        eventType: 'auth.user.deleted',
+        studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        payload: {
+          id: 'evt-legacy',
+          type: 'auth.user.deleted',
+          occurredAt: '2025-01-01T12:00:00.000Z',
+          studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          payload: { userId: 'u-1' },
+        },
+      }),
+    );
+
+    expect(envelope['payload']).toEqual({ userId: 'u-1' });
+  });
+
+  it('leaves a domain payload that merely has a nested payload key untouched', () => {
+    const stored = { id: 'other-id', type: 'auth.user.deleted', payload: { userId: 'u-1' } };
+    const envelope = reconstructEnvelope(
+      row({ eventId: 'evt-id', eventType: 'auth.user.deleted', payload: stored }),
+    );
+
+    expect(envelope['payload']).toEqual(stored);
   });
 
   it('honours a custom batchSize', async () => {

@@ -77,7 +77,7 @@ import { buildStudioSlugResolver } from './adapters/studio-slug-resolver.js';
 import { buildDlqRouter } from './admin/dlq-routes.js';
 import { buildJwtRotateRouter } from './admin/jwt-rotate-routes.js';
 import { buildOutboxRouter } from './admin/outbox-routes.js';
-import { createDrainDb, resolveDrainDbUrl } from './adapters/drain-db.js';
+import { resolveDrainDbUrl, withDrainDb } from './adapters/drain-db.js';
 import { handleDlqBatch } from './events/drain-dlq.js';
 import { runScheduledDrain } from './events/drain-scheduled.js';
 import { rejectUnknownQueueEvent } from './events/reject-unknown-queue-event.js';
@@ -1562,7 +1562,7 @@ const worker = {
     const drainTask = (
       drainDbUrl === null
         ? Promise.resolve()
-        : runScheduledDrain({ ...env, getDb: () => createDrainDb(drainDbUrl) })
+        : withDrainDb(drainDbUrl, (db) => runScheduledDrain({ ...env, getDb: () => db }))
     ).catch((err: unknown) => {
       // Log through the console-backed default logger — the
       // drain module does not accept `StructuredLogger` shapes
