@@ -6,6 +6,35 @@
 
 ---
 
+## SLO monitors managed as code (#415)
+
+A1 (5xx rate), A2 (login p95), A3 (booking p99), A4 (queue lag), A5 (DLQ
+depth) and A16 (outbox backlog) are provisioned by Terraform in
+[`infra/terraform/axiom-monitors.tf`](../../infra/terraform/axiom-monitors.tf)
+and applied per environment by `.github/workflows/terraform.yml`
+(`TF_VAR_axiom_api_token` secret, `AXIOM_SPANS_DATASET` /
+`AXIOM_LOGS_DATASET` / `AXIOM_NOTIFIER_IDS` variables; see
+[`terraform-ops.md`](./terraform-ops.md)). Do not create them by hand: the
+daily drift check flags any UI edit. If they already exist in the UI,
+import them (`terraform import 'axiom_monitor.slo["<key>"]' <monitor-id>`)
+or delete them before the first apply.
+
+The queries read the signals the runtime actually emits:
+
+- A1–A3: the OTLP spans (`status.code`, `name`, `duration`) exported by
+  `packages/api/src/middleware/otel.ts`.
+- A4 / A16: the `outbox.backlog` line the drain cron logs every minute
+  (`ageMs` = age of the oldest pending event, `pending`). Both monitors
+  also alert on **no data**: silence means the cron or the log pipeline
+  stopped.
+- A5: the `[dlq] drain cycle complete` line (`totalPending`) logged after
+  every DLQ batch.
+
+After the first apply, open each monitor in Axiom and run its query once to
+confirm it returns rows on the dataset (field names depend on the ingest
+path), then run the test fires below. The remaining entries of the table
+stay manual.
+
 ## Prérequis
 
 - [ ] Dataset Axiom `athlya-spans` + `athlya-logs` reçoivent OTel depuis staging/prod (vérifier ingest dernière heure).
@@ -55,36 +84,38 @@ Items checklist **non-Axiom** (autre outil) : JWKS rotation expirée → runbook
 
 ---
 
-## Procédure par monitor (Axiom UI)
+## Manual monitor procedure (Axiom UI)
 
-Pour **chaque** A1–A13 :
+For each **manual** monitor only (A6–A15, A17, A18). A1–A5 and A16 are
+Terraform-managed (see above): never create or edit them in the UI.
 
 1. **Monitors → New monitor → Custom query**
-2. Coller la query APL depuis `axiom-alerts.md`
-3. **Trigger:** `Number of results` > 0 (ou équivalent)
-4. **Evaluation window:** voir cooldown dans la fiche alerte
-5. **Notification:** Slack `#ops-athlya-alerts` ; ajouter PagerDuty si Sev1/Sev2 + page indiqué
-6. **Snooze / cooldown:** valeur documentée dans `axiom-alerts.md`
-7. Noter le **Monitor ID** Axiom dans le tableau ci-dessous (commit ops ou ticket)
+2. Paste the APL query from `axiom-alerts.md`
+3. **Trigger:** `Number of results` > 0 (or equivalent)
+4. **Evaluation window:** see the cooldown in the alert entry
+5. **Notification:** Slack `#ops-athlya-alerts`; add PagerDuty for Sev1/Sev2 when paging is listed
+6. **Snooze / cooldown:** value documented in `axiom-alerts.md`
+7. Record the Axiom **Monitor ID** in the table below (ops commit or ticket)
 
-### Table de suivi provisioning
+### Provisioning tracking table
 
-| ID  | Monitor ID Axiom | Provisionné | Test fire |
-| --- | ---------------- | ----------- | --------- |
-| A1  |                  | [ ]         | [ ]       |
-| A2  |                  | [ ]         | [ ]       |
-| A3  |                  | [ ]         | [ ]       |
-| A4  |                  | [ ]         | [ ]       |
-| A5  |                  | [ ]         | [ ]       |
-| A6  |                  | [ ]         | [ ]       |
-| A7  |                  | [ ]         | [ ]       |
-| A8  |                  | [ ]         | [ ]       |
-| A9  |                  | [ ]         | [ ]       |
-| A10 |                  | [ ]         | [ ]       |
-| A11 |                  | [ ]         | [ ]       |
-| A12 |                  | [ ]         | [ ]       |
-| A13 |                  | [ ]         | [ ]       |
-| A14 |                  | [ ]         | [ ]       |
+| ID  | Axiom monitor ID                                       | Provisioned | Test fire |
+| --- | ------------------------------------------------------ | ----------- | --------- |
+| A1  | Terraform `axiom_monitor.slo["api_5xx_rate"]`          | [ ] applied | [ ]       |
+| A2  | Terraform `axiom_monitor.slo["auth_login_p95"]`        | [ ] applied | [ ]       |
+| A3  | Terraform `axiom_monitor.slo["reservations_book_p99"]` | [ ] applied | [ ]       |
+| A4  | Terraform `axiom_monitor.slo["queue_lag"]`             | [ ] applied | [ ]       |
+| A5  | Terraform `axiom_monitor.slo["dlq_depth"]`             | [ ] applied | [ ]       |
+| A6  |                                                        | [ ]         | [ ]       |
+| A7  |                                                        | [ ]         | [ ]       |
+| A8  |                                                        | [ ]         | [ ]       |
+| A9  |                                                        | [ ]         | [ ]       |
+| A10 |                                                        | [ ]         | [ ]       |
+| A11 |                                                        | [ ]         | [ ]       |
+| A12 |                                                        | [ ]         | [ ]       |
+| A13 |                                                        | [ ]         | [ ]       |
+| A14 |                                                        | [ ]         | [ ]       |
+| A16 | Terraform `axiom_monitor.slo["outbox_backlog"]`        | [ ] applied | [ ]       |
 
 ---
 
