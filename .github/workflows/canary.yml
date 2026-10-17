@@ -41,6 +41,9 @@ on:
       - 'scripts/smoke-routes.mjs'
       - '.github/workflows/canary.yml'
 
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-api-production-canary
   cancel-in-progress: false

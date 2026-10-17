@@ -10,13 +10,18 @@ name: Dependabot auto-merge
 on: pull_request_target
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   auto-merge:
-    if: github.actor == 'dependabot[bot]'
+    # Gate on the PR author, not github.actor: the actor is whoever
+    # triggered this event (e.g. a re-run), so it does not prove the PR
+    # was opened by Dependabot.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Fetch Dependabot metadata
         id: meta

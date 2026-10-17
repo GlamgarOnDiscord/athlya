@@ -6,12 +6,12 @@
 
 ## Monorepo
 
-| Outil                            | Version         | Rôle                                                                                                            |
-| -------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------- |
-| [Turborepo](https://turbo.build) | `^2.11.7`       | Orchestration builds, cache de tâches                                                                           |
-| [pnpm](https://pnpm.io)          | `11.28.5`       | Gestionnaire de paquets, workspaces (overrides + réglages dans `pnpm-workspace.yaml`, `minimumReleaseAge` 24 h) |
-| Node.js                          | `>=24.21.0 <25` | Runtime CI/CD — Node 24 LTS « Krypton » (`.nvmrc` 24.21.0)                                                      |
-| TypeScript                       | `^6.0.3`        | Typage strict, mode `bundler` — TS 7 (natif) bloqué : typescript-eslint plafonne à `<6.1`                       |
+| Outil                              | Version         | Rôle                                                                                                            |
+| ---------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------- |
+| [Turborepo](https://turborepo.dev) | `^2.11.7`       | Orchestration builds, cache de tâches                                                                           |
+| [pnpm](https://pnpm.io)            | `11.28.5`       | Gestionnaire de paquets, workspaces (overrides + réglages dans `pnpm-workspace.yaml`, `minimumReleaseAge` 24 h) |
+| Node.js                            | `>=24.21.0 <25` | Runtime CI/CD — Node 24 LTS « Krypton » (`.nvmrc` 24.21.0)                                                      |
+| TypeScript                         | `^6.0.3`        | Typage strict, mode `bundler` — TS 7 (natif) bloqué : typescript-eslint plafonne à `<6.1`                       |
 
 ---
 
