@@ -88,7 +88,7 @@ production). Production cannot run the `@turnstile` flows: its Turnstile secret
 is real and each token is single-use (same decision as the API canary,
 `canary-deploy.md`). Instead, a **production deploy requires a green staging
 deploy job on the same commit** (`deploy all (staging)` or `deploy <app> (staging)`,
-checked with `scripts/require-check-success.mjs`), so the full flows ran on the
+checked with `scripts/require-check-success.mjs --any-check`), so the full flows ran on the
 exact code being shipped.
 
 Clean-up and idempotency:

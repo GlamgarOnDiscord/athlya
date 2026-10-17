@@ -82,19 +82,24 @@ node scripts/verify-role-contract.mjs
 issue #230), un Worker distinct : il n'herite **d'aucun** secret du gateway.
 Il lui faut ses propres secrets runtime en plus de ceux de Stripe :
 
-| Secret (Worker billing)              | Requis     | Usage                                        |
-| ------------------------------------ | ---------- | -------------------------------------------- |
-| `DB_URL`                             | oui        | `athlya_app` : checkout, factures, audit     |
-| `BILLING_DB_URL`                     | oui        | `athlya_billing` : application des webhooks  |
-| `REDIS_URL`, `REDIS_TOKEN`           | oui        | rate limit, idempotence                      |
-| `JWT_JWKS_URL`                       | oui        | verification des JWT admin                   |
-| `CORS_ORIGIN`                        | oui        | origines du studio app                       |
-| `STRIPE_*`, `BILLING_REDIRECT_URL`   | oui        | checkout + signature webhook                 |
-| `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_*` | prod       | observabilite (memes valeurs que le gateway) |
-| `JWT_ISSUER`, `JWT_AUDIENCE`         | si gateway | memes valeurs que le gateway                 |
+| Secret (Worker billing)                 | Requis     | Usage                                        |
+| --------------------------------------- | ---------- | -------------------------------------------- |
+| `DB_URL`                                | oui        | `athlya_app` : checkout, factures, audit     |
+| `BILLING_DB_URL`                        | oui        | `athlya_billing` : application des webhooks  |
+| `REDIS_URL`, `REDIS_TOKEN`              | oui        | rate limit, idempotence                      |
+| `JWT_JWKS_URL`                          | oui        | verification des JWT admin                   |
+| `JWT_KID`, `JWT_*_KEY_PEM`, `JWKS_JSON` | oui        | rotation JWT (`/admin/*`)                    |
+| `CF_ACCESS_AUD`, `CF_ACCESS_CERTS_URL`  | prod       | Cloudflare Access sur `/admin/*`             |
+| `CORS_ORIGIN`                           | oui        | origines du studio app                       |
+| `STRIPE_*`, `BILLING_REDIRECT_URL`      | oui        | checkout + signature webhook                 |
+| `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_*`    | prod       | observabilite (memes valeurs que le gateway) |
+| `JWT_ISSUER`, `JWT_AUDIENCE`            | si gateway | memes valeurs que le gateway                 |
 
 Le gateway (`wrangler.toml`) garde une copie des secrets Stripe pour le
-fallback `*.workers.dev`.
+fallback `*.workers.dev`. `scripts/verify-secrets.mjs` (staging gate et
+`deploy-production.yml`) exige ces secrets sur les deux Workers, plus
+`CF_ACCESS_AUD` / `CF_ACCESS_CERTS_URL` en production sur le billing Worker
+(il sert `/admin/*`).
 
 ```powershell
 cd packages/api
@@ -102,6 +107,7 @@ cd packages/api
 foreach ($envName in 'staging', 'production') {
   # Worker billing (routes /v1/billing/*) — runtime partage avec le gateway
   foreach ($name in 'DB_URL', 'REDIS_URL', 'REDIS_TOKEN', 'JWT_JWKS_URL', 'CORS_ORIGIN',
+                    'JWT_KID', 'JWT_PRIVATE_KEY_PEM', 'JWT_PUBLIC_KEY_PEM', 'JWKS_JSON',
                     'SENTRY_DSN', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_HEADERS') {
     pnpm exec wrangler secret put $name --config wrangler.billing.toml --env $envName
   }
@@ -122,6 +128,13 @@ foreach ($envName in 'staging', 'production') {
   pnpm exec wrangler deploy --config wrangler.billing.toml --env $envName
   pnpm exec wrangler deploy --env $envName
 }
+
+# Production only — the billing Worker serves /admin/* behind Cloudflare Access
+# (same values as the gateway; verify-secrets.mjs requires them in production).
+foreach ($name in 'CF_ACCESS_AUD', 'CF_ACCESS_CERTS_URL') {
+  pnpm exec wrangler secret put $name --config wrangler.billing.toml --env production
+}
+pnpm exec wrangler deploy --config wrangler.billing.toml --env production
 ```
 
 Ne jamais committer les cles. Stocker dans le vault ops.

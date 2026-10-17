@@ -19,7 +19,10 @@ name: Deploy API
 #   production — required reviewers before prod-canary / rollback
 #
 # Production phases (production-deploy, production-canary) refuse to run
-# unless the "Staging gate" check succeeded on the same commit (#343).
+# unless both the "Staging gate" and "Staging gate (full soak)" checks
+# succeeded on the same commit (#343). The full-soak check only exists when
+# staging-gate.yml proved a >= 10-minute k6 soak (always on push to master;
+# PR runs use a 2-minute soak and never produce it).
 #
 # IMPORTANT — production deploy gate (issue #308):
 # Before running `production-canary`, trigger the load-test workflow with
@@ -71,13 +74,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -86,12 +89,15 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Issue #343 — production phases only ship a commit whose staging gate
-      # (deploy + authenticated smoke + migration check + k6) succeeded.
-      - name: Require green staging gate for this commit
+      # (deploy + authenticated smoke + migration check + k6) succeeded AND
+      # ran the full 10-minute soak (the "full soak" job of staging-gate.yml).
+      - name: Require green staging gate (full soak) for this commit
         if: inputs.phase == 'production-deploy' || inputs.phase == 'production-canary'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/require-check-success.mjs --repo "${GITHUB_REPOSITORY}" --sha "${GITHUB_SHA}" --check "Staging gate"
+        run: |
+          node scripts/require-check-success.mjs --repo "${GITHUB_REPOSITORY}" --sha "${GITHUB_SHA}" \
+            --check "Staging gate" --check "Staging gate (full soak)"
 
       - name: Assert Cloudflare credentials
         run: |

@@ -9,6 +9,20 @@ name: Staging gate
 #   4. Migration check — verify DB has all expected migrations applied
 #   5. k6 performance gate — p99 < 500ms, error rate < 1%
 #
+# k6 soak duration (issue #343 requires a 10-minute soak before release):
+#   - pull_request      → 2m. A short soak keeps PRs from holding the shared
+#                         staging environment for 10+ minutes each; it is a
+#                         regression signal, not release evidence.
+#   - push to master    → 10m, always. This is the run production trusts.
+#   - workflow_dispatch → `soak_duration` input (whole minutes, default 10m,
+#                         max 30m); counts as a full soak only when ≥ 10m.
+# A full soak is proven from k6's own summary (state.testRunDurationMs,
+# scripts/staging-gate-soak.mjs verify), not from the requested duration.
+# Only then does the `Staging gate (full soak)` job run and succeed.
+# deploy-production.yml requires BOTH `Staging gate` and `Staging gate
+# (full soak)` to have succeeded on the SHA it promotes, so a commit that
+# only passed a PR-length soak can never reach production.
+#
 # Fail closed (issue #343): on trusted runs (same-repo PRs, pushes to
 # master, manual runs) a missing prerequisite FAILS the job with a
 # machine-readable reason in the step summary. Only runs that cannot read
@@ -49,6 +63,9 @@ name: Staging gate
 #                                    has a free seat, used by the E2E booking
 #                                    journey (#470)
 #
+# The RGPD export E2E (#498) is not a gate step: the export is limited to
+# one request per user per 24 h. It runs from staging-export-e2e.yml.
+#
 # The E2E journey books a real seat. A cancelled run (cancel-in-progress)
 # signals the script, which cancels its reservation before exiting; a class
 # already booked by a concurrent run on another ref is skipped.
@@ -61,9 +78,9 @@ on:
   workflow_dispatch:
     inputs:
       soak_duration:
-        description: 'k6 soak duration (e.g. 2m for PR, 10m for release gates)'
+        description: 'k6 soak duration in whole minutes (10m or more proves a release; max 30m)'
         required: false
-        default: '2m'
+        default: '10m'
         type: string
 
 permissions:
@@ -77,8 +94,12 @@ jobs:
   staging-gate:
     name: Staging gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Deploy + smoke + a soak of up to 30m (manual runs) must fit.
+    timeout-minutes: 60
     environment: staging
+    outputs:
+      full_soak: ${{ steps.soak_verify.outputs.verified }}
+      soak_measured_minutes: ${{ steps.soak_verify.outputs.measured_minutes }}
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -86,7 +107,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Check infra prerequisites
         id: prereq
@@ -129,13 +150,20 @@ jobs:
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve k6 soak duration
+        id: soak
+        if: steps.prereq.outputs.skip != 'true'
+        env:
+          SOAK_INPUT: ${{ inputs.soak_duration }}
+        run: node scripts/staging-gate-soak.mjs resolve --event "${GITHUB_EVENT_NAME}" --input "${SOAK_INPUT}"
+
       - name: Setup pnpm
         if: steps.prereq.outputs.skip != 'true'
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6
 
       - name: Setup Node.js
         if: steps.prereq.outputs.skip != 'true'
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -232,11 +260,20 @@ jobs:
           K6_AUTH_TOKEN: ${{ secrets.K6_STAGING_AUTH_TOKEN }}
           K6_STUDIO_ID: ${{ secrets.K6_STAGING_STUDIO_ID }}
           K6_CLASS_IDS: ${{ secrets.K6_STAGING_CLASS_IDS }}
-          K6_SOAK_DURATION: ${{ inputs.soak_duration || '2m' }}
+          K6_SOAK_DURATION: ${{ steps.soak.outputs.duration }}
+          K6_FULL_SOAK: ${{ steps.soak.outputs.full }}
         run: |
+          echo "k6 soak: ${K6_SOAK_DURATION} (full soak: ${K6_FULL_SOAK})"
           k6 run k6/book-class.js \
             --duration "${K6_SOAK_DURATION}" \
             --summary-export=k6-staging-gate-summary.json
+
+      # Release evidence: prove the soak actually lasted ≥ 10 minutes from
+      # k6's own end-of-test summary (k6/book-class.js handleSummary).
+      - name: '[5/5] Verify full soak duration'
+        id: soak_verify
+        if: steps.prereq.outputs.skip != 'true' && vars.K6_STAGING_BASE_URL != '' && steps.soak.outputs.full == 'true'
+        run: node scripts/staging-gate-soak.mjs verify --summary k6-book-class-summary.json --min-minutes 10
 
       - name: '[5/5] k6 gate missing K6_STAGING_BASE_URL'
         if: steps.prereq.outputs.skip != 'true' && vars.K6_STAGING_BASE_URL == ''
@@ -246,8 +283,28 @@ jobs:
 
       - name: Upload k6 summary
         if: steps.prereq.outputs.skip != 'true' && vars.K6_STAGING_BASE_URL != '' && always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: k6-staging-gate-summary
-          path: k6-staging-gate-summary.json
+          path: |
+            k6-staging-gate-summary.json
+            k6-book-class-summary.json
           retention-days: 14
+
+  # Release attestation (issue #343): runs only when the gate above proved a
+  # ≥ 10-minute soak on this SHA (always on push to master; never on PRs).
+  # Production deploy phases require this check by name, so renaming the job
+  # requires updating deploy-production.yml in the same change.
+  full-soak:
+    name: Staging gate (full soak)
+    needs: staging-gate
+    if: needs.staging-gate.outputs.full_soak == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Record full soak
+        env:
+          MEASURED_MINUTES: ${{ needs.staging-gate.outputs.soak_measured_minutes }}
+        run: |
+          echo "### Staging gate: full soak proven (${MEASURED_MINUTES}m of k6 on ${GITHUB_SHA:0:7})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Full soak proven: ${MEASURED_MINUTES} minutes"

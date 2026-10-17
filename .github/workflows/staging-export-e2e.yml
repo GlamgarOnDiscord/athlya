@@ -1,0 +1,77 @@
+name: Staging RGPD export E2E
+
+# Issue #498 — proves the RGPD data export (Art. 15/20) on the deployed
+# staging system with its real Postgres, Queue and R2 bindings:
+# request → job completes → download through the signed link → archive
+# structure and CSV escaping → link refused without auth, for another
+# account, and when tampered or expired (scripts/smoke-e2e-export.mjs).
+#
+# Not part of the per-PR staging gate: POST /v1/members/me/export is
+# limited to one request per user per 24 h, so a second gate run on the
+# same day would always fail. It runs weekly and on demand against
+# whatever staging currently serves; `job_id` re-validates an export the
+# smoke account already requested (reruns inside the 24 h window).
+#
+# Fail closed: missing configuration fails the run.
+#
+# Required (GitHub environment: staging):
+#   vars.STAGING_API_URL, vars.STAGING_SMOKE_STUDIO_SLUG
+#   secrets.STAGING_SMOKE_EMAIL, secrets.STAGING_SMOKE_PASSWORD
+#   secrets.STAGING_SMOKE_OTHER_EMAIL, secrets.STAGING_SMOKE_OTHER_PASSWORD
+#     — a second account, used to prove the link and job are owner-only
+# Optional:
+#   secrets.STAGING_SMOKE_TURNSTILE_TOKEN, STAGING_SMOKE_OTHER_TURNSTILE_TOKEN
+#     — owner and other-account logins (the other falls back to the first).
+#     Tokens are single-use: stored ones only pass with the Turnstile test
+#     secret on staging.
+
+on:
+  schedule:
+    - cron: '17 6 * * 2'
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: 'Existing export job id of the smoke account to re-validate (optional)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-export-e2e
+  cancel-in-progress: false
+
+jobs:
+  export-e2e:
+    name: RGPD export E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Export E2E
+        env:
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+          SMOKE_STUDIO_SLUG: ${{ vars.STAGING_SMOKE_STUDIO_SLUG }}
+          SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+          SMOKE_OTHER_EMAIL: ${{ secrets.STAGING_SMOKE_OTHER_EMAIL }}
+          SMOKE_OTHER_PASSWORD: ${{ secrets.STAGING_SMOKE_OTHER_PASSWORD }}
+          SMOKE_TURNSTILE_TOKEN: ${{ secrets.STAGING_SMOKE_TURNSTILE_TOKEN }}
+          SMOKE_OTHER_TURNSTILE_TOKEN: ${{ secrets.STAGING_SMOKE_OTHER_TURNSTILE_TOKEN }}
+          JOB_ID: ${{ inputs.job_id }}
+        run: |
+          set -euo pipefail
+          args=(--base-url "${STAGING_API_URL}" --timeout-sec 900)
+          if [ -n "${JOB_ID:-}" ]; then args+=(--job-id "${JOB_ID}"); fi
+          node scripts/smoke-e2e-export.mjs "${args[@]}"
