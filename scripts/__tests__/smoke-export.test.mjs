@@ -3,7 +3,6 @@ import { describe, it } from 'node:test';
 import { crc32, deflateRawSync } from 'node:zlib';
 
 import {
-  CSV_HEADERS,
   checkExpiry,
   missingConfig,
   parseDownloadLink,
@@ -89,11 +88,11 @@ function archiveEntries(notes = probeNote('run-1')) {
     ['profile.json', JSON.stringify({ id: USER_ID, email: 'smoke@example.com' })],
     ['consents.json', JSON.stringify([{ marketing: false }])],
     ['reservations.json', '[]'],
-    ['reservations.csv', csv(CSV_HEADERS['reservations.csv'], [])],
+    ['reservations.csv', csv(HEADERS.reservations, [])],
     ['workout_sessions.json', JSON.stringify([session])],
     [
       'workout_sessions.csv',
-      csv(CSV_HEADERS['workout_sessions.csv'], [
+      csv(HEADERS.sessions, [
         [
           session.id,
           session.userId,
@@ -107,12 +106,29 @@ function archiveEntries(notes = probeNote('run-1')) {
       ]),
     ],
     ['checkins.json', '[]'],
-    ['checkins.csv', csv(CSV_HEADERS['checkins.csv'], [])],
+    ['checkins.csv', csv(HEADERS.checkins, [])],
     ['invoices.json', '[]'],
-    ['invoices.csv', csv(CSV_HEADERS['invoices.csv'], [])],
+    ['invoices.csv', csv(HEADERS.invoices, [])],
     ['audit_trail.json', '[]'],
   ];
 }
+
+/** Column contract of `buildArchiveEntries` (@athlya/members), independent of the script. */
+const HEADERS = {
+  reservations: ['id', 'classId', 'userId', 'status', 'createdAt', 'cancelledAt', 'checkedInAt'],
+  sessions: [
+    'id',
+    'userId',
+    'studioId',
+    'startedAt',
+    'durationMin',
+    'exercisesJson',
+    'notes',
+    'createdAt',
+  ],
+  checkins: ['reservationId', 'classId', 'checkedInAt'],
+  invoices: ['id', 'issuedAt', 'amountCents', 'currency', 'description', 'pdfUrl'],
+};
 
 const PROBE = { sessionId: SESSION_ID, notes: probeNote('run-1') };
 
@@ -274,10 +290,22 @@ function fakeApi({ statuses = ['pending', 'running', 'completed'], overrides = {
   const queue = [...statuses];
   const downloadUrl = `${BASE}/v1/members/me/export/${JOB_ID}/download?exp=${EXP}&sig=goodsig`;
   const routes = {
-    'POST /v1/auth/login': (init) =>
-      json(200, {
-        accessToken: JSON.parse(init.body).email === 'smoke@example.com' ? 'owner' : 'other',
-      }),
+    'POST /v1/auth/login': (init) => {
+      const who = JSON.parse(init.body).email === 'smoke@example.com' ? 'owner' : 'other';
+      return json(200, {
+        accessToken: who,
+        refreshToken: `${who}-refresh-0`,
+        accessTokenExpiresIn: 900,
+      });
+    },
+    'POST /v1/auth/refresh': (init) => {
+      const [who, , n] = JSON.parse(init.body).refreshToken.split('-');
+      return json(200, {
+        accessToken: who,
+        refreshToken: `${who}-refresh-${Number(n) + 1}`,
+        accessTokenExpiresIn: 900,
+      });
+    },
     'POST /v1/sessions': (init) =>
       json(201, { id: SESSION_ID, notes: JSON.parse(init.body).notes }),
     'POST /v1/members/me/export': () => json(202, { jobId: JOB_ID }),
@@ -387,21 +415,62 @@ describe('runExportFlow', () => {
     assert.match(result.error, /other account: expected 403\/404, got 200/);
   });
 
-  it('fails when an altered or expired link is still served', async () => {
-    const { fetchImpl } = fakeApi({
-      overrides: {
-        [`GET /v1/members/me/export/${JOB_ID}/download`]: (init) =>
-          init.headers.authorization === 'Bearer owner'
-            ? new Response(zip(archiveEntries()), {
-                status: 200,
-                headers: { 'content-type': 'application/zip', 'cache-control': 'no-store' },
-              })
-            : json(init.headers.authorization ? 404 : 401, {}),
-      },
+  for (const [name, isMutation] of [
+    ['tampered signature', (q) => q.get('sig') !== 'goodsig'],
+    ['past expiry', (q) => Number(q.get('exp')) < NOW_SEC],
+    ['stretched expiry', (q) => Number(q.get('exp')) > EXP],
+  ]) {
+    it(`fails when a link with a ${name} is still served`, async () => {
+      const api = fakeApi();
+      const download = `GET /v1/members/me/export/${JOB_ID}/download`;
+      const { fetchImpl } = fakeApi({
+        overrides: {
+          [download]: (init, url) =>
+            init.headers.authorization === 'Bearer owner' && isMutation(new URL(url).searchParams)
+              ? new Response(zip(archiveEntries()), { status: 200 })
+              : api.fetchImpl(url, init),
+        },
+      });
+      const result = await runExportFlow({ ...flow, fetchImpl });
+      assert.equal(result.ok, false);
+      assert.equal(result.error, `download with ${name}: expected 403, got 200`);
     });
-    const result = await runExportFlow({ ...flow, fetchImpl });
-    assert.equal(result.ok, false);
-    assert.match(result.error, /tampered signature: expected 403, got 200/);
+  }
+
+  it('refreshes the access tokens when the job outlives them', async () => {
+    let t = NOW.getTime();
+    const { calls, fetchImpl } = fakeApi({
+      statuses: [...Array.from({ length: 40 }, () => 'running'), 'completed'],
+    });
+    const result = await runExportFlow({
+      ...flow,
+      fetchImpl,
+      jobTimeoutMs: 30 * 60_000,
+      now: () => new Date(t),
+      sleep: async (ms) => {
+        t += ms;
+      },
+      pollIntervalMs: 30_000,
+    });
+    assert.equal(result.error, undefined);
+    const refreshes = calls.filter((c) => c.key === 'POST /v1/auth/refresh');
+    assert.ok(refreshes.length >= 2, `expected refreshes, got ${refreshes.length}`);
+    assert.deepEqual(JSON.parse(refreshes[0].init.body), { refreshToken: 'owner-refresh-0' });
+  });
+
+  it('logs the other account in with its own Turnstile token', async () => {
+    const { calls, fetchImpl } = fakeApi();
+    await runExportFlow({
+      ...flow,
+      fetchImpl,
+      turnstileToken: 'tok-owner',
+      otherTurnstileToken: 'tok-other',
+    });
+    const logins = calls.filter((c) => c.key === 'POST /v1/auth/login');
+    assert.deepEqual(
+      logins.map((c) => c.init.headers['cf-turnstile-token']),
+      ['tok-owner', 'tok-other'],
+    );
   });
 
   it('reports the 24 h rate limit explicitly', async () => {

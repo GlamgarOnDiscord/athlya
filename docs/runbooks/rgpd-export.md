@@ -119,18 +119,25 @@ Configuration (environment `staging`, the run fails when any required item is mi
 | `STAGING_API_URL`, `STAGING_SMOKE_STUDIO_SLUG`              | vars    | Shared with the staging gate.                         |
 | `STAGING_SMOKE_EMAIL`, `STAGING_SMOKE_PASSWORD`             | secrets | Shared with the staging gate.                         |
 | `STAGING_SMOKE_OTHER_EMAIL`, `STAGING_SMOKE_OTHER_PASSWORD` | secrets | Second account (any studio), never the smoke account. |
-| `STAGING_SMOKE_TURNSTILE_TOKEN`                             | secret  | Optional; only works with the Turnstile test secret.  |
+| `STAGING_SMOKE_TURNSTILE_TOKEN`                             | secret  | Optional; owner login.                                |
+| `STAGING_SMOKE_OTHER_TURNSTILE_TOKEN`                       | secret  | Optional; other-account login (falls back to above).  |
+
+A Turnstile token is single-use, so stored tokens only work with Cloudflare's Turnstile test secret
+on staging (any token passes, repeatedly). Access tokens live 15 min; the script refreshes both
+sessions through `POST /v1/auth/refresh` while it waits for the job.
 
 Local run:
 
 ```sh
-SMOKE_EMAIL=… SMOKE_PASSWORD=… SMOKE_STUDIO_SLUG=… \
-SMOKE_OTHER_EMAIL=… SMOKE_OTHER_PASSWORD=… [SMOKE_TURNSTILE_TOKEN=…] \
-  node scripts/smoke-e2e-export.mjs --base-url https://staging.api.athlya.app \
-  [--timeout-sec 900] [--job-id <uuid>]
+export SMOKE_EMAIL=… SMOKE_PASSWORD=… SMOKE_STUDIO_SLUG=…
+export SMOKE_OTHER_EMAIL=… SMOKE_OTHER_PASSWORD=…
+node scripts/smoke-e2e-export.mjs --base-url https://staging.api.athlya.app
 ```
+
+Optional: export `SMOKE_TURNSTILE_TOKEN` / `SMOKE_OTHER_TURNSTILE_TOKEN` first, and append
+`--timeout-sec 900` or `--job-id` followed by an existing job id.
 
 The pure parts (ZIP reader, strict CSV parser, archive validator, link and expiry checks, the flow
 against a fake API) are covered by `scripts/__tests__/smoke-export.test.mjs`
 (`pnpm test:scripts`). `CSV_HEADERS` in the script mirrors `buildArchiveEntries` in
-`@athlya/members`: change both together.
+`@athlya/members`: change both together (the test fixture hard-codes the same contract).

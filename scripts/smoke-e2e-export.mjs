@@ -28,9 +28,15 @@
  *
  * Usage:
  *   SMOKE_EMAIL=… SMOKE_PASSWORD=… SMOKE_STUDIO_SLUG=… \
- *   SMOKE_OTHER_EMAIL=… SMOKE_OTHER_PASSWORD=… [SMOKE_TURNSTILE_TOKEN=…] \
+ *   SMOKE_OTHER_EMAIL=… SMOKE_OTHER_PASSWORD=… \
  *     node scripts/smoke-e2e-export.mjs --base-url https://staging.api.athlya.app \
  *     [--timeout-sec 900] [--job-id <uuid>]
+ *
+ * Optional: SMOKE_TURNSTILE_TOKEN and SMOKE_OTHER_TURNSTILE_TOKEN, sent as
+ * `cf-turnstile-token` on the owner and other-account logins. A real
+ * token is single-use, so each login needs its own; the other login falls
+ * back to SMOKE_TURNSTILE_TOKEN, which only works with Cloudflare's
+ * Turnstile test secret (any token passes, repeatedly).
  *
  * Exit 0 = export verified. Exit 1 = a step failed (reason on stderr).
  */
@@ -43,6 +49,8 @@ import { crc32, inflateRawSync } from 'node:zlib';
 const REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_JOB_TIMEOUT_MS = 15 * 60 * 1000;
 const POLL_INTERVAL_MS = 5_000;
+/** Refresh an access token this long before it expires. */
+const TOKEN_REFRESH_MARGIN_MS = 60_000;
 
 /** Requirement 4.2: signed links expire 72 h after issuance. */
 export const DOWNLOAD_TTL_SEC = 72 * 60 * 60;
@@ -392,6 +400,7 @@ export function checkExpiry({ exp, completedAt, downloadExpiresAt, nowSec }) {
  *   otherPassword: string,
  *   studioSlug: string,
  *   turnstileToken?: string,
+ *   otherTurnstileToken?: string,
  *   jobId?: string,
  *   jobTimeoutMs?: number,
  *   pollIntervalMs?: number,
@@ -411,6 +420,7 @@ export async function runExportFlow({
   otherPassword,
   studioSlug,
   turnstileToken,
+  otherTurnstileToken = turnstileToken,
   jobId: existingJobId,
   jobTimeoutMs = DEFAULT_JOB_TIMEOUT_MS,
   pollIntervalMs = POLL_INTERVAL_MS,
@@ -449,27 +459,53 @@ export async function runExportFlow({
     return { status: res.status, json };
   }
 
-  async function login(who, user, pass) {
-    const res = await call('POST', '/v1/auth/login', {
+  /**
+   * Log in and keep the session usable for the whole run: access tokens
+   * live 15 min and the job may take longer, so `token()` rotates the
+   * refresh token shortly before the access token expires.
+   */
+  async function openSession(who, user, pass, turnstile) {
+    const login = await call('POST', '/v1/auth/login', {
       body: { email: user, password: pass },
-      headers: turnstileToken ? { 'cf-turnstile-token': turnstileToken } : {},
+      headers: turnstile ? { 'cf-turnstile-token': turnstile } : {},
     });
-    if (res.status !== 200 || typeof res.json?.accessToken !== 'string') {
-      throw new Error(`login (${who}): expected 200 with accessToken, got ${res.status}`);
+    if (login.status !== 200 || typeof login.json?.accessToken !== 'string') {
+      throw new Error(`login (${who}): expected 200 with accessToken, got ${login.status}`);
     }
-    return res.json.accessToken;
+    let current = login.json;
+    let issuedAt = now().getTime();
+    return {
+      async token() {
+        const ttlMs = (Number(current.accessTokenExpiresIn) || 0) * 1000;
+        if (now().getTime() < issuedAt + ttlMs - TOKEN_REFRESH_MARGIN_MS) {
+          return current.accessToken;
+        }
+        if (typeof current.refreshToken !== 'string') {
+          throw new Error(`refresh (${who}): login returned no refresh token`);
+        }
+        const res = await call('POST', '/v1/auth/refresh', {
+          body: { refreshToken: current.refreshToken },
+        });
+        if (res.status !== 200 || typeof res.json?.accessToken !== 'string') {
+          throw new Error(`refresh (${who}): expected 200 with accessToken, got ${res.status}`);
+        }
+        current = res.json;
+        issuedAt = now().getTime();
+        return current.accessToken;
+      },
+    };
   }
 
   try {
-    const token = await login('owner', email, password);
-    const otherToken = await login('other', otherEmail, otherPassword);
+    const owner = await openSession('owner', email, password, turnstileToken);
+    const other = await openSession('other', otherEmail, otherPassword, otherTurnstileToken);
     step('login (owner + other account)');
 
     let probe;
     if (jobId === undefined) {
       const notes = probeNote(runId);
       const session = await call('POST', '/v1/sessions', {
-        token,
+        token: await owner.token(),
         body: {
           startedAt: new Date(now().getTime() - 60_000).toISOString(),
           durationMin: 1,
@@ -485,7 +521,7 @@ export async function runExportFlow({
       step('log CSV-injection probe session');
 
       const enqueued = await call('POST', '/v1/members/me/export', {
-        token,
+        token: await owner.token(),
         headers: { 'idempotency-key': randomUUID() },
       });
       if (enqueued.status === 429) {
@@ -504,7 +540,7 @@ export async function runExportFlow({
     const deadline = now().getTime() + jobTimeoutMs;
     let job;
     for (;;) {
-      const res = await call('GET', statusPath, { token });
+      const res = await call('GET', statusPath, { token: await owner.token() });
       if (res.status !== 200) throw new Error(`poll export: expected 200, got ${res.status}`);
       job = res.json;
       if (job?.status === 'completed') break;
@@ -521,7 +557,7 @@ export async function runExportFlow({
     }
     step('export completed');
 
-    const otherStatus = await call('GET', statusPath, { token: otherToken });
+    const otherStatus = await call('GET', statusPath, { token: await other.token() });
     if (otherStatus.status !== 404) {
       throw new Error(
         `other account reads the job status: expected 404, got ${otherStatus.status}`,
@@ -540,7 +576,7 @@ export async function runExportFlow({
     if (expiryFailures.length > 0) throw new Error(expiryFailures.join('; '));
     step('signed link expires 72 h after completion');
 
-    const download = await request('GET', job.downloadUrl, { token });
+    const download = await request('GET', job.downloadUrl, { token: await owner.token() });
     if (download.status !== 200) {
       throw new Error(`download: expected 200, got ${download.status}`);
     }
@@ -557,6 +593,8 @@ export async function runExportFlow({
     if (failures.length > 0) throw new Error(`archive: ${failures.join('; ')}`);
     step(probe ? 'archive structure, CSV escaping and probe' : 'archive structure, CSV escaping');
 
+    const token = await owner.token();
+    const otherToken = await other.token();
     const denials = [
       ['no token', job.downloadUrl, undefined, [401]],
       ['other account', job.downloadUrl, otherToken, [403, 404]],
@@ -642,6 +680,8 @@ if (import.meta.main) {
     otherPassword: process.env.SMOKE_OTHER_PASSWORD,
     studioSlug: process.env.SMOKE_STUDIO_SLUG,
     turnstileToken: process.env.SMOKE_TURNSTILE_TOKEN || undefined,
+    otherTurnstileToken:
+      process.env.SMOKE_OTHER_TURNSTILE_TOKEN || process.env.SMOKE_TURNSTILE_TOKEN || undefined,
     jobId: values['job-id'],
     jobTimeoutMs: timeoutSec * 1000,
   });

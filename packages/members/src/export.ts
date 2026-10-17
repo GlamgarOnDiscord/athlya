@@ -469,7 +469,7 @@ export const ARCHIVE_README = [
   '  workout_sessions.json / .csv  the workout sessions you logged',
   '  checkins.json / .csv          your class check-ins',
   '  invoices.json / .csv          invoices issued to you (see below)',
-  '  audit_trail.json              account and security events about you',
+  '  audit_trail.json              account and security events about you (when available)',
   '',
   `Invoices: ${MEMBER_INVOICES_NOTE}`,
   '',
