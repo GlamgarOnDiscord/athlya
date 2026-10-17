@@ -124,6 +124,12 @@ export const IP_BUCKET_PREFIX = 'rl:ip';
 /** Key prefix for the user bucket. */
 export const USER_BUCKET_PREFIX = 'rl:user';
 
+/** Key prefix for the per-mutation IP buckets; the scope is appended (issue #613). */
+export const MUTATION_IP_BUCKET_PREFIX = 'rl:ip:mutation';
+
+/** Key prefix for the per-mutation user buckets; the scope is appended (issue #613). */
+export const MUTATION_USER_BUCKET_PREFIX = 'rl:user:mutation';
+
 /** Key prefix for the host-probe rate-limit bucket (issue #244). */
 export const HOST_PROBE_BUCKET_PREFIX = 'rl:host-probe';
 
@@ -161,6 +167,13 @@ export interface RateLimitOptions {
    * separate namespace from the global per-IP limiter.
    */
   readonly keyPrefix?: string;
+  /**
+   * Override the user-bucket key prefix. Defaults to
+   * {@link USER_BUCKET_PREFIX}. Per-route limiters that run after
+   * authentication set their own namespace so their budgets do not
+   * share one sliding window per user.
+   */
+  readonly userKeyPrefix?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -416,6 +429,7 @@ export function rateLimit(opts: RateLimitOptions = {}): RateLimitMiddleware {
   const windowSec = opts.windowSec ?? DEFAULT_WINDOW_SEC;
   const injectedRedis = opts.redis;
   const ipPrefix = opts.keyPrefix ?? IP_BUCKET_PREFIX;
+  const userPrefix = opts.userKeyPrefix ?? USER_BUCKET_PREFIX;
 
   if (!Number.isFinite(userLimit) || userLimit <= 0) {
     throw new RangeError(`rateLimit: userLimit must be > 0, got ${String(userLimit)}`);
@@ -434,7 +448,7 @@ export function rateLimit(opts: RateLimitOptions = {}): RateLimitMiddleware {
     const userId = readUserId(c);
     const isAuthenticated = userId !== undefined;
     const key = isAuthenticated
-      ? `${globalPrefix}${USER_BUCKET_PREFIX}:${userId}`
+      ? `${globalPrefix}${userPrefix}:${userId}`
       : `${globalPrefix}${ipPrefix}:${deriveClientIp(c.req)}`;
     const limit = isAuthenticated ? userLimit : ipLimit;
 
