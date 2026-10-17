@@ -4,15 +4,14 @@ name: OWASP ZAP Baseline
 # Task 13.2 / Requirement 29.1 — run the OWASP ZAP baseline scan on
 # every pull request and block merge on any HIGH-severity finding.
 #
-# Day-zero behaviour
-# ------------------
-# The apps (Cloudflare Worker API, Next.js web, Expo native) are not
-# scaffolded yet, so there is no staging URL to scan. The workflow is
-# gated on the repository variable `ZAP_TARGET_URL` (Settings →
-# Secrets and variables → Actions → Variables): when it is empty the
-# guard step exits cleanly with a log message. Once staging is live
-# we populate the variable and the scan starts enforcing without any
-# workflow change.
+# Missing target = failure (issue #340)
+# -------------------------------------
+# The scan target comes from the repository variable `ZAP_TARGET_URL`
+# (Settings → Secrets and variables → Actions → Variables). A missing
+# target FAILS the job on trusted runs (same-repo PRs, manual runs) so
+# the workflow can never show green without having scanned anything.
+# Only pull requests from forks skip cleanly: they cannot read
+# repository variables and must not reach the scanning environment.
 #
 # Manual runs can override the variable through the
 # `workflow_dispatch` `target_url` input — useful for poking a
@@ -68,6 +67,7 @@ jobs:
         env:
           VAR_TARGET: ${{ vars.ZAP_TARGET_URL }}
           INPUT_TARGET: ${{ github.event.inputs.target_url }}
+          IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           set -euo pipefail
           # Dispatch input wins over the repo variable so humans can
@@ -75,10 +75,15 @@ jobs:
           TARGET="${INPUT_TARGET:-$VAR_TARGET}"
 
           if [ -z "$TARGET" ]; then
-            echo "::notice title=ZAP baseline skipped::No target configured. Set the repository variable ZAP_TARGET_URL once staging is live (or use the workflow_dispatch target_url input)."
-            echo "skipped=true" >> "$GITHUB_OUTPUT"
-            echo "target=" >> "$GITHUB_OUTPUT"
-            exit 0
+            if [ "$IS_FORK_PR" = "true" ]; then
+              echo "::notice title=ZAP baseline skipped::Fork pull request: repository variables and the scan target are not available."
+              echo "skipped=true" >> "$GITHUB_OUTPUT"
+              echo "target=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error title=ZAP baseline not configured::vars.ZAP_TARGET_URL is empty, so no DAST ran. Provision the synthetic-data scan target and set the variable (docs/operations/zap-activation.md)."
+            echo "### ZAP baseline: FAILED — no target configured (vars.ZAP_TARGET_URL)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
 
           echo "Resolved ZAP target: $TARGET"
