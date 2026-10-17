@@ -60,7 +60,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || github.actor == 'dependabot[bot]') && format('staging-gate-noop-{0}', github.ref) || 'staging-environment' }}
+  group: ${{ ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || github.event.pull_request.user.login == 'dependabot[bot]') && format('staging-gate-noop-{0}', github.ref) || 'staging-environment' }}
   cancel-in-progress: false
 
 jobs:
@@ -82,7 +82,7 @@ jobs:
         id: prereq
         env:
           IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-          IS_DEPENDABOT: ${{ github.actor == 'dependabot[bot]' }}
+          IS_DEPENDABOT: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
           MIGRATION_DB_URL: ${{ secrets.MIGRATION_DB_URL_STAGING }}
           SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
           SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
