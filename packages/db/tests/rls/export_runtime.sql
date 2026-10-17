@@ -102,7 +102,7 @@ SELECT isnt(
 SELECT is(
     export_job_claim('e4980000-0000-7000-8000-000000000001'),
     NULL,
-    'export_job_claim: a concurrent delivery loses while the lease is fresh'
+    'export_job_claim: a second claim is refused while the lease is fresh'
 );
 
 RESET ROLE;

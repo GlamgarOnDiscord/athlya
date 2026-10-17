@@ -4,10 +4,13 @@
 #
 # Prerequisites:
 #   * `psql` on PATH (any version ≥ 14 works; CI pins Postgres 17).
-#   * `$DATABASE_URL` pointing at a database the caller can create
-#     extensions on (the pgtap extension is installed by bootstrap).
-#     Neon ephemeral branches and the `pgtap/pgtap` Docker image both
-#     work out of the box.
+#   * `$DATABASE_URL` pointing at a throwaway database, connected as a
+#     superuser or as a role with both CREATEROLE and BYPASSRLS: the
+#     migrations create the `athlya_*` roles (one of them BYPASSRLS) and
+#     transfer function ownership to `athlya_owner`. The script checks
+#     this before applying anything. The `pgtap/pgtap` Docker image
+#     (`postgres` superuser) works out of the box; on Neon use the
+#     branch owner role.
 #   * `node` on PATH for the coverage linter.
 #
 # What this script does:
@@ -41,6 +44,14 @@ cd "$PKG_ROOT"
 
 if [[ -z "${DATABASE_URL:-}" ]]; then
     echo "test-rls.sh: DATABASE_URL is not set. Point it at a Postgres instance with pgtap available." >&2
+    exit 2
+fi
+
+role_ok="$(psql "$DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c \
+    "SELECT rolsuper OR (rolcreaterole AND rolbypassrls) FROM pg_roles WHERE rolname = current_user")"
+if [[ "$role_ok" != "t" ]]; then
+    echo "test-rls.sh: the DATABASE_URL role must be a superuser or have CREATEROLE and BYPASSRLS" \
+         "(the migrations create the athlya_* roles). Connect as such a role on a throwaway database." >&2
     exit 2
 fi
 

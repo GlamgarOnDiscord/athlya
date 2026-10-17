@@ -27,7 +27,9 @@ migration is different: requests fail with raw database errors instead — the e
   `pending → running` with a 15 min lease and returns a fresh `claim_token`. A second delivery
   gets `in_progress`; a crashed run is reclaimed on redelivery after the lease, which rotates the
   token. `export_job_complete` / `export_job_fail` require the current token, so a slow run whose
-  lease was reclaimed can neither complete nor fail the newer run. Personal data is readable only through the claimed
+  lease was reclaimed can neither complete nor fail the newer run. Archives are stored per claim
+  (`exports/members/{jobId}/{claimToken}.zip`) and the download serves the key of the claim on
+  the completed row, so a stale upload never replaces the published archive (it is left orphaned). Personal data is readable only through the claimed
   job (`export_job_profile`, `export_job_rows`), never by bare user id.
 - **Download**: the link is an HMAC over `jobId.exp` (72 h) **and** the route requires the
   owner's JWT and reads the job through `export_jobs_read_own`. Response is

@@ -264,6 +264,7 @@ function toExportJobRecord(row: typeof exportJobs.$inferSelect): ExportJobRecord
     error: row.error,
     downloadUrl: row.downloadUrl,
     downloadExpiresAt: row.downloadExpiresAt?.toISOString() ?? null,
+    claimToken: row.claimToken,
   };
 }
 

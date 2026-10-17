@@ -84,7 +84,7 @@ describe('export download links', () => {
 
 describe('buildBlobStore', () => {
   const bucket = { put: vi.fn(async () => undefined) } as unknown as R2Bucket;
-  const key = `exports/members/${JOB_ID}.zip`;
+  const key = `exports/members/${JOB_ID}/${CURRENT_CLAIM}.zip`;
 
   it('fails closed without the bucket', async () => {
     const blob = buildBlobStore(undefined, { ENVIRONMENT: 'staging' } as AthlyaBindings);

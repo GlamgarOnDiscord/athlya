@@ -599,11 +599,14 @@ describe('runExportJob', () => {
 
     // Upload to R2 used the expected key.
     expect(put).toHaveBeenCalledTimes(1);
-    expect(put.mock.calls[0]![0]).toBe(exportObjectKey(JOB_ID));
+    expect(put.mock.calls[0]![0]).toBe(exportObjectKey(JOB_ID, CURRENT_CLAIM));
 
     // Signed URL TTL is exactly 72 h (Requirement 4.2).
     expect(signedUrl).toHaveBeenCalledTimes(1);
-    expect(signedUrl).toHaveBeenCalledWith(exportObjectKey(JOB_ID), DOWNLOAD_URL_TTL_SECONDS);
+    expect(signedUrl).toHaveBeenCalledWith(
+      exportObjectKey(JOB_ID, CURRENT_CLAIM),
+      DOWNLOAD_URL_TTL_SECONDS,
+    );
     expect(DOWNLOAD_URL_TTL_SECONDS).toBe(259_200);
 
     // Job row stamped with completedAt + url + expires.
@@ -804,8 +807,11 @@ describe('buildArchiveEntries', () => {
 /* ------------------------------------------------------------------ */
 
 describe('exportObjectKey', () => {
-  it('namespaces keys under the shared prefix', () => {
-    expect(exportObjectKey(JOB_ID)).toBe(`${EXPORT_R2_PREFIX}/${JOB_ID}.zip`);
+  it('namespaces keys under the shared prefix, one key per claim', () => {
+    expect(exportObjectKey(JOB_ID, CURRENT_CLAIM)).toBe(
+      `${EXPORT_R2_PREFIX}/${JOB_ID}/${CURRENT_CLAIM}.zip`,
+    );
+    expect(exportObjectKey(JOB_ID, CURRENT_CLAIM)).not.toBe(exportObjectKey(JOB_ID, USER_ID));
   });
 });
 

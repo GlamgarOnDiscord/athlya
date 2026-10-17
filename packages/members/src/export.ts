@@ -57,7 +57,7 @@ export const DOWNLOAD_URL_TTL_SECONDS = 72 * 60 * 60;
 
 /**
  * Prefix under which archives are stored in Cloudflare R2. The full
- * key is `EXPORT_R2_PREFIX/{jobId}.zip`; keeping the prefix as a
+ * key is `EXPORT_R2_PREFIX/{jobId}/{claimToken}.zip`; keeping the prefix as a
  * named constant makes it trivial to snapshot / rotate a bucket
  * without rebuilding service images.
  */
@@ -248,6 +248,11 @@ export interface ExportJobRecord {
   error: string | null;
   downloadUrl: string | null;
   downloadExpiresAt: string | null;
+  /**
+   * Claim that completed the job; it names the archive object. Only
+   * exposed by stores that read the raw row (the owner's download path).
+   */
+  claimToken?: string | null;
 }
 
 /**
@@ -520,9 +525,15 @@ export async function* buildArchiveEntries(data: MemberExportData): AsyncGenerat
   }
 }
 
-/** Build the R2 object key for `jobId`. */
-export function exportObjectKey(jobId: string): string {
-  return `${EXPORT_R2_PREFIX}/${jobId}.zip`;
+/**
+ * Build the R2 object key for the archive of `jobId` built under
+ * `claimToken`. One key per claim: a stale run whose lease was reclaimed
+ * uploads to its own key, so it can never overwrite the archive the
+ * winning run published; the download path serves the key of the claim
+ * stored on the completed row.
+ */
+export function exportObjectKey(jobId: string, claimToken: string): string {
+  return `${EXPORT_R2_PREFIX}/${jobId}/${claimToken}.zip`;
 }
 
 /**
@@ -680,7 +691,7 @@ export async function runExportJob(
   try {
     const { bytes, sizeBytes } = await deps.archive.build(buildArchiveEntries(data));
 
-    const objectKey = exportObjectKey(jobId);
+    const objectKey = exportObjectKey(jobId, claimToken);
     await deps.blob.put(objectKey, bytes);
     const downloadUrl = await deps.blob.signedUrl(objectKey, DOWNLOAD_URL_TTL_SECONDS);
 

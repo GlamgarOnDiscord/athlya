@@ -228,7 +228,7 @@ max_retries = 3
 #
 #   • AVATARS_BUCKET   — `avatars/{userId}/...` objects purged by the
 #                        Article 17 cascade (`adapters/avatar-store-r2.ts`).
-#   • EXPORTS_BUCKET   — `exports/members/{jobId}.zip` archives uploaded
+#   • EXPORTS_BUCKET   — `exports/members/{jobId}/{claim}.zip` archives uploaded
 #                        by the Article 15/20 export consumer
 #                        (`adapters/export-deps.ts`).
 #

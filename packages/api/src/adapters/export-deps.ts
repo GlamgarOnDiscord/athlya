@@ -54,9 +54,9 @@ export const EXPORTS_BUCKET_MISSING_REASON = 'exports_bucket_missing';
 /*  R2 BlobStore                                                       */
 /* ------------------------------------------------------------------ */
 
-/** Object key layout from `exportObjectKey`: `exports/members/{jobId}.zip`. */
+/** Object key layout from `exportObjectKey`: `exports/members/{jobId}/{claimToken}.zip`. */
 function jobIdFromObjectKey(key: string): string {
-  const match = /^exports\/members\/([0-9a-f-]{36})\.zip$/u.exec(key);
+  const match = /^exports\/members\/([0-9a-f-]{36})\/[0-9a-f-]{36}\.zip$/u.exec(key);
   if (match?.[1] === undefined) {
     throw new Error(`unexpected export object key: ${key}`);
   }
