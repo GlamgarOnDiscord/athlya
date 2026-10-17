@@ -100,6 +100,9 @@ jobs:
         # (P4/P7/reservations properties) runs in integration-docker.yml.
         run: pnpm test
 
+      - name: Release-script tests
+        run: pnpm test:scripts
+
       - name: Production build (Next.js + Workers)
         # Validates that Next.js apps and Cloudflare Worker bundles compile.
         # SKIP_ENV_VALIDATION prevents Next.js from crashing when runtime
