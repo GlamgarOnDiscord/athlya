@@ -20,6 +20,7 @@
 
 -- 2. Per-table test files
 \i tests/rls/studios.sql
+\i tests/rls/studios_runtime.sql
 \i tests/rls/users.sql
 \i tests/rls/classes.sql
 \i tests/rls/reservations.sql

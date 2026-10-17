@@ -12,10 +12,11 @@
     "preview:worker": "opennextjs-cloudflare preview",
     "start": "next start --port 3001",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json",
     "test": "vitest run",
     "e2e:install": "playwright install chromium --with-deps",
     "e2e": "playwright test --config e2e/playwright.config.ts e2e/axe.spec.ts",
+    "e2e:release": "playwright test --config e2e/release.config.ts",
     "clean": "rimraf .next .turbo *.tsbuildinfo"
   },
   "dependencies": {
@@ -37,9 +38,9 @@
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",
     "@athlya/tsconfig": "workspace:*",
-    "@axe-core/playwright": "^4.13.0",
+    "@axe-core/playwright": "^4.14.0",
     "@opennextjs/cloudflare": "1.20.10",
-    "@playwright/test": "^1.64.0",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
@@ -48,14 +49,14 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^16.4.0",
+    "eslint-config-next": "^16.4.2",
     "eslint-config-prettier": "^10.1.8",
-    "jsdom": "^30.1.2",
+    "jsdom": "^30.1.3",
     "postcss": "^8.5.30",
     "rimraf": "^6.1.3",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.3",
-    "wrangler": "^4.149.0"
+    "vitest": "^5.0.5",
+    "wrangler": "^4.151.1"
   }
 }

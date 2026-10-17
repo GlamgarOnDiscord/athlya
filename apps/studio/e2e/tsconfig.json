@@ -1,0 +1,10 @@
+{
+  "extends": "@athlya/tsconfig/react.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"]
+}

@@ -12,9 +12,9 @@
 #
 # Signal contract (alert → emitted signal → backend):
 #   error_count_spike   → captured exceptions          → Sentry (this file)
-#   5xx rate, latency   → `request` log lines          → Axiom A1/A2/A3
-#   queue lag, DLQ      → `queue.*` log lines          → Axiom A4/A5/A13
-#   outbox backlog      → `outbox.backlog` log line    → Axiom A16
+#   5xx rate, latency   → OTLP spans                   → axiom-monitors.tf (A1/A2/A3)
+#   queue lag, DLQ      → `outbox.backlog`, `[dlq] …`  → axiom-monitors.tf (A4/A5)
+#   outbox backlog      → `outbox.backlog` log line    → axiom-monitors.tf (A16)
 #   /health/ready       → external probe               → synthetics.yml
 #
 # scripts/__tests__/sentry-alerts.test.mjs fails if an alert here queries

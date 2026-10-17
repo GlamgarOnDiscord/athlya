@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { evaluateCheckRuns, requireCheckSuccess } from '../require-check-success.mjs';
+import {
+  evaluateCheckRuns,
+  evaluateRequirements,
+  requireCheckSuccess,
+} from '../require-check-success.mjs';
 import { runSmoke } from '../smoke-routes.mjs';
+import { evaluateSoak, resolveSoak } from '../staging-gate-soak.mjs';
 
 function jsonResponse(status, body) {
   return new Response(JSON.stringify(body ?? {}), {
@@ -153,6 +158,15 @@ describe('evaluateCheckRuns', () => {
     assert.equal(result.ok, false);
   });
 
+  it('ignores skipped runs (a short manual gate skips the full-soak job)', () => {
+    const skipped = { ...run('skipped', '2026-10-01T12:00:00Z') };
+    assert.equal(
+      evaluateCheckRuns([run('success', '2026-10-01T10:00:00Z'), skipped], 'Staging gate').ok,
+      true,
+    );
+    assert.equal(evaluateCheckRuns([skipped], 'Staging gate').ok, false);
+  });
+
   it('rejects when no run exists or it is still in progress', () => {
     assert.equal(evaluateCheckRuns([], 'Staging gate').ok, false);
     assert.equal(
@@ -166,6 +180,23 @@ describe('evaluateCheckRuns', () => {
 });
 
 describe('requireCheckSuccess', () => {
+  it('asks GitHub for every run of the check, not only the latest', async () => {
+    let requested = '';
+    await requireCheckSuccess({
+      repo: 'o/r',
+      sha: 'abc',
+      checkName: 'Staging gate (full soak)',
+      token: 't',
+      fetchImpl: async (url) => {
+        requested = url;
+        return jsonResponse(200, { check_runs: [] });
+      },
+    });
+    const query = new URL(requested).searchParams;
+    assert.equal(query.get('filter'), 'all');
+    assert.equal(query.get('check_name'), 'Staging gate (full soak)');
+  });
+
   it('fails closed when the GitHub API errors', async () => {
     const result = await requireCheckSuccess({
       repo: 'o/r',
@@ -175,5 +206,105 @@ describe('requireCheckSuccess', () => {
       fetchImpl: async () => jsonResponse(403),
     });
     assert.equal(result.ok, false);
+  });
+});
+
+describe('evaluateRequirements', () => {
+  const green = new Set(['Staging gate', 'deploy web (staging)']);
+  const check = async (name) => ({ ok: green.has(name), reason: name });
+
+  it('requires every --check', async () => {
+    const result = await evaluateRequirements(
+      { all: ['Staging gate', 'Staging gate (full soak)'], any: [] },
+      check,
+    );
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.failures, ['Staging gate (full soak)']);
+  });
+
+  it('accepts any one --any-check', async () => {
+    const result = await evaluateRequirements(
+      { all: [], any: ['deploy all (staging)', 'deploy web (staging)'] },
+      check,
+    );
+    assert.equal(result.ok, true);
+  });
+
+  it('rejects when no --any-check passed and lists every alternative', async () => {
+    const result = await evaluateRequirements(
+      { all: [], any: ['deploy all (staging)', 'deploy studio (staging)'] },
+      check,
+    );
+    assert.equal(result.ok, false);
+    assert.match(result.failures[0], /deploy all \(staging\); deploy studio \(staging\)/);
+  });
+
+  it('combines both: every --check and one --any-check', async () => {
+    assert.equal(
+      (await evaluateRequirements({ all: ['Staging gate'], any: ['deploy web (staging)'] }, check))
+        .ok,
+      true,
+    );
+    assert.equal(
+      (
+        await evaluateRequirements(
+          { all: ['Staging gate (full soak)'], any: ['deploy web (staging)'] },
+          check,
+        )
+      ).ok,
+      false,
+    );
+  });
+});
+
+describe('resolveSoak', () => {
+  it('keeps PR soaks short and never counts them as release evidence', () => {
+    assert.deepEqual(resolveSoak({ event: 'pull_request' }), {
+      ok: true,
+      duration: '2m',
+      minutes: 2,
+      full: false,
+    });
+  });
+
+  it('runs the full 10-minute soak on push to master, whatever the input', () => {
+    assert.deepEqual(resolveSoak({ event: 'push', input: '1m' }), {
+      ok: true,
+      duration: '10m',
+      minutes: 10,
+      full: true,
+    });
+  });
+
+  it('defaults manual runs to the full soak and flags shorter ones', () => {
+    assert.equal(resolveSoak({ event: 'workflow_dispatch', input: '' }).full, true);
+    assert.equal(resolveSoak({ event: 'workflow_dispatch', input: '15m' }).full, true);
+    assert.equal(resolveSoak({ event: 'workflow_dispatch', input: '3m' }).full, false);
+  });
+
+  it('rejects malformed or oversized manual durations and unknown events', () => {
+    assert.equal(resolveSoak({ event: 'workflow_dispatch', input: '600s' }).ok, false);
+    assert.equal(resolveSoak({ event: 'workflow_dispatch', input: '10m; rm -rf /' }).ok, false);
+    assert.equal(resolveSoak({ event: 'workflow_dispatch', input: '31m' }).ok, false);
+    assert.equal(resolveSoak({ event: 'schedule' }).ok, false);
+  });
+});
+
+describe('evaluateSoak', () => {
+  it('accepts a k6 run of at least the full soak', () => {
+    const result = evaluateSoak({ state: { testRunDurationMs: 600_412 } }, 10);
+    assert.equal(result.ok, true);
+  });
+
+  it('rejects a shorter run', () => {
+    const result = evaluateSoak({ state: { testRunDurationMs: 120_300 } }, 10);
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /2\.0m/);
+  });
+
+  it('fails closed on a summary without a run duration', () => {
+    assert.equal(evaluateSoak({}, 10).ok, false);
+    assert.equal(evaluateSoak(null, 10).ok, false);
+    assert.equal(evaluateSoak({ state: { testRunDurationMs: 'long' } }, 10).ok, false);
   });
 });

@@ -25,6 +25,19 @@
 #   required strings, which makes boot fail loudly if a deployment forgot
 #   to set one.
 #
+# Secrets (set once per env via `wrangler secret put --env <staging|production>`):
+#   DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, CORS_ORIGIN, JWT_KID,
+#   JWT_PRIVATE_KEY_PEM, JWT_PUBLIC_KEY_PEM, JWKS_JSON, CRON_DB_URL,
+#   TURNSTILE_SECRET, RESEND_API_KEY, EXPORT_URL_SIGNING_KEY,
+#   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_ID_PRO,
+#   BILLING_REDIRECT_URL, BILLING_DB_URL (Stripe fallback on *.workers.dev)
+# Production also: SENTRY_DSN, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS,
+#   CF_ACCESS_AUD, CF_ACCESS_CERTS_URL.
+# scripts/verify-secrets.mjs checks these lists (keep both in sync).
+# Queue bindings: EVENTS_QUEUE, EVENTS_DLQ, EVENTS_NOTIFICATIONS_QUEUE,
+#   EVENTS_RGPD_QUEUE, OUTBOX_KICK_QUEUE (producer + consumer, issue #311).
+#   scripts/verify-secrets.mjs checks that every bound queue exists.
+#
 # Hyperdrive (write path — issue #62)
 # -----------------------------------
 #   Booking/cancel interactive transactions use postgres-js over

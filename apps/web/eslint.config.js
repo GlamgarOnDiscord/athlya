@@ -54,16 +54,14 @@ const config = [
       // Playwright artefacts.
       'test-results/**',
       'playwright-report/**',
-      // Files outside the main tsconfig graph — typed-linting
+      // Files outside every tsconfig graph — typed-linting
       // cannot resolve them through `projectService`, so
       // we exclude them entirely from the lint run.
-      // `next.config.ts` / `vitest.config.ts` / `e2e/**` all
-      // have their own build pipelines (Next CLI / Vitest /
-      // Playwright). Lint them via a dedicated config if the
-      // need arises.
+      // `next.config.ts` / `vitest.config.ts` have their own
+      // build pipelines (Next CLI / Vitest). `e2e/**` is linted:
+      // `projectService` resolves it through `e2e/tsconfig.json`.
       'next.config.ts',
       'vitest.config.ts',
-      'e2e/**',
       'scripts/**',
     ],
   },

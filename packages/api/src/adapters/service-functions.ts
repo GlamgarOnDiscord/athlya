@@ -1,12 +1,14 @@
 /**
  * Typed access to the SECURITY DEFINER service functions installed by
  * migrations `0032_service_definer_functions.sql` (issue #224),
- * `0033_auth_event_recording.sql` (issue #411) and
- * `0037_auth_outbox_review_fixes.sql` (issue #609).
+ * `0033_auth_event_recording.sql` (issue #411),
+ * `0037_auth_outbox_review_fixes.sql` (issue #609) and
+ * `0038_studios_runtime.sql` (issue #224, tenant slug resolution).
  *
- * Pre-authentication auth flows and the notifications / RGPD cascade
- * queue consumers run as `athlya_app` without tenant claims, so FORCE
- * RLS hides every row from raw table queries. Each of those paths calls
+ * Pre-authentication auth flows, the tenant slug guard and the
+ * notifications / RGPD cascade queue consumers run as `athlya_app`
+ * without tenant claims, so FORCE RLS hides every row from raw table
+ * queries. Each of those paths calls
  * one narrow function instead; the function signature is the contract.
  * `service-functions.test.ts` keeps this module in sync with the
  * migrations.
@@ -95,6 +97,7 @@ export const serviceFn = {
     sql`SELECT * FROM auth_find_active_user_by_email(${email})`,
   findUserById: (id: string) => sql`SELECT * FROM auth_find_user_by_id(${id}::uuid)`,
   findStudioBySlug: (slug: string) => sql`SELECT * FROM auth_find_studio_by_slug(${slug})`,
+  studioIdBySlug: (slug: string) => sql`SELECT studio_id_by_slug(${slug}) AS id`,
   createMember: (input: {
     studioId: string;
     email: string;
