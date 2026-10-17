@@ -14,6 +14,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  claimLeasedBatch,
+  markPublishedMany,
   claimBatch,
   countPendingOutbox,
   InvalidOutboxInputError,
@@ -259,5 +261,59 @@ describe('releaseLeases', () => {
     const { tx, execute } = makeFakeTx();
     await releaseLeases(tx, [], LEASE);
     expect(execute).not.toHaveBeenCalled();
+  });
+});
+
+describe('claimLeasedBatch (issues #424 / #311)', () => {
+  it('claims unleased rows, stamps a lease and ranks priority types first', async () => {
+    const { tx, calls } = makeFakeTx();
+
+    await claimLeasedBatch(tx, 50, 120, ['auth.user.deleted']);
+
+    const call = calls[0];
+    expect(call?.sqlText).toMatch(/lease_until\s+is\s+null\s+or\s+lease_until\s*<=\s*now\(\)/i);
+    expect(call?.sqlText).toMatch(/for\s+update\s+skip\s+locked/i);
+    expect(call?.sqlText).toMatch(/lease_until\s*=\s*now\(\)\s*\+\s*make_interval/i);
+    expect(call?.sqlText).toMatch(
+      /order\s+by\s+\(event_type\s*=\s*any\(\?::text\[\]\)\)\s+desc,\s*occurred_at\s+asc/i,
+    );
+    expect(call?.sqlText).toMatch(/lease_until::text\s+as\s+lease_token/i);
+    expect(call?.params).toEqual(['{auth.user.deleted}', 50, 120]);
+  });
+
+  it.each(["auth.user.deleted'); drop table outbox; --", 'Auth.User', 'single'])(
+    'rejects the priority type %j',
+    async (eventType) => {
+      const { tx, execute } = makeFakeTx();
+      await expect(claimLeasedBatch(tx, 50, 120, [eventType])).rejects.toBeInstanceOf(
+        InvalidOutboxInputError,
+      );
+      expect(execute).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([0, 3601, 1.5])('rejects a lease of %s seconds', async (lease) => {
+    const { tx, execute } = makeFakeTx();
+    await expect(claimLeasedBatch(tx, 50, lease)).rejects.toBeInstanceOf(InvalidOutboxInputError);
+    expect(execute).not.toHaveBeenCalled();
+  });
+});
+
+describe('markPublishedMany', () => {
+  it('stamps every id in one statement and clears the lease', async () => {
+    const { tx, calls } = makeFakeTx();
+    await markPublishedMany(tx, [OUTBOX_ROW_ID]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.sqlText).toMatch(
+      /set\s+published_at\s*=\s*now\(\),\s*lease_until\s*=\s*null/i,
+    );
+    expect(calls[0]?.params).toEqual([`{${OUTBOX_ROW_ID}}`]);
+  });
+
+  it('is a no-op for an empty batch and rejects non-UUID ids', async () => {
+    const { tx, execute } = makeFakeTx();
+    await markPublishedMany(tx, []);
+    expect(execute).not.toHaveBeenCalled();
+    await expect(markPublishedMany(tx, ['nope'])).rejects.toBeInstanceOf(InvalidOutboxInputError);
   });
 });

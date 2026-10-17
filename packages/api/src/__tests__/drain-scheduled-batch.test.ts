@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   ADAPTIVE_BATCH_SIZE,
+  DRAIN_MAX_ROUNDS,
+  emitOutboxLaneMetrics,
+  totalSnapshot,
   DRAIN_CYCLE_DEADLINE_MS,
   DRAIN_LEASE_SECONDS,
   DRAIN_SEND_CONCURRENCY,
@@ -19,17 +22,20 @@ import {
   DEFAULT_QUEUE_SEND_TIMEOUT_MS,
   type DrainResult,
 } from '../events/drain-worker.js';
+import { COMPLIANCE_EVENT_TYPES } from '../events/route-queue.js';
 
 const countPendingOutboxMock = vi.hoisted(() => vi.fn());
 const claimBatchMock = vi.hoisted(() => vi.fn());
 const markPublishedMock = vi.hoisted(() => vi.fn());
 const releaseLeasesMock = vi.hoisted(() => vi.fn());
+const countByTypeMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@athlya/db/outbox', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@athlya/db/outbox')>();
   return {
     ...actual,
     countPendingOutbox: countPendingOutboxMock,
+    countPendingOutboxByType: countByTypeMock,
     claimLeasedBatch: claimBatchMock,
     markPublishedMany: markPublishedMock,
     releaseLeases: releaseLeasesMock,
@@ -135,10 +141,14 @@ describe('runScheduledDrain', () => {
 
   it('queries pending once per cycle and emits the backlog metric', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    countPendingOutboxMock.mockReset().mockResolvedValue({
-      pending: OUTBOX_BACKLOG_BATCH_THRESHOLD + 50,
-      oldestOccurredAt: null,
-    });
+    countByTypeMock.mockReset().mockResolvedValue([
+      {
+        eventType: 'reservation.created',
+        pending: OUTBOX_BACKLOG_BATCH_THRESHOLD,
+        oldestOccurredAt: null,
+      },
+      { eventType: 'auth.user.deleted', pending: 50, oldestOccurredAt: null },
+    ]);
     claimBatchMock.mockReset().mockResolvedValue([]);
 
     const result = await runScheduledDrain({
@@ -148,11 +158,12 @@ describe('runScheduledDrain', () => {
       EVENTS_RGPD_QUEUE: {} as never,
     });
 
-    expect(countPendingOutboxMock).toHaveBeenCalledTimes(1);
+    expect(countByTypeMock).toHaveBeenCalledTimes(1);
     expect(claimBatchMock).toHaveBeenCalledWith(
       expect.anything(),
       ADAPTIVE_BATCH_SIZE,
       DRAIN_LEASE_SECONDS,
+      COMPLIANCE_EVENT_TYPES,
     );
     expect(log).toHaveBeenCalledWith(
       'outbox.backlog',
@@ -163,7 +174,7 @@ describe('runScheduledDrain', () => {
 
   it('skips the snapshot query when batchSize is overridden', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
-    countPendingOutboxMock.mockReset();
+    countByTypeMock.mockReset();
     claimBatchMock.mockReset().mockResolvedValue([]);
 
     await runScheduledDrain({
@@ -174,13 +185,20 @@ describe('runScheduledDrain', () => {
       batchSize: 25,
     });
 
-    expect(countPendingOutboxMock).not.toHaveBeenCalled();
-    expect(claimBatchMock).toHaveBeenCalledWith(expect.anything(), 25, DRAIN_LEASE_SECONDS);
+    expect(countByTypeMock).not.toHaveBeenCalled();
+    expect(claimBatchMock).toHaveBeenCalledWith(
+      expect.anything(),
+      25,
+      DRAIN_LEASE_SECONDS,
+      COMPLIANCE_EVENT_TYPES,
+    );
   });
 
   it('emits athlya.outbox.drain_errors when the drain reports failures', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    countPendingOutboxMock.mockReset().mockResolvedValue({ pending: 5, oldestOccurredAt: null });
+    countByTypeMock
+      .mockReset()
+      .mockResolvedValue([{ eventType: 'member.registered', pending: 5, oldestOccurredAt: null }]);
 
     const failingRow = {
       id: 'row-1',
@@ -225,7 +243,7 @@ describe('runScheduledDrain lease (issue #424)', () => {
   it('stamps every delivered row in one statement and emits the cycle metric', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const rows = [row(1), row(2), row(3)];
-    claimBatchMock.mockReset().mockResolvedValue(rows);
+    claimBatchMock.mockReset().mockResolvedValueOnce(rows).mockResolvedValue([]);
     markPublishedMock.mockReset().mockResolvedValue(undefined);
     const send = vi.fn().mockResolvedValue(undefined);
 
@@ -369,5 +387,149 @@ describe('warnOnDrainOverlapRisk', () => {
         processed: 200,
       }),
     );
+  });
+});
+
+describe('runScheduledDrain throughput and fairness (issue #311)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const env = (send: (m: unknown) => Promise<void>) => ({
+    getDb: () => ({}) as never,
+    EVENTS_QUEUE: { send },
+    EVENTS_NOTIFICATIONS_QUEUE: { send },
+    EVENTS_RGPD_QUEUE: { send },
+    batchSize: 2,
+  });
+  const row = (n: number) => ({
+    id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+    eventId: `evt-${String(n)}`,
+    eventType: 'reservation.created',
+    payload: {},
+    attempts: 1,
+    occurredAt: new Date(),
+    studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  });
+
+  it('keeps claiming batches within one cycle until the backlog is empty', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    claimBatchMock
+      .mockReset()
+      .mockResolvedValueOnce([row(1), row(2)])
+      .mockResolvedValueOnce([row(3), row(4)])
+      .mockResolvedValueOnce([row(5)])
+      .mockResolvedValue([]);
+    markPublishedMock.mockReset().mockResolvedValue(undefined);
+
+    const result = await runScheduledDrain(env(async () => {}));
+
+    expect(claimBatchMock).toHaveBeenCalledTimes(3);
+    expect(result).toEqual({ processed: 5, succeeded: 5, failed: 0, released: 0 });
+  });
+
+  it('stops the cycle when a whole batch fails instead of spinning on a dead queue', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    claimBatchMock.mockReset().mockResolvedValue([row(1), row(2)]);
+
+    const result = await runScheduledDrain(env(() => Promise.reject(new Error('queue down'))));
+
+    expect(claimBatchMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ processed: 2, succeeded: 0, failed: 2, released: 0 });
+  });
+
+  it('carries released rows across rounds and fences each release on its own claim', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const first = [row(1), row(2)].map((r) => ({ ...r, leaseToken: 'lease-round-1' }));
+    const second = [row(3), row(4)].map((r) => ({ ...r, leaseToken: 'lease-round-2' }));
+    claimBatchMock.mockReset().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    markPublishedMock.mockReset().mockResolvedValue(undefined);
+    releaseLeasesMock.mockReset().mockResolvedValue(undefined);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    let sends = 0;
+    const send = vi.fn(async () => {
+      sends += 1;
+      if (sends === 3) vi.setSystemTime(Date.now() + DRAIN_CYCLE_DEADLINE_MS);
+    });
+
+    try {
+      const result = await runScheduledDrain(env(send));
+
+      expect(claimBatchMock).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ processed: 4, succeeded: 3, failed: 0, released: 1 });
+      expect(releaseLeasesMock).toHaveBeenCalledTimes(1);
+      expect(releaseLeasesMock).toHaveBeenCalledWith(
+        expect.anything(),
+        [second[1]!.id],
+        'lease-round-2',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds the rounds of one cycle', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    claimBatchMock.mockReset().mockImplementation(async () => [row(1), row(2)]);
+    markPublishedMock.mockReset().mockResolvedValue(undefined);
+
+    await runScheduledDrain(env(async () => {}));
+
+    expect(claimBatchMock).toHaveBeenCalledTimes(DRAIN_MAX_ROUNDS);
+  });
+
+  it('claims compliance events first', () => {
+    expect(COMPLIANCE_EVENT_TYPES).toEqual(
+      expect.arrayContaining(['auth.user.deleted', 'members.export.requested']),
+    );
+  });
+});
+
+describe('outbox lane metrics (issue #311)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sums per-type rows into the global snapshot', () => {
+    const old = new Date('2026-10-12T00:00:00Z');
+    expect(
+      totalSnapshot([
+        { pending: 3, oldestOccurredAt: new Date('2026-10-12T01:00:00Z') },
+        { pending: 4, oldestOccurredAt: old },
+        { pending: 0, oldestOccurredAt: null },
+      ]),
+    ).toEqual({ pending: 7, oldestOccurredAt: old });
+  });
+
+  it('emits one backlog data point per lane with depth and oldest age', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const tenMinAgo = new Date(Date.now() - 600_000);
+    emitOutboxLaneMetrics([
+      { eventType: 'reservation.created', pending: 10, oldestOccurredAt: new Date() },
+      { eventType: 'reservation.cancelled', pending: 5, oldestOccurredAt: new Date() },
+      { eventType: 'auth.user.deleted', pending: 1, oldestOccurredAt: tenMinAgo },
+    ]);
+
+    expect(log).toHaveBeenCalledWith(
+      'outbox.lane_backlog',
+      expect.objectContaining({ lane: 'notifications', pending: 15 }),
+    );
+    const rgpd = log.mock.calls.find(
+      (c) => (c[1] as { lane?: string } | undefined)?.lane === 'rgpd',
+    )?.[1] as { pending: number; oldestAgeMs: number };
+    expect(rgpd.pending).toBe(1);
+    expect(rgpd.oldestAgeMs).toBeGreaterThanOrEqual(600_000);
+  });
+
+  it('reports a drained lane as zero instead of omitting it', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    emitOutboxLaneMetrics([]);
+
+    const lanes = log.mock.calls
+      .filter((c) => c[0] === 'outbox.lane_backlog')
+      .map((c) => c[1] as { lane: string; pending: number; oldestAgeMs: number });
+    expect(lanes).toEqual([
+      expect.objectContaining({ lane: 'notifications', pending: 0, oldestAgeMs: 0 }),
+      expect.objectContaining({ lane: 'rgpd', pending: 0, oldestAgeMs: 0 }),
+      expect.objectContaining({ lane: 'legacy', pending: 0, oldestAgeMs: 0 }),
+    ]);
   });
 });

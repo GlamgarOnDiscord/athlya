@@ -6,7 +6,7 @@
 -- =====================================================================
 
 BEGIN;
-SELECT plan(12);
+SELECT plan(13);
 
 INSERT INTO outbox (id, event_id, event_type, payload, occurred_at, studio_id) VALUES
     ('0424aaaa-0000-4000-8000-000000000001', 'evt-424-1', 'test.lease', '{}'::jsonb,
@@ -148,6 +148,37 @@ SELECT results_eq(
     'EXECUTE legacy_claim',
     $$ VALUES ('0424aaaa-0000-4000-8000-000000000002'::uuid) $$,
     'a released row is claimable again'
+);
+
+-- Issue #311: compliance events are claimed before an older backlog.
+-- This checks the claim shape runs under athlya_cron's grants; the
+-- production claimLeasedBatch statement itself is exercised against
+-- Postgres in packages/db/tests/outbox-claim.pglite.test.ts.
+RESET ROLE;
+INSERT INTO outbox (id, event_id, event_type, payload, occurred_at, studio_id) VALUES
+    ('0311aaaa-0000-4000-8000-000000000001', 'evt-311-old-notif', 'reservation.created', '{}'::jsonb,
+     now() - interval '1 hour', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+    ('0311aaaa-0000-4000-8000-000000000002', 'evt-311-erasure', 'auth.user.deleted', '{}'::jsonb,
+     now(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+SET LOCAL ROLE athlya_cron;
+
+SELECT results_eq(
+    $$ WITH claimed AS (
+           SELECT id FROM outbox
+            WHERE published_at IS NULL
+              AND (lease_until IS NULL OR lease_until <= now())
+              AND id::text LIKE '0311aaaa%'
+            ORDER BY (event_type = ANY('{auth.user.deleted,members.export.requested}'::text[])) DESC,
+                     occurred_at ASC
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED
+       )
+       UPDATE outbox SET attempts = outbox.attempts + 1,
+                         lease_until = now() + make_interval(secs => 120)
+         FROM claimed WHERE outbox.id = claimed.id
+       RETURNING outbox.event_type $$,
+    $$ VALUES ('auth.user.deleted'::text) $$,
+    'priority claim: a newer compliance event beats an older notification backlog'
 );
 
 RESET ROLE;

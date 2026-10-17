@@ -242,13 +242,19 @@ export async function claimBatch(
  * Every row of one claim shares the same `lease_until`; its exact text
  * form is returned as `leaseToken` so {@link releaseLeases} only touches
  * rows this claim still owns.
+ *
+ * `priorityEventTypes` are claimed before any other pending row
+ * (issue #311): a notification backlog can never starve compliance
+ * events such as `auth.user.deleted`.
  */
 export async function claimLeasedBatch(
   db: AthlyaDb,
   limit: number,
   leaseSeconds: number,
+  priorityEventTypes: readonly string[] = [],
 ): Promise<LeasedOutboxRow[]> {
   validateLimit(limit);
+  priorityEventTypes.forEach(validateEventType);
   if (!Number.isInteger(leaseSeconds) || leaseSeconds < 1 || leaseSeconds > 3600) {
     throw new InvalidOutboxInputError('leaseSeconds', 'must be an integer in [1, 3600]');
   }
@@ -259,7 +265,8 @@ export async function claimLeasedBatch(
               FROM outbox
              WHERE published_at IS NULL
                AND (lease_until IS NULL OR lease_until <= now())
-             ORDER BY occurred_at ASC
+             ORDER BY (event_type = ANY(${`{${priorityEventTypes.join(',')}}`}::text[])) DESC,
+                      occurred_at ASC
              LIMIT ${limit}
              FOR UPDATE SKIP LOCKED
         )
@@ -288,6 +295,29 @@ export async function claimLeasedBatch(
     attempts: row.attempts,
     studioId: row.studio_id,
     leaseToken: row.lease_token,
+  }));
+}
+
+/** Pending rows and oldest pending timestamp per event type (issue #311 lane metrics). */
+export async function countPendingOutboxByType(
+  db: AthlyaDb,
+): Promise<Array<{ eventType: string; pending: number; oldestOccurredAt: Date | null }>> {
+  interface Row {
+    event_type: string;
+    pending: number;
+    oldest_occurred_at: Date | string | null;
+    [key: string]: unknown;
+  }
+  const result = await db.execute<Row>(sql`
+        SELECT event_type, COUNT(*)::int AS pending, MIN(occurred_at) AS oldest_occurred_at
+          FROM outbox
+         WHERE published_at IS NULL
+         GROUP BY event_type
+    `);
+  return (result as unknown as readonly Row[]).map((row) => ({
+    eventType: row.event_type,
+    pending: row.pending,
+    oldestOccurredAt: row.oldest_occurred_at === null ? null : new Date(row.oldest_occurred_at),
   }));
 }
 
@@ -448,6 +478,15 @@ function validateLimit(limit: number): void {
       'limit',
       `must be ≤ ${String(MAX_CLAIM_LIMIT)}, got ${String(limit)}`,
     );
+  }
+}
+
+/** Dotted event types only — they are inlined into an array literal. */
+const EVENT_TYPE_REGEX = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/u;
+
+function validateEventType(eventType: string): void {
+  if (typeof eventType !== 'string' || !EVENT_TYPE_REGEX.test(eventType)) {
+    throw new InvalidOutboxInputError('eventType', 'must be a dotted lowercase event type');
   }
 }
 
