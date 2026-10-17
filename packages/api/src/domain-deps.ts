@@ -83,9 +83,22 @@ export function lazyAuditDeps(resolve: () => AuditDeps): AuditDeps {
   return { listAuditLog: forward('listAuditLog') };
 }
 
+/**
+ * Lazy auth facade. Besides the service methods it carries the optional
+ * dependencies of the bundle:
+ *
+ *   • `checkRefreshRateLimit` / `checkPasswordResetRateLimit` — getters,
+ *     so the route's per-request `!== undefined` check sees whether the
+ *     resolved bundle provides the throttle.
+ *   • `idempotency` — `buildAuthRouter()` reads it once at mount time,
+ *     before any request env exists, so it is always present here and
+ *     its `db` handle is resolved per request. `ttlSec`,
+ *     `mutationMethods` and `logger` are read at mount time and cannot
+ *     be resolved lazily; the adapter leaves them to their defaults.
+ */
 export function lazyAuthDeps(resolve: () => AuthDeps): AuthDeps {
   const forward = forwarder(resolve);
-  return {
+  const facade: AuthDeps = {
     register: forward('register'),
     login: forward('login'),
     refresh: forward('refresh'),
@@ -94,7 +107,35 @@ export function lazyAuthDeps(resolve: () => AuthDeps): AuthDeps {
     deleteMe: forward('deleteMe'),
     requestPasswordReset: forward('requestPasswordReset'),
     confirmPasswordReset: forward('confirmPasswordReset'),
+    idempotency: {
+      get db() {
+        const idempotency = resolve().idempotency;
+        if (idempotency === undefined) {
+          throw new Error('auth idempotency dependency is not wired for this environment');
+        }
+        return idempotency.db;
+      },
+    },
   };
+  // Getters (not plain optional fields) so `exactOptionalPropertyTypes`
+  // still holds: the value is `undefined` only when the bundle omits it.
+  Object.defineProperties(facade, {
+    checkRefreshRateLimit: {
+      enumerable: true,
+      get: () => {
+        const bundle = resolve();
+        return bundle.checkRefreshRateLimit?.bind(bundle);
+      },
+    },
+    checkPasswordResetRateLimit: {
+      enumerable: true,
+      get: () => {
+        const bundle = resolve();
+        return bundle.checkPasswordResetRateLimit?.bind(bundle);
+      },
+    },
+  });
+  return facade;
 }
 
 export function lazyMembersDeps(resolve: () => MembersDeps): MembersDeps {
@@ -195,12 +236,36 @@ export function assertRequiredSecrets(env: AthlyaBindings): void {
 }
 
 /**
+ * The RS256 key pair `buildAuthDeps` signs tokens with. Checked only
+ * where auth deps are built, so a Worker that never issues tokens does
+ * not depend on the signing material.
+ */
+function assertSigningKeySecrets(env: AthlyaBindings): void {
+  if (env.ENVIRONMENT !== 'production' && env.ENVIRONMENT !== 'staging') {
+    return;
+  }
+  const keys = env as AthlyaBindings & {
+    JWT_PRIVATE_KEY_PEM?: string;
+    JWT_PUBLIC_KEY_PEM?: string;
+  };
+  const missing: string[] = [];
+  if (!nonEmpty(keys.JWT_PRIVATE_KEY_PEM)) missing.push('JWT_PRIVATE_KEY_PEM');
+  if (!nonEmpty(keys.JWT_PUBLIC_KEY_PEM)) missing.push('JWT_PUBLIC_KEY_PEM');
+  if (missing.length > 0) {
+    throw new Error(
+      `buildDefaultDeps: missing required secret(s) in ${env.ENVIRONMENT}: ${missing.join(', ')}. The Worker will not start until they are provisioned via 'wrangler secret put'.`,
+    );
+  }
+}
+
+/**
  * Auth is wired to Drizzle (Neon) + Upstash Redis + the signing key
  * material only when the env carries the credentials (DB_URL +
  * REDIS_URL + JWT_KID); a placeholder env used by tests falls back to
  * the stub bundle.
  */
 export function defaultAuthDeps(env: AthlyaBindings): AuthDeps {
+  assertSigningKeySecrets(env);
   const hasAuthSecrets =
     nonEmpty(env.DB_URL) &&
     nonEmpty(env.REDIS_URL) &&

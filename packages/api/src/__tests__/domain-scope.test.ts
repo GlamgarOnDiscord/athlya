@@ -8,7 +8,7 @@ vi.mock('@athlya/db/client', () => ({
 }));
 
 const { installDomainScope } = await import('../domain-scope.js');
-const { lazyAuthDeps } = await import('../domain-deps.js');
+const { defaultAuthDeps, lazyAuthDeps } = await import('../domain-deps.js');
 
 import { buildMockEnv } from './helpers/test-app.js';
 
@@ -73,6 +73,53 @@ describe('installDomainScope', () => {
 });
 
 describe('lazyAuthDeps', () => {
+  // Typed as Required<AuthDeps>: adding a key to AuthDeps fails the
+  // typecheck here until the test (and the facade) cover it.
+  const full: Required<AuthDeps> = {
+    register: vi.fn(),
+    login: vi.fn(),
+    refresh: vi.fn(),
+    logout: vi.fn(),
+    logoutAll: vi.fn(),
+    deleteMe: vi.fn(),
+    requestPasswordReset: vi.fn(),
+    confirmPasswordReset: vi.fn(),
+    checkRefreshRateLimit: vi.fn(() => Promise.resolve({ allow: true })),
+    checkPasswordResetRateLimit: vi.fn(() => Promise.resolve(true)),
+    idempotency: { db: {} as Required<AuthDeps>['idempotency']['db'] },
+  };
+
+  it.each(Object.keys(full))('forwards %s', (key) => {
+    const deps = lazyAuthDeps(() => full);
+    expect(deps[key as keyof AuthDeps]).toBeDefined();
+  });
+
+  it('forwards the optional rate limits and the idempotency db handle', async () => {
+    const deps = lazyAuthDeps(() => full);
+
+    await deps.checkPasswordResetRateLimit?.('a@example.com');
+    await deps.checkRefreshRateLimit?.('token');
+
+    expect(full.checkPasswordResetRateLimit).toHaveBeenCalledWith('a@example.com');
+    expect(full.checkRefreshRateLimit).toHaveBeenCalledWith('token');
+    expect(deps.idempotency?.db).toBe(full.idempotency.db);
+  });
+
+  it('exposes the idempotency facade before any env is resolved', () => {
+    const resolve = vi.fn((): AuthDeps => full);
+    const deps = lazyAuthDeps(resolve);
+
+    expect(deps.idempotency).toBeDefined();
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it('reports an absent optional rate limit as undefined', () => {
+    const { checkPasswordResetRateLimit: _omit, ...partial } = full;
+    const deps = lazyAuthDeps(() => partial);
+
+    expect(deps.checkPasswordResetRateLimit).toBeUndefined();
+  });
+
   it('resolves the bundle on each call and forwards the arguments', async () => {
     const logout = vi.fn(() => Promise.resolve());
     const resolve = vi.fn(() => ({ logout }) as unknown as AuthDeps);
@@ -83,5 +130,17 @@ describe('lazyAuthDeps', () => {
 
     expect(resolve).toHaveBeenCalledTimes(1);
     expect(logout).toHaveBeenCalledWith('user-1');
+  });
+});
+
+describe('defaultAuthDeps signing-key guard', () => {
+  it.each(['staging', 'production'] as const)('requires the PEM key pair on %s', (environment) => {
+    const env = buildMockEnv({ ENVIRONMENT: environment });
+    expect(() => defaultAuthDeps(env)).toThrow(/JWT_PRIVATE_KEY_PEM, JWT_PUBLIC_KEY_PEM/);
+  });
+
+  it('does not require the key pair in dev', () => {
+    const env = buildMockEnv({ ENVIRONMENT: 'dev' });
+    expect(() => defaultAuthDeps(env)).not.toThrow();
   });
 });
