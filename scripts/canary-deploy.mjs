@@ -13,6 +13,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -262,6 +263,14 @@ async function errorBudgetOrThrow(budget, windowStart, label) {
   }
 }
 
+/**
+ * Tell the workflow the gateway now serves this version, so a later failure
+ * rolls it back (and an earlier one leaves the live deployment alone).
+ */
+function markPromoted() {
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, 'promoted=true\n');
+}
+
 async function productionCanary({ baseUrl, stagingUrl, waitMin, steps }) {
   if (!baseUrl) throw new Error('--base-url is required');
   const budgetConfig = readErrorBudgetConfig(process.env);
@@ -285,6 +294,7 @@ async function productionCanary({ baseUrl, stagingUrl, waitMin, steps }) {
   // full promotion is only reported once the release has held at 100 %.
   for (const pct of steps) {
     promoteVersion('production', versionId, pct);
+    markPromoted();
     const windowStart = new Date();
     await reachabilityOrThrow(baseUrl, `${pct}%`);
     console.log(`Monitoring ${waitMinutes} min at ${pct}% — polling /health/ready every 60 s…`);

@@ -120,7 +120,7 @@ describe('readErrorBudgetConfig', () => {
   });
 
   it('fails validation on a malformed budget instead of falling back', () => {
-    for (const value of ['abc', '-1', '1.5', '5e2', 'Infinity']) {
+    for (const value of ['abc', '-1', '1.5', '5e2', 'Infinity', '9'.repeat(400)]) {
       const result = readErrorBudgetConfig({ ...complete, CANARY_MAX_ERRORS: value });
       assert.equal(result.ok, false, value);
       assert.deepEqual(result.missing, []);
@@ -182,18 +182,34 @@ describe('check-canary-paths', () => {
       '        run: bash scripts/wait.sh "$URL"',
     ].join('\n');
     assert.deepEqual(workflowScripts(yaml), ['scripts/a.mjs', 'scripts/wait.sh']);
-    assert.deepEqual(localImports("import { x } from './b.mjs';\nimport fs from 'node:fs';"), [
-      './b.mjs',
-    ]);
-    const files = {
-      'scripts/a.mjs': "import { b } from './b.mjs';",
-      'scripts/b.mjs': "export { c } from './lib/c.mjs';",
-      'scripts/lib/c.mjs': '',
-    };
     assert.deepEqual(
-      scriptClosure(['scripts/a.mjs', 'scripts/wait.sh'], (f) => files[f]),
-      ['scripts/a.mjs', 'scripts/b.mjs', 'scripts/lib/c.mjs', 'scripts/wait.sh'],
+      localImports(
+        [
+          "import { x } from './b.mjs';",
+          "import fs from 'node:fs';",
+          "import './side-effect.mjs';",
+          "const lazy = await import('../lib/lazy.mjs');",
+          "export { y } from './b.mjs';",
+          "await import('node:path');",
+        ].join('\n'),
+      ),
+      ['./b.mjs', './side-effect.mjs', '../lib/lazy.mjs'],
     );
+    const files = {
+      'scripts/a.mjs': "import { b } from './b.mjs';\nimport './setup.mjs';",
+      'scripts/b.mjs': "export { c } from './lib/c.mjs';\nawait import('./lib/d.mjs');",
+      'scripts/setup.mjs': '',
+      'scripts/lib/c.mjs': '',
+      'scripts/lib/d.mjs': '',
+    };
+    assert.deepEqual(scriptClosure(['scripts/a.mjs', 'scripts/wait.sh'], (f) => files[f]), [
+      'scripts/a.mjs',
+      'scripts/b.mjs',
+      'scripts/lib/c.mjs',
+      'scripts/lib/d.mjs',
+      'scripts/setup.mjs',
+      'scripts/wait.sh',
+    ]);
   });
 
   it('treats nested files as files, not directories', () => {

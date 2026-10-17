@@ -146,10 +146,13 @@ jobs:
           VERSION: ${{ steps.config.outputs.release }}
         run: |
           set -euo pipefail
+          # Each Worker records its own success so a failure only rolls back
+          # the Workers this run actually deployed.
           # wrangler parses --var KEY:VALUE (KEY=VALUE would add a key named "VERSION=…").
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env production --var "VERSION:${VERSION}"
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production --var "VERSION:${VERSION}"
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production --var "VERSION:${VERSION}"
+          for worker in auth reservations billing; do
+            pnpm --filter @athlya/api exec wrangler deploy -c "wrangler.${worker}.toml" --env production --var "VERSION:${VERSION}"
+            echo "${worker}=true" >> "$GITHUB_OUTPUT"
+          done
 
       - name: Pre-canary health check (old gateway + new sub-workers)
         if: steps.config.outputs.ready == 'true' && steps.deploy_subworkers.outcome == 'success'
@@ -182,38 +185,44 @@ jobs:
       # rollback errors, leaving the fleet in an undefined mixed-version state.
       # Each rollback command runs independently; a failure in one is surfaced
       # as a non-zero exit so the step fails and the workflow is marked red.
-      # Only when something was deployed: a failure in the pre-flight checks
-      # must not roll production back from a version this run never touched.
+      # Only the Workers this run deployed are rolled back: `wrangler
+      # rollback` without a version id reverts to the previous deployment, so
+      # running it on an untouched Worker would downgrade production. The
+      # gateway counts as deployed once canary-deploy.mjs promoted it.
       - name: Rollback on failure
-        if: failure() && steps.config.outputs.ready == 'true' && (steps.deploy_subworkers.outcome == 'success' || steps.deploy_subworkers.outcome == 'failure')
+        if: >-
+          failure() && steps.config.outputs.ready == 'true' &&
+          (steps.canary.outputs.promoted == 'true' ||
+           steps.deploy_subworkers.outputs.auth == 'true' ||
+           steps.deploy_subworkers.outputs.reservations == 'true' ||
+           steps.deploy_subworkers.outputs.billing == 'true')
+        env:
+          GATEWAY_DEPLOYED: ${{ steps.canary.outputs.promoted }}
+          AUTH_DEPLOYED: ${{ steps.deploy_subworkers.outputs.auth }}
+          RESERVATIONS_DEPLOYED: ${{ steps.deploy_subworkers.outputs.reservations }}
+          BILLING_DEPLOYED: ${{ steps.deploy_subworkers.outputs.billing }}
         run: |
           set +e
-          echo "::warning::Deploy failed — rolling back production gateway and sub-workers"
+          echo "::warning::Deploy failed — rolling back the production Workers this run deployed"
           ROLLBACK_FAILED=0
 
-          node scripts/canary-deploy.mjs rollback --env production
-          if [ $? -ne 0 ]; then
-            echo "::error::Gateway rollback FAILED"
-            ROLLBACK_FAILED=1
+          if [ "${GATEWAY_DEPLOYED}" = 'true' ]; then
+            node scripts/canary-deploy.mjs rollback --env production
+            if [ $? -ne 0 ]; then
+              echo "::error::Gateway rollback FAILED"
+              ROLLBACK_FAILED=1
+            fi
           fi
 
-          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.auth.toml --env production
-          if [ $? -ne 0 ]; then
-            echo "::error::Auth sub-worker rollback FAILED"
-            ROLLBACK_FAILED=1
-          fi
-
-          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.reservations.toml --env production
-          if [ $? -ne 0 ]; then
-            echo "::error::Reservations sub-worker rollback FAILED"
-            ROLLBACK_FAILED=1
-          fi
-
-          pnpm --filter @athlya/api exec wrangler rollback -c wrangler.billing.toml --env production
-          if [ $? -ne 0 ]; then
-            echo "::error::Billing sub-worker rollback FAILED"
-            ROLLBACK_FAILED=1
-          fi
+          for worker in auth reservations billing; do
+            deployed_var="${worker^^}_DEPLOYED"
+            [ "${!deployed_var}" = 'true' ] || continue
+            pnpm --filter @athlya/api exec wrangler rollback -c "wrangler.${worker}.toml" --env production
+            if [ $? -ne 0 ]; then
+              echo "::error::${worker} sub-worker rollback FAILED"
+              ROLLBACK_FAILED=1
+            fi
+          done
 
           if [ $ROLLBACK_FAILED -ne 0 ]; then
             echo "::error::One or more rollbacks failed. Fleet may be in a mixed-version state. Page on-call immediately."

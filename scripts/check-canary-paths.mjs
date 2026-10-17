@@ -75,13 +75,17 @@ export function workflowScripts(workflowYaml) {
 }
 
 /**
- * Relative ES module specifiers imported by `source`.
+ * Relative ES module specifiers `source` loads: `import … from`,
+ * `export … from`, side-effect `import './x'` and dynamic `import('./x')`
+ * with a literal specifier.
  *
  * @param {string} source
  * @returns {string[]}
  */
 export function localImports(source) {
-  return [...source.matchAll(/\bfrom\s+['"](\.{1,2}\/[^'"]+)['"]/g)].map((match) => match[1]);
+  const pattern =
+    /\bfrom\s+['"](\.{1,2}\/[^'"]+)['"]|\bimport\s*(?:\(\s*)?['"](\.{1,2}\/[^'"]+)['"]/g;
+  return [...new Set([...source.matchAll(pattern)].map((match) => match[1] ?? match[2]))];
 }
 
 /**

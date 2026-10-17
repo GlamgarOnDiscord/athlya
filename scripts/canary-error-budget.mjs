@@ -5,8 +5,8 @@
  * is green": route-level smoke checks must pass and the new release must
  * not burn the error budget. The error signal is the Sentry error count
  * for the canary release (the Worker tags every event with
- * `release = VERSION`, which every deploy sets to the 7-character commit
- * SHA — the same name the source maps are uploaded under).
+ * `release = VERSION`, which the production canary sets to the
+ * 7-character commit SHA on the gateway and every sub-worker).
  */
 
 /**
@@ -127,5 +127,7 @@ export const DEFAULT_MAX_ERRORS = 5;
 function parseMaxErrors(raw) {
   const value = raw?.trim() ?? '';
   if (value === '') return DEFAULT_MAX_ERRORS;
-  return /^\d+$/.test(value) ? Number(value) : Number.NaN;
+  if (!/^\d+$/.test(value)) return Number.NaN;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : Number.NaN;
 }
