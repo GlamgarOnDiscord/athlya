@@ -44,10 +44,13 @@ on:
         required: false
         type: string
       wait_minutes:
-        description: Minutes between canary steps (production-canary only)
+        description: Minutes between canary steps, 1-30 (production-canary only)
         required: false
         default: '10'
         type: string
+
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-api-${{ inputs.phase }}
@@ -101,11 +104,12 @@ jobs:
       - name: Assert API URLs configured
         if: inputs.phase != 'rollback'
         env:
+          PHASE: ${{ inputs.phase }}
           STAGING_API_URL: ${{ vars.STAGING_API_URL }}
           PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
         run: |
           set -euo pipefail
-          case "${{ inputs.phase }}" in
+          case "${PHASE}" in
             staging-deploy|staging-smoke)
               if [ -z "${STAGING_API_URL}" ]; then
                 echo "::error::vars.STAGING_API_URL is empty"
@@ -265,6 +269,7 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          DEPLOY_ENV_NAME: ${{ inputs.phase == 'production-deploy' && 'production' || 'staging' }}
         run: |
           set -euo pipefail
           if [ -z "${SENTRY_AUTH_TOKEN:-}" ] || [ -z "${SENTRY_ORG:-}" ] || [ -z "${SENTRY_PROJECT:-}" ]; then
@@ -280,7 +285,7 @@ jobs:
             exit 1
           fi
           RELEASE="${GITHUB_SHA}"
-          ENV_NAME="${{ inputs.phase == 'production-deploy' && 'production' || 'staging' }}"
+          ENV_NAME="${DEPLOY_ENV_NAME}"
           # Pinned CLI (devDependency @sentry/cli, exact version) invoked
           # through pnpm so CI runs a lockfile-reviewed artifact rather
           # than a floating npx range resolved while the auth token is in
@@ -333,11 +338,18 @@ jobs:
           CANARY_MAX_ERRORS: ${{ vars.CANARY_MAX_ERRORS }}
           PRODUCTION_SMOKE_EMAIL: ${{ secrets.PRODUCTION_SMOKE_EMAIL }}
           PRODUCTION_SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
+          WAIT_MINUTES: ${{ inputs.wait_minutes }}
         run: |
+          set -euo pipefail
+          # Two bake windows (5% and 25%) must fit in the 90-minute job.
+          if ! [[ "${WAIT_MINUTES}" =~ ^([1-9]|[12][0-9]|30)$ ]]; then
+            echo "::error::wait_minutes must be an integer between 1 and 30"
+            exit 1
+          fi
           node scripts/canary-deploy.mjs production-canary \
             --base-url "${PRODUCTION_API_URL}" \
             --staging-url "${STAGING_API_URL}" \
-            --wait-min "${{ inputs.wait_minutes }}" \
+            --wait-min "${WAIT_MINUTES}" \
             --steps "5,25,100"
 
       # Issue #276 — roll back all workers when a staging or production
@@ -368,9 +380,18 @@ jobs:
 
       - name: Rollback production
         if: inputs.phase == 'rollback'
+        env:
+          VERSION_ID: ${{ inputs.version_id }}
         run: |
-          if [ -n "${{ inputs.version_id }}" ]; then
-            node scripts/canary-deploy.mjs rollback --env production --version-id "${{ inputs.version_id }}"
+          set -euo pipefail
+          if [ -n "${VERSION_ID}" ]; then
+            uuid_re='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+            hex_re='^[0-9a-fA-F]{32}$'
+            if ! [[ "${VERSION_ID}" =~ $uuid_re || "${VERSION_ID}" =~ $hex_re ]]; then
+              echo "::error::version_id must be a Cloudflare Worker version id (UUID or 32-char hex)"
+              exit 1
+            fi
+            node scripts/canary-deploy.mjs rollback --env production --version-id "${VERSION_ID}"
           else
             node scripts/canary-deploy.mjs rollback --env production
           fi

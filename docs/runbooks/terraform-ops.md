@@ -7,7 +7,7 @@
 | Cloudflare Queues     | Yes (`queues.tf`)        | All envs                                                                              |
 | Cloudflare R2 buckets | Yes (`r2.tf`)            | All envs                                                                              |
 | Sentry metric alerts  | Yes (`sentry-alerts.tf`) | Error-volume alert on emitted error events; latency/queue/outbox stay in Axiom (#415) |
-| WAF custom rules      | Yes (`waf.tf`)           | Scanner block + Bot Fight Mode                                                        |
+| WAF custom rules      | Yes (`waf.tf`)           | Scanner + Tor block, login rate limit (`http_ratelimit`), Bot Fight Mode opt-in       |
 | Cloudflare Workers    | No — wrangler            | Managed by `deploy-production.yml`                                                    |
 | CF Workers routes     | No — wrangler            | Managed by wrangler.toml `[routes]`                                                   |
 | CF Access rules       | No — dashboard           | Covered by `docs/runbooks/cf-access-admin.md`                                         |
@@ -16,6 +16,12 @@
 | Upstash Redis         | No — Upstash console     | Manual provisioning; keys stored as GH secrets                                        |
 | Axiom alerts          | No — Axiom dashboard     | Covered by `docs/runbooks/axiom-alerts-provision.md`                                  |
 | DNS records           | No — CF dashboard        | Pending domain provisioning (#339)                                                    |
+
+WAF settings depend on the zone plan: set `cloudflare_zone_plan`
+(`free`/`pro`/`business`/`enterprise`) so the login rate limit uses the
+periods and counting expression that plan supports. Bot Fight Mode stays
+off (`waf_bot_fight_mode = false`) because it challenges API clients and
+the Stripe webhook and cannot be bypassed on Free/Pro.
 
 Intentionally manual resources are noted above. Drift in those is detected
 via the corresponding runbook, not Terraform.
