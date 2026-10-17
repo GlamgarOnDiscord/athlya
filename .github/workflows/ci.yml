@@ -9,6 +9,9 @@ on:
       - master
       - 'release/*'
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -96,6 +99,12 @@ jobs:
         # Fast path: unit tests + PGlite-backed properties. Docker-backed PBT
         # (P4/P7/reservations properties) runs in integration-docker.yml.
         run: pnpm test
+
+      - name: Release-script tests
+        run: pnpm test:scripts
+
+      - name: Canary trigger covers the API bundle graph
+        run: pnpm check:canary-paths
 
       - name: Production build (Next.js + Workers)
         # Validates that Next.js apps and Cloudflare Worker bundles compile.

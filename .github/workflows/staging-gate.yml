@@ -9,34 +9,45 @@ name: Staging gate
 #   4. Migration check — verify DB has all expected migrations applied
 #   5. k6 performance gate — p99 < 500ms, error rate < 1%
 #
-# The job skips gracefully when STAGING_API_URL or CLOUDFLARE_API_TOKEN
-# are not configured (e.g. contributor forks without infra access), so
-# PRs that don't touch API/DB code are not blocked.
+# Fail closed (issue #343): on trusted runs (same-repo PRs, pushes to
+# master, manual runs) a missing prerequisite FAILS the job with a
+# machine-readable reason in the step summary. Only runs that cannot read
+# secrets — pull requests from forks and Dependabot-triggered runs — report
+# a neutral skip.
 #
-# Required checks: add "Staging gate / staging-gate" to branch protection
-# required status checks once staging is provisioned.
+# Staging is one shared environment (Workers + Neon branch), so every run
+# that deploys it joins the single `staging-environment` concurrency group
+# and queues instead of racing: the SHA a gate deploys is the SHA it
+# smokes, load-tests and reports on. In-progress runs are never cancelled,
+# so a migration is never cut off mid-way. GitHub keeps at most one
+# *pending* run per group: a newer queued run supersedes an older pending
+# one, which then has to be re-run (production deploys fail closed on a
+# SHA without a successful gate). Runs that skip (fork/Dependabot) never
+# deploy, so they use a per-ref group and don't queue behind deploys.
+#
+# The workflow has no `paths:` filter: it is a required check, and a
+# path-filtered required check never reports on PRs outside the paths,
+# leaving them blocked forever.
+#
+# Pushes to master run the gate on the exact SHA that production deploy
+# phases later verify (scripts/require-check-success.mjs).
 #
 # Required secrets (GitHub environment: staging):
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
 #   MIGRATION_DB_URL_STAGING  — neondb_owner URL for the staging branch
 # Required vars:
 #   STAGING_API_URL            — e.g. https://staging.api.athlya.app
-# Optional (for k6 perf gate):
+#   STAGING_SMOKE_EMAIL, STAGING_SMOKE_PASSWORD — dedicated smoke account
 #   K6_STAGING_AUTH_TOKEN, K6_STAGING_STUDIO_ID, K6_STAGING_CLASS_IDS
+# Optional:
+#   STAGING_SMOKE_TURNSTILE_TOKEN — when staging uses a non-test Turnstile secret
+#   vars.STAGING_SMOKE_STUDIO_SLUG — adds an authenticated GET /v1/classes check
 
 on:
   pull_request:
     branches: [master]
-    paths:
-      - 'packages/api/**'
-      - 'packages/db/**'
-      - 'packages/auth/**'
-      - 'packages/billing/**'
-      - 'packages/members/**'
-      - 'packages/notifications/**'
-      - 'packages/reservations/**'
-      - 'packages/shared/**'
-      - '.github/workflows/staging-gate.yml'
+  push:
+    branches: [master]
   workflow_dispatch:
     inputs:
       soak_duration:
@@ -45,9 +56,12 @@ on:
         default: '2m'
         type: string
 
+permissions:
+  contents: read
+
 concurrency:
-  group: staging-gate-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || github.event.pull_request.user.login == 'dependabot[bot]') && format('staging-gate-noop-{0}', github.ref) || 'staging-environment' }}
+  cancel-in-progress: false
 
 jobs:
   staging-gate:
@@ -66,13 +80,42 @@ jobs:
 
       - name: Check infra prerequisites
         id: prereq
+        env:
+          IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          IS_DEPENDABOT: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+          MIGRATION_DB_URL: ${{ secrets.MIGRATION_DB_URL_STAGING }}
+          SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
         run: |
-          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ] || [ -z "${STAGING_API_URL}" ]; then
-            echo "::notice::CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, or STAGING_API_URL not configured — staging gate skipped. Set these in the 'staging' GitHub environment to enable this gate."
+          set -euo pipefail
+          if [ "${IS_FORK_PR}" = "true" ]; then
+            echo "::notice title=Staging gate neutral::Fork pull request — secrets are unavailable, so the deployed system is not exercised."
+            echo "### Staging gate: NEUTRAL (fork PR, no secrets)" >> "$GITHUB_STEP_SUMMARY"
             echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          if [ "${IS_DEPENDABOT}" = "true" ]; then
+            echo "::notice title=Staging gate neutral::Dependabot-triggered run — Actions secrets are unavailable, so the deployed system is not exercised. The post-merge push to master runs the full gate."
+            echo "### Staging gate: NEUTRAL (Dependabot run, no secrets)" >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          missing=()
+          [ -n "${CLOUDFLARE_API_TOKEN}" ] || missing+=("secrets.CLOUDFLARE_API_TOKEN")
+          [ -n "${CLOUDFLARE_ACCOUNT_ID}" ] || missing+=("secrets.CLOUDFLARE_ACCOUNT_ID")
+          [ -n "${STAGING_API_URL}" ] || missing+=("vars.STAGING_API_URL")
+          [ -n "${MIGRATION_DB_URL}" ] || missing+=("secrets.MIGRATION_DB_URL_STAGING")
+          [ -n "${SMOKE_EMAIL}" ] || missing+=("secrets.STAGING_SMOKE_EMAIL")
+          [ -n "${SMOKE_PASSWORD}" ] || missing+=("secrets.STAGING_SMOKE_PASSWORD")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            {
+              echo "### Staging gate: FAILED — prerequisites missing"
+              for item in "${missing[@]}"; do echo "- \`${item}\`"; done
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Staging gate not configured::missing ${missing[*]} (configure the 'staging' environment)"
+            exit 1
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
         if: steps.prereq.outputs.skip != 'true'
@@ -101,21 +144,23 @@ jobs:
           DATABASE_URL: ${{ secrets.MIGRATION_DB_URL_STAGING }}
         run: |
           set -euo pipefail
-          if [ -n "${DATABASE_URL}" ]; then
-            echo "::notice::Applying migrations before deploy"
-            node packages/db/scripts/migrate.mjs
-          fi
+          node packages/db/scripts/migrate.mjs
           VERSION="${GITHUB_SHA:0:7}"
-          pnpm --filter @athlya/api exec wrangler deploy --env staging --var "VERSION=${VERSION}" --outdir dist
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env staging --var "VERSION=${VERSION}"
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env staging --var "VERSION=${VERSION}"
-          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env staging --var "VERSION=${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy --env staging --var "VERSION:${VERSION}" --outdir dist
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env staging --var "VERSION:${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env staging --var "VERSION:${VERSION}"
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env staging --var "VERSION:${VERSION}"
           bash scripts/wait-health-ready.sh "${STAGING_API_URL}"
 
       # Sub-check 3 — smoke all route groups
       - name: '[3/5] Smoke all route groups'
         if: steps.prereq.outputs.skip != 'true'
-        run: node scripts/smoke-routes.mjs --base-url "${STAGING_API_URL}"
+        env:
+          SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+          SMOKE_TURNSTILE_TOKEN: ${{ secrets.STAGING_SMOKE_TURNSTILE_TOKEN }}
+          SMOKE_STUDIO_SLUG: ${{ vars.STAGING_SMOKE_STUDIO_SLUG }}
+        run: node scripts/smoke-routes.mjs --base-url "${STAGING_API_URL}" --require-auth
 
       # Sub-check 4 — migration check: every .sql file in migrations/
       # must appear in the _athlya_migrations table on staging.
@@ -125,10 +170,6 @@ jobs:
           MIGRATION_DB_URL: ${{ secrets.MIGRATION_DB_URL_STAGING }}
         run: |
           set -euo pipefail
-          if [ -z "${MIGRATION_DB_URL}" ]; then
-            echo "::warning::MIGRATION_DB_URL_STAGING not set — migration check skipped"
-            exit 0
-          fi
           # Expected: filename stems of all forward migration files
           expected=$(ls packages/db/migrations/*.sql | grep -v '\.down\.sql$' | sort | xargs -I{} basename {} .sql)
           # Applied: what the staging DB reports

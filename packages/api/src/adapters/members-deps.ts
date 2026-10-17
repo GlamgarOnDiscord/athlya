@@ -236,7 +236,10 @@ export function buildMembersDeps(
       if (job.downloadExpiresAt === null || Date.parse(job.downloadExpiresAt) <= Date.now()) {
         return { kind: 'invalid_link' };
       }
-      const object = await env.EXPORTS_BUCKET.get(exportObjectKey(jobId));
+      // The completed row's claim names the archive the winning run
+      // uploaded; a stale run's upload lives under another key.
+      if (job.claimToken === undefined || job.claimToken === null) return { kind: 'not_found' };
+      const object = await env.EXPORTS_BUCKET.get(exportObjectKey(jobId, job.claimToken));
       if (object === null) return { kind: 'not_found' };
       return { kind: 'ok', body: object.body as unknown as ReadableStream, size: object.size };
     },
