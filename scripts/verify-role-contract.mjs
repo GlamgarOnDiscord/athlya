@@ -157,21 +157,28 @@ export async function runRoleContract({ app, cron, studioSlug, log = console.log
     await tx`SELECT set_config('app.user_id', '', true)`;
     await tx`SELECT set_config('app.studio_id', '', true)`;
     await tx`SELECT set_config('app.role', '', true)`;
-    const [claim] = await tx`SELECT export_job_claim(${jobId}::uuid) AS won`;
-    check(claim.won === true, 'export worker could not claim the job');
+    const [claim] = await tx`SELECT export_job_claim(${jobId}::uuid)::text AS token`;
+    check(claim.token !== null, 'export worker could not claim the job');
     const [profile] = await tx`SELECT export_job_profile(${jobId}::uuid)->>'email' AS email`;
     check(profile.email === email, 'export worker could not read the claimed job data');
     await tx`SELECT * FROM export_job_rows(${jobId}::uuid, 'reservations', NULL, 10)`;
     ok('export worker claims the job and reads its data without claims');
 
+    const [stale] = await tx`
+      SELECT export_job_fail(${jobId}::uuid, ${randomUUID()}::uuid, 'role contract') AS ok
+    `;
+    check(stale.ok === false, 'export_job_fail accepted a stale claim token');
     const [done] = await tx`
-      SELECT export_job_complete(${jobId}::uuid, 'https://role-contract.invalid/export.zip',
+      SELECT export_job_complete(${jobId}::uuid, ${claim.token}::uuid,
+                                 'https://role-contract.invalid/export.zip',
                                  now() + interval '1 hour') AS ok
     `;
     check(done.ok === true, 'export worker could not complete the claimed job');
-    const [failed] = await tx`SELECT export_job_fail(${jobId}::uuid, 'role contract') AS ok`;
+    const [failed] = await tx`
+      SELECT export_job_fail(${jobId}::uuid, ${claim.token}::uuid, 'role contract') AS ok
+    `;
     check(failed.ok === false, 'export_job_fail changed a completed job');
-    ok('export worker completes the job; fail leaves a finished job untouched');
+    ok('export worker completes under its claim token; stale or late fail is a no-op');
 
     const deleted = {
       id: randomUUID(),

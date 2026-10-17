@@ -102,7 +102,7 @@ describe('GET /v1/members/me/export/:jobId', () => {
       requestedAt: '2026-10-12T00:00:00.000Z',
       completedAt: '2026-10-12T00:01:00.000Z',
       error: null,
-      downloadUrl: 'https://api.athlya.test/v1/members/me/export/x/download?exp=1&sig=s',
+      downloadUrl: `https://api.athlya.test/v1/members/me/export/${JOB_ID}/download?exp=1&sig=s`,
       downloadExpiresAt: '2026-10-15T00:01:00.000Z',
     };
     const getExportJob = vi.fn(async () => view);

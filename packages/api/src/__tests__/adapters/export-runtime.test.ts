@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createExportDataSource,
   EXPORT_JOB_NOT_CLAIMED_REASON,
+  EXPORT_ROWS_MAX_PAGE_SIZE,
 } from '../../adapters/export-data-source.js';
 import { buildBlobStore, EXPORTS_BUCKET_MISSING_REASON } from '../../adapters/export-deps.js';
 import {
@@ -24,6 +25,7 @@ import type { SQL } from 'drizzle-orm';
 const SECRET = 'k'.repeat(48);
 const JOB_ID = '0193f000-0000-7000-8000-000000000498';
 const USER_ID = '11111111-1111-4111-8111-111111111111';
+const CURRENT_CLAIM = '0193f000-0000-7000-8000-00000000c1a1';
 const dialect = new PgDialect();
 
 function fakeDb(respond: (sql: string, params: unknown[]) => unknown[]) {
@@ -60,6 +62,13 @@ describe('export download links', () => {
     await expect(verifyExportDownload(SECRET, JOB_ID, 2_000, 'abc', 1_000)).resolves.toBe(false);
   });
 
+  it.each(['A', 'AAAAA', 'A'.repeat(41)])(
+    'rejects the undecodable base64url signature %s instead of throwing',
+    async (sig) => {
+      await expect(verifyExportDownload(SECRET, JOB_ID, 2_000, sig, 1_000)).resolves.toBe(false);
+    },
+  );
+
   it('builds an absolute API URL carrying exp and sig', async () => {
     const url = new URL(
       await buildExportDownloadUrl('https://api.athlya.test', SECRET, JOB_ID, 2_000),
@@ -75,7 +84,7 @@ describe('export download links', () => {
 
 describe('buildBlobStore', () => {
   const bucket = { put: vi.fn(async () => undefined) } as unknown as R2Bucket;
-  const key = `exports/members/${JOB_ID}.zip`;
+  const key = `exports/members/${JOB_ID}/${CURRENT_CLAIM}.zip`;
 
   it('fails closed without the bucket', async () => {
     const blob = buildBlobStore(undefined, { ENVIRONMENT: 'staging' } as AthlyaBindings);
@@ -83,12 +92,21 @@ describe('buildBlobStore', () => {
     expect(() => blob.put(key, new Uint8Array())).toThrow(EXPORTS_BUCKET_MISSING_REASON);
   });
 
-  it('fails closed without a signing key or public URL', async () => {
+  it('fails closed with a signing key that is too short', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const blob = buildBlobStore(bucket, {
       ENVIRONMENT: 'staging',
       EXPORT_URL_SIGNING_KEY: 'short',
       API_PUBLIC_URL: 'https://api.athlya.test',
+    } as AthlyaBindings);
+    await expect(blob.signedUrl(key, 60)).rejects.toThrow(EXPORT_DOWNLOAD_NOT_CONFIGURED_REASON);
+  });
+
+  it('fails closed without a public API URL', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const blob = buildBlobStore(bucket, {
+      ENVIRONMENT: 'staging',
+      EXPORT_URL_SIGNING_KEY: SECRET,
     } as AthlyaBindings);
     await expect(blob.signedUrl(key, 60)).rejects.toThrow(EXPORT_DOWNLOAD_NOT_CONFIGURED_REASON);
   });
@@ -105,16 +123,47 @@ describe('buildBlobStore', () => {
 });
 
 describe('createExportJobWorkerStore', () => {
-  it('reports whether the claim was won', async () => {
-    const won = fakeDb(() => [{ claimed: true }]);
-    const lost = fakeDb(() => [{ claimed: false }]);
+  it('returns the claim token only when the claim was won', async () => {
+    const won = fakeDb(() => [{ claim_token: CURRENT_CLAIM }]);
+    const lost = fakeDb(() => [{ claim_token: null }]);
     await expect(createExportJobWorkerStore(won.db).markRunning(JOB_ID, new Date())).resolves.toBe(
-      true,
+      CURRENT_CLAIM,
     );
-    await expect(createExportJobWorkerStore(lost.db).markRunning(JOB_ID, new Date())).resolves.toBe(
-      false,
-    );
+    await expect(
+      createExportJobWorkerStore(lost.db).markRunning(JOB_ID, new Date()),
+    ).resolves.toBeNull();
     expect(won.calls[0]?.sql).toContain('export_job_claim(');
+  });
+
+  it('passes the claim token to completion and failure', async () => {
+    const current = fakeDb(() => [{ completed: true }]);
+    const stale = fakeDb(() => [{ completed: false }]);
+    const expires = new Date('2026-10-15T00:00:00.000Z');
+    await expect(
+      createExportJobWorkerStore(current.db).markCompleted(
+        JOB_ID,
+        CURRENT_CLAIM,
+        new Date(),
+        'https://api.athlya.test/dl',
+        expires,
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      createExportJobWorkerStore(stale.db).markCompleted(
+        JOB_ID,
+        CURRENT_CLAIM,
+        new Date(),
+        'https://api.athlya.test/dl',
+        expires,
+      ),
+    ).resolves.toBe(false);
+    expect(current.calls[0]?.sql).toContain('export_job_complete(');
+    expect(current.calls[0]?.params.slice(0, 2)).toEqual([JOB_ID, CURRENT_CLAIM]);
+
+    const failed = fakeDb(() => [{ export_job_fail: false }]);
+    await createExportJobWorkerStore(failed.db).markFailed(JOB_ID, CURRENT_CLAIM, 'boom');
+    expect(failed.calls[0]?.sql).toContain('export_job_fail(');
+    expect(failed.calls[0]?.params).toEqual([JOB_ID, CURRENT_CLAIM, 'boom']);
   });
 
   it('maps export_job_get rows', async () => {
@@ -195,6 +244,25 @@ describe('createExportDataSource', () => {
     expect(calls.map((c) => c.params)).toEqual([
       [JOB_ID, 'reservations', null, 2],
       [JOB_ID, 'reservations', 'c2', 2],
+    ]);
+  });
+
+  it('clamps the page size to the SQL cap so full pages keep paging', async () => {
+    const fullPage = (from: number) =>
+      Array.from({ length: EXPORT_ROWS_MAX_PAGE_SIZE }, (_, i) => ({
+        cursor: `c${from + i}`,
+        data: { id: `r${from + i}` },
+      }));
+    const pages = [fullPage(0), [{ cursor: 'last', data: { id: 'last' } }]];
+    const { db, calls } = fakeDb(() => pages.shift() ?? []);
+    let seen = 0;
+    for await (const page of createExportDataSource(db, 1_000).listReservations(USER_ID, JOB_ID)) {
+      seen += page.length;
+    }
+    expect(seen).toBe(EXPORT_ROWS_MAX_PAGE_SIZE + 1);
+    expect(calls.map((c) => c.params[3])).toEqual([
+      EXPORT_ROWS_MAX_PAGE_SIZE,
+      EXPORT_ROWS_MAX_PAGE_SIZE,
     ]);
   });
 

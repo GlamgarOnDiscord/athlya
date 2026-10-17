@@ -12,6 +12,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "test:scripts": "node --test scripts/__tests__/*.test.mjs",
     "typecheck": "turbo run typecheck",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
@@ -25,7 +26,8 @@
     "check:overrides": "node scripts/check-overrides.mjs",
     "check:legal": "node scripts/check-legal-placeholders.mjs",
     "check:labels": "node scripts/check-labels.mjs",
-    "check:docs": "node scripts/check-docs-drift.mjs"
+    "check:docs": "node scripts/check-docs-drift.mjs",
+    "check:canary-paths": "node scripts/check-canary-paths.mjs"
   },
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",

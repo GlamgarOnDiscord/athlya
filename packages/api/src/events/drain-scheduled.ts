@@ -295,11 +295,20 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
   // Lease-based cycle (issue #424): claim commits immediately, sends
   // run outside any transaction, delivered rows are stamped in one
   // statement at the end.
+  // Every row of one claim shares its lease; the token fences the
+  // release so a drain that outlived its lease cannot clear another's.
+  let leaseToken: string | undefined;
   const store: OutboxStore = {
-    claimBatch: (size) => claimLeasedBatch(db, size, DRAIN_LEASE_SECONDS, COMPLIANCE_EVENT_TYPES),
+    claimBatch: async (size) => {
+      const rows = await claimLeasedBatch(db, size, DRAIN_LEASE_SECONDS, COMPLIANCE_EVENT_TYPES);
+      leaseToken = rows[0]?.leaseToken;
+      return rows;
+    },
     markPublished: (id) => markPublishedMany(db, [id]),
     markPublishedMany: (ids) => markPublishedMany(db, ids),
-    release: (ids) => releaseLeases(db, ids),
+    release: async (ids) => {
+      if (leaseToken !== undefined) await releaseLeases(db, ids, leaseToken);
+    },
   };
 
   // Build the options bag conditionally so `exactOptionalPropertyTypes`
@@ -315,7 +324,7 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
   };
 
   const cycleDeadline = startedAt + DRAIN_CYCLE_DEADLINE_MS;
-  let result: DrainResult = { processed: 0, succeeded: 0, failed: 0 };
+  let result: DrainResult = { processed: 0, succeeded: 0, failed: 0, released: 0 };
   let rounds = 0;
   while (rounds < DRAIN_MAX_ROUNDS) {
     const remainingMs = cycleDeadline - Date.now();
@@ -326,8 +335,11 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
       processed: result.processed + round.processed,
       succeeded: result.succeeded + round.succeeded,
       failed: result.failed + round.failed,
+      released: result.released + round.released,
     };
-    if (round.processed < batchSize || round.succeeded === 0) break;
+    // A short batch means the backlog is empty; no success means the
+    // queue is unhealthy; released rows mean the deadline was reached.
+    if (round.processed < batchSize || round.succeeded === 0 || round.released > 0) break;
   }
   const durationMs = Date.now() - startedAt;
   emitOutboxDrainCycleMetric(durationMs, result, batchSize, logger, rounds);
@@ -358,16 +370,22 @@ export function totalSnapshot(
   return { pending, oldestOccurredAt: oldest };
 }
 
+/** Every queue lane, so each tick reports all of them (zero when drained). */
+const EVENT_QUEUE_LANES: readonly EventQueueLane[] = ['notifications', 'rgpd', 'legacy'];
+
 /**
  * Emit one `outbox_lane_backlog` data point per queue lane (issue #311):
  * pending depth and oldest-event age, so a starved lane is alertable on
- * its own rather than hidden in the global count.
+ * its own rather than hidden in the global count. Lanes with no pending
+ * row report `pending: 0`, so dashboards do not keep a stale depth.
  */
 export function emitOutboxLaneMetrics(
   types: ReadonlyArray<{ eventType: string; pending: number; oldestOccurredAt: Date | null }>,
   logger?: Logger,
 ): void {
-  const lanes = new Map<EventQueueLane, { pending: number; oldest: Date | null }>();
+  const lanes = new Map<EventQueueLane, { pending: number; oldest: Date | null }>(
+    EVENT_QUEUE_LANES.map((lane) => [lane, { pending: 0, oldest: null }]),
+  );
   for (const t of types) {
     const lane = resolveEventQueueLane(t.eventType);
     const acc = lanes.get(lane) ?? { pending: 0, oldest: null };
@@ -410,6 +428,7 @@ export function emitOutboxDrainCycleMetric(
     processed: result.processed,
     succeeded: result.succeeded,
     failed: result.failed,
+    released: result.released,
     batchSize,
     concurrency: DRAIN_SEND_CONCURRENCY,
     deadlineMs: DRAIN_CYCLE_DEADLINE_MS,

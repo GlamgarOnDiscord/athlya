@@ -19,7 +19,7 @@ Optional but recommended when staging is live:
 | `load-test` jobs | `load-test.yml`    | `vars.K6_STAGING_BASE_URL` + secrets |
 | `zap` job        | `zap-baseline.yml` | `vars.ZAP_TARGET_URL`                |
 
-Weekly `ci-required-vars.yml` (lundi 07:00 UTC) échoue si `K6_STAGING_BASE_URL` ou `ZAP_TARGET_URL` sont vides. Déclencher manuellement via **Actions → CI required vars → Run workflow** après configuration.
+Weekly `ci-required-vars.yml` (lundi 07:00 UTC) échoue si `K6_STAGING_BASE_URL`, `ZAP_TARGET_URL` ou `ZAP_ACTIVE_TARGET_URL` sont vides. Déclencher manuellement via **Actions → CI required vars → Run workflow** après configuration.
 
 ## Repository variables (Actions)
 
@@ -27,6 +27,7 @@ Weekly `ci-required-vars.yml` (lundi 07:00 UTC) échoue si `K6_STAGING_BASE_URL`
 | ------------------------------ | -------------------------------- | ------------------ |
 | `K6_STAGING_BASE_URL`          | `https://staging.api.athlya.app` | `load-test.yml`    |
 | `ZAP_TARGET_URL`               | `https://app.staging.athlya.app` | `zap-baseline.yml` |
+| `ZAP_ACTIVE_TARGET_URL`        | dedicated synthetic-data target  | `zap-active.yml`   |
 | `NEON_PROJECT_ID`              | Neon project id                  | `preview.yml`      |
 | `CLOUDFLARE_WORKERS_SUBDOMAIN` | `athlya`                         | `preview.yml`      |
 

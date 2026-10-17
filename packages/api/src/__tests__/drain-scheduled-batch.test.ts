@@ -225,7 +225,10 @@ describe('runScheduledDrain', () => {
 });
 
 describe('runScheduledDrain lease (issue #424)', () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
   const row = (n: number) => ({
     id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
@@ -257,7 +260,7 @@ describe('runScheduledDrain lease (issue #424)', () => {
       batchSize: 3,
     });
 
-    expect(result).toEqual({ processed: 3, succeeded: 3, failed: 0 });
+    expect(result).toEqual({ processed: 3, succeeded: 3, failed: 0, released: 0 });
     expect(send).toHaveBeenCalledTimes(3);
     expect(markPublishedMock).toHaveBeenCalledTimes(1);
     expect(markPublishedMock).toHaveBeenCalledWith(
@@ -267,6 +270,41 @@ describe('runScheduledDrain lease (issue #424)', () => {
     expect(log).toHaveBeenCalledWith(
       'outbox.drain_cycle',
       expect.objectContaining({ metric: 'outbox_drain_cycle', processed: 3, succeeded: 3 }),
+    );
+  });
+
+  it('releases deadline-cut rows under their lease token without reporting drain errors', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const leaseToken = '2026-10-17 12:00:00.123456+00';
+    const rows = [row(1), row(2)].map((r) => ({ ...r, leaseToken }));
+    claimBatchMock.mockReset().mockResolvedValue(rows);
+    markPublishedMock.mockReset().mockResolvedValue(undefined);
+    releaseLeasesMock.mockReset().mockResolvedValue(undefined);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const send = vi.fn(async () => {
+      vi.setSystemTime(Date.now() + DRAIN_CYCLE_DEADLINE_MS);
+    });
+
+    const result = await runScheduledDrain({
+      getDb: () =>
+        ({
+          transaction: () => {
+            throw new Error('no transaction expected');
+          },
+        }) as never,
+      EVENTS_QUEUE: { send },
+      EVENTS_NOTIFICATIONS_QUEUE: {} as never,
+      EVENTS_RGPD_QUEUE: {} as never,
+      batchSize: 2,
+    });
+
+    expect(result).toEqual({ processed: 2, succeeded: 1, failed: 0, released: 1 });
+    expect(releaseLeasesMock).toHaveBeenCalledWith(expect.anything(), [rows[1]!.id], leaseToken);
+    expect(log).not.toHaveBeenCalledWith('athlya.outbox.drain_errors', expect.anything());
+    expect(log).toHaveBeenCalledWith(
+      'outbox.drain_cycle',
+      expect.objectContaining({ failed: 0, released: 1 }),
     );
   });
 
@@ -284,13 +322,13 @@ describe('emitOutboxDrainErrorsMetric', () => {
 
   it('is a no-op when there are no failures', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    emitOutboxDrainErrorsMetric({ processed: 5, succeeded: 5, failed: 0 });
+    emitOutboxDrainErrorsMetric({ processed: 5, succeeded: 5, failed: 0, released: 0 });
     expect(log).not.toHaveBeenCalled();
   });
 
   it('emits the drain_errors metric unconditionally when failed > 0', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    emitOutboxDrainErrorsMetric({ processed: 10, succeeded: 7, failed: 3 });
+    emitOutboxDrainErrorsMetric({ processed: 10, succeeded: 7, failed: 3, released: 0 });
     expect(log).toHaveBeenCalledWith(
       'athlya.outbox.drain_errors',
       expect.objectContaining({
@@ -306,7 +344,7 @@ describe('emitOutboxDrainErrorsMetric', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const errorSpy = vi.fn();
     emitOutboxDrainErrorsMetric(
-      { processed: 2, succeeded: 1, failed: 1 },
+      { processed: 2, succeeded: 1, failed: 1, released: 0 },
       {
         info: vi.fn(),
         warn: vi.fn(),
@@ -323,7 +361,7 @@ describe('emitOutboxDrainErrorsMetric', () => {
 describe('warnOnDrainOverlapRisk', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  const result: DrainResult = { processed: 200, succeeded: 200, failed: 0 };
+  const result: DrainResult = { processed: 200, succeeded: 200, failed: 0, released: 0 };
 
   it('stays silent when the drain is within the cron window', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -385,7 +423,7 @@ describe('runScheduledDrain throughput and fairness (issue #311)', () => {
     const result = await runScheduledDrain(env(async () => {}));
 
     expect(claimBatchMock).toHaveBeenCalledTimes(3);
-    expect(result).toEqual({ processed: 5, succeeded: 5, failed: 0 });
+    expect(result).toEqual({ processed: 5, succeeded: 5, failed: 0, released: 0 });
   });
 
   it('stops the cycle when a whole batch fails instead of spinning on a dead queue', async () => {
@@ -396,7 +434,38 @@ describe('runScheduledDrain throughput and fairness (issue #311)', () => {
     const result = await runScheduledDrain(env(() => Promise.reject(new Error('queue down'))));
 
     expect(claimBatchMock).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ processed: 2, succeeded: 0, failed: 2 });
+    expect(result).toEqual({ processed: 2, succeeded: 0, failed: 2, released: 0 });
+  });
+
+  it('carries released rows across rounds and fences each release on its own claim', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const first = [row(1), row(2)].map((r) => ({ ...r, leaseToken: 'lease-round-1' }));
+    const second = [row(3), row(4)].map((r) => ({ ...r, leaseToken: 'lease-round-2' }));
+    claimBatchMock.mockReset().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    markPublishedMock.mockReset().mockResolvedValue(undefined);
+    releaseLeasesMock.mockReset().mockResolvedValue(undefined);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    let sends = 0;
+    const send = vi.fn(async () => {
+      sends += 1;
+      if (sends === 3) vi.setSystemTime(Date.now() + DRAIN_CYCLE_DEADLINE_MS);
+    });
+
+    try {
+      const result = await runScheduledDrain(env(send));
+
+      expect(claimBatchMock).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ processed: 4, succeeded: 3, failed: 0, released: 1 });
+      expect(releaseLeasesMock).toHaveBeenCalledTimes(1);
+      expect(releaseLeasesMock).toHaveBeenCalledWith(
+        expect.anything(),
+        [second[1]!.id],
+        'lease-round-2',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('bounds the rounds of one cycle', async () => {
@@ -448,5 +517,19 @@ describe('outbox lane metrics (issue #311)', () => {
     )?.[1] as { pending: number; oldestAgeMs: number };
     expect(rgpd.pending).toBe(1);
     expect(rgpd.oldestAgeMs).toBeGreaterThanOrEqual(600_000);
+  });
+
+  it('reports a drained lane as zero instead of omitting it', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    emitOutboxLaneMetrics([]);
+
+    const lanes = log.mock.calls
+      .filter((c) => c[0] === 'outbox.lane_backlog')
+      .map((c) => c[1] as { lane: string; pending: number; oldestAgeMs: number });
+    expect(lanes).toEqual([
+      expect.objectContaining({ lane: 'notifications', pending: 0, oldestAgeMs: 0 }),
+      expect.objectContaining({ lane: 'rgpd', pending: 0, oldestAgeMs: 0 }),
+      expect.objectContaining({ lane: 'legacy', pending: 0, oldestAgeMs: 0 }),
+    ]);
   });
 });

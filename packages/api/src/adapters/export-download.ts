@@ -32,9 +32,15 @@ function toBase64Url(bytes: Uint8Array): string {
 }
 
 function fromBase64Url(value: string): Uint8Array<ArrayBuffer> | null {
-  if (!/^[A-Za-z0-9_-]*$/u.test(value)) return null;
+  // A length of 1 mod 4 is never valid base64 and makes `atob` throw.
+  if (!/^[A-Za-z0-9_-]*$/u.test(value) || value.length % 4 === 1) return null;
   const padded = value.replace(/-/gu, '+').replace(/_/gu, '/');
-  const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
+  let binary: string;
+  try {
+    binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
+  } catch {
+    return null;
+  }
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
   return out;
