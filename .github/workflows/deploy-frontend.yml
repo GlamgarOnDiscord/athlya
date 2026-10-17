@@ -45,6 +45,9 @@ on:
         default: all
         type: string
 
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-frontend-${{ inputs.phase }}
   cancel-in-progress: false

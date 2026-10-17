@@ -1,30 +1,46 @@
-# WAF custom rules and Bot Fight Mode (issue #339)
+# WAF custom rules, login rate limit and Bot Fight Mode (issue #339)
 #
 # Blocks common scanner paths and credential-stuffing vectors before
-# requests reach the Worker. All rules use the zone-scoped
-# `cloudflare_ruleset` resource (provider cloudflare/cloudflare ~> 4.0).
+# requests reach the Worker (provider cloudflare/cloudflare ~> 4.0).
 #
-# Import existing managed rulesets with:
-#   terraform import cloudflare_ruleset.waf_custom <zone_id>/<ruleset_id>
+# Cloudflare evaluates each concern in its own ruleset phase:
+#   - http_request_firewall_custom — scanner block + Tor block
+#   - http_ratelimit               — login brute-force guard
+# A `ratelimit {}` block or `rate()` expression is invalid inside the
+# custom-firewall phase, which is why the guard lives in its own ruleset.
 #
-# Bot Fight Mode is enabled via `cloudflare_bot_management` — requires
-# at least the Workers Paid plan (included on Athlya's current plan).
+# Plan-dependent settings (see var.cloudflare_zone_plan):
+#   - Free: rate-limit period and mitigation timeout are capped at 10 s.
+#   - Pro: period up to 60 s, no custom counting expression.
+#   - Business/Enterprise: counting expression on response codes, so only
+#     failed logins count towards the limit.
+#   - Managed IP lists ($cf.anonymizer, $cf.vpn, …) need Enterprise, so the
+#     Tor block uses `ip.src.continent eq "T1"` (all plans).
 #
-# Rules:
-#   1. scanner_block   — block known scanner/enumeration paths
-#   2. auth_tor_block  — block Tor/datacenter IPs on auth + billing paths
-#   3. rate_guard      — challenge repeated login failures by IP
-#
-# All rules use `block` action. Adjust to `challenge` if false-positive
-# rate on legitimate traffic is unacceptable after initial rollout.
+# Import existing rulesets with:
+#   terraform import cloudflare_ruleset.waf_custom zone/<zone_id>/<ruleset_id>
+#   terraform import cloudflare_ruleset.login_ratelimit zone/<zone_id>/<ruleset_id>
 # =====================================================================
 
+locals {
+  waf_rate_limit_period          = var.cloudflare_zone_plan == "free" ? 10 : 60
+  waf_rate_limit_counts_failures = contains(["business", "enterprise"], var.cloudflare_zone_plan)
+  # Without a counting expression every attempt counts, so allow a little
+  # more headroom for typos and shared IPs (gyms, offices).
+  waf_rate_limit_requests_threshold = local.waf_rate_limit_counts_failures ? 5 : 10
+}
+
 # ---- Bot Fight Mode ------------------------------------------------
+#
+# Bot Fight Mode challenges automated clients zone-wide and cannot be
+# bypassed by custom rules on Free/Pro. The API zone serves the mobile
+# app, server-to-server callers and the Stripe webhook, all of which
+# would be challenged, so it stays off unless explicitly enabled.
 
 resource "cloudflare_bot_management" "main" {
   zone_id    = var.cloudflare_zone_id
-  enable_js  = true
-  fight_mode = true
+  enable_js  = var.waf_bot_fight_mode
+  fight_mode = var.waf_bot_fight_mode
 }
 
 # ---- WAF custom ruleset --------------------------------------------
@@ -32,7 +48,7 @@ resource "cloudflare_bot_management" "main" {
 resource "cloudflare_ruleset" "waf_custom" {
   zone_id     = var.cloudflare_zone_id
   name        = "Athlya WAF custom rules (${var.environment})"
-  description = "Block scanner paths, Tor exits on auth, brute-force guard"
+  description = "Block scanner paths and Tor exits on auth and billing"
   kind        = "zone"
   phase       = "http_request_firewall_custom"
 
@@ -60,55 +76,55 @@ resource "cloudflare_ruleset" "waf_custom" {
     enabled     = true
   }
 
-  # Rule 2 — Tor/datacenter IP block on sensitive endpoints
+  # Rule 2 — Tor exit block on credential and payment endpoints
   # Auth and billing endpoints are the primary credential-stuffing
-  # surface. Blocking Tor exit nodes and known datacenter ASNs on these
-  # paths eliminates anonymised brute-force traffic with minimal
-  # legitimate-user impact (real members don't route through Tor).
+  # surface. Real members don't route through Tor. The Stripe webhook is
+  # excluded: it is called server-to-server and verified by signature.
   rules {
     action      = "block"
     expression  = <<-EOT
       (
         (
-          http.request.uri.path wildcard "/v1/auth/*" or
-          http.request.uri.path wildcard "/v1/billing/*"
+          starts_with(http.request.uri.path, "/v1/auth/") or
+          (
+            starts_with(http.request.uri.path, "/v1/billing/") and
+            http.request.uri.path ne "/v1/billing/webhook"
+          )
         ) and
-        (
-          cf.client.bot or
-          ip.src in $cf.anonymizer or
-          ip.src in $cf.datacenter
-        )
+        ip.src.continent eq "T1"
       )
     EOT
-    description = "Block Tor/datacenter IPs on auth and billing paths"
+    description = "Block Tor exit nodes on auth and billing paths (webhook excluded)"
     enabled     = true
   }
+}
 
-  # Rule 3 — brute-force rate guard on login
-  # 5 requests per minute per IP on the login endpoint triggers a
-  # managed challenge. This supplements the application-layer Redis
-  # rate limiter in packages/api/src/middleware/global-limiter.ts and
-  # fires before the Worker is invoked (no Neon/Redis cost incurred).
+# ---- Login rate limit ------------------------------------------------
+#
+# Supplements the application-layer Redis limiter
+# (packages/api/src/middleware/global-limiter.ts) and fires before the
+# Worker is invoked, so a brute-force burst costs no Neon/Redis calls.
+
+resource "cloudflare_ruleset" "login_ratelimit" {
+  zone_id     = var.cloudflare_zone_id
+  name        = "Athlya login rate limit (${var.environment})"
+  description = "Challenge repeated login attempts per IP"
+  kind        = "zone"
+  phase       = "http_ratelimit"
+
   rules {
-    action = "managed_challenge"
-    action_parameters {
-      version = "latest"
-    }
-    expression  = <<-EOT
-      (
-        http.request.uri.path eq "/v1/auth/login" and
-        http.request.method eq "POST" and
-        rate(http.request.uri.path, ip.src) > 5
-      )
-    EOT
-    description = "Challenge repeated login attempts by IP (>5 req/min)"
+    action      = "managed_challenge"
+    expression  = "(http.request.uri.path eq \"/v1/auth/login\" and http.request.method eq \"POST\")"
+    description = "Challenge repeated login attempts by IP"
     enabled     = true
+
     ratelimit {
-      characteristics        = ["ip.src"]
-      period                 = 60
-      requests_per_period    = 5
-      mitigation_timeout     = 60
-      counting_expression    = "(http.response.code ge 400)"
+      characteristics     = ["cf.colo.id", "ip.src"]
+      period              = local.waf_rate_limit_period
+      requests_per_period = local.waf_rate_limit_requests_threshold
+      mitigation_timeout  = local.waf_rate_limit_period
+      # Business+ only: count failed logins, not every attempt.
+      counting_expression = local.waf_rate_limit_counts_failures ? "(http.request.uri.path eq \"/v1/auth/login\" and http.response.code ge 400)" : null
     }
   }
 }
