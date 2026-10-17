@@ -449,4 +449,18 @@ describe('outbox lane metrics (issue #311)', () => {
     expect(rgpd.pending).toBe(1);
     expect(rgpd.oldestAgeMs).toBeGreaterThanOrEqual(600_000);
   });
+
+  it('reports a drained lane as zero instead of omitting it', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    emitOutboxLaneMetrics([]);
+
+    const lanes = log.mock.calls
+      .filter((c) => c[0] === 'outbox.lane_backlog')
+      .map((c) => c[1] as { lane: string; pending: number; oldestAgeMs: number });
+    expect(lanes).toEqual([
+      expect.objectContaining({ lane: 'notifications', pending: 0, oldestAgeMs: 0 }),
+      expect.objectContaining({ lane: 'rgpd', pending: 0, oldestAgeMs: 0 }),
+      expect.objectContaining({ lane: 'legacy', pending: 0, oldestAgeMs: 0 }),
+    ]);
+  });
 });

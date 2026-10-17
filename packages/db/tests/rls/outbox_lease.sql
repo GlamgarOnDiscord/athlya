@@ -76,6 +76,9 @@ SELECT throws_ok(
 );
 
 -- Issue #311: compliance events are claimed before an older backlog.
+-- This checks the claim shape runs under athlya_cron's grants; the
+-- production claimLeasedBatch statement itself is exercised against
+-- Postgres in packages/db/tests/outbox-claim.pglite.test.ts.
 RESET ROLE;
 INSERT INTO outbox (id, event_id, event_type, payload, occurred_at, studio_id) VALUES
     ('0311aaaa-0000-4000-8000-000000000001', 'evt-311-old-notif', 'reservation.created', '{}'::jsonb,

@@ -45,9 +45,9 @@ a failed final stamp means those rows are re-sent after the lease (consumers
 dedup on `event.id`). Invariant (unit-tested): lease > deadline + one send
 timeout + mark.
 
-Capacity per cycle (one cron tick): ≤ 200 rows; with a queue at 10 ms/send
-≈ 0.25 s, at 1 s/send ≈ 25 s, fully hung queue → cut at 40 s with the
-connection idle.
+Capacity per batch: ≤ 200 rows; with a queue at 10 ms/send ≈ 0.25 s, at
+1 s/send ≈ 25 s, fully hung queue → cut at 40 s with the connection idle. A
+cycle chains up to `DRAIN_MAX_ROUNDS` batches (≤ 10 000 rows, see below).
 
 ## Throughput and fairness (issue #311)
 
@@ -55,19 +55,22 @@ connection idle.
   deadline is reached, or a whole batch failed (dead queue → stop, no spin).
   Cap: `DRAIN_MAX_ROUNDS = 50` batches per cycle.
 - **Fairness**: `COMPLIANCE_EVENT_TYPES` (`auth.user.deleted`,
-  `members.export.requested`, `auth.user.registered`, `billing.subscription.*`)
+  `members.export.requested`, `auth.user.registered`,
+  `billing.subscription.started`, `billing.subscription.failed`)
   are claimed before any other pending row, so a notification burst cannot
   starve RGPD / account / billing events.
-- **Per-lane metric** every tick: `outbox.lane_backlog`
-  (`lane`, `pending`, `oldestAgeMs`).
+- **Per-lane metric** every tick, before the drain: `outbox.lane_backlog`
+  (`lane`, `pending`, `oldestAgeMs`). Every lane (`notifications`, `rgpd`,
+  `legacy`) is reported, with `pending: 0` once drained.
 
-Capacity model (pool 8, one tick = 40 s of sending):
+Capacity model (pool 8, one tick = 40 s of sending then ~20 s idle until the
+next one-minute tick):
 
 | Queue latency / send | Service rate | 10k burst time-to-empty |
 | -------------------- | ------------ | ----------------------- |
 | 10 ms                | ~800 ev/s    | ~13 s (1 tick)          |
-| 50 ms                | ~160 ev/s    | ~63 s (2 ticks)         |
-| 200 ms               | ~40 ev/s     | ~4 min (5 ticks)        |
+| 50 ms                | ~160 ev/s    | ~83 s (2 ticks)         |
+| 200 ms               | ~40 ev/s     | ~6 min 10 s (7 ticks)   |
 
 At 100 users the modeled peak is < 1 ev/s, at 10k users ~10 ev/s, at 1M
 users ~1 000 ev/s (bursts at class start): beyond ~50 ms/send at 1M users
@@ -153,21 +156,36 @@ Voir `docs/operations/axiom-queries.md` § Outbox backlog et alerte **A16**.
 
 On a **staging Neon branch** (never production), as the migration role:
 
+Rows must be valid events (UUID `event_id`, full `reservation.reminder`
+payload), otherwise the consumer rejects them and `pending = 0` proves
+nothing. The fixed load `userId` matches no account, so no email is sent and
+the rows are easy to clean up:
+
 ```sql
 INSERT INTO outbox (event_id, event_type, payload, occurred_at, studio_id)
-SELECT 'load-' || g, 'reservation.reminder',
-       jsonb_build_object('id', 'load-' || g, 'type', 'reservation.reminder'),
+SELECT gen_random_uuid()::text, 'reservation.reminder',
+       jsonb_build_object(
+         'reservationId', gen_random_uuid(),
+         'classId', gen_random_uuid(),
+         'userId', '03110000-0000-4000-8000-000000000001',
+         'startsAt', to_char((now() + interval '1 hour') AT TIME ZONE 'UTC',
+                             'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
        now(), (SELECT id FROM studios LIMIT 1)
   FROM generate_series(1, 10000) g;
 ```
 
 1. Record the time, then watch `outbox.drain_cycle` (`succeeded`, `durationMs`,
-   `throughputPerSec`) and `outbox.lane_backlog` until `pending = 0`.
+   `throughputPerSec`). `outbox.lane_backlog` is emitted before each drain, so
+   confirm completion with `GET /admin/outbox/stats` (`pending = 0`) after the
+   final cycle. Delivery shows up as one `notifications.skipped_no_recipient`
+   per row; any `[worker] notifications event malformed, acking` means the
+   fixture is wrong.
 2. Insert one `auth.user.deleted` row mid-burst and check it is delivered on the
    next tick (fairness).
 3. Pass: time-to-empty ≤ 2 min (SLO) at the measured queue latency; otherwise
    record the measured service rate and raise the pool size / add a tick.
-4. Clean up: `DELETE FROM outbox WHERE event_id LIKE 'load-%';`
+4. Clean up:
+   `DELETE FROM outbox WHERE event_type = 'reservation.reminder' AND payload->>'userId' = '03110000-0000-4000-8000-000000000001';`
 
 ## Related
 

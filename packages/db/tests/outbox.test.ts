@@ -250,6 +250,9 @@ describe('claimLeasedBatch (issues #424 / #311)', () => {
     expect(call?.sqlText).toMatch(/lease_until\s+is\s+null\s+or\s+lease_until\s*<=\s*now\(\)/i);
     expect(call?.sqlText).toMatch(/for\s+update\s+skip\s+locked/i);
     expect(call?.sqlText).toMatch(/lease_until\s*=\s*now\(\)\s*\+\s*make_interval/i);
+    expect(call?.sqlText).toMatch(
+      /order\s+by\s+\(event_type\s*=\s*any\(\?::text\[\]\)\)\s+desc,\s*occurred_at\s+asc/i,
+    );
     expect(call?.params).toEqual(['{auth.user.deleted}', 50, 120]);
   });
 

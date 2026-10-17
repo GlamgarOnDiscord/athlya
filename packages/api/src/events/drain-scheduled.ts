@@ -358,16 +358,22 @@ export function totalSnapshot(
   return { pending, oldestOccurredAt: oldest };
 }
 
+/** Every queue lane, so each tick reports all of them (zero when drained). */
+const EVENT_QUEUE_LANES: readonly EventQueueLane[] = ['notifications', 'rgpd', 'legacy'];
+
 /**
  * Emit one `outbox_lane_backlog` data point per queue lane (issue #311):
  * pending depth and oldest-event age, so a starved lane is alertable on
- * its own rather than hidden in the global count.
+ * its own rather than hidden in the global count. Lanes with no pending
+ * row report `pending: 0`, so dashboards do not keep a stale depth.
  */
 export function emitOutboxLaneMetrics(
   types: ReadonlyArray<{ eventType: string; pending: number; oldestOccurredAt: Date | null }>,
   logger?: Logger,
 ): void {
-  const lanes = new Map<EventQueueLane, { pending: number; oldest: Date | null }>();
+  const lanes = new Map<EventQueueLane, { pending: number; oldest: Date | null }>(
+    EVENT_QUEUE_LANES.map((lane) => [lane, { pending: 0, oldest: null }]),
+  );
   for (const t of types) {
     const lane = resolveEventQueueLane(t.eventType);
     const acc = lanes.get(lane) ?? { pending: 0, oldest: null };
