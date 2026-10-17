@@ -32,6 +32,18 @@ interface ProfileRow extends ExportProfile {
   readonly consents: Consents;
 }
 
+/**
+ * Members have no invoices in v1. Athlya only bills studios for their
+ * own platform subscription (`studio_invoices`, migration 0036): those
+ * invoices belong to the studio, carry no member id and are not the
+ * personal data of any member. Member → studio payments (Stripe Connect)
+ * are out of scope for v1, so nothing billed to a member is stored. The
+ * archive keeps `invoices.json` / `invoices.csv` (empty) and its README
+ * states why, so the export schema stays stable when member billing
+ * lands and this function starts reading it through the claimed job.
+ */
+export async function* memberInvoicesV1(): AsyncGenerator<ReadonlyArray<InvoiceRecord>> {}
+
 /** Page cap enforced by `export_job_rows` (migration 0034). */
 export const EXPORT_ROWS_MAX_PAGE_SIZE = 500;
 
@@ -77,10 +89,7 @@ export function createExportDataSource(db: AthlyaDbAny, requestedPageSize = 200)
     listReservations: (_userId, jobId) => pages<Reservation>(jobId, 'reservations'),
     listSessions: (_userId, jobId) => pages<WorkoutSession>(jobId, 'workout_sessions'),
     listCheckins: (_userId, jobId) => pages<CheckinRecord>(jobId, 'checkins'),
-    // No invoice is persisted yet: billing records live in Stripe until
-    // the billing persistence of issue #122 lands. Empty, not failing, so
-    // the rest of the member's data is still exportable.
-    async *listInvoices(): AsyncGenerator<ReadonlyArray<InvoiceRecord>> {},
+    listInvoices: memberInvoicesV1,
     listAuditTrail: (_userId, jobId) => pages<AuditLog>(jobId, 'audit_trail'),
   };
 }
