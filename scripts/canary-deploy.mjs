@@ -3,11 +3,16 @@
  * Canary deploy orchestrator — Workers Versions API (issue #129).
  *
  * Usage:
- *   node scripts/canary-deploy.mjs upload --env <staging|production> [--message msg]
+ *   node scripts/canary-deploy.mjs upload --env <staging|production> [--message msg] [--outdir dir]
  *   node scripts/canary-deploy.mjs promote --env <env> --version-id ID --percent N
  *   node scripts/canary-deploy.mjs staging-smoke --base-url URL
- *   node scripts/canary-deploy.mjs production-canary --base-url URL [--staging-url URL] [--wait-min 10] [--steps 5,25,100]
+ *   node scripts/canary-deploy.mjs production-canary --base-url URL [--staging-url URL] [--wait-min 10] [--steps 5,25,100] [--version-id ID]
  *   node scripts/canary-deploy.mjs rollback --env production [--version-id ID]
+ *
+ * `upload --outdir dist` keeps the bundle and its source maps (wrangler
+ * writes them under packages/api/<dir>) and records `version_id` in
+ * $GITHUB_OUTPUT, so the workflow can upload the maps to Sentry before
+ * `production-canary --version-id` shifts any traffic (issue #415).
  *
  * Requires: pnpm, wrangler (packages/api), CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID in env.
  */
@@ -31,10 +36,10 @@ const VALID_ENVS = new Set(['staging', 'production']);
 
 function usage(code = 0) {
   console.log(`Usage:
-  node scripts/canary-deploy.mjs upload --env staging|production [--message text]
+  node scripts/canary-deploy.mjs upload --env staging|production [--message text] [--outdir dir]
   node scripts/canary-deploy.mjs promote --env ENV --version-id ID --percent N
   node scripts/canary-deploy.mjs staging-smoke --base-url URL
-  node scripts/canary-deploy.mjs production-canary --base-url URL [--staging-url URL] [--wait-min 10] [--steps 5,25,100]
+  node scripts/canary-deploy.mjs production-canary --base-url URL [--staging-url URL] [--wait-min 10] [--steps 5,25,100] [--version-id ID]
   node scripts/canary-deploy.mjs rollback --env production [--version-id ID]
 
 Runbook: docs/runbooks/canary-deploy.md`);
@@ -105,7 +110,7 @@ function latestVersionId(env) {
   return id;
 }
 
-function uploadVersion(env, message) {
+function uploadVersion(env, message, outdir) {
   assertEnv(env);
   const msg =
     typeof message === 'string' && message.length > 0
@@ -116,6 +121,8 @@ function uploadVersion(env, message) {
   // wrangler parses `--var KEY:VALUE` (a `=` would create a key named
   // "VERSION=…"). VERSION is the Sentry release the error budget queries.
   if (process.env.VERSION) args.push('--var', `VERSION:${process.env.VERSION}`);
+  // Relative to packages/api. Keeps the bundle + *.js.map for Sentry.
+  if (typeof outdir === 'string' && outdir.length > 0) args.push('--outdir', outdir);
   runWrangler(args, { capture: false });
   const versionId = latestVersionId(env);
   console.log(`Uploaded version id: ${versionId}`);
@@ -159,9 +166,13 @@ async function waitHealthReady(baseUrl, maxAttempts = 30, sleepSec = 2) {
         console.log(`Ready after attempt ${attempt}/${maxAttempts}`);
         return;
       }
-      console.log(`attempt ${attempt}/${maxAttempts}: HTTP ${res.status} status=${body?.status ?? 'unknown'}`);
+      console.log(
+        `attempt ${attempt}/${maxAttempts}: HTTP ${res.status} status=${body?.status ?? 'unknown'}`,
+      );
     } catch (err) {
-      console.log(`attempt ${attempt}/${maxAttempts}: ${err instanceof Error ? err.message : String(err)}`);
+      console.log(
+        `attempt ${attempt}/${maxAttempts}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
     if (attempt < maxAttempts) {
       await sleep(sleepSec * 1000);
@@ -271,7 +282,7 @@ function markPromoted() {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, 'promoted=true\n');
 }
 
-async function productionCanary({ baseUrl, stagingUrl, waitMin, steps }) {
+async function productionCanary({ baseUrl, stagingUrl, waitMin, steps, versionId: uploadedId }) {
   if (!baseUrl) throw new Error('--base-url is required');
   const budgetConfig = readErrorBudgetConfig(process.env);
   if (!budgetConfig.ok) {
@@ -287,7 +298,12 @@ async function productionCanary({ baseUrl, stagingUrl, waitMin, steps }) {
     console.log('Pre-flight: staging /health/ready…');
     await waitHealthReady(stagingUrl);
   }
-  const versionId = uploadVersion('production', `production-canary-${budget.release}`);
+  // A version uploaded by an earlier step (whose source maps already reached
+  // Sentry) is promoted as is; otherwise upload one now.
+  const versionId =
+    typeof uploadedId === 'string' && uploadedId.length > 0
+      ? uploadedId
+      : uploadVersion('production', `production-canary-${budget.release}`);
   const waitMs = waitMinutes * 60 * 1000;
 
   // Every step, 100 % included, gets the bake window and the error budget:
@@ -328,7 +344,10 @@ async function main() {
   switch (command) {
     case 'upload': {
       if (!flags.env) throw new Error('--env is required');
-      const id = uploadVersion(flags.env, flags.message);
+      if (flags.outdir === true) throw new Error('--outdir needs a directory');
+      const id = uploadVersion(flags.env, flags.message, flags.outdir);
+      if (process.env.GITHUB_OUTPUT)
+        appendFileSync(process.env.GITHUB_OUTPUT, `version_id=${id}\n`);
       console.log(id);
       break;
     }
@@ -354,11 +373,13 @@ async function main() {
       }
       const rawWaitMin = Number(flags['wait-min'] ?? 10);
       const waitMin = Number.isFinite(rawWaitMin) && rawWaitMin > 0 ? rawWaitMin : 10;
+      if (flags['version-id'] === true) throw new Error('--version-id needs a value');
       await productionCanary({
         baseUrl: flags['base-url'],
         stagingUrl: flags['staging-url'],
         waitMin,
         steps,
+        versionId: flags['version-id'],
       });
       break;
     }

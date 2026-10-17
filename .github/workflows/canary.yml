@@ -11,6 +11,12 @@ name: Canary Deploy
 # The Sentry release is the 7-char commit SHA, set as VERSION on the gateway
 # AND every sub-worker so the error budget covers the whole fleet.
 #
+# Source maps + Sentry release (#415): every Worker is bundled with
+# --outdir under packages/api/dist; scripts/sentry-release.sh creates the
+# release and uploads the maps after the gateway version is uploaded but
+# BEFORE any traffic shifts to it, then finalizes the release and records
+# the production deploy marker once the canary held at 100 %.
+#
 # The canary-deploy.mjs script handles:
 #   • upload       — wrangler versions upload with VERSION:<sha7> (Sentry release)
 #   • promote      — wrangler versions deploy --percentage N
@@ -46,6 +52,7 @@ on:
       - 'pnpm-workspace.yaml'
       - 'scripts/canary-deploy.mjs'
       - 'scripts/canary-error-budget.mjs'
+      - 'scripts/sentry-release.sh'
       - 'scripts/smoke-routes.mjs'
       - 'scripts/verify-secrets.mjs'
       - 'scripts/wait-health-ready.sh'
@@ -149,10 +156,33 @@ jobs:
           # Each Worker records its own success so a failure only rolls back
           # the Workers this run actually deployed.
           # wrangler parses --var KEY:VALUE (KEY=VALUE would add a key named "VERSION=…").
+          # --outdir keeps each bundle and its source map for the Sentry upload.
           for worker in auth reservations billing; do
-            pnpm --filter @athlya/api exec wrangler deploy -c "wrangler.${worker}.toml" --env production --var "VERSION:${VERSION}"
+            pnpm --filter @athlya/api exec wrangler deploy -c "wrangler.${worker}.toml" --env production --var "VERSION:${VERSION}" --outdir "dist/${worker}"
             echo "${worker}=true" >> "$GITHUB_OUTPUT"
           done
+
+      # Uploading a version shifts no traffic: the gateway keeps serving the
+      # previous deployment until canary-deploy.mjs promotes this version.
+      - name: Upload gateway version
+        id: upload_gateway
+        if: steps.config.outputs.ready == 'true' && steps.deploy_subworkers.outcome == 'success'
+        env:
+          VERSION: ${{ steps.config.outputs.release }}
+        run: |
+          set -euo pipefail
+          node scripts/canary-deploy.mjs upload --env production \
+            --message "production-canary-${VERSION}" --outdir dist
+
+      # Release + source maps before the first traffic shift, so the
+      # errors the canary error budget counts already de-minify.
+      - name: Sentry release + source maps
+        if: steps.config.outputs.ready == 'true' && steps.upload_gateway.outcome == 'success'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+        run: bash scripts/sentry-release.sh prepare production
 
       - name: Pre-canary health check (old gateway + new sub-workers)
         if: steps.config.outputs.ready == 'true' && steps.deploy_subworkers.outcome == 'success'
@@ -166,19 +196,29 @@ jobs:
 
       - name: Canary 1% → 10% → 100%
         id: canary
-        if: steps.config.outputs.ready == 'true' && steps.deploy_subworkers.outcome == 'success'
+        if: steps.config.outputs.ready == 'true' && steps.upload_gateway.outcome == 'success'
         env:
           VERSION: ${{ steps.config.outputs.release }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
           CANARY_MAX_ERRORS: ${{ vars.CANARY_MAX_ERRORS }}
+          GATEWAY_VERSION_ID: ${{ steps.upload_gateway.outputs.version_id }}
         run: |
           set -euo pipefail
           node scripts/canary-deploy.mjs production-canary \
             --base-url "${PRODUCTION_API_URL}" \
+            --version-id "${GATEWAY_VERSION_ID}" \
             --wait-min "10" \
             --steps "1,10,100"
+
+      - name: Finalize Sentry release + deploy marker
+        if: steps.config.outputs.ready == 'true' && steps.canary.outcome == 'success'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+        run: bash scripts/sentry-release.sh finalize production
 
       # Issue #404 — rollback must fail loudly so the on-call engineer
       # sees the failure immediately. The previous || true silently swallowed

@@ -1,43 +1,62 @@
-# Runbook — Sentry source maps & release tracking (issue #138)
+# Runbook — Sentry source maps & release tracking (issues #138, #415)
 
-## Objectif
+## Goal
 
-Rendre les stack traces prod **lisibles** (`fichier:ligne` au lieu de bundle minifié) et associer chaque event Sentry à une **release** = sha git court.
+Make production stack traces **readable** (`file:line` instead of a minified bundle) and tie every Sentry event to a **release** = short git sha, on **every** path that ships a production Worker version.
 
-## Comment ça marche
+## How it works
 
-1. **Tag release sur les events** — déjà en place : le Worker émet `event.release = VERSION` (`packages/api/src/sentry.ts`), où `VERSION` est injecté au deploy (`--var VERSION:${GITHUB_SHA:0:7}` — wrangler découpe `--var` sur `:`).
-2. **Source maps** — `wrangler.toml` a `upload_source_maps = true` : `wrangler deploy --outdir dist` écrit `dist/*.js` + `dist/*.js.map`.
-3. **Upload Sentry** — l'étape `Sentry release + source maps` (`.github/workflows/deploy-production.yml`) crée la release `${GITHUB_SHA:0:7}` (même valeur que `VERSION`) — **obligatoire** en `production-deploy`, upload les maps, set-commits `--auto`, finalize, et enregistre un **deploy marker** (`-e staging|production`).
+1. **Release tag on events** — the Worker sets `event.release = VERSION` (`packages/api/src/sentry.ts`). `VERSION` is injected at deploy time with `--var VERSION:${GITHUB_SHA:0:7}` (wrangler splits `--var` on `:`) on the gateway **and** on every sub-worker.
+2. **Source maps** — every `wrangler.*.toml` sets `upload_source_maps = true`, and every deploy path bundles with `--outdir`: the gateway into `packages/api/dist`, each sub-worker into `packages/api/dist/<worker>`, which writes `*.js` + `*.js.map`.
+3. **Sentry upload** — `scripts/sentry-release.sh` is the single implementation, shared by every path:
+   - `prepare <env>`: `releases new <sha7>`, `sourcemaps inject dist`, `sourcemaps upload --release <sha7> dist`, `releases set-commits --auto`. It fails if `packages/api/dist` holds no `*.js.map`.
+   - `finalize <env>`: `releases finalize <sha7>` + deploy marker `releases deploys <sha7> new -e <env>`.
+   - `all <env>`: both, for direct deploys.
 
-**Le nom de release = `VERSION` = sha court** : c'est ce qui permet à Sentry de relier la map uploadée à l'event entrant (matching par release + filename).
+**Release name = `VERSION` = short sha**: this is what lets Sentry match an uploaded map to an incoming event (release + filename matching).
 
-## Secrets / vars CI requis
+### Paths that ship a production Worker version
 
-| Clé                 | Type   | Valeur                                                                           |
-| ------------------- | ------ | -------------------------------------------------------------------------------- |
-| `SENTRY_AUTH_TOKEN` | secret | token avec scope `project:releases` + `org:read` (settings Sentry → Auth Tokens) |
-| `SENTRY_ORG`        | var    | slug org Sentry                                                                  |
-| `SENTRY_PROJECT`    | var    | slug projet (ex. `athlya-api`)                                                   |
+| Path                                          | Bundles                                                                              | Sentry steps                                                                                                         |
+| --------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `deploy-production.yml` → `production-deploy` | `wrangler deploy --outdir dist[/<worker>]` (gateway + 3 sub-workers)                 | `sentry-release.sh all production` after the smoke                                                                   |
+| `deploy-production.yml` → `production-canary` | `canary-deploy.mjs upload --outdir dist` (gateway)                                   | `prepare production` after the upload, **before** the first traffic shift; `finalize production` after 100 %         |
+| `canary.yml` (push to `master`)               | sub-workers `wrangler deploy --outdir dist/<worker>`, gateway `upload --outdir dist` | `prepare production` after the gateway upload, **before** the first traffic shift; `finalize production` after 100 % |
+| `deploy-production.yml` → `staging-deploy`    | same as `production-deploy`                                                          | `sentry-release.sh all staging` (soft-gated)                                                                         |
 
-Soft-gate **staging uniquement** : si `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` absents, l'étape **skip** (warning) sans casser le `staging-deploy`. En **production**, leur absence **fait échouer** le deploy : `production-deploy` sort en erreur dans l'étape `Sentry release + source maps`, et `production-canary` dans `Require Sentry config for production canary` (#415).
+On the canary paths the gateway version is uploaded first (`wrangler versions upload` shifts no traffic), its maps reach Sentry, and `canary-deploy.mjs production-canary --version-id <id>` then promotes **that exact version**. The errors the canary error budget counts (`scripts/canary-error-budget.mjs`, same `<sha7>` release) are therefore already de-minified. In `canary.yml` the sub-workers take traffic right after their `wrangler deploy`; their maps are uploaded about a minute later, with the gateway's, so the first few sub-worker events of a rollout may stay minified.
 
-## Vérification (critères d'acceptation)
+The finalize step only runs when the canary succeeded: an aborted canary leaves an unfinalized release without a deploy marker, which is the intended signal.
 
-1. **Stack trace lisible** : après un `staging-deploy`, déclencher une erreur test sur staging (route 5xx), ouvrir l'event dans Sentry → frames `worker.ts:LIGNE` (pas minifié).
-2. **Release associée** : l'event porte `release: <sha7>` et apparaît dans Sentry → Releases avec un deploy marker `staging`.
-3. **Test error staging → Sentry avec map** : cf. #1.
+## Required CI secrets / vars
 
-## Notes / limites
+| Key                 | Type   | Value                                                                      |
+| ------------------- | ------ | -------------------------------------------------------------------------- |
+| `SENTRY_AUTH_TOKEN` | secret | token with `project:releases` + `org:read` (Sentry settings → Auth Tokens) |
+| `SENTRY_ORG`        | var    | Sentry organisation slug                                                   |
+| `SENTRY_PROJECT`    | var    | project slug (e.g. `athlya-api`)                                           |
 
-- **Frames dans l'event** : `packages/api/src/sentry.ts` parse `Error.stack` en `stacktrace.frames` (`filename`/`lineno`/`colno`). Sans frames, Sentry n'a rien à matcher contre les maps — c'est le pré-requis de la dé-minification (corrigé #138).
-- **Matching** : on s'appuie sur le matching **release + filename** (event.release == nom de release uploadée). Le `sourcemaps inject` ajoute des debug-ids aux artefacts uploadés ; le bundle déployé par wrangler n'embarque pas ces ids (injection post-deploy locale), donc le debug-id matching seul ne suffit pas — d'où l'importance que `VERSION` == nom de release.
-- **Canary / smoke** : `production-canary` passe par `scripts/canary-deploy.mjs` (versions upload) — source maps non câblées sur ce chemin (Phase 1 cible les phases `*-deploy` directes). Suivi possible si besoin.
-- **Phase 3 (SDK `@sentry/cloudflare`)** : hors scope, rejetée pour la taille de bundle (cf. `sentry.ts` docblock + ADR #76).
+Soft gate **staging only**: when `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` are missing, `sentry-release.sh` warns and skips without breaking `staging-deploy`. In **production** their absence **fails** the run on every path: `production-deploy`, `production-canary` (also guarded earlier by `Require Sentry config for production canary`, which checks `SENTRY_DSN` too) and `canary.yml` (`Check canary provisioning`) (#415).
 
-## Références
+## Verification (acceptance criteria)
 
-- `.github/workflows/deploy-production.yml` — étape `Sentry release + source maps`
-- `packages/api/wrangler.toml` — `upload_source_maps = true`
+1. **Readable stack trace**: after a `staging-deploy`, trigger a test error on staging (5xx route), open the event in Sentry → frames `worker.ts:LINE` (not minified).
+2. **Associated release**: the event carries `release: <sha7>` and shows up in Sentry → Releases with a `staging` deploy marker.
+3. **Canary**: after a `canary.yml` run, Sentry → Releases shows `<sha7>` finalized with a `production` deploy marker, and its artifacts list `worker.js.map` plus `auth/auth.js.map`, `reservations/…`, `billing/…`.
+
+## Notes / limits
+
+- **Frames in the event**: `packages/api/src/sentry.ts` parses `Error.stack` into `stacktrace.frames` (`filename`/`lineno`/`colno`). Without frames Sentry has nothing to match against the maps — this is the prerequisite for de-minification (fixed in #138).
+- **Matching**: we rely on **release + filename** matching (event.release == uploaded release name). `sourcemaps inject` adds debug ids to the uploaded artifacts, but the bundle wrangler deployed does not carry them (the injection runs locally after the upload), so debug-id matching alone is not enough — hence `VERSION` must equal the release name.
+- **`staging-smoke`** uploads a staging version only and has no Sentry step; it never ships production code.
+- **Phase 3 (`@sentry/cloudflare` SDK)**: out of scope, rejected for bundle size (see the `sentry.ts` docblock + ADR #76).
+
+## References
+
+- `scripts/sentry-release.sh` — release + source maps (all paths)
+- `.github/workflows/deploy-production.yml` — `Sentry release + source maps` steps
+- `.github/workflows/canary.yml` — `Sentry release + source maps`, `Finalize Sentry release + deploy marker`
+- `scripts/canary-deploy.mjs` — `upload --outdir`, `production-canary --version-id`
+- `packages/api/wrangler*.toml` — `upload_source_maps = true`
 - `packages/api/src/sentry.ts` — `event.release`
 - `scripts/verify-sentry-sourcemaps-checklist.mjs`

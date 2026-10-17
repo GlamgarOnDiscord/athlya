@@ -63,6 +63,18 @@ tout le graphe runtime de `@athlya/api`, la config de build qu'il étend
 (`packages/tsconfig`), le lockfile, et chaque script exécuté par le workflow
 avec ses imports locaux, vérifié en CI par `pnpm check:canary-paths`.
 
+### Source maps and Sentry release (#415)
+
+Both canary paths (`canary.yml` and the `production-canary` phase of
+`deploy-production.yml`) upload the gateway version with
+`canary-deploy.mjs upload --outdir dist` (no traffic shift), then run
+`scripts/sentry-release.sh prepare production` (release `<sha7>`, source
+maps of the gateway and of every sub-worker bundled in this run), and only
+then promote that exact version with `production-canary --version-id`. Once
+the release held at 100 %, `sentry-release.sh finalize production`
+finalizes it and records the deploy marker. Missing Sentry configuration
+fails the run. Details: [`sentry-sourcemaps.md`](./sentry-sourcemaps.md).
+
 ### Pas de smoke authentifié en production (décision)
 
 `/v1/auth/login` est protégé par Turnstile ; en production le secret est
