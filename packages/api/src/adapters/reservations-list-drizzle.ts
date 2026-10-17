@@ -39,7 +39,7 @@ import { and, asc, eq, gt, gte, lte, or, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
-import type { AthlyaDbAny, AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
+import type { AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
 
 /** Default lookback window, aligned with `ListClassesQuerySchema`. */
 const DEFAULT_LOOKBACK_DAYS = 90;
@@ -71,9 +71,14 @@ export interface ReservationListItem {
   };
 }
 
+/**
+ * The read always runs under the caller's tenant claims so the
+ * `reservations` / `classes` RLS policies apply (issue #117): there is
+ * no claim-less path.
+ */
 export interface ListMyReservationsDeps {
-  readonly db: AthlyaDbAny;
-  readonly claims?: TenantClaims;
+  readonly db: AthlyaDbHttp;
+  readonly claims: TenantClaims;
 }
 
 /** Cursor shape encoded into a base64url-safe string. */
@@ -155,38 +160,38 @@ export async function listMyReservations(
         )
       : undefined;
 
-  const selectQuery = deps.db
-    .select({
-      id: reservations.id,
-      classId: reservations.classId,
-      userId: reservations.userId,
-      status: reservations.status,
-      createdAt: reservations.createdAt,
-      cancelledAt: reservations.cancelledAt,
-      checkedInAt: reservations.checkedInAt,
-      classTitle: classes.title,
-      classStartsAt: classes.startsAt,
-      classDurationMin: classes.durationMin,
-    })
-    .from(reservations)
-    .innerJoin(classes, eq(classes.id, reservations.classId))
-    .where(
-      and(
-        eq(reservations.userId, userId),
-        gte(classes.startsAt, from),
-        lte(classes.startsAt, to),
-        cursorCondition,
-      ),
-    )
-    .orderBy(asc(classes.startsAt), asc(reservations.id))
-    .limit(limit + 1);
-
-  const rows =
-    deps.claims !== undefined
-      ? await withConnectionRetry(() =>
-          withTenantHttp(deps.db as AthlyaDbHttp, deps.claims!, selectQuery),
+  const { db, claims } = deps;
+  const rows = await withConnectionRetry(() =>
+    withTenantHttp(
+      db,
+      claims,
+      db
+        .select({
+          id: reservations.id,
+          classId: reservations.classId,
+          userId: reservations.userId,
+          status: reservations.status,
+          createdAt: reservations.createdAt,
+          cancelledAt: reservations.cancelledAt,
+          checkedInAt: reservations.checkedInAt,
+          classTitle: classes.title,
+          classStartsAt: classes.startsAt,
+          classDurationMin: classes.durationMin,
+        })
+        .from(reservations)
+        .innerJoin(classes, eq(classes.id, reservations.classId))
+        .where(
+          and(
+            eq(reservations.userId, userId),
+            gte(classes.startsAt, from),
+            lte(classes.startsAt, to),
+            cursorCondition,
+          ),
         )
-      : await withConnectionRetry(() => selectQuery);
+        .orderBy(asc(classes.startsAt), asc(reservations.id))
+        .limit(limit + 1),
+    ),
+  );
 
   const hasMore = rows.length > limit;
   const pageRows = hasMore ? rows.slice(0, limit) : rows;

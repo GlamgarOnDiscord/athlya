@@ -1,103 +1,80 @@
 /**
- * Drizzle-backed `PasswordResetRepo` adapter — Sprint 7 / SP7.3
- * (Vague 35) — finalises audit finding S2-006.
+ * `PasswordResetRepo` adapter — Sprint 7 / SP7.3 (Vague 35) — finalises
+ * audit finding S2-006.
  *
  * Implements the contract exported by
  * `@athlya/auth/forgot-password.ts`:
  *
- *   - `insertToken({ userId, tokenHash, expiresAt })` — single-row
- *     INSERT. The plain token is NEVER seen by this adapter.
- *   - `findActiveTokenByHash(tokenHash)` — SELECT with the active
+ *   - `insertToken({ userId, tokenHash, expiresAt })` — invalidate the
+ *     user's active tokens and insert the new one. The plain token is
+ *     NEVER seen by this adapter.
+ *   - `findActiveTokenByHash(tokenHash)` — lookup with the active
  *     filter `consumed_at IS NULL AND expires_at > NOW()`.
  *   - `consumeAndResetPassword({ tokenHash, userId, newPasswordHash })`
- *     — atomic transaction: stamp `consumed_at = NOW()` AND update
- *     the user's `password_hash`. Both writes succeed or neither
- *     does.
+ *     — one statement: stamp `consumed_at = NOW()` AND update the
+ *     user's `password_hash`. Both writes succeed or neither does.
+ *
+ * RLS posture (issue #117): the flow runs pre-authentication, so there
+ * are no tenant claims. Every operation goes through a SECURITY DEFINER
+ * service function (migrations 0032, 0037, 0039); `athlya_app` has no
+ * write privilege on `password_reset_tokens`.
  *
  * Idempotence: re-presenting the same token twice fails the second
- * time because the row's `consumed_at` is now non-null and the
- * UPDATE matches zero rows. The error surfaces upstream via the
- * `findActiveTokenByHash` returning `null` on the next attempt —
- * `forgot-password.ts::confirmReset` raises `token_invalid` from
- * that null.
+ * time because the row's `consumed_at` is now non-null. The error
+ * surfaces upstream via `findActiveTokenByHash` returning `null` on the
+ * next attempt — `forgot-password.ts::confirmReset` raises
+ * `token_invalid` from that null.
  *
  * Rate limit at the route layer (deferred — see SP7.4) caps the
  * insert path; this adapter does NOT enforce it.
  *
- * @see packages/db/migrations/0005_password_reset_audit_anonymize.sql
+ * @see packages/db/migrations/0039_runtime_rls_gaps.sql
  * @see packages/auth/src/forgot-password.ts
  */
 
 import { PasswordResetTokenUnavailableError } from '@athlya/auth';
-import { passwordResetTokens } from '@athlya/db/schema';
-import { and, eq, gt, isNull, lt, sql } from 'drizzle-orm';
 
-import { withConnectionRetry } from './db-retry.js';
-import { serviceFn, writeRows } from './service-functions.js';
+import { queryRows, serviceFn, toDateOrNull, writeRows } from './service-functions.js';
 
 import type { PasswordResetRepo } from '@athlya/auth';
-import type { AthlyaDbHttp } from '@athlya/db/client';
+import type { AthlyaDbAny } from '@athlya/db/client';
 
 /**
- * Build the Drizzle-backed adapter. The factory is per-isolate
- * (binds the `db` handle) and stateless beyond that — no caching
- * inside the closure.
- *
- * neon-http-norls: password_reset_tokens has no tenant-scoped RLS policy;
- * the flow runs pre-authentication so no TenantClaims are available.
+ * Build the adapter. The factory is per-isolate (binds the `db` handle)
+ * and stateless beyond that — no caching inside the closure.
  */
-export function createDrizzlePasswordResetRepo(db: AthlyaDbHttp): PasswordResetRepo {
+export function createDrizzlePasswordResetRepo(db: AthlyaDbAny): PasswordResetRepo {
   return {
     async insertToken(input) {
-      // Atomically invalidate any existing active tokens for this user
-      // before inserting the new one. The CTE and the INSERT run in the
-      // same server-side statement so no concurrent request can slip a
-      // second active token in between the invalidation and the insert.
-      // The partial unique index `password_reset_tokens_user_active_uidx`
-      // (migration 0029) is the DB-level safety net for the narrow window
-      // where two concurrent issuance requests reach the DB simultaneously.
-      await withConnectionRetry(() =>
-        db.execute(sql`
-          WITH invalidated AS (
-            UPDATE password_reset_tokens
-            SET    consumed_at = NOW()
-            WHERE  user_id     = ${input.userId}::uuid
-              AND  consumed_at IS NULL
-          )
-          INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
-          VALUES (${input.userId}::uuid, ${input.tokenHash}, ${input.expiresAt.toISOString()}::timestamptz)
-        `),
+      // `auth_issue_password_reset` invalidates the user's active tokens
+      // and inserts the new one in one transaction (issue #522); the
+      // partial unique index `password_reset_tokens_user_active_uidx`
+      // (migration 0029) backs it under concurrency. It issues nothing
+      // for a deleted or unknown user. Not retried: a replay after a
+      // lost commit acknowledgement would collide on `token_hash`.
+      const rows = await writeRows<{ issued: boolean }>(
+        db,
+        serviceFn.issuePasswordReset(input.userId, input.tokenHash, input.expiresAt),
       );
+      if (rows[0]?.issued !== true) {
+        // The user was deleted between the email lookup and the
+        // issuance. Throwing keeps `requestReset` from emailing a link
+        // that no token backs.
+        throw new Error('password reset not issued: the account is no longer active');
+      }
     },
 
     async findActiveTokenByHash(tokenHash) {
-      // Active = not consumed AND not expired. The SQL filter
-      // is the security boundary — even if the in-memory
-      // expiry guard in `confirmReset` had a clock skew, this
-      // SELECT guarantees we never return a stale row.
-      const rows = await withConnectionRetry(() =>
-        db
-          .select({
-            userId: passwordResetTokens.userId,
-            expiresAt: passwordResetTokens.expiresAt,
-          })
-          .from(passwordResetTokens)
-          .where(
-            and(
-              eq(passwordResetTokens.tokenHash, tokenHash),
-              isNull(passwordResetTokens.consumedAt),
-              gt(passwordResetTokens.expiresAt, new Date()),
-            ),
-          )
-          .limit(1),
+      // Active = not consumed AND not expired, filtered in SQL so a
+      // clock skew in `confirmReset` can never surface a stale row.
+      const rows = await queryRows<{ user_id: string; expires_at: Date | string }>(
+        db,
+        serviceFn.findPasswordReset(tokenHash),
       );
-
-      if (rows.length === 0) return null;
-      const row = rows[0]!;
-      return {
-        userId: row.userId,
-        expiresAt: row.expiresAt,
-      };
+      const row = rows[0];
+      const expiresAt = row === undefined ? null : toDateOrNull(row.expires_at);
+      if (row === undefined || expiresAt === null) return null;
+      return { userId: row.user_id, expiresAt };
     },
 
     async consumeAndResetPassword(input) {
@@ -116,22 +93,6 @@ export function createDrizzlePasswordResetRepo(db: AthlyaDbHttp): PasswordResetR
       if (rows.length === 0) {
         throw new PasswordResetTokenUnavailableError();
       }
-    },
-
-    async purgeExpired() {
-      // Optional cron sweeper — deletes tokens whose
-      // `expires_at < now() - 30 days` so the table stays
-      // bounded. Mirrors `purgeExpiredOutbox` from
-      // `rgpd-purge.ts` (Sprint-2 SP2.3).
-      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const deleted = await withConnectionRetry(() =>
-        db
-          .delete(passwordResetTokens)
-          .where(lt(passwordResetTokens.expiresAt, cutoff))
-          .returning({ id: passwordResetTokens.id }),
-      );
-      // `sql` import kept above so future maintenance has the
-      return { deleted: deleted.length };
     },
   };
 }

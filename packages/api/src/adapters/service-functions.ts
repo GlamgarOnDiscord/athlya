@@ -2,8 +2,10 @@
  * Typed access to the SECURITY DEFINER service functions installed by
  * migrations `0032_service_definer_functions.sql` (issue #224),
  * `0033_auth_event_recording.sql` (issue #411),
- * `0037_auth_outbox_review_fixes.sql` (issue #609) and
- * `0038_studios_runtime.sql` (issue #224, tenant slug resolution).
+ * `0037_auth_outbox_review_fixes.sql` (issue #609),
+ * `0038_studios_runtime.sql` (issue #224, tenant slug resolution) and
+ * `0039_runtime_rls_gaps.sql` (issue #117, password reset issuance and
+ * RGPD audit anonymisation).
  *
  * Pre-authentication auth flows, the tenant slug guard and the
  * notifications / RGPD cascade queue consumers run as `athlya_app`
@@ -122,6 +124,10 @@ export const serviceFn = {
   recordAuthEvent: (event: unknown) =>
     sql`SELECT auth_record_event(${JSON.stringify(event)}::jsonb)`,
   bumpCredentialsVersion: (id: string) => sql`SELECT auth_bump_credentials_version(${id}::uuid)`,
+  issuePasswordReset: (userId: string, tokenHash: string, expiresAt: Date) =>
+    sql`SELECT auth_issue_password_reset(${userId}::uuid, ${tokenHash}, ${expiresAt.toISOString()}::timestamptz) AS issued`,
+  findPasswordReset: (tokenHash: string) =>
+    sql`SELECT * FROM auth_find_password_reset(${tokenHash})`,
   consumePasswordReset: (tokenHash: string, userId: string, passwordHash: string) =>
     sql`SELECT id FROM auth_consume_password_reset(${tokenHash}, ${userId}::uuid, ${passwordHash}) AS id`,
   notificationRecipient: (userId: string) =>
@@ -133,6 +139,8 @@ export const serviceFn = {
   deletePushTokens: (userId: string) => sql`SELECT rgpd_delete_push_tokens(${userId}::uuid) AS n`,
   deleteIdempotencyKeys: (userId: string) =>
     sql`SELECT rgpd_delete_idempotency_keys(${userId}::uuid) AS n`,
+  anonymizeUserAudit: (userId: string) =>
+    sql`SELECT rgpd_anonymize_user_audit(${userId}::uuid) AS n`,
   confirmUserDeleted: (userId: string) =>
     sql`SELECT rgpd_confirm_user_deleted(${userId}::uuid) AS deleted`,
 } as const;

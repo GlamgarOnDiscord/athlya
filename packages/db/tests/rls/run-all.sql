@@ -36,6 +36,7 @@
 \i tests/rls/email_partial_unique.sql
 \i tests/rls/password_reset_one_active.sql
 \i tests/rls/service_functions.sql
+\i tests/rls/runtime_rls_gaps.sql
 \i tests/rls/auth_event_recording.sql
 \i tests/rls/export_runtime.sql
 \i tests/rls/outbox_lease.sql

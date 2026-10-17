@@ -27,28 +27,8 @@ import { auditLog } from '@athlya/db/schema';
 
 import { withConnectionRetry } from './db-retry.js';
 
-import type { AthlyaDbAny, AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
+import type { AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
 import type { AuditLogWriter } from '@athlya/members';
-
-/**
- * Factory — produces an `AuditLogWriter` bound to the supplied
- * Drizzle instance. Per-request in production.
- */
-export function createDrizzleAuditLogWriter(db: AthlyaDbAny): AuditLogWriter {
-  return {
-    async append(entry) {
-      await withConnectionRetry(async () => {
-        await db.insert(auditLog).values({
-          actorId: entry.actorId,
-          action: entry.action,
-          targetType: entry.targetType,
-          targetId: entry.targetId,
-          metadata: entry.metadata,
-        });
-      });
-    },
-  };
-}
 
 /**
  * HTTP-driver variant — wraps the insert in `withTenantHttp` so RLS

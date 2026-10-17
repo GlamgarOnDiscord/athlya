@@ -39,95 +39,9 @@ import { and, eq, isNull, lt, or, desc, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
-import type { AthlyaDbAny, AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
+import type { AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
 import type { MemberProfile, MemberRepo, MembersPage } from '@athlya/members';
 import type { UpdateProfileRequest } from '@athlya/shared/schemas/api';
-
-/**
- * Factory — produces a `MemberRepo` bound to the supplied Drizzle
- * instance. One client per request (Workers I/O isolation) means
- * the repo holds no long-lived state; the factory is just a closure
- * over `db`.
- */
-export function createDrizzleMemberRepo(db: AthlyaDbAny): MemberRepo {
-  return {
-    async findProfile(userId) {
-      const rows = await withConnectionRetry(() =>
-        db
-          .select()
-          .from(users)
-          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
-          .limit(1),
-      );
-      const row = rows[0];
-      return row === undefined ? null : toMemberProfile(row);
-    },
-
-    async updateProfile(userId, patch) {
-      const patchColumns = buildUpdatePatch(patch);
-      const [row] = await withConnectionRetry(() =>
-        db
-          .update(users)
-          .set(patchColumns)
-          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
-          .returning(),
-      );
-      if (row === undefined) {
-        // The row existed at read time but went away before
-        // the update fired — treat as "not found" upstream.
-        // We reuse the same error class the service throws
-        // from `getProfile` for shape consistency.
-        throw new Error(`updateProfile: user ${userId} not found or soft-deleted`);
-      }
-      return toMemberProfile(row);
-    },
-
-    async listByStudio(studioId, opts) {
-      const cursor = decodeCursor(opts.cursor);
-
-      // Compose the WHERE clause: active member of the studio,
-      // optionally paginated past the last-seen (createdAt, id)
-      // tuple. `(createdAt, id) < (cursor.createdAt, cursor.id)`
-      // is expressed manually because Drizzle doesn't have a
-      // tuple comparator builder — the equivalent SQL is
-      //    created_at < $1 OR (created_at = $1 AND id < $2)
-      // which the planner matches against the compound index.
-      const conditions = [eq(users.studioId, studioId), isNull(users.deletedAt)];
-      if (cursor !== null) {
-        conditions.push(
-          or(
-            lt(users.createdAt, cursor.createdAt),
-            and(eq(users.createdAt, cursor.createdAt), lt(users.id, cursor.id)),
-          ) as ReturnType<typeof lt>,
-        );
-      }
-
-      // Always fetch `limit + 1` so we can detect the end-of-page
-      // without a COUNT. The extra row is dropped before the
-      // caller sees it; its `{ createdAt, id }` tuple becomes
-      // the next cursor.
-      const rows = await withConnectionRetry(() =>
-        db
-          .select()
-          .from(users)
-          .where(and(...conditions))
-          .orderBy(desc(users.createdAt), desc(users.id))
-          .limit(opts.limit + 1),
-      );
-
-      const hasMore = rows.length > opts.limit;
-      const items = rows.slice(0, opts.limit).map((r) => toMemberProfile(r));
-      const nextCursor = hasMore
-        ? encodeCursor({
-            createdAt: rows[opts.limit - 1]!.createdAt,
-            id: rows[opts.limit - 1]!.id,
-          })
-        : null;
-
-      return { items, nextCursor } satisfies MembersPage;
-    },
-  };
-}
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -222,7 +136,7 @@ void sql;
 /* ------------------------------------------------------------------ */
 
 /**
- * HTTP-driver variant of {@link createDrizzleMemberRepo}.
+ * Tenant-scoped `MemberRepo` over the Neon HTTP driver.
  *
  * Each method wraps its single Drizzle query in `withTenantHttp` so
  * the three `SET LOCAL app.*` statements and the business query are
