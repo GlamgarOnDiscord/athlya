@@ -1,6 +1,6 @@
 # pnpm — Framework Audit
 
-> **Archive snapshot.** Ce document décrit pnpm 9. pnpm 11 ignore `package.json#pnpm.overrides` — migration vers pnpm 11 + Node 22/24 en cours (#511). Ne pas utiliser ce doc comme guide de configuration actuelle.
+> **Archive snapshot.** Ce document décrit pnpm 9. Le projet est passé sur pnpm 11 + Node 24 (#574) : réglages et `overrides` vivent dans `pnpm-workspace.yaml` (`.npmrc` ne sert plus qu'à l'auth/registry), et `minimumReleaseAge` vaut 1440 min (24 h) par défaut. Ne pas utiliser ce doc comme guide de configuration actuelle.
 
 ## Version Status
 
