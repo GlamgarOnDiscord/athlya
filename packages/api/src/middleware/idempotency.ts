@@ -109,8 +109,10 @@ interface IdempotencyProblem {
  *      the header is explicitly optional per Req 20.3.
  *   3. A key longer than 255 chars or empty responds with `400
  *      invalid_idempotency_key` without invoking the handler.
- *   4. `userId` is read from `c.get('userId')`. Its absence is a
- *      programming error (auth middleware missed this route) and throws.
+ *   4. `userId` is read from `c.get('userId')`. Without an
+ *      authenticated user (public routes such as `/v1/auth/login` and
+ *      `/v1/auth/register`) there is no cache scope, so the request
+ *      passes through unchanged: no lookup, no store.
  *   5. On a fresh, non-expired cache hit, the stored body and status are
  *      replayed via `c.json()`. The downstream handler is NOT invoked,
  *      satisfying Req 20.1.
@@ -168,15 +170,11 @@ export function idempotencyMiddleware(
 
     const userId = c.get('userId');
     if (typeof userId !== 'string' || userId.length === 0) {
-      // Programmer error: the auth middleware should have set
-      // `userId` before this runs on a mutation route. Throwing
-      // bubbles up to the global error handler which will log to
-      // Sentry and respond 500 — much better than a silent 401
-      // stand-in, which would lie about the root cause.
-      throw new Error(
-        '[idempotency] userId missing from Hono context; ' +
-          'wire auth middleware before idempotencyMiddleware',
-      );
+      // Cache entries are scoped per user; an anonymous request has no
+      // scope to replay from, so it runs without idempotency caching
+      // instead of failing a public route that sent the header.
+      await next();
+      return;
     }
 
     // --- Lookup path (Req 20.1) -------------------------------------
