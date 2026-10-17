@@ -25,6 +25,26 @@ Actions → **Deploy API** → `workflow_dispatch`
 
 Checklist : `node scripts/verify-deploy-production-checklist.mjs`
 
+## Gate staging obligatoire (issue #343)
+
+`production-deploy` et `production-canary` refusent de démarrer si le check
+**Staging gate** n'a pas réussi sur le même commit
+(`scripts/require-check-success.mjs`). Le workflow `staging-gate.yml` tourne
+sur chaque PR vers `master` et sur chaque push sur `master` ; il **échoue**
+(au lieu de sauter) quand un prérequis manque, sauf pour les PR de forks.
+
+Prérequis du gate (environnement GitHub `staging`) :
+
+- Secrets : `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
+  `MIGRATION_DB_URL_STAGING`, `STAGING_SMOKE_EMAIL`, `STAGING_SMOKE_PASSWORD`
+  (compte de smoke dédié), optionnel `STAGING_SMOKE_TURNSTILE_TOKEN`
+- Vars : `STAGING_API_URL`, `K6_STAGING_BASE_URL`, optionnel
+  `STAGING_SMOKE_STUDIO_SLUG`
+
+Le smoke authentifié (`smoke-routes.mjs --require-auth`) se connecte avec le
+compte de smoke puis exige `200` sur `/v1/members/me` et
+`/v1/reservations/me` (et `/v1/classes` si le slug studio est fourni).
+
 ## Local (ops)
 
 ```bash
