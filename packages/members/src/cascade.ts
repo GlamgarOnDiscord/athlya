@@ -5,11 +5,12 @@
  * cases live in this module:
  *
  *   - {@link handleUserDeleted} — `auth.user.deleted` event consumer
- *     that cascade-deletes every row downstream of the soft-deleted
- *     user (`reservations`, `workout_sessions`, `push_tokens`),
- *     stamps the `users.deleted_at` tombstone, best-effort purges
- *     the R2 avatar binary, and schedules the 30-day audit-log
- *     anonymisation job (Requirements 5.2, 5.3).
+ *     that first confirms the existing `users.deleted_at` tombstone
+ *     (read-only; it skips a live user), then cascade-deletes every row
+ *     downstream of the soft-deleted user (`reservations`,
+ *     `workout_sessions`, `push_tokens`), best-effort purges the R2
+ *     avatar binary, and schedules the 30-day audit-log anonymisation
+ *     job (Requirements 5.2, 5.3).
  *   - {@link anonymizeAuditLog} — the delayed job itself, running
  *     against the `audit_log` table: `actor_id = NULL` and PII is
  *     stripped from the `metadata` JSON (Requirement 5.3). Exposed
@@ -87,12 +88,12 @@ export const ANONYMIZATION_DELAY_MS = ANONYMIZATION_DELAY_DAYS * 24 * 60 * 60 * 
  * MUST NOT drive correctness decisions (see the retry posture
  * discussed in the module docblock).
  *
- * `markUserDeleted` confirms the tombstone of the users row, without
- * moving it, and reports whether the user is soft-deleted. The Auth service stamps
- * `deleted_at` when it emits the `auth.user.deleted` event
- * (Requirement 5.1); the cascade runs first thing and stops when it
- * returns `false`, so a forged or replayed event for a live account
- * has no effect (issue #609).
+ * `markUserDeleted` confirms, read-only, the existing tombstone of the
+ * users row and reports whether the user is soft-deleted. The tombstone
+ * itself is written by the Auth service when it emits the
+ * `auth.user.deleted` event (Requirement 5.1); the cascade checks it
+ * first and stops when it returns `false`, so a forged or replayed
+ * event for a live account has no effect (issue #609).
  *
  * `anonymizeAuditRows` is the only method that touches `audit_log`.
  * Its implementation is expected to be idempotent — a second call
@@ -121,8 +122,8 @@ export interface DeletionRepo {
    * user is soft-deleted, `false` for a live or unknown account. An
    * existing `deleted_at` MUST NOT be moved: retention and anonymisation
    * clocks measure from it, so a replayed event must not restart them.
-   * `deletedAt` is the cascade clock, for implementations that heal a
-   * missing tombstone; the production adapter is read-only.
+   * Implementations are read-only and never tombstone a live account.
+   * `deletedAt` is the cascade clock, passed for logging only.
    */
   markUserDeleted(userId: string, deletedAt: Date): Promise<boolean>;
   /**
