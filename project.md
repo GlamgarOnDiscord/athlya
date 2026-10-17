@@ -350,14 +350,14 @@ L'analyse recommandait **Supabase + Cloudflare + Prisma**. Révision 2026 :
 
 | Techno             | Version  | Rôle                                                                                |
 | ------------------ | -------- | ----------------------------------------------------------------------------------- |
-| **Next.js**        | 16.2     | App Router, Cache Components (PPR), Turbopack prod                                  |
-| **React**          | 19.2     | Server Components, Actions, use()                                                   |
-| **TypeScript**     | 5.9      | Strict mode, exhaustive checks (6.0 RC / 7.0 Beta dispos mais à éviter en prod MVP) |
-| **Tailwind CSS**   | 4.2      | Oxide engine, CSS-first config, plugin Webpack                                      |
+| **Next.js**        | 16.4     | App Router, Cache Components (PPR), Turbopack prod                                  |
+| **React**          | 19.3     | Server Components, Actions, use()                                                   |
+| **TypeScript**     | 6.0      | Strict mode, exhaustive checks (7.0 natif bloqué : typescript-eslint `<6.1`)        |
+| **Tailwind CSS**   | 4.3      | Oxide engine, CSS-first config, plugin Webpack                                      |
 | **shadcn/ui**      | dernière | Composants accessibles, copy-paste                                                  |
 | **TanStack Query** | 5.89+    | Cache serveur, mutations optimistes                                                 |
 | **Zustand**        | 5.x      | État global UI                                                                      |
-| **Zod**            | 4.1      | Validation + types partagés                                                         |
+| **Zod**            | 4.6      | Validation + types partagés                                                         |
 | **Lucide React**   | dernière | Icônes                                                                              |
 | **next-intl**      | dernière | i18n App Router                                                                     |
 
@@ -391,10 +391,10 @@ L'analyse recommandait **Supabase + Cloudflare + Prisma**. Révision 2026 :
 
 | Techno                        | Version      | Rôle                                                                                 |
 | ----------------------------- | ------------ | ------------------------------------------------------------------------------------ |
-| **Hono**                      | 4.10         | Framework HTTP universel (Workers, Node, Bun)                                        |
+| **Hono**                      | 4.13         | Framework HTTP universel (Workers, Node, Bun)                                        |
 | **Drizzle ORM**               | 0.45+        | ORM TypeScript-first, SQL-shaped                                                     |
-| **Drizzle Kit**               | 0.32+        | Migrations versionnées, introspection                                                |
-| **Zod**                       | 4.1          | Validation + partage types client/serveur                                            |
+| **Drizzle Kit**               | 0.31+        | Migrations versionnées, introspection                                                |
+| **Zod**                       | 4.6          | Validation + partage types client/serveur                                            |
 | **Better Auth**               | 1.6+         | Auth multi-providers, sessions, RBAC                                                 |
 | **Stripe SDK**                | dernière     | Paiements, abonnements, webhooks                                                     |
 | **Resend**                    | dernière     | Emails transactionnels                                                               |
@@ -417,8 +417,8 @@ L'analyse recommandait **Supabase + Cloudflare + Prisma**. Révision 2026 :
 
 | Techno                 | Rôle       |
 | ---------------------- | ---------- | -------------------------------------------------- |
-| **Turborepo**          | 2.7+       | Monorepo, cache builds                             |
-| **pnpm**               | 9.x        | Package manager, workspaces                        |
+| **Turborepo**          | 2.11+      | Monorepo, cache builds                             |
+| **pnpm**               | 11.x       | Package manager, workspaces                        |
 | **Vercel**             | Hobby plan | Hébergement Next.js web                            |
 | **Cloudflare Workers** | Free/Paid  | Hébergement API edge                               |
 | **GitHub Actions**     | —          | CI/CD                                              |
@@ -428,40 +428,40 @@ L'analyse recommandait **Supabase + Cloudflare + Prisma**. Révision 2026 :
 | **Sentry**             | —          | Error tracking front + back                        |
 | **Infisical**          | —          | Secrets open-source auto-hébergeable               |
 | **GrowthBook**         | —          | Feature flags open-source                          |
-| **Vitest**             | 4.1+       | Unit + integration testing                         |
-| **fast-check**         | 4.7+       | Property-based testing (avec `@fast-check/vitest`) |
-| **Playwright**         | 1.59+      | E2E web                                            |
+| **Vitest**             | 5.0+       | Unit + integration testing                         |
+| **fast-check**         | 4.10+      | Property-based testing (avec `@fast-check/vitest`) |
+| **Playwright**         | 1.64+      | E2E web                                            |
 
-### 6.6 Versions résumées (à épingler dans `package.json` — vérifiées mai 2026)
+### 6.6 Versions résumées (à épingler dans `package.json` — alignées sur les manifestes en octobre 2026 ; source de vérité : `STACK.md`)
 
 ```jsonc
 {
-  "next": "^16.2.0",
-  "react": "^19.2.0",
+  "next": "^16.4.0",
+  "react": "^19.3.0",
   "react-native": "0.83.2",
   "expo": "^55.0.0",
-  "hono": "^4.10.0",
-  "drizzle-orm": "^0.45.0",
-  "drizzle-kit": "^0.32.0",
+  "hono": "^4.13.13",
+  "drizzle-orm": "^0.45.4",
+  "drizzle-kit": "^0.31.11",
   "@tanstack/react-query": "^5.89.0",
-  "zod": "^4.1.0",
+  "zod": "^4.6.5",
   "better-auth": "^1.6.0",
   "@upstash/qstash": "^2.7.0",
-  "typescript": "^5.9.0",
-  "tailwindcss": "^4.2.0",
+  "typescript": "^6.0.3",
+  "tailwindcss": "^4.3.3",
   "nativewind": "^4.1.0",
   "zustand": "^5.0.0",
   "react-native-mmkv": "^3.3.0",
   "react-native-reanimated": "^4.0.0",
-  "turbo": "^2.7.0",
-  "vitest": "^4.1.0",
-  "fast-check": "^4.7.0",
-  "@fast-check/vitest": "^0.2.0",
-  "@playwright/test": "^1.59.0",
+  "turbo": "^2.11.7",
+  "vitest": "^5.0.3",
+  "fast-check": "^4.10.2",
+  "@fast-check/vitest": "^0.5.0",
+  "@playwright/test": "^1.64.0",
 }
 ```
 
-> 📝 **Note** : dans `apps/mobile/package.json`, `tailwindcss` est épinglé à `^3.4.0` (requis par NativeWind 4.1), pas `^4.2.0`. Voir §6.2.
+> 📝 **Note** : dans `apps/mobile/package.json`, `tailwindcss` est épinglé à `^3.4.0` (requis par NativeWind 4.1), pas `^4.3.3`. Voir §6.2.
 
 ---
 
@@ -1072,7 +1072,7 @@ jobs:
 - [ ] Générer clés SSH dev + activer commit signature.
 - [ ] Setup 1Password (ou équivalent) pour secrets.
 - [ ] Valider qu'Expo Go fonctionne sur ton iPhone depuis Windows (scan d'un snack pour tester).
-- [ ] Installer Node 20 LTS + pnpm + Wrangler CLI + EAS CLI.
+- [ ] Installer Node 24 LTS + pnpm 11 + Wrangler CLI + EAS CLI.
 - [ ] Créer compte Apple Developer (99 $/an) **uniquement au moment de la v0.2** (avant c'est inutile).
 
 ---
