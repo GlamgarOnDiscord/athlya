@@ -10,6 +10,12 @@
  *   GITHUB_TOKEN=… node scripts/require-check-success.mjs \
  *     --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" \
  *     --check "Staging gate" --check "Staging gate (full soak)"
+ *
+ * `--any-check` (also repeatable) adds one alternative group: at least one
+ * of its checks must pass, e.g. a staging frontend deploy of all apps or of
+ * the one app being shipped (issue #422):
+ *   … --any-check "deploy all (staging)" --any-check "deploy web (staging)"
+ * `--check` and `--any-check` combine: every `--check` and one `--any-check`.
  */
 
 import { parseArgs } from 'node:util';
@@ -61,34 +67,62 @@ export async function requireCheckSuccess({ repo, sha, checkName, token, fetchIm
   return evaluateCheckRuns(body.check_runs ?? [], checkName);
 }
 
+/**
+ * Every `all` check must pass; when `any` is non-empty, at least one of its
+ * checks must pass too. Pure so the combination is unit-testable.
+ *
+ * @param {{ all: string[], any: string[] }} required
+ * @param {(checkName: string) => Promise<{ ok: boolean, reason: string }>} check
+ * @returns {Promise<{ ok: boolean, passed: string[], failures: string[] }>}
+ */
+export async function evaluateRequirements({ all, any }, check) {
+  const passed = [];
+  const failures = [];
+  for (const checkName of all) {
+    const { ok, reason } = await check(checkName);
+    (ok ? passed : failures).push(reason);
+  }
+  if (any.length > 0) {
+    const anyReasons = [];
+    let anyPassed = false;
+    for (const checkName of any) {
+      const { ok, reason } = await check(checkName);
+      if (ok) {
+        passed.push(reason);
+        anyPassed = true;
+        break;
+      }
+      anyReasons.push(reason);
+    }
+    if (!anyPassed) failures.push(`none of the alternatives passed: ${anyReasons.join('; ')}`);
+  }
+  return { ok: failures.length === 0, passed, failures };
+}
+
 if (import.meta.main) {
   const { values } = parseArgs({
     options: {
       repo: { type: 'string' },
       sha: { type: 'string' },
       check: { type: 'string', multiple: true },
+      'any-check': { type: 'string', multiple: true },
     },
   });
   const token = process.env.GITHUB_TOKEN;
-  const checks = values.check ?? [];
-  if (!values.repo || !values.sha || checks.length === 0 || !token) {
-    console.error('[require-check] --repo, --sha, --check and GITHUB_TOKEN are required');
+  const all = values.check ?? [];
+  const any = values['any-check'] ?? [];
+  if (!values.repo || !values.sha || all.length + any.length === 0 || !token) {
+    console.error(
+      '[require-check] --repo, --sha, --check or --any-check, and GITHUB_TOKEN are required',
+    );
     process.exit(1);
   }
-  let failed = false;
-  for (const checkName of checks) {
-    const { ok, reason } = await requireCheckSuccess({
-      repo: values.repo,
-      sha: values.sha,
-      checkName,
-      token,
-    });
-    if (ok) {
-      console.log(`[require-check] OK — ${reason}`);
-    } else {
-      console.error(`::error title=Required check missing::${reason} (${values.sha})`);
-      failed = true;
-    }
+  const { ok, passed, failures } = await evaluateRequirements({ all, any }, (checkName) =>
+    requireCheckSuccess({ repo: values.repo, sha: values.sha, checkName, token }),
+  );
+  for (const reason of passed) console.log(`[require-check] OK — ${reason}`);
+  for (const reason of failures) {
+    console.error(`::error title=Required check missing::${reason} (${values.sha})`);
   }
-  if (failed) process.exit(1);
+  if (!ok) process.exit(1);
 }

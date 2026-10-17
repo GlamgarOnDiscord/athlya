@@ -12,9 +12,10 @@
     "preview:worker": "opennextjs-cloudflare preview",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json",
     "test": "vitest run",
     "e2e": "playwright test --config e2e/playwright.config.ts",
+    "e2e:release": "playwright test --config e2e/release.config.ts",
     "e2e:install": "playwright install chromium",
     "lighthouse": "node scripts/lighthouse-check.js",
     "clean": "rimraf .next .turbo *.tsbuildinfo"

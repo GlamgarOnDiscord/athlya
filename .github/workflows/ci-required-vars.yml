@@ -8,7 +8,9 @@ name: CI required vars (staging gates)
 # Optional variables are not listed: CANARY_MAX_ERRORS, NEON_DATABASE_NAME,
 # TF_VAR_cloudflare_zone_plan (defaults) and TURBO_TEAM (Turborepo remote
 # cache for ci.yml / build-check.yml; builds run uncached without it).
-# Secrets are environment-scoped and asserted by the workflows that use them.
+# Secrets are environment-scoped and asserted by the workflows that use them;
+# the staging values of the frontend browser release smoke (#422) are also
+# inventoried by the `check-staging-release-smoke` job below.
 
 on:
   schedule:
@@ -29,9 +31,6 @@ jobs:
         env:
           STAGING_API_URL: ${{ vars.STAGING_API_URL }}
           PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
-          STAGING_WEB_URL: ${{ vars.STAGING_WEB_URL }}
-          PRODUCTION_WEB_URL: ${{ vars.PRODUCTION_WEB_URL }}
-          PRODUCTION_STUDIO_URL: ${{ vars.PRODUCTION_STUDIO_URL }}
           K6_STAGING_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
           ZAP_TARGET_URL: ${{ vars.ZAP_TARGET_URL }}
           ZAP_ACTIVE_TARGET_URL: ${{ vars.ZAP_ACTIVE_TARGET_URL }}
@@ -46,17 +45,14 @@ jobs:
           set -euo pipefail
           # name|consumer
           required=(
-            "STAGING_API_URL|staging-gate.yml, deploy-production.yml, canary.yml, deploy-frontend.yml"
-            "PRODUCTION_API_URL|deploy-production.yml, canary.yml, deploy-frontend.yml, rollback.yml"
-            "STAGING_WEB_URL|deploy-frontend.yml"
-            "PRODUCTION_WEB_URL|deploy-frontend.yml"
-            "PRODUCTION_STUDIO_URL|deploy-frontend.yml"
+            "STAGING_API_URL|staging-gate.yml, deploy-production.yml, canary.yml"
+            "PRODUCTION_API_URL|deploy-production.yml, canary.yml, rollback.yml"
             "K6_STAGING_BASE_URL|staging-gate.yml, load-test.yml"
             "ZAP_TARGET_URL|zap-baseline.yml"
             "ZAP_ACTIVE_TARGET_URL|zap-active.yml"
             "SYNTHETIC_TARGET_URL|synthetics.yml"
-            "SENTRY_ORG|canary.yml, deploy-production.yml, deploy-frontend.yml"
-            "SENTRY_PROJECT|canary.yml, deploy-production.yml, deploy-frontend.yml"
+            "SENTRY_ORG|canary.yml, deploy-production.yml"
+            "SENTRY_PROJECT|canary.yml, deploy-production.yml"
             "NEON_PROJECT_ID|preview.yml"
             "CLOUDFLARE_WORKERS_SUBDOMAIN|preview.yml"
             "TF_CLOUD_ORGANIZATION|terraform.yml"
@@ -86,3 +82,61 @@ jobs:
             exit 1
           fi
           echo "All ${#required[@]} required repository variables are set."
+
+  # Issue #422 — the frontend browser release smoke reads environment-scoped
+  # values that the repository-level job above cannot see. Staging only:
+  # production runs the anonymous pass, which needs no credential.
+  check-staging-release-smoke:
+    name: Verify staging release-smoke configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+
+    steps:
+      - name: Assert staging environment values are configured
+        env:
+          WEB_URL: ${{ vars.WEB_URL }}
+          STUDIO_URL: ${{ vars.STUDIO_URL }}
+          API_URL: ${{ vars.API_URL }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+          STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+          STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+          STAGING_SMOKE_ADMIN_EMAIL: ${{ secrets.STAGING_SMOKE_ADMIN_EMAIL }}
+          STAGING_SMOKE_ADMIN_PASSWORD: ${{ secrets.STAGING_SMOKE_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # kind.name|consumer
+          required=(
+            "vars.WEB_URL|deploy-frontend.yml (deploy target + release smoke)"
+            "vars.STUDIO_URL|deploy-frontend.yml (deploy target + release smoke)"
+            "vars.API_URL|deploy-frontend.yml (NEXT_PUBLIC_API_URL + release smoke)"
+            "vars.TURNSTILE_SITE_KEY|deploy-frontend.yml (Turnstile test site key for the release smoke logins)"
+            "secrets.STAGING_SMOKE_EMAIL|deploy-frontend.yml (member flows), staging-gate.yml"
+            "secrets.STAGING_SMOKE_PASSWORD|deploy-frontend.yml (member flows), staging-gate.yml"
+            "secrets.STAGING_SMOKE_ADMIN_EMAIL|deploy-frontend.yml (studio admin flow)"
+            "secrets.STAGING_SMOKE_ADMIN_PASSWORD|deploy-frontend.yml (studio admin flow)"
+          )
+          missing=0
+          {
+            echo "### Staging environment (release smoke)"
+            echo
+            echo "| Value | Status | Used by |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for entry in "${required[@]}"; do
+            name="${entry%%|*}"
+            consumer="${entry#*|}"
+            var="${name#*.}"
+            if [ -z "${!var:-}" ]; then
+              echo "::error::${name} is empty in the staging environment — ${consumer} cannot run"
+              echo "| \`${name}\` | missing | ${consumer} |" >> "$GITHUB_STEP_SUMMARY"
+              missing=$((missing + 1))
+            else
+              echo "| \`${name}\` | set | ${consumer} |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          if [ "${missing}" -ne 0 ]; then
+            echo "${missing} staging value(s) missing. See docs/runbooks/deploy-frontend.md"
+            exit 1
+          fi
+          echo "All ${#required[@]} staging release-smoke values are set."

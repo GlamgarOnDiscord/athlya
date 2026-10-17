@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { evaluateCheckRuns, requireCheckSuccess } from '../require-check-success.mjs';
+import {
+  evaluateCheckRuns,
+  evaluateRequirements,
+  requireCheckSuccess,
+} from '../require-check-success.mjs';
 import { runSmoke } from '../smoke-routes.mjs';
 import { evaluateSoak, resolveSoak } from '../staging-gate-soak.mjs';
 
@@ -202,6 +206,54 @@ describe('requireCheckSuccess', () => {
       fetchImpl: async () => jsonResponse(403),
     });
     assert.equal(result.ok, false);
+  });
+});
+
+describe('evaluateRequirements', () => {
+  const green = new Set(['Staging gate', 'deploy web (staging)']);
+  const check = async (name) => ({ ok: green.has(name), reason: name });
+
+  it('requires every --check', async () => {
+    const result = await evaluateRequirements(
+      { all: ['Staging gate', 'Staging gate (full soak)'], any: [] },
+      check,
+    );
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.failures, ['Staging gate (full soak)']);
+  });
+
+  it('accepts any one --any-check', async () => {
+    const result = await evaluateRequirements(
+      { all: [], any: ['deploy all (staging)', 'deploy web (staging)'] },
+      check,
+    );
+    assert.equal(result.ok, true);
+  });
+
+  it('rejects when no --any-check passed and lists every alternative', async () => {
+    const result = await evaluateRequirements(
+      { all: [], any: ['deploy all (staging)', 'deploy studio (staging)'] },
+      check,
+    );
+    assert.equal(result.ok, false);
+    assert.match(result.failures[0], /deploy all \(staging\); deploy studio \(staging\)/);
+  });
+
+  it('combines both: every --check and one --any-check', async () => {
+    assert.equal(
+      (await evaluateRequirements({ all: ['Staging gate'], any: ['deploy web (staging)'] }, check))
+        .ok,
+      true,
+    );
+    assert.equal(
+      (
+        await evaluateRequirements(
+          { all: ['Staging gate (full soak)'], any: ['deploy web (staging)'] },
+          check,
+        )
+      ).ok,
+      false,
+    );
   });
 });
 

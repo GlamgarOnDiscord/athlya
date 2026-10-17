@@ -27,7 +27,6 @@ const config = [
       'playwright-report/**',
       'next.config.ts',
       'vitest.config.ts',
-      'e2e/**',
       'scripts/**',
     ],
   },
