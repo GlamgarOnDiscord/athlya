@@ -97,6 +97,9 @@ import type { Context } from 'hono';
 /** Problem Details content-type per RFC 9457. */
 const PROBLEM_JSON = 'application/problem+json';
 
+/** Header policy applied to raw limiter responses (see `securityHeaders()`). */
+const SECURITY_HEADER_VALUES: Readonly<Record<string, string>> = buildSecurityHeaders();
+
 /* ------------------------------------------------------------------ */
 /*  Sprint 1 — Slice 1.2 hardening constants                          */
 /* ------------------------------------------------------------------ */
@@ -275,7 +278,7 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
           if (probeResult instanceof Response) {
             // 429 — probe limit reached. The limiter builds a raw
             // Response, which bypasses the headers staged on `c`.
-            return applySecurityHeaders(probeResult, buildSecurityHeaders());
+            return applySecurityHeaders(probeResult, SECURITY_HEADER_VALUES);
           }
         } catch {
           // Fail-open: Redis unavailable, let the probe through with a warn.
@@ -554,11 +557,21 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   const authLimiter = rateLimit({ ipLimit: AUTH_BUDGET.ipLimit, windowSec: AUTH_BUDGET.windowSec });
   const isDevEnv = (env: AthlyaBindings) => env.ENVIRONMENT === 'dev';
 
+  // Limiters answer 429 / 503 with a raw Response, which bypasses the
+  // headers `securityHeaders()` staged on `c`: apply the policy here.
   const guardLimiter = (
     scope: string,
     inner: ReturnType<typeof rateLimit>,
     policy: 'fail-open' | 'fail-closed' | 'fail-closed-soft',
-  ) => guardRateLimiter(scope, inner, policy, false);
+  ): ReturnType<typeof rateLimit> => {
+    const guarded = guardRateLimiter(scope, inner, policy, false);
+    return async (c, next) => {
+      const result = await guarded(c, next);
+      return result instanceof Response
+        ? applySecurityHeaders(result, SECURITY_HEADER_VALUES)
+        : result;
+    };
+  };
 
   const guardLimiterWithDevBypass = (
     scope: string,
@@ -1130,13 +1143,20 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
           `audit_log_${String(d.getFullYear())}_${String(d.getMonth() + 1).padStart(2, '0')}`;
         const currentPartition = fmt(now);
         const nextPartition = fmt(nextMonth);
-        const rows = (await sqlFn(
-          `SELECT table_name AS name
+        // Same 2-second deadline as the other DB probes so a hung
+        // Postgres does not lock up the readiness gate.
+        const rows = (await Promise.race([
+          sqlFn(
+            `SELECT table_name AS name
            FROM information_schema.tables
            WHERE table_schema = 'public'
              AND table_name = ANY($1::text[])`,
-          [[currentPartition, nextPartition]],
-        )) as Array<{ name: string }>;
+            [[currentPartition, nextPartition]],
+          ),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('audit partition check timeout')), 2000),
+          ),
+        ])) as Array<{ name: string }>;
         const found = new Set(rows.map((r) => r.name));
         const missing: string[] = [];
         if (!found.has(currentPartition)) missing.push(currentPartition);

@@ -43,7 +43,6 @@ import type { MessageBatch } from '@cloudflare/workers-types';
 
 export { buildApp, __buildAppInternal } from './app.js';
 export type { BuildAppOptions } from './app.js';
-export { buildBaseApp } from './base-app.js';
 
 /**
  * Singleton gateway instance. Named so domain route registration
