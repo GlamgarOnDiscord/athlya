@@ -137,16 +137,19 @@ destinataire de notification, enqueue d'export (claims tenant), claim + lecture
 par le worker d'export, suppression de compte + événement, cascade RGPD, puis
 les privilèges du drain sous `athlya_cron`.
 
-```bash
-APP_DATABASE_URL="postgresql://athlya_app:...@.../athlya" \
-CRON_DATABASE_URL="postgresql://athlya_cron:...@.../athlya" \
-SMOKE_STUDIO_SLUG="<slug d'un studio existant>" \
+```powershell
+$env:APP_DATABASE_URL = "postgresql://athlya_app:...@.../athlya"
+$env:CRON_DATABASE_URL = "postgresql://athlya_cron:...@.../athlya"
+$env:SMOKE_STUDIO_SLUG = "<slug d'un studio existant>"
 pnpm verify:role-contract
 ```
 
-Prérequis : migrations `0031` → `0035` appliquées. Exit 0 sur staging **et**
-production avant de déclarer le cutover terminé ; le même contrat tourne en CI
-(`pgtap.yml`) sur une base éphémère à chaque changement de migration.
+Prérequis : migrations `0031` → `0035` appliquées. Les **trois** variables sont
+obligatoires : sans `CRON_DATABASE_URL` le script échoue (exit 1) au lieu de
+sauter la vérification du rôle `athlya_cron`. Il échoue aussi si une connexion
+est `SUPERUSER` ou `BYPASSRLS`. Exit 0 sur staging **et** production avant de
+déclarer le cutover terminé ; le même contrat tourne en CI (`pgtap.yml`) sur
+une base éphémère à chaque changement de migration.
 
 ### Sign-off cutover
 

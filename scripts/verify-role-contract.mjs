@@ -6,7 +6,7 @@
  *
  *   athlya_app  (DB_URL)       register → login lookup → notification
  *                              recipient → member export enqueue (tenant
- *                              GUCs) → worker claim + data → account
+ *                              GUCs) → worker claim + data + complete → account
  *                              deletion with its event → RGPD cascade
  *   athlya_cron (CRON_DB_URL)  leased outbox claim privileges
  *
@@ -16,7 +16,8 @@
  *   SMOKE_STUDIO_SLUG=<existing studio slug> \
  *   node scripts/verify-role-contract.mjs
  *
- * Exit 0 = every workload works under its least-privilege role.
+ * All three variables are required; a superuser or BYPASSRLS connection
+ * fails the contract. Exit 0 = every workload works under its least-privilege role.
  * See docs/runbooks/db-role-switch.md.
  */
 
@@ -38,6 +39,8 @@ export const REQUIRED_FUNCTIONS = [
   'rgpd_delete_idempotency_keys',
   'rgpd_restamp_user_deleted',
   'export_job_claim',
+  'export_job_complete',
+  'export_job_fail',
   'export_job_get',
   'export_job_profile',
   'export_job_rows',
@@ -65,23 +68,25 @@ async function rolledBack(sql, fn) {
 
 async function assertNoBypass(sql, expectedRole, log) {
   const [row] = await sql`
-    SELECT current_user::text AS name, rolbypassrls AS bypass
+    SELECT current_user::text AS name, rolbypassrls AS bypass, rolsuper AS super
       FROM pg_roles WHERE rolname = current_user
   `;
   check(row !== undefined, 'could not resolve current_user');
+  check(row.super === false, `${row.name} is a superuser (bypasses RLS) — wrong connection string`);
   check(row.bypass === false, `${row.name} has BYPASSRLS — wrong connection string`);
   if (expectedRole !== undefined) {
     check(row.name === expectedRole, `connected as ${row.name}, expected ${expectedRole}`);
   }
-  log(`connected as ${row.name} (no BYPASSRLS)`);
+  log(`connected as ${row.name} (no SUPERUSER, no BYPASSRLS)`);
 }
 
 /**
- * @param {{ app: import('postgres').Sql, cron?: import('postgres').Sql,
+ * @param {{ app: import('postgres').Sql, cron: import('postgres').Sql,
  *           studioSlug: string, log?: (m: string) => void }} options
  */
 export async function runRoleContract({ app, cron, studioSlug, log = console.log }) {
   const ok = (m) => log(`[role-contract] OK: ${m}`);
+  check(cron !== undefined, 'CRON_DATABASE_URL is required: the drainer role must be verified');
 
   await assertNoBypass(app, 'athlya_app', ok);
 
@@ -159,6 +164,15 @@ export async function runRoleContract({ app, cron, studioSlug, log = console.log
     await tx`SELECT * FROM export_job_rows(${jobId}::uuid, 'reservations', NULL, 10)`;
     ok('export worker claims the job and reads its data without claims');
 
+    const [done] = await tx`
+      SELECT export_job_complete(${jobId}::uuid, 'https://role-contract.invalid/export.zip',
+                                 now() + interval '1 hour') AS ok
+    `;
+    check(done.ok === true, 'export worker could not complete the claimed job');
+    const [failed] = await tx`SELECT export_job_fail(${jobId}::uuid, 'role contract') AS ok`;
+    check(failed.ok === false, 'export_job_fail changed a completed job');
+    ok('export worker completes the job; fail leaves a finished job untouched');
+
     const deleted = {
       id: randomUUID(),
       type: 'auth.user.deleted',
@@ -180,11 +194,6 @@ export async function runRoleContract({ app, cron, studioSlug, log = console.log
     ok('RGPD cascade functions run for the deleted account');
   });
   ok('app workloads rolled back — nothing persisted');
-
-  if (cron === undefined) {
-    log('[role-contract] SKIP: CRON_DATABASE_URL not set — drainer role not verified');
-    return { cronVerified: false };
-  }
 
   await assertNoBypass(cron, 'athlya_cron', ok);
   await rolledBack(cron, async (tx) => {
@@ -208,15 +217,16 @@ export async function runRoleContract({ app, cron, studioSlug, log = console.log
     await tx`SELECT count(*)::int AS n FROM outbox WHERE published_at IS NULL`;
   });
   ok('drainer: leased claim, publish stamp and backlog count privileges');
-  return { cronVerified: true };
 }
 
 if (import.meta.main) {
   const appUrl = process.env.APP_DATABASE_URL ?? '';
   const cronUrl = process.env.CRON_DATABASE_URL ?? '';
   const studioSlug = process.env.SMOKE_STUDIO_SLUG ?? '';
-  if (appUrl === '' || studioSlug === '') {
-    console.error('[role-contract] APP_DATABASE_URL and SMOKE_STUDIO_SLUG are required');
+  if (appUrl === '' || cronUrl === '' || studioSlug === '') {
+    console.error(
+      '[role-contract] APP_DATABASE_URL, CRON_DATABASE_URL and SMOKE_STUDIO_SLUG are required',
+    );
     process.exit(1);
   }
   // `postgres` is a dependency of @athlya/db, not of the workspace root.
@@ -225,8 +235,7 @@ if (import.meta.main) {
   const fromDb = createRequire(new URL('../packages/db/package.json', import.meta.url));
   const { default: postgres } = await import(pathToFileURL(fromDb.resolve('postgres')).href);
   const app = postgres(appUrl, { max: 1, prepare: false, onnotice: () => {} });
-  const cron =
-    cronUrl === '' ? undefined : postgres(cronUrl, { max: 1, prepare: false, onnotice: () => {} });
+  const cron = postgres(cronUrl, { max: 1, prepare: false, onnotice: () => {} });
   try {
     await runRoleContract({ app, cron, studioSlug });
     console.log('[role-contract] all checks passed');
@@ -235,6 +244,6 @@ if (import.meta.main) {
     process.exitCode = 1;
   } finally {
     await app.end({ timeout: 2 });
-    await cron?.end({ timeout: 2 });
+    await cron.end({ timeout: 2 });
   }
 }
