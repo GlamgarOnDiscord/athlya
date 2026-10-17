@@ -127,7 +127,7 @@ jobs:
         run: |
           set -euo pipefail
           node packages/db/scripts/migrate.mjs
-          VERSION="${GITHUB_SHA}"
+          VERSION="${GITHUB_SHA:0:7}"
           pnpm --filter @athlya/api exec wrangler deploy --env staging --var "VERSION:${VERSION}" --outdir dist
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env staging --var "VERSION:${VERSION}"
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env staging --var "VERSION:${VERSION}"

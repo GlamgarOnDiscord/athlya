@@ -186,7 +186,7 @@ jobs:
           STAGING_API_URL: ${{ vars.STAGING_API_URL }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_SHA}"
+          VERSION="${GITHUB_SHA:0:7}"
           # Issue #333 — sub-workers FIRST, gateway LAST.
           #
           # The old order (gateway → sub-workers) causes 100% failure on routes
@@ -231,7 +231,7 @@ jobs:
           PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_SHA}"
+          VERSION="${GITHUB_SHA:0:7}"
           # Issue #333 — sub-workers FIRST, gateway LAST (same rationale as
           # staging above). Sub-workers are backwards-compatible per the
           # expand/contract pattern (CLAUDE.md); the old gateway routes to
@@ -284,7 +284,7 @@ jobs:
             echo "::error::dist/ not produced by wrangler deploy --outdir dist"
             exit 1
           fi
-          RELEASE="${GITHUB_SHA}"
+          RELEASE="${GITHUB_SHA:0:7}"
           ENV_NAME="${DEPLOY_ENV_NAME}"
           # Pinned CLI (devDependency @sentry/cli, exact version) invoked
           # through pnpm so CI runs a lockfile-reviewed artifact rather

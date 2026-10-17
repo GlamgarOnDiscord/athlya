@@ -52,6 +52,22 @@ production state are always isolated.
 4. Uncomment the `backend "s3" {}` block in `infra/terraform/versions.tf`.
 5. Add the AWS env vars to `.github/workflows/terraform.yml`.
 
+## Required secrets
+
+Set these in **both** the `staging` and `production` GitHub Environments.
+`.github/workflows/terraform.yml` passes each one to Terraform as an env var.
+
+| Secret                         | Purpose                                                    |
+| ------------------------------ | ---------------------------------------------------------- |
+| `TF_VAR_cloudflare_api_token`  | Cloudflare API token (Workers, Queues, R2, WAF)            |
+| `TF_VAR_cloudflare_account_id` | Cloudflare account ID                                      |
+| `TF_VAR_cloudflare_zone_id`    | Cloudflare zone ID for athlya.app                          |
+| `TF_VAR_sentry_auth_token`     | Sentry API auth token (metric alerts)                      |
+| `TF_VAR_sentry_org`            | Sentry organisation slug                                   |
+| `TF_VAR_sentry_project`        | Sentry project slug                                        |
+| `TF_VAR_sentry_alert_team_id`  | Numeric id of the Sentry team emailed by the metric alerts |
+| `TF_TOKEN_app_terraform_io`    | HCP Terraform API token (remote state, Option A)           |
+
 ## Plan → apply workflow
 
 ```bash

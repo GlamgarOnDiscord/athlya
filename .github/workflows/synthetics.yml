@@ -119,12 +119,14 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+          # No checkout in this job, so gh needs the repository explicitly.
+          export GH_REPO="${GITHUB_REPOSITORY}"
           TITLE="[incident] API health check failed — $(date -u +%Y-%m-%dT%H:%MZ)"
 
-          # The labels may not exist yet (#501); create them so the incident
-          # issue can always be opened.
-          gh label create incident --color B60205 --description "Production incident" 2>/dev/null || true
-          gh label create synthetics --color 5319E7 --description "Raised by the external synthetic monitor" 2>/dev/null || true
+          # The labels may not exist yet (#501); --force creates or updates
+          # them so the incident issue can always be opened.
+          gh label create incident --force --color B60205 --description "Production incident"
+          gh label create synthetics --force --color 5319E7 --description "Raised by the external synthetic monitor"
 
           # Do not re-open if a recent unresolved incident issue already exists.
           EXISTING=$(gh issue list --label incident --label synthetics --state open --limit 1 --json number --jq '.[0].number // ""')

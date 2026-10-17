@@ -17,6 +17,7 @@ name: Terraform
 #   TF_VAR_sentry_auth_token      — Sentry API auth token (metric alerts)
 #   TF_VAR_sentry_org             — Sentry organisation slug
 #   TF_VAR_sentry_project         — Sentry project slug
+#   TF_VAR_sentry_alert_team_id   — Sentry team id notified by metric alerts
 #
 # Remote state (HCP Terraform / Terraform Cloud):
 #   TF_TOKEN_app_terraform_io     — HCP Terraform API token
@@ -75,6 +76,7 @@ jobs:
       TF_VAR_sentry_auth_token: ${{ secrets.TF_VAR_sentry_auth_token }}
       TF_VAR_sentry_org: ${{ secrets.TF_VAR_sentry_org }}
       TF_VAR_sentry_project: ${{ secrets.TF_VAR_sentry_project }}
+      TF_VAR_sentry_alert_team_id: ${{ secrets.TF_VAR_sentry_alert_team_id }}
       TF_VAR_environment: ${{ inputs.environment || 'staging' }}
       # HCP Terraform remote state token (see versions.tf backend block).
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_app_terraform_io }}
