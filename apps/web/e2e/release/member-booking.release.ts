@@ -51,7 +51,8 @@ test.afterEach(async () => {
   const { API_URL } = requireEnv(['API_URL']);
   const res = await cancelReservation(API_URL, pending).catch(() => null);
   if (res === null || ![200, 204].includes(res.status())) {
-    console.error(
+    // Fail the run: a seat left behind must not pass silently.
+    throw new Error(
       `[release-smoke] could not cancel reservation ${pending.reservationId} ` +
         `(HTTP ${String(res?.status() ?? 'network error')}); cancel it manually`,
     );

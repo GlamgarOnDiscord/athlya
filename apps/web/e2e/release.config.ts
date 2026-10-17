@@ -5,8 +5,8 @@
  * stubs), this config starts no server and stubs nothing: it drives the
  * deployed Worker at `WEB_URL`, which talks to the real API.
  *
- * Scope (`RELEASE_SMOKE_SCOPE`):
- *  - `full` (default, staging): every spec. Requires `API_URL`,
+ * Scope (`RELEASE_SMOKE_SCOPE`, required, no default):
+ *  - `full` (staging): every spec. Requires `API_URL`,
  *    `SMOKE_EMAIL` and `SMOKE_PASSWORD`.
  *  - `public` (production): anonymous specs only. `@turnstile` specs
  *    submit a Turnstile-protected form, which only a staging deployment
@@ -15,7 +15,7 @@
  * A missing variable aborts the run before any test starts.
  *
  * Run:
- *   WEB_URL=… API_URL=… SMOKE_EMAIL=… SMOKE_PASSWORD=… \
+ *   RELEASE_SMOKE_SCOPE=full WEB_URL=… API_URL=… SMOKE_EMAIL=… SMOKE_PASSWORD=… \
  *     pnpm --filter @athlya/web e2e:release
  */
 import { defineConfig } from '@playwright/test';

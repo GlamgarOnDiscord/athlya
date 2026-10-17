@@ -83,7 +83,8 @@ test.afterEach(async () => {
   const { API_URL } = requireEnv(['API_URL']);
   const status = await deleteClass(API_URL, pending).catch(() => 0);
   if (status !== 204 && status !== 404) {
-    console.error(
+    // Fail the run: a class left behind must not pass silently.
+    throw new Error(
       `[release-smoke] could not delete class ${pending.classId} (HTTP ${String(status)}); ` +
         'the next run sweeps it, or delete it manually',
     );

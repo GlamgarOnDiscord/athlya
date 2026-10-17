@@ -98,6 +98,7 @@ jobs:
           WEB_URL: ${{ vars.WEB_URL }}
           STUDIO_URL: ${{ vars.STUDIO_URL }}
           API_URL: ${{ vars.API_URL }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
           STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
           STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
           STAGING_SMOKE_ADMIN_EMAIL: ${{ secrets.STAGING_SMOKE_ADMIN_EMAIL }}
@@ -109,6 +110,7 @@ jobs:
             "vars.WEB_URL|deploy-frontend.yml (deploy target + release smoke)"
             "vars.STUDIO_URL|deploy-frontend.yml (deploy target + release smoke)"
             "vars.API_URL|deploy-frontend.yml (NEXT_PUBLIC_API_URL + release smoke)"
+            "vars.TURNSTILE_SITE_KEY|deploy-frontend.yml (Turnstile test site key for the release smoke logins)"
             "secrets.STAGING_SMOKE_EMAIL|deploy-frontend.yml (member flows), staging-gate.yml"
             "secrets.STAGING_SMOKE_PASSWORD|deploy-frontend.yml (member flows), staging-gate.yml"
             "secrets.STAGING_SMOKE_ADMIN_EMAIL|deploy-frontend.yml (studio admin flow)"

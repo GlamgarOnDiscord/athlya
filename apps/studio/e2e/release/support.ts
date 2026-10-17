@@ -14,22 +14,30 @@ import { expect, type Locator, type Response } from '@playwright/test';
  */
 export type ReleaseScope = 'full' | 'public';
 
+/** No default: a run that forgets the scope must not pick one silently. */
 export function releaseScope(): ReleaseScope {
-  const raw = process.env['RELEASE_SMOKE_SCOPE'] ?? 'full';
+  const raw = process.env['RELEASE_SMOKE_SCOPE'];
   if (raw !== 'full' && raw !== 'public') {
-    throw new Error(`RELEASE_SMOKE_SCOPE must be "full" or "public", got "${raw}"`);
+    throw new Error(`RELEASE_SMOKE_SCOPE must be "full" or "public", got "${raw ?? ''}"`);
   }
   return raw;
 }
 
-/** Reads required variables, failing with every missing name at once. */
+/**
+ * Reads required variables, failing with every missing name at once.
+ * Only `*_URL` values are normalised (trimmed, trailing slashes removed);
+ * credentials are returned exactly as configured.
+ */
 export function requireEnv<const K extends string>(names: readonly K[]): Record<K, string> {
   const missing = names.filter((name) => (process.env[name] ?? '').trim() === '');
   if (missing.length > 0) {
     throw new Error(`Release smoke: missing ${missing.join(', ')}`);
   }
   return Object.fromEntries(
-    names.map((name) => [name, (process.env[name] ?? '').trim().replace(/\/+$/u, '')]),
+    names.map((name) => {
+      const value = process.env[name] ?? '';
+      return [name, name.endsWith('_URL') ? value.trim().replace(/\/+$/u, '') : value];
+    }),
   ) as Record<K, string>;
 }
 

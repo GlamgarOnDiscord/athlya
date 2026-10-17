@@ -25,15 +25,15 @@ Issue #422. Both Next.js 16 apps ship as **Cloudflare Workers built by OpenNext*
 
 ## Prerequisites (per GitHub environment `staging` / `production`)
 
-| Kind   | Name                    | Notes                                       |
-| ------ | ----------------------- | ------------------------------------------- |
-| secret | `CLOUDFLARE_API_TOKEN`  | Workers Scripts:Edit                        |
-| secret | `CLOUDFLARE_ACCOUNT_ID` |                                             |
-| var    | `WEB_URL`               | e.g. `https://staging.athlya.app`           |
-| var    | `STUDIO_URL`            | e.g. `https://staging.studio.athlya.app`    |
-| var    | `API_URL`               | e.g. `https://staging.api.athlya.app`       |
-| var    | `TURNSTILE_SITE_KEY`    | optional (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`) |
-| var    | `CSP_REPORT_URI`        | optional (`NEXT_PUBLIC_CSP_REPORT_URI`)     |
+| Kind   | Name                    | Notes                                                             |
+| ------ | ----------------------- | ----------------------------------------------------------------- |
+| secret | `CLOUDFLARE_API_TOKEN`  | Workers Scripts:Edit                                              |
+| secret | `CLOUDFLARE_ACCOUNT_ID` |                                                                   |
+| var    | `WEB_URL`               | e.g. `https://staging.athlya.app`                                 |
+| var    | `STUDIO_URL`            | e.g. `https://staging.studio.athlya.app`                          |
+| var    | `API_URL`               | e.g. `https://staging.api.athlya.app`                             |
+| var    | `TURNSTILE_SITE_KEY`    | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`; required on staging (see below) |
+| var    | `CSP_REPORT_URI`        | optional (`NEXT_PUBLIC_CSP_REPORT_URI`)                           |
 
 Browser release smoke, **staging environment only** (production runs the
 anonymous pass, which needs no credential):
@@ -47,15 +47,19 @@ anonymous pass, which needs no credential):
 | var    | `TURNSTILE_SITE_KEY`           | Cloudflare test site key `1x00000000000000000000AA` on staging |
 
 The workflow fails before building when a required value is missing; on a
-staging deploy that includes the smoke credentials of the selected apps.
+staging deploy that includes the smoke credentials of the selected apps and
+`TURNSTILE_SITE_KEY` (without it the forms send no Turnstile token and the API
+refuses every login).
 `ci-required-vars.yml` (job _Verify staging release-smoke configuration_)
 inventories the staging values weekly.
 
 Staging data the flows rely on:
 
 - the member smoke account belongs to a studio that has **at least one class
-  with a free seat in the next 14 days, starting more than 3 h ahead** (the web
-  list shows 14 days; the API refuses cancellations less than 2 h before start);
+  with a free seat in the next 14 days that the smoke account has not booked,
+  starting more than 3 h ahead** (the web list shows 14 days; the API refuses
+  cancellations less than 2 h before start; a class the account already holds
+  answers 409 and is skipped);
 - the admin smoke account is `admin` of a studio (the smoke studio is fine);
 - the staging API runs the Turnstile **test secret**
   (`1x0000000000000000000000000000000AA`) so the dummy token the test site key
@@ -96,12 +100,12 @@ Clean-up and idempotency:
 - the web app has no cancel button yet: the reservation booked through the UI is
   cancelled through `DELETE /v1/reservations/:id` with the session the login form
   produced. An `afterEach` hook cancels it again when a later step failed or timed
-  out; a class the account already holds (409, e.g. a concurrent staging gate) is
-  skipped and left to its owner;
+  out, and fails the run if that cancel fails too; a class the account already
+  holds (409, e.g. a concurrent staging gate) is skipped and left to its owner;
 - the studio class is created 100 days ahead (outside the 14-day member list and the
   staging gate's 90-day booking window) and deleted through the UI; `afterEach`
-  deletes it through the API on failure, and each run first sweeps `Release smoke *`
-  classes a killed run left behind;
+  deletes it through the API on failure (and fails the run if it cannot), and each
+  run first sweeps `Release smoke *` classes a killed run left behind;
 - the reset request goes to a per-run sub-address of the smoke mailbox, not to the
   account address: the API allows 3 reset requests per address per 24 h, and the
   sub-address matches no account, so no token is created and no email is sent while
@@ -120,13 +124,14 @@ pnpm --filter @athlya/shared build
 NEXT_PUBLIC_API_URL=https://staging.api.athlya.app pnpm --filter @athlya/web build:worker
 pnpm --filter @athlya/web exec wrangler deploy --env staging
 WEB_URL=https://staging.athlya.app node scripts/smoke-frontend.mjs
-WEB_URL=https://staging.athlya.app API_URL=https://staging.api.athlya.app \
+RELEASE_SMOKE_SCOPE=full WEB_URL=https://staging.athlya.app API_URL=https://staging.api.athlya.app \
   SMOKE_EMAIL=… SMOKE_PASSWORD=… pnpm --filter @athlya/web e2e:release
-STUDIO_URL=https://staging.studio.athlya.app API_URL=https://staging.api.athlya.app \
+RELEASE_SMOKE_SCOPE=full STUDIO_URL=https://staging.studio.athlya.app API_URL=https://staging.api.athlya.app \
   SMOKE_ADMIN_EMAIL=… SMOKE_ADMIN_PASSWORD=… pnpm --filter @athlya/studio e2e:release
 ```
 
-A missing variable makes the release config throw before any test runs.
+A missing variable, including `RELEASE_SMOKE_SCOPE` (it has no default), makes the
+release config throw before any test runs.
 
 ## Rollback
 
