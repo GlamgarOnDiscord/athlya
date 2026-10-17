@@ -10,8 +10,9 @@
  *     requests in one isolate never share the continent used for EU
  *     read-replica routing (issue #303),
  *   • the outbox kick scope (issue #311): a request whose handler wrote
- *     an outbox row enqueues one `outbox.kick` after it returns, so the
- *     gateway drains it without waiting for the cron.
+ *     an outbox row enqueues an `outbox.kick` after it returns (coalesced
+ *     per isolate, see `OutboxKickCoalescer`), so the gateway drains it
+ *     without waiting for the cron.
  *
  * Returns a resolver that runs `build` against the captured env and the
  * current request's `cf`. Callers wrap it in the lazy facades of

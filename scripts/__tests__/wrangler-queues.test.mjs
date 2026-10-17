@@ -25,13 +25,19 @@ queue = "not-a-binding"
 
 [[env.production.queues.producers]]
 queue = "athlya-outbox-kick"
+
+[[env.production.queues.consumers]]
+queue = 'athlya-single-quoted'
 `;
   assert.deepEqual(queuesForEnv(toml, 'staging'), [
     'athlya-events-staging',
     'athlya-events-staging-dlq',
     'athlya-outbox-kick-staging',
   ]);
-  assert.deepEqual(queuesForEnv(toml, 'production'), ['athlya-outbox-kick']);
+  assert.deepEqual(queuesForEnv(toml, 'production'), [
+    'athlya-outbox-kick',
+    'athlya-single-quoted',
+  ]);
 });
 
 test('every Worker that writes outbox rows declares the kick producer (issue #311)', () => {

@@ -10,7 +10,7 @@
  */
 
 const TABLE_HEADER = /^\s*\[\[?([^\]]+)\]\]?\s*(#.*)?$/;
-const QUEUE_KEY = /^\s*(queue|dead_letter_queue)\s*=\s*"([^"]+)"/;
+const QUEUE_KEY = /^\s*(queue|dead_letter_queue)\s*=\s*(?:"([^"]+)"|'([^']+)')/;
 
 /**
  * @param {string} toml   Wrangler config text.
@@ -31,7 +31,7 @@ export function queuesForEnv(toml, env) {
     }
     if (!inQueueTable) continue;
     const key = QUEUE_KEY.exec(line);
-    if (key !== null) names.add(key[2]);
+    if (key !== null) names.add(key[2] ?? key[3]);
   }
   return [...names].sort();
 }

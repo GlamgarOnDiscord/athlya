@@ -209,7 +209,8 @@ Platform limits to verify in the load test:
   per-invocation subrequest limit of the account's plan. A full cron cycle can
   issue 25 000 sends. If the plan's limit is lower, sends past it fail and the
   cycle stops on the first fully failed batch. Lower `OUTBOX_DRAIN_BATCH_SIZE`
-  or `DRAIN_MAX_ROUNDS` to fit. Moving to `sendBatch` (100 messages per call)
+  (a deploy var) to fit. Lowering `DRAIN_MAX_ROUNDS` is a code change: it is
+  a constant in `drain-scheduled.ts`. Moving to `sendBatch` (100 messages per call)
   is the follow-up.
 - Queue write throughput per queue.
 

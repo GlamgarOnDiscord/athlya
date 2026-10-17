@@ -68,7 +68,10 @@ describe('claimLeasedBatch on Postgres (issues #311 / #424)', () => {
     ]);
   });
 
-  it('never hands the same row to a kick drain and the cron drain (issue #311)', async () => {
+  // PGlite runs on one connection, so the two claims below execute one after
+  // the other: this checks the lease filter (a second drain skips rows the
+  // first one leased), not a row-lock race between two connections.
+  it('does not hand rows leased by one drain to a second drain (issue #311)', async () => {
     await handle.pglite.exec(`
       INSERT INTO outbox (event_id, event_type, payload, occurred_at)
       SELECT 'evt-burst-' || g, 'reservation.reminder', '{}', now() - make_interval(secs => g)

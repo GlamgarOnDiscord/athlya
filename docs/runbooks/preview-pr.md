@@ -133,7 +133,8 @@ PR closed (merged or abandoned)
        │
        ▼
 wrangler delete --name athlya-api-pr-{N}
-Delete per-PR queues: athlya-events-*-preview-pr-{N}* (6 queues)
+Delete per-PR queues: athlya-events-preview-pr-{N}* and
+  athlya-events-*-preview-pr-{N}* (6 queues)
   + athlya-outbox-kick-preview-pr-{N}
 Delete Neon branch "preview-pr-{N}"
 Flush Redis keys "pr-{N}:*"

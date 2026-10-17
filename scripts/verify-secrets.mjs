@@ -248,7 +248,11 @@ if (import.meta.main) {
   }
 
   const existingQueues = listQueues();
-  if (existingQueues === null) {
+  if (declaredQueues(env).size === 0) {
+    // A config the scanner cannot read must not pass as "all queues exist".
+    console.error(`[verify-secrets] MISSING queue bindings: none parsed for --env ${env}`);
+    anyMissing = true;
+  } else if (existingQueues === null) {
     anyMissing = true;
   } else {
     const missingQueues = [...declaredQueues(env)].filter((name) => !existingQueues.has(name));
@@ -264,8 +268,7 @@ if (import.meta.main) {
 
   if (anyMissing) {
     console.error(
-      '[verify-secrets] One or more secrets are missing. Run: wrangler secret put <NAME> [-c <wrangler config>] --env ' +
-        env,
+      `[verify-secrets] One or more checks failed — see the MISSING lines above. Missing secret: wrangler secret put <NAME> [-c <wrangler config>] --env ${env}. Missing queue: wrangler queues create <name>.`,
     );
     process.exit(1);
   }

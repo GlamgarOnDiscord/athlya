@@ -544,7 +544,7 @@ describe('configurable batch size (issue #311)', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('defaults the backlog batch to 500 events', () => {
-    expect(ADAPTIVE_BATCH_SIZE).toBeGreaterThanOrEqual(500);
+    expect(ADAPTIVE_BATCH_SIZE).toBe(500);
     expect(resolveConfiguredBatchSize(undefined)).toBe(ADAPTIVE_BATCH_SIZE);
     expect(resolveConfiguredBatchSize(' ')).toBe(ADAPTIVE_BATCH_SIZE);
   });
@@ -714,7 +714,11 @@ describe('runKickDrain (issue #311)', () => {
     );
     expect(log).toHaveBeenCalledWith(
       'outbox.drain_cycle',
-      expect.objectContaining({ trigger: 'kick', succeeded: 1 }),
+      expect.objectContaining({
+        trigger: 'kick',
+        succeeded: 1,
+        deadlineMs: KICK_DRAIN_DEADLINE_MS,
+      }),
     );
     expect(log).not.toHaveBeenCalledWith('outbox.backlog', expect.anything());
   });

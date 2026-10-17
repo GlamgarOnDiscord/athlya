@@ -426,7 +426,15 @@ export async function runScheduledDrain(
     if (round.processed < batchSize || round.succeeded === 0 || round.released > 0) break;
   }
   const durationMs = Date.now() - startedAt;
-  emitOutboxDrainCycleMetric(durationMs, result, batchSize, logger, rounds, trigger);
+  emitOutboxDrainCycleMetric(
+    durationMs,
+    result,
+    batchSize,
+    logger,
+    rounds,
+    trigger,
+    cycleDeadlineMs,
+  );
 
   // Overlap guard: a drain slower than the warn threshold risks
   // colliding with the next cron tick. SKIP LOCKED keeps that safe,
@@ -519,6 +527,7 @@ export function emitOutboxDrainCycleMetric(
   logger?: Logger,
   rounds = 1,
   trigger: DrainTrigger = 'cron',
+  deadlineMs = DRAIN_CYCLE_DEADLINE_MS,
 ): void {
   const meta = {
     metric: 'outbox_drain_cycle',
@@ -532,7 +541,7 @@ export function emitOutboxDrainCycleMetric(
     released: result.released,
     batchSize,
     concurrency: DRAIN_SEND_CONCURRENCY,
-    deadlineMs: trigger === 'kick' ? KICK_DRAIN_DEADLINE_MS : DRAIN_CYCLE_DEADLINE_MS,
+    deadlineMs,
   };
   console.log('outbox.drain_cycle', meta);
   logger?.info('outbox drain: cycle', meta);

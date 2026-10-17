@@ -188,7 +188,7 @@ export async function applyStripeEvent(
     sql`SELECT billing_apply_stripe_event(${event.id}, ${event.type}, ${JSON.stringify(effect)}::jsonb) AS applied`,
   );
   if (rows[0]?.applied !== true) return 'duplicate';
-  noteOutboxWrite(effect.event?.type);
+  if (effect.event !== null) noteOutboxWrite(effect.event.type);
   return 'applied';
 }
 
