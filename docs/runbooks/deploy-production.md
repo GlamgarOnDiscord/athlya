@@ -27,11 +27,40 @@ Checklist : `node scripts/verify-deploy-production-checklist.mjs`
 
 ## Gate staging obligatoire (issue #343)
 
-`production-deploy` et `production-canary` refusent de démarrer si le check
-**Staging gate** n'a pas réussi sur le même commit
-(`scripts/require-check-success.mjs`). Le workflow `staging-gate.yml` tourne
-sur chaque PR vers `master` et sur chaque push sur `master` ; il **échoue**
-(au lieu de sauter) quand un prérequis manque, sauf pour les PR de forks.
+`production-deploy` et `production-canary` refusent de démarrer si les checks
+**Staging gate** et **Staging gate (full soak)** n'ont pas tous deux réussi
+sur le même commit (`scripts/require-check-success.mjs --check … --check …`).
+Le workflow `staging-gate.yml` tourne sur chaque PR vers `master` et sur
+chaque push sur `master` ; il **échoue** (au lieu de sauter) quand un
+prérequis manque, sauf pour les PR de forks et les runs Dependabot.
+
+### Durée du soak k6
+
+L'issue #343 exige un soak de **10 minutes** avant la production. Le lancer
+sur chaque PR bloquerait l'environnement staging partagé 10+ minutes par push,
+d'où la répartition (`scripts/staging-gate-soak.mjs`) :
+
+| Déclencheur         | Soak k6                                     | Preuve de release ? |
+| ------------------- | ------------------------------------------- | ------------------- |
+| `pull_request`      | 2 min                                       | non                 |
+| push sur `master`   | 10 min (toujours)                           | oui                 |
+| `workflow_dispatch` | input `soak_duration` (défaut `10m`, ≤ 30m) | oui si ≥ 10 min     |
+
+Le soak complet est prouvé par la durée mesurée par k6
+(`state.testRunDurationMs` du résumé `k6-book-class-summary.json`, uploadé
+dans l'artifact `k6-staging-gate-summary`), pas par la durée demandée. Seul
+un run prouvé ≥ 10 min déclenche le job **Staging gate (full soak)** ; sur
+une PR ou un run manuel plus court, ce job est `skipped`, et un run `skipped`
+ne compte ni pour ni contre (la vérification ne retient que le dernier run
+terminé non sauté). Un commit qui n'a passé que le soak de PR ne peut donc
+pas partir en production : relancer le workflow sur ce commit
+(`gh workflow run staging-gate.yml --ref master`) si le push n'a pas produit
+le check (run en attente remplacé par un plus récent dans le groupe
+`staging-environment`, par exemple).
+
+Le job `staging-gate` a un timeout de 60 min ; un push sur `master` occupe
+staging environ 15 min (déploiement, smoke, migrations, soak), les runs de PR
+attendent leur tour dans le groupe de concurrence.
 
 Prérequis du gate (environnement GitHub `staging`) :
 
@@ -54,6 +83,27 @@ log indique l'id de la réservation à annuler manuellement.
 `STAGING_SMOKE_TURNSTILE_TOKEN` n'est utile qu'avec la clé secrète Turnstile
 de test de Cloudflare sur staging : un vrai token expire et ne sert qu'une
 fois, il ne peut donc pas être stocké en secret.
+
+### Secrets Worker vérifiés (`scripts/verify-secrets.mjs`)
+
+La sous-vérification 1 du gate (et `staging-deploy` / `production-deploy`)
+liste les secrets de chaque Worker via `wrangler secret list`. Chaque Worker
+a ses propres secrets (aucun héritage entre configs wrangler) :
+
+| Worker (config)                             | Requis (staging + production)                                                                                                                                                                                                         | Production uniquement                 |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| gateway (`wrangler.toml`)                   | `DB_URL`, `REDIS_*`, JWT, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO`, `BILLING_REDIRECT_URL`, `BILLING_DB_URL`, `CRON_DB_URL`, `TURNSTILE_SECRET`, `CORS_ORIGIN`, `RESEND_API_KEY`, `EXPORT_URL_SIGNING_KEY` | `SENTRY_DSN`, `OTEL_*`, `CF_ACCESS_*` |
+| auth (`wrangler.auth.toml`)                 | `DB_URL`, `REDIS_*`, JWT, `CORS_ORIGIN`, `TURNSTILE_SECRET`, `RESEND_API_KEY`                                                                                                                                                         | `SENTRY_DSN`, `OTEL_*`                |
+| reservations (`wrangler.reservations.toml`) | `DB_URL`, `REDIS_*`, JWT, `CORS_ORIGIN`, `EXPORT_URL_SIGNING_KEY`                                                                                                                                                                     | `SENTRY_DSN`, `OTEL_*`                |
+| billing (`wrangler.billing.toml`)           | `DB_URL`, `REDIS_*`, JWT, `CORS_ORIGIN`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO`, `BILLING_REDIRECT_URL`, `BILLING_DB_URL`                                                                                | `SENTRY_DSN`, `OTEL_*`, `CF_ACCESS_*` |
+
+JWT = `JWT_KID`, `JWT_PRIVATE_KEY_PEM`, `JWT_PUBLIC_KEY_PEM`, `JWKS_JSON`,
+`JWT_JWKS_URL`. Le gateway garde une copie des secrets Stripe/billing pour le
+fallback `*.workers.dev` (voir `stripe-production.md`). Le billing Worker sert
+`/admin/*`, d'où `CF_ACCESS_*` en production. Les en-têtes `# Secrets` des
+configs wrangler des sub-workers donnent la même liste ;
+`scripts/__tests__/verify-secrets.test.mjs` échoue si les deux divergent ou si
+un secret vérifié par `assertRequiredSecrets()` manque.
 
 ## Local (ops)
 

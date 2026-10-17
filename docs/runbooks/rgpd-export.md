@@ -6,13 +6,13 @@ signed link `GET /v1/members/me/export/:jobId/download?exp&sig`.
 
 ## Prerequisites per environment
 
-| Item                     | Where                                                    | Notes                                                                      |
-| ------------------------ | -------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Migrations `0032`–`0034` | Neon (migration role), in order                          | Service functions, auth events, export runtime. Apply **before** deploy.   |
-| `EXPORTS_BUCKET`         | `wrangler r2 bucket create athlya-exports-{env}` + toml  | Private bucket. No public access, no custom domain.                        |
-| `EXPORT_URL_SIGNING_KEY` | `wrangler secret put EXPORT_URL_SIGNING_KEY --env <env>` | ≥ 32 random chars (`openssl rand -base64 48`). Rotation invalidates links. |
-| `API_PUBLIC_URL`         | `[env.<env>.vars]` in `packages/api/wrangler.toml`       | Public API origin; set for dev, staging and production. Preview: add it.   |
-| R2 lifecycle rule        | `wrangler r2 bucket lifecycle add` (see below)           | Expires `exports/members/` objects after 3 days. Required everywhere.      |
+| Item                     | Where                                                    | Notes                                                                                                                                                                                                                      |
+| ------------------------ | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Migrations `0032`–`0034` | Neon (migration role), in order                          | Service functions, auth events, export runtime. Apply **before** deploy.                                                                                                                                                   |
+| `EXPORTS_BUCKET`         | `wrangler r2 bucket create athlya-exports-{env}` + toml  | Private bucket. No public access, no custom domain.                                                                                                                                                                        |
+| `EXPORT_URL_SIGNING_KEY` | `wrangler secret put EXPORT_URL_SIGNING_KEY --env <env>` | ≥ 32 random chars (`openssl rand -base64 48`). Rotation invalidates links. Same value on the gateway (signs) and with `-c wrangler.reservations.toml` (verifies `/v1/members/*`). Checked by `scripts/verify-secrets.mjs`. |
+| `API_PUBLIC_URL`         | `[env.<env>.vars]` in `packages/api/wrangler.toml`       | Public API origin; set for dev, staging and production. Preview: add it.                                                                                                                                                   |
+| R2 lifecycle rule        | `wrangler r2 bucket lifecycle add` (see below)           | Expires `exports/members/` objects after 3 days. Required everywhere.                                                                                                                                                      |
 
 ```sh
 wrangler r2 bucket lifecycle add athlya-exports-{env} expire-exports exports/members/ --expire-days 3
