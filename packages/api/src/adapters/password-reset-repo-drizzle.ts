@@ -28,6 +28,7 @@
  * @see packages/auth/src/forgot-password.ts
  */
 
+import { PasswordResetTokenUnavailableError } from '@athlya/auth';
 import { passwordResetTokens } from '@athlya/db/schema';
 import { and, eq, gt, isNull, lt, sql } from 'drizzle-orm';
 
@@ -113,7 +114,7 @@ export function createDrizzlePasswordResetRepo(db: AthlyaDbHttp): PasswordResetR
         serviceFn.consumePasswordReset(input.tokenHash, input.userId, input.newPasswordHash),
       );
       if (rows.length === 0) {
-        throw new Error('password_reset_token_already_consumed');
+        throw new PasswordResetTokenUnavailableError();
       }
     },
 

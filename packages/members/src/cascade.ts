@@ -87,8 +87,8 @@ export const ANONYMIZATION_DELAY_MS = ANONYMIZATION_DELAY_DAYS * 24 * 60 * 60 * 
  * MUST NOT drive correctness decisions (see the retry posture
  * discussed in the module docblock).
  *
- * `markUserDeleted` re-stamps the tombstone of the users row and
- * reports whether the user is soft-deleted. The Auth service stamps
+ * `markUserDeleted` confirms the tombstone of the users row, without
+ * moving it, and reports whether the user is soft-deleted. The Auth service stamps
  * `deleted_at` when it emits the `auth.user.deleted` event
  * (Requirement 5.1); the cascade runs first thing and stops when it
  * returns `false`, so a forged or replayed event for a live account
@@ -117,9 +117,12 @@ export interface DeletionRepo {
    */
   deleteIdempotencyKeysForUser(userId: string): Promise<number>;
   /**
-   * Stamp `deleted_at = deletedAt` on the users row. Idempotent.
-   * Resolves `true` when the user is soft-deleted after the call,
-   * `false` for a live or unknown account.
+   * Confirm the users row carries a tombstone. Resolves `true` when the
+   * user is soft-deleted, `false` for a live or unknown account. An
+   * existing `deleted_at` MUST NOT be moved: retention and anonymisation
+   * clocks measure from it, so a replayed event must not restart them.
+   * `deletedAt` is the cascade clock, for implementations that heal a
+   * missing tombstone; the production adapter is read-only.
    */
   markUserDeleted(userId: string, deletedAt: Date): Promise<boolean>;
   /**
@@ -258,8 +261,8 @@ export type AnonymizeAuditLogResult = {
  * failure leaves the system in a state that is safe to re-enter
  * (the event bus will redeliver):
  *
- *   0. `markUserDeleted` — re-stamp the tombstone and confirm the user
- *      is soft-deleted (the Auth service stamped `deleted_at` when it
+ *   0. `markUserDeleted` — confirm the user is soft-deleted, keeping
+ *      the original tombstone (the Auth service stamped `deleted_at` when it
  *      published this event). When it is not, the event is forged or
  *      stale: nothing is touched and `skipped` is returned (issue #609).
  *   1. `deleteReservationsForUser` — FK-joined reservations.

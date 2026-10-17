@@ -231,14 +231,22 @@ describe('drainOutbox — happy path', () => {
         payload: {
           id: 'evt-legacy',
           type: 'auth.user.deleted',
-          occurredAt: '2025-01-01T12:00:00.000Z',
-          studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          occurredAt: '2024-12-31T00:00:00.000Z',
+          studioId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           payload: { userId: 'u-1' },
         },
       }),
     );
 
-    expect(envelope['payload']).toEqual({ userId: 'u-1' });
+    // The row columns are authoritative: studioId and occurredAt come
+    // from the row, not from the stored (legacy) envelope.
+    expect(envelope).toEqual({
+      id: 'evt-legacy',
+      type: 'auth.user.deleted',
+      occurredAt: '2025-01-01T12:00:00.000Z',
+      studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      payload: { userId: 'u-1' },
+    });
   });
 
   it('leaves a domain payload that merely has a nested payload key untouched', () => {

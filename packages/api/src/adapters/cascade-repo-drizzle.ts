@@ -76,16 +76,13 @@ export function createDrizzleDeletionRepo(db: AthlyaDbAny): DeletionRepo {
       return callCount(db, serviceFn.deleteIdempotencyKeys(userId));
     },
 
-    async markUserDeleted(userId, deletedAt) {
-      // Idempotent: the Auth service already stamped `deleted_at`
-      // when it published the event (Req 5.1), so this re-stamps the
-      // tombstone with the cascade's clock. The function never
-      // tombstones a live account and reports whether the user is
-      // soft-deleted (migration 0037, issue #609).
-      const rows = await queryRows<{ deleted: boolean }>(
-        db,
-        serviceFn.confirmUserDeleted(userId, deletedAt),
-      );
+    async markUserDeleted(userId) {
+      // The Auth service stamped `deleted_at` when it published the
+      // event (Req 5.1). Read-only confirmation (migration 0037, issue
+      // #609): the original tombstone is kept so a replayed or re-queued
+      // event never restarts the retention clock, and a live account is
+      // never tombstoned.
+      const rows = await queryRows<{ deleted: boolean }>(db, serviceFn.confirmUserDeleted(userId));
       return rows[0]?.deleted === true;
     },
 

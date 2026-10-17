@@ -14,10 +14,10 @@
 --    user is now a no-op that keeps the original tombstone; an unknown
 --    user still raises P0002.
 -- 3. `auth_consume_password_reset` now refuses expired tokens.
--- 4. `rgpd_confirm_user_deleted` re-stamps an existing tombstone like
---    `rgpd_restamp_user_deleted` and reports whether the user is
+-- 4. `rgpd_confirm_user_deleted` reports, read-only, whether the user is
 --    soft-deleted, so the cascade can stop before its R2 / QStash side
---    effects for a live account.
+--    effects for a live account without moving the original tombstone
+--    (re-queued deletions must not restart the retention clock).
 --
 -- Same signatures, owner, search_path and grants as before; the new
 -- function is additive. Canary safe: old Workers call the same
@@ -148,21 +148,19 @@ AS $$
 $$;
 --> statement-breakpoint
 
--- Re-stamps the tombstone of an already soft-deleted user and reports
--- whether there was one. Never tombstones a live account.
-CREATE OR REPLACE FUNCTION rgpd_confirm_user_deleted(p_user_id uuid, p_deleted_at timestamptz)
+-- Reports whether the user is soft-deleted. Read-only: the original
+-- tombstone, which the retention and anonymisation clocks measure
+-- from, is never moved, and a live account is never tombstoned.
+CREATE OR REPLACE FUNCTION rgpd_confirm_user_deleted(p_user_id uuid)
 RETURNS boolean
 LANGUAGE sql
-VOLATILE
+STABLE
 SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
-    WITH restamped AS (
-        UPDATE users SET deleted_at = p_deleted_at
-         WHERE id = p_user_id AND deleted_at IS NOT NULL
-        RETURNING id
+    SELECT EXISTS (
+        SELECT 1 FROM users WHERE id = p_user_id AND deleted_at IS NOT NULL
     )
-    SELECT EXISTS (SELECT 1 FROM restamped)
 $$;
 --> statement-breakpoint
 
@@ -173,7 +171,7 @@ BEGIN
     FOREACH fn IN ARRAY ARRAY[
         'auth_soft_delete_user_with_event(uuid, jsonb)',
         'auth_consume_password_reset(text, uuid, text)',
-        'rgpd_confirm_user_deleted(uuid, timestamptz)'
+        'rgpd_confirm_user_deleted(uuid)'
     ] LOOP
         EXECUTE format('ALTER FUNCTION %s OWNER TO athlya_owner', fn);
         EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', fn);

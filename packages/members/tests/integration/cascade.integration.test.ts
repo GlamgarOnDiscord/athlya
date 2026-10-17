@@ -269,7 +269,7 @@ function buildRepo(client: Sql): DeletionRepo {
     async markUserDeleted(userId, deletedAt) {
       const rows = await client<{ id: string }[]>`
                 UPDATE users
-                   SET deleted_at = ${deletedAt}
+                   SET deleted_at = COALESCE(deleted_at, ${deletedAt})
                  WHERE id = ${userId}
                  RETURNING id
             `;
@@ -515,7 +515,7 @@ function buildRepoPglite(pg: PGlite): DeletionRepo {
     },
     async markUserDeleted(userId, deletedAt) {
       const r = await pg.query<{ id: string }>(
-        `UPDATE users SET deleted_at = $1 WHERE id = $2 RETURNING id`,
+        `UPDATE users SET deleted_at = COALESCE(deleted_at, $1) WHERE id = $2 RETURNING id`,
         [deletedAt, userId],
       );
       return r.rows.length > 0;

@@ -373,7 +373,7 @@ describe('createDrizzleDeletionRepo', () => {
     await expect(repo.deleteIdempotencyKeysForUser(userRow.id)).resolves.toBe(0);
   });
 
-  it('re-stamps the tombstone through rgpd_confirm_user_deleted and reports it', async () => {
+  it('confirms the tombstone through rgpd_confirm_user_deleted without re-stamping it', async () => {
     const { db, calls } = fakeDb(() => [{ deleted: true }]);
     await expect(
       createDrizzleDeletionRepo(db).markUserDeleted(
@@ -381,8 +381,10 @@ describe('createDrizzleDeletionRepo', () => {
         new Date('2026-10-12T00:00:00.000Z'),
       ),
     ).resolves.toBe(true);
+    expect(calls).toHaveLength(1);
     expect(calls[0]?.sql).toContain('rgpd_confirm_user_deleted(');
-    expect(calls[0]?.params).toEqual([userRow.id, '2026-10-12T00:00:00.000Z']);
+    // Only the user id: the cascade clock never reaches the tombstone.
+    expect(calls[0]?.params).toEqual([userRow.id]);
   });
 
   it('reports a live or unknown account as not deleted (issue #609)', async () => {

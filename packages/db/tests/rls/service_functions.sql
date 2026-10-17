@@ -11,7 +11,7 @@
 -- =====================================================================
 
 BEGIN;
-SELECT plan(27);
+SELECT plan(28);
 
 SET LOCAL ROLE athlya_app;
 
@@ -159,7 +159,7 @@ SELECT is(
 );
 
 SELECT is(
-    rgpd_confirm_user_deleted('22222222-2222-4222-8222-222222222221', now()),
+    rgpd_confirm_user_deleted('22222222-2222-4222-8222-222222222221'),
     false,
     'rgpd_confirm_user_deleted: reports a live account as not deleted'
 );
@@ -201,10 +201,21 @@ SELECT is(
     'rgpd_delete_*: idempotent on replay'
 );
 
+RESET ROLE;
+UPDATE users SET deleted_at = '2026-01-01T00:00:00Z'
+ WHERE id = '22222222-2222-4222-8222-222222222221';
+SET LOCAL ROLE athlya_app;
+
 SELECT is(
-    rgpd_confirm_user_deleted('22222222-2222-4222-8222-222222222221', now()),
+    rgpd_confirm_user_deleted('22222222-2222-4222-8222-222222222221'),
     true,
     'rgpd_confirm_user_deleted: reports a soft-deleted account'
+);
+
+SELECT is(
+    (SELECT deleted_at FROM auth_find_user_by_id('22222222-2222-4222-8222-222222222221')),
+    '2026-01-01T00:00:00Z'::timestamptz,
+    'rgpd_confirm_user_deleted: keeps the original tombstone (retention clock untouched)'
 );
 
 RESET ROLE;
@@ -231,8 +242,8 @@ SELECT ok(
     has_function_privilege('athlya_app', 'auth_find_user_by_id(uuid)', 'EXECUTE')
     AND NOT has_function_privilege('athlya_cron', 'auth_find_user_by_id(uuid)', 'EXECUTE')
     AND NOT has_function_privilege('athlya_cron', 'rgpd_delete_reservations(uuid)', 'EXECUTE')
-    AND has_function_privilege('athlya_app', 'rgpd_confirm_user_deleted(uuid, timestamptz)', 'EXECUTE')
-    AND NOT has_function_privilege('athlya_cron', 'rgpd_confirm_user_deleted(uuid, timestamptz)', 'EXECUTE'),
+    AND has_function_privilege('athlya_app', 'rgpd_confirm_user_deleted(uuid)', 'EXECUTE')
+    AND NOT has_function_privilege('athlya_cron', 'rgpd_confirm_user_deleted(uuid)', 'EXECUTE'),
     'service functions are granted to athlya_app, not to athlya_cron'
 );
 

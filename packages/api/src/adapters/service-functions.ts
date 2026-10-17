@@ -130,6 +130,6 @@ export const serviceFn = {
   deletePushTokens: (userId: string) => sql`SELECT rgpd_delete_push_tokens(${userId}::uuid) AS n`,
   deleteIdempotencyKeys: (userId: string) =>
     sql`SELECT rgpd_delete_idempotency_keys(${userId}::uuid) AS n`,
-  confirmUserDeleted: (userId: string, deletedAt: Date) =>
-    sql`SELECT rgpd_confirm_user_deleted(${userId}::uuid, ${deletedAt.toISOString()}::timestamptz) AS deleted`,
+  confirmUserDeleted: (userId: string) =>
+    sql`SELECT rgpd_confirm_user_deleted(${userId}::uuid) AS deleted`,
 } as const;

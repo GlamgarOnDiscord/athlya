@@ -2,7 +2,12 @@
 -- Restores the 0032 / 0033 bodies. The outbox rows unwrapped by the
 -- forward migration keep the domain-payload shape, which every drain
 -- version delivers correctly.
-DROP FUNCTION IF EXISTS rgpd_confirm_user_deleted(uuid, timestamptz);
+--
+-- ORDER: roll the Worker back to a release before #609 FIRST, then run
+-- this file. The #609 cascade calls `rgpd_confirm_user_deleted` on every
+-- `auth.user.deleted` event; dropping it under that code makes the RGPD
+-- cascade fail (and retry) until the code is reverted too.
+DROP FUNCTION IF EXISTS rgpd_confirm_user_deleted(uuid);
 --> statement-breakpoint
 
 CREATE OR REPLACE FUNCTION auth_outbox_insert(p_event jsonb, p_allowed_types text[])

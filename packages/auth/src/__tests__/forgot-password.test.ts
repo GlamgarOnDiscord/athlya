@@ -18,7 +18,12 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { DEFAULT_RESET_TOKEN_TTL_SEC, confirmReset, requestReset } from '../forgot-password.js';
+import {
+  DEFAULT_RESET_TOKEN_TTL_SEC,
+  PasswordResetTokenUnavailableError,
+  confirmReset,
+  requestReset,
+} from '../forgot-password.js';
 import type { PasswordResetEmailTransport, PasswordResetRepo } from '../forgot-password.js';
 import type { SessionStore, UserRepo, UserRow } from '../service.js';
 
@@ -361,6 +366,33 @@ describe('confirmReset (Sprint-6 SP6.3 — S2-006)', () => {
     expect(consumeCall.tokenHash).not.toBe('raw-plain-token');
     expect(consumeCall.userId).toBe(USER_ID);
   });
+
+  it.each([
+    ['token_expired', 'the token expired after the lookup', 1_000 + 120],
+    ['token_invalid', 'a concurrent reset consumed the token', 1_000 + 10],
+  ])(
+    'maps an unconsumable token to %s when %s (issue #609)',
+    async (code, _reason, nowAfterSec) => {
+      const passwordResetRepo = makeResetRepo();
+      const sessionStore = makeSessionStore();
+      passwordResetRepo.findActiveTokenByHash.mockResolvedValueOnce({
+        userId: USER_ID,
+        expiresAt: new Date((1_000 + 60) * 1000),
+      });
+      passwordResetRepo.consumeAndResetPassword.mockRejectedValueOnce(
+        new PasswordResetTokenUnavailableError(),
+      );
+      const now = vi.fn().mockReturnValueOnce(1_000).mockReturnValue(nowAfterSec);
+
+      await expect(
+        confirmReset(
+          { token: 'good', newPassword: 'new-correct-horse-staple-1' },
+          { passwordResetRepo, sessionStore, hibpFetch: hibpOk, now },
+        ),
+      ).rejects.toMatchObject({ code });
+      expect(sessionStore.revokeAllForUser).not.toHaveBeenCalled();
+    },
+  );
 });
 
 /* ------------------------------------------------------------------ */
