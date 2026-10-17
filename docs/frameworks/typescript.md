@@ -4,6 +4,8 @@
 
 _Last updated: 2026-05-14_
 
+> Tout ce qui suit est le **snapshot historique du 2026-05-14** (avant migration, projet alors sur `^5.9.3`). La migration TS 6.0 qu'il planifie a été faite dans #574 ; la config courante vit dans `packages/tsconfig`.
+
 ## Version Status
 
 |                     | Value                                                           |

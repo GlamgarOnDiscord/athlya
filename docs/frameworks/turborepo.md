@@ -6,9 +6,9 @@ _Last updated: 2026-05-14_
 
 |                   | Value                                        |
 | ----------------- | -------------------------------------------- |
-| **Used**          | ^2.9.12                                      |
-| **Latest stable** | 2.9.12 (current)                             |
-| **v3.0 RC**       | Available — do not upgrade yet (breaking)    |
+| **Used**          | ^2.11.7 (root `package.json`)                |
+| **Latest stable** | 2.11.9 (npm `latest`, 2026-10-17)            |
+| **v3.0 RC**       | Snapshot 2026-05-14 — not on npm `latest`    |
 | **Purpose**       | Build orchestration, caching, task pipelines |
 | **UI**            | tui (terminal UI)                            |
 
@@ -133,7 +133,7 @@ No `remoteCache` configured. For solo developer this is fine. For team/CI use, c
 - [x] Global env/deps tracking
 - [x] Dev tasks marked persistent/uncacheable
 - [x] Clean task uncacheable
-- [x] Latest stable version (2.9.12)
+- [x] Latest stable 2.x line (2.11.x)
 - [ ] **Migrate from `turbo-ignore` to `turbo query affected`** (if used in CI)
 - [ ] Enable `groupLogs` Future Flag for cleaner CI output
 - [ ] Consider remote caching for team/CI scenarios
@@ -143,4 +143,5 @@ No `remoteCache` configured. For solo developer this is fine. For team/CI use, c
 
 - https://turborepo.dev/docs
 - https://turborepo.dev/docs/reference/query
-- https://github.com/vercel/turborepo/releases/tag/v2.9.12
+- https://github.com/vercel/turborepo/releases
+- https://www.npmjs.com/package/turbo

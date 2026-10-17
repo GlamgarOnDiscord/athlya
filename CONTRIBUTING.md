@@ -82,10 +82,14 @@ git checkout -b docs/description-courte
 pnpm preflight   # install --frozen-lockfile && format:check && lint && typecheck && test && build:ci
 ```
 
-`preflight` reproduit le job CI requis `Lint, typecheck, and tests` :
-`format:check`, `lint`, `typecheck`, la suite de tests (les suites
-Docker-gated s'auto-skippent sans Docker) et `build:ci`. Un rouge est donc
-attrapé en local (Turbo-caché) au lieu d'un aller-retour CI de ~5 min. Le hook
+`preflight` couvre les gates principales du job CI requis
+`Lint, typecheck, and tests` : `format:check`, `lint`, `typecheck`, la suite de
+tests (les suites Docker-gated s'auto-skippent sans Docker) et le build
+(`build:ci` = `SKIP_ENV_VALIDATION=1 pnpm build`, comme en CI). Les deux guards
+du job (fichiers ignorés trackés / gros binaires, usage brut
+d'`AthlyaDbHttp` hors `withTenantHttp`) ne tournent qu'en CI. Un rouge est donc
+attrapé en local (Turbo-caché) dans la plupart des cas, au lieu d'un
+aller-retour CI de ~5 min. Le hook
 `.githooks/pre-push` (câblé par `git config core.hooksPath .githooks` lors du
 setup initial — voir _Installation_ ci-dessus) le lance automatiquement —
 bypass ponctuel : `git push --no-verify`.

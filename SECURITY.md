@@ -50,7 +50,8 @@ Nous respectons une politique de **coordinated disclosure**. Un crédit public v
 Le code source est **public**. En conséquence :
 
 - Aucun secret (`.dev.vars`, `.env*`, token, DSN, clé JWT) n'est commité ;
-  `gitleaks` scanne chaque PR et `master` (`.github/workflows/secret-scan.yml`).
+  `gitleaks` scanne les PR vers `master`, chaque push sur `master` et le dépôt
+  chaque semaine (`.github/workflows/secret-scan.yml`).
   Un secret exposé est considéré compromis et **roté**, même après réécriture
   de l'historique.
 - Les workflows `pull_request_target` s'exécutent avec un token en écriture et

@@ -49,10 +49,14 @@ Watch CI with the **`Monitor`** tool, never `sleep`. Rerun known flakes
 - The repo is **public**: never commit secrets, `.dev.vars`, `.env*` or real
   DSNs (gitleaks runs in CI). `pull_request_target` workflows must never
   check out or run PR code (they hold write tokens and secrets).
-- postgres-js raw SQL: pass jsonb as `${JSON.stringify(x)}::text::jsonb`; a
-  bare `${JSON.stringify(x)}::jsonb` is double-encoded into a jsonb string.
-  Drizzle's json/jsonb/timestamp column serializers are transparent — pass
-  plain values there.
+- jsonb parameters depend on the client. Through Drizzle (`createDb()`,
+  ``db/tx.execute(sql`…`)``), `drizzle()` turns postgres-js json/jsonb/timestamp
+  serializers into pass-throughs, so `${JSON.stringify(x)}::jsonb` stores an
+  object — and `sql.json(x)` throws there. On a plain `postgres()` client
+  never wrapped by `drizzle()` (scripts, raw test clients),
+  `${JSON.stringify(x)}::jsonb` is double-encoded into a jsonb **string**:
+  use `${JSON.stringify(x)}::text::jsonb` or `sql.json(x)`. Verify with
+  `jsonb_typeof(col)`.
 
 ## Database migrations — expand/contract required for canary safety
 
@@ -79,11 +83,14 @@ See `docs/runbooks/expand-contract-migrations.md` for worked examples.
 - Runtime roles `athlya_app` (API) and `athlya_cron` (maintenance) are
   `NOBYPASSRLS`; RLS is the last line of defence, never widen it with
   `BYPASSRLS`.
-- `SECURITY DEFINER` functions are owned by `athlya_owner`, declare
+- Callable `SECURITY DEFINER` functions are owned by `athlya_owner`, declare
   `SET search_path = public, pg_temp`, and are followed by
   `REVOKE ALL ON FUNCTION … FROM PUBLIC` plus `GRANT EXECUTE` to the single
   runtime role that calls it (`athlya_app`, or `athlya_cron` for cron-only
   functions).
+- `SECURITY DEFINER` trigger functions (e.g. `enforce_class_capacity()`)
+  fire from the trigger, not through EXECUTE grants, so REVOKE/GRANT does
+  not apply; new ones still pin `SET search_path = public, pg_temp`.
 - pgTAP: a `STABLE` function sees the snapshot taken at the start of the
   calling statement, so an assertion that reads through one right after a
   write in the same statement sees stale data — split the write and the
