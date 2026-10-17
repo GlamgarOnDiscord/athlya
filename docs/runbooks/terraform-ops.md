@@ -2,23 +2,24 @@
 
 ## IaC coverage
 
-| Resource              | Managed by Terraform     | Notes                                                                            |
-| --------------------- | ------------------------ | -------------------------------------------------------------------------------- |
-| Cloudflare Queues     | Yes (`queues.tf`)        | All envs                                                                         |
-| Cloudflare R2 buckets | Yes (`r2.tf`)            | All envs                                                                         |
-| Sentry metric alerts  | Yes (`sentry-alerts.tf`) | Error-volume alert on emitted error events; latency/queue/outbox in Axiom (#415) |
-| WAF custom rules      | Yes (`waf.tf`)           | Scanner + Tor block, login rate limit (`http_ratelimit`), Bot Fight Mode opt-in  |
-| Cloudflare Workers    | No — wrangler            | Managed by `deploy-production.yml`                                               |
-| CF Workers routes     | No — wrangler            | Managed by wrangler.toml `[routes]`                                              |
-| CF Access rules       | No — dashboard           | Covered by `docs/runbooks/cf-access-admin.md`                                    |
-| CF Hyperdrive         | No — dashboard           | Covered by `docs/runbooks/hyperdrive-provision.md`                               |
-| Neon (DB)             | No — Neon console        | Branching handled by preview/deploy workflows                                    |
-| Upstash Redis         | No — Upstash console     | Manual provisioning; keys stored as GH secrets                                   |
-| Axiom alerts          | No — Axiom dashboard     | Covered by `docs/runbooks/axiom-alerts-provision.md`                             |
-| DNS records           | No — CF dashboard        | Pending domain provisioning (#339)                                               |
+| Resource              | Managed by Terraform     | Notes                                                                                 |
+| --------------------- | ------------------------ | ------------------------------------------------------------------------------------- |
+| Cloudflare Queues     | Yes (`queues.tf`)        | All envs                                                                              |
+| Cloudflare R2 buckets | Yes (`r2.tf`)            | All envs                                                                              |
+| Sentry metric alerts  | Yes (`sentry-alerts.tf`) | Error-volume alert on emitted error events; latency/queue/outbox stay in Axiom (#415) |
+| WAF custom rules      | Yes (`waf.tf`)           | Scanner + Tor block, login rate limit (`http_ratelimit`), Bot Fight Mode opt-in       |
+| Cloudflare Workers    | No — wrangler            | Managed by `deploy-production.yml`                                                    |
+| CF Workers routes     | No — wrangler            | Managed by wrangler.toml `[routes]`                                                   |
+| CF Access rules       | No — dashboard           | Covered by `docs/runbooks/cf-access-admin.md`                                         |
+| CF Hyperdrive         | No — dashboard           | Covered by `docs/runbooks/hyperdrive-provision.md`                                    |
+| Neon (DB)             | No — Neon console        | Branching handled by preview/deploy workflows                                         |
+| Upstash Redis         | No — Upstash console     | Manual provisioning; keys stored as GH secrets                                        |
+| Axiom alerts          | No — Axiom dashboard     | Covered by `docs/runbooks/axiom-alerts-provision.md`                                  |
+| DNS records           | No — CF dashboard        | Pending domain provisioning (#339)                                                    |
 
 WAF settings depend on the zone plan: set `cloudflare_zone_plan`
-(`free`/`pro`/`business`/`enterprise`) so the login rate limit uses the
+(`free`/`pro`/`business`/`enterprise`) — in CI through the
+`CLOUDFLARE_ZONE_PLAN` variable of each GitHub environment (default `pro`) — so the login rate limit uses the
 periods and counting expression that plan supports. Bot Fight Mode stays
 off (`waf_bot_fight_mode = false`) because it challenges API clients and
 the Stripe webhook and cannot be bypassed on Free/Pro.
@@ -68,6 +69,22 @@ and commit `.terraform.lock.hcl`.
 
 Cloudflare provider v5 is a breaking rewrite: migrate with Cloudflare's
 `tf-migrate`, review the plan per workspace, then bump `~> 4.52` to `~> 5`.
+
+## Required secrets
+
+Set these in **both** the `staging` and `production` GitHub Environments.
+`.github/workflows/terraform.yml` passes each one to Terraform as an env var.
+
+| Secret                         | Purpose                                                    |
+| ------------------------------ | ---------------------------------------------------------- |
+| `TF_VAR_cloudflare_api_token`  | Cloudflare API token (Workers, Queues, R2, WAF)            |
+| `TF_VAR_cloudflare_account_id` | Cloudflare account ID                                      |
+| `TF_VAR_cloudflare_zone_id`    | Cloudflare zone ID for athlya.app                          |
+| `TF_VAR_sentry_auth_token`     | Sentry API auth token (metric alerts)                      |
+| `TF_VAR_sentry_org`            | Sentry organisation slug                                   |
+| `TF_VAR_sentry_project`        | Sentry project slug                                        |
+| `TF_VAR_sentry_alert_team_id`  | Numeric id of the Sentry team emailed by the metric alerts |
+| `TF_TOKEN_app_terraform_io`    | HCP Terraform API token (remote state, Option A)           |
 
 ## Plan → apply workflow
 

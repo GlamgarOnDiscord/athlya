@@ -1,0 +1,10 @@
+# OSV-Scanner configuration (auto-loaded next to pnpm-lock.yaml).
+# Every ignore needs a reason and an expiry; review when it lapses.
+
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2027-01-17T00:00:00Z
+reason = """braces <=3.0.3 stack exhaustion on deeply nested patterns. No fixed \
+release exists. Only reached via micromatch/fast-glob in dev and CLI tooling \
+(eslint-config-next, shadcn CLI, ts-morph) that expands repo-authored globs, \
+never user input. Drop once braces publishes a fix or the consumers move off it."""

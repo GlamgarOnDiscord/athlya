@@ -1,97 +1,87 @@
 # Runbook — Frontend deploy (apps/web + apps/studio)
 
-Issue #422. See also [`deploy-unified.md`](./deploy-unified.md) for the API +
-frontend combined deploy order.
+Issue #422. Both Next.js 16 apps ship as **Cloudflare Workers built by OpenNext**
+(`@opennextjs/cloudflare`), on the same account as the API
+(ADR: `docs/security/deploy-web-adr.md`).
 
 ## Architecture
 
-| App              | Worker name     | URL (production)            |
-| ---------------- | --------------- | --------------------------- |
-| `@athlya/web`    | `athlya-web`    | `https://app.athlya.app`    |
-| `@athlya/studio` | `athlya-studio` | `https://studio.athlya.app` |
+| App           | Worker (staging / production)             | Config                       |
+| ------------- | ----------------------------------------- | ---------------------------- |
+| `apps/web`    | `athlya-web-staging` / `athlya-web`       | `apps/web/wrangler.jsonc`    |
+| `apps/studio` | `athlya-studio-staging` / `athlya-studio` | `apps/studio/wrangler.jsonc` |
 
-Both apps use **OpenNext → Cloudflare Workers** (see
-`docs/security/deploy-web-adr.md`). Each app has a `wrangler.toml` that
-defines `[env.staging]` and `[env.production]` with CF zone bindings.
+- `pnpm --filter @athlya/<app> build:worker` = `next build` + OpenNext bundle in
+  `.open-next/` (`worker.js` + static `assets/`).
+- `NEXT_PUBLIC_*` values are **inlined at build time**: build once per environment.
+- Runtime var `APP_ENV` (staging / production) comes from `wrangler.jsonc`
+  (`Secure` cookies, issue #465). Custom domains / routes are attached in the
+  Cloudflare dashboard.
+- Bundle size ≈ 2.6–3.1 MiB gzip → **Workers Paid** plan (10 MiB limit).
+- `patches/@opennextjs__cloudflare@1.20.10.patch`: Next 16.4 loads
+  `.next/server/preview-props.json` unconditionally; without the patch every route
+  answers 500 in the Worker. Remove it once OpenNext ships the fix (bump the version
+  and drop `patchedDependencies` in `pnpm-workspace.yaml`).
 
-## Deploy prerequisites
+## Prerequisites (per GitHub environment `staging` / `production`)
 
-GitHub secrets and vars required in addition to the API deploy:
+| Kind   | Name                    | Notes                                       |
+| ------ | ----------------------- | ------------------------------------------- |
+| secret | `CLOUDFLARE_API_TOKEN`  | Workers Scripts:Edit                        |
+| secret | `CLOUDFLARE_ACCOUNT_ID` |                                             |
+| var    | `WEB_URL`               | e.g. `https://staging.athlya.app`           |
+| var    | `STUDIO_URL`            | e.g. `https://staging.studio.athlya.app`    |
+| var    | `API_URL`               | e.g. `https://staging.api.athlya.app`       |
+| var    | `TURNSTILE_SITE_KEY`    | optional (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`) |
+| var    | `CSP_REPORT_URI`        | optional (`NEXT_PUBLIC_CSP_REPORT_URI`)     |
 
-| Key                     | Where  | Purpose                                  |
-| ----------------------- | ------ | ---------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`  | secret | Workers:Edit (same token as API)         |
-| `CLOUDFLARE_ACCOUNT_ID` | secret | CF account ID                            |
-| `SENTRY_AUTH_TOKEN`     | secret | Source map upload (optional)             |
-| `STAGING_WEB_URL`       | var    | e.g. `https://staging.athlya.app`        |
-| `STAGING_STUDIO_URL`    | var    | e.g. `https://staging.studio.athlya.app` |
-| `PRODUCTION_WEB_URL`    | var    | e.g. `https://app.athlya.app`            |
-| `PRODUCTION_STUDIO_URL` | var    | e.g. `https://studio.athlya.app`         |
-| `SENTRY_ORG`            | var    | Sentry org slug (optional)               |
-| `SENTRY_PROJECT`        | var    | Sentry project slug (optional)           |
+The workflow fails before building when a required value is missing.
 
-## Deploy to staging
+## Deploy
 
-```bash
-gh workflow run deploy-frontend.yml \
-  -f phase=staging-deploy \
-  -f apps=all
-```
+Actions → **Deploy Frontend** → `environment` = staging | production,
+`phase` = deploy, `apps` = all | web | studio. The job:
 
-Steps:
+1. builds the selected Workers with that environment's `NEXT_PUBLIC_*` values;
+2. `wrangler deploy --env <env> --var VERSION:<sha>`;
+3. waits until `WEB_URL/robots.txt` and `STUDIO_URL/login` serve 200;
+4. runs `scripts/smoke-frontend.mjs` against the **real** URLs: public pages 200,
+   per-request CSP nonce + `frame-ancestors 'none'`, HSTS, auth route handlers
+   answer 4xx (not 5xx) to an anonymous refresh, API `/health` 200.
 
-1. Build `@athlya/shared`
-2. Build `@athlya/web` + `@athlya/studio` (`next build`)
-3. `wrangler deploy --env staging` for each app
-4. Playwright axe + member flow smoke tests against `STAGING_WEB_URL`
+In production, any failure after the deploy step rolls the selected apps back and
+the job stays **red**. Staging is left as-is for investigation.
 
-## Deploy to production
-
-Always deploy the API first when the PR changes the API contract (see
-`deploy-unified.md` § Deploy order).
-
-```bash
-gh workflow run deploy-frontend.yml \
-  -f phase=production-deploy \
-  -f apps=all
-```
-
-Additional steps beyond staging:
-
-- Sentry release creation + source map upload for both apps
-- Ready gate (`scripts/wait-health-ready.sh`) after each wrangler deploy
-- Auto-rollback on failure (wrangler rollback for each app)
-
-## Deploy one app only
+Locally (same commands as CI):
 
 ```bash
-gh workflow run deploy-frontend.yml \
-  -f phase=staging-deploy \
-  -f apps=web
+pnpm --filter @athlya/shared build
+NEXT_PUBLIC_API_URL=https://staging.api.athlya.app pnpm --filter @athlya/web build:worker
+pnpm --filter @athlya/web exec wrangler deploy --env staging
+WEB_URL=https://staging.athlya.app node scripts/smoke-frontend.mjs
 ```
 
 ## Rollback
 
+Actions → **Deploy Frontend** → `phase` = rollback (same `environment` / `apps`).
+`wrangler rollback` restores the previous version and the smoke re-runs; a failed
+rollback fails the job (no `continue-on-error`). Manual:
+
 ```bash
-gh workflow run deploy-frontend.yml \
-  -f phase=rollback \
-  -f apps=all
+pnpm --filter @athlya/web exec wrangler rollback --env production -y --message "<reason>"
 ```
 
-Rolls back both Workers to the previous uploaded version. Safe to run for
-either app independently (`apps=web` or `apps=studio`).
+## CI gates
 
-## E2E smoke coverage
-
-The `e2e/flows` suite covers:
-
-- Register → book class → cancel (member flow)
-- Profile edit
-
-The `e2e/axe.spec.ts` covers WCAG 2.2 AA accessibility (core pages).
-
-Add CSP and security header checks to the Playwright config when the
-CSP nonce implementation is stable (tracked in `apps/web/src/proxy.ts`).
+- `ci.yml` — `pnpm build` (Next production build of both apps) and the unit tests;
+  studio no longer passes with zero tests (`--passWithNoTests` removed).
+- `frontend-worker.yml` (PRs touching `apps/**`, `packages/shared/**`, the lockfile
+  or the patch) — per app: OpenNext build, `wrangler deploy --dry-run --env production`,
+  then serves the bundle in workerd (`wrangler dev`) and runs `smoke-frontend.mjs`
+  against it.
+- Browser flows (`apps/*/e2e`) stay in `axe.yml`; they stub the network and are not
+  a release signal on their own. The release signal against the real API is the
+  staging gate (`staging-gate.yml`) plus this post-deploy smoke.
 
 ## Contract compatibility
 

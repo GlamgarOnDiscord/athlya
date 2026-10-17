@@ -8,6 +8,9 @@ on:
     - cron: '0 7 * * 1'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   check-staging-vars:
     name: Verify K6 + ZAP repository variables
@@ -19,6 +22,7 @@ jobs:
         env:
           K6_STAGING_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
           ZAP_TARGET_URL: ${{ vars.ZAP_TARGET_URL }}
+          ZAP_ACTIVE_TARGET_URL: ${{ vars.ZAP_ACTIVE_TARGET_URL }}
         run: |
           set -euo pipefail
           missing=0
@@ -27,7 +31,11 @@ jobs:
             missing=1
           fi
           if [ -z "${ZAP_TARGET_URL}" ]; then
-            echo "::error::vars.ZAP_TARGET_URL is empty — zap-baseline.yml skips on every PR"
+            echo "::error::vars.ZAP_TARGET_URL is empty — zap-baseline.yml fails on every trusted PR"
+            missing=1
+          fi
+          if [ -z "${ZAP_ACTIVE_TARGET_URL}" ]; then
+            echo "::error::vars.ZAP_ACTIVE_TARGET_URL is empty — the weekly zap-active.yml scan fails"
             missing=1
           fi
           if [ "${missing}" -ne 0 ]; then
@@ -35,4 +43,4 @@ jobs:
             echo "See .github/READ_ME.md and docs/runbooks/branch-protection.md"
             exit 1
           fi
-          echo "K6_STAGING_BASE_URL and ZAP_TARGET_URL are set."
+          echo "K6_STAGING_BASE_URL, ZAP_TARGET_URL and ZAP_ACTIVE_TARGET_URL are set."

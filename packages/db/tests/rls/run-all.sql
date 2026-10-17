@@ -9,11 +9,8 @@
 --      the end, so a second invocation in the same psql session
 --      operates against identical seed data.
 --
--- Usage:
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
---        -f migrations/0000_init.sql \
---        -f migrations/0001_rls.sql \
---        -f tests/rls/run-all.sql
+-- Usage: `pnpm --filter @athlya/db test:rls` (scripts/test-rls.sh)
+-- applies every forward migration, then sources this file.
 -- =====================================================================
 
 \set ON_ERROR_STOP on
@@ -37,5 +34,8 @@
 \i tests/rls/export_jobs.sql
 \i tests/rls/email_partial_unique.sql
 \i tests/rls/password_reset_one_active.sql
+\i tests/rls/service_functions.sql
+\i tests/rls/auth_event_recording.sql
+\i tests/rls/export_runtime.sql
 \i tests/rls/cron_role.sql
 \i tests/rls/constraints.sql

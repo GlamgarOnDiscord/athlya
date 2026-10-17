@@ -26,7 +26,7 @@ describe('sentry-alerts.tf signal contract', () => {
     });
 
     it(`${name} relies on no signal the runtime never emits`, () => {
-      assert.doesNotMatch(body, /transaction|d:custom|failure_rate|\(user\)/);
+      assert.doesNotMatch(body, /transaction|d:custom|failure_rate|\buser\b/);
     });
   }
 });

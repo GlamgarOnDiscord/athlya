@@ -24,6 +24,9 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-api-production-canary
   cancel-in-progress: false

@@ -96,6 +96,8 @@ export function buildStubDeps(
       uploadAvatar: vi.fn(),
       updateConsents: vi.fn(),
       enqueueExport: vi.fn(),
+      getExportJob: vi.fn(),
+      openExportDownload: vi.fn(),
       listMembersByStudio: vi.fn(),
       ...overrides.members,
     },
