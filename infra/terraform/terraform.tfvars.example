@@ -8,3 +8,7 @@ environment           = "staging"  # or "production"
 sentry_alert_team_id  = "TODO: Sentry → Settings → Teams → team id"
 cloudflare_zone_plan  = "pro"      # free | pro | business | enterprise
 waf_bot_fight_mode    = false
+axiom_api_token       = "TODO: Axiom → Settings → API tokens (advanced: monitors + query)"
+axiom_spans_dataset   = "TODO: dataset in X-Axiom-Dataset of OTEL_EXPORTER_OTLP_HEADERS"
+axiom_logs_dataset    = "TODO: dataset receiving the Worker log lines"
+axiom_notifier_ids    = ["TODO: Axiom → Monitors → Notifiers → id"]

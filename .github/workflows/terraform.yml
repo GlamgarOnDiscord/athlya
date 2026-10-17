@@ -23,11 +23,15 @@ name: Terraform
 #   TF_VAR_sentry_org             — Sentry organisation slug
 #   TF_VAR_sentry_project         — Sentry project slug
 #   TF_VAR_sentry_alert_team_id   — Sentry team id notified by metric alerts
+#   TF_VAR_axiom_api_token        — Axiom advanced API token (SLO monitors, #415)
 #   TF_TOKEN_app_terraform_io     — HCP Terraform API token (remote state)
 #
 # Required variables (vars.*):
 #   TF_CLOUD_ORGANIZATION         — HCP Terraform organisation slug
 #   CLOUDFLARE_ZONE_PLAN          — optional: free | pro | business | enterprise (default: pro)
+#   AXIOM_SPANS_DATASET           — Axiom dataset of the Worker OTLP spans
+#   AXIOM_LOGS_DATASET            — Axiom dataset of the Worker log lines
+#   AXIOM_NOTIFIER_IDS            — HCL list of Axiom notifier ids, e.g. ["abc123"]
 #
 # See infra/terraform/versions.tf for the backend and
 # docs/runbooks/terraform-ops.md for the apply runbook.
@@ -93,7 +97,7 @@ jobs:
       - name: Lock file pins every provider
         run: |
           set -euo pipefail
-          for provider in cloudflare/cloudflare jianyuan/sentry; do
+          for provider in cloudflare/cloudflare jianyuan/sentry axiomhq/axiom; do
             if ! grep -q "provider \"registry.terraform.io/${provider}\"" .terraform.lock.hcl; then
               echo "::error file=infra/terraform/.terraform.lock.hcl::${provider} is not locked — run terraform providers lock"
               exit 1
@@ -136,6 +140,10 @@ jobs:
       TF_VAR_sentry_org: ${{ secrets.TF_VAR_sentry_org }}
       TF_VAR_sentry_project: ${{ secrets.TF_VAR_sentry_project }}
       TF_VAR_sentry_alert_team_id: ${{ secrets.TF_VAR_sentry_alert_team_id }}
+      TF_VAR_axiom_api_token: ${{ secrets.TF_VAR_axiom_api_token }}
+      TF_VAR_axiom_spans_dataset: ${{ vars.AXIOM_SPANS_DATASET }}
+      TF_VAR_axiom_logs_dataset: ${{ vars.AXIOM_LOGS_DATASET }}
+      TF_VAR_axiom_notifier_ids: ${{ vars.AXIOM_NOTIFIER_IDS }}
       TF_VAR_environment: ${{ inputs.environment || (github.event_name == 'schedule' && 'production') || 'staging' }}
       # HCP Terraform remote state token (see versions.tf backend block).
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_app_terraform_io }}
@@ -160,6 +168,10 @@ jobs:
           [ -n "${TF_VAR_sentry_org}" ] || missing+=("secrets.TF_VAR_sentry_org")
           [ -n "${TF_VAR_sentry_project}" ] || missing+=("secrets.TF_VAR_sentry_project")
           [ -n "${TF_VAR_sentry_alert_team_id}" ] || missing+=("secrets.TF_VAR_sentry_alert_team_id")
+          [ -n "${TF_VAR_axiom_api_token}" ] || missing+=("secrets.TF_VAR_axiom_api_token")
+          [ -n "${TF_VAR_axiom_spans_dataset}" ] || missing+=("vars.AXIOM_SPANS_DATASET")
+          [ -n "${TF_VAR_axiom_logs_dataset}" ] || missing+=("vars.AXIOM_LOGS_DATASET")
+          [ -n "${TF_VAR_axiom_notifier_ids}" ] || missing+=("vars.AXIOM_NOTIFIER_IDS")
           [ -n "${TF_TOKEN_app_terraform_io}" ] || missing+=("secrets.TF_TOKEN_app_terraform_io")
           [ -n "${TF_CLOUD_ORGANIZATION}" ] || missing+=("vars.TF_CLOUD_ORGANIZATION")
           if [ "${#missing[@]}" -eq 0 ]; then

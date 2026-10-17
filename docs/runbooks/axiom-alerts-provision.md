@@ -6,6 +6,35 @@
 
 ---
 
+## SLO monitors managed as code (#415)
+
+A1 (5xx rate), A2 (login p95), A3 (booking p99), A4 (queue lag), A5 (DLQ
+depth) and A16 (outbox backlog) are provisioned by Terraform in
+[`infra/terraform/axiom-monitors.tf`](../../infra/terraform/axiom-monitors.tf)
+and applied per environment by `.github/workflows/terraform.yml`
+(`TF_VAR_axiom_api_token` secret, `AXIOM_SPANS_DATASET` /
+`AXIOM_LOGS_DATASET` / `AXIOM_NOTIFIER_IDS` variables; see
+[`terraform-ops.md`](./terraform-ops.md)). Do not create them by hand: the
+daily drift check flags any UI edit. If they already exist in the UI,
+import them (`terraform import 'axiom_monitor.slo["<key>"]' <monitor-id>`)
+or delete them before the first apply.
+
+The queries read the signals the runtime actually emits:
+
+- A1–A3: the OTLP spans (`status.code`, `name`, `duration`) exported by
+  `packages/api/src/middleware/otel.ts`.
+- A4 / A16: the `outbox.backlog` line the drain cron logs every minute
+  (`ageMs` = age of the oldest pending event, `pending`). Both monitors
+  also alert on **no data**: silence means the cron or the log pipeline
+  stopped.
+- A5: the `[dlq] drain cycle complete` line (`totalPending`) logged after
+  every DLQ batch.
+
+After the first apply, open each monitor in Axiom and run its query once to
+confirm it returns rows on the dataset (field names depend on the ingest
+path), then run the test fires below. The remaining entries of the table
+stay manual.
+
 ## Prérequis
 
 - [ ] Dataset Axiom `athlya-spans` + `athlya-logs` reçoivent OTel depuis staging/prod (vérifier ingest dernière heure).

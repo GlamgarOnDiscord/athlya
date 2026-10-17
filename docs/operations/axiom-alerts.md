@@ -6,6 +6,12 @@ Catalogue des alertes Axiom à provisionner pour l'API Athlya. Toutes
 ces alertes pointent sur un Slack channel ops + page PagerDuty pour
 les Sev1.
 
+> **As code (#415):** A1, A2, A3, A4, A5 and A16 are Terraform-managed in
+> `infra/terraform/axiom-monitors.tf` — change them there, not in the UI.
+> Their queries use the emitted signals (OTLP span fields, the
+> `outbox.backlog` and `[dlq] drain cycle complete` log lines) rather than
+> the illustrative APL below.
+
 ## Pré-requis
 
 - Slice 12.11 livrée (queries Axiom).

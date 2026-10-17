@@ -1,6 +1,30 @@
 # This file is maintained automatically by "terraform init".
 # Manual edits may be lost in future updates.
 
+provider "registry.terraform.io/axiomhq/axiom" {
+  version     = "1.7.0"
+  constraints = "~> 1.7"
+  hashes = [
+    "h1:HImSY9ycw1pIWIKJl5nvbgMAq6zlytzjFE94bkh3tGE=",
+    "h1:a53GiqiepPQAC8Tw2E4YbWZqKmj982MtgN4tHgJQfM4=",
+    "h1:gtT2EXZHXHn8x6lMdy30fWRr540R6F9QXYtuMh+AGok=",
+    "h1:sOomL19GDK95GQAk4a00Lc9vU+DnwbwFau1daTh7O0g=",
+    "zh:05bb3bff18ae70e2ef21a4736995b735ea9d97724e9e5c43e34f729748c6351a",
+    "zh:1f10e6662a0751de03e8dcae50196c0ddafaebff5cb341eaf36f08ba8fd06814",
+    "zh:21ac2ea95c8c507d0eb8351aecb973874eb206e453633572589616e10c4e2566",
+    "zh:3ea5ff855019ff32055f1cc365ceccd559adc1ba992274aac5de904ada670ee2",
+    "zh:4632c145633497a701de1ef73861fd8d6ccdae7d011eb66f3679313709d13538",
+    "zh:89f1c1cb213427a62030f3893adb8b0a47fb8b2585569709b993fa1b442ae624",
+    "zh:9349958f96818bb0d7f56161256c1420bfd7cef015784f15999a32ae396cc38b",
+    "zh:951678affc46e5025655646cc0ea53a4f316dba59b95608a4e546a78baf77c0a",
+    "zh:9671e0fee7f995577cff7540f0d74dea743487d85821957aff01a8567135ee02",
+    "zh:a767feb42041906724f03e2a109399f45386e4a1b9df625ff8d254622b7a370e",
+    "zh:dbcde19c7f7b5e8915d964ffccfd2eb89ba86dd2cba8bf0d6243f263d6707dba",
+    "zh:dbeb2dacd59d0a4d1d09142b173ff0575d96c0ab23847a1dbdb1b40e3d25fa02",
+    "zh:f99803ec7d8b37bc2e347b9be9f3c0df56a3e12fb57b21ddaece23622189707c",
+  ]
+}
+
 provider "registry.terraform.io/cloudflare/cloudflare" {
   version     = "4.52.9"
   constraints = "~> 4.52"
