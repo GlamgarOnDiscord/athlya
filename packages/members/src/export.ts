@@ -198,28 +198,33 @@ export interface ExportJobStore {
 
   /**
    * Claim the job: atomic `pending → running` (or reclaim of a
-   * `running` job whose lease expired after a crashed run). Resolves
-   * `true` only for the caller that won the transition, so concurrent
-   * deliveries of the same event never both build an archive (#498).
+   * `running` job whose lease expired after a crashed run). Resolves a
+   * claim token only for the caller that won the transition, `null`
+   * otherwise, so concurrent deliveries of the same event never both
+   * build an archive (#498).
    */
-  markRunning(jobId: string, startedAt: Date): Promise<boolean>;
+  markRunning(jobId: string, startedAt: Date): Promise<string | null>;
 
   /**
    * Transition the row from `running` → `completed`, stamping the
-   * signed URL and its expiration. Idempotent.
+   * signed URL and its expiration. Resolves `false` when `claimToken`
+   * is no longer current (the lease was reclaimed by a newer run), in
+   * which case nothing is written. Idempotent.
    */
   markCompleted(
     jobId: string,
+    claimToken: string,
     completedAt: Date,
     downloadUrl: string,
     downloadExpiresAt: Date,
-  ): Promise<void>;
+  ): Promise<boolean>;
 
   /**
-   * Transition the row to `failed`, stamping a short human-readable
-   * error reason. Idempotent.
+   * Transition the row from `running` → `failed`, stamping a short
+   * human-readable error reason. A stale `claimToken` is a no-op.
+   * Idempotent.
    */
-  markFailed(jobId: string, error: string): Promise<void>;
+  markFailed(jobId: string, claimToken: string, error: string): Promise<void>;
 
   /** Fetch a stored job, or `null` if unknown. */
   get(jobId: string): Promise<ExportJobRecord | null>;
@@ -350,7 +355,8 @@ export type EnqueueExportResult =
  * is the happy path; `already_completed` covers retries hitting a
  * terminal row; `failed` stamps the job as failed and does NOT
  * publish the completion event; `in_progress` means another delivery
- * holds the claim (its lease has not expired); `not_found` protects against a
+ * holds the claim (its lease has not expired, or it reclaimed this
+ * run's lease before completion); `not_found` protects against a
  * poisoned QStash message whose `jobId` was already hard-deleted.
  */
 export type RunExportJobResult =
@@ -635,8 +641,8 @@ export async function runExportJob(
     return { kind: 'already_completed', jobId };
   }
 
-  const claimed = await deps.jobs.markRunning(jobId, new Date(deps.clock.now()));
-  if (!claimed) {
+  const claimToken = await deps.jobs.markRunning(jobId, new Date(deps.clock.now()));
+  if (claimToken === null) {
     return { kind: 'in_progress', jobId };
   }
 
@@ -660,7 +666,7 @@ export async function runExportJob(
     };
   } catch (err) {
     const reason = toErrorReason(err);
-    await deps.jobs.markFailed(jobId, reason);
+    await deps.jobs.markFailed(jobId, claimToken, reason);
     deps.logger?.error('export job: data source failure', {
       jobId,
       userId: job.userId,
@@ -681,7 +687,22 @@ export async function runExportJob(
     const completedAt = new Date(deps.clock.now());
     const expiresAt = new Date(completedAt.getTime() + DOWNLOAD_URL_TTL_SECONDS * 1000);
 
-    await deps.jobs.markCompleted(jobId, completedAt, downloadUrl, expiresAt);
+    const completed = await deps.jobs.markCompleted(
+      jobId,
+      claimToken,
+      completedAt,
+      downloadUrl,
+      expiresAt,
+    );
+    if (!completed) {
+      // A newer delivery reclaimed the lease: it owns the job now and
+      // publishes its own completion.
+      deps.logger?.warn('export job: claim superseded before completion', {
+        jobId,
+        userId: job.userId,
+      });
+      return { kind: 'in_progress', jobId };
+    }
 
     const event: MembersExportCompletedEvent = {
       id: deps.uuid(),
@@ -704,7 +725,7 @@ export async function runExportJob(
     };
   } catch (err) {
     const reason = toErrorReason(err);
-    await deps.jobs.markFailed(jobId, reason);
+    await deps.jobs.markFailed(jobId, claimToken, reason);
     deps.logger?.error('export job: archive / upload failure', {
       jobId,
       userId: job.userId,

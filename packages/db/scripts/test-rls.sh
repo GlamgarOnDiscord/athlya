@@ -14,9 +14,9 @@
 #   1. Runs `scripts/lint-rls-coverage.mjs` to confirm every policy in
 #      `migrations/0001_rls.sql` is referenced by at least one test.
 #      A failure here short-circuits before any SQL runs.
-#   2. Applies the schema migrations in order (`0000_init.sql`,
-#      `0001_rls.sql`). `ON_ERROR_STOP=1` makes psql exit non-zero on
-#      the first error.
+#   2. Applies every forward migration (`migrations/*.sql` minus the
+#      `*.down.sql` rollbacks) in filename order, like `pgtap.yml`.
+#      `ON_ERROR_STOP=1` makes psql exit non-zero on the first error.
 #   3. Runs `tests/rls/run-all.sql`, which sources the bootstrap and
 #      every per-table test file. Each file wraps its assertions in a
 #      `BEGIN; ... ROLLBACK;` pair so the suite is idempotent.
@@ -47,9 +47,10 @@ fi
 echo "==> [1/3] lint: every policy must be referenced by a test"
 node "$PKG_ROOT/scripts/lint-rls-coverage.mjs"
 
-echo "==> [2/3] apply migrations (0000_init.sql, 0001_rls.sql)"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PKG_ROOT/migrations/0000_init.sql"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PKG_ROOT/migrations/0001_rls.sql"
+echo "==> [2/3] apply forward migrations in filename order"
+for f in $(ls "$PKG_ROOT"/migrations/*.sql | grep -v '\.down\.sql$' | sort); do
+    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+done
 
 echo "==> [3/3] run pgTAP RLS suite (tests/rls/run-all.sql)"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PKG_ROOT/tests/rls/run-all.sql"
