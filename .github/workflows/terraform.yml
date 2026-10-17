@@ -154,6 +154,12 @@ jobs:
           set -euo pipefail
           missing=()
           [ -n "${TF_VAR_cloudflare_api_token}" ] || missing+=("secrets.TF_VAR_cloudflare_api_token")
+          [ -n "${TF_VAR_cloudflare_account_id}" ] || missing+=("secrets.TF_VAR_cloudflare_account_id")
+          [ -n "${TF_VAR_cloudflare_zone_id}" ] || missing+=("secrets.TF_VAR_cloudflare_zone_id")
+          [ -n "${TF_VAR_sentry_auth_token}" ] || missing+=("secrets.TF_VAR_sentry_auth_token")
+          [ -n "${TF_VAR_sentry_org}" ] || missing+=("secrets.TF_VAR_sentry_org")
+          [ -n "${TF_VAR_sentry_project}" ] || missing+=("secrets.TF_VAR_sentry_project")
+          [ -n "${TF_VAR_sentry_alert_team_id}" ] || missing+=("secrets.TF_VAR_sentry_alert_team_id")
           [ -n "${TF_TOKEN_app_terraform_io}" ] || missing+=("secrets.TF_TOKEN_app_terraform_io")
           [ -n "${TF_CLOUD_ORGANIZATION}" ] || missing+=("vars.TF_CLOUD_ORGANIZATION")
           if [ "${#missing[@]}" -eq 0 ]; then
