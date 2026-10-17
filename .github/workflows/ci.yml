@@ -103,6 +103,9 @@ jobs:
       - name: Release-script tests
         run: pnpm test:scripts
 
+      - name: Canary trigger covers the API bundle graph
+        run: pnpm check:canary-paths
+
       - name: Production build (Next.js + Workers)
         # Validates that Next.js apps and Cloudflare Worker bundles compile.
         # SKIP_ENV_VALIDATION prevents Next.js from crashing when runtime

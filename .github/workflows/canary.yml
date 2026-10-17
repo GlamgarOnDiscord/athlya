@@ -3,25 +3,42 @@ name: Canary Deploy
 # CN.7.1 — automatic canary promotion on every push to master.
 # Runbook: docs/runbooks/canary-deploy.md
 #
-# Required secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
-# Required vars:    PRODUCTION_API_URL, STAGING_API_URL
+# Required secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, SENTRY_AUTH_TOKEN
+# Required vars:    PRODUCTION_API_URL, STAGING_API_URL, SENTRY_ORG, SENTRY_PROJECT
+# Optional:         PRODUCTION_SMOKE_EMAIL / PRODUCTION_SMOKE_PASSWORD secrets
+#                   (authenticated route smoke), CANARY_MAX_ERRORS var (default 5)
 #
 # The canary-deploy.mjs script handles:
-#   • upload           — wrangler versions upload → new VERSION_ID
-#   • promote          — wrangler deployments create --percentage N
-#   • health check     — /health/ready polled at the end (after 100%)
-#   • rollback         — wrangler rollback on health failure
+#   • upload       — wrangler versions upload with VERSION=<sha> (Sentry release)
+#   • promote      — wrangler versions deploy --percentage N
+#   • route smoke  — scripts/smoke-routes.mjs after every traffic shift
+#   • bake gate    — /health/ready every 60 s, then the Sentry error count
+#                    for the release must stay within CANARY_MAX_ERRORS (#404)
+#   • rollback     — the workflow rolls back gateway + sub-workers on failure
 #
-# Steps: 1% → 10-min sleep → 10% → 10-min sleep → 100% → /health/ready
-# Bake windows are time-based sleeps; rollback triggers if the final
-# health check or any step throws.
+# A missing prerequisite FAILS the run: a merge to master must not look
+# deployed when nothing was promoted.
 
 on:
   push:
     branches:
       - master
+    # Every package @athlya/api reaches through runtime dependencies, plus
+    # the lockfile — checked by scripts/check-canary-paths.mjs (#404).
     paths:
       - 'packages/api/**'
+      - 'packages/auth/**'
+      - 'packages/billing/**'
+      - 'packages/db/**'
+      - 'packages/members/**'
+      - 'packages/notifications/**'
+      - 'packages/ratelimit/**'
+      - 'packages/reservations/**'
+      - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'scripts/canary-deploy.mjs'
+      - 'scripts/smoke-routes.mjs'
       - '.github/workflows/canary.yml'
 
 permissions:
@@ -60,19 +77,23 @@ jobs:
 
       - name: Check canary provisioning
         id: config
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
         run: |
           set -euo pipefail
           missing=()
-          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
-            missing+=("CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID")
-          fi
-          if [ -z "${PRODUCTION_API_URL}" ]; then
-            missing+=("vars.PRODUCTION_API_URL")
-          fi
+          [ -n "${CLOUDFLARE_API_TOKEN}" ] || missing+=("secrets.CLOUDFLARE_API_TOKEN")
+          [ -n "${CLOUDFLARE_ACCOUNT_ID}" ] || missing+=("secrets.CLOUDFLARE_ACCOUNT_ID")
+          [ -n "${PRODUCTION_API_URL}" ] || missing+=("vars.PRODUCTION_API_URL")
+          [ -n "${SENTRY_AUTH_TOKEN}" ] || missing+=("secrets.SENTRY_AUTH_TOKEN")
+          [ -n "${SENTRY_ORG}" ] || missing+=("vars.SENTRY_ORG")
+          [ -n "${SENTRY_PROJECT}" ] || missing+=("vars.SENTRY_PROJECT")
           if [ "${#missing[@]}" -gt 0 ]; then
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping canary deploy; missing ${missing[*]}. Configure the repository or production environment before enabling automatic canary deploys."
-            exit 0
+            echo "### Canary: FAILED — not provisioned: ${missing[*]}" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Canary not provisioned::missing ${missing[*]}"
+            exit 1
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
@@ -109,9 +130,24 @@ jobs:
         if: steps.config.outputs.ready == 'true' && steps.deploy_subworkers.outcome == 'success'
         run: bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}" 10 5
 
+      - name: Route smoke (old gateway + new sub-workers)
+        if: steps.config.outputs.ready == 'true' && steps.deploy_subworkers.outcome == 'success'
+        env:
+          SMOKE_EMAIL: ${{ secrets.PRODUCTION_SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
+        run: node scripts/smoke-routes.mjs --base-url "${PRODUCTION_API_URL}"
+
       - name: Canary 1% → 10% → 100%
         id: canary
         if: steps.config.outputs.ready == 'true' && steps.deploy_subworkers.outcome == 'success'
+        env:
+          VERSION: ${{ github.sha }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          CANARY_MAX_ERRORS: ${{ vars.CANARY_MAX_ERRORS }}
+          PRODUCTION_SMOKE_EMAIL: ${{ secrets.PRODUCTION_SMOKE_EMAIL }}
+          PRODUCTION_SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
         run: |
           set -euo pipefail
           node scripts/canary-deploy.mjs production-canary \
