@@ -158,16 +158,19 @@ On a **staging Neon branch** (never production), as the migration role:
 
 Rows must be valid events (UUID `event_id`, full `reservation.reminder`
 payload), otherwise the consumer rejects them and `pending = 0` proves
-nothing. The fixed load `userId` matches no account, so no email is sent and
-the rows are easy to clean up:
+nothing. The payload schema is strict, so the per-run marker is the `userId`
+itself: a fresh UUID that matches no account (no email is sent) and that only
+this run's rows carry. In `psql`:
 
 ```sql
+SELECT gen_random_uuid() AS load_run_user \gset
+\echo :load_run_user
 INSERT INTO outbox (event_id, event_type, payload, occurred_at, studio_id)
 SELECT gen_random_uuid()::text, 'reservation.reminder',
        jsonb_build_object(
          'reservationId', gen_random_uuid(),
          'classId', gen_random_uuid(),
-         'userId', '03110000-0000-4000-8000-000000000001',
+         'userId', :'load_run_user',
          'startsAt', to_char((now() + interval '1 hour') AT TIME ZONE 'UTC',
                              'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
        now(), (SELECT id FROM studios LIMIT 1)
@@ -184,8 +187,9 @@ SELECT gen_random_uuid()::text, 'reservation.reminder',
    next tick (fairness).
 3. Pass: time-to-empty ≤ 2 min (SLO) at the measured queue latency; otherwise
    record the measured service rate and raise the pool size / add a tick.
-4. Clean up:
-   `DELETE FROM outbox WHERE event_type = 'reservation.reminder' AND payload->>'userId' = '03110000-0000-4000-8000-000000000001';`
+4. Clean up only this run's rows (from another session, paste the UUID echoed
+   above in place of `:'load_run_user'`):
+   `DELETE FROM outbox WHERE event_type = 'reservation.reminder' AND payload->>'userId' = :'load_run_user';`
 
 ## Related
 
