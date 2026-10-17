@@ -1,7 +1,14 @@
 name: CI required vars (staging gates)
 
-# Issue #67 — fail loud on default branch when staging scan/load vars are unset.
-# Branch protection should also require: ci, integration-docker, pgtap (see docs).
+# Issues #67, #471 — fail loud when the repository variables that the
+# release, scan, load-test and observability workflows depend on are unset.
+# Each of those workflows fails closed on its own; this weekly job gives a
+# single launch-readiness inventory instead of N scattered red runs.
+#
+# Optional variables are not listed: CANARY_MAX_ERRORS, NEON_DATABASE_NAME,
+# TF_VAR_cloudflare_zone_plan (defaults) and TURBO_TEAM (Turborepo remote
+# cache for ci.yml / build-check.yml; builds run uncached without it).
+# Secrets are environment-scoped and asserted by the workflows that use them.
 
 on:
   schedule:
@@ -13,34 +20,69 @@ permissions:
 
 jobs:
   check-staging-vars:
-    name: Verify K6 + ZAP repository variables
+    name: Verify required repository variables
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-      - name: Assert staging gate variables are configured
+      - name: Assert required variables are configured
         env:
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+          PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+          STAGING_WEB_URL: ${{ vars.STAGING_WEB_URL }}
+          PRODUCTION_WEB_URL: ${{ vars.PRODUCTION_WEB_URL }}
+          PRODUCTION_STUDIO_URL: ${{ vars.PRODUCTION_STUDIO_URL }}
           K6_STAGING_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
           ZAP_TARGET_URL: ${{ vars.ZAP_TARGET_URL }}
           ZAP_ACTIVE_TARGET_URL: ${{ vars.ZAP_ACTIVE_TARGET_URL }}
+          SYNTHETIC_TARGET_URL: ${{ vars.SYNTHETIC_TARGET_URL }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+          TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+          STAGING_SMOKE_STUDIO_SLUG: ${{ vars.STAGING_SMOKE_STUDIO_SLUG }}
         run: |
           set -euo pipefail
+          # name|consumer
+          required=(
+            "STAGING_API_URL|staging-gate.yml, deploy-production.yml, canary.yml, deploy-frontend.yml"
+            "PRODUCTION_API_URL|deploy-production.yml, canary.yml, deploy-frontend.yml, rollback.yml"
+            "STAGING_WEB_URL|deploy-frontend.yml"
+            "PRODUCTION_WEB_URL|deploy-frontend.yml"
+            "PRODUCTION_STUDIO_URL|deploy-frontend.yml"
+            "K6_STAGING_BASE_URL|staging-gate.yml, load-test.yml"
+            "ZAP_TARGET_URL|zap-baseline.yml"
+            "ZAP_ACTIVE_TARGET_URL|zap-active.yml"
+            "SYNTHETIC_TARGET_URL|synthetics.yml"
+            "SENTRY_ORG|canary.yml, deploy-production.yml, deploy-frontend.yml"
+            "SENTRY_PROJECT|canary.yml, deploy-production.yml, deploy-frontend.yml"
+            "NEON_PROJECT_ID|preview.yml"
+            "CLOUDFLARE_WORKERS_SUBDOMAIN|preview.yml"
+            "TF_CLOUD_ORGANIZATION|terraform.yml"
+            "STAGING_SMOKE_STUDIO_SLUG|staging-gate.yml (E2E booking journey)"
+          )
           missing=0
-          if [ -z "${K6_STAGING_BASE_URL}" ]; then
-            echo "::error::vars.K6_STAGING_BASE_URL is empty — load-test.yml skips on every PR"
-            missing=1
-          fi
-          if [ -z "${ZAP_TARGET_URL}" ]; then
-            echo "::error::vars.ZAP_TARGET_URL is empty — zap-baseline.yml fails on every trusted PR"
-            missing=1
-          fi
-          if [ -z "${ZAP_ACTIVE_TARGET_URL}" ]; then
-            echo "::error::vars.ZAP_ACTIVE_TARGET_URL is empty — the weekly zap-active.yml scan fails"
-            missing=1
-          fi
+          {
+            echo "### Required repository variables"
+            echo
+            echo "| Variable | Status | Used by |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for entry in "${required[@]}"; do
+            name="${entry%%|*}"
+            consumer="${entry#*|}"
+            if [ -z "${!name:-}" ]; then
+              echo "::error::vars.${name} is empty — ${consumer} cannot run against a real target"
+              echo "| \`${name}\` | missing | ${consumer} |" >> "$GITHUB_STEP_SUMMARY"
+              missing=$((missing + 1))
+            else
+              echo "| \`${name}\` | set | ${consumer} |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
           if [ "${missing}" -ne 0 ]; then
-            echo "Configure repository variables (Settings → Secrets and variables → Actions → Variables)."
-            echo "See .github/READ_ME.md and docs/runbooks/branch-protection.md"
+            echo "${missing} required variable(s) missing. Configure them in Settings → Secrets and variables → Actions → Variables."
+            echo "See docs/runbooks/branch-protection.md"
             exit 1
           fi
-          echo "K6_STAGING_BASE_URL, ZAP_TARGET_URL and ZAP_ACTIVE_TARGET_URL are set."
+          echo "All ${#required[@]} required repository variables are set."

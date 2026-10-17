@@ -26,6 +26,7 @@ import {
   buildArchiveEntries,
   enqueueExport,
   exportObjectKey,
+  neutralizeCsvFormula,
   runExportJob,
   type ArchiveBuilder,
   type ArchiveEntry,
@@ -56,6 +57,7 @@ import type { Reservation, WorkoutSession } from '@athlya/shared/schemas/domain'
 const USER_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ab';
 const STUDIO_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ac';
 const JOB_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ad';
+const CURRENT_CLAIM = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ae';
 const REQUEST_EVENT_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ae';
 const COMPLETE_EVENT_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8af';
 
@@ -336,6 +338,10 @@ describe('enqueueExport', () => {
       userId: USER_ID,
       exportJobId: JOB_ID,
     });
+
+    // Issue #498 — the same event is handed to create() so the adapter
+    // records it in the outbox together with the row.
+    expect(createArgs[3]).toBe(event);
   });
 
   it('reuses an active job when the user already has one in flight (dedup)', async () => {
@@ -381,6 +387,143 @@ describe('enqueueExport', () => {
 });
 
 /* ------------------------------------------------------------------ */
+/*  runExportJob — claim (issue #498)                                  */
+/* ------------------------------------------------------------------ */
+
+describe('runExportJob claim', () => {
+  it('returns in_progress without reading data when another delivery holds the claim', async () => {
+    const store = buildJobStore();
+    const source = buildDataSource();
+    const { blob, put } = buildBlob();
+    const { archive, build } = buildArchiveDouble();
+    const { events, publish } = buildEvents();
+    store.get.mockResolvedValueOnce({ ...STORED_JOB, status: 'running' });
+    store.markRunning.mockResolvedValueOnce(null);
+
+    const result = await runExportJob(JOB_ID, {
+      jobs: store.jobs,
+      data: source.data,
+      archive,
+      blob,
+      events,
+      clock: buildClock([FROZEN_REQUEST_TIME]),
+      uuid: buildUuid(),
+    });
+
+    expect(result).toEqual({ kind: 'in_progress', jobId: JOB_ID });
+    expect(source.fetchProfile).not.toHaveBeenCalled();
+    expect(build).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+    expect(store.markFailed).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('does not publish completion when a newer delivery reclaimed the lease', async () => {
+    const store = buildJobStore();
+    const source = buildDataSource();
+    const { blob, put, signedUrl } = buildBlob();
+    const { archive } = buildArchiveDouble();
+    const { events, publish } = buildEvents();
+    store.get.mockResolvedValueOnce(STORED_JOB);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
+    store.markCompleted.mockResolvedValueOnce(false);
+    source.fetchProfile.mockResolvedValueOnce(PROFILE);
+    source.fetchConsents.mockResolvedValueOnce([CONSENTS_ROW]);
+    source.listReservations.mockReturnValueOnce(asyncPage([]));
+    source.listSessions.mockReturnValueOnce(asyncPage([]));
+    source.listCheckins.mockReturnValueOnce(asyncPage([]));
+    source.listInvoices.mockReturnValueOnce(asyncPage([]));
+    put.mockResolvedValueOnce(undefined);
+    signedUrl.mockResolvedValueOnce('https://api.athlya.test/download');
+
+    const result = await runExportJob(JOB_ID, {
+      jobs: store.jobs,
+      data: source.data,
+      archive,
+      blob,
+      events,
+      clock: buildClock([FROZEN_REQUEST_TIME, FROZEN_COMPLETE_TIME]),
+      uuid: buildUuid(COMPLETE_EVENT_ID),
+    });
+
+    expect(result).toEqual({ kind: 'in_progress', jobId: JOB_ID });
+    expect(store.markCompleted.mock.calls[0]?.[1]).toBe(CURRENT_CLAIM);
+    expect(store.markFailed).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  CSV formula injection (issue #498)                                 */
+/* ------------------------------------------------------------------ */
+
+describe('neutralizeCsvFormula', () => {
+  it.each([
+    '=HYPERLINK("http://evil")',
+    '+1+1',
+    '-2+3',
+    '@SUM(A1)',
+    '\tcmd',
+    '\rcmd',
+    '\uFF1D1+1',
+    '\uFF0B1',
+    '\uFF0D1',
+    '\uFF20SUM(A1)',
+  ])('prefixes %j with a quote', (value) => {
+    expect(neutralizeCsvFormula(value)).toBe(`'${value}`);
+  });
+
+  it.each(['plain note', '', '42', 'a=b', ' =not-leading'])('leaves %j untouched', (value) => {
+    expect(neutralizeCsvFormula(value)).toBe(value);
+  });
+
+  it('escapes CSV cells but keeps the raw value in JSON', async () => {
+    const payload = '=HYPERLINK("http://evil","x")';
+    const one = <T>(rows: T[]): AsyncIterable<T[]> => ({
+      [Symbol.asyncIterator]: () => {
+        let done = false;
+        return {
+          next: () => {
+            const result: IteratorResult<T[]> = done
+              ? { done: true, value: undefined }
+              : { done: false, value: rows };
+            done = true;
+            return Promise.resolve(result);
+          },
+        };
+      },
+    });
+    const entries: ArchiveEntry[] = [];
+    for await (const entry of buildArchiveEntries({
+      profile: PROFILE,
+      consents: [CONSENTS_ROW],
+      reservations: one<Reservation>([]),
+      sessions: one<WorkoutSession>([]),
+      checkins: one<CheckinRecord>([]),
+      invoices: one<InvoiceRecord>([
+        {
+          id: 'inv_1',
+          issuedAt: '2026-01-01T00:00:00.000Z',
+          amountCents: 100,
+          currency: 'eur',
+          description: payload,
+          pdfUrl: '@evil',
+        },
+      ]),
+    })) {
+      entries.push(entry);
+    }
+    const text = (name: string) =>
+      new TextDecoder().decode(entries.find((e) => e.name === name)!.bytes);
+
+    expect(text('invoices.csv')).toContain(`"'=HYPERLINK(""http://evil"",""x"")"`);
+    expect(text('invoices.csv')).toContain(`"'@evil"`);
+    const invoicesJson = JSON.parse(text('invoices.json')) as InvoiceRecord[];
+    expect(invoicesJson[0]?.description).toBe(payload);
+  });
+});
+
+/* ------------------------------------------------------------------ */
 /*  runExportJob — happy path                                          */
 /* ------------------------------------------------------------------ */
 
@@ -393,8 +536,8 @@ describe('runExportJob', () => {
     const { events, publish } = buildEvents();
 
     store.get.mockResolvedValueOnce(STORED_JOB);
-    store.markRunning.mockResolvedValueOnce(undefined);
-    store.markCompleted.mockResolvedValueOnce(undefined);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
+    store.markCompleted.mockResolvedValueOnce(true);
 
     source.fetchProfile.mockResolvedValueOnce(PROFILE);
     source.fetchConsents.mockResolvedValueOnce([CONSENTS_ROW]);
@@ -433,12 +576,12 @@ describe('runExportJob', () => {
     }
 
     // Data sources were fetched.
-    expect(source.fetchProfile).toHaveBeenCalledWith(USER_ID);
-    expect(source.fetchConsents).toHaveBeenCalledWith(USER_ID);
-    expect(source.listReservations).toHaveBeenCalledWith(USER_ID);
-    expect(source.listSessions).toHaveBeenCalledWith(USER_ID);
-    expect(source.listCheckins).toHaveBeenCalledWith(USER_ID);
-    expect(source.listInvoices).toHaveBeenCalledWith(USER_ID);
+    expect(source.fetchProfile).toHaveBeenCalledWith(USER_ID, JOB_ID);
+    expect(source.fetchConsents).toHaveBeenCalledWith(USER_ID, JOB_ID);
+    expect(source.listReservations).toHaveBeenCalledWith(USER_ID, JOB_ID);
+    expect(source.listSessions).toHaveBeenCalledWith(USER_ID, JOB_ID);
+    expect(source.listCheckins).toHaveBeenCalledWith(USER_ID, JOB_ID);
+    expect(source.listInvoices).toHaveBeenCalledWith(USER_ID, JOB_ID);
 
     // Archive was built with entries covering every collection.
     expect(build).toHaveBeenCalledTimes(1);
@@ -456,20 +599,24 @@ describe('runExportJob', () => {
 
     // Upload to R2 used the expected key.
     expect(put).toHaveBeenCalledTimes(1);
-    expect(put.mock.calls[0]![0]).toBe(exportObjectKey(JOB_ID));
+    expect(put.mock.calls[0]![0]).toBe(exportObjectKey(JOB_ID, CURRENT_CLAIM));
 
     // Signed URL TTL is exactly 72 h (Requirement 4.2).
     expect(signedUrl).toHaveBeenCalledTimes(1);
-    expect(signedUrl).toHaveBeenCalledWith(exportObjectKey(JOB_ID), DOWNLOAD_URL_TTL_SECONDS);
+    expect(signedUrl).toHaveBeenCalledWith(
+      exportObjectKey(JOB_ID, CURRENT_CLAIM),
+      DOWNLOAD_URL_TTL_SECONDS,
+    );
     expect(DOWNLOAD_URL_TTL_SECONDS).toBe(259_200);
 
     // Job row stamped with completedAt + url + expires.
     expect(store.markCompleted).toHaveBeenCalledTimes(1);
     const completeArgs = store.markCompleted.mock.calls[0]!;
     expect(completeArgs[0]).toBe(JOB_ID);
-    expect(completeArgs[1].toISOString()).toBe(new Date(FROZEN_COMPLETE_TIME).toISOString());
-    expect(completeArgs[2]).toBe(signedUrlStr);
-    expect(completeArgs[3].toISOString()).toBe(
+    expect(completeArgs[1]).toBe(CURRENT_CLAIM);
+    expect(completeArgs[2].toISOString()).toBe(new Date(FROZEN_COMPLETE_TIME).toISOString());
+    expect(completeArgs[3]).toBe(signedUrlStr);
+    expect(completeArgs[4].toISOString()).toBe(
       new Date(FROZEN_COMPLETE_TIME + DOWNLOAD_URL_TTL_SECONDS * 1000).toISOString(),
     );
 
@@ -501,7 +648,7 @@ describe('runExportJob', () => {
     const { events, publish } = buildEvents();
 
     store.get.mockResolvedValueOnce(STORED_JOB);
-    store.markRunning.mockResolvedValueOnce(undefined);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
     store.markFailed.mockResolvedValueOnce(undefined);
 
     source.fetchProfile.mockResolvedValueOnce(PROFILE);
@@ -526,8 +673,9 @@ describe('runExportJob', () => {
       expect(result.reason).toContain('consents repo offline');
     }
     expect(store.markFailed).toHaveBeenCalledTimes(1);
-    const [failedJobId, reason] = store.markFailed.mock.calls[0]!;
+    const [failedJobId, failedToken, reason] = store.markFailed.mock.calls[0]!;
     expect(failedJobId).toBe(JOB_ID);
+    expect(failedToken).toBe(CURRENT_CLAIM);
     expect(reason).toContain('consents repo offline');
 
     // Critical invariant: completion was NOT published, and the
@@ -659,8 +807,11 @@ describe('buildArchiveEntries', () => {
 /* ------------------------------------------------------------------ */
 
 describe('exportObjectKey', () => {
-  it('namespaces keys under the shared prefix', () => {
-    expect(exportObjectKey(JOB_ID)).toBe(`${EXPORT_R2_PREFIX}/${JOB_ID}.zip`);
+  it('namespaces keys under the shared prefix, one key per claim', () => {
+    expect(exportObjectKey(JOB_ID, CURRENT_CLAIM)).toBe(
+      `${EXPORT_R2_PREFIX}/${JOB_ID}/${CURRENT_CLAIM}.zip`,
+    );
+    expect(exportObjectKey(JOB_ID, CURRENT_CLAIM)).not.toBe(exportObjectKey(JOB_ID, USER_ID));
   });
 });
 

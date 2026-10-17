@@ -6,7 +6,7 @@
  *   2. GET with `Idempotency-Key` → pass-through (read-only verbs skip).
  *   3. POST cache miss, handler returns 2xx → `store()` called.
  *   4. POST cache hit → handler never invoked, response matches cache.
- *   5. Missing `userId` context → middleware throws (programmer error).
+ *   5. Missing `userId` context → pass-through without lookup or store.
  *   6. Empty or oversized key → HTTP 400 `invalid_idempotency_key`.
  *
  * The tests exercise the middleware through a real Hono `app.request`
@@ -238,23 +238,18 @@ describe('idempotencyMiddleware', () => {
     expect(mocks.store).not.toHaveBeenCalled();
   });
 
-  it('case 5: throws when userId is absent from the context', async () => {
-    const { app } = buildApp({ injectUserId: false });
-
-    // Hono catches handler errors and returns 500 by default, but
-    // the `onError` default also logs to stderr. We assert the
-    // status rather than rely on the error surfacing through the
-    // fetch call.
-    app.onError((err, c) => c.json({ thrown: err.message }, 500));
+  it('case 5: passes through without caching when userId is absent', async () => {
+    const { app, handlerSpy } = buildApp({ injectUserId: false });
 
     const res = await app.request('/resource', {
       method: 'POST',
-      headers: { 'Idempotency-Key': 'k-missing-user' },
+      headers: { 'Idempotency-Key': 'k-anonymous' },
     });
 
-    expect(res.status).toBe(500);
-    const body = await res.json<{ thrown: string }>();
-    expect(body.thrown).toMatch(/userId missing/);
+    expect(res.status).toBe(201);
+    expect(handlerSpy).toHaveBeenCalledTimes(1);
+    expect(mocks.lookup).not.toHaveBeenCalled();
+    expect(mocks.store).not.toHaveBeenCalled();
   });
 
   it('case 6a: rejects an empty Idempotency-Key with 400', async () => {

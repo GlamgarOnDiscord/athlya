@@ -129,6 +129,38 @@ node scripts/smoke-rls-cutover.mjs
 
 Exit code 0 requis avant de considérer le cutover terminé (issue #117).
 
+### 6c. Contrat des rôles runtime (issue #117)
+
+Rejoue **chaque charge de travail** sous le rôle réellement déployé, dans des
+transactions toujours annulées (rien n'est persisté) : register, lookup login,
+destinataire de notification, enqueue d'export (claims tenant), claim + lecture
+par le worker d'export, suppression de compte + événement, cascade RGPD, puis
+les privilèges du drain sous `athlya_cron` et l'application d'un événement Stripe
+sous `athlya_billing` (le seul rôle autorisé ; `athlya_app` est refusé).
+
+```powershell
+$env:APP_DATABASE_URL = "postgresql://athlya_app:...@.../athlya"
+$env:CRON_DATABASE_URL = "postgresql://athlya_cron:...@.../athlya"
+$env:BILLING_DATABASE_URL = "postgresql://athlya_billing:...@.../athlya"
+$env:SMOKE_STUDIO_SLUG = "<slug d'un studio existant>"
+pnpm verify:role-contract
+```
+
+Prérequis : migrations `0031` → `0036` appliquées, `athlya_billing` en LOGIN
+(voir `stripe-production.md`). Les **quatre** variables sont obligatoires : sans
+`CRON_DATABASE_URL` ou `BILLING_DATABASE_URL` le script échoue (exit 1) au lieu
+de sauter la vérification du rôle `athlya_cron` ou `athlya_billing`. Il échoue aussi si une connexion
+est `SUPERUSER` ou `BYPASSRLS`. Exit 0 sur staging **et** production avant de
+déclarer le cutover terminé ; le même contrat tourne en CI (`pgtap.yml`) sur
+une base éphémère à chaque changement de migration.
+
+### Sign-off cutover
+
+| Environnement | Date | Opérateur | `verify:role-contract` | Soak 48 h sans régression | Rollback testé |
+| ------------- | ---- | --------- | ---------------------- | ------------------------- | -------------- |
+| staging       |      |           |                        |                           |                |
+| production    |      |           |                        | n/a                       |                |
+
 ### 7. Vérification RLS active
 
 Exécuter en SQL editor (en tant que `neondb_owner`) :

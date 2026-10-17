@@ -117,6 +117,8 @@ head_sampling_rate = 0.1
 [vars]
 ENVIRONMENT = "dev"
 VERSION = "0.0.0-dev"
+# Public API origin used in RGPD export download links (issue #498).
+API_PUBLIC_URL = "http://localhost:8787"
 
 # ----------------------------------------------------------------------------
 # Queue producers (shared defaults)
@@ -226,7 +228,7 @@ max_retries = 3
 #
 #   • AVATARS_BUCKET   — `avatars/{userId}/...` objects purged by the
 #                        Article 17 cascade (`adapters/avatar-store-r2.ts`).
-#   • EXPORTS_BUCKET   — `exports/members/{jobId}.zip` archives uploaded
+#   • EXPORTS_BUCKET   — `exports/members/{jobId}/{claim}.zip` archives uploaded
 #                        by the Article 15/20 export consumer
 #                        (`adapters/export-deps.ts`).
 #
@@ -285,6 +287,7 @@ name = "athlya-api-dev"
 [env.dev.vars]
 ENVIRONMENT = "dev"
 VERSION = "0.0.0-dev"
+API_PUBLIC_URL = "http://localhost:8787"
 
 # Secrets (REDIS_TOKEN, DB_URL, JWT_JWKS_URL, SENTRY_DSN) live in
 # `.dev.vars` for local dev and are never committed.
@@ -381,6 +384,8 @@ workers_dev = true
 ENVIRONMENT = "staging"
 VERSION = "0.0.0-staging"
 OTEL_SAMPLE_RATE = "0.5"
+# Matches the staging route above (RGPD export download links, #498).
+API_PUBLIC_URL = "https://staging.api.athlya.app"
 
 [env.staging.placement]
 # Smart placement co-locates the Worker with EU-resident data stores.
@@ -478,6 +483,8 @@ route = { pattern = "api.athlya.app/*", zone_name = "athlya.app" }
 ENVIRONMENT = "production"
 VERSION = "0.1.0"
 OTEL_SAMPLE_RATE = "0.1"
+# Matches the production route above (RGPD export download links, #498).
+API_PUBLIC_URL = "https://api.athlya.app"
 
 [env.production.placement]
 mode = "smart"

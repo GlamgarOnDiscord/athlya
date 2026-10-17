@@ -57,7 +57,7 @@ export const DOWNLOAD_URL_TTL_SECONDS = 72 * 60 * 60;
 
 /**
  * Prefix under which archives are stored in Cloudflare R2. The full
- * key is `EXPORT_R2_PREFIX/{jobId}.zip`; keeping the prefix as a
+ * key is `EXPORT_R2_PREFIX/{jobId}/{claimToken}.zip`; keeping the prefix as a
  * named constant makes it trivial to snapshot / rotate a bucket
  * without rebuilding service images.
  */
@@ -184,31 +184,47 @@ export interface ExportJobStore {
    * propagating the error. The caller detects the race by comparing
    * the returned id against the generated `jobId` and short-circuits
    * to `{ kind: 'deduped' }` without publishing a duplicate event.
+   *
+   * When `requestedEvent` is supplied the adapter records it in the
+   * outbox in the same statement as the row (issue #498): a queue
+   * outage then delays the export instead of stranding it `pending`.
    */
-  create(jobId: string, userId: string, requestedAt: Date): Promise<string>;
+  create(
+    jobId: string,
+    userId: string,
+    requestedAt: Date,
+    requestedEvent?: MembersExportRequestedEvent,
+  ): Promise<string>;
 
   /**
-   * Transition the row from `pending` → `running`. Idempotent: a
-   * second call with the same `jobId` is a no-op.
+   * Claim the job: atomic `pending → running` (or reclaim of a
+   * `running` job whose lease expired after a crashed run). Resolves a
+   * claim token only for the caller that won the transition, `null`
+   * otherwise, so concurrent deliveries of the same event never both
+   * build an archive (#498).
    */
-  markRunning(jobId: string, startedAt: Date): Promise<void>;
+  markRunning(jobId: string, startedAt: Date): Promise<string | null>;
 
   /**
    * Transition the row from `running` → `completed`, stamping the
-   * signed URL and its expiration. Idempotent.
+   * signed URL and its expiration. Resolves `false` when `claimToken`
+   * is no longer current (the lease was reclaimed by a newer run), in
+   * which case nothing is written. Idempotent.
    */
   markCompleted(
     jobId: string,
+    claimToken: string,
     completedAt: Date,
     downloadUrl: string,
     downloadExpiresAt: Date,
-  ): Promise<void>;
+  ): Promise<boolean>;
 
   /**
-   * Transition the row to `failed`, stamping a short human-readable
-   * error reason. Idempotent.
+   * Transition the row from `running` → `failed`, stamping a short
+   * human-readable error reason. A stale `claimToken` is a no-op.
+   * Idempotent.
    */
-  markFailed(jobId: string, error: string): Promise<void>;
+  markFailed(jobId: string, claimToken: string, error: string): Promise<void>;
 
   /** Fetch a stored job, or `null` if unknown. */
   get(jobId: string): Promise<ExportJobRecord | null>;
@@ -232,6 +248,11 @@ export interface ExportJobRecord {
   error: string | null;
   downloadUrl: string | null;
   downloadExpiresAt: string | null;
+  /**
+   * Claim that completed the job; it names the archive object. Only
+   * exposed by stores that read the raw row (the owner's download path).
+   */
+  claimToken?: string | null;
 }
 
 /**
@@ -242,14 +263,16 @@ export interface ExportJobRecord {
  * rows into memory simultaneously (issue #469).
  */
 export interface MemberDataSource {
-  fetchProfile(userId: string): Promise<ExportProfile>;
-  fetchConsents(userId: string): Promise<ReadonlyArray<Consents>>;
-  listReservations(userId: string): AsyncIterable<ReadonlyArray<Reservation>>;
-  listSessions(userId: string): AsyncIterable<ReadonlyArray<WorkoutSession>>;
-  listCheckins(userId: string): AsyncIterable<ReadonlyArray<CheckinRecord>>;
-  listInvoices(userId: string): AsyncIterable<ReadonlyArray<InvoiceRecord>>;
+  // `jobId` is the claimed job: the production adapter reads personal
+  // data only through it (migration 0034), never by bare user id.
+  fetchProfile(userId: string, jobId: string): Promise<ExportProfile>;
+  fetchConsents(userId: string, jobId: string): Promise<ReadonlyArray<Consents>>;
+  listReservations(userId: string, jobId: string): AsyncIterable<ReadonlyArray<Reservation>>;
+  listSessions(userId: string, jobId: string): AsyncIterable<ReadonlyArray<WorkoutSession>>;
+  listCheckins(userId: string, jobId: string): AsyncIterable<ReadonlyArray<CheckinRecord>>;
+  listInvoices(userId: string, jobId: string): AsyncIterable<ReadonlyArray<InvoiceRecord>>;
   /** Optional — audit trail visible to the subject. */
-  listAuditTrail?(userId: string): AsyncIterable<ReadonlyArray<AuditLog>>;
+  listAuditTrail?(userId: string, jobId: string): AsyncIterable<ReadonlyArray<AuditLog>>;
 }
 
 /**
@@ -336,7 +359,9 @@ export type EnqueueExportResult =
  * Discriminated result returned by {@link runExportJob}. `completed`
  * is the happy path; `already_completed` covers retries hitting a
  * terminal row; `failed` stamps the job as failed and does NOT
- * publish the completion event; `not_found` protects against a
+ * publish the completion event; `in_progress` means another delivery
+ * holds the claim (its lease has not expired, or it reclaimed this
+ * run's lease before completion); `not_found` protects against a
  * poisoned QStash message whose `jobId` was already hard-deleted.
  */
 export type RunExportJobResult =
@@ -347,6 +372,7 @@ export type RunExportJobResult =
       readonly sizeBytes: number;
     }
   | { readonly kind: 'already_completed'; readonly jobId: string }
+  | { readonly kind: 'in_progress'; readonly jobId: string }
   | { readonly kind: 'failed'; readonly reason: string }
   | { readonly kind: 'not_found'; readonly jobId: string };
 
@@ -360,6 +386,24 @@ const UTF8 = new TextEncoder();
 /** Encode a JSON-serialisable value as pretty-printed UTF-8 bytes. */
 function toJsonBytes(value: unknown): Uint8Array {
   return UTF8.encode(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+/**
+ * Characters that make Excel / LibreOffice / Google Sheets evaluate a
+ * cell as a formula (CSV injection, OWASP), including the full-width
+ * variants some spreadsheets normalise.
+ */
+const CSV_FORMULA_TRIGGER = /^[=+\-@\t\r\n\uFF1D\uFF0B\uFF0D\uFF20]/u;
+
+/**
+ * Neutralise a cell that a spreadsheet would execute as a formula by
+ * prefixing a single quote (issue #498). Applied to the CSV entries
+ * only: the JSON files keep the raw value, so a leading `-` on a
+ * negative number in CSV reads `'-5` — the documented trade-off for
+ * never executing member-controlled text (notes, descriptions, URLs).
+ */
+export function neutralizeCsvFormula(value: string): string {
+  return CSV_FORMULA_TRIGGER.test(value) ? `'${value}` : value;
 }
 
 /**
@@ -380,7 +424,7 @@ function toCsvBytes<T>(
     if (raw === null || raw === undefined) return '';
     const asString = typeof raw === 'string' ? raw : (JSON.stringify(raw) ?? '');
     // Always quote; escape embedded quotes by doubling them.
-    return `"${asString.replace(/"/g, '""')}"`;
+    return `"${neutralizeCsvFormula(asString).replace(/"/g, '""')}"`;
   };
   const lines: string[] = [];
   lines.push(columns.map(([header]) => escape(header)).join(','));
@@ -481,9 +525,15 @@ export async function* buildArchiveEntries(data: MemberExportData): AsyncGenerat
   }
 }
 
-/** Build the R2 object key for `jobId`. */
-export function exportObjectKey(jobId: string): string {
-  return `${EXPORT_R2_PREFIX}/${jobId}.zip`;
+/**
+ * Build the R2 object key for the archive of `jobId` built under
+ * `claimToken`. One key per claim: a stale run whose lease was reclaimed
+ * uploads to its own key, so it can never overwrite the archive the
+ * winning run published; the download path serves the key of the claim
+ * stored on the completed row.
+ */
+export function exportObjectKey(jobId: string, claimToken: string): string {
+  return `${EXPORT_R2_PREFIX}/${jobId}/${claimToken}.zip`;
 }
 
 /**
@@ -540,11 +590,6 @@ export async function enqueueExport(
   const jobId = deps.uuid();
   const requestedAt = new Date(deps.clock.now());
 
-  const effectiveJobId = await deps.jobs.create(jobId, userId, requestedAt);
-  if (effectiveJobId !== jobId) {
-    return { kind: 'deduped', jobId: effectiveJobId };
-  }
-
   const event: MembersExportRequestedEvent = {
     id: deps.uuid(),
     type: 'members.export.requested',
@@ -554,6 +599,14 @@ export async function enqueueExport(
       exportJobId: jobId,
     },
   };
+
+  // The row and its outbox event commit together; the publish below is
+  // only the low-latency path (the outbox drain delivers on failure).
+  const effectiveJobId = await deps.jobs.create(jobId, userId, requestedAt, event);
+  if (effectiveJobId !== jobId) {
+    return { kind: 'deduped', jobId: effectiveJobId };
+  }
+
   await deps.events.publish(event);
 
   return { kind: 'ok', jobId };
@@ -570,7 +623,8 @@ export async function enqueueExport(
  *
  *   1. Load the row. If unknown → `not_found`; if already in a
  *      terminal state → `already_completed`.
- *   2. Transition to `running`.
+ *   2. Claim the job (`running`); a delivery that loses the claim
+ *      returns `in_progress` without touching any data.
  *   3. Fetch every required collection in parallel (Requirement
  *      4.4). Any failure here aborts — the job is marked `failed`
  *      with the thrown reason and no completion event is published
@@ -598,29 +652,32 @@ export async function runExportJob(
     return { kind: 'already_completed', jobId };
   }
 
-  await deps.jobs.markRunning(jobId, new Date(deps.clock.now()));
+  const claimToken = await deps.jobs.markRunning(jobId, new Date(deps.clock.now()));
+  if (claimToken === null) {
+    return { kind: 'in_progress', jobId };
+  }
 
   // Step 1: fetch scalar sources eagerly; any throw here aborts before
   // the archive builder is started so the builder is never invoked on a
   // partial data set.
   let data: MemberExportData;
   try {
-    const profile = await deps.data.fetchProfile(job.userId);
-    const consents = await deps.data.fetchConsents(job.userId);
+    const profile = await deps.data.fetchProfile(job.userId, jobId);
+    const consents = await deps.data.fetchConsents(job.userId, jobId);
     data = {
       profile,
       consents,
-      reservations: deps.data.listReservations(job.userId),
-      sessions: deps.data.listSessions(job.userId),
-      checkins: deps.data.listCheckins(job.userId),
-      invoices: deps.data.listInvoices(job.userId),
+      reservations: deps.data.listReservations(job.userId, jobId),
+      sessions: deps.data.listSessions(job.userId, jobId),
+      checkins: deps.data.listCheckins(job.userId, jobId),
+      invoices: deps.data.listInvoices(job.userId, jobId),
       ...(deps.data.listAuditTrail !== undefined
-        ? { auditTrail: deps.data.listAuditTrail(job.userId) }
+        ? { auditTrail: deps.data.listAuditTrail(job.userId, jobId) }
         : {}),
     };
   } catch (err) {
     const reason = toErrorReason(err);
-    await deps.jobs.markFailed(jobId, reason);
+    await deps.jobs.markFailed(jobId, claimToken, reason);
     deps.logger?.error('export job: data source failure', {
       jobId,
       userId: job.userId,
@@ -634,14 +691,29 @@ export async function runExportJob(
   try {
     const { bytes, sizeBytes } = await deps.archive.build(buildArchiveEntries(data));
 
-    const objectKey = exportObjectKey(jobId);
+    const objectKey = exportObjectKey(jobId, claimToken);
     await deps.blob.put(objectKey, bytes);
     const downloadUrl = await deps.blob.signedUrl(objectKey, DOWNLOAD_URL_TTL_SECONDS);
 
     const completedAt = new Date(deps.clock.now());
     const expiresAt = new Date(completedAt.getTime() + DOWNLOAD_URL_TTL_SECONDS * 1000);
 
-    await deps.jobs.markCompleted(jobId, completedAt, downloadUrl, expiresAt);
+    const completed = await deps.jobs.markCompleted(
+      jobId,
+      claimToken,
+      completedAt,
+      downloadUrl,
+      expiresAt,
+    );
+    if (!completed) {
+      // A newer delivery reclaimed the lease: it owns the job now and
+      // publishes its own completion.
+      deps.logger?.warn('export job: claim superseded before completion', {
+        jobId,
+        userId: job.userId,
+      });
+      return { kind: 'in_progress', jobId };
+    }
 
     const event: MembersExportCompletedEvent = {
       id: deps.uuid(),
@@ -664,7 +736,7 @@ export async function runExportJob(
     };
   } catch (err) {
     const reason = toErrorReason(err);
-    await deps.jobs.markFailed(jobId, reason);
+    await deps.jobs.markFailed(jobId, claimToken, reason);
     deps.logger?.error('export job: archive / upload failure', {
       jobId,
       userId: job.userId,

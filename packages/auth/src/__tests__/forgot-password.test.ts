@@ -124,6 +124,20 @@ describe('requestReset (Sprint-6 SP6.3 — S2-006)', () => {
     expect(emailCall.link).toMatch(/^https:\/\/app\.athlya\.test\/reset-password\/[A-Za-z0-9_-]+$/);
   });
 
+  it('strips trailing slashes from the reset link base URL', async () => {
+    const emailTransport = makeTransport();
+
+    await requestReset('alice@example.com', {
+      userRepo: makeUserRepo(makeUser()),
+      passwordResetRepo: makeResetRepo(),
+      emailTransport,
+      resetLinkBaseUrl: 'https://app.athlya.test///',
+    });
+
+    const emailCall = emailTransport.sendResetEmail.mock.calls[0]![0]!;
+    expect(emailCall.link).toMatch(/^https:\/\/app\.athlya\.test\/reset-password\/[A-Za-z0-9_-]+$/);
+  });
+
   it('returns sent (no side-effect) when the email does NOT match — email-enumeration defence', async () => {
     const userRepo = makeUserRepo(null);
     const passwordResetRepo = makeResetRepo();
