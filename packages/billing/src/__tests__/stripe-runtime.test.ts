@@ -6,7 +6,7 @@ import {
   createFetchStripeClient,
   encodeCheckoutForm,
 } from '../stripe-client.js';
-import { mapStripeEvent } from '../stripe-effects.js';
+import { PAYMENT_FAILED_REASON, mapStripeEvent } from '../stripe-effects.js';
 import { createStudioCheckout } from '../studio-checkout.js';
 import { handleStripeWebhook, type WebhookDeps } from '../webhook.js';
 
@@ -192,8 +192,42 @@ describe('mapStripeEvent', () => {
     });
     expect(effect?.event).toMatchObject({
       type: 'billing.subscription.failed',
-      payload: { subscriptionId: 'sub_1', reason: 'invoice_payment_failed' },
+      payload: { subscriptionId: 'sub_1', reason: PAYMENT_FAILED_REASON },
     });
+  });
+
+  it('ignores last_finalization_error, which is not a payment decline', () => {
+    const effect = mapStripeEvent(
+      ev('invoice.payment_failed', {
+        id: 'in_1',
+        status: 'open',
+        amount_due: 4900,
+        currency: 'eur',
+        created: 1_760_227_200,
+        subscription: 'sub_1',
+        last_finalization_error: { message: 'tax_id_invalid' },
+      }),
+      fixedId,
+      fixedNow,
+    );
+    expect(effect?.event?.payload['reason']).toBe(PAYMENT_FAILED_REASON);
+  });
+
+  it('carries the Stripe event time so late older deliveries are ordered', () => {
+    const effect = mapStripeEvent(
+      {
+        ...ev('customer.subscription.updated', { id: 'sub_1', status: 'active' }),
+        created: 1_760_227_200,
+      },
+      fixedId,
+    );
+    expect(effect?.sourceEventAt).toBe('2025-10-12T00:00:00.000Z');
+    expect(
+      mapStripeEvent(
+        ev('customer.subscription.updated', { id: 'sub_1', status: 'active' }),
+        fixedId,
+      )?.sourceEventAt,
+    ).toBeNull();
   });
 
   it.each([
@@ -258,23 +292,20 @@ describe('handleStripeWebhook — atomic applyEvent path', () => {
           ok: true as const,
           event: { id: 'evt_1', type: 'invoice.paid', data: {} },
         }),
-      claimStripeEvent: vi.fn(() => Promise.resolve(true)),
       appendAudit: vi.fn(() => Promise.resolve()),
-      publish: vi.fn(() => Promise.resolve()),
       withTransaction: async (fn) => fn(),
-      ...(applyEvent !== undefined ? { applyEvent } : {}),
+      applyEvent,
     };
   }
 
-  it('delegates to applyEvent and never uses the separate claim', async () => {
+  it('delegates to applyEvent and writes no separate audit', async () => {
     const d = deps(() => Promise.resolve('applied' as const));
     await expect(handleStripeWebhook('{}', 'sig', 'whsec', d)).resolves.toEqual({
       kind: 'processed',
       eventType: 'invoice.paid',
       eventId: 'evt_1',
     });
-    expect(d.claimStripeEvent).not.toHaveBeenCalled();
-    expect(d.publish).not.toHaveBeenCalled();
+    expect(d.appendAudit).not.toHaveBeenCalled();
   });
 
   it('acknowledges duplicates and ignored events', async () => {

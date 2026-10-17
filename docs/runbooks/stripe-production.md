@@ -1,7 +1,7 @@
 # Stripe production — provisioning (issue #122)
 
 **Owner:** Backend / billing ops  
-**Prerequis:** API deployee staging + production, migrations `0010_stripe_webhook_events.sql` et `0036_billing_runtime.sql` appliquees.
+**Prerequis:** API deployee staging + production, migrations `0010_stripe_webhook_events.sql` et `0036_billing_runtime.sql` appliquees et verifiees (Phase 3), role `athlya_billing` en LOGIN (Phase 2).
 
 ---
 
@@ -36,24 +36,47 @@ Connect onboarding studio : voir [billing.md](./billing.md) § Connect.
 
 ## Phase 2 — Secrets Cloudflare Workers
 
+`/v1/billing/*` est servi par le Worker **billing** (`wrangler.billing.toml`,
+issue #230) : c'est lui qui doit porter les secrets Stripe et `BILLING_DB_URL`.
+Le gateway (`wrangler.toml`) garde une copie des secrets Stripe pour le
+fallback `*.workers.dev`.
+
+Le webhook applique les evenements Stripe sous le role dedie `athlya_billing`
+(migration 0036) — `athlya_app` ne peut pas les appliquer. Le passer en LOGIN
+une fois par environnement (Neon, role owner) :
+
+```sql
+ALTER ROLE athlya_billing LOGIN PASSWORD '<vault>';
+```
+
 ```powershell
 cd packages/api
 
-pnpm exec wrangler secret put STRIPE_SECRET_KEY --env staging
-pnpm exec wrangler secret put STRIPE_WEBHOOK_SECRET --env staging
-pnpm exec wrangler secret put STRIPE_PRICE_ID_PRO --env staging
-pnpm exec wrangler secret put BILLING_REDIRECT_URL --env staging   # https://<studio app origin>
+foreach ($envName in 'staging', 'production') {
+  # Worker billing (routes /v1/billing/*)
+  pnpm exec wrangler secret put STRIPE_SECRET_KEY --config wrangler.billing.toml --env $envName
+  pnpm exec wrangler secret put STRIPE_WEBHOOK_SECRET --config wrangler.billing.toml --env $envName
+  pnpm exec wrangler secret put STRIPE_PRICE_ID_PRO --config wrangler.billing.toml --env $envName
+  pnpm exec wrangler secret put BILLING_REDIRECT_URL --config wrangler.billing.toml --env $envName   # https://<studio app origin>
+  pnpm exec wrangler secret put BILLING_DB_URL --config wrangler.billing.toml --env $envName         # postgresql://athlya_billing:...
 
-pnpm exec wrangler secret put STRIPE_SECRET_KEY --env production
-pnpm exec wrangler secret put STRIPE_WEBHOOK_SECRET --env production
-pnpm exec wrangler secret put STRIPE_PRICE_ID_PRO --env production
-pnpm exec wrangler secret put BILLING_REDIRECT_URL --env production
+  # Gateway (fallback *.workers.dev)
+  pnpm exec wrangler secret put STRIPE_SECRET_KEY --env $envName
+  pnpm exec wrangler secret put STRIPE_WEBHOOK_SECRET --env $envName
+  pnpm exec wrangler secret put STRIPE_PRICE_ID_PRO --env $envName
+  pnpm exec wrangler secret put BILLING_REDIRECT_URL --env $envName
+  pnpm exec wrangler secret put BILLING_DB_URL --env $envName
 
-pnpm exec wrangler deploy --env staging
-pnpm exec wrangler deploy --env production
+  pnpm exec wrangler deploy --config wrangler.billing.toml --env $envName
+  pnpm exec wrangler deploy --env $envName
+}
 ```
 
 Ne jamais committer les cles. Stocker dans le vault ops.
+
+Sans `BILLING_DB_URL` (hors `dev`, qui retombe sur `DB_URL`), un webhook signe
+repond **500** : Stripe relivre l'evenement jusqu'a ce que le secret soit pose,
+rien n'est perdu.
 
 Sans `STRIPE_SECRET_KEY` + `STRIPE_PRICE_ID_PRO` + une origine de redirection
 `https://` (`BILLING_REDIRECT_URL`, sinon `WEB_APP_URL`), `POST /v1/billing/checkout`
@@ -72,8 +95,14 @@ reste en 503 `billing_not_configured` (toujours en `dev`).
   `billing.subscription.failed` sur `invoice.payment_failed`) et la ligne d'audit.
   Un echec annule aussi la reclamation : la relance Stripe est retraitee au lieu
   d'etre ignoree comme doublon. Un rejeu est un no-op.
+- **Ordre de livraison** : Stripe n'ordonne pas ses envois. Une facture d'un
+  abonnement pas encore enregistre repond 500 (non reclamee) et la relance
+  Stripe l'applique une fois l'abonnement connu. Un evenement plus ancien livre
+  en retard (`created` Stripe) ne fait jamais reculer un statut (une facture
+  `paid` ne redevient pas `open`).
 - **Factures** : `GET /v1/billing/invoices` (admin) pagine `studio_invoices`
-  (curseur opaque `created_at|id`).
+  (curseur opaque `created_at|id`) sous les claims du tenant : la RLS limite la
+  lecture aux admins du studio.
 
 ---
 
@@ -87,8 +116,25 @@ pnpm --filter @athlya/db run migrate
 Verifier :
 
 ```sql
-SELECT * FROM _athlya_migrations WHERE name = '0010_stripe_webhook_events.sql';
+SELECT name FROM _athlya_migrations
+ WHERE name IN ('0010_stripe_webhook_events.sql', '0036_billing_runtime.sql');  -- 2 lignes
 \d stripe_webhook_events
+\d studio_subscriptions
+\d studio_invoices
+SELECT has_function_privilege('athlya_billing', 'billing_apply_stripe_event(text, text, jsonb)', 'EXECUTE') AS billing_ok,
+       NOT has_function_privilege('athlya_app', 'billing_apply_stripe_event(text, text, jsonb)', 'EXECUTE') AS app_refused,
+       has_function_privilege('athlya_app', 'billing_list_invoices(uuid, timestamptz, uuid, integer)', 'EXECUTE') AS listing_ok;
+-- 3 x true
+```
+
+Puis le contrat de roles (rejoue chaque charge sous son role, tout est annule) :
+
+```powershell
+$env:APP_DATABASE_URL = "postgresql://athlya_app:...@.../athlya"
+$env:CRON_DATABASE_URL = "postgresql://athlya_cron:...@.../athlya"
+$env:BILLING_DATABASE_URL = "postgresql://athlya_billing:...@.../athlya"
+$env:SMOKE_STUDIO_SLUG = "<studio existant>"
+node scripts/verify-role-contract.mjs
 ```
 
 ---
@@ -107,8 +153,18 @@ SELECT * FROM _athlya_migrations WHERE name = '0010_stripe_webhook_events.sql';
    ```
 3. Rejeu : Dashboard → Webhooks → evenement → **Resend** → reponse 200, aucune
    nouvelle ligne (`stripe_webhook_events` inchange, pas de second evenement outbox).
-4. Echec : `stripe trigger invoice.payment_failed` (carte `4000 0000 0000 0341`) →
-   facture `open` + `billing.subscription.failed` dans l'outbox → email de relance.
+4. Echec sur **l'abonnement cree a l'etape 1** (un `stripe trigger` generique cree
+   un client et un abonnement sans metadata Athlya, qui ne touchent aucun studio) :
+   ```bash
+   # carte qui s'attache puis echoue au debit
+   stripe payment_methods attach pm_card_chargeCustomerFail --customer <cus_...>
+   stripe subscriptions update <sub_...> \
+     -d default_payment_method=pm_card_chargeCustomerFail \
+     -d billing_cycle_anchor=now -d proration_behavior=none
+   ```
+   Le changement d'ancre facture immediatement l'abonnement → `invoice.payment_failed`
+   pour ce `sub_...` → facture `open` dans `studio_invoices` du studio +
+   `billing.subscription.failed` dans l'outbox → email de relance a l'admin initiateur.
 5. `GET /v1/billing/invoices` (admin) liste la facture ; un membre recoit 403.
 
 ### Config webhook (sans signature valide)
@@ -140,6 +196,7 @@ node scripts/verify-stripe-provision-checklist.mjs
 | STRIPE_WEBHOOK_SECRET      | [x]     | [x]        | 2 endpoints distincts dans Stripe Dashboard               |
 | Webhook endpoint actif     | [x]     | [x]        | `*.workers.dev` (pas de domaine custom — voir ci-dessous) |
 | Migration 0010             | [x]     | [x]        | `stripe_webhook_events` créée + grantée à `athlya_app`    |
+| Migration 0036 + rôle      | [ ]     | [ ]        | `athlya_billing` LOGIN + `BILLING_DB_URL` (Phase 2/3)     |
 | Checkout E2E admin         | [ ]     | [ ]        | **bloqué**, voir "Limite connue" ci-dessous               |
 | Replay event.id idempotent | [ ]     | [ ]        | **bloqué**, idem                                          |
 

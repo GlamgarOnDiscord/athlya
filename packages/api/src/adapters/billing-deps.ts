@@ -8,12 +8,15 @@
  *     (`BILLING_REDIRECT_URL`, else `WEB_APP_URL`); otherwise — and
  *     always in dev — it answers `not_configured` (503).
  *   • `listInvoices` — keyset page of the studio's invoices persisted
- *     from Stripe webhooks (`billing_list_invoices`, migration 0036).
+ *     from Stripe webhooks (`billing_list_invoices`, migration 0036),
+ *     run under the admin's tenant claims so RLS scopes it.
  *   • `handleWebhook` — signature verification, then ONE statement
  *     (`billing_apply_stripe_event`) claims the Stripe event, applies the
  *     subscription / invoice change, records the bus event in the outbox
  *     and appends the audit row. A failure rolls the claim back, so
- *     Stripe's retry is processed instead of discarded.
+ *     Stripe's retry is processed instead of discarded. The statement
+ *     runs as `athlya_billing` (`BILLING_DB_URL`), the only role allowed
+ *     to apply Stripe events.
  */
 
 import {
@@ -26,14 +29,16 @@ import {
   type WebhookAuditEntry,
   type WebhookDeps,
 } from '@athlya/billing';
-import { claimStripeWebhookEvent } from '@athlya/db/stripe-webhook-events';
+import { withTenantHttp } from '@athlya/db';
+import { createDb } from '@athlya/db/client';
 import { sql } from 'drizzle-orm';
 
 import { createBillingWebhookAuditAppender } from './audit-log-wiring.js';
 import { getOrCreateDbHttp, getOrCreateWriteDb } from './deps-cache.js';
+import { withConnectionRetry } from './db-retry.js';
 import { queryRows, serviceFn, toDateOrNull, type ServiceUserRow } from './service-functions.js';
 
-import type { AthlyaDbAny } from '@athlya/db/client';
+import type { AthlyaDbAny, AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
 import type { InvoicesPage } from '@athlya/shared/schemas/api';
 
 import type { BillingDeps } from '../routes/billing.js';
@@ -52,9 +57,49 @@ interface StripeBindings {
   readonly STRIPE_PRICE_ID_PRO?: string;
   /** Origin of the studio app Stripe redirects back to. */
   readonly BILLING_REDIRECT_URL?: string;
+  /**
+   * Connection string of `athlya_billing`, the only role allowed to
+   * apply Stripe events (migration 0036). Dev may omit it and falls
+   * back to `DB_URL`.
+   */
+  readonly BILLING_DB_URL?: string;
+}
+
+/** `athlya_billing` connection for the webhook, or null when missing outside dev. */
+export function resolveBillingDbUrl(env: {
+  readonly ENVIRONMENT?: string;
+  readonly DB_URL?: string;
+  readonly BILLING_DB_URL?: string;
+}): string | null {
+  const url = env.BILLING_DB_URL?.trim() ?? '';
+  if (url !== '') return url;
+  if (env.ENVIRONMENT === 'dev' && typeof env.DB_URL === 'string' && env.DB_URL !== '') {
+    return env.DB_URL;
+  }
+  return null;
+}
+
+/**
+ * Stripe idempotency key of a checkout: the client's `Idempotency-Key`
+ * scoped to the studio and admin (Stripe keys are account-wide), so a
+ * retried request reuses the same session. Without a client key every
+ * call is a new session.
+ */
+export async function checkoutIdempotencyKey(
+  input: { readonly studioId: string; readonly userId: string; readonly idempotencyKey?: string },
+  randomId: () => string = () => crypto.randomUUID(),
+): Promise<string> {
+  if (input.idempotencyKey === undefined) return `studio-checkout:${randomId()}`;
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(`${input.studioId}|${input.userId}|${input.idempotencyKey}`),
+  );
+  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  return `studio-checkout:${hex}`;
 }
 
 const DEFAULT_INVOICE_PAGE = 20;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 /** Opaque keyset cursor: base64url(`createdAtIso|id`). */
 export function encodeInvoiceCursor(createdAt: string, id: string): string {
@@ -65,11 +110,11 @@ export function decodeInvoiceCursor(cursor: string): { createdAt: string; id: st
   try {
     const padded = cursor.replace(/-/gu, '+').replace(/_/gu, '/');
     const [createdAt, id] = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4)).split('|');
-    if (createdAt === undefined || id === undefined || Number.isNaN(Date.parse(createdAt))) {
-      return null;
-    }
-    if (!/^[0-9a-f-]{36}$/u.test(id)) return null;
-    return { createdAt, id };
+    if (createdAt === undefined || id === undefined || !UUID.test(id)) return null;
+    const at = new Date(createdAt);
+    if (Number.isNaN(at.getTime())) return null;
+    // Re-serialised so only a canonical ISO timestamp reaches the cast.
+    return { createdAt: at.toISOString(), id: id.toLowerCase() };
   } catch {
     return null;
   }
@@ -86,17 +131,28 @@ interface InvoiceRow {
   readonly created_at: Date | string;
 }
 
+/**
+ * `billing_list_invoices` is SECURITY INVOKER: the tenant claims set in
+ * the same batch make the studio_invoices RLS policy (studio admin only)
+ * decide what is visible.
+ */
 export async function listStudioInvoices(
-  db: AthlyaDbAny,
-  studioId: string,
+  db: AthlyaDbHttp,
+  claims: TenantClaims,
   opts: { cursor?: string | undefined; limit?: number | undefined },
 ): Promise<InvoicesPage> {
   const limit = opts.limit ?? DEFAULT_INVOICE_PAGE;
   const after = opts.cursor === undefined ? null : decodeInvoiceCursor(opts.cursor);
-  const rows = await queryRows<InvoiceRow>(
-    db,
-    sql`SELECT * FROM billing_list_invoices(${studioId}::uuid, ${after?.createdAt ?? null}::timestamptz, ${after?.id ?? null}::uuid, ${limit + 1})`,
+  const result = await withConnectionRetry(() =>
+    withTenantHttp(
+      db,
+      claims,
+      db.execute(
+        sql`SELECT * FROM billing_list_invoices(${claims.studioId}::uuid, ${after?.createdAt ?? null}::timestamptz, ${after?.id ?? null}::uuid, ${limit + 1})`,
+      ),
+    ),
   );
+  const rows = (result as unknown as { rows: InvoiceRow[] }).rows;
   const page = rows.slice(0, limit);
   const last = page[page.length - 1];
   const lastCreated = last === undefined ? null : toDateOrNull(last.created_at);
@@ -168,7 +224,7 @@ export function buildBillingDeps(env: AthlyaBindings): BillingDeps {
           studioId: input.studioId,
           userId: input.userId,
           email: user.email,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: await checkoutIdempotencyKey(input),
         },
         {
           stripe: createFetchStripeClient({ secretKey }),
@@ -179,8 +235,8 @@ export function buildBillingDeps(env: AthlyaBindings): BillingDeps {
       return { kind: 'ok' as const, checkoutUrl: session.url };
     },
 
-    listInvoices(studioId, opts) {
-      return listStudioInvoices(getOrCreateDbHttp(env.DB_URL), studioId, opts);
+    listInvoices(claims, opts) {
+      return listStudioInvoices(getOrCreateDbHttp(env.DB_URL), claims, opts);
     },
 
     async handleWebhook({ rawPayload, signature }) {
@@ -203,16 +259,30 @@ export function buildBillingDeps(env: AthlyaBindings): BillingDeps {
       }
 
       // Signature failures keep the audit + transaction wrapper (issue
-      // #127); verified events go through the atomic `applyEvent` path.
+      // #127); verified events go through the atomic `applyEvent` path
+      // as athlya_billing.
       const db = getOrCreateWriteDb(env);
       const auditPorts = createBillingWebhookAuditAppender(db);
       const deps: WebhookDeps = {
         verifySignature: (payload, sig, sec) => verifyStripeSignature(payload, sig, sec),
-        claimStripeEvent: (eventId, eventType) => claimStripeWebhookEvent(db, eventId, eventType),
         appendAudit: (entry: WebhookAuditEntry) => auditPorts.appendAudit(entry),
-        publish: () => Promise.resolve(undefined),
         withTransaction: (fn) => auditPorts.withTransaction(fn),
-        applyEvent: (event) => applyStripeEvent(db, event),
+        applyEvent: (event) => {
+          const billingDbUrl = resolveBillingDbUrl({ ...env, ...stripeBindings });
+          if (billingDbUrl === null) {
+            // Fail closed with a 500: Stripe keeps retrying until the
+            // binding is provisioned, so no event is lost.
+            console.error('[billing-deps] BILLING_DB_URL missing — Stripe event not applied', {
+              env: env.ENVIRONMENT,
+              binding: 'BILLING_DB_URL',
+            });
+            return Promise.reject(new Error('BILLING_DB_URL is not configured'));
+          }
+          return applyStripeEvent(
+            createDb(billingDbUrl, { maxConnections: 1, idleTimeoutSec: 5 }),
+            event,
+          );
+        },
       };
 
       const outcome = await handleStripeWebhook(rawPayload, signature, secret, deps);

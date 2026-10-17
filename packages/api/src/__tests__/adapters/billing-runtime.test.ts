@@ -1,21 +1,26 @@
 import { PgDialect } from 'drizzle-orm/pg-core';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   applyStripeEvent,
   buildBillingDeps,
+  checkoutIdempotencyKey,
   decodeInvoiceCursor,
   encodeInvoiceCursor,
   listStudioInvoices,
+  resolveBillingDbUrl,
 } from '../../adapters/billing-deps.js';
+import { dbHttpCache, resetAllDepsCachesForTests } from '../../adapters/deps-cache.js';
 
 import type { AthlyaBindings } from '../../types.js';
-import type { AthlyaDbAny } from '@athlya/db/client';
+import type { AthlyaDbAny, AthlyaDbHttp } from '@athlya/db/client';
 import type { SQL } from 'drizzle-orm';
 
 /** Issue #122 — billing adapters over the 0036 functions. */
 
 const STUDIO = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const ADMIN = '11111111-1111-4111-8111-111111111113';
+const CLAIMS = { userId: ADMIN, studioId: STUDIO, role: 'admin' as const };
 const dialect = new PgDialect();
 
 function fakeDb(respond: (sql: string, params: unknown[]) => unknown[]) {
@@ -28,6 +33,21 @@ function fakeDb(respond: (sql: string, params: unknown[]) => unknown[]) {
     },
   };
   return { db: db as unknown as AthlyaDbAny, calls };
+}
+
+/** Neon HTTP double: `batch` runs the queued statements in one round-trip. */
+function fakeHttpDb(rows: unknown[]) {
+  const calls: Array<{ sql: string; params: unknown[] }> = [];
+  const db = {
+    execute(query: SQL) {
+      return dialect.sqlToQuery(query);
+    },
+    batch(items: Array<{ sql: string; params: unknown[] }>) {
+      calls.push(...items);
+      return Promise.resolve(items.map((_, i) => ({ rows: i === items.length - 1 ? rows : [] })));
+    },
+  };
+  return { db: db as unknown as AthlyaDbHttp, calls };
 }
 
 const invoiceRow = (n: number) => ({
@@ -51,12 +71,26 @@ describe('invoice cursor', () => {
     expect(decodeInvoiceCursor('!!!')).toBeNull();
     expect(decodeInvoiceCursor(btoa('nope|x'))).toBeNull();
   });
+
+  it('rejects a tampered id that is not a hyphenated UUID', () => {
+    const dashes = '-'.repeat(36);
+    expect(decodeInvoiceCursor(btoa(`2026-10-12T00:00:00.000Z|${dashes}`))).toBeNull();
+    expect(
+      decodeInvoiceCursor(btoa('2026-10-12T00:00:00.000Z|0193f0000000-7000-8000-0000000000001')),
+    ).toBeNull();
+  });
+
+  it('normalises the timestamp to ISO before it reaches the cast', () => {
+    expect(
+      decodeInvoiceCursor(btoa(`2026-10-12T02:00:00+02:00|${invoiceRow(1).id.toUpperCase()}`)),
+    ).toEqual({ createdAt: '2026-10-12T00:00:00.000Z', id: invoiceRow(1).id });
+  });
 });
 
 describe('listStudioInvoices', () => {
   it('maps rows to the API projection and emits a next cursor on overflow', async () => {
-    const { db, calls } = fakeDb(() => [invoiceRow(3), invoiceRow(2), invoiceRow(1)]);
-    const page = await listStudioInvoices(db, STUDIO, { limit: 2 });
+    const { db, calls } = fakeHttpDb([invoiceRow(3), invoiceRow(2), invoiceRow(1)]);
+    const page = await listStudioInvoices(db, CLAIMS, { limit: 2 });
 
     expect(page.items).toEqual([
       {
@@ -74,16 +108,22 @@ describe('listStudioInvoices', () => {
       createdAt: '2026-10-12T00:00:00.000Z',
       id: invoiceRow(2).id,
     });
-    expect(calls[0]?.sql).toContain('billing_list_invoices(');
-    expect(calls[0]?.params).toEqual([STUDIO, null, null, 3]);
+    // Tenant claims are set in the same batch: RLS scopes the listing.
+    expect(calls.slice(0, 3).map((c) => [c.sql.match(/app\.\w+/u)?.[0], ...c.params])).toEqual([
+      ['app.user_id', ADMIN],
+      ['app.studio_id', STUDIO],
+      ['app.role', 'admin'],
+    ]);
+    expect(calls[3]?.sql).toContain('billing_list_invoices(');
+    expect(calls[3]?.params).toEqual([STUDIO, null, null, 3]);
   });
 
   it('passes the decoded cursor and returns no cursor on the last page', async () => {
-    const { db, calls } = fakeDb(() => [invoiceRow(1)]);
+    const { db, calls } = fakeHttpDb([invoiceRow(1)]);
     const cursor = encodeInvoiceCursor('2026-10-12T00:00:00.000Z', invoiceRow(2).id);
-    const page = await listStudioInvoices(db, STUDIO, { cursor, limit: 20 });
+    const page = await listStudioInvoices(db, CLAIMS, { cursor, limit: 20 });
     expect(page.nextCursor).toBeNull();
-    expect(calls[0]?.params).toEqual([STUDIO, '2026-10-12T00:00:00.000Z', invoiceRow(2).id, 21]);
+    expect(calls[3]?.params).toEqual([STUDIO, '2026-10-12T00:00:00.000Z', invoiceRow(2).id, 21]);
   });
 });
 
@@ -153,5 +193,98 @@ describe('createCheckoutSession configuration gate', () => {
     await expect(
       deps.createCheckoutSession({ userId: 'u', studioId: STUDIO, plan: 'pro' }),
     ).resolves.toEqual({ kind: 'not_configured' });
+  });
+});
+
+describe('createCheckoutSession when configured', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetAllDepsCachesForTests();
+  });
+
+  it('creates the Stripe session with a request-scoped idempotency key', async () => {
+    const env = {
+      ENVIRONMENT: 'staging',
+      DB_URL: 'postgres://billing-configured',
+      WEB_APP_URL: 'https://studio.athlya.test',
+      STRIPE_SECRET_KEY: 'sk_test_x',
+      STRIPE_PRICE_ID_PRO: 'price_pro',
+    };
+    const { db } = fakeDb(() => [
+      { id: ADMIN, studio_id: STUDIO, email: 'admin@athlya.test', deleted_at: null },
+    ]);
+    dbHttpCache.set(env.DB_URL, db as unknown as AthlyaDbHttp);
+    const fetchMock = vi.fn((_url: string, _init: RequestInit) =>
+      Promise.resolve(
+        Response.json({ id: 'cs_test_1', url: 'https://checkout.stripe.com/c/pay/cs_test_1' }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const deps = buildBillingDeps(env as unknown as AthlyaBindings);
+    const input = { userId: ADMIN, studioId: STUDIO, plan: 'pro' as const, idempotencyKey: 'k-1' };
+    await expect(deps.createCheckoutSession(input)).resolves.toEqual({
+      kind: 'ok',
+      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_1',
+    });
+    await deps.createCheckoutSession(input);
+
+    const keys = fetchMock.mock.calls.map(
+      ([, init]) => (init.headers as Record<string, string>)['idempotency-key'],
+    );
+    expect(keys[0]).toBe(await checkoutIdempotencyKey(input));
+    expect(keys[1]).toBe(keys[0]);
+    const form = new URLSearchParams(String(fetchMock.mock.calls[0]?.[1].body));
+    expect(form.get('metadata[studioId]')).toBe(STUDIO);
+    expect(form.get('success_url')).toMatch(/^https:\/\/studio\.athlya\.test\/billing\/success/u);
+  });
+});
+
+describe('checkoutIdempotencyKey', () => {
+  it('scopes the client key to the studio and admin', async () => {
+    const a = await checkoutIdempotencyKey({
+      studioId: STUDIO,
+      userId: ADMIN,
+      idempotencyKey: 'k',
+    });
+    const b = await checkoutIdempotencyKey({
+      studioId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      userId: ADMIN,
+      idempotencyKey: 'k',
+    });
+    expect(a).toMatch(/^studio-checkout:[0-9a-f]{64}$/u);
+    expect(b).not.toBe(a);
+  });
+
+  it('uses a fresh key when the client sent none', async () => {
+    await expect(
+      checkoutIdempotencyKey({ studioId: STUDIO, userId: ADMIN }, () => 'fresh'),
+    ).resolves.toBe('studio-checkout:fresh');
+  });
+});
+
+describe('resolveBillingDbUrl', () => {
+  it('uses the athlya_billing connection when configured', () => {
+    expect(
+      resolveBillingDbUrl({
+        ENVIRONMENT: 'production',
+        DB_URL: 'postgres://app',
+        BILLING_DB_URL: 'postgres://billing',
+      }),
+    ).toBe('postgres://billing');
+  });
+
+  it('never falls back to the athlya_app connection outside dev', () => {
+    expect(resolveBillingDbUrl({ ENVIRONMENT: 'production', DB_URL: 'postgres://app' })).toBeNull();
+    expect(
+      resolveBillingDbUrl({
+        ENVIRONMENT: 'staging',
+        DB_URL: 'postgres://app',
+        BILLING_DB_URL: ' ',
+      }),
+    ).toBeNull();
+    expect(resolveBillingDbUrl({ ENVIRONMENT: 'dev', DB_URL: 'postgres://app' })).toBe(
+      'postgres://app',
+    );
   });
 });

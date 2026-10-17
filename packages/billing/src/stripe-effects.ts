@@ -51,6 +51,8 @@ export interface BillingBusEvent {
 export interface StripeEventEffect {
   readonly studioId: string | null;
   readonly userId: string | null;
+  /** Stripe event `created` (ISO): a late older event never rolls a status back. */
+  readonly sourceEventAt: string | null;
   readonly subscription: SubscriptionChange | null;
   readonly invoice: InvoiceChange | null;
   readonly event: BillingBusEvent | null;
@@ -59,6 +61,11 @@ export interface StripeEventEffect {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const INVOICE_STATUSES = new Set<InvoiceStatus>(['draft', 'open', 'paid', 'uncollectible', 'void']);
 const PLAN = 'pro';
+/**
+ * Stripe puts no decline reason on the invoice (it lives on the charge),
+ * so the dunning email gets a readable sentence instead of a code.
+ */
+export const PAYMENT_FAILED_REASON = 'the payment could not be collected';
 
 type Obj = Record<string, unknown>;
 
@@ -164,6 +171,7 @@ export function mapStripeEvent(
 ): StripeEventEffect | null {
   const object = dataObject(event);
   if (object === null) return null;
+  const sourceEventAt = unixToIso(event.created);
 
   switch (event.type) {
     case 'checkout.session.completed': {
@@ -174,6 +182,7 @@ export function mapStripeEvent(
       return {
         ...ids,
         studioId: ids.studioId ?? uuid(object['client_reference_id']),
+        sourceEventAt,
         subscription: {
           stripeSubscriptionId: subscriptionId,
           stripeCustomerId: stripeId(object['customer']),
@@ -198,6 +207,7 @@ export function mapStripeEvent(
       const startsAt = unixToIso(object['start_date']) ?? now().toISOString();
       return {
         ...metadataIds(object),
+        sourceEventAt,
         subscription: change,
         invoice: null,
         event:
@@ -221,11 +231,10 @@ export function mapStripeEvent(
       const change = invoiceChange(object);
       if (change === null) return null;
       const failed = event.type === 'invoice.payment_failed';
-      const reason =
-        str(obj(object['last_finalization_error'])?.['message'], 500) ?? 'invoice_payment_failed';
       return {
         studioId: null,
         userId: null,
+        sourceEventAt,
         subscription: null,
         invoice: change,
         event:
@@ -234,7 +243,10 @@ export function mapStripeEvent(
                 id: newEventId(),
                 type: 'billing.subscription.failed',
                 occurredAt: now().toISOString(),
-                payload: { subscriptionId: change.stripeSubscriptionId, reason },
+                payload: {
+                  subscriptionId: change.stripeSubscriptionId,
+                  reason: PAYMENT_FAILED_REASON,
+                },
               }
             : null,
       };

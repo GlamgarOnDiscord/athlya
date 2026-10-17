@@ -9,11 +9,12 @@
 --      the end, so a second invocation in the same psql session
 --      operates against identical seed data.
 --
--- Usage:
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
---        -f migrations/0000_init.sql \
---        -f migrations/0001_rls.sql \
---        -f tests/rls/run-all.sql
+-- Usage — apply EVERY forward migration in filename order first (as
+-- .github/workflows/pgtap.yml does; later files test later migrations):
+--   for f in $(ls migrations/*.sql | grep -v '\.down\.sql$' | sort); do
+--     psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+--   done
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/rls/run-all.sql
 -- =====================================================================
 
 \set ON_ERROR_STOP on

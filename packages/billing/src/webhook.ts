@@ -10,10 +10,11 @@
  *     reject the request with HTTP 400 AND append a row to the
  *     Audit_Log **atomically**; both actions succeed together or the
  *     whole operation fails (no orphan audit, no silent reject).
- *   - **18.4** — on `customer.subscription.created`, publish
- *     `billing.subscription.started` on the event bus.
- *   - **18.5** — on `invoice.payment_failed`, publish
- *     `billing.subscription.failed` on the event bus.
+ *   - **18.4** — on `customer.subscription.created`, record
+ *     `billing.subscription.started` for the event bus.
+ *   - **18.5** — on `invoice.payment_failed`, record
+ *     `billing.subscription.failed` for the event bus.
+ *   Both are written by {@link WebhookDeps.applyEvent} (issue #122).
  *   - **22.1** — audit row shape (`actor_id`, `action`, `target_type`,
  *     `target_id`, `metadata`).
  *
@@ -65,10 +66,9 @@
 /**
  * Discriminated outcomes of {@link handleStripeWebhook}.
  *
- *   - `'processed'`          — signature valid, event dispatched
- *                              (or a no-op for an event type we do
- *                              not care about); the HTTP layer
- *                              returns 200. `eventId` lets the
+ *   - `'processed'`          — signature valid, event applied (or
+ *                              already applied: a replay); the HTTP
+ *                              layer returns 200. `eventId` lets the
  *                              gateway log correlate back to Stripe.
  *   - `'signature_invalid'`  — signature verification failed; the
  *                              HTTP layer returns 400 and the audit
@@ -76,8 +76,9 @@
  *                              the same transaction.
  *   - `'unknown_event_type'` — signature valid but the event type
  *                              is not one the billing service cares
- *                              about (e.g. `charge.updated`). No
- *                              publish, no audit; the HTTP layer
+ *                              about (e.g. `charge.updated`) or a
+ *                              malformed object. Nothing is
+ *                              written; the HTTP layer
  *                              returns 200 so Stripe stops retrying.
  *
  * HTTP serialisation is the caller's concern — this union keeps the
@@ -129,6 +130,8 @@ export interface StripeEvent {
   readonly id: string;
   readonly type: string;
   readonly data: unknown;
+  /** Unix seconds Stripe created the event at; orders late deliveries. */
+  readonly created?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -164,23 +167,6 @@ export interface WebhookAuditEntry {
 }
 
 /**
- * Event envelope the handler hands to {@link WebhookDeps.publish}.
- *
- * Intentionally looser than `AthlyaEvent` in `@athlya/shared` so the
- * billing package stays decoupled from the shared discriminated
- * union: the wiring layer (outside this package) adapts the envelope
- * to the concrete `publish(event, tx, deps)` signature from
- * `packages/api/src/events/publish.ts`.
- */
-export interface WebhookPublishEnvelope {
-  readonly id: string;
-  readonly type: string;
-  readonly occurredAt: string;
-  readonly studioId?: string;
-  readonly payload: Record<string, unknown>;
-}
-
-/**
  * Discriminated result of {@link verifyStripeSignature} and
  * {@link WebhookDeps.verifySignature}.
  *
@@ -209,23 +195,23 @@ export type VerifyResult =
  *                         reason on any error. The default wiring
  *                         uses {@link verifyStripeSignature}; tests
  *                         inject deterministic stubs.
- *   - `appendAudit`     — append a row to the audit log. MUST run
- *                         in the same DB transaction as any state
- *                         writes / publishes that accompany it;
- *                         {@link WebhookDeps.withTransaction} is
- *                         responsible for providing that scope.
- *   - `publish`         — push an event onto the bus. MUST run
- *                         inside a transaction (so an outbox
- *                         fallback can commit atomically with the
- *                         caller's state changes).
- *   - `withTransaction` — transactional scope. The handler calls it
- *                         once per write path (audit write, publish,
- *                         …); the wiring layer opens a DB tx and
+ *   - `appendAudit`     — append the signature-failure row to the
+ *                         audit log, inside `withTransaction`.
+ *   - `withTransaction` — transactional scope of the signature-failure
+ *                         audit; the wiring layer opens a DB tx and
  *                         commits it if the callback resolves or
  *                         rolls back if it throws.
- *   - `claimStripeEvent`  — insert-once dedup on Stripe `event.id`
- *                         (issue #69). Returns `true` when the event
- *                         is new; `false` when already recorded.
+ *   - `applyEvent`      — applies a verified event atomically (issue
+ *                         #122): the adapter claims the Stripe event
+ *                         (dedup on `event.id`, issue #69), applies the
+ *                         billing change, records the bus event and the
+ *                         audit row in ONE statement, so a failure after
+ *                         the claim can never make Stripe's retry look
+ *                         like a duplicate.
+ *                           - `applied`   — first delivery, state changed.
+ *                           - `duplicate` — already applied; acknowledge.
+ *                           - `ignored`   — type not tracked or object
+ *                                           malformed; acknowledge.
  */
 export interface WebhookDeps {
   readonly verifySignature: (
@@ -233,21 +219,9 @@ export interface WebhookDeps {
     signatureHeader: string,
     secret: string,
   ) => Promise<VerifyResult>;
-  readonly claimStripeEvent: (eventId: string, eventType: string) => Promise<boolean>;
   readonly appendAudit: (entry: WebhookAuditEntry) => Promise<void>;
-  readonly publish: (event: WebhookPublishEnvelope) => Promise<void>;
   readonly withTransaction: <T>(fn: () => Promise<T>) => Promise<T>;
-  /**
-   * Atomic application path (issue #122). When provided it replaces the
-   * claim → publish → audit sequence: the adapter claims the Stripe
-   * event, applies the billing change, records the bus event and the
-   * audit row in ONE statement, so a failure after the claim can no
-   * longer make Stripe's retry look like a duplicate.
-   *   - `applied`   — first delivery, state changed.
-   *   - `duplicate` — already applied; acknowledge.
-   *   - `ignored`   — type not tracked or object malformed; acknowledge.
-   */
-  readonly applyEvent?: (event: StripeEvent) => Promise<'applied' | 'duplicate' | 'ignored'>;
+  readonly applyEvent: (event: StripeEvent) => Promise<'applied' | 'duplicate' | 'ignored'>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -492,9 +466,13 @@ export async function verifyStripeSignature(
     return { ok: false, reason: 'malformed_payload' };
   }
 
+  const created = obj['created'];
   return {
     ok: true,
-    event: { id, type, data: obj['data'] },
+    event:
+      typeof created === 'number' && Number.isSafeInteger(created) && created > 0
+        ? { id, type, data: obj['data'], created }
+        : { id, type, data: obj['data'] },
   };
 }
 
@@ -508,32 +486,12 @@ export async function verifyStripeSignature(
  * webhook signature failure path.
  */
 const AUDIT_ACTION_SIGNATURE_FAILED = 'billing.webhook.signature_failed';
-const AUDIT_ACTION_PROCESSED = 'billing.webhook.processed';
 
 /** Target type tag for audit rows emitted by this handler. */
 const AUDIT_TARGET_TYPE = 'stripe_webhook';
 
 /** Placeholder used when the event id cannot be extracted. */
 const AUDIT_TARGET_UNKNOWN = 'unknown';
-
-async function appendProcessedAudit(deps: WebhookDeps, event: StripeEvent): Promise<void> {
-  await deps.appendAudit({
-    actorId: null,
-    action: AUDIT_ACTION_PROCESSED,
-    targetType: AUDIT_TARGET_TYPE,
-    targetId: event.id,
-    metadata: { stripeEventType: event.type },
-  });
-}
-
-/** Stripe event types dispatched to the event bus. */
-const EVENT_CHECKOUT_COMPLETED = 'checkout.session.completed';
-const EVENT_SUBSCRIPTION_CREATED = 'customer.subscription.created';
-const EVENT_INVOICE_PAYMENT_FAILED = 'invoice.payment_failed';
-
-/** Athlya event types published to the bus. */
-const PUB_SUBSCRIPTION_STARTED = 'billing.subscription.started';
-const PUB_SUBSCRIPTION_FAILED = 'billing.subscription.failed';
 
 /**
  * Best-effort extraction of a Stripe event id from a raw payload,
@@ -568,18 +526,18 @@ function tryExtractEventId(rawPayload: string): string {
  *   1. **Verify** `signatureHeader` against `rawPayload` using
  *      `webhookSecret`. On failure, atomically append an audit row
  *      (within a transaction) and return `{ kind: 'signature_invalid' }`.
- *   2. **Dispatch** by `event.type`:
- *        - `checkout.session.completed`     → publish `billing.subscription.started`.
- *        - `customer.subscription.created`  → publish `billing.subscription.started`.
- *        - `invoice.payment_failed`         → publish `billing.subscription.failed`.
- *        - anything else                    → `{ kind: 'unknown_event_type' }`.
- *      Publishes run inside `withTransaction` so the outbox fallback
- *      (when the downstream queue is down) commits with whatever
- *      state writes the wiring layer eventually plugs in.
+ *   2. **Apply** the verified event through `applyEvent`, which claims
+ *      the Stripe event, writes the billing state, the bus event
+ *      (`billing.subscription.started` / `billing.subscription.failed`)
+ *      and the audit row in one statement — `withTransaction` and
+ *      `appendAudit` are only used by the signature-failure path.
+ *        - `applied` / `duplicate` → `{ kind: 'processed' }`.
+ *        - `ignored`               → `{ kind: 'unknown_event_type' }`.
  *
- * Error propagation: any thrown error from `appendAudit`, `publish`
+ * Error propagation: any thrown error from `applyEvent`, `appendAudit`
  * or `withTransaction` bubbles up unchanged. The gateway's outer
- * handler maps it to HTTP 500; Stripe will retry.
+ * handler maps it to HTTP 500; Stripe will retry, and since a failed
+ * application never keeps its claim, the retry is applied.
  *
  * No HTTP-specific concerns — this function returns a typed
  * outcome, never writes headers or bodies.
@@ -629,95 +587,8 @@ export async function handleStripeWebhook(
 
   const { event } = verifyResult;
 
-  if (deps.applyEvent !== undefined) {
-    const applied = await deps.applyEvent(event);
-    return applied === 'ignored'
-      ? { kind: 'unknown_event_type', eventType: event.type }
-      : { kind: 'processed', eventType: event.type, eventId: event.id };
-  }
-
-  // Step 2 — idempotent claim (issue #69).
-  const isNew = await deps.claimStripeEvent(event.id, event.type);
-  if (!isNew) {
-    return {
-      kind: 'processed',
-      eventType: event.type,
-      eventId: event.id,
-    };
-  }
-
-  // Step 3 — dispatch by event type.
-  const occurredAt = new Date().toISOString();
-
-  switch (event.type) {
-    case EVENT_CHECKOUT_COMPLETED: {
-      await deps.withTransaction(async () => {
-        await deps.publish({
-          id: event.id,
-          type: PUB_SUBSCRIPTION_STARTED,
-          occurredAt,
-          payload: {
-            stripeEventId: event.id,
-            stripeEventType: event.type,
-            session: event.data,
-          },
-        });
-        await appendProcessedAudit(deps, event);
-      });
-      return {
-        kind: 'processed',
-        eventType: event.type,
-        eventId: event.id,
-      };
-    }
-
-    case EVENT_SUBSCRIPTION_CREATED: {
-      await deps.withTransaction(async () => {
-        await deps.publish({
-          id: event.id,
-          type: PUB_SUBSCRIPTION_STARTED,
-          occurredAt,
-          payload: {
-            stripeEventId: event.id,
-            stripeEventType: event.type,
-            subscription: event.data,
-          },
-        });
-        await appendProcessedAudit(deps, event);
-      });
-      return {
-        kind: 'processed',
-        eventType: event.type,
-        eventId: event.id,
-      };
-    }
-
-    case EVENT_INVOICE_PAYMENT_FAILED: {
-      await deps.withTransaction(async () => {
-        await deps.publish({
-          id: event.id,
-          type: PUB_SUBSCRIPTION_FAILED,
-          occurredAt,
-          payload: {
-            stripeEventId: event.id,
-            stripeEventType: event.type,
-            invoice: event.data,
-          },
-        });
-        await appendProcessedAudit(deps, event);
-      });
-      return {
-        kind: 'processed',
-        eventType: event.type,
-        eventId: event.id,
-      };
-    }
-
-    default: {
-      // Stripe emits plenty of events we don't care about
-      // (`charge.updated`, `customer.updated`, …). Treat them
-      // as a no-op so Stripe stops retrying the delivery.
-      return { kind: 'unknown_event_type', eventType: event.type };
-    }
-  }
+  const applied = await deps.applyEvent(event);
+  return applied === 'ignored'
+    ? { kind: 'unknown_event_type', eventType: event.type }
+    : { kind: 'processed', eventType: event.type, eventId: event.id };
 }
