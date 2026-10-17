@@ -38,6 +38,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, closed]
 
+permissions:
+  contents: read
+
 concurrency:
   # One preview deploy at a time per PR; updates to the same PR cancel the
   # in-flight deploy so only the latest commit is served.
@@ -98,9 +101,10 @@ jobs:
           NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
           NEON_DATABASE_NAME: ${{ vars.NEON_DATABASE_NAME || 'neondb' }}
           NEON_OWNER_ROLE: ${{ vars.NEON_OWNER_ROLE || 'neondb_owner' }}
+          PR_N: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          BRANCH_NAME="preview-pr-${{ github.event.pull_request.number }}"
+          BRANCH_NAME="preview-pr-${PR_N}"
 
           # Idempotent: if a branch already exists for this PR (e.g. on
           # `synchronize`), Neon returns 409. We detect that and look up the
@@ -204,10 +208,16 @@ jobs:
           "
 
       - name: Set preview secrets
+        env:
+          PREVIEW_DB_URL: ${{ steps.neon.outputs.app_db_url }}
+          PREVIEW_REDIS_URL: ${{ secrets.PREVIEW_REDIS_URL }}
+          PREVIEW_REDIS_TOKEN: ${{ secrets.PREVIEW_REDIS_TOKEN }}
+          PREVIEW_JWT_JWKS_URL: ${{ secrets.PREVIEW_JWT_JWKS_URL }}
+          PREVIEW_TURNSTILE_SECRET: ${{ secrets.PREVIEW_TURNSTILE_SECRET }}
         run: |
           WRANGLER_NAME_FLAGS=(--env preview --name "${PREVIEW_WORKER_NAME}")
 
-          printf '%s' "${{ steps.neon.outputs.app_db_url }}" | \
+          printf '%s' "${PREVIEW_DB_URL}" | \
             pnpm --filter @athlya/api exec wrangler secret put DB_URL "${WRANGLER_NAME_FLAGS[@]}"
 
           # No browser app talks to a preview API; allow its own origin only
@@ -215,16 +225,16 @@ jobs:
           printf '%s' "${PREVIEW_URL}" | \
             pnpm --filter @athlya/api exec wrangler secret put CORS_ORIGIN "${WRANGLER_NAME_FLAGS[@]}"
 
-          printf '%s' "${{ secrets.PREVIEW_REDIS_URL }}" | \
+          printf '%s' "${PREVIEW_REDIS_URL}" | \
             pnpm --filter @athlya/api exec wrangler secret put REDIS_URL "${WRANGLER_NAME_FLAGS[@]}"
 
-          printf '%s' "${{ secrets.PREVIEW_REDIS_TOKEN }}" | \
+          printf '%s' "${PREVIEW_REDIS_TOKEN}" | \
             pnpm --filter @athlya/api exec wrangler secret put REDIS_TOKEN "${WRANGLER_NAME_FLAGS[@]}"
 
-          printf '%s' "${{ secrets.PREVIEW_JWT_JWKS_URL }}" | \
+          printf '%s' "${PREVIEW_JWT_JWKS_URL}" | \
             pnpm --filter @athlya/api exec wrangler secret put JWT_JWKS_URL "${WRANGLER_NAME_FLAGS[@]}"
 
-          printf '%s' "${{ secrets.PREVIEW_TURNSTILE_SECRET }}" | \
+          printf '%s' "${PREVIEW_TURNSTILE_SECRET}" | \
             pnpm --filter @athlya/api exec wrangler secret put TURNSTILE_SECRET "${WRANGLER_NAME_FLAGS[@]}"
 
       - name: Provision per-PR preview queues
@@ -282,16 +292,18 @@ jobs:
       - name: Comment on PR
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_N: ${{ github.event.pull_request.number }}
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+          NEON_BRANCH_NAME: ${{ steps.neon.outputs.branch_name }}
         run: |
-          PR_N="${{ github.event.pull_request.number }}"
           BODY="<!-- athlya-preview-env -->
           ## API Preview — PR #${PR_N}
 
           | | |
           |---|---|
-          | **Endpoint** | \`${{ steps.deploy.outputs.preview_url }}\` |
+          | **Endpoint** | \`${PREVIEW_URL}\` |
           | **Worker** | \`athlya-api-pr-${PR_N}\` |
-          | **Neon branch** | \`${{ steps.neon.outputs.branch_name }}\` |
+          | **Neon branch** | \`${NEON_BRANCH_NAME}\` |
           | **Queues** | \`athlya-events-preview-pr-${PR_N}*\` |
           | **Version** | \`${{ steps.deploy.outputs.version }}\` (verified on \`/health\`) |
 
@@ -300,15 +312,15 @@ jobs:
 
           # Update an existing preview comment rather than spamming new ones.
           COMMENT_ID=$(gh api \
-            "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_N}/comments" \
             --jq '.[] | select(.body | contains("<!-- athlya-preview-env -->")) | .id' | head -1)
 
           if [ -n "$COMMENT_ID" ]; then
             gh api --method PATCH \
-              "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
+              "repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}" \
               -f body="${BODY}"
           else
-            gh pr comment ${{ github.event.pull_request.number }} --body "${BODY}"
+            gh pr comment "${PR_N}" --body "${BODY}"
           fi
 
   # --------------------------------------------------------------------------
@@ -371,8 +383,9 @@ jobs:
       - name: Delete Neon branch
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          PR_N: ${{ github.event.pull_request.number }}
         run: |
-          BRANCH_NAME="preview-pr-${{ github.event.pull_request.number }}"
+          BRANCH_NAME="preview-pr-${PR_N}"
 
           BRANCH_ID=$(curl -sf \
             "${NEON_API}/projects/${{ vars.NEON_PROJECT_ID }}/branches" \
@@ -395,8 +408,8 @@ jobs:
         env:
           PREVIEW_REDIS_URL: ${{ secrets.PREVIEW_REDIS_URL }}
           PREVIEW_REDIS_TOKEN: ${{ secrets.PREVIEW_REDIS_TOKEN }}
+          PR_N: ${{ github.event.pull_request.number }}
         run: |
-          PR_N="${{ github.event.pull_request.number }}"
           PREFIX="pr-${PR_N}:"
 
           if [ -z "${PREVIEW_REDIS_URL}" ] || [ -z "${PREVIEW_REDIS_TOKEN}" ]; then

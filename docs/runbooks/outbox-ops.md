@@ -7,6 +7,23 @@
 - Per-cycle batch: **100** rows; **200** when `pending > 500` (`OUTBOX_BACKLOG_BATCH_THRESHOLD`).
 - Empty batch → early return (pas de send). La taille adaptative + le batch large suffisent à throttler ; un vrai skip "N cycles vides" exigerait un état (KV/Redis) et est différé.
 
+## Roles and bindings (issue #497)
+
+| Side     | Role          | Binding       | Allowed on `outbox`                                                              |
+| -------- | ------------- | ------------- | -------------------------------------------------------------------------------- |
+| Producer | `athlya_app`  | `DB_URL`      | `INSERT` for its own studio only (`app.studio_id`), undelivered rows only (0031) |
+| Drainer  | `athlya_cron` | `CRON_DB_URL` | `SELECT`, `UPDATE (attempts, published_at)`, `DELETE` (0019 + 0031)              |
+
+- Events are inserted in the same transaction as the mutation that emits
+  them (`withTenant`), so a booking/cancel and its event commit or roll back
+  together.
+- The cron drain builds its connection from `CRON_DB_URL`. In staging and
+  production a missing `CRON_DB_URL` skips the drain and logs
+  `[worker] CRON_DB_URL missing — outbox drain skipped`
+  (`code: configuration_error`); dev falls back to `DB_URL`.
+- Each `queue.send` has a 5 s deadline: a hung queue call fails the row
+  (retried next tick) instead of holding the claim transaction open.
+
 ## Overlap guard (issue #134)
 
 - Le drain tourne dans **une transaction** avec `SELECT … FOR UPDATE SKIP LOCKED` : deux cycles qui se chevauchent ne traitent jamais la même ligne → overlap **correct par construction**.

@@ -26,6 +26,10 @@ ON CONFLICT (id) DO NOTHING;
 
 SELECT plan(2);
 
+-- Assertions run as the non-superuser tenant role: a superuser bypasses
+-- RLS entirely, so without this the policy would never be exercised.
+SET LOCAL ROLE athlya_tenant_test;
+
 -- ------------------------------------------------------------------ --
 -- export_jobs_read_own: member sees only their own rows               --
 -- ------------------------------------------------------------------ --
@@ -58,6 +62,7 @@ SELECT is(
 );
 
 SELECT test_unset_tenant();
+RESET ROLE;
 
 SELECT * FROM finish();
 ROLLBACK;

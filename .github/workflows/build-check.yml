@@ -31,6 +31,9 @@ on:
       - 'packages/api/**'
       - '.github/workflows/build-check.yml'
 
+permissions:
+  contents: read
+
 concurrency:
   group: build-check-${{ github.ref }}
   cancel-in-progress: true

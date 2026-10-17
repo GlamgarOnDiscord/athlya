@@ -4,7 +4,8 @@
 -- Verifies that after migration 0019:
 --   1. athlya_cron has rolbypassrls = false
 --   2. athlya_cron can SELECT + UPDATE users (anonymization path)
---   3. athlya_cron can SELECT + DELETE from outbox
+--   3. athlya_cron can SELECT + DELETE from outbox, and (migration 0031,
+--      issue #497) claim + mark rows: UPDATE attempts / published_at only
 --   4. athlya_cron can SELECT + DELETE from export_jobs
 --   5. athlya_cron cannot SELECT from audit_log (revoked in 0012)
 --   6. athlya_cron cannot access classes / reservations / studios
@@ -67,6 +68,15 @@ VALUES
         NOW() - INTERVAL '10 days',
         NOW() - INTERVAL '10 days',
         'cccccccc-cc02-4ccc-8ccc-cccccccccc02'
+    ),
+    (
+        'eeeeeeee-ee03-4eee-8eee-eeeeeeeeee03',
+        'evt-cron-pending',
+        'test.cron.pending',
+        '{"t":3}'::jsonb,
+        NOW() - INTERVAL '1 minute',
+        NULL,
+        'cccccccc-cc02-4ccc-8ccc-cccccccccc02'
     )
 ON CONFLICT (id) DO NOTHING;
 
@@ -74,14 +84,14 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO export_jobs (id, user_id, status, requested_at)
 VALUES
     (
-        'ffffffff-ff01-4fff-8fff-ffffffffffff01',
+        'ffffffff-ff01-4fff-8fff-ffffffffff01',
         'dddddddd-dd01-4ddd-8ddd-dddddddddd01',
         'completed',
         NOW() - INTERVAL '8 days'
     )
 ON CONFLICT (id) DO NOTHING;
 
-SELECT plan(9);
+SELECT plan(13);
 
 -- ------------------------------------------------------------------ --
 -- 1. athlya_cron must have rolbypassrls = false after migration 0019  --
@@ -146,11 +156,55 @@ SELECT is(
 );
 
 -- ------------------------------------------------------------------ --
+-- 5b. Drain cycle as athlya_cron (policy: outbox_cron_update, 0031)    --
+--     claimBatch = SELECT … FOR UPDATE SKIP LOCKED + attempts++, then  --
+--     markPublished stamps published_at.                              --
+-- ------------------------------------------------------------------ --
+SELECT results_eq(
+    $$ WITH claimed AS (
+           SELECT id FROM outbox
+            WHERE published_at IS NULL AND event_type = 'test.cron.pending'
+            ORDER BY occurred_at
+            LIMIT 10
+            FOR UPDATE SKIP LOCKED
+       )
+       UPDATE outbox SET attempts = outbox.attempts + 1
+         FROM claimed WHERE outbox.id = claimed.id
+       RETURNING outbox.id, outbox.attempts $$,
+    $$ VALUES ('eeeeeeee-ee03-4eee-8eee-eeeeeeeeee03'::uuid, 1) $$,
+    'outbox_cron_update: athlya_cron claims a pending row (FOR UPDATE SKIP LOCKED + attempts++)'
+);
+
+UPDATE outbox SET published_at = now() WHERE id = 'eeeeeeee-ee03-4eee-8eee-eeeeeeeeee03';
+
+SELECT isnt(
+    (SELECT published_at FROM outbox WHERE id = 'eeeeeeee-ee03-4eee-8eee-eeeeeeeeee03'),
+    NULL,
+    'outbox_cron_update: athlya_cron marks a delivered row as published'
+);
+
+SELECT throws_ok(
+    $$ UPDATE outbox SET payload = '{"tampered":true}'::jsonb
+        WHERE id = 'eeeeeeee-ee03-4eee-8eee-eeeeeeeeee03' $$,
+    '42501',
+    NULL,
+    'athlya_cron cannot rewrite an event payload (UPDATE limited to attempts, published_at)'
+);
+
+SELECT throws_ok(
+    $$ INSERT INTO outbox (event_id, event_type, payload, occurred_at)
+       VALUES ('evt-cron-forge', 'test.forge', '{}'::jsonb, now()) $$,
+    '42501',
+    NULL,
+    'athlya_cron cannot record events (no INSERT privilege)'
+);
+
+-- ------------------------------------------------------------------ --
 -- 6. athlya_cron can SELECT export_jobs (policy: export_jobs_cron_select) --
 -- ------------------------------------------------------------------ --
 SELECT is(
     (SELECT COUNT(*)::int FROM export_jobs
-     WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffffff01'),
+     WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffff01'),
     1,
     'export_jobs_cron_select: athlya_cron can read export_jobs cross-tenant'
 );
@@ -158,10 +212,10 @@ SELECT is(
 -- ------------------------------------------------------------------ --
 -- 7. athlya_cron can DELETE export_jobs (policy: export_jobs_cron_delete) --
 -- ------------------------------------------------------------------ --
-DELETE FROM export_jobs WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffffff01';
+DELETE FROM export_jobs WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffff01';
 
 SELECT is(
-    (SELECT COUNT(*)::int FROM export_jobs WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffffff01'),
+    (SELECT COUNT(*)::int FROM export_jobs WHERE id = 'ffffffff-ff01-4fff-8fff-ffffffffff01'),
     0,
     'export_jobs_cron_delete: athlya_cron can purge completed export_jobs'
 );

@@ -85,7 +85,7 @@ export type AthlyaEnvironment = 'dev' | 'preview' | 'staging' | 'production';
  * - `SENTRY_DSN` is optional because staging / dev can run without a
  *   Sentry project (a warn log is emitted and error reporting is
  *   suppressed — implementation lands in task 14.x).
- * - `VERSION` is injected by CI (`wrangler deploy --var VERSION=...`)
+ * - `VERSION` is injected by CI (`wrangler deploy --var VERSION:...`)
  *   so `/health` can echo the deployed build id back to smoke-test
  *   harnesses. Defaulted to a semver-ish placeholder in
  *   `wrangler.toml` for local dev.

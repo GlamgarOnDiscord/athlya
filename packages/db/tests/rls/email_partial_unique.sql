@@ -15,18 +15,6 @@ BEGIN;
 
 SELECT plan(3);
 
--- ---- helpers ---------------------------------------------------------
-
-DO $$
-BEGIN
-  -- Soft-delete the seeded member-a@athlya.test user so we can reuse
-  -- that email as the "deleted" side in test 2.
-  UPDATE "users"
-     SET "deleted_at" = NOW() - INTERVAL '1 day'
-   WHERE "email" = 'member-a@athlya.test';
-END;
-$$;
-
 -- 1. active + active with same email → unique violation (23505).
 SELECT throws_ok(
     $$INSERT INTO "users" (id, studio_id, email, display_name, role, consents)
@@ -42,6 +30,19 @@ SELECT throws_ok(
     NULL,
     'active + active same email is rejected (users_email_active_unique, 23505)'
 );
+
+-- ---- helpers ---------------------------------------------------------
+-- Only now soft-delete the seeded member-a@athlya.test user, so test 1
+-- above collides with an ACTIVE row and tests 2–3 reuse the email as the
+-- "deleted" side.
+
+DO $$
+BEGIN
+  UPDATE "users"
+     SET "deleted_at" = NOW() - INTERVAL '1 day'
+   WHERE "email" = 'member-a@athlya.test';
+END;
+$$;
 
 -- 2. active + soft-deleted with same email → must succeed.
 SELECT lives_ok(

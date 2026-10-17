@@ -17,12 +17,12 @@
  *   - Uses `env.EVENTS_QUEUE` (Cloudflare Queues producer binding) to
  *     publish `auth.user.registered` / `auth.user.deleted` events
  *     via the `publish` helper from `@athlya/api/events/publish`.
- *   - Durability: compliance-critical events (auth.user.*) rethrow
- *     outbox failures so the caller returns 500 and the client retries.
- *     Advisory events (login.suspicious, session.*) log at error level
- *     for Sentry capture and continue to best-effort queue delivery.
- *   - DB_URL MUST be a role with BYPASSRLS — the outbox table has no
- *     FOR INSERT policy and will reject inserts from athlya_app.
+ *   - Durability (issue #411): `auth.user.registered` / `auth.user.deleted`
+ *     are recorded in the outbox by the user repo in the same statement
+ *     as the user mutation (migration 0033), then dispatched to the
+ *     queue best-effort via `dispatchRecordedEvent`. Advisory events
+ *     (`auth.suspicious.*`) go through `publishEvent`, which records them
+ *     with `auth_record_event` — no BYPASSRLS needed under `athlya_app`.
  *
  * Cloudflare Workers caching strategy (Vague 18 — slice B1)
  * ---------------------------------------------------------
@@ -64,8 +64,6 @@ import {
   type SessionStore,
 } from '@athlya/auth';
 
-import { outbox } from '@athlya/db/schema';
-
 import { buildRoutedPublishDeps } from '../events/publish-deps.js';
 import { publish } from '../events/publish.js';
 
@@ -80,6 +78,7 @@ import {
 import { fetchWithRetry } from './fetch-retry.js';
 import { createRedisLoginAnomalyStore } from './login-anomaly-store-redis.js';
 import { createDrizzlePasswordResetRepo } from './password-reset-repo-drizzle.js';
+import { queryRows, serviceFn } from './service-functions.js';
 
 import type { AuthDeps, AuthSession } from '../routes/auth.js';
 import type { AthlyaBindings } from '../types.js';
@@ -261,6 +260,7 @@ async function getAuthState(env: AthlyaBindings): Promise<AuthServiceState> {
         (env as { JWT_AUDIENCE?: string }).JWT_AUDIENCE ?? `athlya-api-${env.ENVIRONMENT}`,
     },
     publishEvent: (event: AthlyaEvent) => buildPublishEvent(env)(event),
+    dispatchRecordedEvent: (event: AthlyaEvent) => buildDispatchRecordedEvent(env)(event),
     hibpFailClosed: env.ENVIRONMENT === 'production',
   };
 
@@ -282,16 +282,18 @@ async function getAuthState(env: AthlyaBindings): Promise<AuthServiceState> {
  * Returns a `publishEvent` function bound to the supplied env.
  *
  * Durability policy:
- *   - Compliance-critical events (auth.user.*): outbox failure rethrows
- *     so the caller returns 500 and the client can retry. The user
- *     mutation is idempotent (soft delete / unique constraint).
- *   - Advisory events (auth.login.suspicious, auth.session.*): outbox
- *     failure is logged at error level for Sentry; execution continues
- *     to step 2 (direct queue publish).
+ *   - Compliance-critical events (auth.user.*) are normally recorded by
+ *     the user repo together with their mutation and never reach this
+ *     function. `auth_record_event` refuses them, so if one does reach it
+ *     the outbox write fails and is rethrown: the caller returns 500
+ *     rather than emitting a critical event without its durable record.
+ *   - Advisory events (auth.suspicious.*): outbox failure is logged at
+ *     error level for Sentry; execution continues to the direct queue
+ *     publish.
  *
- * REQUIREMENT: env.DB_URL must point to a role with BYPASSRLS (e.g.
- * athlya_owner). The outbox table has no FOR INSERT policy and will
- * reject inserts from athlya_app (NOBYPASSRLS) with SQLSTATE 42501.
+ * The outbox row is written through the `auth_record_event` SECURITY
+ * DEFINER function (migration 0033), which works under the NOBYPASSRLS
+ * `athlya_app` role without tenant context.
  */
 export function buildPublishEvent(env: AthlyaBindings): (event: AthlyaEvent) => Promise<void> {
   const COMPLIANCE_CRITICAL_PREFIXES = ['auth.user.'] as const;
@@ -303,15 +305,7 @@ export function buildPublishEvent(env: AthlyaBindings): (event: AthlyaEvent) => 
 
     const dbHttp = getOrCreateDbHttp(env.DB_URL);
     try {
-      await dbHttp
-        .insert(outbox)
-        .values({
-          eventId: event.id,
-          eventType: event.type,
-          payload: event as Record<string, unknown>,
-          occurredAt: new Date(event.occurredAt),
-        })
-        .onConflictDoNothing();
+      await queryRows(dbHttp, serviceFn.recordAuthEvent(event));
     } catch (outboxErr) {
       console.error('[auth-deps] publishEvent: outbox write failed', {
         eventId: event.id,
@@ -337,6 +331,27 @@ export function buildPublishEvent(env: AthlyaBindings): (event: AthlyaEvent) => 
           error: err instanceof Error ? err.message : String(err),
         },
       );
+    }
+  };
+}
+
+/**
+ * Queue-only delivery for an event the user repo already recorded in the
+ * outbox together with its mutation (issue #411). Never writes the
+ * outbox; a queue failure is logged and left to the outbox drain.
+ */
+export function buildDispatchRecordedEvent(
+  env: AthlyaBindings,
+): (event: AthlyaEvent) => Promise<void> {
+  return async (event: AthlyaEvent) => {
+    try {
+      await publish(event, undefined, buildRoutedPublishDeps(env));
+    } catch (err) {
+      console.warn('[auth-deps] dispatchRecordedEvent: queue publish failed — drain will deliver', {
+        eventId: event.id,
+        eventType: event.type,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   };
 }

@@ -77,6 +77,7 @@ import { buildStudioSlugResolver } from './adapters/studio-slug-resolver.js';
 import { buildDlqRouter } from './admin/dlq-routes.js';
 import { buildJwtRotateRouter } from './admin/jwt-rotate-routes.js';
 import { buildOutboxRouter } from './admin/outbox-routes.js';
+import { createDrainDb, resolveDrainDbUrl } from './adapters/drain-db.js';
 import { handleDlqBatch } from './events/drain-dlq.js';
 import { runScheduledDrain } from './events/drain-scheduled.js';
 import { rejectUnknownQueueEvent } from './events/reject-unknown-queue-event.js';
@@ -1553,7 +1554,23 @@ const worker = {
     // already swallowed internally by `drainOutbox` and summarised
     // via its `DrainResult`; this catch fires only on
     // `claimBatch` / transaction-level failures.
-    const drainTask = runScheduledDrain(env).catch((err: unknown) => {
+    // Issue #497 — the drain runs as athlya_cron through CRON_DB_URL;
+    // there is no `getDb` binding on a real Worker env.
+    const drainDbUrl = resolveDrainDbUrl(env as unknown as AthlyaBindings);
+    if (drainDbUrl === null) {
+      console.error('[worker] CRON_DB_URL missing — outbox drain skipped', {
+        code: 'configuration_error',
+        binding: 'CRON_DB_URL',
+        environment: (env as unknown as AthlyaBindings).ENVIRONMENT ?? 'unknown',
+        cron: event.cron,
+        scheduledTime: event.scheduledTime,
+      });
+    }
+    const drainTask = (
+      drainDbUrl === null
+        ? Promise.resolve()
+        : runScheduledDrain({ ...env, getDb: () => createDrainDb(drainDbUrl) })
+    ).catch((err: unknown) => {
       // Log through the console-backed default logger — the
       // drain module does not accept `StructuredLogger` shapes
       // and we do not want to convert here; task 8.6 (OTel)

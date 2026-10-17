@@ -1342,37 +1342,37 @@ test.prop([fc.integer({ min: 1, max: 10 }), fc.array(fc.uuid(), { minLength: 1, 
 
 ```jsonc
 {
-  "next": "^16.2.0",
-  "react": "^19.2.0",
+  "next": "^16.4.0",
+  "react": "^19.3.0",
   "react-native": "0.83.2",
   "expo": "^55.0.0",
   "expo-router": "^5.0.0",
   "expo-secure-store": "^14.0.0",
   "expo-local-authentication": "^15.0.0",
   "expo-notifications": "^12.0.0",
-  "hono": "^4.10.0",
+  "hono": "^4.13.13",
   "@hono/zod-validator": "^0.4.0",
-  "drizzle-orm": "^0.45.0",
-  "drizzle-kit": "^0.32.0",
+  "drizzle-orm": "^0.45.4",
+  "drizzle-kit": "^0.31.11",
   "@tanstack/react-query": "^5.89.0",
-  "zod": "^4.1.0",
+  "zod": "^4.6.5",
   "better-auth": "^1.6.0",
-  "jose": "^5.9.0",
+  "jose": "^6.2.12",
   "stripe": "^17.0.0",
   "resend": "^4.0.0",
   "@upstash/qstash": "^2.7.0",
-  "typescript": "^5.9.0",
-  "tailwindcss": "^4.2.0",
+  "typescript": "^6.0.3",
+  "tailwindcss": "^4.3.3",
   "nativewind": "^4.1.0",
   "zustand": "^5.0.0",
   "react-native-mmkv": "^3.3.0",
   "react-native-reanimated": "^4.0.0",
   "@opentelemetry/api": "^1.9.0",
-  "turbo": "^2.7.0",
-  "fast-check": "^4.7.0",
-  "@fast-check/vitest": "^0.2.0",
-  "vitest": "^4.1.0",
-  "@playwright/test": "^1.59.0",
+  "turbo": "^2.11.7",
+  "fast-check": "^4.10.2",
+  "@fast-check/vitest": "^0.5.0",
+  "vitest": "^5.0.3",
+  "@playwright/test": "^1.64.0",
 }
 ```
 
@@ -1384,6 +1384,6 @@ test.prop([fc.integer({ min: 1, max: 10 }), fc.array(fc.uuid(), { minLength: 1, 
 
 ### Contraintes d'environnement
 
-- Développement sur **Windows 11** : toute la stack est cross-platform (Node 20 LTS, pnpm 9, Wrangler CLI, EAS CLI).
+- Développement sur **Windows 11** : toute la stack est cross-platform (Node 24 LTS, pnpm 11, Wrangler CLI, EAS CLI).
 - Test iOS gratuit : Expo Go sur iPhone réel via QR code local (Wi-Fi partagé) ; EAS Build cloud pour les IPA de production (pas de Mac requis).
 - Le workspace `apps/mobile` exige EAS Build dès qu'un module natif custom est introduit (post-v0.2).
