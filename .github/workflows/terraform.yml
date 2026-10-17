@@ -87,7 +87,7 @@ jobs:
         id: prereq
         run: |
           if [ -z "${TF_VAR_cloudflare_api_token}" ]; then
-            echo "::notice::TF_VAR_cloudflare_api_token not set — terraform skipped. Set it in the '${{ inputs.environment || 'staging' }}' GitHub environment."
+            echo "::notice::TF_VAR_cloudflare_api_token not set — terraform skipped. Set it in the '${TF_VAR_environment}' GitHub environment."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
