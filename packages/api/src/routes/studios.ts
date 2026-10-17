@@ -43,6 +43,7 @@ import {
   requireRole,
 } from './helpers.js';
 
+import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
 import type { UpdateStudioRequest } from '@athlya/shared/schemas/api';
@@ -82,16 +83,22 @@ export interface StudiosDeps {
   /**
    * Resolve a studio by id. Returns `null` when the row does not
    * exist (or is soft-deleted) — the router renders that as 404
-   * with the canonical `not_found` Problem Details code.
+   * with the canonical `not_found` Problem Details code. `claims`
+   * scope the query through RLS (`withTenantHttp`).
    */
-  getStudio(studioId: string): Promise<StudioView | null>;
+  getStudio(studioId: string, claims: AuthClaims): Promise<StudioView | null>;
 
   /**
    * Update a studio. Returns the new row, or `null` if the studio
    * disappeared between the auth check and the write (e.g. cascading
-   * tenant cleanup). The router maps `null` to 404.
+   * tenant cleanup). The router maps `null` to 404. `claims` scope
+   * the write through RLS (`studios_admin_update_own`).
    */
-  updateStudio(studioId: string, patch: StudioPatch): Promise<StudioView | null>;
+  updateStudio(
+    studioId: string,
+    patch: StudioPatch,
+    claims: AuthClaims,
+  ): Promise<StudioView | null>;
 
   /** Dependency bundle forwarded to the idempotency middleware. */
   readonly idempotency?: IdempotencyMiddlewareDeps;
@@ -156,7 +163,7 @@ export function buildStudiosRouter(deps: StudiosDeps): Hono<HonoEnv> {
     if (claims === undefined) {
       throw new Error('authClaims unexpectedly missing after jwtAuth');
     }
-    const studio = await deps.getStudio(claims.studioId);
+    const studio = await deps.getStudio(claims.studioId, claims);
     if (studio === null) {
       // Tenant root row has been hard-deleted under a still-valid
       // session — surface 404 rather than 401 so the client
@@ -195,7 +202,11 @@ export function buildStudiosRouter(deps: StudiosDeps): Hono<HonoEnv> {
         }
       }
 
-      const updated = await deps.updateStudio(claims.studioId, patch as unknown as StudioPatch);
+      const updated = await deps.updateStudio(
+        claims.studioId,
+        patch as unknown as StudioPatch,
+        claims,
+      );
       if (updated === null) {
         return problem404(c, 'studio not found');
       }
