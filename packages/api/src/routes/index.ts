@@ -258,6 +258,16 @@ const notImplemented = (what: string): never => {
   throw new Error(`buildDefaultDeps: ${what} adapter not yet implemented`);
 };
 
+/** Signing key bindings `buildAuthDeps` reads (`getJwtState`). */
+type JwtKeyBinding = 'JWT_KID' | 'JWT_PRIVATE_KEY_PEM' | 'JWT_PUBLIC_KEY_PEM' | 'JWKS_JSON';
+
+/** Key material the preview guard requires on top of `JWT_KID`. */
+const PREVIEW_JWT_KEY_BINDINGS = [
+  'JWT_PRIVATE_KEY_PEM',
+  'JWT_PUBLIC_KEY_PEM',
+  'JWKS_JSON',
+] as const;
+
 /**
  * Build the default production dependency bundle from the Worker
  * bindings.
@@ -309,9 +319,19 @@ export function buildDefaultDeps(
     if (typeof env.JWT_JWKS_URL !== 'string' || env.JWT_JWKS_URL.length === 0) {
       missing.push('JWT_JWKS_URL');
     }
-    const widerJwt = env as AthlyaBindings & { JWT_KID?: string };
+    const widerJwt = env as AthlyaBindings & Partial<Record<JwtKeyBinding, string>>;
     if (typeof widerJwt.JWT_KID !== 'string' || widerJwt.JWT_KID.length === 0) {
       missing.push('JWT_KID');
+    }
+    // Preview secrets are written by the workflow on every deploy, so
+    // the guard also covers the key material `buildAuthDeps` loads
+    // (`getJwtState`). Staging and production keep the historical list;
+    // `scripts/verify-secrets.mjs` checks their key material.
+    if (env.ENVIRONMENT === 'preview') {
+      for (const name of PREVIEW_JWT_KEY_BINDINGS) {
+        const value = widerJwt[name];
+        if (typeof value !== 'string' || value.length === 0) missing.push(name);
+      }
     }
     if (missing.length > 0) {
       throw new Error(

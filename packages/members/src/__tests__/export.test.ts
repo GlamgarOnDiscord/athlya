@@ -434,6 +434,11 @@ describe('runExportJob claim', () => {
     store.get.mockResolvedValueOnce(STORED_JOB);
     store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
     store.markCompleted.mockResolvedValueOnce(false);
+    store.get.mockResolvedValueOnce({
+      ...STORED_JOB,
+      status: 'completed',
+      downloadUrl: 'https://api.athlya.test/download-of-the-newer-run',
+    });
     source.fetchProfile.mockResolvedValueOnce(PROFILE);
     source.fetchConsents.mockResolvedValueOnce([CONSENTS_ROW]);
     source.listReservations.mockReturnValueOnce(asyncPage([]));
@@ -589,6 +594,100 @@ describe('runExportJob archive cleanup', () => {
     put.mockResolvedValueOnce(undefined);
     signedUrl.mockResolvedValueOnce('https://api.athlya.test/download');
     publish.mockRejectedValueOnce(new Error('queue down'));
+
+    await runExportJob(JOB_ID, {
+      jobs: store.jobs,
+      data: source.data,
+      archive,
+      blob,
+      events,
+      clock: buildClock([FROZEN_REQUEST_TIME, FROZEN_COMPLETE_TIME]),
+      uuid: buildUuid(COMPLETE_EVENT_ID),
+    });
+
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('treats a false completion whose row publishes this run as completed', async () => {
+    const store = buildJobStore();
+    const source = buildDataSource();
+    const { blob, put, signedUrl, del, deleteJobArchivesExcept } = buildBlob();
+    const { archive } = buildArchiveDouble();
+    const { events, publish } = buildEvents();
+    const url = 'https://api.athlya.test/download';
+    store.get.mockResolvedValueOnce(STORED_JOB);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
+    // The first attempt committed, the retried one matched no row.
+    store.markCompleted.mockResolvedValueOnce(false);
+    store.get.mockResolvedValueOnce({ ...STORED_JOB, status: 'completed', downloadUrl: url });
+    primeSources(source);
+    put.mockResolvedValueOnce(undefined);
+    signedUrl.mockResolvedValueOnce(url);
+    publish.mockResolvedValue(undefined);
+
+    const result = await runExportJob(JOB_ID, {
+      jobs: store.jobs,
+      data: source.data,
+      archive,
+      blob,
+      events,
+      clock: buildClock([FROZEN_REQUEST_TIME, FROZEN_COMPLETE_TIME]),
+      uuid: buildUuid(COMPLETE_EVENT_ID),
+    });
+
+    expect(result.kind).toBe('completed');
+    expect(del).not.toHaveBeenCalled();
+    expect(deleteJobArchivesExcept).toHaveBeenCalledWith(
+      JOB_ID,
+      exportObjectKey(JOB_ID, CURRENT_CLAIM),
+    );
+    expect(publish).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the upload when the row cannot be re-read after a false completion', async () => {
+    const store = buildJobStore();
+    const source = buildDataSource();
+    const { blob, put, signedUrl, del } = buildBlob();
+    const { archive } = buildArchiveDouble();
+    const { events, publish } = buildEvents();
+    store.get.mockResolvedValueOnce(STORED_JOB);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
+    store.markCompleted.mockResolvedValueOnce(false);
+    store.get.mockRejectedValueOnce(new Error('db offline'));
+    primeSources(source);
+    put.mockResolvedValueOnce(undefined);
+    signedUrl.mockResolvedValueOnce('https://api.athlya.test/download');
+
+    const result = await runExportJob(JOB_ID, {
+      jobs: store.jobs,
+      data: source.data,
+      archive,
+      blob,
+      events,
+      clock: buildClock([FROZEN_REQUEST_TIME, FROZEN_COMPLETE_TIME]),
+      uuid: buildUuid(COMPLETE_EVENT_ID),
+    });
+
+    expect(result).toEqual({ kind: 'in_progress', jobId: JOB_ID });
+    expect(del).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('keeps the upload when markCompleted throws after committing it', async () => {
+    const store = buildJobStore();
+    const source = buildDataSource();
+    const { blob, put, signedUrl, del } = buildBlob();
+    const { archive } = buildArchiveDouble();
+    const { events } = buildEvents();
+    const url = 'https://api.athlya.test/download';
+    store.get.mockResolvedValueOnce(STORED_JOB);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
+    store.markCompleted.mockRejectedValueOnce(new Error('connection reset'));
+    store.markFailed.mockResolvedValueOnce(undefined);
+    store.get.mockResolvedValueOnce({ ...STORED_JOB, status: 'completed', downloadUrl: url });
+    primeSources(source);
+    put.mockResolvedValueOnce(undefined);
+    signedUrl.mockResolvedValueOnce(url);
 
     await runExportJob(JOB_ID, {
       jobs: store.jobs,

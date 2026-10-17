@@ -83,28 +83,26 @@ try {
   }
   ok('unscoped users SELECT returns 0 rows');
 
-  await sql
-    .begin(async (tx) => {
-      await tx.unsafe(`SELECT set_config('app.user_id', '${FAKE_USER}', true)`);
-      await tx.unsafe(`SELECT set_config('app.studio_id', '${FAKE_STUDIO}', true)`);
-      await tx.unsafe(`SELECT set_config('app.role', 'member', true)`);
+  await sql.begin(async (tx) => {
+    await tx.unsafe(`SELECT set_config('app.user_id', '${FAKE_USER}', true)`);
+    await tx.unsafe(`SELECT set_config('app.studio_id', '${FAKE_STUDIO}', true)`);
+    await tx.unsafe(`SELECT set_config('app.role', 'member', true)`);
 
-      const [scoped] = await tx`SELECT count(*)::int AS n FROM users`;
-      if (scoped.n !== 0) {
-        fail(`scoped member SELECT on users returned ${scoped.n}, expected 0`);
-      }
+    const [scoped] = await tx`SELECT count(*)::int AS n FROM users`;
+    if (scoped.n !== 0) {
+      fail(`scoped member SELECT on users returned ${scoped.n}, expected 0`);
+    }
 
-      await tx.unsafe(`
+    await tx.unsafe(`
       INSERT INTO audit_log (actor_id, action, metadata)
       VALUES (NULL, 'smoke.rls.cutover', '{}'::jsonb)
     `);
-      throw new Error('ROLLBACK_SMOKE');
-    })
-    .catch((err) => {
-      if (!(err instanceof Error) || err.message !== 'ROLLBACK_SMOKE') {
-        throw err;
-      }
-    });
+    throw new Error('ROLLBACK_SMOKE');
+  }).catch((err) => {
+    if (!(err instanceof Error) || err.message !== 'ROLLBACK_SMOKE') {
+      throw err;
+    }
+  });
   ok('audit_log INSERT succeeds under tenant GUC (rolled back)');
 
   const studioId = process.env.SMOKE_STUDIO_ID;
@@ -122,9 +120,7 @@ try {
       ok(`admin scoped SELECT returned ${adminCount.n} user(s) in studio`);
     });
   } else {
-    console.log(
-      '[smoke-rls] skip studio probe (set SMOKE_STUDIO_ID + SMOKE_ADMIN_ID for full check)',
-    );
+    console.log('[smoke-rls] skip studio probe (set SMOKE_STUDIO_ID + SMOKE_ADMIN_ID for full check)');
   }
 
   console.log('[smoke-rls] all checks passed');

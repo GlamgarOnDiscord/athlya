@@ -19,17 +19,21 @@ name: Preview environments
 #   NEON_API_KEY                — Neon project API key
 #   PREVIEW_REDIS_URL           — Upstash Redis URL (dedicated preview database)
 #   PREVIEW_REDIS_TOKEN         — Upstash Redis token (dedicated preview database)
-#   PREVIEW_JWT_JWKS_URL        — JWKS endpoint that publishes the preview key
-#   PREVIEW_JWT_KID             — key id of the preview signing key
-#   PREVIEW_JWT_PRIVATE_KEY_PEM — PKCS#8 private key (scripts/generate-jwt-keypair.mjs)
-#   PREVIEW_JWT_PUBLIC_KEY_PEM  — SPKI public key of the same pair
-#   PREVIEW_JWKS_JSON           — JWKS served at /.well-known/jwks.json
+#   PREVIEW_JWT_JWKS_URL        — https JWKS endpoint that publishes the preview key
+#   PREVIEW_JWT_KID             — key id of the preview signing key (`preview-…`)
+#   PREVIEW_JWT_PRIVATE_KEY_PEM — multi-line PKCS#8 private key
+#   PREVIEW_JWT_PUBLIC_KEY_PEM  — multi-line SPKI public key of the same pair
+#   PREVIEW_JWKS_JSON           — public JWKS listing the kid, served at
+#                                 /.well-known/jwks.json
 #   PREVIEW_TURNSTILE_SECRET    — Turnstile secret (staging site key is fine)
 #
 # The JWT key material is required like on staging: without JWT_KID the
-# Worker has no auth/idempotency wiring and refuses every request. The
+# Worker has no auth/idempotency wiring and refuses every request. It must
+# be a dedicated preview pair: preview Workers run PR code, so they never
+# get the staging or production signing key. scripts/validate-preview-jwt.mjs
+# checks the values before any resource is created. The
 # PREVIEW_JWT_JWKS_URL document must list PREVIEW_JWT_KID, otherwise the
-# tokens a preview mints fail verification.
+# tokens a preview mints fail verification. See docs/runbooks/preview-pr.md.
 #
 # Required GitHub variables:
 #   NEON_PROJECT_ID              — Neon project ID (e.g. "proud-dream-12345678")
@@ -122,6 +126,9 @@ jobs:
             echo "::error::Missing preview secrets: ${missing[*]}"
             exit 1
           fi
+          # Malformed or mismatched key material, a non-https JWKS URL or
+          # a kid that is not a dedicated preview kid fail here too.
+          node scripts/validate-preview-jwt.mjs
 
       - name: Create Neon branch
         id: neon

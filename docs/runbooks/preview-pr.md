@@ -17,25 +17,48 @@ The Neon branch, Worker, and queue set are deleted when the PR closes.
 
 In **Settings → Secrets → Actions**, add:
 
-| Secret                        | Description                                                        |
-| ----------------------------- | ------------------------------------------------------------------ |
-| `CLOUDFLARE_API_TOKEN`        | CF API token with **Workers:Edit** scope                           |
-| `CLOUDFLARE_ACCOUNT_ID`       | CF account ID (visible in the Cloudflare dashboard URL)            |
-| `NEON_API_KEY`                | Neon project API key (Project settings → API keys)                 |
-| `PREVIEW_REDIS_URL`           | Upstash Redis URL — dedicated preview instance                     |
-| `PREVIEW_REDIS_TOKEN`         | Upstash Redis token — dedicated preview instance                   |
-| `PREVIEW_JWT_JWKS_URL`        | JWKS endpoint for preview JWT verification (lists the preview key) |
-| `PREVIEW_JWT_KID`             | Key id of the preview signing key                                  |
-| `PREVIEW_JWT_PRIVATE_KEY_PEM` | PKCS#8 private key of the preview signing key                      |
-| `PREVIEW_JWT_PUBLIC_KEY_PEM`  | SPKI public key of the same pair                                   |
-| `PREVIEW_JWKS_JSON`           | JWKS document the preview serves at `/.well-known/jwks.json`       |
-| `PREVIEW_TURNSTILE_SECRET`    | Cloudflare Turnstile secret (staging key is fine)                  |
+| Secret                        | Description                                                      |
+| ----------------------------- | ---------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`        | CF API token with **Workers:Edit** scope                         |
+| `CLOUDFLARE_ACCOUNT_ID`       | CF account ID (visible in the Cloudflare dashboard URL)          |
+| `NEON_API_KEY`                | Neon project API key (Project settings → API keys)               |
+| `PREVIEW_REDIS_URL`           | Upstash Redis URL — dedicated preview instance                   |
+| `PREVIEW_REDIS_TOKEN`         | Upstash Redis token — dedicated preview instance                 |
+| `PREVIEW_JWT_JWKS_URL`        | https JWKS endpoint for preview JWT verification (lists the kid) |
+| `PREVIEW_JWT_KID`             | Key id of the dedicated preview signing key, `preview-…`         |
+| `PREVIEW_JWT_PRIVATE_KEY_PEM` | Multi-line PKCS#8 private key of the preview signing key         |
+| `PREVIEW_JWT_PUBLIC_KEY_PEM`  | Multi-line SPKI public key of the same pair                      |
+| `PREVIEW_JWKS_JSON`           | Public JWKS the preview serves at `/.well-known/jwks.json`       |
+| `PREVIEW_TURNSTILE_SECRET`    | Cloudflare Turnstile secret (staging key is fine)                |
+
+#### Preview JWT signing key
 
 The JWT key material is required, as on staging: without `JWT_KID` the Worker has no
-auth/idempotency wiring and rejects every request. Generate a dedicated pair with
-`node scripts/generate-jwt-keypair.mjs` (or reuse the staging pair) and make sure
-`PREVIEW_JWT_JWKS_URL` publishes `PREVIEW_JWT_KID`. The deploy job fails before creating any
-resource when one of these secrets is missing.
+auth/idempotency wiring and rejects every request. It must be a **dedicated preview pair**,
+never the staging or production one: preview Workers run PR code, so their private key must not
+sign tokens any other environment accepts.
+
+Generate it with the same flow that writes `scripts/dev-secrets/` (real multi-line PEM files and
+a JWKS), into a directory of its own so your local dev keys are kept. Do **not** copy the escaped
+`.dev.vars` lines the script prints: their literal `\n` sequences break key import.
+
+```sh
+KID="preview-$(date +%Y%m%d)"
+OUT="$(mktemp -d)"
+node scripts/generate-jwt-keypair.mjs --out "$OUT" --kid "$KID"
+
+gh secret set PREVIEW_JWT_KID --body "$KID"
+gh secret set PREVIEW_JWT_PRIVATE_KEY_PEM < "$OUT/jwt-private.pem"
+gh secret set PREVIEW_JWT_PUBLIC_KEY_PEM < "$OUT/jwt-public.pem"
+gh secret set PREVIEW_JWKS_JSON < "$OUT/jwks.json"
+rm -rf "$OUT"
+```
+
+`PREVIEW_JWT_KID` is the `--kid` value; it is also `keys[0].kid` in `jwks.json`. Publish that
+JWKS at `PREVIEW_JWT_JWKS_URL`. Before creating any resource, the deploy job fails when a secret
+is missing, and `scripts/validate-preview-jwt.mjs` fails it when the URL is not https, the kid
+does not start with `preview-`, a PEM is malformed or escaped, the PEMs are not one pair, or the
+JWKS does not list the kid with that public key.
 
 ### 2. GitHub variables
 
