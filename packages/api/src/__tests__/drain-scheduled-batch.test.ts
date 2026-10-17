@@ -207,7 +207,10 @@ describe('runScheduledDrain', () => {
 });
 
 describe('runScheduledDrain lease (issue #424)', () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
   const row = (n: number) => ({
     id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
@@ -278,7 +281,6 @@ describe('runScheduledDrain lease (issue #424)', () => {
       batchSize: 2,
     });
 
-    vi.useRealTimers();
     expect(result).toEqual({ processed: 2, succeeded: 1, failed: 0, released: 1 });
     expect(releaseLeasesMock).toHaveBeenCalledWith(expect.anything(), [rows[1]!.id], leaseToken);
     expect(log).not.toHaveBeenCalledWith('athlya.outbox.drain_errors', expect.anything());
