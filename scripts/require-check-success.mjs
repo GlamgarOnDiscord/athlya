@@ -3,18 +3,22 @@
  * Fail unless a named GitHub check run succeeded on a commit — issue #343.
  *
  * Production deploy phases call this so a commit can only reach
- * production after the staging gate proved that exact SHA.
+ * production after the staging gate proved that exact SHA, including the
+ * full 10-minute k6 soak ("Staging gate (full soak)").
  *
- * Usage (GitHub Actions):
+ * Usage (GitHub Actions) — `--check` may be repeated; every check must pass:
  *   GITHUB_TOKEN=… node scripts/require-check-success.mjs \
- *     --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --check "Staging gate"
+ *     --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" \
+ *     --check "Staging gate" --check "Staging gate (full soak)"
  */
 
 import { parseArgs } from 'node:util';
 
 /**
  * Pick the most recent completed run of `checkName` and report whether it
- * succeeded. Pure so it can be unit-tested without the GitHub API.
+ * succeeded. Skipped runs prove nothing either way (e.g. the full-soak job
+ * of a short manual staging-gate run), so they are ignored. Pure so it can
+ * be unit-tested without the GitHub API.
  *
  * @param {Array<{ name: string, status: string, conclusion: string | null, completed_at: string | null }>} checkRuns
  * @param {string} checkName
@@ -22,7 +26,9 @@ import { parseArgs } from 'node:util';
  */
 export function evaluateCheckRuns(checkRuns, checkName) {
   const runs = checkRuns
-    .filter((run) => run.name === checkName && run.status === 'completed')
+    .filter(
+      (run) => run.name === checkName && run.status === 'completed' && run.conclusion !== 'skipped',
+    )
     .sort((a, b) => String(b.completed_at).localeCompare(String(a.completed_at)));
   const latest = runs[0];
   if (!latest) {
@@ -58,23 +64,29 @@ if (import.meta.main) {
     options: {
       repo: { type: 'string' },
       sha: { type: 'string' },
-      check: { type: 'string' },
+      check: { type: 'string', multiple: true },
     },
   });
   const token = process.env.GITHUB_TOKEN;
-  if (!values.repo || !values.sha || !values.check || !token) {
+  const checks = values.check ?? [];
+  if (!values.repo || !values.sha || checks.length === 0 || !token) {
     console.error('[require-check] --repo, --sha, --check and GITHUB_TOKEN are required');
     process.exit(1);
   }
-  const { ok, reason } = await requireCheckSuccess({
-    repo: values.repo,
-    sha: values.sha,
-    checkName: values.check,
-    token,
-  });
-  if (!ok) {
-    console.error(`::error title=Required check missing::${reason} (${values.sha})`);
-    process.exit(1);
+  let failed = false;
+  for (const checkName of checks) {
+    const { ok, reason } = await requireCheckSuccess({
+      repo: values.repo,
+      sha: values.sha,
+      checkName,
+      token,
+    });
+    if (ok) {
+      console.log(`[require-check] OK — ${reason}`);
+    } else {
+      console.error(`::error title=Required check missing::${reason} (${values.sha})`);
+      failed = true;
+    }
   }
-  console.log(`[require-check] OK — ${reason}`);
+  if (failed) process.exit(1);
 }
