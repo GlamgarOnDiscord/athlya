@@ -49,6 +49,9 @@ name: Staging gate
 #                                    has a free seat, used by the E2E booking
 #                                    journey (#470)
 #
+# The RGPD export E2E (#498) is not a gate step: the export is limited to
+# one request per user per 24 h. It runs from staging-export-e2e.yml.
+#
 # The E2E journey books a real seat. A cancelled run (cancel-in-progress)
 # signals the script, which cancels its reservation before exiting; a class
 # already booked by a concurrent run on another ref is skipped.
