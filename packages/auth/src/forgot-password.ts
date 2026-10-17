@@ -245,7 +245,7 @@ export async function requestReset(
       expiresAt,
     });
 
-    const link = `${deps.resetLinkBaseUrl.replace(/\/+$/u, '')}/reset-password/${plainToken}`;
+    const link = `${stripTrailingSlashes(deps.resetLinkBaseUrl)}/reset-password/${plainToken}`;
     await deps.emailTransport.sendResetEmail({
       to: user.email,
       link,
@@ -254,6 +254,13 @@ export async function requestReset(
   }
 
   return { kind: 'sent' };
+}
+
+/** Linear-time trailing-slash trim (a `/\/+$/` regex backtracks quadratically). */
+function stripTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 0x2f) end -= 1;
+  return url.slice(0, end);
 }
 
 /* ------------------------------------------------------------------ */
