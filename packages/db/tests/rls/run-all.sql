@@ -37,5 +37,6 @@
 \i tests/rls/export_jobs.sql
 \i tests/rls/email_partial_unique.sql
 \i tests/rls/password_reset_one_active.sql
+\i tests/rls/service_functions.sql
 \i tests/rls/cron_role.sql
 \i tests/rls/constraints.sql
