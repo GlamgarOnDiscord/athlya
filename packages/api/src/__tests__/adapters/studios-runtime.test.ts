@@ -102,14 +102,15 @@ describe('createDrizzleStudioRepoHttp', () => {
   });
 
   it('updates the editable columns inside a tenant batch', async () => {
-    const { db, batches } = fakeHttpDb([{ ...row, name: 'Renamed' }]);
+    const { db, batches } = fakeHttpDb([{ ...row, name: 'Renamed', brandColor: '#1D4ED8' }]);
     const updated = await createDrizzleStudioRepoHttp(db, claims).updateById(STUDIO_ID, {
       name: 'Renamed',
+      brandColor: '#1D4ED8',
       brandLogo: 'ignored',
     });
-    expect(updated?.name).toBe('Renamed');
+    expect(updated).toMatchObject({ name: 'Renamed', brandColor: '#1D4ED8', brandLogo: null });
     expect(batches[0]?.kinds).toEqual(['execute', 'execute', 'execute', 'update']);
-    expect(batches[0]?.set).toEqual({ name: 'Renamed' });
+    expect(batches[0]?.set).toEqual({ name: 'Renamed', brandColor: '#1D4ED8' });
   });
 
   it('falls back to a scoped read when nothing editable changed', async () => {

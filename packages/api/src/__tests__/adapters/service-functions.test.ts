@@ -75,13 +75,48 @@ describe('service function contract with migration 0032', () => {
     expect(new Set(used).size).toBe(17);
   });
 
+  const granted = grantedToApp(migration);
+
   it.each([...new Set(used)])('%s is created and granted to athlya_app by the migrations', (fn) => {
     expect(migration).toMatch(new RegExp(`CREATE OR REPLACE FUNCTION ${fn}\\(`, 'u'));
-    expect(migration).toMatch(
-      new RegExp(`'${fn}\\(|GRANT EXECUTE ON FUNCTION ${fn}\\([^)]*\\) TO athlya_app;`, 'u'),
-    );
+    expect(granted).toContain(fn);
+  });
+
+  it('only counts a grant loop whose body grants EXECUTE to athlya_app', () => {
+    const loop = (grantee: string) => `
+      FOREACH fn IN ARRAY ARRAY['a_fn(uuid)', 'b_fn(text)'] LOOP
+          EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO ${grantee}', fn);
+      END LOOP;`;
+    expect([...grantedToApp(loop('athlya_app'))].sort()).toEqual(['a_fn', 'b_fn']);
+    expect([...grantedToApp(loop('athlya_cron'))]).toEqual([]);
+    expect([...grantedToApp("SELECT 'c_fn(uuid)';")]).toEqual([]);
+    expect([...grantedToApp('GRANT EXECUTE ON FUNCTION d_fn(uuid) TO athlya_app;')]).toEqual([
+      'd_fn',
+    ]);
   });
 });
+
+/**
+ * Functions granted EXECUTE to `athlya_app`, either by a direct
+ * `GRANT EXECUTE ON FUNCTION fn(...) TO athlya_app;` or by a
+ * `FOREACH fn IN ARRAY ARRAY[...] LOOP` whose body grants to athlya_app.
+ */
+function grantedToApp(sqlText: string): Set<string> {
+  const names = new Set<string>();
+  for (const m of sqlText.matchAll(
+    /GRANT EXECUTE ON FUNCTION ([a-z_0-9]+)\([^)]*\) TO athlya_app;/gu,
+  )) {
+    names.add(m[1] ?? '');
+  }
+  const loops = sqlText.matchAll(
+    /FOREACH \w+ IN ARRAY ARRAY\[([\s\S]*?)\]\s*LOOP([\s\S]*?)END LOOP;/gu,
+  );
+  for (const m of loops) {
+    if (!/GRANT EXECUTE ON FUNCTION %s TO athlya_app'/u.test(m[2] ?? '')) continue;
+    for (const fn of (m[1] ?? '').matchAll(/'([a-z_0-9]+)\(/gu)) names.add(fn[1] ?? '');
+  }
+  return names;
+}
 
 /*
  * RLS inventory (issues #224, #117). Every Drizzle query an adapter
@@ -104,7 +139,14 @@ const QUERY_METHODS = new Set([
   'batch',
   'transaction',
 ]);
-const DB_RECEIVER = /^(?:db|dbHttp|dbWrite|writeDb|tx|client)$/u;
+/*
+ * Db handles. Transaction handles (`tx`, `drizzleTx`, …) are not listed:
+ * they only exist inside a transaction, and opening one (`.transaction(`
+ * on any receiver) is itself reported unless it happens inside
+ * `withTenant` — so a query on a transaction handle is scoped by
+ * construction, wherever the handle was passed to.
+ */
+const DB_RECEIVER = /^(?:db|dbHttp|dbWrite|writeDb|client)$/u;
 const TENANT_WRAPPERS = new Set(['withTenantHttp', 'withTenant']);
 const SERVICE_CALLS = new Set(['queryRows', 'writeRows', 'callCount']);
 const CONNECTION_FACTORIES = new Set([
@@ -211,68 +253,114 @@ interface Finding {
 /** Raw query sites under `adapters/**`, keyed by file and enclosing top-level function. */
 function scanAdapters(definers: ReadonlySet<string>): Finding[] {
   const adaptersDir = resolve(apiSrc, 'adapters');
-  const files = readdirSync(adaptersDir, { recursive: true })
+  return readdirSync(adaptersDir, { recursive: true })
     .map(String)
     .filter((f) => f.endsWith('.ts'))
-    .map((f) => f.split(sep).join('/'));
+    .flatMap((f) =>
+      scanSource(f.split(sep).join('/'), readFileSync(resolve(adaptersDir, f), 'utf8'), definers),
+    );
+}
+
+/** Raw query sites of one adapter source file. */
+function scanSource(file: string, text: string, definers: ReadonlySet<string>): Finding[] {
   const findings: Finding[] = [];
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  const report = (node: ts.Node, what: string): void => {
+    const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+    findings.push({
+      key: `${file}#${enclosingTopLevel(node)}`,
+      where: `${file}:${line} ${what}`,
+    });
+  };
 
-  for (const file of files) {
-    const text = readFileSync(resolve(adaptersDir, file), 'utf8');
-    const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
-    // A `tx` receiver comes from `withTenant(db, claims, async (tx) => …)`.
-    const fileUsesWithTenant = /\bwithTenant\(/u.test(text);
-    const report = (node: ts.Node, what: string): void => {
-      const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
-      findings.push({
-        key: `${file}#${enclosingTopLevel(node)}`,
-        where: `${file}:${line} ${what}`,
-      });
-    };
+  const visit = (node: ts.Node, scoped: boolean): void => {
+    let inScope = scoped;
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      if (ts.isIdentifier(callee) && TENANT_WRAPPERS.has(callee.text)) inScope = true;
 
-    const visit = (node: ts.Node, scoped: boolean): void => {
-      let inScope = scoped;
-      if (ts.isCallExpression(node)) {
-        const callee = node.expression;
-        if (ts.isIdentifier(callee) && TENANT_WRAPPERS.has(callee.text)) inScope = true;
-
-        if (ts.isPropertyAccessExpression(callee) && QUERY_METHODS.has(callee.name.text)) {
-          const recv = receiverName(callee.expression);
-          const txFromTenant = recv === 'tx' && fileUsesWithTenant;
-          if (DB_RECEIVER.test(recv) && !inScope && !txFromTenant) {
-            report(node, `${recv}.${callee.name.text}()`);
-          }
-        }
-
-        if (ts.isIdentifier(callee) && CONNECTION_FACTORIES.has(callee.text)) {
-          report(node, `${callee.text}() opens a connection`);
-        }
-
-        if (
-          ts.isIdentifier(callee) &&
-          SERVICE_CALLS.has(callee.text) &&
-          file !== 'service-functions.ts' &&
-          !inScope
-        ) {
-          const arg = node.arguments[1];
-          const viaDefiner = calledSqlFunctions(arg, source).some((fn) => definers.has(fn));
-          if (!isServiceFnCall(arg) && !viaDefiner) {
-            report(node, `${callee.text}() without a SECURITY DEFINER function`);
-          }
+      if (ts.isPropertyAccessExpression(callee) && QUERY_METHODS.has(callee.name.text)) {
+        const recv = receiverName(callee.expression);
+        const method = callee.name.text;
+        // Every transaction opened in an adapter, on any receiver, must be
+        // tenant-scoped or allowlisted: that is what makes the
+        // transaction-handle exemption below sound.
+        const opensTransaction = method === 'transaction';
+        if (!inScope && (opensTransaction || DB_RECEIVER.test(recv))) {
+          report(node, `${recv}.${method}()`);
         }
       }
-      ts.forEachChild(node, (child) => {
-        visit(child, inScope);
-      });
-    };
-    visit(source, false);
-  }
+
+      if (ts.isIdentifier(callee) && CONNECTION_FACTORIES.has(callee.text)) {
+        report(node, `${callee.text}() opens a connection`);
+      }
+
+      if (
+        ts.isIdentifier(callee) &&
+        SERVICE_CALLS.has(callee.text) &&
+        file !== 'service-functions.ts' &&
+        !inScope
+      ) {
+        const arg = node.arguments[1];
+        const viaDefiner = calledSqlFunctions(arg, source).some((fn) => definers.has(fn));
+        if (!isServiceFnCall(arg) && !viaDefiner) {
+          report(node, `${callee.text}() without a SECURITY DEFINER function`);
+        }
+      }
+    }
+    ts.forEachChild(node, (child) => {
+      visit(child, inScope);
+    });
+  };
+  visit(source, false);
   return findings;
 }
 
 describe('RLS inventory — every adapter query is tenant-scoped or a service-function call', () => {
   const definers = securityDefinerFunctions();
   const findings = scanAdapters(definers);
+
+  it.each([
+    [
+      'a query on a db handle outside a tenant scope',
+      'export function f(db) { return db.select().from(t); }',
+      ['x.ts:1 db.select()'],
+    ],
+    [
+      'a transaction opened outside withTenant, whatever the receiver',
+      'export function f(pool) { return pool.transaction(async (tx) => tx.select()); }',
+      ['x.ts:1 pool.transaction()'],
+    ],
+    [
+      'a claim-less queryRows without a SECURITY DEFINER function',
+      'export function f(db) { return queryRows(db, sql`SELECT * FROM users`); }',
+      ['x.ts:1 queryRows() without a SECURITY DEFINER function'],
+    ],
+    [
+      'nothing for queries inside withTenant / withTenantHttp',
+      `export function f(db, c) {
+         withTenantHttp(db, c, db.select().from(t));
+         return withTenant(db, c, async (tx) => tx.update(t).set({}));
+       }`,
+      [],
+    ],
+    [
+      'nothing for a transaction handle passed to a helper',
+      'function g(drizzleTx) { return drizzleTx.select().from(t); }',
+      [],
+    ],
+    [
+      'nothing for service-function calls',
+      `export function f(db) {
+         queryRows(db, serviceFn.findUserById('u'));
+         return queryRows(db, sql\`SELECT studio_id_by_slug(\${'s'})\`);
+       }`,
+      [],
+    ],
+  ])('scanner reports %s', (_name, text, expected) => {
+    const found = scanSource('x.ts', text, new Set(['studio_id_by_slug']));
+    expect(found.map((f) => f.where)).toEqual(expected);
+  });
 
   it('reads the SECURITY DEFINER functions from the migrations', () => {
     expect(definers).toContain('studio_id_by_slug');
