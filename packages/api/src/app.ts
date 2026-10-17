@@ -3,7 +3,9 @@
  * `./base-app.ts` plus every `/v1/*` domain router and the OpenAPI spec.
  */
 
+import { mountAdminRouters } from './admin-routes.js';
 import { buildBaseApp } from './base-app.js';
+import { buildDefaultDeps, buildLazyDomainDeps } from './domain-deps.js';
 import { installDomainScope } from './domain-scope.js';
 import { buildSpecApp } from './openapi/spec.js';
 import { mountDomainRoutes, type DomainDeps } from './routes/index.js';
@@ -16,7 +18,7 @@ import type { Hono } from 'hono';
  *
  *   • `deps` — custom {@link DomainDeps} bundle to wire into
  *     {@link mountDomainRoutes}. When omitted, the lazy production
- *     facade from {@link installDomainScope} is used. Integration tests
+ *     facade over {@link installDomainScope} is used. Integration tests
  *     pass a `vi.fn()`-backed bundle here so the route handlers are
  *     exercised without a real adapter.
  */
@@ -45,9 +47,10 @@ export function buildApp(options: BuildAppOptions = {}): Hono<HonoEnv> {
  */
 export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<HonoEnv> {
   if (options.skipDomainRoutes === true) {
-    return buildBaseApp();
+    return buildBaseApp({ mountAdmin: mountAdminRouters });
   }
   return buildBaseApp({
+    mountAdmin: mountAdminRouters,
     mountDomain: (app) => {
       // CN.9.1 — OpenAPI 3.1 spec served at /openapi.json. A dedicated
       // OpenAPIHono instance generates the spec from the shared Zod
@@ -55,7 +58,10 @@ export function __buildAppInternal(options: BuildAppInternalOptions = {}): Hono<
       // stubs never shadow the real domain routes.
       const specApp = buildSpecApp();
       app.get('/openapi.json', (c) => specApp.request('/openapi.json', undefined, c.env));
-      mountDomainRoutes(app, options.deps ?? installDomainScope(app, 'gateway'));
+      mountDomainRoutes(
+        app,
+        options.deps ?? buildLazyDomainDeps(installDomainScope(app, 'gateway', buildDefaultDeps)),
+      );
     },
   });
 }

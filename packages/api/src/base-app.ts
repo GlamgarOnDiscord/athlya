@@ -54,12 +54,8 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 
-import { lazyDlqAuditWriter, lazyJwtRotateAuditWriter } from './adapters/audit-log-wiring.js';
 import { AVATAR_MAX_BYTES } from './adapters/avatar-upload-store-r2.js';
 import { buildStudioSlugResolver } from './adapters/studio-slug-resolver.js';
-import { buildDlqRouter } from './admin/dlq-routes.js';
-import { buildJwtRotateRouter } from './admin/jwt-rotate-routes.js';
-import { buildOutboxRouter } from './admin/outbox-routes.js';
 import { createLogger } from './logging.js';
 import { isCronDbUrlConfigured } from './maintenance/cron-db-config.js';
 import { jwtAuth } from './middleware/auth.js';
@@ -80,7 +76,11 @@ import {
   REGISTER_BUDGET,
 } from './middleware/rate-limit-policies.js';
 import { rateLimit, HOST_PROBE_BUCKET_PREFIX, deriveClientIp } from './middleware/rate-limit.js';
-import { securityHeaders } from './middleware/security-headers.js';
+import {
+  applySecurityHeaders,
+  buildSecurityHeaders,
+  securityHeaders,
+} from './middleware/security-headers.js';
 import { tenantClaimGuard, tenantResolverMiddleware } from './middleware/tenant-resolver.js';
 import { handleCspReport } from './routes/csp-report.js';
 import { requireRole } from './routes/helpers.js';
@@ -119,7 +119,7 @@ const DEV_CORS_ORIGINS: ReadonlySet<string> = new Set([
 
 /**
  * Hosts the gateway accepts on the `Host` header. The check fires
- * as the very first middleware so a DNS-rebound `Host: evil.com`
+ * right after the security headers so a DNS-rebound `Host: evil.com`
  * gets a 421 Misdirected Request (RFC 7540 §9.1.2) before any
  * downstream code runs (Findings S3-003, S4-006, S4-015).
  */
@@ -174,14 +174,20 @@ let sentryRegionWarned = false;
  *     tracing, rate limiters, error handlers) and before the admin
  *     routes and `app.notFound(...)`, so unknown paths still get the
  *     Problem Details 404. Omitted → no domain routes.
+ *   • `mountAdmin` — mounts the `/admin/*` operator routers behind the
+ *     shared admin guard chain (rate limit, CF Access, JWT, admin role).
+ *     Receives the admin env accessor for the lazy audit writers.
+ *     Omitted → no `/admin/*` surface: only the gateway and the billing
+ *     Worker (which owns the `/admin/*` route) opt in.
  *
- * This module never imports domain routers or adapters itself: the
+ * This module never imports domain or admin routers itself: the
  * monolith (`./app.ts`) and each bulkhead sub-worker (`./workers/*.ts`)
  * pass their own `mountDomain`, so a sub-worker bundle only pulls the
  * domains it serves (issue #230).
  */
 export interface BaseAppOptions {
   readonly mountDomain?: (app: Hono<HonoEnv>) => void;
+  readonly mountAdmin?: (app: Hono<HonoEnv>, getAdminEnv: () => AthlyaBindings) => void;
 }
 
 /**
@@ -202,6 +208,12 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
     windowSec: 60,
     keyPrefix: HOST_PROBE_BUCKET_PREFIX,
   });
+
+  // Security headers first — they MUST land on every response,
+  // including the host-check rejections (421 / 404 / probe 429) and
+  // error responses, so the middleware runs before anything that can
+  // short-circuit or throw.
+  app.use('*', securityHeaders());
 
   // 0. Host check — Sprint 1 / Slice 1.2 (Findings S3-003, S4-006,
   //    S4-015). Defense against DNS rebinding and Host-header
@@ -261,7 +273,9 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
         try {
           const probeResult = await hostProbeRateLimiter(c, async () => {});
           if (probeResult instanceof Response) {
-            return probeResult; // 429 — probe limit reached
+            // 429 — probe limit reached. The limiter builds a raw
+            // Response, which bypasses the headers staged on `c`.
+            return applySecurityHeaders(probeResult, buildSecurityHeaders());
           }
         } catch {
           // Fail-open: Redis unavailable, let the probe through with a warn.
@@ -313,11 +327,6 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   //      and dev `localhost:*` exists by design). Refusal logic
   //      lives downstream in `tenantClaimGuard()`.
   app.use('*', tenantResolverMiddleware());
-
-  // 1. Security headers first — they MUST land on every response,
-  //    including error responses, so we register the middleware
-  //    before anything that can throw.
-  app.use('*', securityHeaders());
 
   // 1.5. CORS middleware — Sprint 1 / Slice 1.2 (Findings S3-005,
   //      S4-003, S4-014). Strict per-environment whitelist:
@@ -1292,52 +1301,33 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   //      either. Both checks emit RFC 9457 Problem Details 403
   //      bodies, so the duplication is invisible to the client.
   //
-  // The router exposes its routes under the literal `/admin/dlq/*`
-  // prefix (each handler hard-codes the full path), so we mount
-  // it at `app.route('/', router)` rather than at `/admin/dlq` —
-  // double-prefixing would shift the routes to `/admin/dlq/admin/dlq/*`
-  // and break the contract documented in `dlq-routes.test.ts`.
-  let latestAdminEnv: AthlyaBindings | undefined;
-  app.use(
-    '/admin/*',
-    guardAdminStatsReadLimiter(adminStatsReadLimiter) as Parameters<typeof app.use>[1],
-  );
-  app.use('/admin/*', async (c, next) => {
-    latestAdminEnv = c.env;
-    await next();
-  });
-  const getAdminEnv = (): AthlyaBindings => {
-    if (latestAdminEnv === undefined) {
-      throw new Error(
-        'admin audit wiring: request env not yet captured; this should not happen if the /admin/* middleware ran first',
-      );
-    }
-    return latestAdminEnv;
-  };
-  // Issue #273 — CF Access defense-in-depth on /admin/*. No-op when
-  // CF_ACCESS_AUD / CF_ACCESS_CERTS_URL are absent (dev / unconfigured).
-  app.use('/admin/*', cfAccessGuard() as Parameters<typeof app.use>[1]);
-  app.use('/admin/*', jwtAuth());
-  app.use('/admin/*', requireRole('admin'));
-  app.route(
-    '/',
-    buildDlqRouter({ auditWriter: lazyDlqAuditWriter(getAdminEnv) }) as unknown as Hono<HonoEnv>,
-  );
-  app.route('/', buildOutboxRouter());
-
-  // Sprint 12 / Slice 12.13 (Epic B3.1) — JWT rotation admin
-  // surface. Mounted under the same `/admin/*` chain so it
-  // inherits `jwtAuth()` + `requireRole('admin')`. The router
-  // already enforces `enforceAdmin()` per-route as defence in
-  // depth, mirroring `buildDlqRouter`.
-  //
-  // Endpoints exposed:
-  //   • GET  /admin/jwt/state           — read-only snapshot
-  //   • POST /admin/jwt/rotate-prepare  — generate new keypair
-  //
-  // Operator runbook: `docs/runbooks/rotate-jwt.md`. Audit rows
-  // are appended via `lazyJwtRotateAuditWriter` (issue #127).
-  app.route('/', buildJwtRotateRouter({ auditWriter: lazyJwtRotateAuditWriter(getAdminEnv) }));
+  // The routers themselves live in `./admin-routes.ts`; only Workers
+  // that serve `/admin/*` pass `mountAdmin` (see BaseAppOptions).
+  if (options.mountAdmin !== undefined) {
+    let latestAdminEnv: AthlyaBindings | undefined;
+    app.use(
+      '/admin/*',
+      guardAdminStatsReadLimiter(adminStatsReadLimiter) as Parameters<typeof app.use>[1],
+    );
+    app.use('/admin/*', async (c, next) => {
+      latestAdminEnv = c.env;
+      await next();
+    });
+    const getAdminEnv = (): AthlyaBindings => {
+      if (latestAdminEnv === undefined) {
+        throw new Error(
+          'admin audit wiring: request env not yet captured; this should not happen if the /admin/* middleware ran first',
+        );
+      }
+      return latestAdminEnv;
+    };
+    // Issue #273 — CF Access defense-in-depth on /admin/*. No-op when
+    // CF_ACCESS_AUD / CF_ACCESS_CERTS_URL are absent (dev / unconfigured).
+    app.use('/admin/*', cfAccessGuard() as Parameters<typeof app.use>[1]);
+    app.use('/admin/*', jwtAuth());
+    app.use('/admin/*', requireRole('admin'));
+    options.mountAdmin(app, getAdminEnv);
+  }
 
   // 404: Problem Details envelope, minimal. Task 8.5 will lift the
   // full RFC 9457 shape (type URI catalogue, `instance`, `detail`)

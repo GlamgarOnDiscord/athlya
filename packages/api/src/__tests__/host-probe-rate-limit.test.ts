@@ -68,6 +68,9 @@ describe('host-probe rate limiting (issue #244)', () => {
     const res = await app.request('/health', { method: 'GET', headers: probeHeaders }, stagingEnv);
 
     expect(res.status).toBe(429);
+    // Host-check rejections still carry the global security headers.
+    expect(res.headers.get('strict-transport-security')).toMatch(/max-age=\d+/);
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
   it('fails open when Redis is unreachable for the host-probe check', async () => {

@@ -158,22 +158,48 @@ describe.each(SUB_WORKERS)('$config route contract', ({ config, app, source }) =
   });
 
   it.each(prefixes)('serves %s', (prefix) => {
+    // Middleware (`app.use`) registers with method ALL and would match a
+    // prefix even when no router is mounted: count real handlers only.
     const served = app.routes.some(
-      (route) => route.path === prefix || route.path.startsWith(`${prefix}/`),
+      (route) =>
+        route.method !== 'ALL' && (route.path === prefix || route.path.startsWith(`${prefix}/`)),
     );
     expect(served).toBe(true);
   });
 
-  it('does not import the monolith entry point', () => {
-    expect(readPackageFile(source)).not.toMatch(/from '\.\.\/worker\.js'/);
+  it('does not import the monolith entry point or the all-domain bundle', () => {
+    const text = readPackageFile(source);
+    expect(text).not.toMatch(/from '\.\.\/worker\.js'/);
+    expect(text).not.toMatch(/from '\.\.\/app\.js'/);
+    expect(text).not.toMatch(/from '\.\.\/routes\/index\.js'/);
+  });
+
+  it('serves /admin/* only when its wrangler config routes it', async () => {
+    const routesAdmin = prefixes.includes('/admin');
+    const s = await status(app, '/admin/jwt/state');
+    if (routesAdmin) {
+      expect(s).not.toBe(404);
+    } else {
+      expect(s).toBe(404);
+    }
   });
 });
 
 describe('base-app module', () => {
-  it('imports no domain router or OpenAPI spec (bundle isolation)', () => {
+  it('imports no domain router, admin router or OpenAPI spec (bundle isolation)', () => {
     const baseApp = readPackageFile('src/base-app.ts');
     expect(baseApp).not.toMatch(/from '\.\/routes\/index\.js'/);
+    expect(baseApp).not.toMatch(/from '\.\/admin\//);
+    expect(baseApp).not.toMatch(/from '\.\/admin-routes\.js'/);
     expect(baseApp).not.toMatch(/from '\.\/openapi\//);
     expect(baseApp).not.toMatch(/from '\.\/worker\.js'/);
+  });
+});
+
+describe.each(['src/domain-scope.ts', 'src/domain-deps.ts'])('%s', (source) => {
+  it('does not import the router bundle (bundle isolation)', () => {
+    const text = readPackageFile(source);
+    expect(text).not.toMatch(/^import \{[^}]*\} from '\.\/routes\//m);
+    expect(text).not.toMatch(/from '\.\/routes\/index\.js'/);
   });
 });

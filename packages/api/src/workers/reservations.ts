@@ -20,6 +20,17 @@
  */
 
 import { buildBaseApp } from '../base-app.js';
+import {
+  assertRequiredSecrets,
+  defaultClassesDeps,
+  defaultMembersDeps,
+  defaultReservationsDeps,
+  defaultStudiosDeps,
+  lazyClassesDeps,
+  lazyMembersDeps,
+  lazyReservationsDeps,
+  lazyStudiosDeps,
+} from '../domain-deps.js';
 import { installDomainScope } from '../domain-scope.js';
 import { buildCapacityRouter } from '../routes/capacity.js';
 import { buildClassesRouter } from '../routes/classes.js';
@@ -34,14 +45,25 @@ const app = buildBaseApp({
   // of the chain as in the monolith, behind the shared /v1/* scope (env
   // capture, BYPASSRLS guard, per-request cf).
   mountDomain: (base) => {
-    const deps = installDomainScope(base, 'reservations worker');
+    const resolve = installDomainScope(base, 'reservations worker', (env, cf) => {
+      assertRequiredSecrets(env);
+      return {
+        classes: defaultClassesDeps(env, cf),
+        reservations: defaultReservationsDeps(env, cf),
+        members: defaultMembersDeps(env, cf),
+        studios: defaultStudiosDeps(env),
+      };
+    });
     // Capacity WebSocket mounts first: /v1/classes/:classId/capacity/ws
     // must match before the JWT-guarded classes router shadows it.
     base.route('/v1/classes', buildCapacityRouter());
-    base.route('/v1/classes', buildClassesRouter(deps.classes));
-    base.route('/v1/reservations', buildReservationsRouter(deps.reservations));
-    base.route('/v1/members', buildMembersRouter(deps.members));
-    base.route('/v1/studios', buildStudiosRouter(deps.studios));
+    base.route('/v1/classes', buildClassesRouter(lazyClassesDeps(() => resolve().classes)));
+    base.route(
+      '/v1/reservations',
+      buildReservationsRouter(lazyReservationsDeps(() => resolve().reservations)),
+    );
+    base.route('/v1/members', buildMembersRouter(lazyMembersDeps(() => resolve().members)));
+    base.route('/v1/studios', buildStudiosRouter(lazyStudiosDeps(() => resolve().studios)));
   },
 });
 

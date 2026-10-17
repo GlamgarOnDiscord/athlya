@@ -11,19 +11,32 @@
  * traffic — those are served by separate Workers.
  */
 
+import { mountAdminRouters } from '../admin-routes.js';
 import { buildBaseApp } from '../base-app.js';
+import {
+  assertRequiredSecrets,
+  defaultAuditDeps,
+  defaultBillingDeps,
+  lazyAuditDeps,
+  lazyBillingDeps,
+} from '../domain-deps.js';
 import { installDomainScope } from '../domain-scope.js';
 import { buildAuditRouter } from '../routes/audit.js';
 import { buildBillingRouter } from '../routes/billing.js';
 
 const app = buildBaseApp({
+  // The /admin/* surface is served by this Worker only (wrangler.billing.toml).
+  mountAdmin: mountAdminRouters,
   // Mounted through the base app hook so the routes sit at the same point
   // of the chain as in the monolith, behind the shared /v1/* scope (env
   // capture, BYPASSRLS guard, per-request cf).
   mountDomain: (base) => {
-    const deps = installDomainScope(base, 'billing worker');
-    base.route('/v1/billing', buildBillingRouter(deps.billing));
-    base.route('/v1/audit', buildAuditRouter(deps.audit));
+    const resolve = installDomainScope(base, 'billing worker', (env) => {
+      assertRequiredSecrets(env);
+      return { billing: defaultBillingDeps(env), audit: defaultAuditDeps(env) };
+    });
+    base.route('/v1/billing', buildBillingRouter(lazyBillingDeps(() => resolve().billing)));
+    base.route('/v1/audit', buildAuditRouter(lazyAuditDeps(() => resolve().audit)));
   },
 });
 

@@ -10,42 +10,54 @@
  *     requests in one isolate never share the continent used for EU
  *     read-replica routing (issue #303).
  *
- * Returns the lazy {@link DomainDeps} facade: adapters materialise on
- * first use from the captured env and are memoised per env reference.
+ * Returns a resolver that runs `build` against the captured env and the
+ * current request's `cf`. Callers wrap it in the lazy facades of
+ * `./domain-deps.ts` for the domains they serve, so a sub-worker never
+ * imports or builds the adapters of another domain.
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { assertRlsRole } from '@athlya/db/client';
 
-import { buildDefaultDeps, buildLazyDomainDeps, type DomainDeps } from './routes/index.js';
-
+import type { RequestCf } from './domain-deps.js';
 import type { AthlyaBindings, HonoEnv } from './types.js';
 import type { Hono } from 'hono';
 
-export function installDomainScope(app: Hono<HonoEnv>, owner: string): DomainDeps {
+export function installDomainScope<D>(
+  app: Hono<HonoEnv>,
+  owner: string,
+  build: (env: AthlyaBindings, cf: RequestCf) => D,
+): () => D {
   // `latestEnv` is safe at closure scope: c.env is the same bindings
   // object for every request in one isolate.
   let latestEnv: AthlyaBindings | undefined;
-  const cfStorage = new AsyncLocalStorage<{ readonly continent?: string } | undefined>();
+  const cfStorage = new AsyncLocalStorage<RequestCf>();
   let rlsCheckPromise: Promise<void> | undefined;
 
   app.use('/v1/*', async (c, next) => {
     latestEnv = c.env;
     if (typeof c.env.DB_URL === 'string' && c.env.DB_URL.length > 0) {
-      rlsCheckPromise ??= assertRlsRole(c.env.DB_URL, c.env.ENVIRONMENT ?? '');
+      // A rejected check is not cached: a transient Neon failure must not
+      // poison the isolate, so the next request retries the check.
+      rlsCheckPromise ??= assertRlsRole(c.env.DB_URL, c.env.ENVIRONMENT ?? '').catch(
+        (error: unknown) => {
+          rlsCheckPromise = undefined;
+          throw error;
+        },
+      );
       await rlsCheckPromise;
     }
     const cf = (c.req.raw.cf as { continent?: string } | undefined) ?? undefined;
     await cfStorage.run(cf, () => next());
   });
 
-  return buildLazyDomainDeps(() => {
+  return () => {
     if (latestEnv === undefined) {
       throw new Error(
         `${owner}: request env not yet captured — the /v1/* scope middleware must run first`,
       );
     }
-    return buildDefaultDeps(latestEnv, cfStorage.getStore());
-  });
+    return build(latestEnv, cfStorage.getStore());
+  };
 }

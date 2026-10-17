@@ -18,6 +18,7 @@
  */
 
 import { buildBaseApp } from '../base-app.js';
+import { assertRequiredSecrets, defaultAuthDeps, lazyAuthDeps } from '../domain-deps.js';
 import { installDomainScope } from '../domain-scope.js';
 import { buildAuthRouter } from '../routes/auth.js';
 
@@ -26,8 +27,11 @@ const app = buildBaseApp({
   // of the chain as in the monolith, behind the shared /v1/* scope (env
   // capture, BYPASSRLS guard, per-request cf).
   mountDomain: (base) => {
-    const deps = installDomainScope(base, 'auth worker');
-    base.route('/v1/auth', buildAuthRouter(deps.auth));
+    const resolve = installDomainScope(base, 'auth worker', (env) => {
+      assertRequiredSecrets(env);
+      return defaultAuthDeps(env);
+    });
+    base.route('/v1/auth', buildAuthRouter(lazyAuthDeps(resolve)));
   },
 });
 
