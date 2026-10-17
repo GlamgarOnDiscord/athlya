@@ -11,6 +11,12 @@ Configure on **Settings → Branches → Branch protection rules → `master`**.
 | `ci` / Lint, typecheck, and tests              | `ci.yml`                 | Unit + PGlite property paths                     |
 | `integration-docker` / Property tests (Docker) | `integration-docker.yml` | P4 cascade, P7 tenant (Docker), reservations PBT |
 | `pgtap` / pgTAP RLS suite                      | `pgtap.yml`              | SQL RLS assertions (on migration paths)          |
+| `Staging gate`                                 | `staging-gate.yml`       | Deployed staging proof (issue #343)              |
+
+`Staging gate (full soak)` is **not** a branch-protection check: PR runs use a
+2-minute k6 soak and skip it. It runs on push to `master` (10-minute soak) and
+`deploy-production.yml` requires it, together with `Staging gate`, on the SHA
+it promotes. See [deploy-production.md](./deploy-production.md#durée-du-soak-k6).
 
 Optional but recommended when staging is live:
 

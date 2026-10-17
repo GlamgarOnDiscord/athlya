@@ -19,7 +19,10 @@ name: Deploy API
 #   production — required reviewers before prod-canary / rollback
 #
 # Production phases (production-deploy, production-canary) refuse to run
-# unless the "Staging gate" check succeeded on the same commit (#343).
+# unless both the "Staging gate" and "Staging gate (full soak)" checks
+# succeeded on the same commit (#343). The full-soak check only exists when
+# staging-gate.yml proved a >= 10-minute k6 soak (always on push to master;
+# PR runs use a 2-minute soak and never produce it).
 #
 # IMPORTANT — production deploy gate (issue #308):
 # Before running `production-canary`, trigger the load-test workflow with
@@ -86,12 +89,15 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Issue #343 — production phases only ship a commit whose staging gate
-      # (deploy + authenticated smoke + migration check + k6) succeeded.
-      - name: Require green staging gate for this commit
+      # (deploy + authenticated smoke + migration check + k6) succeeded AND
+      # ran the full 10-minute soak (the "full soak" job of staging-gate.yml).
+      - name: Require green staging gate (full soak) for this commit
         if: inputs.phase == 'production-deploy' || inputs.phase == 'production-canary'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/require-check-success.mjs --repo "${GITHUB_REPOSITORY}" --sha "${GITHUB_SHA}" --check "Staging gate"
+        run: |
+          node scripts/require-check-success.mjs --repo "${GITHUB_REPOSITORY}" --sha "${GITHUB_SHA}" \
+            --check "Staging gate" --check "Staging gate (full soak)"
 
       - name: Assert Cloudflare credentials
         run: |
