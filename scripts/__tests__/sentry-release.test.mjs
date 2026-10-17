@@ -75,6 +75,14 @@ describe('production deploy paths wire Sentry releases', () => {
     assert.match(yaml, /--version-id "\$\{GATEWAY_VERSION_ID\}"/);
   });
 
+  it('every production path verifies the Worker telemetry secrets', () => {
+    assert.match(
+      workflow('deploy-production.yml'),
+      /if: inputs\.phase == 'production-deploy' \|\| inputs\.phase == 'production-canary'\n\s+run: node scripts\/verify-secrets\.mjs --env production/,
+    );
+    assert.match(workflow('canary.yml'), /node scripts\/verify-secrets\.mjs --env production/);
+  });
+
   it('no workflow keeps an inline sentry-cli upload', () => {
     for (const name of ['canary.yml', 'deploy-production.yml']) {
       assert.doesNotMatch(workflow(name), /sentry-cli/);

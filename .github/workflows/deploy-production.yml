@@ -139,8 +139,10 @@ jobs:
         if: inputs.phase == 'staging-deploy'
         run: node scripts/verify-secrets.mjs --env staging
 
+      # production-canary ships a Worker version too: without SENTRY_DSN and
+      # the OTLP exporter secrets its error budget would count zero (#415).
       - name: Verify secrets (production)
-        if: inputs.phase == 'production-deploy'
+        if: inputs.phase == 'production-deploy' || inputs.phase == 'production-canary'
         run: node scripts/verify-secrets.mjs --env production
 
       - name: Check legal page placeholders (production)
