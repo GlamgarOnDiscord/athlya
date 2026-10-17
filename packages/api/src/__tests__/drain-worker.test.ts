@@ -384,3 +384,52 @@ describe('drainOutbox — defensive guards', () => {
     expect(d.markPublished).not.toHaveBeenCalled();
   });
 });
+
+/* ------------------------------------------------------------------ */
+/*  Queue send deadline (issue #497)                                   */
+/* ------------------------------------------------------------------ */
+
+describe('drainOutbox — queue send deadline', () => {
+  it('fails a row whose queue send exceeds the deadline and leaves it unpublished', async () => {
+    const d = makeDoubles([row()]);
+    d.send.mockImplementation(() => new Promise<void>(() => {}));
+
+    const result = await drainOutbox({
+      store: d.store,
+      queue: d.queue,
+      logger: d.logger,
+      sendTimeoutMs: 10,
+    });
+
+    expect(result).toEqual({ processed: 1, succeeded: 0, failed: 1 });
+    expect(d.markPublished).not.toHaveBeenCalled();
+    expect(d.loggerWarn).toHaveBeenCalledWith(
+      'outbox drain: queue send failed; leaving row for next drain',
+      expect.objectContaining({
+        error: expect.objectContaining({
+          message: expect.stringContaining('deadline') as unknown,
+        }) as unknown,
+      }),
+    );
+  });
+
+  it('keeps draining the rest of the batch after a timed-out send', async () => {
+    const d = makeDoubles([
+      row({ id: '00000000-0000-4000-8000-000000000001' }),
+      row({ id: '00000000-0000-4000-8000-000000000002' }),
+    ]);
+    d.send
+      .mockImplementationOnce(() => new Promise<void>(() => {}))
+      .mockResolvedValueOnce(undefined);
+
+    const result = await drainOutbox({
+      store: d.store,
+      queue: d.queue,
+      logger: d.logger,
+      sendTimeoutMs: 10,
+    });
+
+    expect(result).toEqual({ processed: 2, succeeded: 1, failed: 1 });
+    expect(d.markPublished).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000002');
+  });
+});

@@ -9,7 +9,7 @@
  * Ports wiring:
  *
  *   - `dedup`       — Upstash Redis `SET key value NX EX ttl`.
- *   - `recipients`  — Drizzle read model (`users` + `push_tokens`).
+ *   - `recipients`  — `notification_recipient` service function (migration 0032).
  *   - `email`       — Resend transport (`RESEND_API_KEY`). Dev-only
  *                     no-op when the key is absent; staging/production
  *                     throw so the queue retries instead of silently
@@ -21,12 +21,9 @@
  * setup. Runtime calls happen inside the consumer.
  */
 
-import { pushTokens, users } from '@athlya/db/schema';
-import { and, eq, isNull } from 'drizzle-orm';
-
-import { withConnectionRetry } from './db-retry.js';
 import { getOrCreateDbHttp, getOrCreateRedis } from './deps-cache.js';
 import { fetchWithRetry } from './fetch-retry.js';
+import { queryRows, serviceFn } from './service-functions.js';
 
 import type { AthlyaBindings } from '../types.js';
 import type { AthlyaDbAny } from '@athlya/db/client';
@@ -68,34 +65,26 @@ function buildDedupStore(env: AthlyaBindings): DedupStore {
 /*  Recipient lookup                                                   */
 /* ------------------------------------------------------------------ */
 
-function buildRecipientRepo(db: AthlyaDbAny): RecipientRepo {
+export function buildRecipientRepo(db: AthlyaDbAny): RecipientRepo {
   return {
     async getRecipient(userId): Promise<Recipient | null> {
-      const rows = await withConnectionRetry(() =>
-        db
-          .select({
-            id: users.id,
-            email: users.email,
-            consents: users.consents,
-          })
-          .from(users)
-          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
-          .limit(1),
-      );
+      // The queue consumer has no tenant claims, so the recipient is
+      // resolved through the `notification_recipient` SECURITY DEFINER
+      // function (migration 0032, issue #224) rather than raw `users` /
+      // `push_tokens` reads that FORCE RLS would hide from `athlya_app`.
+      const rows = await queryRows<{
+        id: string;
+        email: string;
+        consents: Recipient['consents'];
+        push_tokens: string[] | null;
+      }>(db, serviceFn.notificationRecipient(userId));
       const user = rows[0];
       if (user === undefined) return null;
-
-      const tokenRows = await withConnectionRetry(() =>
-        db
-          .select({ token: pushTokens.token })
-          .from(pushTokens)
-          .where(and(eq(pushTokens.userId, userId), isNull(pushTokens.deletedAt))),
-      );
 
       return {
         userId: user.id,
         email: user.email,
-        pushTokens: tokenRows.map((r) => r.token),
+        pushTokens: user.push_tokens ?? [],
         consents: user.consents,
         // Locale column is not in users yet; FR is product default.
         locale: 'fr',

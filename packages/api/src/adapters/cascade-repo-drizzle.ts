@@ -8,6 +8,14 @@
  * {@link import('../worker.js')}); this adapter is the bridge
  * between that service-layer port and the live Postgres tables.
  *
+ * RLS posture (issue #224)
+ * -------------------------
+ * The queue consumer runs as `athlya_app` with no tenant claims, so the
+ * purge goes through the `rgpd_delete_*` / `rgpd_restamp_user_deleted`
+ * SECURITY DEFINER functions of migration 0032. They only act on a user
+ * whose `deleted_at` is already set, so a forged or replayed event
+ * cannot erase a live account.
+ *
  * Idempotency
  * -----------
  * Every method maps to one `DELETE … WHERE user_id = $1` (or the
@@ -30,17 +38,11 @@
  * RGPD Article 17 cascade not wired). See `docs/security/audit-S5-rgpd.md`.
  */
 
-import {
-  auditLog,
-  idempotencyKeys,
-  pushTokens,
-  reservations,
-  users,
-  workoutSessions,
-} from '@athlya/db/schema';
+import { auditLog } from '@athlya/db/schema';
 import { eq, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
+import { callCount, queryRows, serviceFn } from './service-functions.js';
 
 import type { AthlyaDbAny } from '@athlya/db/client';
 import type { DeletionRepo } from '@athlya/members';
@@ -53,17 +55,11 @@ import type { DeletionRepo } from '@athlya/members';
 export function createDrizzleDeletionRepo(db: AthlyaDbAny): DeletionRepo {
   return {
     async deleteReservationsForUser(userId) {
-      const rows = await withConnectionRetry(() =>
-        db.delete(reservations).where(eq(reservations.userId, userId)).returning(),
-      );
-      return rows.length;
+      return callCount(db, serviceFn.deleteReservations(userId));
     },
 
     async deleteWorkoutSessionsForUser(userId) {
-      const rows = await withConnectionRetry(() =>
-        db.delete(workoutSessions).where(eq(workoutSessions.userId, userId)).returning(),
-      );
-      return rows.length;
+      return callCount(db, serviceFn.deleteWorkoutSessions(userId));
     },
 
     async deletePushTokensForUser(userId) {
@@ -72,28 +68,19 @@ export function createDrizzleDeletionRepo(db: AthlyaDbAny): DeletionRepo {
       // notifications consumer's own bookkeeping (token marked
       // invalid by the platform) and is not the right tombstone
       // for a fully-erased user.
-      const rows = await withConnectionRetry(() =>
-        db.delete(pushTokens).where(eq(pushTokens.userId, userId)).returning(),
-      );
-      return rows.length;
+      return callCount(db, serviceFn.deletePushTokens(userId));
     },
 
     async deleteIdempotencyKeysForUser(userId) {
-      const rows = await withConnectionRetry(() =>
-        db.delete(idempotencyKeys).where(eq(idempotencyKeys.userId, userId)).returning(),
-      );
-      return rows.length;
+      return callCount(db, serviceFn.deleteIdempotencyKeys(userId));
     },
 
     async markUserDeleted(userId, deletedAt) {
       // Idempotent: the Auth service already stamped `deleted_at`
-      // when it published the event (Req 5.1), so this `UPDATE`
-      // typically matches one row already carrying a tombstone.
-      // Re-stamping with the cascade's clock keeps the value
-      // monotonically up-to-date if the cascade is replayed.
-      await withConnectionRetry(async () => {
-        await db.update(users).set({ deletedAt }).where(eq(users.id, userId));
-      });
+      // when it published the event (Req 5.1), so this re-stamps the
+      // tombstone with the cascade's clock. The function never
+      // tombstones a live account.
+      await queryRows(db, serviceFn.restampUserDeleted(userId, deletedAt));
     },
 
     async anonymizeAuditRows(userId) {

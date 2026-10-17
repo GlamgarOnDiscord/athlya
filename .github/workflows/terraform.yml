@@ -22,11 +22,12 @@ name: Terraform
 #   TF_VAR_sentry_auth_token      — Sentry API auth token (metric alerts)
 #   TF_VAR_sentry_org             — Sentry organisation slug
 #   TF_VAR_sentry_project         — Sentry project slug
-#   TF_VAR_sentry_alert_team_id   — Sentry team notified by the alerts
+#   TF_VAR_sentry_alert_team_id   — Sentry team id notified by metric alerts
 #   TF_TOKEN_app_terraform_io     — HCP Terraform API token (remote state)
-# Required variables:
+#
+# Required variables (vars.*):
 #   TF_CLOUD_ORGANIZATION         — HCP Terraform organisation slug
-#   TF_VAR_cloudflare_zone_plan   — optional, defaults to "pro"
+#   CLOUDFLARE_ZONE_PLAN          — optional: free | pro | business | enterprise (default: pro)
 #
 # See infra/terraform/versions.tf for the backend and
 # docs/runbooks/terraform-ops.md for the apply runbook.
@@ -116,7 +117,7 @@ jobs:
     timeout-minutes: 20
     environment: ${{ inputs.environment || (github.event_name == 'schedule' && 'production') || 'staging' }}
     concurrency:
-      group: terraform-${{ inputs.environment || (github.event_name == 'schedule' && 'production') || 'staging' }}
+      group: terraform-${{ inputs.environment || (github.event_name == 'schedule' && 'production') || 'staging' }}-${{ github.ref }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -130,12 +131,13 @@ jobs:
       TF_VAR_cloudflare_api_token: ${{ secrets.TF_VAR_cloudflare_api_token }}
       TF_VAR_cloudflare_account_id: ${{ secrets.TF_VAR_cloudflare_account_id }}
       TF_VAR_cloudflare_zone_id: ${{ secrets.TF_VAR_cloudflare_zone_id }}
-      TF_VAR_cloudflare_zone_plan: ${{ vars.TF_VAR_cloudflare_zone_plan || 'pro' }}
+      TF_VAR_cloudflare_zone_plan: ${{ vars.CLOUDFLARE_ZONE_PLAN || 'pro' }}
       TF_VAR_sentry_auth_token: ${{ secrets.TF_VAR_sentry_auth_token }}
       TF_VAR_sentry_org: ${{ secrets.TF_VAR_sentry_org }}
       TF_VAR_sentry_project: ${{ secrets.TF_VAR_sentry_project }}
       TF_VAR_sentry_alert_team_id: ${{ secrets.TF_VAR_sentry_alert_team_id }}
       TF_VAR_environment: ${{ inputs.environment || (github.event_name == 'schedule' && 'production') || 'staging' }}
+      # HCP Terraform remote state token (see versions.tf backend block).
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_app_terraform_io }}
       TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
       # One HCP Terraform workspace per environment so staging and
@@ -152,6 +154,12 @@ jobs:
           set -euo pipefail
           missing=()
           [ -n "${TF_VAR_cloudflare_api_token}" ] || missing+=("secrets.TF_VAR_cloudflare_api_token")
+          [ -n "${TF_VAR_cloudflare_account_id}" ] || missing+=("secrets.TF_VAR_cloudflare_account_id")
+          [ -n "${TF_VAR_cloudflare_zone_id}" ] || missing+=("secrets.TF_VAR_cloudflare_zone_id")
+          [ -n "${TF_VAR_sentry_auth_token}" ] || missing+=("secrets.TF_VAR_sentry_auth_token")
+          [ -n "${TF_VAR_sentry_org}" ] || missing+=("secrets.TF_VAR_sentry_org")
+          [ -n "${TF_VAR_sentry_project}" ] || missing+=("secrets.TF_VAR_sentry_project")
+          [ -n "${TF_VAR_sentry_alert_team_id}" ] || missing+=("secrets.TF_VAR_sentry_alert_team_id")
           [ -n "${TF_TOKEN_app_terraform_io}" ] || missing+=("secrets.TF_TOKEN_app_terraform_io")
           [ -n "${TF_CLOUD_ORGANIZATION}" ] || missing+=("vars.TF_CLOUD_ORGANIZATION")
           if [ "${#missing[@]}" -eq 0 ]; then
@@ -182,10 +190,12 @@ jobs:
 
       # Plan always runs — for plan, apply and drift. Apply consumes the
       # plan produced in this same job, never a stale artifact (#405).
+      # The concurrency group is per ref, so runs on different refs wait
+      # for the HCP Terraform state lock instead of failing on it.
       - name: terraform plan
         if: steps.prereq.outputs.skip != 'true'
         id: plan
-        run: terraform plan -input=false -no-color -detailed-exitcode -out=tfplan
+        run: terraform plan -input=false -no-color -lock-timeout=10m -detailed-exitcode -out=tfplan
         continue-on-error: true
 
       - name: Interpret plan result
@@ -241,4 +251,4 @@ jobs:
       # Environment required-reviewers gate fires before this job starts.
       - name: terraform apply
         if: steps.prereq.outputs.skip != 'true' && inputs.action == 'apply' && github.event_name == 'workflow_dispatch' && steps.plan.outputs.exitcode == '2'
-        run: terraform apply -input=false tfplan
+        run: terraform apply -input=false -lock-timeout=10m tfplan

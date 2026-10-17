@@ -145,6 +145,13 @@ export interface DrainOutboxOptions {
   readonly batchSize?: number;
   readonly logger?: Logger;
   readonly clock?: Clock;
+  /**
+   * Deadline for each `queue.send` (issue #497). A hung queue call must
+   * not hold the claim transaction open: past the deadline the row is
+   * treated as failed and retried by the next drain. Defaults to
+   * {@link DEFAULT_QUEUE_SEND_TIMEOUT_MS}.
+   */
+  readonly sendTimeoutMs?: number;
 }
 
 /** Tally returned by {@link drainOutbox}. See module docstring. */
@@ -209,6 +216,9 @@ const defaultClock: Clock = {
  *         - On success: count as `succeeded`.
  *   3. Return `{ processed, succeeded, failed }`.
  */
+/** Default per-row queue send deadline, in milliseconds (issue #497). */
+export const DEFAULT_QUEUE_SEND_TIMEOUT_MS = 5_000;
+
 export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainResult> {
   const { store } = options;
   const resolveQueue =
@@ -222,6 +232,7 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
   const logger = options.logger ?? defaultLogger;
   const clock = options.clock ?? defaultClock;
   const batchSize = normaliseBatchSize(options.batchSize);
+  const sendTimeoutMs = options.sendTimeoutMs ?? DEFAULT_QUEUE_SEND_TIMEOUT_MS;
 
   const startedAt = clock.now();
 
@@ -251,7 +262,7 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
     }
 
     const queue = resolveQueue(row.eventType);
-    const sendOk = await trySend(queue, row, logger);
+    const sendOk = await trySend(queue, row, logger, sendTimeoutMs);
     if (!sendOk) {
       failed += 1;
       continue;
@@ -307,9 +318,22 @@ function reconstructEnvelope(row: ClaimedRow): Record<string, unknown> {
  * returning. Never re-throws: the whole point of per-row isolation is
  * that one bad row must not abort the rest of the batch.
  */
-async function trySend(queue: QueueProducer, row: ClaimedRow, logger: Logger): Promise<boolean> {
+async function trySend(
+  queue: QueueProducer,
+  row: ClaimedRow,
+  logger: Logger,
+  timeoutMs: number,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await queue.send(reconstructEnvelope(row));
+    await Promise.race([
+      queue.send(reconstructEnvelope(row)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`queue send exceeded ${String(timeoutMs)} ms deadline`));
+        }, timeoutMs);
+      }),
+    ]);
     return true;
   } catch (err) {
     logger.warn('outbox drain: queue send failed; leaving row for next drain', {
@@ -320,6 +344,8 @@ async function trySend(queue: QueueProducer, row: ClaimedRow, logger: Logger): P
       error: errToDetail(err),
     });
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

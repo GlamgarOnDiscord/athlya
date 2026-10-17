@@ -36,12 +36,14 @@ In **Settings → Variables → Actions**, add:
 | `NEON_PROJECT_ID`              | `proud-dream-12345678` (Neon dashboard → Project settings) |
 | `CLOUDFLARE_WORKERS_SUBDOMAIN` | `athlya` (CF dashboard → Workers → your account subdomain) |
 | `NEON_DATABASE_NAME`           | optional, defaults to `neondb`                             |
+| `NEON_OWNER_ROLE`              | optional, defaults to `neondb_owner`                       |
 
 The Neon parent branch must contain the `athlya_app` role (no `BYPASSRLS`)
 with a password: each preview branch inherits it, and the workflow fetches
-its connection URI through the Neon `connection_uri` API. The branch owner
-URI is only used for migrations, because the Worker refuses to boot on a
-`BYPASSRLS` role outside `dev`.
+its connection URI through the Neon v2 `connection_uri` API. The owner role
+URI (`NEON_OWNER_ROLE`) is only used for migrations, because outside `dev`
+the Worker rejects every `/v1/*` request with a `BYPASSRLS` error when its
+role bypasses RLS.
 
 ### 3. Provision R2 preview buckets
 
@@ -114,7 +116,7 @@ If the workflow fails to clean up:
 
 ```bash
 # Neon branch
-curl -sf "https://api.neon.tech/v1/projects/${NEON_PROJECT_ID}/branches" \
+curl -sf "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches" \
   -H "Authorization: Bearer ${NEON_API_KEY}" | \
   jq '.branches[] | select(.name | startswith("preview-pr-")) | {id, name}'
 
