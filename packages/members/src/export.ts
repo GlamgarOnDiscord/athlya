@@ -442,6 +442,43 @@ function toCsvBytes<T>(
   return UTF8.encode(`${lines.join('\r\n')}\r\n`);
 }
 
+/** Name of the plain-text guide placed at the root of every archive. */
+export const ARCHIVE_README_NAME = 'README.txt';
+
+/**
+ * Statement carried by the archive README about invoices. Athlya v1
+ * bills studios only (their platform subscription); it never invoices
+ * a member, so `invoices.json` / `invoices.csv` are always empty.
+ */
+export const MEMBER_INVOICES_NOTE =
+  'Athlya does not issue invoices to members in this version: payments to your studio are ' +
+  'handled by the studio outside Athlya, and invoices for the studio subscription belong to the ' +
+  'studio. invoices.json is therefore an empty list and invoices.csv contains only its header row.';
+
+/**
+ * Plain-text guide placed at the root of every archive (Art. 15/20):
+ * what each file holds and how the CSV files are encoded.
+ */
+export const ARCHIVE_README = [
+  'Athlya personal data export',
+  '',
+  'Files:',
+  '  profile.json                  your account profile',
+  '  consents.json                 your current consent choices',
+  '  reservations.json / .csv      your class reservations',
+  '  workout_sessions.json / .csv  the workout sessions you logged',
+  '  checkins.json / .csv          your class check-ins',
+  '  invoices.json / .csv          invoices issued to you (see below)',
+  '  audit_trail.json              account and security events about you (when available)',
+  '',
+  `Invoices: ${MEMBER_INVOICES_NOTE}`,
+  '',
+  'CSV files are UTF-8 with CRLF line endings. Every cell is quoted and embedded quotes are',
+  "doubled. A cell that would start with = + - @ or a tab/line break is prefixed with ' so",
+  'spreadsheet software does not run it as a formula; the JSON files keep the raw values.',
+  '',
+].join('\r\n');
+
 /**
  * Async generator that yields {@link ArchiveEntry} items one at a
  * time, processing each list collection serially so at most one
@@ -452,6 +489,7 @@ function toCsvBytes<T>(
  * array is released before the next collection begins.
  */
 export async function* buildArchiveEntries(data: MemberExportData): AsyncGenerator<ArchiveEntry> {
+  yield { name: ARCHIVE_README_NAME, bytes: UTF8.encode(ARCHIVE_README) };
   yield { name: 'profile.json', bytes: toJsonBytes(data.profile) };
   yield { name: 'consents.json', bytes: toJsonBytes(data.consents) };
 

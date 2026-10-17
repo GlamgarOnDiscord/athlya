@@ -21,8 +21,10 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 
 import {
+  ARCHIVE_README_NAME,
   DOWNLOAD_URL_TTL_SECONDS,
   EXPORT_R2_PREFIX,
+  MEMBER_INVOICES_NOTE,
   buildArchiveEntries,
   enqueueExport,
   exportJobPrefix,
@@ -1066,6 +1068,26 @@ describe('buildArchiveEntries', () => {
     const text = new TextDecoder().decode(profileEntry.bytes);
     const parsed: unknown = JSON.parse(text);
     expect(parsed).toEqual(PROFILE);
+  });
+
+  it('keeps the invoice section with no rows and states why in the README', async () => {
+    const entries = await collectEntries({
+      profile: PROFILE,
+      consents: [],
+      reservations: asyncPage([]),
+      sessions: asyncPage([]),
+      checkins: asyncPage([]),
+      invoices: asyncPage([]),
+    });
+    const text = (name: string) =>
+      new TextDecoder().decode(entries.find((e) => e.name === name)!.bytes);
+
+    expect(entries[0]?.name).toBe(ARCHIVE_README_NAME);
+    expect(text(ARCHIVE_README_NAME)).toContain(MEMBER_INVOICES_NOTE);
+    expect(JSON.parse(text('invoices.json'))).toEqual([]);
+    expect(text('invoices.csv')).toBe(
+      '"id","issuedAt","amountCents","currency","description","pdfUrl"\r\n',
+    );
   });
 });
 
