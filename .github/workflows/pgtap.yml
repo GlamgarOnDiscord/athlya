@@ -41,6 +41,9 @@ on:
       - 'packages/db/tests/rls/**'
       - '.github/workflows/pgtap.yml'
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

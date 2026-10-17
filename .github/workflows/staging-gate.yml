@@ -45,6 +45,9 @@ on:
         default: '2m'
         type: string
 
+permissions:
+  contents: read
+
 concurrency:
   group: staging-gate-${{ github.ref }}
   cancel-in-progress: true
