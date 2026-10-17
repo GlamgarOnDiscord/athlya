@@ -273,7 +273,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${SENTRY_AUTH_TOKEN:-}" ] || [ -z "${SENTRY_ORG:-}" ] || [ -z "${SENTRY_PROJECT:-}" ]; then
-            if [ "${{ inputs.phase }}" = "production-deploy" ]; then
+            if [ "${DEPLOY_ENV_NAME}" = "production" ]; then
               echo "::error::SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT are required for production source maps (#415)"
               exit 1
             fi
