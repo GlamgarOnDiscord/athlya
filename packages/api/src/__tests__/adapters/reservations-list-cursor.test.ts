@@ -27,6 +27,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { listMyReservations } from '../../adapters/reservations-list-drizzle.js';
 
 const USER_ID = '00000000-0000-4000-8000-000000000001';
+const CLAIMS = {
+  userId: USER_ID,
+  studioId: '00000000-0000-4000-8000-0000000000aa',
+  role: 'member' as const,
+};
 
 function makeRow(id: string, startsAt: Date) {
   return {
@@ -53,15 +58,23 @@ function buildFakeDb(rows: ReturnType<typeof makeRow>[]) {
     innerJoin: vi.fn(),
     where: vi.fn(),
     orderBy: vi.fn(),
-    limit: vi.fn().mockResolvedValue(rows),
+    limit: vi.fn(),
   };
+  selectQuery.limit.mockReturnValue(selectQuery);
   selectQuery.orderBy.mockReturnValue(selectQuery);
   selectQuery.where.mockReturnValue(selectQuery);
   selectQuery.innerJoin.mockReturnValue(selectQuery);
   selectQuery.from.mockReturnValue(selectQuery);
 
+  // Rows only come back through `batch`, i.e. inside `withTenantHttp`.
   return {
     select: vi.fn().mockReturnValue(selectQuery),
+    execute: vi.fn(() => ({ kind: 'set_config' })),
+    batch: vi.fn(async (items: unknown[]) => {
+      expect(items).toHaveLength(4);
+      expect(items[3]).toBe(selectQuery);
+      return [null, null, null, rows];
+    }),
     _selectQuery: selectQuery,
   };
 }
@@ -76,7 +89,11 @@ describe('listMyReservations cursor pagination (issue #334)', () => {
     ];
     const db = buildFakeDb(rows);
 
-    const result = await listMyReservations(USER_ID, { limit }, { db: db as never });
+    const result = await listMyReservations(
+      USER_ID,
+      { limit },
+      { db: db as never, claims: CLAIMS },
+    );
 
     expect(result.items).toHaveLength(limit);
     expect(result.nextCursor).not.toBeNull();
@@ -88,7 +105,11 @@ describe('listMyReservations cursor pagination (issue #334)', () => {
     const rows = [makeRow(V4_ID, STARTS_AT), makeRow(V7_ID, STARTS_AT)];
     const db = buildFakeDb(rows);
 
-    const result = await listMyReservations(USER_ID, { limit }, { db: db as never });
+    const result = await listMyReservations(
+      USER_ID,
+      { limit },
+      { db: db as never, claims: CLAIMS },
+    );
 
     expect(result.items).toHaveLength(2);
     expect(result.nextCursor).toBeNull();
@@ -98,7 +119,11 @@ describe('listMyReservations cursor pagination (issue #334)', () => {
     const rows = [makeRow(V4_ID, STARTS_AT), makeRow(V7_ID, new Date('2026-07-02T09:00:00.000Z'))];
     const db = buildFakeDb(rows);
 
-    const result = await listMyReservations(USER_ID, { limit: 1 }, { db: db as never });
+    const result = await listMyReservations(
+      USER_ID,
+      { limit: 1 },
+      { db: db as never, claims: CLAIMS },
+    );
 
     expect(result.nextCursor).not.toBeNull();
     expect(result.nextCursor).toMatch(/^[A-Za-z0-9_-]+$/);
@@ -117,7 +142,7 @@ describe('listMyReservations cursor pagination (issue #334)', () => {
     const result = await listMyReservations(
       USER_ID,
       { cursor: 'not-valid-base64url!!' },
-      { db: db as never },
+      { db: db as never, claims: CLAIMS },
     );
 
     expect(result.items).toHaveLength(1);
@@ -134,7 +159,11 @@ describe('listMyReservations cursor pagination (issue #334)', () => {
       v7Row,
       makeRow('ffffffff-ffff-4fff-8fff-ffffffffffff', t),
     ]);
-    const page1 = await listMyReservations(USER_ID, { limit: 2 }, { db: firstPageDb as never });
+    const page1 = await listMyReservations(
+      USER_ID,
+      { limit: 2 },
+      { db: firstPageDb as never, claims: CLAIMS },
+    );
 
     expect(page1.items).toHaveLength(2);
     expect(page1.nextCursor).not.toBeNull();
@@ -146,7 +175,7 @@ describe('listMyReservations cursor pagination (issue #334)', () => {
     const page2 = await listMyReservations(
       USER_ID,
       { limit: 2, cursor: page1.nextCursor! },
-      { db: secondPageDb as never },
+      { db: secondPageDb as never, claims: CLAIMS },
     );
 
     expect(page2.items).toHaveLength(1);
@@ -154,5 +183,12 @@ describe('listMyReservations cursor pagination (issue #334)', () => {
 
     const allIds = [...ids1, ...page2.items.map((i) => i.id)];
     expect(new Set(allIds).size).toBe(allIds.length);
+  });
+
+  it('always runs inside a tenant batch with the caller claims (issue #117)', async () => {
+    const db = buildFakeDb([makeRow(V4_ID, STARTS_AT)]);
+    await listMyReservations(USER_ID, {}, { db: db as never, claims: CLAIMS });
+    expect(db.batch).toHaveBeenCalledTimes(1);
+    expect(db.execute).toHaveBeenCalledTimes(3);
   });
 });

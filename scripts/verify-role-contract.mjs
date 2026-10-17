@@ -5,16 +5,17 @@
  * that are always rolled back (nothing is persisted):
  *
  *   athlya_app  (DB_URL)       tenant slug resolution → register → login
- *                              lookup → notification recipient → own studio
+ *                              lookup → notification recipient → password
+ *                              reset issue + lookup + consume → own studio
  *                              read + admin branding update and member export
  *                              enqueue (tenant GUCs) → worker claim + data +
  *                              complete → account deletion with its event →
- *                              RGPD cascade
+ *                              RGPD cascade (incl. audit anonymisation)
  *   athlya_cron (CRON_DB_URL)  leased outbox claim privileges
  *   athlya_billing             Stripe event application (the only role
  *     (BILLING_DB_URL)         allowed to; athlya_app is refused)
  *
- * Usage (staging, after migrations 0031–0038):
+ * Usage (staging, after migrations 0031–0039):
  *   APP_DATABASE_URL=postgresql://athlya_app:...@.../athlya \
  *   CRON_DATABASE_URL=postgresql://athlya_cron:...@.../athlya \
  *   BILLING_DATABASE_URL=postgresql://athlya_billing:...@.../athlya \
@@ -28,7 +29,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-/** Functions athlya_app needs from migrations 0032–0038. */
+/** Functions athlya_app needs from migrations 0032–0039. */
 export const REQUIRED_FUNCTIONS = [
   'auth_find_active_user_by_email',
   'auth_find_user_by_id',
@@ -51,6 +52,9 @@ export const REQUIRED_FUNCTIONS = [
   'export_job_rows',
   'billing_list_invoices',
   'studio_id_by_slug',
+  'auth_issue_password_reset',
+  'auth_find_password_reset',
+  'rgpd_anonymize_user_audit',
 ];
 
 /** Stripe event application: athlya_billing only (migration 0036). */
@@ -111,7 +115,7 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
   `;
   const present = new Set(fns.map((r) => r.name));
   const missing = REQUIRED_FUNCTIONS.filter((f) => !present.has(f));
-  check(missing.length === 0, `missing or not executable: ${missing.join(', ')} (apply 0032–0038)`);
+  check(missing.length === 0, `missing or not executable: ${missing.join(', ')} (apply 0032–0039)`);
   ok(`${REQUIRED_FUNCTIONS.length} service functions executable`);
 
   const [forge] = await app`SELECT has_function_privilege(${BILLING_APPLY}, 'EXECUTE') AS can`;
@@ -153,6 +157,26 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     const [recipient] = await tx`SELECT email FROM notification_recipient(${userId}::uuid)`;
     check(recipient?.email === email, 'notification recipient lookup failed');
     ok('notification recipient resolves without claims');
+
+    const tokenHash = randomUUID().replaceAll('-', '').repeat(2);
+    const [issued] = await tx`
+      SELECT auth_issue_password_reset(${userId}::uuid, ${tokenHash}, now() + interval '1 hour') AS ok
+    `;
+    check(issued.ok === true, 'password reset token could not be issued');
+    const [active] = await tx`SELECT user_id FROM auth_find_password_reset(${tokenHash})`;
+    check(active?.user_id === userId, 'issued password reset token not found');
+    const consumed = await tx`
+      SELECT id FROM auth_consume_password_reset(${tokenHash}, ${userId}::uuid, 'role-contract-hash') AS id
+    `;
+    check(consumed.length === 1, 'password reset token could not be consumed');
+    ok('password reset: issue, lookup and consume work without claims');
+
+    await tx`
+      INSERT INTO audit_log (actor_id, action, metadata)
+      VALUES (${userId}::uuid, 'role.contract', ${JSON.stringify({ email })}::text::jsonb)
+    `;
+    const [liveAudit] = await tx`SELECT rgpd_anonymize_user_audit(${userId}::uuid) AS n`;
+    check(liveAudit.n === 0, 'audit rows of a live account were anonymised');
 
     await tx`SELECT set_config('app.user_id', ${userId}, true)`;
     await tx`SELECT set_config('app.studio_id', ${studio.id}, true)`;
@@ -231,7 +255,9 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
              rgpd_delete_push_tokens(${userId}::uuid), rgpd_delete_idempotency_keys(${userId}::uuid),
              rgpd_restamp_user_deleted(${userId}::uuid, now())
     `;
-    ok('RGPD cascade functions run for the deleted account');
+    const [anonymised] = await tx`SELECT rgpd_anonymize_user_audit(${userId}::uuid) AS n`;
+    check(anonymised.n >= 1, 'audit rows of the deleted account were not anonymised');
+    ok('RGPD cascade functions run for the deleted account, audit rows anonymised');
 
     const invoices =
       await tx`SELECT * FROM billing_list_invoices(${studio.id}::uuid, NULL, NULL, 1)`;

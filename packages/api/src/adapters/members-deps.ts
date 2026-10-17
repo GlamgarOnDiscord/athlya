@@ -4,11 +4,11 @@
  *
  * Wires the four Drizzle-backed adapters shipped in this folder:
  *
- *   - `createDrizzleMemberRepo`       — `MemberRepo`
+ *   - `createDrizzleMemberRepoHttp`   — `MemberRepo`
  *     (`getProfile`, `updateProfile`, `listByStudio`).
- *   - `createDrizzleConsentsRepo`     — `ConsentsRepo`
+ *   - `createDrizzleConsentsRepoHttp` — `ConsentsRepo`
  *     (`findConsents`, `updateConsents`).
- *   - `createDrizzleAuditLogWriter`   — `AuditLogWriter.append`.
+ *   - `createDrizzleAuditLogWriterHttp` — `AuditLogWriter.append`.
  *   - `createDrizzleExportJobStoreHttp` — `ExportJobStore.*` (tenant-scoped)
  *
  * Plus the event publisher — events go through the Cloudflare Queues

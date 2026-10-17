@@ -28,6 +28,7 @@ const migration = [
   '0033_auth_event_recording.sql',
   '0037_auth_outbox_review_fixes.sql',
   '0038_studios_runtime.sql',
+  '0039_runtime_rls_gaps.sql',
 ]
   .map((file) => readFileSync(resolve(here, '../../../../db/migrations', file), 'utf8'))
   .join('\n');
@@ -71,8 +72,8 @@ describe('service function contract with migration 0032', () => {
     (m) => m[1],
   );
 
-  it('references the 17 service functions', () => {
-    expect(new Set(used).size).toBe(17);
+  it('references the 20 service functions', () => {
+    expect(new Set(used).size).toBe(20);
   });
 
   const granted = grantedToApp(migration);
@@ -157,8 +158,6 @@ const CONNECTION_FACTORIES = new Set([
   'neon',
 ]);
 
-const SUPERSEDED = 'no production caller (superseded by the Http variant); removal tracked in #117';
-
 const RAW_QUERY_ALLOWLIST: Readonly<Record<string, string>> = {
   'deps-cache.ts#createWriteDb': 'connection cache; its handles are checked at their query sites',
   'deps-cache.ts#getOrCreateDbHttp':
@@ -174,20 +173,6 @@ const RAW_QUERY_ALLOWLIST: Readonly<Record<string, string>> = {
     'platform audit rows (JWT rotate, DLQ, billing webhook) have no tenant; audit_app_insert accepts claim-less inserts',
   'audit-log-wiring.ts#createBillingWebhookAuditAppender':
     'transaction around the claim-less audit_log append above',
-  'password-reset-repo-drizzle.ts#createDrizzlePasswordResetRepo':
-    'pre-auth, password_reset_tokens has no RLS; known gap (#117): athlya_app lacks INSERT/DELETE on it',
-  'cascade-repo-drizzle.ts#createDrizzleDeletionRepo':
-    'known gap (#117): anonymizeAuditRows updates audit_log without claims, which audit_no_update blocks under athlya_app',
-  'reservations-list-drizzle.ts#listMyReservations':
-    'query is built once and run inside withTenantHttp when claims are set; known gap (#117): claim-less fallback',
-  'classes-repo-drizzle.ts#createDrizzleListClassesRepo': SUPERSEDED,
-  'classes-repo-drizzle.ts#createDrizzleCreateClassRepo': SUPERSEDED,
-  'classes-repo-drizzle.ts#createDrizzleDeleteClassRepo': SUPERSEDED,
-  'classes-repo-drizzle.ts#createDrizzleUpdateClassRepo': SUPERSEDED,
-  'classes-repo-drizzle.ts#createDrizzleSearchClassesRepo': SUPERSEDED,
-  'members-repo-drizzle.ts#createDrizzleMemberRepo': SUPERSEDED,
-  'members-consents-repo-drizzle.ts#createDrizzleConsentsRepo': SUPERSEDED,
-  'members-audit-writer-drizzle.ts#createDrizzleAuditLogWriter': SUPERSEDED,
 };
 
 /** SECURITY DEFINER functions declared by any forward migration. */
@@ -384,6 +369,13 @@ describe('RLS inventory — every adapter query is tenant-scoped or a service-fu
     'studios-repo-drizzle.ts',
     'auth-user-repo-drizzle.ts',
     'notifications-deps.ts',
+    'password-reset-repo-drizzle.ts',
+    'cascade-repo-drizzle.ts',
+    'reservations-list-drizzle.ts',
+    'classes-repo-drizzle.ts',
+    'members-repo-drizzle.ts',
+    'members-consents-repo-drizzle.ts',
+    'members-audit-writer-drizzle.ts',
   ])('%s is not allowlisted', (file) => {
     const entries = Object.keys(RAW_QUERY_ALLOWLIST).filter((key) => key.startsWith(`${file}#`));
     expect(entries).toEqual([]);
@@ -710,5 +702,63 @@ describe('createDrizzleDeletionRepo', () => {
     await expect(
       createDrizzleDeletionRepo(unknown.db).markUserDeleted(userRow.id, new Date()),
     ).resolves.toBe(false);
+  });
+
+  it('anonymises audit rows through rgpd_anonymize_user_audit (issue #117)', async () => {
+    const { db, calls } = fakeDb(() => [{ n: '4' }]);
+    await expect(createDrizzleDeletionRepo(db).anonymizeAuditRows(userRow.id)).resolves.toBe(4);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.sql).toContain('rgpd_anonymize_user_audit(');
+    expect(calls[0]?.sql).not.toMatch(/update\s+"?audit_log/iu);
+    expect(calls[0]?.params).toEqual([userRow.id]);
+  });
+});
+
+describe('createDrizzlePasswordResetRepo — service functions only (issue #117)', () => {
+  const tokenHash = 'a'.repeat(64);
+
+  it('issues a token through auth_issue_password_reset', async () => {
+    const { db, calls } = fakeDb(() => [{ issued: true }]);
+    const expiresAt = new Date('2026-10-17T12:00:00.000Z');
+    await createDrizzlePasswordResetRepo(db).insertToken({
+      userId: userRow.id,
+      tokenHash,
+      expiresAt,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.sql).toContain('auth_issue_password_reset(');
+    expect(calls[0]?.params).toEqual([userRow.id, tokenHash, expiresAt.toISOString()]);
+  });
+
+  it('does not retry an issuance on a dropped connection', async () => {
+    const { db, calls } = fakeDb(() =>
+      Object.assign(new Error('connection terminated'), { code: 'ECONNRESET' }),
+    );
+    await expect(
+      createDrizzlePasswordResetRepo(db).insertToken({
+        userId: userRow.id,
+        tokenHash,
+        expiresAt: new Date(),
+      }),
+    ).rejects.toThrow('connection terminated');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('finds an active token through auth_find_password_reset', async () => {
+    const { db, calls } = fakeDb(() => [
+      { user_id: userRow.id, expires_at: '2026-10-17T12:00:00.000Z' },
+    ]);
+    await expect(
+      createDrizzlePasswordResetRepo(db).findActiveTokenByHash(tokenHash),
+    ).resolves.toEqual({ userId: userRow.id, expiresAt: new Date('2026-10-17T12:00:00.000Z') });
+    expect(calls[0]?.sql).toContain('auth_find_password_reset(');
+    expect(calls[0]?.params).toEqual([tokenHash]);
+  });
+
+  it('returns null when no active token matches', async () => {
+    const { db } = fakeDb(() => []);
+    await expect(
+      createDrizzlePasswordResetRepo(db).findActiveTokenByHash(tokenHash),
+    ).resolves.toBeNull();
   });
 });

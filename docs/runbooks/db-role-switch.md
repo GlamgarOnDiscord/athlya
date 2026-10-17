@@ -146,7 +146,7 @@ $env:SMOKE_STUDIO_SLUG = "<slug d'un studio existant>"
 pnpm verify:role-contract
 ```
 
-Prérequis : migrations `0031` → `0038` appliquées, `athlya_billing` en LOGIN
+Prérequis : migrations `0031` → `0039` appliquées, `athlya_billing` en LOGIN
 (voir `stripe-production.md`). Les **quatre** variables sont obligatoires : sans
 `CRON_DATABASE_URL` ou `BILLING_DATABASE_URL` le script échoue (exit 1) au lieu
 de sauter la vérification du rôle `athlya_cron` ou `athlya_billing`. Il échoue aussi si une connexion

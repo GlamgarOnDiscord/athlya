@@ -8,11 +8,12 @@
  * {@link import('../worker.js')}); this adapter is the bridge
  * between that service-layer port and the live Postgres tables.
  *
- * RLS posture (issue #224)
- * -------------------------
+ * RLS posture (issues #224, #117)
+ * --------------------------------
  * The queue consumer runs as `athlya_app` with no tenant claims, so the
- * purge goes through the `rgpd_delete_*` (migration 0032) and
- * `rgpd_confirm_user_deleted` (migration 0037) SECURITY DEFINER
+ * purge goes through the `rgpd_delete_*` (migration 0032),
+ * `rgpd_confirm_user_deleted` (migration 0037) and
+ * `rgpd_anonymize_user_audit` (migration 0039) SECURITY DEFINER
  * functions. They only act on a user
  * whose `deleted_at` is already set, so a forged or replayed event
  * cannot erase a live account.
@@ -39,10 +40,6 @@
  * RGPD Article 17 cascade not wired). See `docs/security/audit-S5-rgpd.md`.
  */
 
-import { auditLog } from '@athlya/db/schema';
-import { eq, sql } from 'drizzle-orm';
-
-import { withConnectionRetry } from './db-retry.js';
 import { callCount, queryRows, serviceFn } from './service-functions.js';
 
 import type { AthlyaDbAny } from '@athlya/db/client';
@@ -87,25 +84,14 @@ export function createDrizzleDeletionRepo(db: AthlyaDbAny): DeletionRepo {
     },
 
     async anonymizeAuditRows(userId) {
-      // Single statement matching the SQL in the cascade
-      // module's docblock. The PII keys stripped from the
-      // `metadata` JSONB are intentionally enumerated here
-      // (rather than wholesale-replacing `metadata`) so an
-      // operator audit-trail keeps non-PII fields like
-      // `subjectUserId`, `eventType`, `revision` for forensics
-      // (Req 5.3). See finding S5-017 in the audit for the
-      // ongoing controversy on `subjectUserId`.
-      const result = await withConnectionRetry(() =>
-        db
-          .update(auditLog)
-          .set({
-            actorId: null,
-            metadata: sql`COALESCE(${auditLog.metadata}, '{}'::jsonb) - 'email' - 'displayName' - 'ip' - 'userAgent'`,
-          })
-          .where(eq(auditLog.actorId, userId))
-          .returning(),
-      );
-      return result.length;
+      // `audit_log` is append-only for athlya_app (no UPDATE grant,
+      // `audit_no_update` USING false). The only sanctioned mutation is
+      // `anonymize_user_audit()` (migrations 0003/0006): actor_id → NULL
+      // and the PII keys stripped from `metadata`, for rows the user
+      // acted on or is the subject of. `rgpd_anonymize_user_audit`
+      // (migration 0039) exposes it to the cascade, as a no-op for a
+      // live account. Idempotent, so a redelivered event is harmless.
+      return callCount(db, serviceFn.anonymizeUserAudit(userId));
     },
   };
 }
