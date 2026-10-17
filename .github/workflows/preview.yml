@@ -31,9 +31,11 @@ name: Preview environments
 # Worker has no auth/idempotency wiring and refuses every request. It must
 # be a dedicated preview pair: preview Workers run PR code, so they never
 # get the staging or production signing key. scripts/validate-preview-jwt.mjs
-# checks the values before any resource is created. The
-# PREVIEW_JWT_JWKS_URL document must list PREVIEW_JWT_KID, otherwise the
-# tokens a preview mints fail verification. See docs/runbooks/preview-pr.md.
+# checks the secret values before any resource is created; it checks that
+# PREVIEW_JWT_JWKS_URL is an https URL but never fetches it, so the
+# published document is not verified. The operator must make sure it lists
+# PREVIEW_JWT_KID, otherwise the tokens a preview mints fail verification.
+# See docs/runbooks/preview-pr.md.
 #
 # Required GitHub variables:
 #   NEON_PROJECT_ID              — Neon project ID (e.g. "proud-dream-12345678")

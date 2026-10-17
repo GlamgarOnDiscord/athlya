@@ -788,16 +788,24 @@ export async function runExportJob(
     // `false` also covers a retried call whose first attempt committed:
     // the row then already publishes this run's URL.
     const publication = completed ? 'published' : await publicationOf(deps, jobId, downloadUrl);
-    if (publication !== 'published') {
+    if (publication === 'not_published') {
       // A newer delivery reclaimed the lease: it owns the job now and
       // publishes its own completion.
       deps.logger?.warn('export job: claim superseded before completion', {
         jobId,
         userId: job.userId,
       });
-      if (publication === 'not_published') {
-        await cleanupArchives(deps, jobId, () => deps.blob.delete(objectKey));
-      }
+      await cleanupArchives(deps, jobId, () => deps.blob.delete(objectKey));
+      return { kind: 'in_progress', jobId };
+    }
+    if (publication === 'unknown') {
+      deps.logger?.warn(
+        'export job: completion state unknown after markCompleted; keeping upload',
+        {
+          jobId,
+          userId: job.userId,
+        },
+      );
       return { kind: 'in_progress', jobId };
     }
     unpublishedKey = null;

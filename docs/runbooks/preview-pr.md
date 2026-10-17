@@ -57,8 +57,10 @@ rm -rf "$OUT"
 `PREVIEW_JWT_KID` is the `--kid` value; it is also `keys[0].kid` in `jwks.json`. Publish that
 JWKS at `PREVIEW_JWT_JWKS_URL`. Before creating any resource, the deploy job fails when a secret
 is missing, and `scripts/validate-preview-jwt.mjs` fails it when the URL is not https, the kid
-does not start with `preview-`, a PEM is malformed or escaped, the PEMs are not one pair, or the
-JWKS does not list the kid with that public key.
+does not start with `preview-`, a PEM is malformed or escaped, the PEMs are not one pair, or
+`PREVIEW_JWKS_JSON` does not list the kid with that public key. The document published at
+`PREVIEW_JWT_JWKS_URL` is never fetched: make sure it lists `PREVIEW_JWT_KID` yourself, or tokens
+the preview mints fail verification.
 
 ### 2. GitHub variables
 

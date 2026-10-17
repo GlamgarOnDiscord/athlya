@@ -650,6 +650,7 @@ describe('runExportJob archive cleanup', () => {
     const { blob, put, signedUrl, del } = buildBlob();
     const { archive } = buildArchiveDouble();
     const { events, publish } = buildEvents();
+    const warn = vi.fn();
     store.get.mockResolvedValueOnce(STORED_JOB);
     store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
     store.markCompleted.mockResolvedValueOnce(false);
@@ -666,11 +667,20 @@ describe('runExportJob archive cleanup', () => {
       events,
       clock: buildClock([FROZEN_REQUEST_TIME, FROZEN_COMPLETE_TIME]),
       uuid: buildUuid(COMPLETE_EVENT_ID),
+      logger: { warn, error: vi.fn() },
     });
 
     expect(result).toEqual({ kind: 'in_progress', jobId: JOB_ID });
     expect(del).not.toHaveBeenCalled();
     expect(publish).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      'export job: completion state unknown after markCompleted; keeping upload',
+      { jobId: JOB_ID, userId: USER_ID },
+    );
+    expect(warn).not.toHaveBeenCalledWith(
+      'export job: claim superseded before completion',
+      expect.anything(),
+    );
   });
 
   it('keeps the upload when markCompleted throws after committing it', async () => {
