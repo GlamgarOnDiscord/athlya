@@ -123,7 +123,7 @@ export interface DeletionRepo {
    * existing `deleted_at` MUST NOT be moved: retention and anonymisation
    * clocks measure from it, so a replayed event must not restart them.
    * Implementations are read-only and never tombstone a live account.
-   * `deletedAt` is the cascade clock, passed for logging only.
+   * `deletedAt` is the cascade clock; the production adapter ignores it.
    */
   markUserDeleted(userId: string, deletedAt: Date): Promise<boolean>;
   /**
