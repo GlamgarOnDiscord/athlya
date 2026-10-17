@@ -16,7 +16,7 @@ function fakeFetch(routes, calls = []) {
   return async (url, init) => {
     const { pathname } = new URL(url);
     const key = `${init.method} ${pathname}`;
-    calls.push({ key, headers: init.headers, body: init.body });
+    calls.push({ key, url, headers: init.headers, body: init.body });
     const handler = routes[key];
     return handler ? handler(init) : jsonResponse(401);
   };
@@ -80,6 +80,34 @@ describe('runSmoke', () => {
     assert.deepEqual(result.failures, []);
     const login = calls.find((c) => c.key === 'POST /v1/auth/login' && c.body?.includes('smoke@'));
     assert.equal(login.headers['cf-turnstile-token'], 'XXXX');
+  });
+
+  it('lists studio classes over a bounded range and returns the session token', async () => {
+    const calls = [];
+    const authed = (init) =>
+      init.headers.authorization === 'Bearer tok' ? jsonResponse(200, {}) : jsonResponse(401);
+    const routes = {
+      ...healthy,
+      'POST /v1/auth/login': () => jsonResponse(200, { accessToken: 'tok' }),
+      'GET /v1/members/me': authed,
+      'GET /v1/reservations/me': authed,
+      'GET /v1/classes': authed,
+    };
+    const result = await runSmoke({
+      baseUrl: 'https://staging.example',
+      email: 'smoke@example.com',
+      password: 'secret',
+      studioSlug: 'smoke-studio',
+      now: () => new Date('2026-10-12T10:00:00Z'),
+      fetchImpl: fakeFetch(routes, calls),
+      log: () => {},
+    });
+    assert.deepEqual(result.failures, []);
+    assert.equal(result.accessToken, 'tok');
+    const list = calls.find((c) => c.key === 'GET /v1/classes' && c.headers.authorization);
+    const query = new URL(list.url).searchParams;
+    assert.equal(query.get('from'), '2026-10-12T10:00:00.000Z');
+    assert.equal(query.get('to'), '2027-01-10T10:00:00.000Z');
   });
 
   it('fails when an authenticated route does not return 200', async () => {

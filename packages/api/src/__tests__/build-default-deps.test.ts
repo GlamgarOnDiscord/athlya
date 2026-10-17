@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buildDefaultDeps } from '../routes/index.js';
+import { buildDefaultDeps } from '../domain-deps.js';
 
 import type { AthlyaBindings } from '../types.js';
 
@@ -22,24 +22,27 @@ const CONNECTIONS = {
 };
 
 describe('buildDefaultDeps required secrets', () => {
-  it.each(['production', 'staging'] as const)('names every missing secret in %s', (environment) => {
-    expect(() => buildDefaultDeps(envFor(environment))).toThrow(
-      `missing required secret(s) in ${environment}: DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, JWT_KID.`,
-    );
-  });
+  it.each(['production', 'staging', 'preview'] as const)(
+    'names every missing secret in %s',
+    (environment) => {
+      expect(() => buildDefaultDeps(envFor(environment))).toThrow(
+        `missing required secret(s) in ${environment}: DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, JWT_KID.`,
+      );
+    },
+  );
 
-  it('also requires the signing key material in preview', () => {
-    expect(() => buildDefaultDeps(envFor('preview'))).toThrow(
-      'missing required secret(s) in preview: DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, JWT_KID, JWT_PRIVATE_KEY_PEM, JWT_PUBLIC_KEY_PEM, JWKS_JSON.',
-    );
-  });
-
-  it('reports a preview Worker with JWT_KID but no key material', () => {
+  it('requires the signing key material and JWKS_JSON in preview', () => {
     expect(() =>
       buildDefaultDeps(envFor('preview', { ...CONNECTIONS, JWT_KID: 'preview-1' })),
     ).toThrow(
       'missing required secret(s) in preview: JWT_PRIVATE_KEY_PEM, JWT_PUBLIC_KEY_PEM, JWKS_JSON.',
     );
+  });
+
+  it('does not require JWKS_JSON outside preview', () => {
+    expect(() =>
+      buildDefaultDeps(envFor('staging', { ...CONNECTIONS, JWT_KID: 'staging-1' })),
+    ).toThrow('missing required secret(s) in staging: JWT_PRIVATE_KEY_PEM, JWT_PUBLIC_KEY_PEM.');
   });
 
   it('reports a preview Worker without JWT_KID', () => {

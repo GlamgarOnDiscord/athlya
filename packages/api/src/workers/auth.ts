@@ -4,8 +4,9 @@
  * Handles:
  *   • /v1/auth/*   — register, login, logout, refresh, password reset
  *
- * /v1/sessions/* is not mounted here — the sessions adapter is not yet
- * implemented. Routes are added once the adapter ships (issue #302).
+ * /v1/sessions/* is not routed to this Worker: the sessions adapter is
+ * not implemented yet (issue #302), so its wrangler route was removed
+ * rather than sending traffic to a Worker that 404s.
  *
  * Shares the same global middleware chain as the monolith (host check,
  * CORS, tracing, rate limiters, security headers, error handlers) via
@@ -16,38 +17,23 @@
  * affect reservation or billing latency.
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
-
-import { buildBaseApp } from '../worker.js';
-import { buildDefaultDeps, buildLazyDomainDeps } from '../routes/index.js';
+import { buildBaseApp } from '../base-app.js';
+import { assertRequiredSecrets, defaultAuthDeps, lazyAuthDeps } from '../domain-deps.js';
+import { installDomainScope } from '../domain-scope.js';
 import { buildAuthRouter } from '../routes/auth.js';
 
-import type { AthlyaBindings } from '../types.js';
-
-const app = buildBaseApp();
-
-let latestEnv: AthlyaBindings | undefined;
-
-// Per-request cf via AsyncLocalStorage so concurrent requests in the same
-// isolate cannot cross-contaminate the continent routing decision (issue #303).
-// latestEnv is safe as a module-scope variable because c.env is the same
-// bindings object for every request in one isolate.
-const cfStorage = new AsyncLocalStorage<{ readonly continent?: string } | undefined>();
-
-app.use('/v1/*', async (c, next) => {
-  latestEnv = c.env;
-  const cf = (c.req.raw.cf as { continent?: string } | undefined) ?? undefined;
-  await cfStorage.run(cf, () => next());
+const app = buildBaseApp({
+  // Mounted through the base app hook so the routes sit at the same point
+  // of the chain as in the monolith, behind the shared /v1/* scope (env
+  // capture, BYPASSRLS guard, per-request cf).
+  mountDomain: (base) => {
+    const resolve = installDomainScope(base, 'auth worker', (env) => {
+      assertRequiredSecrets(env);
+      return defaultAuthDeps(env);
+    });
+    base.route('/v1/auth', buildAuthRouter(lazyAuthDeps(resolve)));
+  },
 });
-
-const lazyDeps = buildLazyDomainDeps(() => {
-  if (latestEnv === undefined) {
-    throw new Error('auth worker: env not yet captured — /v1/* middleware must run first');
-  }
-  return buildDefaultDeps(latestEnv, cfStorage.getStore());
-});
-
-app.route('/v1/auth', buildAuthRouter(lazyDeps.auth));
 
 export { app };
 

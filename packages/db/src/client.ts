@@ -388,12 +388,12 @@ export async function pingDb(connectionString: string): Promise<number> {
 }
 
 /**
- * Assert that the DB connection is subject to RLS.
+ * Assert that the DB connection does not use a role that bypasses RLS.
  *
  * Queries `pg_roles` for the current user and throws if `rolbypassrls`
- * or `rolsuper` is true (a superuser bypasses RLS whatever its
- * `rolbypassrls` flag). Must be called once per Worker isolate cold
- * start (issue #461).
+ * or `rolsuper` is true (a superuser bypasses every RLS policy), and fails
+ * closed when either flag is missing. Must be called once per Worker
+ * isolate cold start (issue #461).
  *
  * Skips only when `environment` is explicitly one of the known non-production
  * labels: 'dev', 'test', 'local', 'ci'. Any other value — including an empty
@@ -415,11 +415,17 @@ export async function assertRlsRole(connectionString: string, environment: strin
   if (row === undefined) {
     throw new Error('[boot] assertRlsRole: could not resolve current_user from pg_roles');
   }
-  if (row.bypass !== false || row.superuser !== false) {
-    const reason = row.superuser !== false ? 'SUPERUSER' : 'BYPASSRLS';
+  // Fail closed: a missing flag (unexpected driver shape) is a rejection.
+  if (row.superuser !== false) {
     throw new Error(
-      `[boot] assertRlsRole: connected as "${row.name}" which has ${reason}. ` +
+      `[boot] assertRlsRole: connected as "${row.name}" which is a SUPERUSER and bypasses RLS. ` +
         'Switch DB_URL to athlya_app (rolsuper=false, rolbypassrls=false) before serving traffic.',
+    );
+  }
+  if (row.bypass !== false) {
+    throw new Error(
+      `[boot] assertRlsRole: connected as "${row.name}" which has BYPASSRLS. ` +
+        'Switch DB_URL to athlya_app (rolbypassrls=false) before serving traffic.',
     );
   }
   console.log(

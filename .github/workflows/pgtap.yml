@@ -32,6 +32,7 @@ on:
     paths:
       - 'packages/db/migrations/**'
       - 'packages/db/tests/rls/**'
+      - 'scripts/verify-role-contract.mjs'
       - '.github/workflows/pgtap.yml'
   push:
     branches:
@@ -39,6 +40,7 @@ on:
     paths:
       - 'packages/db/migrations/**'
       - 'packages/db/tests/rls/**'
+      - 'scripts/verify-role-contract.mjs'
       - '.github/workflows/pgtap.yml'
 
 permissions:
@@ -198,3 +200,31 @@ jobs:
             --ext .sql \
             --verbose \
             $TEST_FILES
+
+      # Issue #117 — replay register / login / notification / export /
+      # deletion / RGPD cascade / drain as the REAL runtime roles (all
+      # rolled back). Roles are NOLOGIN after migrations; give them a
+      # throwaway password on this ephemeral database only.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter @athlya/db
+
+      - name: Runtime role contract (athlya_app / athlya_cron)
+        env:
+          APP_DATABASE_URL: postgres://athlya_app:role-contract@localhost:5432/athlya_test
+          CRON_DATABASE_URL: postgres://athlya_cron:role-contract@localhost:5432/athlya_test
+          SMOKE_STUDIO_SLUG: studio-a
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d athlya_test \
+            -c "ALTER ROLE athlya_app LOGIN PASSWORD 'role-contract'" \
+            -c "ALTER ROLE athlya_cron LOGIN PASSWORD 'role-contract'"
+          node scripts/verify-role-contract.mjs
