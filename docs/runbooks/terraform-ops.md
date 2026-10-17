@@ -14,7 +14,7 @@
 | CF Hyperdrive         | No — dashboard           | Covered by `docs/runbooks/hyperdrive-provision.md`                                    |
 | Neon (DB)             | No — Neon console        | Branching handled by preview/deploy workflows                                         |
 | Upstash Redis         | No — Upstash console     | Manual provisioning; keys stored as GH secrets                                        |
-| Axiom alerts          | No — Axiom dashboard     | Covered by `docs/runbooks/axiom-alerts-provision.md`                                  |
+| Axiom alerts          | No — Axiom dashboard     | SLO monitors (latency/queue/outbox/DLQ) move to `axiom-monitors.tf` in #616           |
 | DNS records           | No — CF dashboard        | Pending domain provisioning (#339)                                                    |
 
 WAF settings depend on the zone plan: set `cloudflare_zone_plan`
@@ -67,8 +67,54 @@ Updating providers: `terraform init -upgrade` then
 `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64 -platform=windows_amd64`
 and commit `.terraform.lock.hcl`.
 
-Cloudflare provider v5 is a breaking rewrite: migrate with Cloudflare's
-`tf-migrate`, review the plan per workspace, then bump `~> 4.52` to `~> 5`.
+## Cloudflare provider v5 migration (one-time, per workspace)
+
+The configuration targets `cloudflare/cloudflare ~> 5.28`. Every resource
+keeps its type and address, so no `moved {}` block is needed: the v5
+provider's built-in state upgraders rewrite the v4 state on the first
+`plan`/`apply`. What changed in the code:
+
+| Resource                    | v4 → v5 change                                                 |
+| --------------------------- | -------------------------------------------------------------- |
+| `cloudflare_queue`          | `name` → `queue_name`                                          |
+| `cloudflare_r2_bucket`      | none in config; import ID is now `<account_id>/<name>/default` |
+| `cloudflare_ruleset`        | `rules { … }` blocks → `rules = [{ … }]`, `ratelimit = { … }`  |
+| `cloudflare_bot_management` | none                                                           |
+
+Before the first v5 apply, for **staging first, then production**:
+
+1. Make sure the workspace state was last written by provider 4.52.x (the
+   previous pin): the upgraders only migrate state from the latest v4.
+2. `gh workflow run terraform.yml -f environment=staging -f action=plan` and
+   read the whole plan. Expected: no `must be replaced` and no `destroy`;
+   only in-place updates of computed or defaulted attributes (e.g.
+   `jurisdiction = "default"`, `storage_class = "Standard"` on R2, rule
+   `ref`/`logging` on rulesets).
+3. If the plan **replaces** a queue, bucket or ruleset (a state upgrader
+   could not map an attribute), do not apply. Re-attach the existing object
+   instead, from a shell with the workspace credentials
+   (`TF_CLOUD_ORGANIZATION`, `TF_WORKSPACE`, `TF_TOKEN_app_terraform_io`,
+   `TF_VAR_*`):
+
+   ```bash
+   cd infra/terraform && terraform init
+   terraform state rm cloudflare_queue.events
+   terraform import cloudflare_queue.events '<account_id>/<queue_id>'
+   terraform state rm cloudflare_r2_bucket.avatars
+   terraform import cloudflare_r2_bucket.avatars '<account_id>/athlya-avatars-<env>/default'
+   terraform state rm cloudflare_ruleset.waf_custom
+   terraform import cloudflare_ruleset.waf_custom 'zones/<zone_id>/<ruleset_id>'
+   terraform state rm cloudflare_bot_management.main
+   terraform import cloudflare_bot_management.main '<zone_id>'
+   ```
+
+   Only for the addresses the plan replaces; same pattern for the other
+   queues, bucket and ruleset. IDs come from `wrangler queues list`, the R2
+   dashboard and `GET /zones/<zone_id>/rulesets`. Plan again until it shows
+   no replacement.
+
+4. Apply (`-f action=apply`), then re-run `plan`: it must report no changes.
+   The daily drift job then covers the workspace again.
 
 ## Required secrets
 

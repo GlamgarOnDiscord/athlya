@@ -1,12 +1,13 @@
 # WAF custom rules, login rate limit and Bot Fight Mode (issue #339)
 #
 # Blocks common scanner paths and credential-stuffing vectors before
-# requests reach the Worker (provider cloudflare/cloudflare ~> 4.0).
+# requests reach the Worker (provider cloudflare/cloudflare ~> 5.28;
+# `rules` and `ratelimit` are attributes, not blocks, since v5).
 #
 # Cloudflare evaluates each concern in its own ruleset phase:
 #   - http_request_firewall_custom — scanner block + Tor block
 #   - http_ratelimit               — login brute-force guard
-# A `ratelimit {}` block or `rate()` expression is invalid inside the
+# A `ratelimit` rule or `rate()` expression is invalid inside the
 # custom-firewall phase, which is why the guard lives in its own ruleset.
 #
 # Plan-dependent settings (see var.cloudflare_zone_plan):
@@ -20,8 +21,9 @@
 #     Tor block uses `ip.src.continent eq "T1"` (all plans).
 #
 # Import existing rulesets with:
-#   terraform import cloudflare_ruleset.waf_custom zone/<zone_id>/<ruleset_id>
-#   terraform import cloudflare_ruleset.login_ratelimit zone/<zone_id>/<ruleset_id>
+#   terraform import cloudflare_ruleset.waf_custom 'zones/<zone_id>/<ruleset_id>'
+#   terraform import cloudflare_ruleset.login_ratelimit 'zones/<zone_id>/<ruleset_id>'
+#   terraform import cloudflare_bot_management.main '<zone_id>'
 # =====================================================================
 
 locals {
@@ -57,51 +59,53 @@ resource "cloudflare_ruleset" "waf_custom" {
   kind        = "zone"
   phase       = "http_request_firewall_custom"
 
-  # Rule 1 — scanner path block
-  # Blocks requests to common enumeration/probe paths that would never
-  # appear in a legitimate Athlya client request.
-  rules {
-    action      = "block"
-    expression  = <<-EOT
-      (
-        http.request.uri.path contains "/.env"         or
-        http.request.uri.path contains "/.git/"        or
-        http.request.uri.path contains "/wp-login"     or
-        http.request.uri.path contains "/wp-admin"     or
-        http.request.uri.path contains "/phpMyAdmin"   or
-        http.request.uri.path contains "/phpmyadmin"   or
-        http.request.uri.path contains "/admin.php"    or
-        http.request.uri.path contains "/xmlrpc.php"   or
-        http.request.uri.path contains "/.well-known/acme-challenge/../" or
-        http.request.uri.path contains "/etc/passwd"   or
-        http.request.uri.path contains "/proc/self"
-      )
-    EOT
-    description = "Block scanner/enumeration paths"
-    enabled     = true
-  }
-
-  # Rule 2 — Tor exit block on credential and payment endpoints
-  # Auth and billing endpoints are the primary credential-stuffing
-  # surface. Real members don't route through Tor. The Stripe webhook is
-  # excluded: it is called server-to-server and verified by signature.
-  rules {
-    action      = "block"
-    expression  = <<-EOT
-      (
+  rules = [
+    # Rule 1 — scanner path block
+    # Blocks requests to common enumeration/probe paths that would never
+    # appear in a legitimate Athlya client request.
+    {
+      action      = "block"
+      expression  = <<-EOT
         (
-          starts_with(http.request.uri.path, "/v1/auth/") or
+          http.request.uri.path contains "/.env"         or
+          http.request.uri.path contains "/.git/"        or
+          http.request.uri.path contains "/wp-login"     or
+          http.request.uri.path contains "/wp-admin"     or
+          http.request.uri.path contains "/phpMyAdmin"   or
+          http.request.uri.path contains "/phpmyadmin"   or
+          http.request.uri.path contains "/admin.php"    or
+          http.request.uri.path contains "/xmlrpc.php"   or
+          http.request.uri.path contains "/.well-known/acme-challenge/../" or
+          http.request.uri.path contains "/etc/passwd"   or
+          http.request.uri.path contains "/proc/self"
+        )
+      EOT
+      description = "Block scanner/enumeration paths"
+      enabled     = true
+    },
+
+    # Rule 2 — Tor exit block on credential and payment endpoints
+    # Auth and billing endpoints are the primary credential-stuffing
+    # surface. Real members don't route through Tor. The Stripe webhook is
+    # excluded: it is called server-to-server and verified by signature.
+    {
+      action      = "block"
+      expression  = <<-EOT
+        (
           (
-            starts_with(http.request.uri.path, "/v1/billing/") and
-            http.request.uri.path ne "/v1/billing/webhook"
-          )
-        ) and
-        ip.src.continent eq "T1"
-      )
-    EOT
-    description = "Block Tor exit nodes on auth and billing paths (webhook excluded)"
-    enabled     = true
-  }
+            starts_with(http.request.uri.path, "/v1/auth/") or
+            (
+              starts_with(http.request.uri.path, "/v1/billing/") and
+              http.request.uri.path ne "/v1/billing/webhook"
+            )
+          ) and
+          ip.src.continent eq "T1"
+        )
+      EOT
+      description = "Block Tor exit nodes on auth and billing paths (webhook excluded)"
+      enabled     = true
+    },
+  ]
 }
 
 # ---- Login rate limit ------------------------------------------------
@@ -117,19 +121,21 @@ resource "cloudflare_ruleset" "login_ratelimit" {
   kind        = "zone"
   phase       = "http_ratelimit"
 
-  rules {
-    action      = "managed_challenge"
-    expression  = "(http.request.uri.path eq \"/v1/auth/login\" and http.request.method eq \"POST\")"
-    description = "Challenge repeated login attempts by IP"
-    enabled     = true
+  rules = [
+    {
+      action      = "managed_challenge"
+      expression  = "(http.request.uri.path eq \"/v1/auth/login\" and http.request.method eq \"POST\")"
+      description = "Challenge repeated login attempts by IP"
+      enabled     = true
 
-    ratelimit {
-      characteristics     = ["cf.colo.id", "ip.src"]
-      period              = local.waf_rate_limit_period
-      requests_per_period = local.waf_rate_limit_requests_threshold
-      mitigation_timeout  = local.waf_rate_limit_mitigation_timeout
-      # Business+ only: count failed logins, not every attempt.
-      counting_expression = local.waf_rate_limit_counts_failures ? "(http.request.uri.path eq \"/v1/auth/login\" and http.response.code ge 400)" : null
-    }
-  }
+      ratelimit = {
+        characteristics     = ["cf.colo.id", "ip.src"]
+        period              = local.waf_rate_limit_period
+        requests_per_period = local.waf_rate_limit_requests_threshold
+        mitigation_timeout  = local.waf_rate_limit_mitigation_timeout
+        # Business+ only: count failed logins, not every attempt.
+        counting_expression = local.waf_rate_limit_counts_failures ? "(http.request.uri.path eq \"/v1/auth/login\" and http.response.code ge 400)" : null
+      }
+    },
+  ]
 }

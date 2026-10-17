@@ -42,7 +42,7 @@ terraform import cloudflare_queue.events_dlq \
 
 # Example: import an R2 bucket
 terraform import cloudflare_r2_bucket.avatars \
-  "${TF_VAR_cloudflare_account_id}/athlya-avatars-production"
+  "${TF_VAR_cloudflare_account_id}/athlya-avatars-production/default"
 ```
 
 Verify the import with `terraform plan` — it should show no changes if the

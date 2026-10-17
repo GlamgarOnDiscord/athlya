@@ -1,6 +1,6 @@
 # R2 buckets — mirrors wrangler.toml [[r2_buckets]] per environment.
 # Import existing buckets with:
-#   terraform import cloudflare_r2_bucket.avatars <account_id>/<bucket_name>
+#   terraform import cloudflare_r2_bucket.avatars '<account_id>/<bucket_name>/default'
 
 resource "cloudflare_r2_bucket" "avatars" {
   account_id = var.cloudflare_account_id

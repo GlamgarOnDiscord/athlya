@@ -4,8 +4,8 @@ terraform {
   required_providers {
     cloudflare = {
       source = "cloudflare/cloudflare"
-      # v5 is a breaking rewrite (tf-migrate + reviewed plans) — tracked in #405.
-      version = "~> 4.52"
+      # v5 state upgraders migrate v4 state on the first plan (#405).
+      version = "~> 5.28"
     }
     sentry = {
       source  = "jianyuan/sentry"
