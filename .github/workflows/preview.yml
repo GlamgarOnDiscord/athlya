@@ -19,8 +19,17 @@ name: Preview environments
 #   NEON_API_KEY                — Neon project API key
 #   PREVIEW_REDIS_URL           — Upstash Redis URL (dedicated preview database)
 #   PREVIEW_REDIS_TOKEN         — Upstash Redis token (dedicated preview database)
-#   PREVIEW_JWT_JWKS_URL        — JWKS endpoint for preview (can reuse staging)
+#   PREVIEW_JWT_JWKS_URL        — JWKS endpoint that publishes the preview key
+#   PREVIEW_JWT_KID             — key id of the preview signing key
+#   PREVIEW_JWT_PRIVATE_KEY_PEM — PKCS#8 private key (scripts/generate-jwt-keypair.mjs)
+#   PREVIEW_JWT_PUBLIC_KEY_PEM  — SPKI public key of the same pair
+#   PREVIEW_JWKS_JSON           — JWKS served at /.well-known/jwks.json
 #   PREVIEW_TURNSTILE_SECRET    — Turnstile secret (staging site key is fine)
+#
+# The JWT key material is required like on staging: without JWT_KID the
+# Worker has no auth/idempotency wiring and refuses every request. The
+# PREVIEW_JWT_JWKS_URL document must list PREVIEW_JWT_KID, otherwise the
+# tokens a preview mints fail verification.
 #
 # Required GitHub variables:
 #   NEON_PROJECT_ID              — Neon project ID (e.g. "proud-dream-12345678")
@@ -88,9 +97,29 @@ jobs:
       - name: Assert preview configuration
         env:
           WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+          PREVIEW_REDIS_URL: ${{ secrets.PREVIEW_REDIS_URL }}
+          PREVIEW_REDIS_TOKEN: ${{ secrets.PREVIEW_REDIS_TOKEN }}
+          PREVIEW_JWT_JWKS_URL: ${{ secrets.PREVIEW_JWT_JWKS_URL }}
+          PREVIEW_JWT_KID: ${{ secrets.PREVIEW_JWT_KID }}
+          PREVIEW_JWT_PRIVATE_KEY_PEM: ${{ secrets.PREVIEW_JWT_PRIVATE_KEY_PEM }}
+          PREVIEW_JWT_PUBLIC_KEY_PEM: ${{ secrets.PREVIEW_JWT_PUBLIC_KEY_PEM }}
+          PREVIEW_JWKS_JSON: ${{ secrets.PREVIEW_JWKS_JSON }}
+          PREVIEW_TURNSTILE_SECRET: ${{ secrets.PREVIEW_TURNSTILE_SECRET }}
         run: |
           if [ -z "${WORKERS_SUBDOMAIN}" ]; then
             echo "::error::vars.CLOUDFLARE_WORKERS_SUBDOMAIN is required to address the preview Worker"
+            exit 1
+          fi
+          # Fail before creating any resource: the Worker refuses every
+          # request when one of these secrets is missing.
+          missing=()
+          for name in PREVIEW_REDIS_URL PREVIEW_REDIS_TOKEN PREVIEW_JWT_JWKS_URL \
+            PREVIEW_JWT_KID PREVIEW_JWT_PRIVATE_KEY_PEM PREVIEW_JWT_PUBLIC_KEY_PEM \
+            PREVIEW_JWKS_JSON PREVIEW_TURNSTILE_SECRET; do
+            [ -n "${!name}" ] || missing+=("secrets.${name}")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing preview secrets: ${missing[*]}"
             exit 1
           fi
 
@@ -213,8 +242,13 @@ jobs:
           PREVIEW_REDIS_URL: ${{ secrets.PREVIEW_REDIS_URL }}
           PREVIEW_REDIS_TOKEN: ${{ secrets.PREVIEW_REDIS_TOKEN }}
           PREVIEW_JWT_JWKS_URL: ${{ secrets.PREVIEW_JWT_JWKS_URL }}
+          PREVIEW_JWT_KID: ${{ secrets.PREVIEW_JWT_KID }}
+          PREVIEW_JWT_PRIVATE_KEY_PEM: ${{ secrets.PREVIEW_JWT_PRIVATE_KEY_PEM }}
+          PREVIEW_JWT_PUBLIC_KEY_PEM: ${{ secrets.PREVIEW_JWT_PUBLIC_KEY_PEM }}
+          PREVIEW_JWKS_JSON: ${{ secrets.PREVIEW_JWKS_JSON }}
           PREVIEW_TURNSTILE_SECRET: ${{ secrets.PREVIEW_TURNSTILE_SECRET }}
         run: |
+          set -euo pipefail
           WRANGLER_NAME_FLAGS=(--env preview --name "${PREVIEW_WORKER_NAME}")
 
           printf '%s' "${PREVIEW_DB_URL}" | \
@@ -233,6 +267,20 @@ jobs:
 
           printf '%s' "${PREVIEW_JWT_JWKS_URL}" | \
             pnpm --filter @athlya/api exec wrangler secret put JWT_JWKS_URL "${WRANGLER_NAME_FLAGS[@]}"
+
+          # JWT signing key material, as on staging (buildDefaultDeps
+          # requires JWT_KID; buildAuthDeps loads the PEMs and JWKS).
+          printf '%s' "${PREVIEW_JWT_KID}" | \
+            pnpm --filter @athlya/api exec wrangler secret put JWT_KID "${WRANGLER_NAME_FLAGS[@]}"
+
+          printf '%s' "${PREVIEW_JWT_PRIVATE_KEY_PEM}" | \
+            pnpm --filter @athlya/api exec wrangler secret put JWT_PRIVATE_KEY_PEM "${WRANGLER_NAME_FLAGS[@]}"
+
+          printf '%s' "${PREVIEW_JWT_PUBLIC_KEY_PEM}" | \
+            pnpm --filter @athlya/api exec wrangler secret put JWT_PUBLIC_KEY_PEM "${WRANGLER_NAME_FLAGS[@]}"
+
+          printf '%s' "${PREVIEW_JWKS_JSON}" | \
+            pnpm --filter @athlya/api exec wrangler secret put JWKS_JSON "${WRANGLER_NAME_FLAGS[@]}"
 
           printf '%s' "${PREVIEW_TURNSTILE_SECRET}" | \
             pnpm --filter @athlya/api exec wrangler secret put TURNSTILE_SECRET "${WRANGLER_NAME_FLAGS[@]}"

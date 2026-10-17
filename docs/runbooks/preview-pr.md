@@ -1,6 +1,6 @@
 # Runbook — Preview environments per PR (CN.7.2)
 
-Each pull request automatically gets a fully isolated API preview (issues #237, #419):
+Each pull request automatically gets an isolated API preview (issues #237, #419):
 
 - **Neon branch** — a DB fork created from the project primary branch. Schema + seed data are copied; writes are fully isolated from staging/production. Migrations are applied automatically after the branch is created.
 - **Cloudflare Worker** — `athlya-api-pr-<N>` with secrets scoped to that Worker (including per-PR `DB_URL`). Redis is shared with the dedicated preview database.
@@ -17,15 +17,25 @@ The Neon branch, Worker, and queue set are deleted when the PR closes.
 
 In **Settings → Secrets → Actions**, add:
 
-| Secret                     | Description                                             |
-| -------------------------- | ------------------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`     | CF API token with **Workers:Edit** scope                |
-| `CLOUDFLARE_ACCOUNT_ID`    | CF account ID (visible in the Cloudflare dashboard URL) |
-| `NEON_API_KEY`             | Neon project API key (Project settings → API keys)      |
-| `PREVIEW_REDIS_URL`        | Upstash Redis URL — dedicated preview instance          |
-| `PREVIEW_REDIS_TOKEN`      | Upstash Redis token — dedicated preview instance        |
-| `PREVIEW_JWT_JWKS_URL`     | JWKS endpoint for preview JWT verification              |
-| `PREVIEW_TURNSTILE_SECRET` | Cloudflare Turnstile secret (staging key is fine)       |
+| Secret                        | Description                                                        |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `CLOUDFLARE_API_TOKEN`        | CF API token with **Workers:Edit** scope                           |
+| `CLOUDFLARE_ACCOUNT_ID`       | CF account ID (visible in the Cloudflare dashboard URL)            |
+| `NEON_API_KEY`                | Neon project API key (Project settings → API keys)                 |
+| `PREVIEW_REDIS_URL`           | Upstash Redis URL — dedicated preview instance                     |
+| `PREVIEW_REDIS_TOKEN`         | Upstash Redis token — dedicated preview instance                   |
+| `PREVIEW_JWT_JWKS_URL`        | JWKS endpoint for preview JWT verification (lists the preview key) |
+| `PREVIEW_JWT_KID`             | Key id of the preview signing key                                  |
+| `PREVIEW_JWT_PRIVATE_KEY_PEM` | PKCS#8 private key of the preview signing key                      |
+| `PREVIEW_JWT_PUBLIC_KEY_PEM`  | SPKI public key of the same pair                                   |
+| `PREVIEW_JWKS_JSON`           | JWKS document the preview serves at `/.well-known/jwks.json`       |
+| `PREVIEW_TURNSTILE_SECRET`    | Cloudflare Turnstile secret (staging key is fine)                  |
+
+The JWT key material is required, as on staging: without `JWT_KID` the Worker has no
+auth/idempotency wiring and rejects every request. Generate a dedicated pair with
+`node scripts/generate-jwt-keypair.mjs` (or reuse the staging pair) and make sure
+`PREVIEW_JWT_JWKS_URL` publishes `PREVIEW_JWT_KID`. The deploy job fails before creating any
+resource when one of these secrets is missing.
 
 ### 2. GitHub variables
 

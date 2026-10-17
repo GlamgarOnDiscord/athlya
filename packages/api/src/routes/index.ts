@@ -288,8 +288,14 @@ export function buildDefaultDeps(
   // miss it.
   //
   // Dev intentionally skips the check so local boot without
-  // credentials still works (the stub bundle below kicks in).
-  if (env.ENVIRONMENT === 'production' || env.ENVIRONMENT === 'staging') {
+  // credentials still works (the stub bundle below kicks in). Preview
+  // Workers are provisioned by `.github/workflows/preview.yml` and
+  // must name a missing secret instead of failing on idempotency.
+  if (
+    env.ENVIRONMENT === 'production' ||
+    env.ENVIRONMENT === 'staging' ||
+    env.ENVIRONMENT === 'preview'
+  ) {
     const missing: string[] = [];
     if (typeof env.DB_URL !== 'string' || env.DB_URL.length === 0) {
       missing.push('DB_URL');

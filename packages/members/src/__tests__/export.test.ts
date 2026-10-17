@@ -25,6 +25,7 @@ import {
   EXPORT_R2_PREFIX,
   buildArchiveEntries,
   enqueueExport,
+  exportJobPrefix,
   exportObjectKey,
   neutralizeCsvFormula,
   runExportJob,
@@ -227,11 +228,17 @@ function buildBlob(): {
   blob: BlobStore;
   put: Mock<BlobStore['put']>;
   signedUrl: Mock<BlobStore['signedUrl']>;
+  del: Mock<BlobStore['delete']>;
+  deleteJobArchivesExcept: Mock<BlobStore['deleteJobArchivesExcept']>;
 } {
   const put = vi.fn<BlobStore['put']>();
   const signedUrl = vi.fn<BlobStore['signedUrl']>();
-  const blob: BlobStore = { put, signedUrl };
-  return { blob, put, signedUrl };
+  const del = vi.fn<BlobStore['delete']>().mockResolvedValue(undefined);
+  const deleteJobArchivesExcept = vi
+    .fn<BlobStore['deleteJobArchivesExcept']>()
+    .mockResolvedValue(undefined);
+  const blob: BlobStore = { put, signedUrl, delete: del, deleteJobArchivesExcept };
+  return { blob, put, signedUrl, del, deleteJobArchivesExcept };
 }
 
 /**
@@ -421,7 +428,7 @@ describe('runExportJob claim', () => {
   it('does not publish completion when a newer delivery reclaimed the lease', async () => {
     const store = buildJobStore();
     const source = buildDataSource();
-    const { blob, put, signedUrl } = buildBlob();
+    const { blob, put, signedUrl, del, deleteJobArchivesExcept } = buildBlob();
     const { archive } = buildArchiveDouble();
     const { events, publish } = buildEvents();
     store.get.mockResolvedValueOnce(STORED_JOB);
@@ -450,6 +457,157 @@ describe('runExportJob claim', () => {
     expect(store.markCompleted.mock.calls[0]?.[1]).toBe(CURRENT_CLAIM);
     expect(store.markFailed).not.toHaveBeenCalled();
     expect(publish).not.toHaveBeenCalled();
+    // The superseded upload is never served: it is deleted, and the
+    // newer run's archives are left alone.
+    expect(del).toHaveBeenCalledWith(exportObjectKey(JOB_ID, CURRENT_CLAIM));
+    expect(deleteJobArchivesExcept).not.toHaveBeenCalled();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  runExportJob — archive cleanup (issue #611)                        */
+/* ------------------------------------------------------------------ */
+
+describe('runExportJob archive cleanup', () => {
+  function primeSources(source: ReturnType<typeof buildDataSource>) {
+    source.fetchProfile.mockResolvedValueOnce(PROFILE);
+    source.fetchConsents.mockResolvedValueOnce([CONSENTS_ROW]);
+    source.listReservations.mockReturnValueOnce(asyncPage([]));
+    source.listSessions.mockReturnValueOnce(asyncPage([]));
+    source.listCheckins.mockReturnValueOnce(asyncPage([]));
+    source.listInvoices.mockReturnValueOnce(asyncPage([]));
+  }
+
+  it('deletes the archives of superseded claims once the job completes', async () => {
+    const store = buildJobStore();
+    const source = buildDataSource();
+    const { blob, put, signedUrl, del, deleteJobArchivesExcept } = buildBlob();
+    const { archive } = buildArchiveDouble();
+    const { events, publish } = buildEvents();
+    store.get.mockResolvedValueOnce(STORED_JOB);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
+    store.markCompleted.mockResolvedValueOnce(true);
+    primeSources(source);
+    put.mockResolvedValueOnce(undefined);
+    signedUrl.mockResolvedValueOnce('https://api.athlya.test/download');
+    publish.mockResolvedValue(undefined);
+
+    const result = await runExportJob(JOB_ID, {
+      jobs: store.jobs,
+      data: source.data,
+      archive,
+      blob,
+      events,
+      clock: buildClock([FROZEN_REQUEST_TIME, FROZEN_COMPLETE_TIME]),
+      uuid: buildUuid(COMPLETE_EVENT_ID),
+    });
+
+    expect(result.kind).toBe('completed');
+    expect(deleteJobArchivesExcept).toHaveBeenCalledWith(
+      JOB_ID,
+      exportObjectKey(JOB_ID, CURRENT_CLAIM),
+    );
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('still completes when the cleanup fails', async () => {
+    const store = buildJobStore();
+    const source = buildDataSource();
+    const { blob, put, signedUrl, deleteJobArchivesExcept } = buildBlob();
+    const { archive } = buildArchiveDouble();
+    const { events, publish } = buildEvents();
+    const warn = vi.fn();
+    store.get.mockResolvedValueOnce(STORED_JOB);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
+    store.markCompleted.mockResolvedValueOnce(true);
+    primeSources(source);
+    put.mockResolvedValueOnce(undefined);
+    signedUrl.mockResolvedValueOnce('https://api.athlya.test/download');
+    publish.mockResolvedValue(undefined);
+    deleteJobArchivesExcept.mockRejectedValueOnce(new Error('r2 unavailable'));
+
+    const result = await runExportJob(JOB_ID, {
+      jobs: store.jobs,
+      data: source.data,
+      archive,
+      blob,
+      events,
+      clock: buildClock([FROZEN_REQUEST_TIME, FROZEN_COMPLETE_TIME]),
+      uuid: buildUuid(COMPLETE_EVENT_ID),
+      logger: { warn, error: vi.fn() },
+    });
+
+    expect(result.kind).toBe('completed');
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(store.markFailed).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('export job: archive cleanup failed', {
+      jobId: JOB_ID,
+      error: 'Error: r2 unavailable',
+    });
+  });
+
+  it('deletes its own upload when the run fails after uploading', async () => {
+    const store = buildJobStore();
+    const source = buildDataSource();
+    const { blob, put, signedUrl, del, deleteJobArchivesExcept } = buildBlob();
+    const { archive } = buildArchiveDouble();
+    const { events, publish } = buildEvents();
+    store.get.mockResolvedValueOnce(STORED_JOB);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
+    store.markFailed.mockResolvedValueOnce(undefined);
+    primeSources(source);
+    put.mockResolvedValueOnce(undefined);
+    signedUrl.mockRejectedValueOnce(new Error('export_download_not_configured'));
+
+    const result = await runExportJob(JOB_ID, {
+      jobs: store.jobs,
+      data: source.data,
+      archive,
+      blob,
+      events,
+      clock: buildClock([FROZEN_REQUEST_TIME, FROZEN_COMPLETE_TIME]),
+      uuid: buildUuid(COMPLETE_EVENT_ID),
+    });
+
+    expect(result.kind).toBe('failed');
+    expect(del).toHaveBeenCalledWith(exportObjectKey(JOB_ID, CURRENT_CLAIM));
+    expect(deleteJobArchivesExcept).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('does not delete the published archive when publishing completion throws', async () => {
+    const store = buildJobStore();
+    const source = buildDataSource();
+    const { blob, put, signedUrl, del } = buildBlob();
+    const { archive } = buildArchiveDouble();
+    const { events, publish } = buildEvents();
+    store.get.mockResolvedValueOnce(STORED_JOB);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
+    store.markCompleted.mockResolvedValueOnce(true);
+    store.markFailed.mockResolvedValueOnce(undefined);
+    primeSources(source);
+    put.mockResolvedValueOnce(undefined);
+    signedUrl.mockResolvedValueOnce('https://api.athlya.test/download');
+    publish.mockRejectedValueOnce(new Error('queue down'));
+
+    await runExportJob(JOB_ID, {
+      jobs: store.jobs,
+      data: source.data,
+      archive,
+      blob,
+      events,
+      clock: buildClock([FROZEN_REQUEST_TIME, FROZEN_COMPLETE_TIME]),
+      uuid: buildUuid(COMPLETE_EVENT_ID),
+    });
+
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('builds per-job keys under the job prefix', () => {
+    expect(exportObjectKey(JOB_ID, CURRENT_CLAIM)).toBe(
+      `${exportJobPrefix(JOB_ID)}${CURRENT_CLAIM}.zip`,
+    );
+    expect(exportJobPrefix(JOB_ID)).toBe(`exports/members/${JOB_ID}/`);
   });
 });
 

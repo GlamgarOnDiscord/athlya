@@ -246,6 +246,10 @@ max_retries = 3
 #   wrangler r2 bucket create athlya-exports-staging        --env staging
 #   wrangler r2 bucket create athlya-avatars-production     --env production
 #   wrangler r2 bucket create athlya-exports-production     --env production
+#
+# Then expire export archives with the link TTL (docs/runbooks/rgpd-export.md):
+#
+#   wrangler r2 bucket lifecycle add athlya-exports-{env} expire-exports exports/members/ --expire-days 3
 
 [[r2_buckets]]
 binding = "AVATARS_BUCKET"
@@ -583,6 +587,10 @@ id = "4cdf25a926de4c84a810dc25fd19135d"
 #   wrangler secret put REDIS_URL          --env preview   # once (preview Redis)
 #   wrangler secret put REDIS_TOKEN        --env preview   # once (preview Redis)
 #   wrangler secret put JWT_JWKS_URL       --env preview   # once
+#   wrangler secret put JWT_KID            --env preview   # once
+#   wrangler secret put JWT_PRIVATE_KEY_PEM --env preview  # once
+#   wrangler secret put JWT_PUBLIC_KEY_PEM --env preview   # once
+#   wrangler secret put JWKS_JSON          --env preview   # once
 #   wrangler secret put TURNSTILE_SECRET   --env preview   # once
 #
 # Required one-time provisioning (R2 buckets):

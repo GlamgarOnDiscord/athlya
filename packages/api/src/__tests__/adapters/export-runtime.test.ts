@@ -6,7 +6,11 @@ import {
   EXPORT_JOB_NOT_CLAIMED_REASON,
   EXPORT_ROWS_MAX_PAGE_SIZE,
 } from '../../adapters/export-data-source.js';
-import { buildBlobStore, EXPORTS_BUCKET_MISSING_REASON } from '../../adapters/export-deps.js';
+import {
+  buildBlobStore,
+  EXPORTS_BUCKET_MISSING_REASON,
+  jobIdFromObjectKey,
+} from '../../adapters/export-deps.js';
 import {
   EXPORT_DOWNLOAD_NOT_CONFIGURED_REASON,
   buildExportDownloadUrl,
@@ -119,6 +123,98 @@ describe('buildBlobStore', () => {
     } as AthlyaBindings);
     const url = new URL(await blob.signedUrl(key, 60));
     expect(url.pathname).toBe(`/v1/members/me/export/${JOB_ID}/download`);
+  });
+
+  it('signs a link for an uppercase job id', async () => {
+    const upperJobId = JOB_ID.toUpperCase();
+    const blob = buildBlobStore(bucket, {
+      ENVIRONMENT: 'staging',
+      EXPORT_URL_SIGNING_KEY: SECRET,
+      API_PUBLIC_URL: 'https://api.athlya.test',
+    } as AthlyaBindings);
+    const url = new URL(
+      await blob.signedUrl(`exports/members/${upperJobId}/${CURRENT_CLAIM.toUpperCase()}.zip`, 60),
+    );
+    expect(url.pathname).toBe(`/v1/members/me/export/${upperJobId}/download`);
+  });
+
+  it('deletes one archive', async () => {
+    const del = vi.fn(async () => undefined);
+    const blob = buildBlobStore(
+      { delete: del } as unknown as R2Bucket,
+      {
+        ENVIRONMENT: 'staging',
+      } as AthlyaBindings,
+    );
+    await blob.delete(key);
+    expect(del).toHaveBeenCalledWith(key);
+  });
+
+  it('deletes every archive of the job except the published one, across pages', async () => {
+    const published = key;
+    const staleA = `exports/members/${JOB_ID}/0193f000-0000-7000-8000-0000000000aa.zip`;
+    const staleB = `exports/members/${JOB_ID}/0193f000-0000-7000-8000-0000000000bb.zip`;
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({
+        objects: [{ key: staleA }, { key: published }],
+        truncated: true,
+        cursor: 'page-2',
+      })
+      .mockResolvedValueOnce({ objects: [{ key: staleB }], truncated: false });
+    const del = vi.fn(async () => undefined);
+    const blob = buildBlobStore(
+      { list, delete: del } as unknown as R2Bucket,
+      {
+        ENVIRONMENT: 'staging',
+      } as AthlyaBindings,
+    );
+
+    await blob.deleteJobArchivesExcept(JOB_ID, published);
+
+    expect(list).toHaveBeenNthCalledWith(1, { prefix: `exports/members/${JOB_ID}/`, limit: 100 });
+    expect(list).toHaveBeenNthCalledWith(2, {
+      prefix: `exports/members/${JOB_ID}/`,
+      limit: 100,
+      cursor: 'page-2',
+    });
+    expect(del.mock.calls).toEqual([[[staleA]], [[staleB]]]);
+  });
+
+  it('skips the delete call when only the published archive exists', async () => {
+    const list = vi.fn().mockResolvedValueOnce({ objects: [{ key }], truncated: false });
+    const del = vi.fn(async () => undefined);
+    const blob = buildBlobStore(
+      { list, delete: del } as unknown as R2Bucket,
+      {
+        ENVIRONMENT: 'staging',
+      } as AthlyaBindings,
+    );
+    await blob.deleteJobArchivesExcept(JOB_ID, key);
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('has nothing to delete without the bucket', async () => {
+    const blob = buildBlobStore(undefined, { ENVIRONMENT: 'staging' } as AthlyaBindings);
+    await expect(blob.delete(key)).resolves.toBeUndefined();
+    await expect(blob.deleteJobArchivesExcept(JOB_ID, key)).resolves.toBeUndefined();
+  });
+});
+
+describe('jobIdFromObjectKey', () => {
+  it('parses lowercase and uppercase UUID keys', () => {
+    expect(jobIdFromObjectKey(`exports/members/${JOB_ID}/${CURRENT_CLAIM}.zip`)).toBe(JOB_ID);
+    const upper = `exports/members/${JOB_ID.toUpperCase()}/${CURRENT_CLAIM.toUpperCase()}.zip`;
+    expect(jobIdFromObjectKey(upper)).toBe(JOB_ID.toUpperCase());
+  });
+
+  it('rejects keys outside the per-claim layout', () => {
+    expect(() => jobIdFromObjectKey(`exports/members/${JOB_ID}.zip`)).toThrow(
+      'unexpected export object key',
+    );
+    expect(() => jobIdFromObjectKey(`avatars/${JOB_ID}/${CURRENT_CLAIM}.zip`)).toThrow(
+      'unexpected export object key',
+    );
   });
 });
 
