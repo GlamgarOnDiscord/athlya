@@ -227,18 +227,25 @@ const defaultClock: Clock = {
  *
  * Algorithm (see module docstring for rationale):
  *
- *   1. Call `store.claimBatch(batchSize)`.
- *   2. For each claimed row, in the order returned by the store:
- *      a. Call `queue.send(reconstructed envelope)`.
+ *   1. Validate `batchSize` and `concurrency`, then call
+ *      `store.claimBatch(batchSize)`.
+ *   2. Send the claimed rows through a pool of `concurrency` workers,
+ *      taking rows in the order returned by the store:
+ *      a. Past the cycle deadline, no send starts: the row is set
+ *         aside as `released`.
+ *      b. Call `queue.send(reconstructed envelope)`, bounded by
+ *         `sendTimeoutMs`.
  *         - On failure: log at warn, count as `failed`, move on. The
- *           row is left with `published_at IS NULL` and will be
- *           re-drained on the next cycle.
- *      b. On queue send success, call `store.markPublished(row.id)`.
- *         - On failure: log at error, count as `failed`, move on.
- *           The queue already has the event; the consumer dedup
- *           (Req 17.4) absorbs the eventual redelivery.
- *         - On success: count as `succeeded`.
- *   3. Return `{ processed, succeeded, failed }`.
+ *           row keeps `published_at IS NULL` and is re-drained later.
+ *      c. On send success, stamp the row: collected for one
+ *         `store.markPublishedMany` call when the store has it,
+ *         otherwise `store.markPublished(row.id)` right away.
+ *         - A stamp failure is logged at error and counted as
+ *           `failed`; the consumer dedup (Req 17.4) absorbs the
+ *           redelivery.
+ *   3. Stamp the collected rows with `store.markPublishedMany` and
+ *      give the released rows back with `store.release`.
+ *   4. Return `{ processed, succeeded, failed, released }`.
  */
 /** Default per-row queue send deadline, in milliseconds (issue #497). */
 export const DEFAULT_QUEUE_SEND_TIMEOUT_MS = 5_000;
@@ -256,6 +263,7 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
   const logger = options.logger ?? defaultLogger;
   const clock = options.clock ?? defaultClock;
   const batchSize = normaliseBatchSize(options.batchSize);
+  const concurrency = normaliseConcurrency(options.concurrency);
   const sendTimeoutMs = options.sendTimeoutMs ?? DEFAULT_QUEUE_SEND_TIMEOUT_MS;
 
   const startedAt = clock.now();
@@ -319,7 +327,7 @@ export async function drainOutbox(options: DrainOutboxOptions): Promise<DrainRes
     }
   };
 
-  const workers = Math.min(normaliseConcurrency(options.concurrency), rows.length);
+  const workers = Math.min(concurrency, rows.length);
   await Promise.all(Array.from({ length: workers }, () => sendNext()));
 
   if (delivered.length > 0) {

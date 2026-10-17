@@ -58,17 +58,45 @@ describe('drainOutbox — leased store', () => {
     expect(markPublishedMany.mock.calls[0]![0]).toHaveLength(40);
   });
 
-  it('a pool cuts the cycle time of a slow queue (capacity model)', async () => {
-    const queue = { send: async () => delay(20) };
-    const startedAt = Date.now();
-    await drainOutbox({
-      store: leasedStore(rows(200)).store,
+  it('fills the pool before any send completes (no timing assumption)', async () => {
+    const pool = 8;
+    let inFlight = 0;
+    let peak = 0;
+    const waiting: (() => void)[] = [];
+    const queue = {
+      send: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            inFlight += 1;
+            peak = Math.max(peak, inFlight);
+            waiting.push(() => {
+              inFlight -= 1;
+              resolve();
+            });
+          }),
+      ),
+    };
+
+    const drained = drainOutbox({
+      store: leasedStore(rows(20)).store,
       queue,
-      concurrency: 8,
+      concurrency: pool,
       logger: silent,
     });
-    // Sequential: 200 × 20 ms = 4 s. Pool of 8: ~25 waves × 20 ms.
-    expect(Date.now() - startedAt).toBeLessThan(2_000);
+
+    // Release sends one by one, only once every pool slot is busy (or the
+    // remaining rows cannot fill it).
+    for (let sent = 0; sent < 20; sent += 1) {
+      await vi.waitFor(() => {
+        expect(inFlight).toBe(Math.min(pool, 20 - sent));
+      });
+      waiting.shift()!();
+    }
+
+    const result = await drained;
+    expect(result).toEqual({ processed: 20, succeeded: 20, failed: 0, released: 0 });
+    expect(peak).toBe(pool);
+    expect(queue.send).toHaveBeenCalledTimes(20);
   });
 
   it('stops starting sends at the deadline and releases the rest', async () => {
@@ -121,14 +149,16 @@ describe('drainOutbox — leased store', () => {
     expect(markPublishedMany.mock.calls[0]![0]).toEqual([claimed[0]!.id, claimed[2]!.id]);
   });
 
-  it('rejects a non-positive pool size', async () => {
+  it('rejects a non-positive pool size before leasing any row', async () => {
+    const { store } = leasedStore(rows(1));
     await expect(
       drainOutbox({
-        store: leasedStore(rows(1)).store,
+        store,
         queue: { send: async () => {} },
         concurrency: 0,
         logger: silent,
       }),
     ).rejects.toThrow(RangeError);
+    expect(store.claimBatch).not.toHaveBeenCalled();
   });
 });

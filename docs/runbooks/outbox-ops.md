@@ -106,7 +106,7 @@ Backlog snapshot (**émis à chaque cron tick**, indépendant du logger — issu
 Cycle metric (**every cycle**, issue #424 — duration, throughput, failures):
 
 ```
-['athlya-logs'] | where ['message'] == "outbox.drain_cycle" | summarize p95(toint(['durationMs'])), sum(toint(['failed'])) by bin(_time, 5m)
+['athlya-logs'] | where ['message'] == "outbox.drain_cycle" | summarize percentile(toint(['durationMs']), 95), sum(toint(['processed'])), sum(toint(['failed'])), sum(toint(['released'])) by bin(_time, 5m)
 ```
 
 Overlap risk (cycle > 45s) :

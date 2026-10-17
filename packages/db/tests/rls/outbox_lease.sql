@@ -153,3 +153,8 @@ SELECT results_eq(
 RESET ROLE;
 SELECT * FROM finish();
 ROLLBACK;
+
+-- Prepared statements are session-scoped and survive ROLLBACK; drop them
+-- so run-all.sql can be replayed in the same psql session.
+DEALLOCATE claim_lease;
+DEALLOCATE legacy_claim;
