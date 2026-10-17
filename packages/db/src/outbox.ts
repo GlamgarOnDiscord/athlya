@@ -124,6 +124,16 @@ interface ClaimedOutboxRowRaw {
   [key: string]: unknown;
 }
 
+/** Row returned by {@link claimLeasedBatch}: the claimed row plus its lease token. */
+export interface LeasedOutboxRow extends ClaimedOutboxRow {
+  /** `lease_until` of the claim, as text, for {@link releaseLeases} fencing. */
+  readonly leaseToken: string;
+}
+
+interface LeasedOutboxRowRaw extends ClaimedOutboxRowRaw {
+  lease_token: string;
+}
+
 /**
  * Insert an event into the outbox as part of the caller's transaction.
  *
@@ -217,6 +227,105 @@ export async function claimBatch(
     attempts: row.attempts,
     studioId: row.studio_id,
   }));
+}
+
+/**
+ * Claim up to `limit` pending rows under a lease (issue #424).
+ *
+ * One autocommit statement: rows are selected with `FOR UPDATE SKIP
+ * LOCKED`, get `attempts + 1` and `lease_until = now() + leaseSeconds`,
+ * and the locks are released as soon as the statement commits. The
+ * caller sends OUTSIDE any transaction; until the lease expires no
+ * other drain can claim the rows, and a drain that dies mid-batch
+ * simply lets the lease lapse.
+ *
+ * Every row of one claim shares the same `lease_until`; its exact text
+ * form is returned as `leaseToken` so {@link releaseLeases} only touches
+ * rows this claim still owns.
+ */
+export async function claimLeasedBatch(
+  db: AthlyaDb,
+  limit: number,
+  leaseSeconds: number,
+): Promise<LeasedOutboxRow[]> {
+  validateLimit(limit);
+  if (!Number.isInteger(leaseSeconds) || leaseSeconds < 1 || leaseSeconds > 3600) {
+    throw new InvalidOutboxInputError('leaseSeconds', 'must be an integer in [1, 3600]');
+  }
+
+  const result = await db.execute<LeasedOutboxRowRaw>(sql`
+        WITH claimed AS (
+            SELECT id
+              FROM outbox
+             WHERE published_at IS NULL
+               AND (lease_until IS NULL OR lease_until <= now())
+             ORDER BY occurred_at ASC
+             LIMIT ${limit}
+             FOR UPDATE SKIP LOCKED
+        )
+        UPDATE outbox
+           SET attempts = outbox.attempts + 1,
+               lease_until = now() + make_interval(secs => ${leaseSeconds})
+          FROM claimed
+         WHERE outbox.id = claimed.id
+        RETURNING outbox.id,
+                  outbox.event_id,
+                  outbox.event_type,
+                  outbox.payload,
+                  outbox.occurred_at,
+                  outbox.attempts,
+                  outbox.studio_id,
+                  outbox.lease_until::text AS lease_token
+    `);
+
+  const rows = result as unknown as readonly LeasedOutboxRowRaw[];
+  return rows.map((row) => ({
+    id: row.id,
+    eventId: row.event_id,
+    eventType: row.event_type,
+    payload: row.payload,
+    occurredAt: row.occurred_at,
+    attempts: row.attempts,
+    studioId: row.studio_id,
+    leaseToken: row.lease_token,
+  }));
+}
+
+/** Stamp `published_at` on every delivered row of a leased batch in one statement. */
+export async function markPublishedMany(db: AthlyaDb, ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  ids.forEach(validateId);
+  await db.execute(sql`
+        UPDATE outbox
+           SET published_at = now(), lease_until = NULL
+         WHERE id = ANY(${`{${ids.join(',')}}`}::uuid[])
+    `);
+}
+
+/**
+ * Release the lease of rows the drain claimed but did not attempt (cycle
+ * deadline reached), so the next cycle can claim them without waiting
+ * for the lease to lapse. The claim's `attempts + 1` is undone because
+ * the row was never sent.
+ *
+ * Fenced on `leaseToken`: a drain that stalled past its lease must not
+ * clear (or decrement) a lease another drain has taken since.
+ */
+export async function releaseLeases(
+  db: AthlyaDb,
+  ids: readonly string[],
+  leaseToken: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  ids.forEach(validateId);
+  await db.execute(sql`
+        UPDATE outbox
+           SET lease_until = NULL,
+               attempts = GREATEST(outbox.attempts - 1, 0)
+         WHERE id = ANY(${`{${ids.join(',')}}`}::uuid[])
+           AND published_at IS NULL
+           AND lease_until = ${leaseToken}::timestamptz
+    `);
 }
 
 /**

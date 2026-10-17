@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   ADAPTIVE_BATCH_SIZE,
+  DRAIN_CYCLE_DEADLINE_MS,
+  DRAIN_LEASE_SECONDS,
+  DRAIN_SEND_CONCURRENCY,
   OUTBOX_BACKLOG_BATCH_THRESHOLD,
   OUTBOX_DRAIN_OVERLAP_WARN_MS,
   emitOutboxBacklogMetric,
@@ -11,19 +14,25 @@ import {
   runScheduledDrain,
   warnOnDrainOverlapRisk,
 } from '../events/drain-scheduled.js';
-import { DEFAULT_BATCH_SIZE, type DrainResult } from '../events/drain-worker.js';
+import {
+  DEFAULT_BATCH_SIZE,
+  DEFAULT_QUEUE_SEND_TIMEOUT_MS,
+  type DrainResult,
+} from '../events/drain-worker.js';
 
 const countPendingOutboxMock = vi.hoisted(() => vi.fn());
 const claimBatchMock = vi.hoisted(() => vi.fn());
 const markPublishedMock = vi.hoisted(() => vi.fn());
+const releaseLeasesMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@athlya/db/outbox', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@athlya/db/outbox')>();
   return {
     ...actual,
     countPendingOutbox: countPendingOutboxMock,
-    claimBatch: claimBatchMock,
-    markPublished: markPublishedMock,
+    claimLeasedBatch: claimBatchMock,
+    markPublishedMany: markPublishedMock,
+    releaseLeases: releaseLeasesMock,
   };
 });
 
@@ -115,9 +124,13 @@ describe('emitOutboxBacklogMetric', () => {
 describe('runScheduledDrain', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  // Issue #424 — the drain must never open a transaction around sends.
   function fakeDb() {
-    const tx = {};
-    return { transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(tx)) } as never;
+    return {
+      transaction: vi.fn(() => {
+        throw new Error('runScheduledDrain must not open a transaction');
+      }),
+    } as never;
   }
 
   it('queries pending once per cycle and emits the backlog metric', async () => {
@@ -136,7 +149,11 @@ describe('runScheduledDrain', () => {
     });
 
     expect(countPendingOutboxMock).toHaveBeenCalledTimes(1);
-    expect(claimBatchMock).toHaveBeenCalledWith(expect.anything(), ADAPTIVE_BATCH_SIZE);
+    expect(claimBatchMock).toHaveBeenCalledWith(
+      expect.anything(),
+      ADAPTIVE_BATCH_SIZE,
+      DRAIN_LEASE_SECONDS,
+    );
     expect(log).toHaveBeenCalledWith(
       'outbox.backlog',
       expect.objectContaining({ metric: 'outbox_pending_count', backlog: true }),
@@ -158,7 +175,7 @@ describe('runScheduledDrain', () => {
     });
 
     expect(countPendingOutboxMock).not.toHaveBeenCalled();
-    expect(claimBatchMock).toHaveBeenCalledWith(expect.anything(), 25);
+    expect(claimBatchMock).toHaveBeenCalledWith(expect.anything(), 25, DRAIN_LEASE_SECONDS);
   });
 
   it('emits athlya.outbox.drain_errors when the drain reports failures', async () => {
@@ -189,18 +206,111 @@ describe('runScheduledDrain', () => {
   });
 });
 
+describe('runScheduledDrain lease (issue #424)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const row = (n: number) => ({
+    id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+    eventId: `evt-${String(n)}`,
+    eventType: 'member.registered',
+    payload: {},
+    attempts: 1,
+    occurredAt: new Date(),
+    studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  });
+
+  it('stamps every delivered row in one statement and emits the cycle metric', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const rows = [row(1), row(2), row(3)];
+    claimBatchMock.mockReset().mockResolvedValue(rows);
+    markPublishedMock.mockReset().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(undefined);
+
+    const result = await runScheduledDrain({
+      getDb: () =>
+        ({
+          transaction: () => {
+            throw new Error('no transaction expected');
+          },
+        }) as never,
+      EVENTS_QUEUE: { send },
+      EVENTS_NOTIFICATIONS_QUEUE: {} as never,
+      EVENTS_RGPD_QUEUE: {} as never,
+      batchSize: 3,
+    });
+
+    expect(result).toEqual({ processed: 3, succeeded: 3, failed: 0, released: 0 });
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(markPublishedMock).toHaveBeenCalledTimes(1);
+    expect(markPublishedMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining(rows.map((r) => r.id)),
+    );
+    expect(log).toHaveBeenCalledWith(
+      'outbox.drain_cycle',
+      expect.objectContaining({ metric: 'outbox_drain_cycle', processed: 3, succeeded: 3 }),
+    );
+  });
+
+  it('releases deadline-cut rows under their lease token without reporting drain errors', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const leaseToken = '2026-10-17 12:00:00.123456+00';
+    const rows = [row(1), row(2)].map((r) => ({ ...r, leaseToken }));
+    claimBatchMock.mockReset().mockResolvedValue(rows);
+    markPublishedMock.mockReset().mockResolvedValue(undefined);
+    releaseLeasesMock.mockReset().mockResolvedValue(undefined);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const send = vi.fn(async () => {
+      vi.setSystemTime(Date.now() + DRAIN_CYCLE_DEADLINE_MS);
+    });
+
+    const result = await runScheduledDrain({
+      getDb: () =>
+        ({
+          transaction: () => {
+            throw new Error('no transaction expected');
+          },
+        }) as never,
+      EVENTS_QUEUE: { send },
+      EVENTS_NOTIFICATIONS_QUEUE: {} as never,
+      EVENTS_RGPD_QUEUE: {} as never,
+      batchSize: 2,
+    });
+
+    expect(result).toEqual({ processed: 2, succeeded: 1, failed: 0, released: 1 });
+    expect(releaseLeasesMock).toHaveBeenCalledWith(expect.anything(), [rows[1]!.id], leaseToken);
+    expect(log).not.toHaveBeenCalledWith('athlya.outbox.drain_errors', expect.anything());
+    expect(log).toHaveBeenCalledWith(
+      'outbox.drain_cycle',
+      expect.objectContaining({ failed: 0, released: 1 }),
+    );
+  });
+
+  it('keeps the lease longer than the longest possible cycle', () => {
+    expect(DRAIN_LEASE_SECONDS * 1000).toBeGreaterThan(
+      DRAIN_CYCLE_DEADLINE_MS + DEFAULT_QUEUE_SEND_TIMEOUT_MS + 10_000,
+    );
+    expect(DRAIN_CYCLE_DEADLINE_MS).toBeLessThan(OUTBOX_DRAIN_OVERLAP_WARN_MS);
+    expect(DRAIN_SEND_CONCURRENCY).toBeGreaterThan(1);
+  });
+});
+
 describe('emitOutboxDrainErrorsMetric', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('is a no-op when there are no failures', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    emitOutboxDrainErrorsMetric({ processed: 5, succeeded: 5, failed: 0 });
+    emitOutboxDrainErrorsMetric({ processed: 5, succeeded: 5, failed: 0, released: 0 });
     expect(log).not.toHaveBeenCalled();
   });
 
   it('emits the drain_errors metric unconditionally when failed > 0', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    emitOutboxDrainErrorsMetric({ processed: 10, succeeded: 7, failed: 3 });
+    emitOutboxDrainErrorsMetric({ processed: 10, succeeded: 7, failed: 3, released: 0 });
     expect(log).toHaveBeenCalledWith(
       'athlya.outbox.drain_errors',
       expect.objectContaining({
@@ -216,7 +326,7 @@ describe('emitOutboxDrainErrorsMetric', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const errorSpy = vi.fn();
     emitOutboxDrainErrorsMetric(
-      { processed: 2, succeeded: 1, failed: 1 },
+      { processed: 2, succeeded: 1, failed: 1, released: 0 },
       {
         info: vi.fn(),
         warn: vi.fn(),
@@ -233,7 +343,7 @@ describe('emitOutboxDrainErrorsMetric', () => {
 describe('warnOnDrainOverlapRisk', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  const result: DrainResult = { processed: 200, succeeded: 200, failed: 0 };
+  const result: DrainResult = { processed: 200, succeeded: 200, failed: 0, released: 0 };
 
   it('stays silent when the drain is within the cron window', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
