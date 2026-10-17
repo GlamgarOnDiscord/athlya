@@ -116,7 +116,7 @@ jobs:
     timeout-minutes: 20
     environment: ${{ inputs.environment || (github.event_name == 'schedule' && 'production') || 'staging' }}
     concurrency:
-      group: terraform-${{ inputs.environment || (github.event_name == 'schedule' && 'production') || 'staging' }}
+      group: terraform-${{ inputs.environment || (github.event_name == 'schedule' && 'production') || 'staging' }}-${{ github.ref }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -182,10 +182,12 @@ jobs:
 
       # Plan always runs — for plan, apply and drift. Apply consumes the
       # plan produced in this same job, never a stale artifact (#405).
+      # The concurrency group is per ref, so runs on different refs wait
+      # for the HCP Terraform state lock instead of failing on it.
       - name: terraform plan
         if: steps.prereq.outputs.skip != 'true'
         id: plan
-        run: terraform plan -input=false -no-color -detailed-exitcode -out=tfplan
+        run: terraform plan -input=false -no-color -lock-timeout=10m -detailed-exitcode -out=tfplan
         continue-on-error: true
 
       - name: Interpret plan result
@@ -241,4 +243,4 @@ jobs:
       # Environment required-reviewers gate fires before this job starts.
       - name: terraform apply
         if: steps.prereq.outputs.skip != 'true' && inputs.action == 'apply' && github.event_name == 'workflow_dispatch' && steps.plan.outputs.exitcode == '2'
-        run: terraform apply -input=false tfplan
+        run: terraform apply -input=false -lock-timeout=10m tfplan

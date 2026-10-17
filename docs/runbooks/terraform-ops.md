@@ -34,15 +34,18 @@ fallback: `terraform init` without a backend fails instead of writing state
 on a throwaway runner.
 
 1. Create a free account at <https://app.terraform.io>.
-2. Create an organisation and **two** workspaces tagged `athlya`:
-   `athlya-staging` and `athlya-production`, execution mode **Local**.
+2. Create an organisation and **two** workspaces, `athlya-staging` and
+   `athlya-production`, execution mode **Local**. `TF_WORKSPACE` selects
+   one; it does not create it.
 3. Generate an API token: User Settings → Tokens → Create an API token.
 4. GitHub: secret `TF_TOKEN_app_terraform_io` in both the `staging` and
    `production` environments, and the repository variable
    `TF_CLOUD_ORGANIZATION` (organisation slug).
 5. Import the resources that already exist in Cloudflare/Sentry into each
-   workspace (`terraform import …`, see the header of each `.tf` file) before
-   the first apply, otherwise Terraform will try to recreate them.
+   workspace before the first apply, otherwise Terraform will try to
+   recreate them (`terraform import`, ID formats in the header of each `.tf`
+   file). For example, the Sentry error alert:
+   `terraform import sentry_metric_alert.error_count_spike <org-slug>/<project-slug>/<alert-rule-id>`.
 
 CI sets `TF_WORKSPACE=athlya-<environment>`, so staging and production state
 are always isolated. Locally: `export TF_CLOUD_ORGANIZATION=<org>

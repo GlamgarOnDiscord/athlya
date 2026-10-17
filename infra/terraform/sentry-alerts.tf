@@ -21,6 +21,9 @@
 # a dataset the runtime does not emit (transactions, custom metrics).
 #
 # Provider: jianyuan/sentry ~> 0.15 (threshold_type is numeric: 0 = above)
+#
+# Import an existing alert rule (IDs are in the Sentry rule URL) with:
+#   terraform import sentry_metric_alert.error_count_spike <org-slug>/<project-slug>/<alert-rule-id>
 # Variables: sentry_auth_token, sentry_org, sentry_project, sentry_alert_team
 # =====================================================================
 
