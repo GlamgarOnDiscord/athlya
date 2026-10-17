@@ -15,9 +15,9 @@
  * Cloudflare Workers** (same zone as the Hono API → first-party cookies
  * on `.athlya.app`, minimal CORS). Decision + unified deploy ordering:
  * `docs/security/deploy-web-adr.md` and `docs/runbooks/deploy-unified.md`.
- * The `@opennextjs/cloudflare` adapter wiring is a dedicated follow-up
- * slice (build/deploy validation gated on CI quota #123) — see the ADR's
- * implementation plan.
+ * Built for Workers by `@opennextjs/cloudflare` (`pnpm build:worker`,
+ * `open-next.config.ts`, `wrangler.jsonc`) — runbook
+ * `docs/runbooks/deploy-frontend.md` (issue #422).
  *
  * @see Req 25.3, Req 25.4 — requirements.md
  */

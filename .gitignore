@@ -12,6 +12,7 @@ coverage/
 
 # Cloudflare Workers
 .wrangler/
+.open-next/
 
 # Env
 .env
@@ -66,3 +67,10 @@ yarn-error.log*
 
 # Claude Code runtime
 .claude/scheduled_tasks.lock
+.claude/worktrees/
+
+# Private keys and certificates
+*.pem
+*.key
+*.p8
+*.p12

@@ -22,6 +22,7 @@ import {
 import { buildCascadeDeps } from './adapters/cascade-deps.js';
 import { buildCronSqlExecutor } from './adapters/cron-sql-executor.js';
 import { getOrCreateRedis } from './adapters/deps-cache.js';
+import { createDrainDb, resolveDrainDbUrl } from './adapters/drain-db.js';
 import { buildExportDeps } from './adapters/export-deps.js';
 import { buildNotificationsDeps } from './adapters/notifications-deps.js';
 import { buildApp } from './app.js';
@@ -88,7 +89,23 @@ const worker = {
     // already swallowed internally by `drainOutbox` and summarised
     // via its `DrainResult`; this catch fires only on
     // `claimBatch` / transaction-level failures.
-    const drainTask = runScheduledDrain(env).catch((err: unknown) => {
+    // Issue #497 — the drain runs as athlya_cron through CRON_DB_URL;
+    // there is no `getDb` binding on a real Worker env.
+    const drainDbUrl = resolveDrainDbUrl(env as unknown as AthlyaBindings);
+    if (drainDbUrl === null) {
+      console.error('[worker] CRON_DB_URL missing — outbox drain skipped', {
+        code: 'configuration_error',
+        binding: 'CRON_DB_URL',
+        environment: (env as unknown as AthlyaBindings).ENVIRONMENT ?? 'unknown',
+        cron: event.cron,
+        scheduledTime: event.scheduledTime,
+      });
+    }
+    const drainTask = (
+      drainDbUrl === null
+        ? Promise.resolve()
+        : runScheduledDrain({ ...env, getDb: () => createDrainDb(drainDbUrl) })
+    ).catch((err: unknown) => {
       // Log through the console-backed default logger — the
       // drain module does not accept `StructuredLogger` shapes
       // and we do not want to convert here; task 8.6 (OTel)

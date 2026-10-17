@@ -44,6 +44,9 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -70,17 +73,20 @@ jobs:
           IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           set -euo pipefail
+          # Fork PRs never scan the shared environment, whatever the
+          # variable holds: check this before resolving the target.
+          if [ "$IS_FORK_PR" = "true" ]; then
+            echo "::notice title=ZAP baseline skipped::Fork pull request: the shared scan target is not exercised from forks."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            echo "target=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           # Dispatch input wins over the repo variable so humans can
           # target ad-hoc preview URLs without editing settings.
           TARGET="${INPUT_TARGET:-$VAR_TARGET}"
 
           if [ -z "$TARGET" ]; then
-            if [ "$IS_FORK_PR" = "true" ]; then
-              echo "::notice title=ZAP baseline skipped::Fork pull request: repository variables and the scan target are not available."
-              echo "skipped=true" >> "$GITHUB_OUTPUT"
-              echo "target=" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
             echo "::error title=ZAP baseline not configured::vars.ZAP_TARGET_URL is empty, so no DAST ran. Provision the synthetic-data scan target and set the variable (docs/operations/zap-activation.md)."
             echo "### ZAP baseline: FAILED — no target configured (vars.ZAP_TARGET_URL)" >> "$GITHUB_STEP_SUMMARY"
             exit 1

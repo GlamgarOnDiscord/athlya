@@ -5,8 +5,9 @@ name: CI required vars (staging gates)
 # Each of those workflows fails closed on its own; this weekly job gives a
 # single launch-readiness inventory instead of N scattered red runs.
 #
-# Optional variables (with defaults) are not listed: CANARY_MAX_ERRORS,
-# NEON_DATABASE_NAME, TF_VAR_cloudflare_zone_plan.
+# Optional variables are not listed: CANARY_MAX_ERRORS, NEON_DATABASE_NAME,
+# TF_VAR_cloudflare_zone_plan (defaults) and TURBO_TEAM (Turborepo remote
+# cache for ci.yml / build-check.yml; builds run uncached without it).
 # Secrets are environment-scoped and asserted by the workflows that use them.
 
 on:
@@ -40,14 +41,13 @@ jobs:
           NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
           CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
           TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
-          TURBO_TEAM: ${{ vars.TURBO_TEAM }}
           STAGING_SMOKE_STUDIO_SLUG: ${{ vars.STAGING_SMOKE_STUDIO_SLUG }}
         run: |
           set -euo pipefail
           # name|consumer
           required=(
-            "STAGING_API_URL|staging-gate.yml, deploy-production.yml, canary.yml"
-            "PRODUCTION_API_URL|deploy-production.yml, canary.yml"
+            "STAGING_API_URL|staging-gate.yml, deploy-production.yml, canary.yml, deploy-frontend.yml"
+            "PRODUCTION_API_URL|deploy-production.yml, canary.yml, deploy-frontend.yml, rollback.yml"
             "STAGING_WEB_URL|deploy-frontend.yml"
             "PRODUCTION_WEB_URL|deploy-frontend.yml"
             "PRODUCTION_STUDIO_URL|deploy-frontend.yml"
@@ -55,12 +55,11 @@ jobs:
             "ZAP_TARGET_URL|zap-baseline.yml"
             "ZAP_ACTIVE_TARGET_URL|zap-active.yml"
             "SYNTHETIC_TARGET_URL|synthetics.yml"
-            "SENTRY_ORG|canary.yml, deploy-production.yml"
-            "SENTRY_PROJECT|canary.yml, deploy-production.yml"
+            "SENTRY_ORG|canary.yml, deploy-production.yml, deploy-frontend.yml"
+            "SENTRY_PROJECT|canary.yml, deploy-production.yml, deploy-frontend.yml"
             "NEON_PROJECT_ID|preview.yml"
             "CLOUDFLARE_WORKERS_SUBDOMAIN|preview.yml"
             "TF_CLOUD_ORGANIZATION|terraform.yml"
-            "TURBO_TEAM|ci.yml (remote cache)"
             "STAGING_SMOKE_STUDIO_SLUG|staging-gate.yml (E2E booking journey)"
           )
           missing=0

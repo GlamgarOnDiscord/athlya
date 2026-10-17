@@ -4,19 +4,22 @@
 #
 # Prerequisites:
 #   * `psql` on PATH (any version ≥ 14 works; CI pins Postgres 17).
-#   * `$DATABASE_URL` pointing at a database the caller can create
-#     extensions on (the pgtap extension is installed by bootstrap).
-#     Neon ephemeral branches and the `pgtap/pgtap` Docker image both
-#     work out of the box.
+#   * `$DATABASE_URL` pointing at a throwaway database, connected as a
+#     superuser or as a role with both CREATEROLE and BYPASSRLS: the
+#     migrations create the `athlya_*` roles (one of them BYPASSRLS) and
+#     transfer function ownership to `athlya_owner`. The script checks
+#     this before applying anything. The `pgtap/pgtap` Docker image
+#     (`postgres` superuser) works out of the box; on Neon use the
+#     branch owner role.
 #   * `node` on PATH for the coverage linter.
 #
 # What this script does:
 #   1. Runs `scripts/lint-rls-coverage.mjs` to confirm every policy in
 #      `migrations/0001_rls.sql` is referenced by at least one test.
 #      A failure here short-circuits before any SQL runs.
-#   2. Applies the schema migrations in order (`0000_init.sql`,
-#      `0001_rls.sql`). `ON_ERROR_STOP=1` makes psql exit non-zero on
-#      the first error.
+#   2. Applies every forward migration (`migrations/*.sql` minus the
+#      `*.down.sql` rollbacks) in filename order, like `pgtap.yml`.
+#      `ON_ERROR_STOP=1` makes psql exit non-zero on the first error.
 #   3. Runs `tests/rls/run-all.sql`, which sources the bootstrap and
 #      every per-table test file. Each file wraps its assertions in a
 #      `BEGIN; ... ROLLBACK;` pair so the suite is idempotent.
@@ -44,12 +47,21 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
     exit 2
 fi
 
+role_ok="$(psql "$DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c \
+    "SELECT rolsuper OR (rolcreaterole AND rolbypassrls) FROM pg_roles WHERE rolname = current_user")"
+if [[ "$role_ok" != "t" ]]; then
+    echo "test-rls.sh: the DATABASE_URL role must be a superuser or have CREATEROLE and BYPASSRLS" \
+         "(the migrations create the athlya_* roles). Connect as such a role on a throwaway database." >&2
+    exit 2
+fi
+
 echo "==> [1/3] lint: every policy must be referenced by a test"
 node "$PKG_ROOT/scripts/lint-rls-coverage.mjs"
 
-echo "==> [2/3] apply migrations (0000_init.sql, 0001_rls.sql)"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PKG_ROOT/migrations/0000_init.sql"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PKG_ROOT/migrations/0001_rls.sql"
+echo "==> [2/3] apply forward migrations in filename order"
+for f in $(ls "$PKG_ROOT"/migrations/*.sql | grep -v '\.down\.sql$' | sort); do
+    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+done
 
 echo "==> [3/3] run pgTAP RLS suite (tests/rls/run-all.sql)"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PKG_ROOT/tests/rls/run-all.sql"

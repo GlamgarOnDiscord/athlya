@@ -9,7 +9,7 @@
  * -------------------
  * Set K6_AUTH_TOKENS to a comma-separated list of JWTs (one per
  * simulated user). Each VU selects a token by index
- * (`tokens[(__VU - 1) % tokens.length]`) so traffic spreads across
+ * (`TOKENS[(__VU - 1) % TOKENS.length]`) so traffic spreads across
  * all provided identities. Provide ≥ maxVUs tokens for full isolation.
  * K6_AUTH_TOKEN (singular, legacy) is accepted as a single-element
  * list and produces a warning.
@@ -116,6 +116,9 @@ const CLASS_IDS = (__ENV.K6_CLASS_IDS ?? '').split(',').filter(Boolean);
 
 // Multi-user token selection. K6_AUTH_TOKENS (plural) is the canonical
 // form. K6_AUTH_TOKEN (singular) is accepted for backward compatibility.
+// Tokens are read from __ENV in every VU's init context and are never
+// returned from setup(): k6 serializes setup data into the end-of-test
+// summary (`setup_data`), which is uploaded as a CI artifact.
 const RAW_TOKENS = __ENV.K6_AUTH_TOKENS ?? __ENV.K6_AUTH_TOKEN ?? '';
 const TOKENS = RAW_TOKENS.split(',').filter(Boolean);
 
@@ -132,15 +135,14 @@ export function setup() {
         'Provide one token per VU for realistic multi-user contention.',
     );
   }
-  return { tokens: TOKENS };
 }
 
-export default function (data) {
+export default function () {
   // Assign each VU a stable token so repeated iterations of the same
   // VU always represent the same simulated user. This prevents the VU
   // from booking the same class twice (which would return 409) unless
   // it was already waitlisted on a previous iteration.
-  const token = data.tokens[(__VU - 1) % data.tokens.length];
+  const token = TOKENS[(__VU - 1) % TOKENS.length];
 
   // Spread bookings across the class pool to avoid hammering a single
   // Postgres row and a single Redis counter.
@@ -185,9 +187,12 @@ export default function (data) {
 }
 
 export function handleSummary(data) {
+  // Defense in depth: never persist setup data in the uploaded summary.
+  const publicData = { ...data };
+  delete publicData.setup_data;
   return {
-    stdout: textSummary(data),
-    'k6-book-class-summary.json': JSON.stringify(data, null, 2),
+    stdout: textSummary(publicData),
+    'k6-book-class-summary.json': JSON.stringify(publicData, null, 2),
   };
 }
 

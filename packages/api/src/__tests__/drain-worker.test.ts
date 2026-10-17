@@ -164,7 +164,7 @@ describe('drainOutbox — happy path', () => {
       logger: d.logger,
     });
 
-    expect(result).toEqual({ processed: 3, succeeded: 3, failed: 0 });
+    expect(result).toEqual({ processed: 3, succeeded: 3, failed: 0, released: 0 });
     // Default batch size propagates to the store.
     expect(d.claimBatch).toHaveBeenCalledTimes(1);
     expect(d.claimBatch).toHaveBeenCalledWith(DEFAULT_BATCH_SIZE);
@@ -229,7 +229,7 @@ describe('drainOutbox — empty batch', () => {
       logger: d.logger,
     });
 
-    expect(result).toEqual({ processed: 0, succeeded: 0, failed: 0 });
+    expect(result).toEqual({ processed: 0, succeeded: 0, failed: 0, released: 0 });
     expect(d.send).not.toHaveBeenCalled();
     expect(d.markPublished).not.toHaveBeenCalled();
     // Empty-batch path still logs a single info line so operators
@@ -271,7 +271,7 @@ describe('drainOutbox — queue send failure for one row', () => {
       logger: d.logger,
     });
 
-    expect(result).toEqual({ processed: 3, succeeded: 2, failed: 1 });
+    expect(result).toEqual({ processed: 3, succeeded: 2, failed: 1, released: 0 });
 
     // The failing row was attempted exactly once — no internal
     // retry loop (the drain leaves retries to the next cycle).
@@ -326,7 +326,7 @@ describe('drainOutbox — markPublished failure', () => {
     });
 
     // All three rows were sent; two were stamped, one was not.
-    expect(result).toEqual({ processed: 3, succeeded: 2, failed: 1 });
+    expect(result).toEqual({ processed: 3, succeeded: 2, failed: 1, released: 0 });
     expect(d.send).toHaveBeenCalledTimes(3);
     expect(d.markPublished).toHaveBeenCalledTimes(3);
     // Crucially, row-3 (after the failing row-2) was still
@@ -382,5 +382,54 @@ describe('drainOutbox — defensive guards', () => {
     // must not attempt queue traffic when it has no rows to send.
     expect(d.send).not.toHaveBeenCalled();
     expect(d.markPublished).not.toHaveBeenCalled();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Queue send deadline (issue #497)                                   */
+/* ------------------------------------------------------------------ */
+
+describe('drainOutbox — queue send deadline', () => {
+  it('fails a row whose queue send exceeds the deadline and leaves it unpublished', async () => {
+    const d = makeDoubles([row()]);
+    d.send.mockImplementation(() => new Promise<void>(() => {}));
+
+    const result = await drainOutbox({
+      store: d.store,
+      queue: d.queue,
+      logger: d.logger,
+      sendTimeoutMs: 10,
+    });
+
+    expect(result).toEqual({ processed: 1, succeeded: 0, failed: 1, released: 0 });
+    expect(d.markPublished).not.toHaveBeenCalled();
+    expect(d.loggerWarn).toHaveBeenCalledWith(
+      'outbox drain: queue send failed; leaving row for next drain',
+      expect.objectContaining({
+        error: expect.objectContaining({
+          message: expect.stringContaining('deadline') as unknown,
+        }) as unknown,
+      }),
+    );
+  });
+
+  it('keeps draining the rest of the batch after a timed-out send', async () => {
+    const d = makeDoubles([
+      row({ id: '00000000-0000-4000-8000-000000000001' }),
+      row({ id: '00000000-0000-4000-8000-000000000002' }),
+    ]);
+    d.send
+      .mockImplementationOnce(() => new Promise<void>(() => {}))
+      .mockResolvedValueOnce(undefined);
+
+    const result = await drainOutbox({
+      store: d.store,
+      queue: d.queue,
+      logger: d.logger,
+      sendTimeoutMs: 10,
+    });
+
+    expect(result).toEqual({ processed: 2, succeeded: 1, failed: 1, released: 0 });
+    expect(d.markPublished).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000002');
   });
 });

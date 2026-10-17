@@ -146,6 +146,8 @@ export function lazyMembersDeps(resolve: () => MembersDeps): MembersDeps {
     uploadAvatar: forward('uploadAvatar'),
     updateConsents: forward('updateConsents'),
     enqueueExport: forward('enqueueExport'),
+    getExportJob: forward('getExportJob'),
+    openExportDownload: forward('openExportDownload'),
     listMembersByStudio: forward('listMembersByStudio'),
   };
 }
@@ -311,6 +313,8 @@ export function defaultMembersDeps(env: AthlyaBindings, cf?: RequestCf): Members
         uploadAvatar: () => notImplemented('members.uploadAvatar'),
         updateConsents: () => notImplemented('members.updateConsents'),
         enqueueExport: () => notImplemented('members.enqueueExport'),
+        getExportJob: () => notImplemented('members.getExportJob'),
+        openExportDownload: () => notImplemented('members.openExportDownload'),
         listMembersByStudio: () => notImplemented('members.listMembersByStudio'),
       };
 }

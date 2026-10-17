@@ -387,7 +387,7 @@ describe('outbox → drain → consumer (5 critical events)', () => {
     });
 
     // Every row was claimed, sent and stamped.
-    expect(result).toEqual({ processed: 5, succeeded: 5, failed: 0 });
+    expect(result).toEqual({ processed: 5, succeeded: 5, failed: 0, released: 0 });
     expect(outbox.pendingCount()).toBe(0);
     expect(queue.delivered).toHaveLength(5);
 
@@ -442,7 +442,7 @@ describe('outbox → drain → consumer (5 critical events)', () => {
       logger: SILENT_LOGGER,
     });
 
-    expect(second).toEqual({ processed: 0, succeeded: 0, failed: 0 });
+    expect(second).toEqual({ processed: 0, succeeded: 0, failed: 0, released: 0 });
     expect(queue.delivered).toHaveLength(beforeRedrain);
   });
 });
@@ -467,7 +467,7 @@ describe('outbox → drain → consumer — failure modes', () => {
       queue,
       logger: SILENT_LOGGER,
     });
-    expect(first).toEqual({ processed: 5, succeeded: 4, failed: 1 });
+    expect(first).toEqual({ processed: 5, succeeded: 4, failed: 1, released: 0 });
     expect(outbox.pendingCount()).toBe(1);
     // The failing row was NOT marked published — the queue does
     // not have it.
@@ -479,7 +479,7 @@ describe('outbox → drain → consumer — failure modes', () => {
       queue,
       logger: SILENT_LOGGER,
     });
-    expect(second).toEqual({ processed: 1, succeeded: 1, failed: 0 });
+    expect(second).toEqual({ processed: 1, succeeded: 1, failed: 0, released: 0 });
     expect(outbox.pendingCount()).toBe(0);
 
     // Total publishes: exactly 5 (one per event). No duplicate.
@@ -504,7 +504,7 @@ describe('outbox → drain → consumer — failure modes', () => {
       logger: SILENT_LOGGER,
     });
     // 5 sends happened; only 4 stamps succeeded.
-    expect(first).toEqual({ processed: 5, succeeded: 4, failed: 1 });
+    expect(first).toEqual({ processed: 5, succeeded: 4, failed: 1, released: 0 });
     expect(queue.delivered).toHaveLength(5);
     expect(outbox.pendingCount()).toBe(1);
 
@@ -516,7 +516,7 @@ describe('outbox → drain → consumer — failure modes', () => {
       queue,
       logger: SILENT_LOGGER,
     });
-    expect(second).toEqual({ processed: 1, succeeded: 1, failed: 0 });
+    expect(second).toEqual({ processed: 1, succeeded: 1, failed: 0, released: 0 });
     expect(queue.delivered).toHaveLength(6);
 
     const duplicateId = CRITICAL_EVENTS[3]!.eventId;

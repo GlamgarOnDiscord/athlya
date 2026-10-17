@@ -10,7 +10,9 @@
 # custom-firewall phase, which is why the guard lives in its own ruleset.
 #
 # Plan-dependent settings (see var.cloudflare_zone_plan):
-#   - Free: rate-limit period and mitigation timeout are capped at 10 s.
+#   - Free: rate-limit period is capped at 10 s.
+#   - Free/Pro/Business: a challenge action requires mitigation_timeout = 0
+#     (request throttling); only Enterprise can set a challenge duration.
 #   - Pro: period up to 60 s, no custom counting expression.
 #   - Business/Enterprise: counting expression on response codes, so only
 #     failed logins count towards the limit.
@@ -28,6 +30,9 @@ locals {
   # Without a counting expression every attempt counts, so allow a little
   # more headroom for typos and shared IPs (gyms, offices).
   waf_rate_limit_requests_threshold = local.waf_rate_limit_counts_failures ? 5 : 10
+  # With a challenge action, Free/Pro/Business must use request throttling
+  # (mitigation_timeout = 0); only Enterprise may set a duration.
+  waf_rate_limit_mitigation_timeout = var.cloudflare_zone_plan == "enterprise" ? local.waf_rate_limit_period : 0
 }
 
 # ---- Bot Fight Mode ------------------------------------------------
@@ -122,7 +127,7 @@ resource "cloudflare_ruleset" "login_ratelimit" {
       characteristics     = ["cf.colo.id", "ip.src"]
       period              = local.waf_rate_limit_period
       requests_per_period = local.waf_rate_limit_requests_threshold
-      mitigation_timeout  = local.waf_rate_limit_period
+      mitigation_timeout  = local.waf_rate_limit_mitigation_timeout
       # Business+ only: count failed logins, not every attempt.
       counting_expression = local.waf_rate_limit_counts_failures ? "(http.request.uri.path eq \"/v1/auth/login\" and http.response.code ge 400)" : null
     }
