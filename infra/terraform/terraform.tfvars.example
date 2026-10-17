@@ -5,3 +5,5 @@ cloudflare_api_token  = "TODO: wrangler secret from 1Password"
 cloudflare_account_id = "TODO: from Cloudflare dashboard → Workers → Account ID"
 cloudflare_zone_id    = "TODO: from Cloudflare dashboard → athlya.app zone"
 environment           = "staging"  # or "production"
+cloudflare_zone_plan  = "pro"      # free | pro | business | enterprise
+waf_bot_fight_mode    = false

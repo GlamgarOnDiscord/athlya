@@ -77,11 +77,12 @@ Une fois le baseline initial validé (rapport HTML reviewable +
 findings adressés), aucune action additionnelle n'est requise.
 Le workflow tourne automatiquement sur **chaque PR**.
 
-Si on veut désactiver temporairement (ex: maintenance staging) :
-
-- Vider la variable `ZAP_TARGET_URL` (ne pas la supprimer — le
-  guard step skip cleanly avec un message)
-- Le workflow continue à tourner mais skip immédiatement.
+**Fail-closed (issue #340)** : une variable `ZAP_TARGET_URL` vide fait
+**échouer** le job sur toute exécution de confiance (PR du même dépôt,
+`workflow_dispatch`). Seules les PR issues de forks sautent le scan
+proprement (pas d'accès aux variables ni à l'environnement de scan).
+Pour une maintenance du staging, utiliser `workflow_dispatch` avec un
+`target_url` alternatif plutôt que vider la variable.
 
 ## Rule customization
 
@@ -97,21 +98,25 @@ Format : `<plugin-id>\t<IGNORE|WARN|FAIL>\t<comment>`. Les plugin
 IDs ZAP sont documentés sur
 <https://www.zaproxy.org/docs/alerts/>.
 
-## Schedule scan complet (slice future)
+## Scan actif hebdomadaire
 
-Le baseline scan est passif (spider + headers check). Pour des
-scans actifs (XSS / SQL injection submission), créer un workflow
-séparé qui tourne sur un staging dédié (pas le staging shared)
-toutes les semaines :
+`.github/workflows/zap-active.yml` lance chaque lundi 02:00 UTC un scan
+**actif** (`zaproxy/action-full-scan`, épinglé par SHA) contre
+`ZAP_ACTIVE_TARGET_URL`. Cette cible doit être un environnement **dédié,
+peuplé de données synthétiques** : le scan envoie de vrais payloads
+d'attaque. Une variable vide fait **échouer** le run planifié.
 
-```yaml
-# .github/workflows/zap-full-scan.yml
-on:
-  schedule:
-    - cron: '0 4 * * 1' # Monday 04:00 UTC
-```
+## Couverture — ce que les scans prouvent (et ne prouvent pas)
 
-Out of scope Sprint 14.
+| Couvert                                                                   | Non couvert                                                              |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Baseline : en-têtes de sécurité, cookies, fuites d'info dans les réponses | Routes authentifiées (aucun login scripté : seules les pages publiques)  |
+| Baseline : pages atteignables par le spider depuis la cible               | Endpoints JSON non liés depuis une page (`/v1/*` hors spider)            |
+| Actif : injections (SQLi, XSS, path traversal) sur les URLs découvertes   | Logique métier (IDOR, isolation multi-tenant) — couverte par pgTAP/tests |
+| Actif : findings HIGH/MEDIUM ouverts automatiquement en issues GitHub     | Webhooks signés (Stripe) et flux asynchrones (Queues, cron)              |
+
+La preuve d'exécution est l'artefact `zap-baseline-report` /
+`zap-active-report-<run_id>` (rapports HTML + JSON) attaché au run.
 
 ## Alertes
 
@@ -121,16 +126,18 @@ détecté en main.
 
 ## Provisioning checklist
 
-| Item                                   | Status        | Owner        |
-| -------------------------------------- | ------------- | ------------ |
-| Staging URL stable                     | ⏳            | DevOps       |
-| Variable `ZAP_TARGET_URL` provisionnée | ⏳            | DevOps       |
-| Premier run validé manually            | ⏳            | DevOps + Eng |
-| Slack alert configuré                  | ⏳            | DevOps       |
-| Rules `.zap/rules.tsv` revues          | ✅ scaffolded | Eng          |
+| Item                                        | Status        | Owner        |
+| ------------------------------------------- | ------------- | ------------ |
+| Staging URL stable                          | ⏳            | DevOps       |
+| Variable `ZAP_TARGET_URL` provisionnée      | ⏳            | DevOps       |
+| Env de scan dédié + `ZAP_ACTIVE_TARGET_URL` | ⏳            | DevOps       |
+| Premier run validé manually                 | ⏳            | DevOps + Eng |
+| Slack alert configuré                       | ⏳            | DevOps       |
+| Rules `.zap/rules.tsv` revues               | ✅ scaffolded | Eng          |
 
 ## Références
 
-- `.github/workflows/zap-baseline.yml` — workflow scaffolded
+- `.github/workflows/zap-baseline.yml` — scan passif sur chaque PR
+- `.github/workflows/zap-active.yml` — scan actif hebdomadaire
 - `.zap/rules.tsv` — suppressions
 - ZAP docs: <https://www.zaproxy.org/docs/desktop/start/features/scanpolicy/>
