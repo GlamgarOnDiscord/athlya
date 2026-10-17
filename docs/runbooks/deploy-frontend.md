@@ -25,15 +25,15 @@ Issue #422. Both Next.js 16 apps ship as **Cloudflare Workers built by OpenNext*
 
 ## Prerequisites (per GitHub environment `staging` / `production`)
 
-| Kind   | Name                    | Notes                                                             |
-| ------ | ----------------------- | ----------------------------------------------------------------- |
-| secret | `CLOUDFLARE_API_TOKEN`  | Workers Scripts:Edit                                              |
-| secret | `CLOUDFLARE_ACCOUNT_ID` |                                                                   |
-| var    | `WEB_URL`               | e.g. `https://staging.athlya.app`                                 |
-| var    | `STUDIO_URL`            | e.g. `https://staging.studio.athlya.app`                          |
-| var    | `API_URL`               | e.g. `https://staging.api.athlya.app`                             |
-| var    | `TURNSTILE_SITE_KEY`    | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`; required on staging (see below) |
-| var    | `CSP_REPORT_URI`        | optional (`NEXT_PUBLIC_CSP_REPORT_URI`)                           |
+| Kind   | Name                    | Notes                                                                                                                    |
+| ------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| secret | `CLOUDFLARE_API_TOKEN`  | Workers Scripts:Edit                                                                                                     |
+| secret | `CLOUDFLARE_ACCOUNT_ID` |                                                                                                                          |
+| var    | `WEB_URL`               | e.g. `https://staging.athlya.app`                                                                                        |
+| var    | `STUDIO_URL`            | e.g. `https://staging.studio.athlya.app`                                                                                 |
+| var    | `API_URL`               | e.g. `https://staging.api.athlya.app`                                                                                    |
+| var    | `TURNSTILE_SITE_KEY`    | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`; required in both environments (real key in production, test key on staging, see below) |
+| var    | `CSP_REPORT_URI`        | optional (`NEXT_PUBLIC_CSP_REPORT_URI`)                                                                                  |
 
 Browser release smoke, **staging environment only** (production runs the
 anonymous pass, which needs no credential):
@@ -46,10 +46,10 @@ anonymous pass, which needs no credential):
 | secret | `STAGING_SMOKE_ADMIN_PASSWORD` | **new**                                                        |
 | var    | `TURNSTILE_SITE_KEY`           | Cloudflare test site key `1x00000000000000000000AA` on staging |
 
-The workflow fails before building when a required value is missing; on a
-staging deploy that includes the smoke credentials of the selected apps and
-`TURNSTILE_SITE_KEY` (without it the forms send no Turnstile token and the API
-refuses every login).
+The workflow fails before building when a required value is missing, including
+`TURNSTILE_SITE_KEY` in either environment (without it the forms send no
+Turnstile token and the API refuses every login) and, on a staging deploy, the
+smoke credentials of the selected apps.
 `ci-required-vars.yml` (job _Verify staging release-smoke configuration_)
 inventories the staging values weekly.
 

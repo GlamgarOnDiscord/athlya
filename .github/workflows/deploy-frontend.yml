@@ -13,8 +13,9 @@ name: Deploy Frontend
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
 # Required vars (per environment):
 #   WEB_URL, STUDIO_URL, API_URL          — public origins (smoke + NEXT_PUBLIC_API_URL)
-#   TURNSTILE_SITE_KEY                    — NEXT_PUBLIC_TURNSTILE_SITE_KEY (required on
-#                                           staging deploys: the release smoke logs in)
+#   TURNSTILE_SITE_KEY                    — NEXT_PUBLIC_TURNSTILE_SITE_KEY (required: the
+#                                           API rejects logins without a token; staging
+#                                           uses Cloudflare's test key)
 #   CSP_REPORT_URI                        — NEXT_PUBLIC_CSP_REPORT_URI (optional)
 # Required secrets (environment staging only) — browser release smoke:
 #   STAGING_SMOKE_EMAIL, STAGING_SMOKE_PASSWORD           — member smoke account
@@ -127,11 +128,14 @@ jobs:
           [ -n "${API_URL}" ] || missing+=(vars.API_URL)
           if [ "${DEPLOY_WEB}" = 'true' ] && [ -z "${WEB_URL}" ]; then missing+=(vars.WEB_URL); fi
           if [ "${DEPLOY_STUDIO}" = 'true' ] && [ -z "${STUDIO_URL}" ]; then missing+=(vars.STUDIO_URL); fi
+          # The site key is inlined at build time. Without it the forms send
+          # no Turnstile token and the API (Turnstile enforced outside dev)
+          # refuses every login, register and reset request.
+          if [ "${PHASE}" = 'deploy' ] && [ -z "${TURNSTILE_SITE_KEY}" ]; then
+            missing+=(vars.TURNSTILE_SITE_KEY)
+          fi
           # The full browser release smoke runs on staging deploys only.
           if [ "${PHASE}" = 'deploy' ] && [ "${RELEASE_SMOKE_SCOPE}" = 'full' ]; then
-            # Without a site key the forms send no Turnstile token and the
-            # API refuses every login the smoke attempts.
-            [ -n "${TURNSTILE_SITE_KEY}" ] || missing+=(vars.TURNSTILE_SITE_KEY)
             if [ "${DEPLOY_WEB}" = 'true' ]; then
               [ -n "${SMOKE_EMAIL}" ] || missing+=(secrets.STAGING_SMOKE_EMAIL)
               [ -n "${SMOKE_PASSWORD}" ] || missing+=(secrets.STAGING_SMOKE_PASSWORD)
