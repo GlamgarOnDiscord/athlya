@@ -46,7 +46,10 @@ export interface AthlyaHyperdriveBinding {
  * (via `createLogger({ env })`), so operators can filter Loki / Tail
  * Workers on the exact value.
  *
- * `'dev'`         — local `wrangler dev` and CI preview runs.
+ * `'dev'`         — local `wrangler dev`.
+ * `'preview'`     — per-PR Worker `athlya-api-pr-<N>.<sub>.workers.dev`
+ *                   on its own Neon branch (issue #419); strict like
+ *                   staging, no dev bypasses.
  * `'staging'`     — `staging.api.athlya.app`, full infra but isolated
  *                   data stores. Exercised by the E2E suite.
  * `'production'`  — `api.athlya.app`. Serves real tenants.
@@ -55,7 +58,7 @@ export interface AthlyaHyperdriveBinding {
  * on the field fails the typecheck when a new environment lands —
  * enums allow an unknown value to slip through and defeat that guard.
  */
-export type AthlyaEnvironment = 'dev' | 'staging' | 'production';
+export type AthlyaEnvironment = 'dev' | 'preview' | 'staging' | 'production';
 
 /* ------------------------------------------------------------------ */
 /*  Bindings (runtime env)                                             */
