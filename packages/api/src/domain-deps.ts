@@ -214,14 +214,38 @@ const notImplemented = (what: string): never => {
 const nonEmpty = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 
 /**
+ * Deployed environments whose Workers must refuse to start without
+ * their secrets. Preview Workers are provisioned by
+ * `.github/workflows/preview.yml` (issue #611).
+ */
+const isDeployedEnvironment = (env: AthlyaBindings): boolean =>
+  env.ENVIRONMENT === 'production' ||
+  env.ENVIRONMENT === 'staging' ||
+  env.ENVIRONMENT === 'preview';
+
+/** Signing key bindings `buildAuthDeps` reads besides `JWT_KID` (`getJwtState`). */
+type JwtKeyBinding = 'JWT_PRIVATE_KEY_PEM' | 'JWT_PUBLIC_KEY_PEM' | 'JWKS_JSON';
+
+const SIGNING_KEY_BINDINGS: readonly JwtKeyBinding[] = [
+  'JWT_PRIVATE_KEY_PEM',
+  'JWT_PUBLIC_KEY_PEM',
+];
+
+/**
+ * Preview also requires `JWKS_JSON`: the workflow writes every preview
+ * secret on each deploy, so a missing one is a provisioning bug.
+ */
+const PREVIEW_JWT_KEY_BINDINGS: readonly JwtKeyBinding[] = [...SIGNING_KEY_BINDINGS, 'JWKS_JSON'];
+
+/**
  * Sprint-10 SP10.1 (Vague 38, critique C1.1) — fail-fast on missing
- * secrets in production / staging. A service MUST refuse to start when
- * its required configuration is absent rather than degrading silently
- * to `not yet implemented` runtime errors. Dev intentionally skips the
- * check so local boot without credentials still works.
+ * secrets in production / staging / preview. A service MUST refuse to
+ * start when its required configuration is absent rather than degrading
+ * silently to `not yet implemented` runtime errors. Dev intentionally
+ * skips the check so local boot without credentials still works.
  */
 export function assertRequiredSecrets(env: AthlyaBindings): void {
-  if (env.ENVIRONMENT !== 'production' && env.ENVIRONMENT !== 'staging') {
+  if (!isDeployedEnvironment(env)) {
     return;
   }
   const missing: string[] = [];
@@ -243,16 +267,12 @@ export function assertRequiredSecrets(env: AthlyaBindings): void {
  * not depend on the signing material.
  */
 function assertSigningKeySecrets(env: AthlyaBindings): void {
-  if (env.ENVIRONMENT !== 'production' && env.ENVIRONMENT !== 'staging') {
+  if (!isDeployedEnvironment(env)) {
     return;
   }
-  const keys = env as AthlyaBindings & {
-    JWT_PRIVATE_KEY_PEM?: string;
-    JWT_PUBLIC_KEY_PEM?: string;
-  };
-  const missing: string[] = [];
-  if (!nonEmpty(keys.JWT_PRIVATE_KEY_PEM)) missing.push('JWT_PRIVATE_KEY_PEM');
-  if (!nonEmpty(keys.JWT_PUBLIC_KEY_PEM)) missing.push('JWT_PUBLIC_KEY_PEM');
+  const keys = env as AthlyaBindings & Partial<Record<JwtKeyBinding, string>>;
+  const required = env.ENVIRONMENT === 'preview' ? PREVIEW_JWT_KEY_BINDINGS : SIGNING_KEY_BINDINGS;
+  const missing = required.filter((name) => !nonEmpty(keys[name]));
   if (missing.length > 0) {
     throw new Error(
       `buildDefaultDeps: missing required secret(s) in ${env.ENVIRONMENT}: ${missing.join(', ')}. The Worker will not start until they are provisioned via 'wrangler secret put'.`,

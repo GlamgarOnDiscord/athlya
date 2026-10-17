@@ -295,6 +295,13 @@ export interface ArchiveBuilder {
 export interface BlobStore {
   put(key: string, bytes: Uint8Array): Promise<void>;
   signedUrl(key: string, expiresSec: number): Promise<string>;
+  /** Delete one archive. Deleting a missing key is a no-op. */
+  delete(key: string): Promise<void>;
+  /**
+   * Delete every archive stored under {@link exportJobPrefix}(`jobId`)
+   * except `keepKey`, the archive the completed row publishes.
+   */
+  deleteJobArchivesExcept(jobId: string, keepKey: string): Promise<void>;
 }
 
 /**
@@ -533,7 +540,73 @@ export async function* buildArchiveEntries(data: MemberExportData): AsyncGenerat
  * stored on the completed row.
  */
 export function exportObjectKey(jobId: string, claimToken: string): string {
-  return `${EXPORT_R2_PREFIX}/${jobId}/${claimToken}.zip`;
+  return `${exportJobPrefix(jobId)}${claimToken}.zip`;
+}
+
+/** R2 prefix holding every per-claim archive of `jobId`. */
+export function exportJobPrefix(jobId: string): string {
+  return `${EXPORT_R2_PREFIX}/${jobId}/`;
+}
+
+/**
+ * Whether the stored row publishes `downloadUrl`. `unknown` when the
+ * row cannot be read: callers then keep the archive.
+ */
+async function publicationOf(
+  deps: RunExportJobDeps,
+  jobId: string,
+  downloadUrl: string,
+): Promise<'published' | 'not_published' | 'unknown'> {
+  try {
+    const row = await deps.jobs.get(jobId);
+    return row?.status === 'completed' && row.downloadUrl === downloadUrl
+      ? 'published'
+      : 'not_published';
+  } catch (err) {
+    deps.logger?.warn('export job: could not re-read the job row', {
+      jobId,
+      error: toErrorReason(err),
+    });
+    return 'unknown';
+  }
+}
+
+/**
+ * Delete this run's upload unless the row publishes it. `downloadUrl`
+ * is `null` when `markCompleted` was never called, so nothing can
+ * publish the upload. An unreadable row keeps the archive; the R2
+ * lifecycle rule removes it if it is orphaned.
+ */
+async function deleteUnlessPublished(
+  deps: RunExportJobDeps,
+  jobId: string,
+  objectKey: string,
+  downloadUrl: string | null,
+): Promise<void> {
+  if (downloadUrl !== null && (await publicationOf(deps, jobId, downloadUrl)) !== 'not_published') {
+    return;
+  }
+  await cleanupArchives(deps, jobId, () => deps.blob.delete(objectKey));
+}
+
+/**
+ * Best-effort archive cleanup: a failure is logged and never changes
+ * the job outcome. The R2 lifecycle rule on `EXPORT_R2_PREFIX` is the
+ * backstop for anything left behind (docs/runbooks/rgpd-export.md).
+ */
+async function cleanupArchives(
+  deps: RunExportJobDeps,
+  jobId: string,
+  action: () => Promise<void>,
+): Promise<void> {
+  try {
+    await action();
+  } catch (err) {
+    deps.logger?.warn('export job: archive cleanup failed', {
+      jobId,
+      error: toErrorReason(err),
+    });
+  }
 }
 
 /**
@@ -688,16 +761,23 @@ export async function runExportJob(
 
   // Step 2: build archive + upload + publish completion. Errors from
   // the paginated list iterables surface here (inside archive.build).
+  // `unpublishedKey` names this run's upload until the completed row
+  // publishes it, so every exit that does not publish it deletes it.
+  // `pendingUrl` is set once `markCompleted` may have committed.
+  let unpublishedKey: string | null = null;
+  let pendingUrl: string | null = null;
   try {
     const { bytes, sizeBytes } = await deps.archive.build(buildArchiveEntries(data));
 
     const objectKey = exportObjectKey(jobId, claimToken);
+    unpublishedKey = objectKey;
     await deps.blob.put(objectKey, bytes);
     const downloadUrl = await deps.blob.signedUrl(objectKey, DOWNLOAD_URL_TTL_SECONDS);
 
     const completedAt = new Date(deps.clock.now());
     const expiresAt = new Date(completedAt.getTime() + DOWNLOAD_URL_TTL_SECONDS * 1000);
 
+    pendingUrl = downloadUrl;
     const completed = await deps.jobs.markCompleted(
       jobId,
       claimToken,
@@ -705,15 +785,33 @@ export async function runExportJob(
       downloadUrl,
       expiresAt,
     );
-    if (!completed) {
+    // `false` also covers a retried call whose first attempt committed:
+    // the row then already publishes this run's URL.
+    const publication = completed ? 'published' : await publicationOf(deps, jobId, downloadUrl);
+    if (publication === 'not_published') {
       // A newer delivery reclaimed the lease: it owns the job now and
       // publishes its own completion.
       deps.logger?.warn('export job: claim superseded before completion', {
         jobId,
         userId: job.userId,
       });
+      await cleanupArchives(deps, jobId, () => deps.blob.delete(objectKey));
       return { kind: 'in_progress', jobId };
     }
+    if (publication === 'unknown') {
+      deps.logger?.warn(
+        'export job: completion state unknown after markCompleted; keeping upload',
+        {
+          jobId,
+          userId: job.userId,
+        },
+      );
+      return { kind: 'in_progress', jobId };
+    }
+    unpublishedKey = null;
+
+    // Uploads of superseded claims are never served: drop them.
+    await cleanupArchives(deps, jobId, () => deps.blob.deleteJobArchivesExcept(jobId, objectKey));
 
     const event: MembersExportCompletedEvent = {
       id: deps.uuid(),
@@ -737,6 +835,9 @@ export async function runExportJob(
   } catch (err) {
     const reason = toErrorReason(err);
     await deps.jobs.markFailed(jobId, claimToken, reason);
+    if (unpublishedKey !== null) {
+      await deleteUnlessPublished(deps, jobId, unpublishedKey, pendingUrl);
+    }
     deps.logger?.error('export job: archive / upload failure', {
       jobId,
       userId: job.userId,

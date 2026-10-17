@@ -16,6 +16,12 @@
  *
  * Usage:
  *   node scripts/generate-jwt-keypair.mjs
+ *   node scripts/generate-jwt-keypair.mjs --out <dir> --kid preview-<date>
+ *
+ * `--out` writes the three files to another directory (default
+ * `scripts/dev-secrets/`), `--kid` overrides the generated `dev-…` key
+ * id. The `.pem` files hold real multi-line PEMs: use them, not the
+ * escaped `.dev.vars` lines, as CI secret values.
  *
  * Regenerating keys invalidates every existing access token. Do that
  * at most once per dev environment, or whenever a key is suspected
@@ -26,9 +32,18 @@ import { createPublicKey, generateKeyPairSync } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
-const OUT_DIR = resolve(SCRIPT_DIR, 'dev-secrets');
+
+const { values: args } = parseArgs({
+  options: {
+    out: { type: 'string' },
+    kid: { type: 'string' },
+  },
+});
+
+const OUT_DIR = resolve(args.out ?? resolve(SCRIPT_DIR, 'dev-secrets'));
 
 function main() {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', {
@@ -37,7 +52,7 @@ function main() {
     publicKeyEncoding: { format: 'pem', type: 'spki' },
   });
 
-  const kid = `dev-${Date.now().toString(36)}`;
+  const kid = args.kid ?? `dev-${Date.now().toString(36)}`;
 
   // Export the public key as a JWK so the Worker can serve it. We
   // use the stdlib `createPublicKey(pem).export({ format: 'jwk' })`
