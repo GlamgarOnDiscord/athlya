@@ -25,7 +25,7 @@ import type { SQL } from 'drizzle-orm';
 const SECRET = 'k'.repeat(48);
 const JOB_ID = '0193f000-0000-7000-8000-000000000498';
 const USER_ID = '11111111-1111-4111-8111-111111111111';
-const CLAIM_TOKEN = '0193f000-0000-7000-8000-00000000c1a1';
+const CURRENT_CLAIM = '0193f000-0000-7000-8000-00000000c1a1';
 const dialect = new PgDialect();
 
 function fakeDb(respond: (sql: string, params: unknown[]) => unknown[]) {
@@ -124,10 +124,10 @@ describe('buildBlobStore', () => {
 
 describe('createExportJobWorkerStore', () => {
   it('returns the claim token only when the claim was won', async () => {
-    const won = fakeDb(() => [{ claim_token: CLAIM_TOKEN }]);
+    const won = fakeDb(() => [{ claim_token: CURRENT_CLAIM }]);
     const lost = fakeDb(() => [{ claim_token: null }]);
     await expect(createExportJobWorkerStore(won.db).markRunning(JOB_ID, new Date())).resolves.toBe(
-      CLAIM_TOKEN,
+      CURRENT_CLAIM,
     );
     await expect(
       createExportJobWorkerStore(lost.db).markRunning(JOB_ID, new Date()),
@@ -142,7 +142,7 @@ describe('createExportJobWorkerStore', () => {
     await expect(
       createExportJobWorkerStore(current.db).markCompleted(
         JOB_ID,
-        CLAIM_TOKEN,
+        CURRENT_CLAIM,
         new Date(),
         'https://api.athlya.test/dl',
         expires,
@@ -151,19 +151,19 @@ describe('createExportJobWorkerStore', () => {
     await expect(
       createExportJobWorkerStore(stale.db).markCompleted(
         JOB_ID,
-        CLAIM_TOKEN,
+        CURRENT_CLAIM,
         new Date(),
         'https://api.athlya.test/dl',
         expires,
       ),
     ).resolves.toBe(false);
     expect(current.calls[0]?.sql).toContain('export_job_complete(');
-    expect(current.calls[0]?.params.slice(0, 2)).toEqual([JOB_ID, CLAIM_TOKEN]);
+    expect(current.calls[0]?.params.slice(0, 2)).toEqual([JOB_ID, CURRENT_CLAIM]);
 
     const failed = fakeDb(() => [{ export_job_fail: false }]);
-    await createExportJobWorkerStore(failed.db).markFailed(JOB_ID, CLAIM_TOKEN, 'boom');
+    await createExportJobWorkerStore(failed.db).markFailed(JOB_ID, CURRENT_CLAIM, 'boom');
     expect(failed.calls[0]?.sql).toContain('export_job_fail(');
-    expect(failed.calls[0]?.params).toEqual([JOB_ID, CLAIM_TOKEN, 'boom']);
+    expect(failed.calls[0]?.params).toEqual([JOB_ID, CURRENT_CLAIM, 'boom']);
   });
 
   it('maps export_job_get rows', async () => {

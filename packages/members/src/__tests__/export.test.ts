@@ -57,7 +57,7 @@ import type { Reservation, WorkoutSession } from '@athlya/shared/schemas/domain'
 const USER_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ab';
 const STUDIO_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ac';
 const JOB_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ad';
-const CLAIM_TOKEN = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ae';
+const CURRENT_CLAIM = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ae';
 const REQUEST_EVENT_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ae';
 const COMPLETE_EVENT_ID = '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8af';
 
@@ -425,7 +425,7 @@ describe('runExportJob claim', () => {
     const { archive } = buildArchiveDouble();
     const { events, publish } = buildEvents();
     store.get.mockResolvedValueOnce(STORED_JOB);
-    store.markRunning.mockResolvedValueOnce(CLAIM_TOKEN);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
     store.markCompleted.mockResolvedValueOnce(false);
     source.fetchProfile.mockResolvedValueOnce(PROFILE);
     source.fetchConsents.mockResolvedValueOnce([CONSENTS_ROW]);
@@ -447,7 +447,7 @@ describe('runExportJob claim', () => {
     });
 
     expect(result).toEqual({ kind: 'in_progress', jobId: JOB_ID });
-    expect(store.markCompleted.mock.calls[0]?.[1]).toBe(CLAIM_TOKEN);
+    expect(store.markCompleted.mock.calls[0]?.[1]).toBe(CURRENT_CLAIM);
     expect(store.markFailed).not.toHaveBeenCalled();
     expect(publish).not.toHaveBeenCalled();
   });
@@ -536,7 +536,7 @@ describe('runExportJob', () => {
     const { events, publish } = buildEvents();
 
     store.get.mockResolvedValueOnce(STORED_JOB);
-    store.markRunning.mockResolvedValueOnce(CLAIM_TOKEN);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
     store.markCompleted.mockResolvedValueOnce(true);
 
     source.fetchProfile.mockResolvedValueOnce(PROFILE);
@@ -610,7 +610,7 @@ describe('runExportJob', () => {
     expect(store.markCompleted).toHaveBeenCalledTimes(1);
     const completeArgs = store.markCompleted.mock.calls[0]!;
     expect(completeArgs[0]).toBe(JOB_ID);
-    expect(completeArgs[1]).toBe(CLAIM_TOKEN);
+    expect(completeArgs[1]).toBe(CURRENT_CLAIM);
     expect(completeArgs[2].toISOString()).toBe(new Date(FROZEN_COMPLETE_TIME).toISOString());
     expect(completeArgs[3]).toBe(signedUrlStr);
     expect(completeArgs[4].toISOString()).toBe(
@@ -645,7 +645,7 @@ describe('runExportJob', () => {
     const { events, publish } = buildEvents();
 
     store.get.mockResolvedValueOnce(STORED_JOB);
-    store.markRunning.mockResolvedValueOnce(CLAIM_TOKEN);
+    store.markRunning.mockResolvedValueOnce(CURRENT_CLAIM);
     store.markFailed.mockResolvedValueOnce(undefined);
 
     source.fetchProfile.mockResolvedValueOnce(PROFILE);
@@ -672,7 +672,7 @@ describe('runExportJob', () => {
     expect(store.markFailed).toHaveBeenCalledTimes(1);
     const [failedJobId, failedToken, reason] = store.markFailed.mock.calls[0]!;
     expect(failedJobId).toBe(JOB_ID);
-    expect(failedToken).toBe(CLAIM_TOKEN);
+    expect(failedToken).toBe(CURRENT_CLAIM);
     expect(reason).toContain('consents repo offline');
 
     // Critical invariant: completion was NOT published, and the
