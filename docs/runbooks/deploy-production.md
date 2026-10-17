@@ -53,10 +53,14 @@ un run prouvé ≥ 10 min déclenche le job **Staging gate (full soak)** ; sur
 une PR ou un run manuel plus court, ce job est `skipped`, et un run `skipped`
 ne compte ni pour ni contre (la vérification ne retient que le dernier run
 terminé non sauté). Un commit qui n'a passé que le soak de PR ne peut donc
-pas partir en production : relancer le workflow sur ce commit
-(`gh workflow run staging-gate.yml --ref master`) si le push n'a pas produit
-le check (run en attente remplacé par un plus récent dans le groupe
-`staging-environment`, par exemple).
+pas partir en production. Si le push n'a pas produit le check (run en
+attente remplacé par un plus récent dans le groupe `staging-environment`, par
+exemple), relancer ce run-là depuis l'onglet Actions (`gh run rerun <run-id>`) :
+il rejoue le même SHA. `gh workflow run staging-gate.yml --ref master` ne
+convient que si ce commit est encore la tête de `master`, car `--ref` prend
+une branche ou un tag, pas un SHA : sur un commit plus ancien, le check
+atterrirait sur la nouvelle tête. Sinon, déployer le commit plus récent dont
+le push a produit les deux checks.
 
 Le job `staging-gate` a un timeout de 60 min ; un push sur `master` occupe
 staging environ 15 min (déploiement, smoke, migrations, soak), les runs de PR

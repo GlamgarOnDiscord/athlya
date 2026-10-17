@@ -43,8 +43,10 @@ export function evaluateCheckRuns(checkRuns, checkName) {
 /**
  * @param {{ repo: string, sha: string, checkName: string, token: string, fetchImpl?: typeof fetch }} options
  */
+// `filter=all`: the API defaults to `latest`, which can return only the
+// newest run and hide an earlier success behind a later skipped run.
 export async function requireCheckSuccess({ repo, sha, checkName, token, fetchImpl = fetch }) {
-  const url = `https://api.github.com/repos/${repo}/commits/${sha}/check-runs?check_name=${encodeURIComponent(checkName)}&per_page=100`;
+  const url = `https://api.github.com/repos/${repo}/commits/${sha}/check-runs?check_name=${encodeURIComponent(checkName)}&filter=all&per_page=100`;
   const res = await fetchImpl(url, {
     headers: {
       accept: 'application/vnd.github+json',

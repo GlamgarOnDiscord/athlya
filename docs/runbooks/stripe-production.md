@@ -128,6 +128,13 @@ foreach ($envName in 'staging', 'production') {
   pnpm exec wrangler deploy --config wrangler.billing.toml --env $envName
   pnpm exec wrangler deploy --env $envName
 }
+
+# Production only — the billing Worker serves /admin/* behind Cloudflare Access
+# (same values as the gateway; verify-secrets.mjs requires them in production).
+foreach ($name in 'CF_ACCESS_AUD', 'CF_ACCESS_CERTS_URL') {
+  pnpm exec wrangler secret put $name --config wrangler.billing.toml --env production
+}
+pnpm exec wrangler deploy --config wrangler.billing.toml --env production
 ```
 
 Ne jamais committer les cles. Stocker dans le vault ops.

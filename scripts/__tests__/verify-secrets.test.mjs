@@ -76,8 +76,7 @@ describe('verify-secrets lists', () => {
     assert.ok(REQUIRED.auth.includes('RESEND_API_KEY'));
   });
 
-  for (const [worker, configFile] of Object.entries(CONFIG_FILES)) {
-    if (configFile === undefined) continue;
+  for (const [worker, configFile = 'wrangler.toml'] of Object.entries(CONFIG_FILES)) {
     it(`match the secrets documented in ${configFile}`, () => {
       const toml = readFileSync(path.join(API, configFile), 'utf8');
       const documented = headerSecrets(toml, 'Secrets (set once per env');

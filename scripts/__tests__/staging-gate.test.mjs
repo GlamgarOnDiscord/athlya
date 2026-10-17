@@ -176,6 +176,23 @@ describe('evaluateCheckRuns', () => {
 });
 
 describe('requireCheckSuccess', () => {
+  it('asks GitHub for every run of the check, not only the latest', async () => {
+    let requested = '';
+    await requireCheckSuccess({
+      repo: 'o/r',
+      sha: 'abc',
+      checkName: 'Staging gate (full soak)',
+      token: 't',
+      fetchImpl: async (url) => {
+        requested = url;
+        return jsonResponse(200, { check_runs: [] });
+      },
+    });
+    const query = new URL(requested).searchParams;
+    assert.equal(query.get('filter'), 'all');
+    assert.equal(query.get('check_name'), 'Staging gate (full soak)');
+  });
+
   it('fails closed when the GitHub API errors', async () => {
     const result = await requireCheckSuccess({
       repo: 'o/r',
