@@ -11,6 +11,10 @@ terraform {
       source  = "jianyuan/sentry"
       version = "~> 0.15"
     }
+    axiom = {
+      source  = "axiomhq/axiom"
+      version = "~> 1.7"
+    }
   }
 
   # Remote state with locking — HCP Terraform (issue #405).

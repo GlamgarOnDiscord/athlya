@@ -4,15 +4,17 @@
  * tenant workload against the REAL deployed roles, inside transactions
  * that are always rolled back (nothing is persisted):
  *
- *   athlya_app  (DB_URL)       register → login lookup → notification
- *                              recipient → member export enqueue (tenant
- *                              GUCs) → worker claim + data + complete → account
- *                              deletion with its event → RGPD cascade
+ *   athlya_app  (DB_URL)       tenant slug resolution → register → login
+ *                              lookup → notification recipient → own studio
+ *                              read + admin branding update and member export
+ *                              enqueue (tenant GUCs) → worker claim + data +
+ *                              complete → account deletion with its event →
+ *                              RGPD cascade
  *   athlya_cron (CRON_DB_URL)  leased outbox claim privileges
  *   athlya_billing             Stripe event application (the only role
  *     (BILLING_DB_URL)         allowed to; athlya_app is refused)
  *
- * Usage (staging, after migrations 0031–0036):
+ * Usage (staging, after migrations 0031–0038):
  *   APP_DATABASE_URL=postgresql://athlya_app:...@.../athlya \
  *   CRON_DATABASE_URL=postgresql://athlya_cron:...@.../athlya \
  *   BILLING_DATABASE_URL=postgresql://athlya_billing:...@.../athlya \
@@ -26,7 +28,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-/** Functions athlya_app needs from migrations 0032–0036. */
+/** Functions athlya_app needs from migrations 0032–0038. */
 export const REQUIRED_FUNCTIONS = [
   'auth_find_active_user_by_email',
   'auth_find_user_by_id',
@@ -48,6 +50,7 @@ export const REQUIRED_FUNCTIONS = [
   'export_job_profile',
   'export_job_rows',
   'billing_list_invoices',
+  'studio_id_by_slug',
 ];
 
 /** Stripe event application: athlya_billing only (migration 0036). */
@@ -108,7 +111,7 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
   `;
   const present = new Set(fns.map((r) => r.name));
   const missing = REQUIRED_FUNCTIONS.filter((f) => !present.has(f));
-  check(missing.length === 0, `missing or not executable: ${missing.join(', ')} (apply 0032–0036)`);
+  check(missing.length === 0, `missing or not executable: ${missing.join(', ')} (apply 0032–0038)`);
   ok(`${REQUIRED_FUNCTIONS.length} service functions executable`);
 
   const [forge] = await app`SELECT has_function_privilege(${BILLING_APPLY}, 'EXECUTE') AS can`;
@@ -122,6 +125,9 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
   await rolledBack(app, async (tx) => {
     const [studio] = await tx`SELECT id FROM auth_find_studio_by_slug(${studioSlug})`;
     check(studio !== undefined, `studio slug "${studioSlug}" not found (pre-auth lookup)`);
+    const [resolved] = await tx`SELECT studio_id_by_slug(${studioSlug}) AS id`;
+    check(resolved?.id === studio.id, 'tenant slug guard could not resolve the studio id');
+    ok('tenant slug guard resolves the studio id without claims');
 
     const userId = randomUUID();
     const email = `role-contract+${userId}@athlya.invalid`;
@@ -153,6 +159,17 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     await tx`SELECT set_config('app.role', 'member', true)`;
     const [own] = await tx`SELECT count(*)::int AS n FROM users`;
     check(own.n === 1, `member sees ${own.n} user rows, expected exactly their own`);
+    const [ownStudio] = await tx`SELECT count(*)::int AS n FROM studios`;
+    check(ownStudio.n === 1, `member sees ${ownStudio.n} studios rows, expected exactly their own`);
+    const memberEdit =
+      await tx`UPDATE studios SET name = name WHERE id = ${studio.id}::uuid RETURNING id`;
+    check(memberEdit.length === 0, 'a member could update the studio branding');
+    await tx`SELECT set_config('app.role', 'admin', true)`;
+    const adminEdit =
+      await tx`UPDATE studios SET name = name WHERE id = ${studio.id}::uuid RETURNING id`;
+    check(adminEdit.length === 1, 'a studio admin could not update the studio branding');
+    await tx`SELECT set_config('app.role', 'member', true)`;
+    ok('studio read is tenant-scoped; only an admin updates the branding');
     const jobId = randomUUID();
     const requested = {
       id: randomUUID(),
@@ -216,7 +233,8 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     `;
     ok('RGPD cascade functions run for the deleted account');
 
-    const invoices = await tx`SELECT * FROM billing_list_invoices(${studio.id}::uuid, NULL, NULL, 1)`;
+    const invoices =
+      await tx`SELECT * FROM billing_list_invoices(${studio.id}::uuid, NULL, NULL, 1)`;
     check(invoices.length === 0, 'billing invoices visible without tenant claims');
     ok('billing invoice listing runs and is RLS-scoped');
   });

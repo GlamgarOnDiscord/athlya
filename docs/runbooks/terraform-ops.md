@@ -2,20 +2,21 @@
 
 ## IaC coverage
 
-| Resource              | Managed by Terraform     | Notes                                                                                 |
-| --------------------- | ------------------------ | ------------------------------------------------------------------------------------- |
-| Cloudflare Queues     | Yes (`queues.tf`)        | All envs                                                                              |
-| Cloudflare R2 buckets | Yes (`r2.tf`)            | All envs                                                                              |
-| Sentry metric alerts  | Yes (`sentry-alerts.tf`) | Error-volume alert on emitted error events; latency/queue/outbox stay in Axiom (#415) |
-| WAF custom rules      | Yes (`waf.tf`)           | Scanner + Tor block, login rate limit (`http_ratelimit`), Bot Fight Mode opt-in       |
-| Cloudflare Workers    | No — wrangler            | Managed by `deploy-production.yml`                                                    |
-| CF Workers routes     | No — wrangler            | Managed by wrangler.toml `[routes]`                                                   |
-| CF Access rules       | No — dashboard           | Covered by `docs/runbooks/cf-access-admin.md`                                         |
-| CF Hyperdrive         | No — dashboard           | Covered by `docs/runbooks/hyperdrive-provision.md`                                    |
-| Neon (DB)             | No — Neon console        | Branching handled by preview/deploy workflows                                         |
-| Upstash Redis         | No — Upstash console     | Manual provisioning; keys stored as GH secrets                                        |
-| Axiom alerts          | No — Axiom dashboard     | SLO monitors (latency/queue/outbox/DLQ) move to `axiom-monitors.tf` in #616           |
-| DNS records           | No — CF dashboard        | Pending domain provisioning (#339)                                                    |
+| Resource              | Managed by Terraform      | Notes                                                                                 |
+| --------------------- | ------------------------- | ------------------------------------------------------------------------------------- |
+| Cloudflare Queues     | Yes (`queues.tf`)         | All envs                                                                              |
+| Cloudflare R2 buckets | Yes (`r2.tf`)             | All envs                                                                              |
+| Sentry metric alerts  | Yes (`sentry-alerts.tf`)  | Error-volume alert on emitted error events; latency/queue/outbox stay in Axiom (#415) |
+| WAF custom rules      | Yes (`waf.tf`)            | Scanner + Tor block, login rate limit (`http_ratelimit`), Bot Fight Mode opt-in       |
+| Cloudflare Workers    | No — wrangler             | Managed by `deploy-production.yml`                                                    |
+| CF Workers routes     | No — wrangler             | Managed by wrangler.toml `[routes]`                                                   |
+| CF Access rules       | No — dashboard            | Covered by `docs/runbooks/cf-access-admin.md`                                         |
+| CF Hyperdrive         | No — dashboard            | Covered by `docs/runbooks/hyperdrive-provision.md`                                    |
+| Neon (DB)             | No — Neon console         | Branching handled by preview/deploy workflows                                         |
+| Upstash Redis         | No — Upstash console      | Manual provisioning; keys stored as GH secrets                                        |
+| Axiom SLO monitors    | Yes (`axiom-monitors.tf`) | 5xx rate, login p95, booking p99, queue lag, outbox backlog, DLQ depth (#415)         |
+| Other Axiom alerts    | No — Axiom dashboard      | A6–A15, A17, A18: `docs/runbooks/axiom-alerts-provision.md`                           |
+| DNS records           | No — CF dashboard         | Pending domain provisioning (#339)                                                    |
 
 WAF settings depend on the zone plan: set `cloudflare_zone_plan`
 (`free`/`pro`/`business`/`enterprise`) — in CI through the
@@ -47,6 +48,9 @@ on a throwaway runner.
    recreate them (`terraform import`, ID formats in the header of each `.tf`
    file). For example, the Sentry error alert:
    `terraform import sentry_metric_alert.error_count_spike <org-slug>/<project-slug>/<alert-rule-id>`.
+   An Axiom SLO monitor already created by hand in the UI:
+   `terraform import 'axiom_monitor.slo["queue_lag"]' <monitor-id>` (or delete
+   the manual one and let Terraform create it).
 
 CI sets `TF_WORKSPACE=athlya-<environment>`, so staging and production state
 are always isolated. Locally: `export TF_CLOUD_ORGANIZATION=<org>
@@ -81,11 +85,13 @@ provider's built-in state upgraders rewrite the v4 state on the first
 | `cloudflare_ruleset`        | `rules { … }` blocks → `rules = [{ … }]`, `ratelimit = { … }`  |
 | `cloudflare_bot_management` | none                                                           |
 
-Before the first v5 apply, for **staging first, then production**:
+Before the first v5 apply, run these steps with `ENV=staging` first, then
+again with `ENV=production` (the workflow's `environment` input defaults to
+staging, so always pass it):
 
 1. Make sure the workspace state was last written by provider 4.52.x (the
    previous pin): the upgraders only migrate state from the latest v4.
-2. `gh workflow run terraform.yml -f environment=staging -f action=plan` and
+2. `gh workflow run terraform.yml -f environment=$ENV -f action=plan` and
    read the whole plan. Expected: no `must be replaced` and no `destroy`;
    only in-place updates of computed or defaulted attributes (e.g.
    `jurisdiction = "default"`, `storage_class = "Standard"` on R2, rule
@@ -113,8 +119,9 @@ Before the first v5 apply, for **staging first, then production**:
    dashboard and `GET /zones/<zone_id>/rulesets`. Plan again until it shows
    no replacement.
 
-4. Apply (`-f action=apply`), then re-run `plan`: it must report no changes.
-   The daily drift job then covers the workspace again.
+4. `gh workflow run terraform.yml -f environment=$ENV -f action=apply`, then
+   re-run the `plan` of step 2: it must report no changes. The daily drift
+   job only covers production; staging drift is checked by a manual plan.
 
 ## Required secrets
 
@@ -130,7 +137,23 @@ Set these in **both** the `staging` and `production` GitHub Environments.
 | `TF_VAR_sentry_org`            | Sentry organisation slug                                   |
 | `TF_VAR_sentry_project`        | Sentry project slug                                        |
 | `TF_VAR_sentry_alert_team_id`  | Numeric id of the Sentry team emailed by the metric alerts |
+| `TF_VAR_axiom_api_token`       | Axiom advanced API token: monitors read/write + query      |
 | `TF_TOKEN_app_terraform_io`    | HCP Terraform API token (remote state, Option A)           |
+
+And these **variables** (`vars.*`) per environment:
+
+| Variable                  | Purpose                                                                 |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `AXIOM_SPANS_DATASET`     | Dataset of the Worker OTLP spans (`X-Axiom-Dataset` of the OTLP header) |
+| `AXIOM_LOGS_DATASET`      | Dataset of the Worker log lines (`outbox.backlog`, `[dlq] …`)           |
+| `AXIOM_NOTIFIER_IDS`      | HCL list of Axiom notifier ids, e.g. `["abc123","def456"]`              |
+| `AXIOM_PAGE_NOTIFIER_IDS` | HCL list of paging notifier ids (PagerDuty), or `[]` to never page      |
+
+The Axiom variables have no defaults and are validated (non-empty token,
+dataset names, at least one notifier): a plan without them fails instead of
+creating silent monitors. Notifiers are referenced by id, not managed, so
+the token needs no notifier permission. Each environment must use its own
+datasets: the monitor queries do not filter by environment.
 
 ## Plan → apply workflow
 

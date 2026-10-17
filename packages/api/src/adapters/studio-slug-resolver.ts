@@ -23,6 +23,10 @@
  * isolate (see `adapters/deps-cache.ts`), so repeated lookups never
  * pay client-construction cost.
  *
+ * RLS — the lookup goes through the `studio_id_by_slug` service
+ * function (migration 0038, issue #224); a raw `studios` query sees no
+ * row under the `athlya_app` runtime role.
+ *
  * Result caching is the responsibility of the middleware itself
  * (60 s TTL `Map<slug, studioId>` keyed by the same `DB_URL` string
  * we feed here), so this adapter is intentionally cache-agnostic.
@@ -35,42 +39,37 @@
  * @see Requirements 13.1, 13.2, 13.5.
  */
 
-import { studios } from '@athlya/db/schema';
-import { eq } from 'drizzle-orm';
-
 import { getOrCreateDbHttp } from './deps-cache.js';
+import { queryRows, serviceFn } from './service-functions.js';
 
 import type { StudioSlugResolver } from '../middleware/tenant-resolver.js';
 import type { AthlyaBindings } from '../types.js';
+import type { AthlyaDbAny } from '@athlya/db/client';
 
 /**
- * Build a {@link StudioSlugResolver} bound to the supplied env.
+ * Build a {@link StudioSlugResolver} over `db`.
  *
- * The returned function performs a single
- *
- * ```sql
- * SELECT id FROM studios WHERE slug = $1 LIMIT 1
- * ```
- *
- * and yields `studios.id` on hit, `null` on miss. The query targets a
- * unique index (`studios_slug_unique`) so the read is O(1) on the
- * Postgres side; combined with the 60 s middleware-side cache, the
- * steady-state load is ≤ 1 query per slug per minute regardless of
- * traffic volume.
- *
- * The connection cache from `adapters/deps-cache.ts` ensures we
- * reuse a single Drizzle client across the worker isolate — there is
- * no per-call setup cost beyond the SQL round-trip itself.
+ * The lookup runs before any tenant context exists, so it cannot query
+ * `studios` directly: the table is FORCE RLS and its read policy keys on
+ * `app_studio_id()`, which matches nothing under the `athlya_app` role
+ * (issue #224). It calls the `studio_id_by_slug` SECURITY DEFINER
+ * function instead (migration 0038), which returns the id of the live
+ * studio with that slug, or `NULL`. The function hits the
+ * `studios_slug_unique` index; combined with the 60 s middleware-side
+ * cache, the steady-state load is at most one query per slug per minute.
+ */
+export function createStudioSlugResolver(db: AthlyaDbAny): StudioSlugResolver {
+  return async (slug) => {
+    const rows = await queryRows<{ id: string | null }>(db, serviceFn.studioIdBySlug(slug));
+    return rows[0]?.id ?? null;
+  };
+}
+
+/**
+ * Build a {@link StudioSlugResolver} bound to the supplied env. The
+ * connection cache from `adapters/deps-cache.ts` reuses a single Drizzle
+ * client across the worker isolate.
  */
 export function buildStudioSlugResolver(env: AthlyaBindings): StudioSlugResolver {
-  return async (slug) => {
-    const db = getOrCreateDbHttp(env.DB_URL);
-    const rows = await db
-      .select({ id: studios.id })
-      .from(studios)
-      .where(eq(studios.slug, slug))
-      .limit(1);
-    const row = rows[0];
-    return row === undefined ? null : row.id;
-  };
+  return (slug) => createStudioSlugResolver(getOrCreateDbHttp(env.DB_URL))(slug);
 }

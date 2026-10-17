@@ -63,6 +63,39 @@ tout le graphe runtime de `@athlya/api`, la config de build qu'il étend
 (`packages/tsconfig`), le lockfile, et chaque script exécuté par le workflow
 avec ses imports locaux, vérifié en CI par `pnpm check:canary-paths`.
 
+### Latency gate (#415)
+
+After the error budget, every step (100 % included) times
+`CANARY_LATENCY_SAMPLES` (default 20) sequential `/health/ready` requests
+pinned to the canary with the `Cloudflare-Workers-Version-Overrides:
+athlya-api-production="<version-id>"` header
+(`scripts/canary-latency.mjs`). At 1 % / 5 % ordinary traffic would mostly
+hit the previous version; the override makes every sample measure the new
+one, and each answer must carry the canary `version` (`<sha7>`), otherwise
+the gate fails. This is **readiness latency**: `/health/ready` runs the
+request pipeline plus live Postgres and Redis round-trips (R2 and cron are
+configuration checks only), so it catches a canary that is slow or degraded
+as a whole, not a regression confined to one API route. Per-route p95/p99
+SLOs are covered by the Axiom monitors (`infra/terraform/axiom-monitors.tf`). A p95 above
+`CANARY_MAX_P95_MS` (default 1500 ms, measured from the CI runner, network
+included), any non-ready answer, or a sample served by another version
+aborts the canary and rolls back. Both variables are optional repository
+variables; an invalid value (not an integer in range) fails the run. Tune
+`CANARY_MAX_P95_MS` from the p95 the first canaries log
+(`latency at <step>: …`).
+
+### Source maps and Sentry release (#415)
+
+Both canary paths (`canary.yml` and the `production-canary` phase of
+`deploy-production.yml`) upload the gateway version with
+`canary-deploy.mjs upload --outdir dist` (no traffic shift), then run
+`scripts/sentry-release.sh prepare production` (release `<sha7>`, source
+maps of the gateway and of every sub-worker bundled in this run), and only
+then promote that exact version with `production-canary --version-id`. Once
+the release held at 100 %, `sentry-release.sh finalize production`
+finalizes it and records the deploy marker. Missing Sentry configuration
+fails the run. Details: [`sentry-sourcemaps.md`](./sentry-sourcemaps.md).
+
 ### Pas de smoke authentifié en production (décision)
 
 `/v1/auth/login` est protégé par Turnstile ; en production le secret est

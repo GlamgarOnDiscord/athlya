@@ -18,7 +18,11 @@
 #   the main athlya-api Worker no longer owns this namespace.
 #
 # Secrets (set once per env via `wrangler secret put --config wrangler.reservations.toml`):
-#   DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, CORS_ORIGIN, HYPERDRIVE (binding)
+#   DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, CORS_ORIGIN, JWT_KID,
+#   JWT_PRIVATE_KEY_PEM, JWT_PUBLIC_KEY_PEM, JWKS_JSON, EXPORT_URL_SIGNING_KEY
+# Production also: SENTRY_DSN, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS.
+# Binding (not a secret): HYPERDRIVE.
+# scripts/verify-secrets.mjs checks this list (keep both in sync).
 # ----------------------------------------------------------------------------
 
 name = "athlya-api-reservations"

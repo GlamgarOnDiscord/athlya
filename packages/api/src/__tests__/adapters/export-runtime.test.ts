@@ -362,7 +362,7 @@ describe('createExportDataSource', () => {
     ]);
   });
 
-  it('exports no invoices until billing persistence exists', async () => {
+  it('exports no member invoices in v1 without querying studio billing', async () => {
     const { db, calls } = fakeDb(() => []);
     const pages: unknown[] = [];
     for await (const page of createExportDataSource(db).listInvoices(USER_ID, JOB_ID)) {
