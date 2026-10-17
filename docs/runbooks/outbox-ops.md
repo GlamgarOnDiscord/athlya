@@ -187,9 +187,10 @@ SELECT gen_random_uuid()::text, 'reservation.reminder',
    next tick (fairness).
 3. Pass: time-to-empty ≤ 2 min (SLO) at the measured queue latency; otherwise
    record the measured service rate and raise the pool size / add a tick.
-4. Clean up only this run's rows (from another session, paste the UUID echoed
-   above in place of `:'load_run_user'`):
+4. Clean up only this run's rows, in the same `psql` session:
    `DELETE FROM outbox WHERE event_type = 'reservation.reminder' AND payload->>'userId' = :'load_run_user';`
+   From another session, paste the UUID echoed above inside the quotes:
+   `DELETE FROM outbox WHERE event_type = 'reservation.reminder' AND payload->>'userId' = 'PASTE_LOAD_RUN_USER_UUID';`
 
 ## Related
 
