@@ -18,7 +18,8 @@ name: Deploy Frontend
 #
 # Phases:
 #   deploy   — build → deploy → readiness → real-network smoke; on failure the
-#              production apps are rolled back and the job stays red.
+#              production apps deployed by this run are rolled back and the
+#              job stays red.
 #   rollback — wrangler rollback to the previous version; fails loudly.
 # The API must be deployed first when a release changes the API contract
 # (docs/runbooks/deploy-frontend.md).
@@ -135,6 +136,7 @@ jobs:
               --env "${TARGET_ENV}" \
               --var "VERSION:${GITHUB_SHA}" \
               --message "deploy ${GITHUB_SHA} (run ${GITHUB_RUN_ID})"
+            echo "DEPLOYED_${app^^}=true" >> "$GITHUB_ENV"
           done
 
       - name: Wait for readiness
@@ -163,21 +165,36 @@ jobs:
             node scripts/smoke-frontend.mjs
 
       # ------------------------------------------------------------- rollback
+      # phase=rollback: roll back every selected app.
+      # Failed production deploy: roll back only the apps whose `wrangler
+      # deploy` succeeded in this run (DEPLOYED_<APP>). A failure before or
+      # during the first deploy leaves production untouched.
       - name: Roll back
         if: inputs.phase == 'rollback' || (failure() && inputs.phase == 'deploy' && inputs.environment == 'production')
         env:
           TARGET_ENV: ${{ inputs.environment }}
+          PHASE: ${{ inputs.phase }}
         run: |
           set -euo pipefail
+          rolled_back=0
           for app in web studio; do
-            flag="DEPLOY_${app^^}"
-            [ "${!flag}" = 'true' ] || continue
+            if [ "${PHASE}" = 'rollback' ]; then
+              flag="DEPLOY_${app^^}"
+            else
+              flag="DEPLOYED_${app^^}"
+            fi
+            [ "${!flag:-}" = 'true' ] || continue
             echo "Rolling back athlya-${app} (${TARGET_ENV})"
             pnpm --filter "@athlya/${app}" exec wrangler rollback \
               --env "${TARGET_ENV}" -y \
               --message "rollback from run ${GITHUB_RUN_ID}"
+            rolled_back=$((rolled_back + 1))
           done
-          echo "::warning::Frontend rolled back — the triggering deploy did not ship."
+          if [ "${rolled_back}" -eq 0 ]; then
+            echo "::notice::Nothing was deployed in this run, so production was left untouched."
+          else
+            echo "::warning::Frontend rolled back — the triggering deploy did not ship."
+          fi
 
       - name: Smoke after rollback
         if: inputs.phase == 'rollback'

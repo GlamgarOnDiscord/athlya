@@ -13,6 +13,12 @@ updates:
     labels:
       - dependencies
       - npm
+    ignore:
+      # Pinned to the exact version patched in pnpm-workspace.yaml
+      # (patchedDependencies, patches/@opennextjs__cloudflare@1.20.10.patch):
+      # any bump leaves the patch unused, pnpm fails and the whole grouped
+      # PR is blocked. Remove once upstream ships the preview-props fix.
+      - dependency-name: '@opennextjs/cloudflare'
     # Group minor/patch bumps into one PR each so we get 1-2 PRs/week instead
     # of ~10. Majors stay ungrouped (one PR each) for manual review — they
     # break things (e.g. ESLint 10 vs eslint-plugin-import). See CONTRIBUTING.
