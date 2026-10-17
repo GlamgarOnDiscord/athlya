@@ -71,6 +71,12 @@ export const exportJobs = pgTable(
       withTimezone: true,
       mode: 'date',
     }),
+    /**
+     * Fencing token minted by `export_job_claim` (migration 0034) on
+     * every claim or lease reclaim. Completion and failure require the
+     * current token, so a stale run cannot overwrite a newer one.
+     */
+    claimToken: uuid('claim_token'),
     createdAt: createdAt(),
   },
   (table) => [

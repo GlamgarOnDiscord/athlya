@@ -32,7 +32,14 @@ interface ProfileRow extends ExportProfile {
   readonly consents: Consents;
 }
 
-export function createExportDataSource(db: AthlyaDbAny, pageSize = 200): MemberDataSource {
+/** Page cap enforced by `export_job_rows` (migration 0034). */
+export const EXPORT_ROWS_MAX_PAGE_SIZE = 500;
+
+export function createExportDataSource(db: AthlyaDbAny, requestedPageSize = 200): MemberDataSource {
+  // Clamped to the SQL cap: a short page is the end-of-section signal, so
+  // asking for more than the database returns would stop after one page.
+  const pageSize = Math.min(Math.max(Math.trunc(requestedPageSize), 1), EXPORT_ROWS_MAX_PAGE_SIZE);
+
   async function profileOf(userId: string, jobId: string): Promise<ProfileRow> {
     const rows = await queryRows<{ profile: ProfileRow | null }>(
       db,

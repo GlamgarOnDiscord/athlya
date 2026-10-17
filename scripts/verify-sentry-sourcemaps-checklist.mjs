@@ -28,7 +28,7 @@ const ITEMS = [
   },
   {
     id: 'M4',
-    label: 'Soft-gate SENTRY_AUTH_TOKEN/ORG/PROJECT (skip propre si absent)',
+    label: 'Soft-gate SENTRY_AUTH_TOKEN/ORG/PROJECT en staging uniquement (production échoue)',
     doc: 'deploy-production.yml',
   },
   {

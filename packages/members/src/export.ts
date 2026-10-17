@@ -57,7 +57,7 @@ export const DOWNLOAD_URL_TTL_SECONDS = 72 * 60 * 60;
 
 /**
  * Prefix under which archives are stored in Cloudflare R2. The full
- * key is `EXPORT_R2_PREFIX/{jobId}.zip`; keeping the prefix as a
+ * key is `EXPORT_R2_PREFIX/{jobId}/{claimToken}.zip`; keeping the prefix as a
  * named constant makes it trivial to snapshot / rotate a bucket
  * without rebuilding service images.
  */
@@ -198,28 +198,33 @@ export interface ExportJobStore {
 
   /**
    * Claim the job: atomic `pending → running` (or reclaim of a
-   * `running` job whose lease expired after a crashed run). Resolves
-   * `true` only for the caller that won the transition, so concurrent
-   * deliveries of the same event never both build an archive (#498).
+   * `running` job whose lease expired after a crashed run). Resolves a
+   * claim token only for the caller that won the transition, `null`
+   * otherwise, so concurrent deliveries of the same event never both
+   * build an archive (#498).
    */
-  markRunning(jobId: string, startedAt: Date): Promise<boolean>;
+  markRunning(jobId: string, startedAt: Date): Promise<string | null>;
 
   /**
    * Transition the row from `running` → `completed`, stamping the
-   * signed URL and its expiration. Idempotent.
+   * signed URL and its expiration. Resolves `false` when `claimToken`
+   * is no longer current (the lease was reclaimed by a newer run), in
+   * which case nothing is written. Idempotent.
    */
   markCompleted(
     jobId: string,
+    claimToken: string,
     completedAt: Date,
     downloadUrl: string,
     downloadExpiresAt: Date,
-  ): Promise<void>;
+  ): Promise<boolean>;
 
   /**
-   * Transition the row to `failed`, stamping a short human-readable
-   * error reason. Idempotent.
+   * Transition the row from `running` → `failed`, stamping a short
+   * human-readable error reason. A stale `claimToken` is a no-op.
+   * Idempotent.
    */
-  markFailed(jobId: string, error: string): Promise<void>;
+  markFailed(jobId: string, claimToken: string, error: string): Promise<void>;
 
   /** Fetch a stored job, or `null` if unknown. */
   get(jobId: string): Promise<ExportJobRecord | null>;
@@ -243,6 +248,11 @@ export interface ExportJobRecord {
   error: string | null;
   downloadUrl: string | null;
   downloadExpiresAt: string | null;
+  /**
+   * Claim that completed the job; it names the archive object. Only
+   * exposed by stores that read the raw row (the owner's download path).
+   */
+  claimToken?: string | null;
 }
 
 /**
@@ -350,7 +360,8 @@ export type EnqueueExportResult =
  * is the happy path; `already_completed` covers retries hitting a
  * terminal row; `failed` stamps the job as failed and does NOT
  * publish the completion event; `in_progress` means another delivery
- * holds the claim (its lease has not expired); `not_found` protects against a
+ * holds the claim (its lease has not expired, or it reclaimed this
+ * run's lease before completion); `not_found` protects against a
  * poisoned QStash message whose `jobId` was already hard-deleted.
  */
 export type RunExportJobResult =
@@ -514,9 +525,15 @@ export async function* buildArchiveEntries(data: MemberExportData): AsyncGenerat
   }
 }
 
-/** Build the R2 object key for `jobId`. */
-export function exportObjectKey(jobId: string): string {
-  return `${EXPORT_R2_PREFIX}/${jobId}.zip`;
+/**
+ * Build the R2 object key for the archive of `jobId` built under
+ * `claimToken`. One key per claim: a stale run whose lease was reclaimed
+ * uploads to its own key, so it can never overwrite the archive the
+ * winning run published; the download path serves the key of the claim
+ * stored on the completed row.
+ */
+export function exportObjectKey(jobId: string, claimToken: string): string {
+  return `${EXPORT_R2_PREFIX}/${jobId}/${claimToken}.zip`;
 }
 
 /**
@@ -635,8 +652,8 @@ export async function runExportJob(
     return { kind: 'already_completed', jobId };
   }
 
-  const claimed = await deps.jobs.markRunning(jobId, new Date(deps.clock.now()));
-  if (!claimed) {
+  const claimToken = await deps.jobs.markRunning(jobId, new Date(deps.clock.now()));
+  if (claimToken === null) {
     return { kind: 'in_progress', jobId };
   }
 
@@ -660,7 +677,7 @@ export async function runExportJob(
     };
   } catch (err) {
     const reason = toErrorReason(err);
-    await deps.jobs.markFailed(jobId, reason);
+    await deps.jobs.markFailed(jobId, claimToken, reason);
     deps.logger?.error('export job: data source failure', {
       jobId,
       userId: job.userId,
@@ -674,14 +691,29 @@ export async function runExportJob(
   try {
     const { bytes, sizeBytes } = await deps.archive.build(buildArchiveEntries(data));
 
-    const objectKey = exportObjectKey(jobId);
+    const objectKey = exportObjectKey(jobId, claimToken);
     await deps.blob.put(objectKey, bytes);
     const downloadUrl = await deps.blob.signedUrl(objectKey, DOWNLOAD_URL_TTL_SECONDS);
 
     const completedAt = new Date(deps.clock.now());
     const expiresAt = new Date(completedAt.getTime() + DOWNLOAD_URL_TTL_SECONDS * 1000);
 
-    await deps.jobs.markCompleted(jobId, completedAt, downloadUrl, expiresAt);
+    const completed = await deps.jobs.markCompleted(
+      jobId,
+      claimToken,
+      completedAt,
+      downloadUrl,
+      expiresAt,
+    );
+    if (!completed) {
+      // A newer delivery reclaimed the lease: it owns the job now and
+      // publishes its own completion.
+      deps.logger?.warn('export job: claim superseded before completion', {
+        jobId,
+        userId: job.userId,
+      });
+      return { kind: 'in_progress', jobId };
+    }
 
     const event: MembersExportCompletedEvent = {
       id: deps.uuid(),
@@ -704,7 +736,7 @@ export async function runExportJob(
     };
   } catch (err) {
     const reason = toErrorReason(err);
-    await deps.jobs.markFailed(jobId, reason);
+    await deps.jobs.markFailed(jobId, claimToken, reason);
     deps.logger?.error('export job: archive / upload failure', {
       jobId,
       userId: job.userId,

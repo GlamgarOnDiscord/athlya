@@ -9,12 +9,8 @@
 --      the end, so a second invocation in the same psql session
 --      operates against identical seed data.
 --
--- Usage — apply EVERY forward migration in filename order first (as
--- .github/workflows/pgtap.yml does; later files test later migrations):
---   for f in $(ls migrations/*.sql | grep -v '\.down\.sql$' | sort); do
---     psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
---   done
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/rls/run-all.sql
+-- Usage: `pnpm --filter @athlya/db test:rls` (scripts/test-rls.sh)
+-- applies every forward migration, then sources this file.
 -- =====================================================================
 
 \set ON_ERROR_STOP on
