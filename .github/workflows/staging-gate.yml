@@ -11,8 +11,19 @@ name: Staging gate
 #
 # Fail closed (issue #343): on trusted runs (same-repo PRs, pushes to
 # master, manual runs) a missing prerequisite FAILS the job with a
-# machine-readable reason in the step summary. Only pull requests from
-# forks, which cannot read secrets, report a neutral skip.
+# machine-readable reason in the step summary. Only runs that cannot read
+# secrets — pull requests from forks and Dependabot-triggered runs — report
+# a neutral skip.
+#
+# Staging is one shared environment (Workers + Neon branch), so every run
+# that deploys it joins the single `staging-environment` concurrency group
+# and queues instead of racing: the SHA a gate deploys is the SHA it
+# smokes, load-tests and reports on. In-progress runs are never cancelled,
+# so a migration is never cut off mid-way. GitHub keeps at most one
+# *pending* run per group: a newer queued run supersedes an older pending
+# one, which then has to be re-run (production deploys fail closed on a
+# SHA without a successful gate). Runs that skip (fork/Dependabot) never
+# deploy, so they use a per-ref group and don't queue behind deploys.
 #
 # The workflow has no `paths:` filter: it is a required check, and a
 # path-filtered required check never reports on PRs outside the paths,
@@ -49,8 +60,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: staging-gate-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || github.event.pull_request.user.login == 'dependabot[bot]') && format('staging-gate-noop-{0}', github.ref) || 'staging-environment' }}
+  cancel-in-progress: false
 
 jobs:
   staging-gate:
@@ -71,6 +82,7 @@ jobs:
         id: prereq
         env:
           IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          IS_DEPENDABOT: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
           MIGRATION_DB_URL: ${{ secrets.MIGRATION_DB_URL_STAGING }}
           SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
           SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
@@ -79,6 +91,12 @@ jobs:
           if [ "${IS_FORK_PR}" = "true" ]; then
             echo "::notice title=Staging gate neutral::Fork pull request — secrets are unavailable, so the deployed system is not exercised."
             echo "### Staging gate: NEUTRAL (fork PR, no secrets)" >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${IS_DEPENDABOT}" = "true" ]; then
+            echo "::notice title=Staging gate neutral::Dependabot-triggered run — Actions secrets are unavailable, so the deployed system is not exercised. The post-merge push to master runs the full gate."
+            echo "### Staging gate: NEUTRAL (Dependabot run, no secrets)" >> "$GITHUB_STEP_SUMMARY"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
