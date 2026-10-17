@@ -22,7 +22,7 @@ import {
 import { buildCascadeDeps } from './adapters/cascade-deps.js';
 import { buildCronSqlExecutor } from './adapters/cron-sql-executor.js';
 import { getOrCreateRedis } from './adapters/deps-cache.js';
-import { createDrainDb, resolveDrainDbUrl } from './adapters/drain-db.js';
+import { resolveDrainDbUrl, withDrainDb } from './adapters/drain-db.js';
 import { buildExportDeps } from './adapters/export-deps.js';
 import { buildNotificationsDeps } from './adapters/notifications-deps.js';
 import { buildApp } from './app.js';
@@ -103,7 +103,7 @@ const worker = {
     const drainTask = (
       drainDbUrl === null
         ? Promise.resolve()
-        : runScheduledDrain({ ...env, getDb: () => createDrainDb(drainDbUrl) })
+        : withDrainDb(drainDbUrl, (db) => runScheduledDrain({ ...env, getDb: () => db }))
     ).catch((err: unknown) => {
       // Log through the console-backed default logger — the
       // drain module does not accept `StructuredLogger` shapes

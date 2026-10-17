@@ -1330,9 +1330,14 @@ function decodeUnsafeRefresh(token: string): { sub: string; sid: string } | null
  *      performs the full RGPD cascade (reservations, sessions,
  *      R2 avatars, …).
  *
- * Idempotent: calling `deleteMe` on an already-deleted user re-runs
- * steps 2–4 and returns normally. The second emission of
- * `auth.user.deleted` is deduped downstream on `event.id` (Req 17.4).
+ * Idempotent: calling `deleteMe` on an already-deleted user returns
+ * normally. With `softDeleteUserWithEvent` the original tombstone is
+ * kept and no second outbox row is written (migration 0037, issue #609).
+ * Sessions are revoked again and the freshly built event is dispatched
+ * best-effort only (not durable): if it is delivered, the consumer runs
+ * the full, idempotent erasure cascade again — the tombstone check
+ * passes and the deletions match no remaining rows — without moving
+ * `deleted_at`.
  */
 export async function deleteMe(userId: string, deps: AuthServiceDeps): Promise<void> {
   const user = await deps.userRepo.findUserById(userId);

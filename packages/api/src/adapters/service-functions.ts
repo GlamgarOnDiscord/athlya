@@ -1,7 +1,8 @@
 /**
  * Typed access to the SECURITY DEFINER service functions installed by
- * migrations `0032_service_definer_functions.sql` (issue #224) and
- * `0033_auth_event_recording.sql` (issue #411).
+ * migrations `0032_service_definer_functions.sql` (issue #224),
+ * `0033_auth_event_recording.sql` (issue #411) and
+ * `0037_auth_outbox_review_fixes.sql` (issue #609).
  *
  * Pre-authentication auth flows and the notifications / RGPD cascade
  * queue consumers run as `athlya_app` without tenant claims, so FORCE
@@ -29,15 +30,33 @@ export interface ServiceUserRow {
   readonly credentials_version: number;
 }
 
-/**
- * Run `query` and return its rows for either driver: postgres-js
- * resolves to an array, the Neon HTTP driver to `{ rows }`.
- */
-export async function queryRows<T>(db: AthlyaDbAny, query: SQL): Promise<T[]> {
-  const execute = (db as { execute: (q: SQL) => PromiseLike<unknown> }).execute.bind(db);
-  const result = await withConnectionRetry(async () => execute(query));
+function execute(db: AthlyaDbAny, query: SQL): Promise<unknown> {
+  const run = (db as { execute: (q: SQL) => PromiseLike<unknown> }).execute.bind(db);
+  return Promise.resolve(run(query));
+}
+
+/** postgres-js resolves to an array, the Neon HTTP driver to `{ rows }`. */
+function rowsOf<T>(result: unknown): T[] {
   if (Array.isArray(result)) return result as T[];
   return (result as { rows: T[] }).rows;
+}
+
+/**
+ * Run a read, or a call that is idempotent on replay, and return its
+ * rows. Retried once when the connection was dropped.
+ */
+export async function queryRows<T>(db: AthlyaDbAny, query: SQL): Promise<T[]> {
+  return rowsOf<T>(await withConnectionRetry(() => execute(db, query)));
+}
+
+/**
+ * Run a non-idempotent write and return its rows. Never retried
+ * (issue #609): a connection dropped after the commit would replay it
+ * and turn a success into `email_taken`, "token already consumed" or a
+ * second credentials bump. The error surfaces instead.
+ */
+export async function writeRows<T>(db: AthlyaDbAny, query: SQL): Promise<T[]> {
+  return rowsOf<T>(await execute(db, query));
 }
 
 /** `timestamptz` arrives as `Date` (postgres-js) or ISO string (Neon HTTP). */
@@ -111,6 +130,6 @@ export const serviceFn = {
   deletePushTokens: (userId: string) => sql`SELECT rgpd_delete_push_tokens(${userId}::uuid) AS n`,
   deleteIdempotencyKeys: (userId: string) =>
     sql`SELECT rgpd_delete_idempotency_keys(${userId}::uuid) AS n`,
-  restampUserDeleted: (userId: string, deletedAt: Date) =>
-    sql`SELECT rgpd_restamp_user_deleted(${userId}::uuid, ${deletedAt.toISOString()}::timestamptz)`,
+  confirmUserDeleted: (userId: string) =>
+    sql`SELECT rgpd_confirm_user_deleted(${userId}::uuid) AS deleted`,
 } as const;

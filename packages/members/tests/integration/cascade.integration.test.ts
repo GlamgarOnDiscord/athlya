@@ -21,8 +21,9 @@
  *   1. (Req 5.2, 5.4) Calling `deleteMe` (modelled here by the
  *      `auth.user.deleted` consumer) removes every row referencing
  *      Alice from `reservations`, `workout_sessions` and
- *      `push_tokens`, stamps `users.deleted_at` and best-effort
- *      purges the R2 avatar. Other users' data (Bob in a DIFFERENT
+ *      `push_tokens`, keeps the `users.deleted_at` tombstone the Auth
+ *      service stamped (never moves it) and best-effort purges the R2
+ *      avatar. An event for a live user (Bob) is skipped entirely. Other users' data (Bob in a DIFFERENT
  *      studio) is untouched.
  *   2. (Req 5.3) A delayed anonymisation job runs 30 days after
  *      `deleted_at`: on every `audit_log` row with `actor_id =
@@ -198,6 +199,13 @@ const EVENT_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 
 /** Frozen wall-clock instant fed to the cascade's clock port. */
 const TIME_0_MS = Date.parse('2026-02-01T10:00:00.000Z');
+/** When the Auth service tombstoned Alice, before emitting the event. */
+const AUTH_DELETED_AT_MS = TIME_0_MS - 60_000;
+
+/** Model `DELETE /me`: the Auth service stamps the tombstone first. */
+async function tombstone(userId: string, atMs: number): Promise<void> {
+  await sqlQ(`UPDATE users SET deleted_at = $1 WHERE id = $2`, [new Date(atMs), userId]);
+}
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 const DEFAULT_CONSENTS = {
@@ -266,12 +274,14 @@ function buildRepo(client: Sql): DeletionRepo {
             `;
       return rows.length;
     },
-    async markUserDeleted(userId, deletedAt) {
-      await client`
-                UPDATE users
-                   SET deleted_at = ${deletedAt}
-                 WHERE id = ${userId}
+    async markUserDeleted(userId) {
+      // Read-only, like `rgpd_confirm_user_deleted` (migration 0037).
+      const [row] = await client<{ deleted: boolean }[]>`
+                SELECT EXISTS (
+                    SELECT 1 FROM users WHERE id = ${userId} AND deleted_at IS NOT NULL
+                ) AS deleted
             `;
+      return row?.deleted === true;
     },
     async anonymizeAuditRows(userId) {
       // Delegate to the SECURITY DEFINER function (0003+0006) — runs as
@@ -511,8 +521,13 @@ function buildRepoPglite(pg: PGlite): DeletionRepo {
       );
       return r.rows.length;
     },
-    async markUserDeleted(userId, deletedAt) {
-      await pg.query(`UPDATE users SET deleted_at = $1 WHERE id = $2`, [deletedAt, userId]);
+    async markUserDeleted(userId) {
+      // Read-only, like `rgpd_confirm_user_deleted` (migration 0037).
+      const r = await pg.query<{ deleted: boolean }>(
+        `SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND deleted_at IS NOT NULL) AS deleted`,
+        [userId],
+      );
+      return r.rows[0]?.deleted === true;
     },
     async anonymizeAuditRows(userId) {
       const r = await pg.query<{ n: number }>(`SELECT anonymize_user_audit($1) AS n`, [userId]);
@@ -830,6 +845,7 @@ describe('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', 
       // Arrange — clean slate + seed Alice & Bob's rows.
       await truncateFn();
       const { aliceAuditIds, bobAuditIds } = await seedFn();
+      await tombstone(ALICE_ID, AUTH_DELETED_AT_MS);
       const { avatars, store: avatarStore } = buildAvatars({
         [ALICE_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
         [BOB_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
@@ -845,18 +861,20 @@ describe('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', 
       });
 
       /* --- Result contract --------------------------------- */
-      expect(result.kind).toBe('ok');
-      expect(result.counts).toEqual({
-        reservations: 3,
-        sessions: 2,
-        pushTokens: 4,
-        idempotencyKeys: 0,
-        // Anonymisation happens 30 days later — audit rows
-        // are NOT touched during the cascade step itself.
-        auditAnonymized: 0,
-      });
       const expectedDueAt = new Date(TIME_0_MS + THIRTY_DAYS_MS).toISOString();
-      expect(result.scheduledAnonymizationAt).toBe(expectedDueAt);
+      expect(result).toEqual({
+        kind: 'ok',
+        counts: {
+          reservations: 3,
+          sessions: 2,
+          pushTokens: 4,
+          idempotencyKeys: 0,
+          // Anonymisation happens 30 days later — audit rows
+          // are NOT touched during the cascade step itself.
+          auditAnonymized: 0,
+        },
+        scheduledAnonymizationAt: expectedDueAt,
+      });
 
       /* --- SQL-side: Alice is gone ------------------------- */
       const aliceReservations = await sqlQ<{ id: string }>(
@@ -875,14 +893,16 @@ describe('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', 
       expect(aliceSessions).toHaveLength(0);
       expect(alicePushTokens).toHaveLength(0);
 
-      /* --- users tombstone was stamped --------------------- */
+      /* --- the Auth tombstone is kept, not moved ----------- */
       const aliceRow = await sqlQ<{ deleted_at: Date | null }>(
         `SELECT deleted_at FROM users WHERE id = $1`,
         [ALICE_ID],
       );
       expect(aliceRow).toHaveLength(1);
       expect(aliceRow[0]!.deleted_at).toBeInstanceOf(Date);
-      expect(aliceRow[0]!.deleted_at!.toISOString()).toBe(new Date(TIME_0_MS).toISOString());
+      expect(aliceRow[0]!.deleted_at!.toISOString()).toBe(
+        new Date(AUTH_DELETED_AT_MS).toISOString(),
+      );
 
       /* --- Avatar was purged from the R2 fake -------------- */
       expect(avatarStore.has(ALICE_ID)).toBe(false);
@@ -1039,6 +1059,7 @@ describe('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', 
 
       await truncateFn();
       await (rootClient ? seedScenario(rootClient) : seedScenarioPglite(pglite!));
+      await tombstone(ALICE_ID, AUTH_DELETED_AT_MS);
       const { avatars, store: avatarStore } = buildAvatars({
         [ALICE_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
       });
@@ -1092,6 +1113,55 @@ describe('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', 
     },
     180_000,
   );
+
+  it('skips a forged or stale event for a live user: no row, avatar or job is touched (issue #609)', async () => {
+    if (!rootClient && !pglite) {
+      throw new Error('rootClient not initialised');
+    }
+    const truncateFn = rootClient
+      ? () => truncateAll(rootClient!)
+      : () => truncateAllPglite(pglite!);
+    const repo = rootClient ? buildRepo(rootClient) : buildRepoPglite(pglite!);
+
+    await truncateFn();
+    await (rootClient ? seedScenario(rootClient) : seedScenarioPglite(pglite!));
+    const { avatars, store: avatarStore } = buildAvatars({
+      [BOB_ID]: new Uint8Array([0xff, 0xd8, 0xff]),
+    });
+    const { scheduler, jobs } = buildScheduler();
+
+    // Bob was never deleted: the event is forged or replayed.
+    const result = await handleUserDeleted(buildEvent(BOB_ID), {
+      repo,
+      avatars,
+      scheduler,
+      clock: buildClock(TIME_0_MS),
+    });
+
+    expect(result).toEqual({ kind: 'skipped', reason: 'user_not_deleted' });
+    const bobReservations = await sqlQ<{ id: string }>(
+      `SELECT id FROM reservations WHERE user_id = $1`,
+      [BOB_ID],
+    );
+    const bobSessions = await sqlQ<{ id: string }>(
+      `SELECT id FROM workout_sessions WHERE user_id = $1`,
+      [BOB_ID],
+    );
+    const bobPushTokens = await sqlQ<{ id: string }>(
+      `SELECT id FROM push_tokens WHERE user_id = $1`,
+      [BOB_ID],
+    );
+    const bobRow = await sqlQ<{ deleted_at: Date | null }>(
+      `SELECT deleted_at FROM users WHERE id = $1`,
+      [BOB_ID],
+    );
+    expect(bobReservations).toHaveLength(1);
+    expect(bobSessions).toHaveLength(1);
+    expect(bobPushTokens).toHaveLength(1);
+    expect(bobRow[0]!.deleted_at).toBeNull();
+    expect(avatarStore.has(BOB_ID)).toBe(true);
+    expect(jobs).toHaveLength(0);
+  }, 180_000);
 });
 
 /* ================================================================= */

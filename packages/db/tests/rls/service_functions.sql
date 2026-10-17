@@ -11,7 +11,7 @@
 -- =====================================================================
 
 BEGIN;
-SELECT plan(22);
+SELECT plan(28);
 
 SET LOCAL ROLE athlya_app;
 
@@ -114,6 +114,23 @@ SELECT is_empty(
     'auth_consume_password_reset: a consumed token cannot be replayed'
 );
 
+-- Issue #609: an expired token is refused at the SQL layer too.
+RESET ROLE;
+INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at) VALUES
+    ('a0a0a0a0-a0a0-4a0a-8a0a-a0a0a0a0a002', '11111111-1111-4111-8111-111111111114', 'svc-expired-hash', now() - interval '1 second');
+SET LOCAL ROLE athlya_app;
+
+SELECT is_empty(
+    $$ SELECT * FROM auth_consume_password_reset('svc-expired-hash', '11111111-1111-4111-8111-111111111114', 'expired') $$,
+    'auth_consume_password_reset: an expired token is not consumed'
+);
+
+SELECT results_eq(
+    $$ SELECT password_hash, credentials_version FROM auth_find_user_by_id('11111111-1111-4111-8111-111111111114') $$,
+    $$ VALUES ('new-hash'::text, 2) $$,
+    'auth_consume_password_reset: an expired token leaves the password untouched'
+);
+
 -- ---------- notifications ----------
 
 SELECT results_eq(
@@ -139,6 +156,18 @@ SELECT is(
     (SELECT deleted_at FROM auth_find_user_by_id('22222222-2222-4222-8222-222222222221')),
     NULL,
     'rgpd_restamp_user_deleted: never tombstones a live account'
+);
+
+SELECT is(
+    rgpd_confirm_user_deleted('22222222-2222-4222-8222-222222222221'),
+    false,
+    'rgpd_confirm_user_deleted: reports a live account as not deleted'
+);
+
+SELECT is(
+    (SELECT deleted_at FROM auth_find_user_by_id('22222222-2222-4222-8222-222222222221')),
+    NULL,
+    'rgpd_confirm_user_deleted: never tombstones a live account'
 );
 
 -- ---------- RGPD cascade: deleted account ----------
@@ -173,6 +202,23 @@ SELECT is(
 );
 
 RESET ROLE;
+UPDATE users SET deleted_at = '2026-01-01T00:00:00Z'
+ WHERE id = '22222222-2222-4222-8222-222222222221';
+SET LOCAL ROLE athlya_app;
+
+SELECT is(
+    rgpd_confirm_user_deleted('22222222-2222-4222-8222-222222222221'),
+    true,
+    'rgpd_confirm_user_deleted: reports a soft-deleted account'
+);
+
+SELECT is(
+    (SELECT deleted_at FROM auth_find_user_by_id('22222222-2222-4222-8222-222222222221')),
+    '2026-01-01T00:00:00Z'::timestamptz,
+    'rgpd_confirm_user_deleted: keeps the original tombstone (retention clock untouched)'
+);
+
+RESET ROLE;
 
 -- ---------- privileges ----------
 
@@ -183,19 +229,21 @@ SELECT is(
           'auth_create_member', 'auth_soft_delete_user', 'auth_bump_credentials_version',
           'auth_consume_password_reset', 'notification_recipient', 'rgpd_delete_reservations',
           'rgpd_delete_workout_sessions', 'rgpd_delete_push_tokens', 'rgpd_delete_idempotency_keys',
-          'rgpd_restamp_user_deleted')
+          'rgpd_restamp_user_deleted', 'rgpd_confirm_user_deleted')
         AND p.prosecdef
         AND pg_get_userbyid(p.proowner) = 'athlya_owner'
         AND NOT has_function_privilege('public', p.oid, 'EXECUTE')
         AND 'search_path=public, pg_temp' = ANY (p.proconfig)),
-    13,
-    'all 13 service functions: SECURITY DEFINER, owned by athlya_owner, pinned search_path, no PUBLIC EXECUTE'
+    14,
+    'all 14 service functions: SECURITY DEFINER, owned by athlya_owner, pinned search_path, no PUBLIC EXECUTE'
 );
 
 SELECT ok(
     has_function_privilege('athlya_app', 'auth_find_user_by_id(uuid)', 'EXECUTE')
     AND NOT has_function_privilege('athlya_cron', 'auth_find_user_by_id(uuid)', 'EXECUTE')
-    AND NOT has_function_privilege('athlya_cron', 'rgpd_delete_reservations(uuid)', 'EXECUTE'),
+    AND NOT has_function_privilege('athlya_cron', 'rgpd_delete_reservations(uuid)', 'EXECUTE')
+    AND has_function_privilege('athlya_app', 'rgpd_confirm_user_deleted(uuid)', 'EXECUTE')
+    AND NOT has_function_privilege('athlya_cron', 'rgpd_confirm_user_deleted(uuid)', 'EXECUTE'),
     'service functions are granted to athlya_app, not to athlya_cron'
 );
 
