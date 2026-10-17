@@ -35,7 +35,8 @@ No transaction and no row lock are held while sending:
 2. **Send** — outside any transaction, pool of `DRAIN_SEND_CONCURRENCY = 8`,
    each send bounded by 5 s. No new send starts after
    `DRAIN_CYCLE_DEADLINE_MS = 40 s`; unattempted rows are released
-   (`lease_until = NULL`).
+   (`lease_until = NULL`, claim attempt undone, fenced on the claim's lease)
+   and reported as `released` in `outbox.drain_cycle`, not as failures.
 3. **Mark** — delivered rows are stamped in one `UPDATE … WHERE id = ANY(…)`
    (`published_at = now()`, lease cleared).
 
@@ -45,6 +46,10 @@ a failed final stamp means those rows are re-sent after the lease (consumers
 dedup on `event.id`). Invariant (unit-tested): lease > deadline + one send
 timeout + mark.
 
+Canary: an old Worker's lease-unaware claim is skipped by the
+`outbox_skip_leased_claim` trigger on rows under a live lease (0035), so
+old and new drainers never send the same row while both run.
+
 Capacity per batch: ≤ 200 rows; with a queue at 10 ms/send ≈ 0.25 s, at
 1 s/send ≈ 25 s, fully hung queue → cut at 40 s with the connection idle. A
 cycle chains up to `DRAIN_MAX_ROUNDS` batches (≤ 10 000 rows, see below).
@@ -52,7 +57,8 @@ cycle chains up to `DRAIN_MAX_ROUNDS` batches (≤ 10 000 rows, see below).
 ## Throughput and fairness (issue #311)
 
 - A cycle keeps claiming batches until the backlog is empty, the 40 s
-  deadline is reached, or a whole batch failed (dead queue → stop, no spin).
+  deadline is reached (unsent rows are `released`), or a whole batch failed
+  (dead queue → stop, no spin).
   Cap: `DRAIN_MAX_ROUNDS = 50` batches per cycle.
 - **Fairness**: `COMPLIANCE_EVENT_TYPES` (`auth.user.deleted`,
   `members.export.requested`, `auth.user.registered`,
@@ -136,7 +142,7 @@ Backlog snapshot (**émis à chaque cron tick**, indépendant du logger — issu
 Cycle metric (**every cycle**, issue #424 — duration, throughput, failures):
 
 ```
-['athlya-logs'] | where ['message'] == "outbox.drain_cycle" | summarize p95(toint(['durationMs'])), sum(toint(['failed'])) by bin(_time, 5m)
+['athlya-logs'] | where ['message'] == "outbox.drain_cycle" | summarize percentile(toint(['durationMs']), 95), sum(toint(['processed'])), sum(toint(['failed'])), sum(toint(['released'])) by bin(_time, 5m)
 ```
 
 Overlap risk (cycle > 45s) :

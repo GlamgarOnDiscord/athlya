@@ -19,7 +19,8 @@
  *   - `markRunning` / `markCompleted` / `markFailed` are idempotent
  *     by design — re-running a transition that already landed is a
  *     no-op because the WHERE clause filters on the source state;
- *     `markRunning` reports whether this caller won the claim.
+ *     `markRunning` returns a claim token only to the caller that won
+ *     the claim, and completion / failure require that token.
  *
  * @see Requirements 4.1, 4.2, 4.3, 20.1.
  */
@@ -40,8 +41,9 @@ import type { ExportJobRecord, ExportJobStore } from '@athlya/members';
  * consumer (issue #498). The consumer runs as `athlya_app` with no
  * tenant claims, so every transition goes through the SECURITY DEFINER
  * functions of migration 0034: `export_job_claim` is the atomic
- * `pending → running` claim with a 15 min lease, and completion / failure
- * only move a job out of the state the worker owns. The worker never
+ * `pending → running` claim with a 15 min lease that mints a claim
+ * token; completion / failure require the current token, so a stale run
+ * whose lease was reclaimed cannot touch the newer run. The worker never
  * enqueues, so `create` / `findActiveByUser` refuse.
  */
 export function createExportJobWorkerStore(db: AthlyaDbAny): ExportJobStore {
@@ -51,22 +53,26 @@ export function createExportJobWorkerStore(db: AthlyaDbAny): ExportJobStore {
     },
 
     async markRunning(jobId) {
-      const rows = await queryRows<{ claimed: boolean }>(
+      const rows = await queryRows<{ claim_token: string | null }>(
         db,
-        sql`SELECT export_job_claim(${jobId}::uuid) AS claimed`,
+        sql`SELECT export_job_claim(${jobId}::uuid) AS claim_token`,
       );
-      return rows[0]?.claimed === true;
+      return rows[0]?.claim_token ?? null;
     },
 
-    async markCompleted(jobId, _completedAt, downloadUrl, downloadExpiresAt) {
+    async markCompleted(jobId, claimToken, _completedAt, downloadUrl, downloadExpiresAt) {
+      const rows = await queryRows<{ completed: boolean }>(
+        db,
+        sql`SELECT export_job_complete(${jobId}::uuid, ${claimToken}::uuid, ${downloadUrl}, ${downloadExpiresAt.toISOString()}::timestamptz) AS completed`,
+      );
+      return rows[0]?.completed === true;
+    },
+
+    async markFailed(jobId, claimToken, error) {
       await queryRows(
         db,
-        sql`SELECT export_job_complete(${jobId}::uuid, ${downloadUrl}, ${downloadExpiresAt.toISOString()}::timestamptz)`,
+        sql`SELECT export_job_fail(${jobId}::uuid, ${claimToken}::uuid, ${error})`,
       );
-    },
-
-    async markFailed(jobId, error) {
-      await queryRows(db, sql`SELECT export_job_fail(${jobId}::uuid, ${error})`);
     },
 
     async get(jobId) {
@@ -147,22 +153,23 @@ export function createDrizzleExportJobStoreHttp(
     },
 
     async markRunning(jobId, startedAt) {
+      const claimToken = crypto.randomUUID();
       const rows = await withConnectionRetry(() =>
         withTenantHttp(
           db,
           claims,
           db
             .update(exportJobs)
-            .set({ status: 'running', startedAt })
+            .set({ status: 'running', startedAt, claimToken })
             .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'pending')))
             .returning({ id: exportJobs.id }),
         ),
       );
-      return rows.length > 0;
+      return rows.length > 0 ? claimToken : null;
     },
 
-    async markCompleted(jobId, completedAt, downloadUrl, downloadExpiresAt) {
-      await withConnectionRetry(() =>
+    async markCompleted(jobId, claimToken, completedAt, downloadUrl, downloadExpiresAt) {
+      const rows = await withConnectionRetry(() =>
         withTenantHttp(
           db,
           claims,
@@ -174,12 +181,20 @@ export function createDrizzleExportJobStoreHttp(
               downloadUrl,
               downloadExpiresAt,
             })
-            .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'running'))),
+            .where(
+              and(
+                eq(exportJobs.id, jobId),
+                eq(exportJobs.status, 'running'),
+                eq(exportJobs.claimToken, claimToken),
+              ),
+            )
+            .returning({ id: exportJobs.id }),
         ),
       );
+      return rows.length > 0;
     },
 
-    async markFailed(jobId, error) {
+    async markFailed(jobId, claimToken, error) {
       await withConnectionRetry(() =>
         withTenantHttp(
           db,
@@ -188,7 +203,11 @@ export function createDrizzleExportJobStoreHttp(
             .update(exportJobs)
             .set({ status: 'failed', error })
             .where(
-              and(eq(exportJobs.id, jobId), inArray(exportJobs.status, ['pending', 'running'])),
+              and(
+                eq(exportJobs.id, jobId),
+                eq(exportJobs.status, 'running'),
+                eq(exportJobs.claimToken, claimToken),
+              ),
             ),
         ),
       );
@@ -245,6 +264,7 @@ function toExportJobRecord(row: typeof exportJobs.$inferSelect): ExportJobRecord
     error: row.error,
     downloadUrl: row.downloadUrl,
     downloadExpiresAt: row.downloadExpiresAt?.toISOString() ?? null,
+    claimToken: row.claimToken,
   };
 }
 

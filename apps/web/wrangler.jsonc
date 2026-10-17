@@ -1,0 +1,29 @@
+// Cloudflare Worker for @athlya/web built by OpenNext (issue #422).
+//   pnpm --filter @athlya/web build:worker      # next build + OpenNext bundle
+//   pnpm --filter @athlya/web exec wrangler deploy --env <staging|production>
+// NEXT_PUBLIC_* values are inlined at build time: build once per environment.
+// Custom domains / routes are attached in the Cloudflare dashboard (runbook
+// docs/runbooks/deploy-frontend.md), not here, so a dry-run needs no zone.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "athlya-web-dev",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-03-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+  },
+  "observability": { "enabled": true },
+  "upload_source_maps": true,
+  "env": {
+    "staging": {
+      "name": "athlya-web-staging",
+      "vars": { "APP_ENV": "staging" },
+    },
+    "production": {
+      "name": "athlya-web",
+      "vars": { "APP_ENV": "production" },
+    },
+  },
+}

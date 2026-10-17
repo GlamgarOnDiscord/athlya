@@ -18,12 +18,17 @@
 -- for that job's user.
 --   - export_job_claim: atomic pending → running with a 15 min lease,
 --     so two concurrent deliveries cannot both run, and a crashed run is
---     reclaimed on redelivery.
---   - export_job_complete / export_job_fail: guarded transitions.
+--     reclaimed on redelivery. Each claim mints a fresh `claim_token`.
+--   - export_job_complete / export_job_fail: transitions guarded by that
+--     token, so a stale run whose lease was reclaimed cannot complete or
+--     fail the newer run.
 --   - export_job_profile / export_job_rows: the archive sections.
 --
--- Additive only — canary safe.
+-- Additive only — canary safe: `claim_token` is a nullable column the
+-- previous Worker never reads or writes.
 -- =====================================================================
+
+ALTER TABLE "export_jobs" ADD COLUMN IF NOT EXISTS "claim_token" uuid;--> statement-breakpoint
 
 DROP POLICY IF EXISTS "export_jobs_insert_own" ON "export_jobs";--> statement-breakpoint
 CREATE POLICY "export_jobs_insert_own" ON "export_jobs"
@@ -36,11 +41,13 @@ CREATE POLICY "export_jobs_insert_own" ON "export_jobs"
         AND error IS NULL
         AND download_url IS NULL
         AND download_expires_at IS NULL
+        AND claim_token IS NULL
     );
 --> statement-breakpoint
 
 GRANT SELECT ON "export_jobs" TO athlya_owner;--> statement-breakpoint
-GRANT UPDATE ("status", "started_at", "completed_at", "error", "download_url", "download_expires_at")
+GRANT UPDATE ("status", "started_at", "completed_at", "error", "download_url", "download_expires_at",
+              "claim_token")
     ON "export_jobs" TO athlya_owner;--> statement-breakpoint
 
 -- Internal: ISO-8601 UTC rendering matching the API's `toISOString()`.
@@ -78,11 +85,12 @@ AS $$
 $$;
 --> statement-breakpoint
 
--- Returns true only for the caller that wins the transition. A `running`
--- job whose lease (started_at + 15 min) expired is reclaimable, so a
--- worker that died mid-run does not strand the job.
+-- Returns a fresh claim token to the caller that wins the transition,
+-- NULL otherwise. A `running` job whose lease (started_at + 15 min)
+-- expired is reclaimable, so a worker that died mid-run does not strand
+-- the job; the reclaim rotates the token, which fences off the old run.
 CREATE OR REPLACE FUNCTION export_job_claim(p_job_id uuid)
-RETURNS boolean
+RETURNS uuid
 LANGUAGE sql
 VOLATILE
 SECURITY DEFINER
@@ -90,18 +98,19 @@ SET search_path = public, pg_temp
 AS $$
     WITH claimed AS (
         UPDATE export_jobs j
-           SET status = 'running', started_at = now()
+           SET status = 'running', started_at = now(), claim_token = gen_random_uuid()
          WHERE j.id = p_job_id
            AND (j.status = 'pending'
                 OR (j.status = 'running' AND j.started_at < now() - interval '15 minutes'))
-        RETURNING 1
+        RETURNING j.claim_token
     )
-    SELECT EXISTS (SELECT 1 FROM claimed)
+    SELECT (SELECT claim_token FROM claimed)
 $$;
 --> statement-breakpoint
 
 CREATE OR REPLACE FUNCTION export_job_complete(
     p_job_id uuid,
+    p_claim_token uuid,
     p_download_url text,
     p_download_expires_at timestamptz
 )
@@ -117,14 +126,14 @@ AS $$
                completed_at = now(),
                download_url = p_download_url,
                download_expires_at = p_download_expires_at
-         WHERE j.id = p_job_id AND j.status = 'running'
+         WHERE j.id = p_job_id AND j.status = 'running' AND j.claim_token = p_claim_token
         RETURNING 1
     )
     SELECT EXISTS (SELECT 1 FROM done)
 $$;
 --> statement-breakpoint
 
-CREATE OR REPLACE FUNCTION export_job_fail(p_job_id uuid, p_error text)
+CREATE OR REPLACE FUNCTION export_job_fail(p_job_id uuid, p_claim_token uuid, p_error text)
 RETURNS boolean
 LANGUAGE sql
 VOLATILE
@@ -134,7 +143,7 @@ AS $$
     WITH failed AS (
         UPDATE export_jobs j
            SET status = 'failed', error = left(p_error, 500)
-         WHERE j.id = p_job_id AND j.status IN ('pending', 'running')
+         WHERE j.id = p_job_id AND j.status = 'running' AND j.claim_token = p_claim_token
         RETURNING 1
     )
     SELECT EXISTS (SELECT 1 FROM failed)
@@ -220,15 +229,19 @@ BEGIN
          ORDER BY w.id
          LIMIT v_limit;
     ELSIF p_section = 'audit_trail' THEN
-        -- Rows the user authored, plus rows about them; another actor's
-        -- identity is not disclosed.
+        -- Rows the user authored, plus rows about them. For the latter the
+        -- actor is withheld and only allow-listed metadata keys are kept,
+        -- so free-form metadata cannot disclose the other actor.
         RETURN QUERY
         SELECT a.id::text, jsonb_build_object(
                    'id', a.id::text,
                    'actorId', CASE WHEN a.actor_id = v_user THEN a.actor_id END,
                    'action', a.action, 'targetType', a.target_type, 'targetId', a.target_id,
                    'metadata', CASE WHEN a.actor_id = v_user THEN a.metadata
-                                    ELSE a.metadata - 'actorEmail' - 'ip' - 'userAgent' END,
+                                    ELSE jsonb_strip_nulls(jsonb_build_object(
+                                             'subjectUserId', a.metadata->'subjectUserId',
+                                             'eventType', a.metadata->'eventType',
+                                             'revision', a.metadata->'revision')) END,
                    'createdAt', export_iso(a.created_at))
           FROM audit_log a
          WHERE (a.actor_id = v_user OR a.metadata->>'subjectUserId' = v_user::text)
@@ -250,8 +263,8 @@ BEGIN
     FOREACH fn IN ARRAY ARRAY[
         'export_job_get(uuid)',
         'export_job_claim(uuid)',
-        'export_job_complete(uuid, text, timestamptz)',
-        'export_job_fail(uuid, text)',
+        'export_job_complete(uuid, uuid, text, timestamptz)',
+        'export_job_fail(uuid, uuid, text)',
         'export_job_profile(uuid)',
         'export_job_rows(uuid, text, text, integer)'
     ] LOOP

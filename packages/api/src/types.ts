@@ -46,7 +46,10 @@ export interface AthlyaHyperdriveBinding {
  * (via `createLogger({ env })`), so operators can filter Loki / Tail
  * Workers on the exact value.
  *
- * `'dev'`         — local `wrangler dev` and CI preview runs.
+ * `'dev'`         — local `wrangler dev`.
+ * `'preview'`     — per-PR Worker `athlya-api-pr-<N>.<sub>.workers.dev`
+ *                   on its own Neon branch (issue #419); strict like
+ *                   staging, no dev bypasses.
  * `'staging'`     — `staging.api.athlya.app`, full infra but isolated
  *                   data stores. Exercised by the E2E suite.
  * `'production'`  — `api.athlya.app`. Serves real tenants.
@@ -55,7 +58,7 @@ export interface AthlyaHyperdriveBinding {
  * on the field fails the typecheck when a new environment lands —
  * enums allow an unknown value to slip through and defeat that guard.
  */
-export type AthlyaEnvironment = 'dev' | 'staging' | 'production';
+export type AthlyaEnvironment = 'dev' | 'preview' | 'staging' | 'production';
 
 /* ------------------------------------------------------------------ */
 /*  Bindings (runtime env)                                             */
@@ -82,7 +85,7 @@ export type AthlyaEnvironment = 'dev' | 'staging' | 'production';
  * - `SENTRY_DSN` is optional because staging / dev can run without a
  *   Sentry project (a warn log is emitted and error reporting is
  *   suppressed — implementation lands in task 14.x).
- * - `VERSION` is injected by CI (`wrangler deploy --var VERSION=...`)
+ * - `VERSION` is injected by CI (`wrangler deploy --var VERSION:...`)
  *   so `/health` can echo the deployed build id back to smoke-test
  *   harnesses. Defaulted to a semver-ish placeholder in
  *   `wrangler.toml` for local dev.

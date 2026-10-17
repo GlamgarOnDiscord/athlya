@@ -13,8 +13,16 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+
+import {
+  evaluateErrorBudget,
+  fetchReleaseErrorCount,
+  readErrorBudgetConfig,
+} from './canary-error-budget.mjs';
+import { runSmoke } from './smoke-routes.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const API_DIR = path.join(ROOT, 'packages', 'api');
@@ -104,7 +112,11 @@ function uploadVersion(env, message) {
       ? message
       : `canary-${env}-${new Date().toISOString()}`;
   console.log(`Uploading Worker version (${env})…`);
-  runWrangler(['versions', 'upload', '--env', env, '--message', msg, '-y'], { capture: false });
+  const args = ['versions', 'upload', '--env', env, '--message', msg, '-y'];
+  // wrangler parses `--var KEY:VALUE` (a `=` would create a key named
+  // "VERSION=…"). VERSION is the Sentry release the error budget queries.
+  if (process.env.VERSION) args.push('--var', `VERSION:${process.env.VERSION}`);
+  runWrangler(args, { capture: false });
   const versionId = latestVersionId(env);
   console.log(`Uploaded version id: ${versionId}`);
   return versionId;
@@ -218,32 +230,94 @@ async function monitorCanaryWindow(baseUrl, waitMs) {
   return consecutiveFailures;
 }
 
+/**
+ * Route reachability after a traffic shift: every route group answers
+ * without a 5xx. At a partial percentage most of these requests still land
+ * on the previous version, so this proves the fleet is reachable, not that
+ * the canary is healthy — the release-tagged error budget does that.
+ *
+ * Unauthenticated on purpose: production login sits behind Turnstile,
+ * whose tokens are single-use and cannot be minted by CI. The
+ * authenticated route smoke runs on staging (staging-gate.yml).
+ */
+async function reachabilityOrThrow(baseUrl, label) {
+  const { ok, failures } = await runSmoke({ baseUrl });
+  if (!ok) {
+    throw new Error(`Route reachability failed at ${label}: ${failures.join('; ')}`);
+  }
+}
+
+async function errorBudgetOrThrow(budget, windowStart, label) {
+  const errorCount = await fetchReleaseErrorCount({
+    org: budget.org,
+    project: budget.project,
+    release: budget.release,
+    token: budget.token,
+    start: windowStart,
+    end: new Date(),
+  });
+  const { ok, reason } = evaluateErrorBudget({ errorCount, maxErrors: budget.maxErrors });
+  console.log(`error budget at ${label}: ${reason}`);
+  if (!ok) {
+    throw new Error(`Canary aborted at ${label}: ${reason}`);
+  }
+}
+
+/**
+ * Tell the workflow the gateway now serves this version, so a later failure
+ * rolls it back (and an earlier one leaves the live deployment alone).
+ */
+function markPromoted() {
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, 'promoted=true\n');
+}
+
 async function productionCanary({ baseUrl, stagingUrl, waitMin, steps }) {
   if (!baseUrl) throw new Error('--base-url is required');
+  const budgetConfig = readErrorBudgetConfig(process.env);
+  if (!budgetConfig.ok) {
+    const problems = [
+      ...(budgetConfig.missing.length > 0 ? [`missing ${budgetConfig.missing.join(', ')}`] : []),
+      ...budgetConfig.invalid.map((entry) => `invalid ${entry}`),
+    ];
+    throw new Error(`Canary needs a live error signal; ${problems.join('; ')} (issue #404)`);
+  }
+  const budget = budgetConfig.config;
   const waitMinutes = Number.isFinite(waitMin) && waitMin > 0 ? waitMin : 10;
   if (stagingUrl) {
     console.log('Pre-flight: staging /health/ready…');
     await waitHealthReady(stagingUrl);
   }
-  const versionId = uploadVersion('production', `production-canary-${Date.now()}`);
+  const versionId = uploadVersion('production', `production-canary-${budget.release}`);
   const waitMs = waitMinutes * 60 * 1000;
 
+  // Every step, 100 % included, gets the bake window and the error budget:
+  // full promotion is only reported once the release has held at 100 %.
   for (const pct of steps) {
     promoteVersion('production', versionId, pct);
-    if (pct < 100) {
-      console.log(`Monitoring ${waitMinutes} min at ${pct}% — polling /health/ready every 60 s…`);
-      const failures = await monitorCanaryWindow(baseUrl, waitMs);
-      if (failures >= 2) {
-        throw new Error(
-          `Canary aborted at ${pct}%: /health/ready failed ${failures} times consecutively. ` +
-            'Run: node scripts/canary-deploy.mjs rollback --env production',
-        );
-      }
+    markPromoted();
+    const windowStart = new Date();
+    await reachabilityOrThrow(baseUrl, `${pct}%`);
+    console.log(`Monitoring ${waitMinutes} min at ${pct}% — polling /health/ready every 60 s…`);
+    const failures = await monitorCanaryWindow(baseUrl, waitMs);
+    if (failures >= 2) {
+      throw new Error(
+        `Canary aborted at ${pct}%: /health/ready failed ${failures} times consecutively. ` +
+          'Run: node scripts/canary-deploy.mjs rollback --env production',
+      );
     }
+    await errorBudgetOrThrow(budget, windowStart, `${pct}%`);
   }
 
   await waitHealthReady(baseUrl);
-  console.log(JSON.stringify({ phase: 'production-canary', versionId, steps, baseUrl }));
+  console.log(
+    JSON.stringify({
+      phase: 'production-canary',
+      versionId,
+      release: budget.release,
+      steps,
+      baseUrl,
+    }),
+  );
   return versionId;
 }
 
@@ -278,14 +352,14 @@ async function main() {
       if (steps.length === 0 || steps[steps.length - 1] !== 100) {
         throw new Error('--steps must end with 100 (e.g. 5,25,100)');
       }
-  const rawWaitMin = Number(flags['wait-min'] ?? 10);
-  const waitMin = Number.isFinite(rawWaitMin) && rawWaitMin > 0 ? rawWaitMin : 10;
-  await productionCanary({
-    baseUrl: flags['base-url'],
-    stagingUrl: flags['staging-url'],
-    waitMin,
-    steps,
-  });
+      const rawWaitMin = Number(flags['wait-min'] ?? 10);
+      const waitMin = Number.isFinite(rawWaitMin) && rawWaitMin > 0 ? rawWaitMin : 10;
+      await productionCanary({
+        baseUrl: flags['base-url'],
+        stagingUrl: flags['staging-url'],
+        waitMin,
+        steps,
+      });
       break;
     }
     case 'rollback':

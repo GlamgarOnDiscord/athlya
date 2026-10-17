@@ -124,6 +124,16 @@ interface ClaimedOutboxRowRaw {
   [key: string]: unknown;
 }
 
+/** Row returned by {@link claimLeasedBatch}: the claimed row plus its lease token. */
+export interface LeasedOutboxRow extends ClaimedOutboxRow {
+  /** `lease_until` of the claim, as text, for {@link releaseLeases} fencing. */
+  readonly leaseToken: string;
+}
+
+interface LeasedOutboxRowRaw extends ClaimedOutboxRowRaw {
+  lease_token: string;
+}
+
 /**
  * Insert an event into the outbox as part of the caller's transaction.
  *
@@ -229,6 +239,10 @@ export async function claimBatch(
  * other drain can claim the rows, and a drain that dies mid-batch
  * simply lets the lease lapse.
  *
+ * Every row of one claim shares the same `lease_until`; its exact text
+ * form is returned as `leaseToken` so {@link releaseLeases} only touches
+ * rows this claim still owns.
+ *
  * `priorityEventTypes` are claimed before any other pending row
  * (issue #311): a notification backlog can never starve compliance
  * events such as `auth.user.deleted`.
@@ -238,14 +252,14 @@ export async function claimLeasedBatch(
   limit: number,
   leaseSeconds: number,
   priorityEventTypes: readonly string[] = [],
-): Promise<ClaimedOutboxRow[]> {
+): Promise<LeasedOutboxRow[]> {
   validateLimit(limit);
   priorityEventTypes.forEach(validateEventType);
   if (!Number.isInteger(leaseSeconds) || leaseSeconds < 1 || leaseSeconds > 3600) {
     throw new InvalidOutboxInputError('leaseSeconds', 'must be an integer in [1, 3600]');
   }
 
-  const result = await db.execute<ClaimedOutboxRowRaw>(sql`
+  const result = await db.execute<LeasedOutboxRowRaw>(sql`
         WITH claimed AS (
             SELECT id
               FROM outbox
@@ -267,10 +281,11 @@ export async function claimLeasedBatch(
                   outbox.payload,
                   outbox.occurred_at,
                   outbox.attempts,
-                  outbox.studio_id
+                  outbox.studio_id,
+                  outbox.lease_until::text AS lease_token
     `);
 
-  const rows = result as unknown as readonly ClaimedOutboxRowRaw[];
+  const rows = result as unknown as readonly LeasedOutboxRowRaw[];
   return rows.map((row) => ({
     id: row.id,
     eventId: row.event_id,
@@ -279,6 +294,7 @@ export async function claimLeasedBatch(
     occurredAt: row.occurred_at,
     attempts: row.attempts,
     studioId: row.studio_id,
+    leaseToken: row.lease_token,
   }));
 }
 
@@ -319,16 +335,26 @@ export async function markPublishedMany(db: AthlyaDb, ids: readonly string[]): P
 /**
  * Release the lease of rows the drain claimed but did not attempt (cycle
  * deadline reached), so the next cycle can claim them without waiting
- * for the lease to lapse.
+ * for the lease to lapse. The claim's `attempts + 1` is undone because
+ * the row was never sent.
+ *
+ * Fenced on `leaseToken`: a drain that stalled past its lease must not
+ * clear (or decrement) a lease another drain has taken since.
  */
-export async function releaseLeases(db: AthlyaDb, ids: readonly string[]): Promise<void> {
+export async function releaseLeases(
+  db: AthlyaDb,
+  ids: readonly string[],
+  leaseToken: string,
+): Promise<void> {
   if (ids.length === 0) return;
   ids.forEach(validateId);
   await db.execute(sql`
         UPDATE outbox
-           SET lease_until = NULL
+           SET lease_until = NULL,
+               attempts = GREATEST(outbox.attempts - 1, 0)
          WHERE id = ANY(${`{${ids.join(',')}}`}::uuid[])
            AND published_at IS NULL
+           AND lease_until = ${leaseToken}::timestamptz
     `);
 }
 
