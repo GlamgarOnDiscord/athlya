@@ -113,7 +113,7 @@ importers:
         specifier: ^4.13.0
         version: 4.13.0(playwright-core@1.64.0)
       '@opennextjs/cloudflare':
-        specifier: ^1.20.10
+        specifier: 1.20.10
         version: 1.20.10(patch_hash=cb9094d9ddd1702fff24915cbb952868b0a9f30762cf972213ec5fc02a98f07f)(next@16.4.0(@babel/core@8.0.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.64.0)(@types/node@24.19.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(supports-color@10.2.2)(wrangler@4.149.0(@cloudflare/workers-types@5.20261011.1)(@types/node@24.19.2))
       '@playwright/test':
         specifier: ^1.64.0
@@ -228,7 +228,7 @@ importers:
         specifier: ^4.13.0
         version: 4.13.0(playwright-core@1.64.0)
       '@opennextjs/cloudflare':
-        specifier: ^1.20.10
+        specifier: 1.20.10
         version: 1.20.10(patch_hash=cb9094d9ddd1702fff24915cbb952868b0a9f30762cf972213ec5fc02a98f07f)(next@16.4.0(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.64.0)(@types/node@24.19.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(supports-color@10.2.2)(wrangler@4.149.0(@cloudflare/workers-types@5.20261011.1)(@types/node@24.19.2))
       '@playwright/test':
         specifier: ^1.64.0
