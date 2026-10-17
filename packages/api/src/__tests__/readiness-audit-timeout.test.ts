@@ -30,7 +30,12 @@ describe('/health/ready audit partition probe', () => {
     const pending = app.request(
       '/health/ready',
       { method: 'GET', headers: { host: 'localhost:8787' } },
-      buildMockEnv({ ENVIRONMENT: 'dev', DB_URL: 'postgresql://app@db.example/athlya' }),
+      // Empty REDIS_URL skips the Redis probe, so no real fetch races the fake timers.
+      buildMockEnv({
+        ENVIRONMENT: 'dev',
+        DB_URL: 'postgresql://app@db.example/athlya',
+        REDIS_URL: '',
+      }),
     );
     await vi.advanceTimersByTimeAsync(2000);
     const res = await pending;
