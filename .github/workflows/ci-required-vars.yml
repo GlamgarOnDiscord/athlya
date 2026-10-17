@@ -31,9 +31,6 @@ jobs:
         env:
           STAGING_API_URL: ${{ vars.STAGING_API_URL }}
           PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
-          STAGING_WEB_URL: ${{ vars.STAGING_WEB_URL }}
-          PRODUCTION_WEB_URL: ${{ vars.PRODUCTION_WEB_URL }}
-          PRODUCTION_STUDIO_URL: ${{ vars.PRODUCTION_STUDIO_URL }}
           K6_STAGING_BASE_URL: ${{ vars.K6_STAGING_BASE_URL }}
           ZAP_TARGET_URL: ${{ vars.ZAP_TARGET_URL }}
           ZAP_ACTIVE_TARGET_URL: ${{ vars.ZAP_ACTIVE_TARGET_URL }}
@@ -48,17 +45,14 @@ jobs:
           set -euo pipefail
           # name|consumer
           required=(
-            "STAGING_API_URL|staging-gate.yml, deploy-production.yml, canary.yml, deploy-frontend.yml"
-            "PRODUCTION_API_URL|deploy-production.yml, canary.yml, deploy-frontend.yml, rollback.yml"
-            "STAGING_WEB_URL|deploy-frontend.yml"
-            "PRODUCTION_WEB_URL|deploy-frontend.yml"
-            "PRODUCTION_STUDIO_URL|deploy-frontend.yml"
+            "STAGING_API_URL|staging-gate.yml, deploy-production.yml, canary.yml"
+            "PRODUCTION_API_URL|deploy-production.yml, canary.yml, rollback.yml"
             "K6_STAGING_BASE_URL|staging-gate.yml, load-test.yml"
             "ZAP_TARGET_URL|zap-baseline.yml"
             "ZAP_ACTIVE_TARGET_URL|zap-active.yml"
             "SYNTHETIC_TARGET_URL|synthetics.yml"
-            "SENTRY_ORG|canary.yml, deploy-production.yml, deploy-frontend.yml"
-            "SENTRY_PROJECT|canary.yml, deploy-production.yml, deploy-frontend.yml"
+            "SENTRY_ORG|canary.yml, deploy-production.yml"
+            "SENTRY_PROJECT|canary.yml, deploy-production.yml"
             "NEON_PROJECT_ID|preview.yml"
             "CLOUDFLARE_WORKERS_SUBDOMAIN|preview.yml"
             "TF_CLOUD_ORGANIZATION|terraform.yml"
