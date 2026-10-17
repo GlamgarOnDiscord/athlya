@@ -460,7 +460,7 @@ id = "49e3db37042d4f2999b0c0061363929c"
 # Production environment
 # ============================================================================
 # Real tenants. CI rewrites VERSION at deploy time
-# (`wrangler deploy --env production --var VERSION=...`) so the value
+# (`wrangler deploy --env production --var VERSION:...`) so the value
 # below is only a placeholder.
 #
 # Secrets are set via:

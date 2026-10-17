@@ -8,8 +8,12 @@ Issue **#80** (runbook) · **#129** (automation CI).
 - Workers Paid (versions + traffic split).
 - `wrangler` ≥ 3.73 avec `versions upload`.
 - Baseline Sentry error rate + Axiom `http.status_code` 5xx (15 min avant canary).
-- Secrets GitHub : `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
-- Variables GitHub : `STAGING_API_URL`, `PRODUCTION_API_URL`.
+- Secrets GitHub : `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
+  `SENTRY_AUTH_TOKEN`, `SENTRY_DSN`.
+- Variables GitHub : `STAGING_API_URL`, `PRODUCTION_API_URL`, `SENTRY_ORG`,
+  `SENTRY_PROJECT` (optionnel : `CANARY_MAX_ERRORS`).
+- Secret Worker `SENTRY_DSN` sur la gateway et les trois sub-workers
+  (`node scripts/verify-secrets.mjs --env production`).
 
 Checklist ops : `node scripts/verify-canary-deploy-checklist.mjs`
 
@@ -18,32 +22,58 @@ Checklist ops : `node scripts/verify-canary-deploy-checklist.mjs`
 Workflow : [`.github/workflows/deploy-production.yml`](../../.github/workflows/deploy-production.yml)  
 Actions → **Deploy API** → `workflow_dispatch`
 
-| Phase               | Action                                                                                      |
-| ------------------- | ------------------------------------------------------------------------------------------- |
-| `staging-smoke`     | `versions upload` staging + gate `/health/ready`                                            |
-| `production-canary` | staging ready → upload prod → **5 %** (10 min) → **25 %** (10 min) → **100 %** + ready prod |
-| `rollback`          | `wrangler rollback` production (option `version_id`)                                        |
+| Phase               | Action                                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `staging-smoke`     | `versions upload` staging + gate `/health/ready`                                                     |
+| `production-canary` | staging ready → upload prod → **5 %** (10 min) → **25 %** (10 min) → **100 %** (10 min) + ready prod |
+| `rollback`          | `wrangler rollback` production (option `version_id`)                                                 |
 
 Environment GitHub **`production`** : approbation manuelle obligatoire avant canary/rollback.
 
 ## Gates de promotion (issue #404)
 
-À chaque palier (1 % → 10 % → 100 % automatique, 5 → 25 → 100 % manuel) :
+À **chaque** palier, 100 % compris (1 % → 10 % → 100 % automatique, 5 → 25 → 100 % manuel) :
 
-1. **Smoke par route** (`scripts/smoke-routes.mjs`) juste après le
-   basculement de trafic — authentifié si `PRODUCTION_SMOKE_EMAIL` /
-   `PRODUCTION_SMOKE_PASSWORD` sont fournis.
+1. **Accessibilité des routes** (`scripts/smoke-routes.mjs`, passe non
+   authentifiée) juste après le basculement de trafic : chaque groupe de
+   routes répond sans 5xx. À 1 % / 5 % / 10 %, la plupart de ces requêtes
+   tombent encore sur l'ancienne version : c'est un contrôle
+   d'**accessibilité** du parc, pas de santé du canary (et il ne voit pas
+   les régressions 4xx). La santé de la release est mesurée par le gate 3.
 2. **Fenêtre de bake** : `/health/ready` toutes les 60 s (2 échecs
    consécutifs → abort).
 3. **Budget d'erreurs** : nombre d'erreurs Sentry de la release
-   (`VERSION` = SHA du commit, injecté par `--var VERSION:<sha>`) sur la
+   (`VERSION` = SHA court du commit, 7 caractères, injecté par
+   `--var VERSION:<sha7>` sur la gateway **et** les trois sub-workers) sur la
    fenêtre ; au-delà de `CANARY_MAX_ERRORS` (défaut 5) → abort et rollback.
    Une erreur de l'API Sentry fait échouer le gate (fail-closed).
+   `CANARY_MAX_ERRORS` vide = défaut ; toute valeur qui n'est pas un entier
+   ≥ 0 (`abc`, `-1`, `1.5`) fait échouer la configuration.
+
+Le palier 100 % a donc lui aussi sa fenêtre de bake et son budget : le
+canary ne rapporte un succès qu'une fois la release tenue à 100 %. Avec trois
+fenêtres, `wait_minutes` du workflow manuel est limité à 1-20.
 
 Prérequis obligatoires (le workflow **échoue** sinon) : `SENTRY_AUTH_TOKEN`,
-`SENTRY_ORG`, `SENTRY_PROJECT`. Les déclencheurs de `canary.yml` couvrent tout
-le graphe runtime de `@athlya/api` + le lockfile, vérifié en CI par
-`pnpm check:canary-paths`.
+`SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_DSN` (secret GitHub), et les secrets
+Workers vérifiés par `scripts/verify-secrets.mjs --env production` (dont
+`SENTRY_DSN` sur les quatre Workers — sans lui le budget compterait zéro
+erreur et promouvrait à l'aveugle). Les déclencheurs de `canary.yml` couvrent
+tout le graphe runtime de `@athlya/api`, la config de build qu'il étend
+(`packages/tsconfig`), le lockfile, et chaque script exécuté par le workflow
+avec ses imports locaux, vérifié en CI par `pnpm check:canary-paths`.
+
+### Pas de smoke authentifié en production (décision)
+
+`/v1/auth/login` est protégé par Turnstile ; en production le secret est
+réel et chaque token est à usage unique, donc la CI ne peut pas en fournir un
+par palier (un token statique échoue dès la deuxième connexion, et un bearer
+pré-émis expire au bout de 15 min, avant la fin d'un canary). Le canary de
+production exécute donc **uniquement** la passe non authentifiée ; la passe
+authentifiée tourne sur staging (`staging-gate.yml`, clés de test Turnstile,
+`STAGING_SMOKE_*`). Turnstile n'est **pas** assoupli sur la route de login.
+Les secrets `PRODUCTION_SMOKE_EMAIL` / `PRODUCTION_SMOKE_PASSWORD` ne sont
+plus lus.
 
 ## Script local / CI
 

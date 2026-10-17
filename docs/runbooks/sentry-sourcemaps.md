@@ -6,7 +6,7 @@ Rendre les stack traces prod **lisibles** (`fichier:ligne` au lieu de bundle min
 
 ## Comment ça marche
 
-1. **Tag release sur les events** — déjà en place : le Worker émet `event.release = VERSION` (`packages/api/src/sentry.ts`), où `VERSION` est injecté au deploy (`--var VERSION:${GITHUB_SHA:0:7}` — wrangler parses `KEY:VALUE` ; un `=` créait une variable vide).
+1. **Tag release sur les events** — déjà en place : le Worker émet `event.release = VERSION` (`packages/api/src/sentry.ts`), où `VERSION` est injecté au deploy (`--var VERSION:${GITHUB_SHA:0:7}` — wrangler découpe `--var` sur `:`).
 2. **Source maps** — `wrangler.toml` a `upload_source_maps = true` : `wrangler deploy --outdir dist` écrit `dist/*.js` + `dist/*.js.map`.
 3. **Upload Sentry** — l'étape `Sentry release + source maps` (`.github/workflows/deploy-production.yml`) crée la release `${GITHUB_SHA:0:7}` (même valeur que `VERSION`) — **obligatoire** en `production-deploy`, upload les maps, set-commits `--auto`, finalize, et enregistre un **deploy marker** (`-e staging|production`).
 
