@@ -46,7 +46,7 @@ export interface AthlyaHyperdriveBinding {
  * (via `createLogger({ env })`), so operators can filter Loki / Tail
  * Workers on the exact value.
  *
- * `'dev'`         — local `wrangler dev` and CI preview runs.
+ * `'dev'`         — local `wrangler dev`.
  * `'preview'`     — per-PR Worker `athlya-api-pr-<N>.<sub>.workers.dev`
  *                   on its own Neon branch (issue #419); strict like
  *                   staging, no dev bypasses.

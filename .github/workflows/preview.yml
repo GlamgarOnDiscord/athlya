@@ -26,9 +26,10 @@ name: Preview environments
 #   NEON_PROJECT_ID              — Neon project ID (e.g. "proud-dream-12345678")
 #   CLOUDFLARE_WORKERS_SUBDOMAIN — CF workers.dev subdomain (e.g. "athlya")
 #   NEON_DATABASE_NAME           — optional, defaults to "neondb"
+#   NEON_OWNER_ROLE              — optional, defaults to "neondb_owner"
 #
 # The Neon branch owner URL is only used to run migrations; the Worker gets
-# an `athlya_app` URL from the Neon connection_uri API so the boot-time RLS
+# an `athlya_app` URL from the Neon v2 connection_uri API so the per-isolate RLS
 # role check passes and previews exercise RLS like production.
 #
 # See docs/runbooks/preview-pr.md for full setup instructions.
@@ -42,6 +43,9 @@ concurrency:
   # in-flight deploy so only the latest commit is served.
   group: preview-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
+
+env:
+  NEON_API: https://console.neon.tech/api/v2
 
 jobs:
   # --------------------------------------------------------------------------
@@ -91,50 +95,64 @@ jobs:
         id: neon
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          NEON_DATABASE_NAME: ${{ vars.NEON_DATABASE_NAME || 'neondb' }}
+          NEON_OWNER_ROLE: ${{ vars.NEON_OWNER_ROLE || 'neondb_owner' }}
         run: |
+          set -euo pipefail
           BRANCH_NAME="preview-pr-${{ github.event.pull_request.number }}"
 
           # Idempotent: if a branch already exists for this PR (e.g. on
-          # `synchronize`), Neon returns 409. We detect that and fetch the
-          # existing branch instead of failing.
+          # `synchronize`), Neon returns 409. We detect that and look up the
+          # existing branch instead of failing. The branch gets its own
+          # read-write compute so it can be connected to.
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "https://api.neon.tech/v1/projects/${{ vars.NEON_PROJECT_ID }}/branches" \
+            "${NEON_API}/projects/${NEON_PROJECT_ID}/branches" \
             -H "Authorization: Bearer ${NEON_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d "{\"branch\": {\"name\": \"${BRANCH_NAME}\"}}")
+            -d "{\"branch\": {\"name\": \"${BRANCH_NAME}\"}, \"endpoints\": [{\"type\": \"read_write\"}]}")
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           BODY=$(echo "$RESPONSE" | head -n -1)
 
           if [ "$HTTP_CODE" = "409" ]; then
-            # Branch exists — fetch its connection URI.
             BRANCH_ID=$(curl -sf \
-              "https://api.neon.tech/v1/projects/${{ vars.NEON_PROJECT_ID }}/branches" \
+              "${NEON_API}/projects/${NEON_PROJECT_ID}/branches" \
               -H "Authorization: Bearer ${NEON_API_KEY}" | \
               jq -r ".branches[] | select(.name == \"${BRANCH_NAME}\") | .id")
-
-            BODY=$(curl -sf \
-              "https://api.neon.tech/v1/projects/${{ vars.NEON_PROJECT_ID }}/branches/${BRANCH_ID}" \
-              -H "Authorization: Bearer ${NEON_API_KEY}")
-          fi
-
-          BRANCH_ID=$(echo "$BODY" | jq -r '.branch.id // .id')
-          DB_URL=$(echo "$BODY" | jq -r '.connection_uris[0].connection_uri // empty')
-
-          if [ -z "$DB_URL" ]; then
-            echo "::error::Failed to obtain DB_URL from Neon API (response omitted to avoid leaking credentials)"
+          elif [ "$HTTP_CODE" = "201" ]; then
+            BRANCH_ID=$(echo "$BODY" | jq -r '.branch.id // empty')
+          else
+            echo "::error::Neon branch creation failed with HTTP ${HTTP_CODE}"
             exit 1
           fi
 
-          # Runtime connection as athlya_app (no BYPASSRLS) — the owner URL
-          # above is only used for migrations.
-          APP_DB_URL=$(curl -sf -G \
-            "https://api.neon.tech/v1/projects/${{ vars.NEON_PROJECT_ID }}/connection_uri" \
-            --data-urlencode "branch_id=${BRANCH_ID}" \
-            --data-urlencode "database_name=${{ vars.NEON_DATABASE_NAME || 'neondb' }}" \
-            --data-urlencode "role_name=athlya_app" \
-            -H "Authorization: Bearer ${NEON_API_KEY}" | jq -r '.uri // empty')
+          if [ -z "$BRANCH_ID" ]; then
+            echo "::error::Could not resolve the Neon branch id for ${BRANCH_NAME}"
+            exit 1
+          fi
 
+          # The create response omits connection URIs once the parent has
+          # more than one role (it holds athlya_app), so both URIs come from
+          # the connection_uri endpoint, one per role.
+          connection_uri() {
+            curl -sf -G \
+              "${NEON_API}/projects/${NEON_PROJECT_ID}/connection_uri" \
+              --data-urlencode "branch_id=${BRANCH_ID}" \
+              --data-urlencode "database_name=${NEON_DATABASE_NAME}" \
+              --data-urlencode "role_name=$1" \
+              -H "Authorization: Bearer ${NEON_API_KEY}" | jq -r '.uri // empty'
+          }
+
+          # Owner connection, only used for migrations.
+          DB_URL=$(connection_uri "${NEON_OWNER_ROLE}" || true)
+          if [ -z "$DB_URL" ]; then
+            echo "::error::Failed to obtain the ${NEON_OWNER_ROLE} connection URI for ${BRANCH_NAME}"
+            exit 1
+          fi
+
+          # Runtime connection as athlya_app (no BYPASSRLS).
+          APP_DB_URL=$(connection_uri athlya_app || true)
           if [ -z "$APP_DB_URL" ]; then
             echo "::error::Failed to obtain the athlya_app connection URI for ${BRANCH_NAME}"
             exit 1
@@ -357,7 +375,7 @@ jobs:
           BRANCH_NAME="preview-pr-${{ github.event.pull_request.number }}"
 
           BRANCH_ID=$(curl -sf \
-            "https://api.neon.tech/v1/projects/${{ vars.NEON_PROJECT_ID }}/branches" \
+            "${NEON_API}/projects/${{ vars.NEON_PROJECT_ID }}/branches" \
             -H "Authorization: Bearer ${NEON_API_KEY}" | \
             jq -r ".branches[] | select(.name == \"${BRANCH_NAME}\") | .id")
 
@@ -367,7 +385,7 @@ jobs:
           fi
 
           curl -sf -X DELETE \
-            "https://api.neon.tech/v1/projects/${{ vars.NEON_PROJECT_ID }}/branches/${BRANCH_ID}" \
+            "${NEON_API}/projects/${{ vars.NEON_PROJECT_ID }}/branches/${BRANCH_ID}" \
             -H "Authorization: Bearer ${NEON_API_KEY}"
 
           echo "Deleted Neon branch ${BRANCH_NAME} (${BRANCH_ID})"
