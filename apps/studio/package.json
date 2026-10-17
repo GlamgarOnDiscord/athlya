@@ -12,10 +12,11 @@
     "preview:worker": "opennextjs-cloudflare preview",
     "start": "next start --port 3001",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json",
     "test": "vitest run",
     "e2e:install": "playwright install chromium --with-deps",
     "e2e": "playwright test --config e2e/playwright.config.ts e2e/axe.spec.ts",
+    "e2e:release": "playwright test --config e2e/release.config.ts",
     "clean": "rimraf .next .turbo *.tsbuildinfo"
   },
   "dependencies": {

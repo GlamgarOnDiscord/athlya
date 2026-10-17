@@ -8,6 +8,9 @@
  * Usage (GitHub Actions):
  *   GITHUB_TOKEN=… node scripts/require-check-success.mjs \
  *     --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --check "Staging gate"
+ *
+ * `--check` may be repeated: the commit passes when any of the named
+ * checks succeeded (e.g. a release smoke run for all apps or for one).
  */
 
 import { parseArgs } from 'node:util';
@@ -58,23 +61,29 @@ if (import.meta.main) {
     options: {
       repo: { type: 'string' },
       sha: { type: 'string' },
-      check: { type: 'string' },
+      check: { type: 'string', multiple: true },
     },
   });
   const token = process.env.GITHUB_TOKEN;
-  if (!values.repo || !values.sha || !values.check || !token) {
+  const checks = values.check ?? [];
+  if (!values.repo || !values.sha || checks.length === 0 || !token) {
     console.error('[require-check] --repo, --sha, --check and GITHUB_TOKEN are required');
     process.exit(1);
   }
-  const { ok, reason } = await requireCheckSuccess({
-    repo: values.repo,
-    sha: values.sha,
-    checkName: values.check,
-    token,
-  });
-  if (!ok) {
-    console.error(`::error title=Required check missing::${reason} (${values.sha})`);
-    process.exit(1);
+  const reasons = [];
+  for (const checkName of checks) {
+    const { ok, reason } = await requireCheckSuccess({
+      repo: values.repo,
+      sha: values.sha,
+      checkName,
+      token,
+    });
+    if (ok) {
+      console.log(`[require-check] OK — ${reason}`);
+      process.exit(0);
+    }
+    reasons.push(reason);
   }
-  console.log(`[require-check] OK — ${reason}`);
+  console.error(`::error title=Required check missing::${reasons.join('; ')} (${values.sha})`);
+  process.exit(1);
 }
