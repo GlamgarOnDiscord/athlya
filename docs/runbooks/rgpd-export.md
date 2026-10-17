@@ -6,13 +6,13 @@ signed link `GET /v1/members/me/export/:jobId/download?exp&sig`.
 
 ## Prerequisites per environment
 
-| Item                     | Where                                                    | Notes                                                                      |
-| ------------------------ | -------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Migrations `0032`–`0034` | Neon (migration role), in order                          | Service functions, auth events, export runtime. Apply **before** deploy.   |
-| `EXPORTS_BUCKET`         | `wrangler r2 bucket create athlya-exports-{env}` + toml  | Private bucket. No public access, no custom domain.                        |
-| `EXPORT_URL_SIGNING_KEY` | `wrangler secret put EXPORT_URL_SIGNING_KEY --env <env>` | ≥ 32 random chars (`openssl rand -base64 48`). Rotation invalidates links. |
-| `API_PUBLIC_URL`         | `[env.<env>.vars]` in `packages/api/wrangler.toml`       | Public API origin; set for dev, staging and production. Preview: add it.   |
-| R2 lifecycle rule        | `wrangler r2 bucket lifecycle add` (see below)           | Expires `exports/members/` objects after 3 days. Required everywhere.      |
+| Item                     | Where                                                    | Notes                                                                                                                                                                                                                      |
+| ------------------------ | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Migrations `0032`–`0034` | Neon (migration role), in order                          | Service functions, auth events, export runtime. Apply **before** deploy.                                                                                                                                                   |
+| `EXPORTS_BUCKET`         | `wrangler r2 bucket create athlya-exports-{env}` + toml  | Private bucket. No public access, no custom domain.                                                                                                                                                                        |
+| `EXPORT_URL_SIGNING_KEY` | `wrangler secret put EXPORT_URL_SIGNING_KEY --env <env>` | ≥ 32 random chars (`openssl rand -base64 48`). Rotation invalidates links. Same value on the gateway (signs) and with `-c wrangler.reservations.toml` (verifies `/v1/members/*`). Checked by `scripts/verify-secrets.mjs`. |
+| `API_PUBLIC_URL`         | `[env.<env>.vars]` in `packages/api/wrangler.toml`       | Public API origin; set for dev, staging and production. Preview: add it.                                                                                                                                                   |
+| R2 lifecycle rule        | `wrangler r2 bucket lifecycle add` (see below)           | Expires `exports/members/` objects after 3 days. Required everywhere.                                                                                                                                                      |
 
 ```sh
 wrangler r2 bucket lifecycle add athlya-exports-{env} expire-exports exports/members/ --expire-days 3
@@ -56,9 +56,22 @@ migration is different: requests fail with raw database errors instead — the e
 
 ## Archive contents
 
-`profile.json`, `consents.json`, `reservations.{json,csv}`, `workout_sessions.{json,csv}`,
-`checkins.{json,csv}`, `invoices.{json,csv}`, `audit_trail.json`.
-Invoices are empty until billing records are persisted (issue #122). Audit rows the user wrote are
+`README.txt`, `profile.json`, `consents.json`, `reservations.{json,csv}`,
+`workout_sessions.{json,csv}`, `checkins.{json,csv}`, `invoices.{json,csv}`, `audit_trail.json`.
+
+`README.txt` describes each file and the CSV encoding (UTF-8, CRLF, every cell quoted, formula
+prefix).
+
+**Invoices: members have no invoices in v1.** Athlya only bills studios for their own platform
+subscription (`studio_invoices`, migration `0036`, issue #122). Those invoices belong to the
+studio, carry no member id and are not a member's personal data, so they are not exported.
+Member → studio payments (Stripe Connect) are out of scope for v1 and nothing billed to a member
+is stored. The archive keeps `invoices.json` (`[]`) and `invoices.csv` (header row only) so its
+schema stays stable, and `README.txt` says why. When member billing ships, implement
+`listInvoices` in `packages/api/src/adapters/export-data-source.ts` through the claimed job (like
+`export_job_rows`) and update the README text (`MEMBER_INVOICES_NOTE` in `@athlya/members`).
+
+Audit rows the user wrote are
 exported in full; rows about the user written by another actor are exported with `actorId: null`
 and only the `subjectUserId`, `eventType` and `revision` metadata keys (everything else is
 dropped, so free-form metadata cannot disclose that actor).
@@ -74,3 +87,57 @@ SELECT id, user_id, started_at FROM export_jobs
 SELECT error, count(*) FROM export_jobs
  WHERE status = 'failed' AND requested_at > now() - interval '24 hours' GROUP BY 1;
 ```
+
+## Staging E2E
+
+`scripts/smoke-e2e-export.mjs` proves the whole flow on staging with the real Postgres, Queue and
+R2 bindings:
+
+1. logs in as the smoke account and as a second, unrelated account;
+2. logs a workout session whose notes are a CSV-injection probe (`=HYPERLINK(…)`, quotes, comma,
+   CRLF). Sessions cannot be deleted through the API, so each run adds one to the smoke account;
+3. `POST /v1/members/me/export`, then polls the job (default timeout 15 min);
+4. checks the signed expiry is 72 h after completion and matches `downloadExpiresAt`;
+5. downloads the archive through the signed link (it refuses a link on another origin, so the
+   token never leaves the API) and validates it: exact file list, CRC-32, JSON/CSV row counts,
+   CSV headers, strict quoting and CRLF, no unneutralised formula cell, and the probe escaped
+   (`'` prefix, doubled quotes) in CSV and raw in JSON;
+6. requires the link to be refused with no token (`401`), for the other account (`403`/`404`),
+   with a tampered signature, a past expiry or a stretched expiry (`403`), and the job status to
+   be hidden from the other account (`404`).
+
+It is **not** in the per-PR staging gate: the export is limited to one request per user per 24 h
+(`export-post` rate-limit policy), so a second gate run on the same day would always fail. It runs
+from `.github/workflows/staging-export-e2e.yml` weekly (Tuesday 06:17 UTC) and on demand
+(`workflow_dispatch`). A rerun inside the 24 h window passes `job_id` (manual input or
+`--job-id`) to re-validate the export already requested; the probe check is then skipped.
+
+Configuration (environment `staging`, the run fails when any required item is missing):
+
+| Name                                                        | Kind    | Notes                                                 |
+| ----------------------------------------------------------- | ------- | ----------------------------------------------------- |
+| `STAGING_API_URL`, `STAGING_SMOKE_STUDIO_SLUG`              | vars    | Shared with the staging gate.                         |
+| `STAGING_SMOKE_EMAIL`, `STAGING_SMOKE_PASSWORD`             | secrets | Shared with the staging gate.                         |
+| `STAGING_SMOKE_OTHER_EMAIL`, `STAGING_SMOKE_OTHER_PASSWORD` | secrets | Second account (any studio), never the smoke account. |
+| `STAGING_SMOKE_TURNSTILE_TOKEN`                             | secret  | Optional; owner login.                                |
+| `STAGING_SMOKE_OTHER_TURNSTILE_TOKEN`                       | secret  | Optional; other-account login (falls back to above).  |
+
+A Turnstile token is single-use, so stored tokens only work with Cloudflare's Turnstile test secret
+on staging (any token passes, repeatedly). Access tokens live 15 min; the script refreshes both
+sessions through `POST /v1/auth/refresh` while it waits for the job.
+
+Local run:
+
+```sh
+export SMOKE_EMAIL=… SMOKE_PASSWORD=… SMOKE_STUDIO_SLUG=…
+export SMOKE_OTHER_EMAIL=… SMOKE_OTHER_PASSWORD=…
+node scripts/smoke-e2e-export.mjs --base-url https://staging.api.athlya.app
+```
+
+Optional: export `SMOKE_TURNSTILE_TOKEN` / `SMOKE_OTHER_TURNSTILE_TOKEN` first, and append
+`--timeout-sec 900` or `--job-id` followed by an existing job id.
+
+The pure parts (ZIP reader, strict CSV parser, archive validator, link and expiry checks, the flow
+against a fake API) are covered by `scripts/__tests__/smoke-export.test.mjs`
+(`pnpm test:scripts`). `CSV_HEADERS` in the script mirrors `buildArchiveEntries` in
+`@athlya/members`: change both together (the test fixture hard-codes the same contract).
