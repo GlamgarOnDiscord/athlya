@@ -8,7 +8,7 @@ Rendre les stack traces prod **lisibles** (`fichier:ligne` au lieu de bundle min
 
 1. **Tag release sur les events** — déjà en place : le Worker émet `event.release = VERSION` (`packages/api/src/sentry.ts`), où `VERSION` est injecté au deploy (`--var VERSION:${GITHUB_SHA:0:7}` — wrangler découpe `--var` sur `:`).
 2. **Source maps** — `wrangler.toml` a `upload_source_maps = true` : `wrangler deploy --outdir dist` écrit `dist/*.js` + `dist/*.js.map`.
-3. **Upload Sentry** — l'étape `Sentry release + source maps` (`.github/workflows/deploy-production.yml`) crée la release `${GITHUB_SHA:0:7}`, upload les maps, set-commits `--auto`, finalize, et enregistre un **deploy marker** (`-e staging|production`).
+3. **Upload Sentry** — l'étape `Sentry release + source maps` (`.github/workflows/deploy-production.yml`) crée la release `${GITHUB_SHA:0:7}` (même valeur que `VERSION`) — **obligatoire** en `production-deploy`, upload les maps, set-commits `--auto`, finalize, et enregistre un **deploy marker** (`-e staging|production`).
 
 **Le nom de release = `VERSION` = sha court** : c'est ce qui permet à Sentry de relier la map uploadée à l'event entrant (matching par release + filename).
 
@@ -20,7 +20,7 @@ Rendre les stack traces prod **lisibles** (`fichier:ligne` au lieu de bundle min
 | `SENTRY_ORG`        | var    | slug org Sentry                                                                  |
 | `SENTRY_PROJECT`    | var    | slug projet (ex. `athlya-api`)                                                   |
 
-Soft-gate : si `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` absents, l'étape **skip** (warning) sans casser le deploy.
+Soft-gate **staging uniquement** : si `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` absents, l'étape **skip** (warning) sans casser le `staging-deploy`. En **production**, leur absence **fait échouer** le deploy : `production-deploy` sort en erreur dans l'étape `Sentry release + source maps`, et `production-canary` dans `Require Sentry config for production canary` (#415).
 
 ## Vérification (critères d'acceptation)
 

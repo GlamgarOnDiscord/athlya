@@ -265,8 +265,8 @@ jobs:
       # packages/api/dist/<worker>; inject + upload walk the tree, so every
       # Worker sharing the release gets its maps.
       #
-      # Soft-gated on SENTRY_AUTH_TOKEN: skips cleanly when the secret is
-      # absent (e.g. fork PRs) rather than failing the deploy.
+      # Mandatory for production-deploy (issue #415): a production release
+      # without source maps cannot be diagnosed. Staging only warns.
       - name: Sentry release + source maps
         if: inputs.phase == 'staging-deploy' || inputs.phase == 'production-deploy'
         env:
@@ -277,7 +277,11 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${SENTRY_AUTH_TOKEN:-}" ] || [ -z "${SENTRY_ORG:-}" ] || [ -z "${SENTRY_PROJECT:-}" ]; then
-            echo "::warning::SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT not configured — skipping source map upload (#138)"
+            if [ "${DEPLOY_ENV_NAME}" = "production" ]; then
+              echo "::error::SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT are required for production source maps (#415)"
+              exit 1
+            fi
+            echo "::warning::SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT not configured — skipping staging source map upload (#138)"
             exit 0
           fi
           # `pnpm --filter @athlya/api exec` runs in packages/api, so that is
