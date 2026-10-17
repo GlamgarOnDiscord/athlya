@@ -77,10 +77,12 @@ Une fois le baseline initial validé (rapport HTML reviewable +
 findings adressés), aucune action additionnelle n'est requise.
 Le workflow tourne automatiquement sur **chaque PR**.
 
-**Fail-closed (issue #340)** : une variable `ZAP_TARGET_URL` vide fait
-**échouer** le job sur toute exécution de confiance (PR du même dépôt,
-`workflow_dispatch`). Seules les PR issues de forks sautent le scan
-proprement (pas d'accès aux variables ni à l'environnement de scan).
+**Fail-closed (issue #340)** : sur toute exécution de confiance (PR du même
+dépôt, `workflow_dispatch`), le job **échoue** si aucune cible n'est résolue,
+c'est-à-dire si `ZAP_TARGET_URL` est vide et qu'aucun `target_url` n'est
+fourni au `workflow_dispatch` (l'input prime sur la variable). Les PR issues
+de forks sautent toujours le scan proprement, même si la variable est
+renseignée : l'environnement de scan partagé n'est jamais exposé aux forks.
 Pour une maintenance du staging, utiliser `workflow_dispatch` avec un
 `target_url` alternatif plutôt que vider la variable.
 
