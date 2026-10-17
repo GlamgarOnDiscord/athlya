@@ -28,7 +28,9 @@
 --      wraps it with the same guard as the other `rgpd_*` functions
 --      (0032): it is a no-op unless the user is already soft-deleted,
 --      so a forged or replayed `auth.user.deleted` event cannot strip
---      a live account's audit trail.
+--      a live account's audit trail. `anonymize_user_audit` itself now
+--      skips rows that are already anonymised, so its count is exact
+--      and a replay returns 0.
 --
 -- Conventions (0032): owner `athlya_owner`, `SET search_path = public,
 -- pg_temp`, EXECUTE revoked from PUBLIC and granted to `athlya_app`.
@@ -62,7 +64,11 @@ BEGIN
             USING ERRCODE = '22023';
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM users u WHERE u.id = p_user_id AND u.deleted_at IS NULL) THEN
+    -- Locking the live user row serialises concurrent issuances for the
+    -- same user: without it, two first-time requests both pass the
+    -- check and the second INSERT fails on the one-active-token index.
+    PERFORM 1 FROM users u WHERE u.id = p_user_id AND u.deleted_at IS NULL FOR UPDATE;
+    IF NOT FOUND THEN
         RETURN false;
     END IF;
 
@@ -101,7 +107,50 @@ $$;
 
 -- ---------------------------------------------------------------------
 -- 2. RGPD cascade — audit_log anonymisation for a deleted user only
+--
+-- `anonymize_user_audit` (0006 body) keeps matching `subjectUserId`
+-- rows after they were anonymised, because that key is preserved, so a
+-- replay reported them again. It now only touches rows that still
+-- carry an actor or a PII key; the returned count is the rows actually
+-- anonymised and a replay returns 0. Same signature, owner and grants.
 -- ---------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION anonymize_user_audit(target_user uuid)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    touched integer;
+BEGIN
+    UPDATE audit_log
+       SET actor_id = NULL,
+           metadata = CASE
+                        WHEN jsonb_typeof(metadata) = 'object'
+                        THEN metadata
+                                - 'email'
+                                - 'displayName'
+                                - 'ip'
+                                - 'userAgent'
+                        ELSE metadata
+                      END
+     WHERE (actor_id = target_user
+            OR (jsonb_typeof(metadata) = 'object'
+                AND metadata ? 'subjectUserId'
+                AND metadata->>'subjectUserId' = target_user::text))
+       AND (actor_id IS NOT NULL
+            OR (jsonb_typeof(metadata) = 'object'
+                AND metadata ?| ARRAY['email', 'displayName', 'ip', 'userAgent']));
+    GET DIAGNOSTICS touched = ROW_COUNT;
+    RETURN touched;
+END;
+$$;
+--> statement-breakpoint
+
+ALTER FUNCTION anonymize_user_audit(uuid) OWNER TO athlya_owner;--> statement-breakpoint
+REVOKE ALL ON FUNCTION anonymize_user_audit(uuid) FROM PUBLIC;--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION anonymize_user_audit(uuid) TO athlya_cron;--> statement-breakpoint
 
 CREATE OR REPLACE FUNCTION rgpd_anonymize_user_audit(p_user_id uuid)
 RETURNS integer

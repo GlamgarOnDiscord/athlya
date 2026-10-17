@@ -22,9 +22,14 @@
  *      dataset spans both UUID generations.
  */
 
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it, vi } from 'vitest';
 
 import { listMyReservations } from '../../adapters/reservations-list-drizzle.js';
+
+import type { SQL } from 'drizzle-orm';
+
+const dialect = new PgDialect();
 
 const USER_ID = '00000000-0000-4000-8000-000000000001';
 const CLAIMS = {
@@ -69,7 +74,10 @@ function buildFakeDb(rows: ReturnType<typeof makeRow>[]) {
   // Rows only come back through `batch`, i.e. inside `withTenantHttp`.
   return {
     select: vi.fn().mockReturnValue(selectQuery),
-    execute: vi.fn(() => ({ kind: 'set_config' })),
+    execute: vi.fn((query: SQL) => ({
+      kind: 'set_config',
+      params: dialect.sqlToQuery(query).params,
+    })),
     batch: vi.fn(async (items: unknown[]) => {
       expect(items).toHaveLength(4);
       expect(items[3]).toBe(selectQuery);
@@ -189,6 +197,11 @@ describe('listMyReservations cursor pagination (issue #334)', () => {
     const db = buildFakeDb([makeRow(V4_ID, STARTS_AT)]);
     await listMyReservations(USER_ID, {}, { db: db as never, claims: CLAIMS });
     expect(db.batch).toHaveBeenCalledTimes(1);
-    expect(db.execute).toHaveBeenCalledTimes(3);
+    const setup = (db.batch.mock.calls[0]?.[0] ?? []).slice(0, 3) as { params: unknown[] }[];
+    expect(setup.map((item) => item.params)).toEqual([
+      [CLAIMS.userId],
+      [CLAIMS.studioId],
+      [CLAIMS.role],
+    ]);
   });
 });

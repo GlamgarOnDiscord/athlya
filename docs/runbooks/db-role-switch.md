@@ -23,7 +23,7 @@ Tant que `DB_URL` pointe sur `neondb_owner`, ces changements sont **non-disrupti
 ## Pré-requis
 
 - [ ] La migration `0004_rls_hardening.sql` est appliquée en production.
-- [ ] La migration `0032_service_definer_functions.sql` est appliquée **et** le Worker qui l'appelle est déployé (issue #224). Sans elle, sous `athlya_app`, le login/register/reset, la résolution des destinataires de notifications et la cascade RGPD voient zéro ligne (FORCE RLS sans claims). Vérification : `SELECT count(*) FROM pg_proc WHERE proowner = 'athlya_owner'::regrole AND proname ~ '^(auth|rgpd|notification)_'` → 13.
+- [ ] Les migrations `0032` → `0039` (fonctions de service `SECURITY DEFINER`) sont appliquées **et** le Worker qui les appelle est déployé (issues #224, #117). Sans elles, sous `athlya_app`, le login/register/reset, la résolution du slug studio, `/v1/studios/me`, la résolution des destinataires de notifications et la cascade RGPD voient zéro ligne (FORCE RLS sans claims) ou échouent en 42501. Vérification : `SELECT count(*) FROM pg_proc WHERE proowner = 'athlya_owner'::regrole AND proname ~ '^(auth|rgpd|notification|studio)_'` → 22, puis `pnpm verify:role-contract` (voir plus bas).
 - [ ] Le test d'isolation `multi-tenant-isolation.integration.test.ts` est vert sur la branche déployée.
 - [ ] Les 387+ tests api sont verts.
 - [ ] Un opérateur a accès Neon Console (rôle propriétaire) et Cloudflare Workers Dashboard (Secrets).

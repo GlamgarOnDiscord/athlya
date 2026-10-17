@@ -18,7 +18,7 @@
 -- =====================================================================
 
 BEGIN;
-SELECT plan(17);
+SELECT plan(19);
 
 -- Seed as the migration superuser: an audit row for a live member and
 -- for a member about to be deleted, plus a soft-deleted user.
@@ -26,6 +26,8 @@ INSERT INTO audit_log (actor_id, action, metadata) VALUES
     ('11111111-1111-4111-8111-111111111111', 'gaps.live', '{"email":"member-a@athlya.test","keep":"x"}'::jsonb),
     ('11111111-1111-4111-8111-111111111112', 'gaps.deleted', '{"email":"member-a2@athlya.test","keep":"y"}'::jsonb);
 UPDATE users SET deleted_at = now() WHERE id = '11111111-1111-4111-8111-111111111112';
+INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+VALUES ('11111111-1111-4111-8111-111111111113', 'gaps-token-expired', now() - interval '1 minute');
 
 -- ---------- hardening ----------
 
@@ -66,6 +68,11 @@ SELECT is(
     (SELECT user_id FROM auth_find_password_reset('gaps-token-1')),
     '11111111-1111-4111-8111-111111111111'::uuid,
     'auth_find_password_reset: finds the active token'
+);
+
+SELECT is_empty(
+    $$ SELECT * FROM auth_find_password_reset('gaps-token-expired') $$,
+    'auth_find_password_reset: an expired, unconsumed token is not returned'
 );
 
 SELECT is(
@@ -139,6 +146,12 @@ SELECT is(
 SELECT ok(
     rgpd_anonymize_user_audit('11111111-1111-4111-8111-111111111112') >= 1,
     'rgpd_anonymize_user_audit: anonymises the rows of a soft-deleted user'
+);
+
+SELECT is(
+    rgpd_anonymize_user_audit('11111111-1111-4111-8111-111111111112'),
+    0,
+    'rgpd_anonymize_user_audit: a replay anonymises (and reports) nothing'
 );
 
 RESET ROLE;

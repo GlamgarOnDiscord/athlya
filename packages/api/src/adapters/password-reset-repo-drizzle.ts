@@ -52,10 +52,16 @@ export function createDrizzlePasswordResetRepo(db: AthlyaDbAny): PasswordResetRe
       // (migration 0029) backs it under concurrency. It issues nothing
       // for a deleted or unknown user. Not retried: a replay after a
       // lost commit acknowledgement would collide on `token_hash`.
-      await writeRows(
+      const rows = await writeRows<{ issued: boolean }>(
         db,
         serviceFn.issuePasswordReset(input.userId, input.tokenHash, input.expiresAt),
       );
+      if (rows[0]?.issued !== true) {
+        // The user was deleted between the email lookup and the
+        // issuance. Throwing keeps `requestReset` from emailing a link
+        // that no token backs.
+        throw new Error('password reset not issued: the account is no longer active');
+      }
     },
 
     async findActiveTokenByHash(tokenHash) {

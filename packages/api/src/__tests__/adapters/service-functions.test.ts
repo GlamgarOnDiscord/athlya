@@ -730,6 +730,17 @@ describe('createDrizzlePasswordResetRepo — service functions only (issue #117)
     expect(calls[0]?.params).toEqual([userRow.id, tokenHash, expiresAt.toISOString()]);
   });
 
+  it('throws when the account was deleted before issuance, so no email goes out', async () => {
+    const { db } = fakeDb(() => [{ issued: false }]);
+    await expect(
+      createDrizzlePasswordResetRepo(db).insertToken({
+        userId: userRow.id,
+        tokenHash,
+        expiresAt: new Date(),
+      }),
+    ).rejects.toThrow(/not issued/u);
+  });
+
   it('does not retry an issuance on a dropped connection', async () => {
     const { db, calls } = fakeDb(() =>
       Object.assign(new Error('connection terminated'), { code: 'ECONNRESET' }),
