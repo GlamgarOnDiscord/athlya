@@ -9,25 +9,17 @@
  *   | GET    | /invoices  | jwtAuth → requireRole('admin') → zValidator(query) → handler |
  *   | POST   | /webhook   | (no auth) → raw-body → handler                              |
  *
- * Posture (slice B9 — Stripe not provisioned in production yet)
- * --------------------------------------------------------------
- * `@athlya/billing` is a typed port. Until a real Stripe secret is
- * wired into `wrangler.toml`, this router runs in **mode dégradé**:
- *
- *   • `POST /checkout` returns 503 with
- *     `code: 'billing_not_configured'` when STRIPE_SECRET_KEY is
- *     absent — the studio dashboard surfaces that as a "Stripe non
- *     configuré" notice instead of failing silently.
- *   • `GET /invoices` returns an empty page (`{ items: [],
- *     nextCursor: null }`) so the dashboard renders a stable empty
- *     state.
- *   • `POST /webhook` verifies the signature when
- *     STRIPE_WEBHOOK_SECRET is set. With no secret, staging/production
- *     return 500 `configuration_error` (fail-closed, issue #69). Dev
- *     returns 200 no-op for local runs without Stripe.
- *
- * The mode dégradé is documented in `docs/runbooks/billing.md`.
- *
+ * Posture (issue #122)
+ * --------------------
+ *   • `POST /checkout` creates a real Stripe Checkout session for the
+ *     studio "pro" plan; it returns 503 `billing_not_configured` while
+ *     `STRIPE_SECRET_KEY` / `STRIPE_PRICE_ID_PRO` / the redirect origin
+ *     are missing (and always in dev).
+ *   • `GET /invoices` pages the studio invoices persisted from webhooks.
+ *   • `POST /webhook` verifies the signature, then claims and applies the
+ *     event atomically. With no secret, staging/production return 500
+ *     `configuration_error` (fail-closed, issue #69); dev returns 200.
+ * See `docs/runbooks/stripe-production.md`.
  * Webhook composition note
  * ------------------------
  * `POST /webhook` MUST read the raw payload via `c.req.raw.text()` —
@@ -100,9 +92,15 @@ export interface BillingDeps {
     readonly userId: string;
     readonly studioId: string;
     readonly plan: 'pro';
+    /** Client `Idempotency-Key`: a retried request reuses the same Stripe session. */
+    readonly idempotencyKey?: string;
   }): Promise<CreateCheckoutOutcome>;
 
-  listInvoices(studioId: string, opts: ListInvoicesQuery): Promise<InvoicesPage>;
+  /** Runs under the caller's tenant claims: RLS limits it to their studio. */
+  listInvoices(
+    claims: { readonly userId: string; readonly studioId: string; readonly role: 'admin' },
+    opts: ListInvoicesQuery,
+  ): Promise<InvoicesPage>;
 
   handleWebhook(input: {
     readonly rawPayload: string;
@@ -203,10 +201,12 @@ export function buildBillingRouter(deps: BillingDeps): Hono<HonoEnv> {
         throw new Error('authClaims unexpectedly missing after jwtAuth');
       }
       const body = readValidated<CheckoutRequest>(c, 'json');
+      const idempotencyKey = c.req.header('Idempotency-Key');
       const outcome = await deps.createCheckoutSession({
         userId: claims.userId,
         studioId: claims.studioId,
         plan: body.plan,
+        ...(idempotencyKey !== undefined && idempotencyKey.length > 0 ? { idempotencyKey } : {}),
       });
       switch (outcome.kind) {
         case 'ok':
@@ -236,7 +236,10 @@ export function buildBillingRouter(deps: BillingDeps): Hono<HonoEnv> {
         throw new Error('authClaims unexpectedly missing after jwtAuth');
       }
       const query = readValidated<ListInvoicesQuery>(c, 'query');
-      const page = await deps.listInvoices(claims.studioId, query);
+      const page = await deps.listInvoices(
+        { userId: claims.userId, studioId: claims.studioId, role: 'admin' },
+        query,
+      );
       return c.json(page as unknown as Record<string, unknown>, 200);
     },
   );

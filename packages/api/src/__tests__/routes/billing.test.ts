@@ -193,6 +193,49 @@ describe('POST /v1/billing/checkout', () => {
     expect(body.checkoutUrl).toBe('https://checkout.stripe.com/cs_test_abc');
   });
 
+  it.each([
+    ['forwards a client Idempotency-Key', 'idem-key-1', { idempotencyKey: 'idem-key-1' }],
+    ['omits an empty Idempotency-Key', '', {}],
+  ])('%s to the adapter', async (_label, header, extra) => {
+    const deps = buildStubDeps({
+      billing: {
+        createCheckoutSession: vi.fn(async () => ({
+          kind: 'ok' as const,
+          checkoutUrl: 'https://checkout.stripe.com/cs_test_abc',
+        })),
+      },
+    });
+    const app = buildAppWithDeps(deps);
+    const token = await signTestJwt(kp.privateKey, {
+      sub: TEST_USER_ID,
+      studio: TEST_STUDIO_ID,
+      role: 'admin',
+    });
+
+    const res = await app.request(
+      '/v1/billing/checkout',
+      {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'idempotency-key': header,
+        },
+        body: JSON.stringify({ plan: 'pro' }),
+      },
+      buildMockEnv(),
+    );
+
+    expect(res.status).toBe(200);
+    const input = vi.mocked(deps.billing.createCheckoutSession).mock.calls[0]?.[0];
+    expect(input).toStrictEqual({
+      userId: TEST_USER_ID,
+      studioId: TEST_STUDIO_ID,
+      plan: 'pro',
+      ...extra,
+    });
+  });
+
   it('rejects an invalid plan with 422 ValidationError', async () => {
     const deps = buildStubDeps();
     const app = buildAppWithDeps(deps);

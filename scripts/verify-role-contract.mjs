@@ -9,21 +9,24 @@
  *                              GUCs) → worker claim + data + complete → account
  *                              deletion with its event → RGPD cascade
  *   athlya_cron (CRON_DB_URL)  leased outbox claim privileges
+ *   athlya_billing             Stripe event application (the only role
+ *     (BILLING_DB_URL)         allowed to; athlya_app is refused)
  *
- * Usage (staging, after migrations 0031–0035):
+ * Usage (staging, after migrations 0031–0036):
  *   APP_DATABASE_URL=postgresql://athlya_app:...@.../athlya \
  *   CRON_DATABASE_URL=postgresql://athlya_cron:...@.../athlya \
+ *   BILLING_DATABASE_URL=postgresql://athlya_billing:...@.../athlya \
  *   SMOKE_STUDIO_SLUG=<existing studio slug> \
  *   node scripts/verify-role-contract.mjs
  *
- * All three variables are required; a superuser or BYPASSRLS connection
+ * All four variables are required; a superuser or BYPASSRLS connection
  * fails the contract. Exit 0 = every workload works under its least-privilege role.
  * See docs/runbooks/db-role-switch.md.
  */
 
 import { randomUUID } from 'node:crypto';
 
-/** Functions the runtime needs from migrations 0032–0034. */
+/** Functions athlya_app needs from migrations 0032–0036. */
 export const REQUIRED_FUNCTIONS = [
   'auth_find_active_user_by_email',
   'auth_find_user_by_id',
@@ -44,7 +47,11 @@ export const REQUIRED_FUNCTIONS = [
   'export_job_get',
   'export_job_profile',
   'export_job_rows',
+  'billing_list_invoices',
 ];
+
+/** Stripe event application: athlya_billing only (migration 0036). */
+const BILLING_APPLY = 'billing_apply_stripe_event(text, text, jsonb)';
 
 const ROLLBACK = Symbol('role-contract-rollback');
 
@@ -82,11 +89,16 @@ async function assertNoBypass(sql, expectedRole, log) {
 
 /**
  * @param {{ app: import('postgres').Sql, cron: import('postgres').Sql,
+ *           billing: import('postgres').Sql,
  *           studioSlug: string, log?: (m: string) => void }} options
  */
-export async function runRoleContract({ app, cron, studioSlug, log = console.log }) {
+export async function runRoleContract({ app, cron, billing, studioSlug, log = console.log }) {
   const ok = (m) => log(`[role-contract] OK: ${m}`);
   check(cron !== undefined, 'CRON_DATABASE_URL is required: the drainer role must be verified');
+  check(
+    billing !== undefined,
+    'BILLING_DATABASE_URL is required: the Stripe webhook role must be verified',
+  );
 
   await assertNoBypass(app, 'athlya_app', ok);
 
@@ -96,8 +108,12 @@ export async function runRoleContract({ app, cron, studioSlug, log = console.log
   `;
   const present = new Set(fns.map((r) => r.name));
   const missing = REQUIRED_FUNCTIONS.filter((f) => !present.has(f));
-  check(missing.length === 0, `missing or not executable: ${missing.join(', ')} (apply 0032–0034)`);
+  check(missing.length === 0, `missing or not executable: ${missing.join(', ')} (apply 0032–0036)`);
   ok(`${REQUIRED_FUNCTIONS.length} service functions executable`);
+
+  const [forge] = await app`SELECT has_function_privilege(${BILLING_APPLY}, 'EXECUTE') AS can`;
+  check(forge.can === false, 'athlya_app can apply Stripe events — revoke it (migration 0036)');
+  ok('athlya_app cannot apply Stripe events');
 
   const [unscoped] = await app`SELECT count(*)::int AS n FROM users`;
   check(unscoped.n === 0, `unscoped users read returned ${unscoped.n} rows — RLS not enforced`);
@@ -199,8 +215,23 @@ export async function runRoleContract({ app, cron, studioSlug, log = console.log
              rgpd_restamp_user_deleted(${userId}::uuid, now())
     `;
     ok('RGPD cascade functions run for the deleted account');
+
+    const invoices = await tx`SELECT * FROM billing_list_invoices(${studio.id}::uuid, NULL, NULL, 1)`;
+    check(invoices.length === 0, 'billing invoices visible without tenant claims');
+    ok('billing invoice listing runs and is RLS-scoped');
   });
   ok('app workloads rolled back — nothing persisted');
+
+  await assertNoBypass(billing, 'athlya_billing', ok);
+  await rolledBack(billing, async (tx) => {
+    const eventId = `evt_role_contract_${randomUUID()}`;
+    const [first] =
+      await tx`SELECT billing_apply_stripe_event(${eventId}, 'role.contract', '{}'::jsonb) AS applied`;
+    const [replay] =
+      await tx`SELECT billing_apply_stripe_event(${eventId}, 'role.contract', '{}'::jsonb) AS applied`;
+    check(first.applied === true && replay.applied === false, 'Stripe event claim/replay failed');
+  });
+  ok('Stripe webhook: event applied once, replay is a no-op');
 
   await assertNoBypass(cron, 'athlya_cron', ok);
   await rolledBack(cron, async (tx) => {
@@ -229,10 +260,11 @@ export async function runRoleContract({ app, cron, studioSlug, log = console.log
 if (import.meta.main) {
   const appUrl = process.env.APP_DATABASE_URL ?? '';
   const cronUrl = process.env.CRON_DATABASE_URL ?? '';
+  const billingUrl = process.env.BILLING_DATABASE_URL ?? '';
   const studioSlug = process.env.SMOKE_STUDIO_SLUG ?? '';
-  if (appUrl === '' || cronUrl === '' || studioSlug === '') {
+  if (appUrl === '' || cronUrl === '' || billingUrl === '' || studioSlug === '') {
     console.error(
-      '[role-contract] APP_DATABASE_URL, CRON_DATABASE_URL and SMOKE_STUDIO_SLUG are required',
+      '[role-contract] APP_DATABASE_URL, CRON_DATABASE_URL, BILLING_DATABASE_URL and SMOKE_STUDIO_SLUG are required',
     );
     process.exit(1);
   }
@@ -243,8 +275,9 @@ if (import.meta.main) {
   const { default: postgres } = await import(pathToFileURL(fromDb.resolve('postgres')).href);
   const app = postgres(appUrl, { max: 1, prepare: false, onnotice: () => {} });
   const cron = postgres(cronUrl, { max: 1, prepare: false, onnotice: () => {} });
+  const billing = postgres(billingUrl, { max: 1, prepare: false, onnotice: () => {} });
   try {
-    await runRoleContract({ app, cron, studioSlug });
+    await runRoleContract({ app, cron, billing, studioSlug });
     console.log('[role-contract] all checks passed');
   } catch (err) {
     console.error(`[role-contract] FAIL: ${err instanceof Error ? err.message : String(err)}`);
@@ -252,5 +285,6 @@ if (import.meta.main) {
   } finally {
     await app.end({ timeout: 2 });
     await cron.end({ timeout: 2 });
+    await billing.end({ timeout: 2 });
   }
 }

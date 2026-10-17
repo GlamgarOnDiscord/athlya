@@ -217,14 +217,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter @athlya/db
 
-      - name: Runtime role contract (athlya_app / athlya_cron)
+      - name: Runtime role contract (athlya_app / athlya_cron / athlya_billing)
         env:
           APP_DATABASE_URL: postgres://athlya_app:role-contract@localhost:5432/athlya_test
           CRON_DATABASE_URL: postgres://athlya_cron:role-contract@localhost:5432/athlya_test
+          BILLING_DATABASE_URL: postgres://athlya_billing:role-contract@localhost:5432/athlya_test
           SMOKE_STUDIO_SLUG: studio-a
         run: |
           set -euo pipefail
           psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d athlya_test \
             -c "ALTER ROLE athlya_app LOGIN PASSWORD 'role-contract'" \
-            -c "ALTER ROLE athlya_cron LOGIN PASSWORD 'role-contract'"
+            -c "ALTER ROLE athlya_cron LOGIN PASSWORD 'role-contract'" \
+            -c "ALTER ROLE athlya_billing LOGIN PASSWORD 'role-contract'"
           node scripts/verify-role-contract.mjs
