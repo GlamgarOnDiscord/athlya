@@ -47,6 +47,14 @@
       "ghsa": "GHSA-rfgv-xxqx-mfg5, GHSA-3wwx-pv8p-q78v, GHSA-8xcm-r25x-g524, GHSA-m8rv-5g2x-5cg5, GHSA-r53p-7pc4-xj5r, GHSA-v3r7-h72x-cjcm (previously GHSA-3m2p-5qmv-gg22)",
       "added": "2026-10-17",
       "remove_when": "@sentry/cli ships with undici >=6.28.1"
+    },
+    "glob@>=10.2.0 <10.5.0": {
+      "pinned": "^10.5.0",
+      "reason": "glob CLI command injection via -c/--cmd (pulled by @opennextjs/cloudflare -> glob@10.3.3); range-scoped so glob 7/8/11 consumers are untouched",
+      "cve": null,
+      "ghsa": "GHSA-5j98-mcp5-4vw2",
+      "added": "2026-10-12",
+      "remove_when": "@opennextjs/cloudflare depends on glob >=10.5.0"
     }
   }
 }

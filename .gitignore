@@ -12,6 +12,7 @@ coverage/
 
 # Cloudflare Workers
 .wrangler/
+.open-next/
 
 # Env
 .env
