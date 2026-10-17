@@ -93,15 +93,18 @@ Set these in **both** the `staging` and `production` GitHub Environments.
 
 And these **variables** (`vars.*`) per environment:
 
-| Variable              | Purpose                                                                 |
-| --------------------- | ----------------------------------------------------------------------- |
-| `AXIOM_SPANS_DATASET` | Dataset of the Worker OTLP spans (`X-Axiom-Dataset` of the OTLP header) |
-| `AXIOM_LOGS_DATASET`  | Dataset of the Worker log lines (`outbox.backlog`, `[dlq] …`)           |
-| `AXIOM_NOTIFIER_IDS`  | HCL list of Axiom notifier ids, e.g. `["abc123","def456"]`              |
+| Variable                  | Purpose                                                                 |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `AXIOM_SPANS_DATASET`     | Dataset of the Worker OTLP spans (`X-Axiom-Dataset` of the OTLP header) |
+| `AXIOM_LOGS_DATASET`      | Dataset of the Worker log lines (`outbox.backlog`, `[dlq] …`)           |
+| `AXIOM_NOTIFIER_IDS`      | HCL list of Axiom notifier ids, e.g. `["abc123","def456"]`              |
+| `AXIOM_PAGE_NOTIFIER_IDS` | HCL list of paging notifier ids (PagerDuty), or `[]` to never page      |
 
 The Axiom variables have no defaults and are validated (non-empty token,
 dataset names, at least one notifier): a plan without them fails instead of
-creating silent monitors.
+creating silent monitors. Notifiers are referenced by id, not managed, so
+the token needs no notifier permission. Each environment must use its own
+datasets: the monitor queries do not filter by environment.
 
 ## Plan → apply workflow
 

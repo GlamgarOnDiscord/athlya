@@ -27,12 +27,16 @@ import {
   fetchReleaseErrorCount,
   readErrorBudgetConfig,
 } from './canary-error-budget.mjs';
+import { evaluateLatency, probeCanaryLatency, readLatencyConfig } from './canary-latency.mjs';
 import { runSmoke } from './smoke-routes.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const API_DIR = path.join(ROOT, 'packages', 'api');
 
 const VALID_ENVS = new Set(['staging', 'production']);
+
+/** Gateway Worker names (wrangler.toml `[env.*] name`), for version overrides. */
+const GATEWAY_WORKER = { staging: 'athlya-api-staging', production: 'athlya-api-production' };
 
 function usage(code = 0) {
   console.log(`Usage:
@@ -275,6 +279,25 @@ async function errorBudgetOrThrow(budget, windowStart, label) {
 }
 
 /**
+ * p95 of `/health/ready` requests pinned to the canary version (#415).
+ */
+async function latencyOrThrow({ baseUrl, versionId, release, latency }, label) {
+  const { p95Ms, failures } = await probeCanaryLatency({
+    baseUrl,
+    workerName: GATEWAY_WORKER.production,
+    versionId,
+    expectedVersion: release,
+    samples: latency.samples,
+  });
+  for (const failure of failures) console.warn(`latency probe at ${label}: ${failure}`);
+  const { ok, reason } = evaluateLatency({ p95Ms, maxP95Ms: latency.maxP95Ms });
+  console.log(`latency at ${label}: ${reason}`);
+  if (!ok) {
+    throw new Error(`Canary aborted at ${label}: ${reason}`);
+  }
+}
+
+/**
  * Tell the workflow the gateway now serves this version, so a later failure
  * rolls it back (and an earlier one leaves the live deployment alone).
  */
@@ -293,6 +316,13 @@ async function productionCanary({ baseUrl, stagingUrl, waitMin, steps, versionId
     throw new Error(`Canary needs a live error signal; ${problems.join('; ')} (issue #404)`);
   }
   const budget = budgetConfig.config;
+  const latencyConfig = readLatencyConfig(process.env);
+  if (!latencyConfig.ok) {
+    throw new Error(
+      `Canary latency gate misconfigured: invalid ${latencyConfig.invalid.join(', ')}`,
+    );
+  }
+  const latency = latencyConfig.config;
   const waitMinutes = Number.isFinite(waitMin) && waitMin > 0 ? waitMin : 10;
   if (stagingUrl) {
     console.log('Pre-flight: staging /health/ready…');
@@ -306,7 +336,8 @@ async function productionCanary({ baseUrl, stagingUrl, waitMin, steps, versionId
       : uploadVersion('production', `production-canary-${budget.release}`);
   const waitMs = waitMinutes * 60 * 1000;
 
-  // Every step, 100 % included, gets the bake window and the error budget:
+  // Every step, 100 % included, gets the bake window, the error budget and
+  // the latency probe pinned to the canary version:
   // full promotion is only reported once the release has held at 100 %.
   for (const pct of steps) {
     promoteVersion('production', versionId, pct);
@@ -322,6 +353,7 @@ async function productionCanary({ baseUrl, stagingUrl, waitMin, steps, versionId
       );
     }
     await errorBudgetOrThrow(budget, windowStart, `${pct}%`);
+    await latencyOrThrow({ baseUrl, versionId, release: budget.release, latency }, `${pct}%`);
   }
 
   await waitHealthReady(baseUrl);
@@ -344,7 +376,9 @@ async function main() {
   switch (command) {
     case 'upload': {
       if (!flags.env) throw new Error('--env is required');
-      if (flags.outdir === true) throw new Error('--outdir needs a directory');
+      if (flags.outdir === true || flags.outdir === '') {
+        throw new Error('--outdir needs a directory');
+      }
       const id = uploadVersion(flags.env, flags.message, flags.outdir);
       if (process.env.GITHUB_OUTPUT)
         appendFileSync(process.env.GITHUB_OUTPUT, `version_id=${id}\n`);
@@ -373,7 +407,9 @@ async function main() {
       }
       const rawWaitMin = Number(flags['wait-min'] ?? 10);
       const waitMin = Number.isFinite(rawWaitMin) && rawWaitMin > 0 ? rawWaitMin : 10;
-      if (flags['version-id'] === true) throw new Error('--version-id needs a value');
+      if (flags['version-id'] === true || flags['version-id'] === '') {
+        throw new Error('--version-id needs a value');
+      }
       await productionCanary({
         baseUrl: flags['base-url'],
         stagingUrl: flags['staging-url'],

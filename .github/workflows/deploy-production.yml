@@ -131,6 +131,27 @@ jobs:
               ;;
           esac
 
+      # Issue #415 — production-deploy uploads source maps only after the
+      # Workers are live, so check the Sentry release config BEFORE any
+      # migration or deploy: a missing value must stop the run while
+      # nothing has shipped yet.
+      - name: Require Sentry release config (production-deploy)
+        if: inputs.phase == 'production-deploy'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "${SENTRY_AUTH_TOKEN:-}" ] || missing+=("SENTRY_AUTH_TOKEN")
+          [ -n "${SENTRY_ORG:-}" ] || missing+=("SENTRY_ORG")
+          [ -n "${SENTRY_PROJECT:-}" ] || missing+=("SENTRY_PROJECT")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::production-deploy requires Sentry release config (#415). Missing: ${missing[*]}"
+            exit 1
+          fi
+
       # Issue #328 — verify all required secrets are present on every worker
       # before uploading a new version. Exits non-zero if any secret is
       # missing, which hard-fails the deploy rather than deploying a
@@ -342,6 +363,9 @@ jobs:
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
           CANARY_MAX_ERRORS: ${{ vars.CANARY_MAX_ERRORS }}
+          # Latency gate (#415): optional, defaults 1500 ms / 20 samples.
+          CANARY_MAX_P95_MS: ${{ vars.CANARY_MAX_P95_MS }}
+          CANARY_LATENCY_SAMPLES: ${{ vars.CANARY_LATENCY_SAMPLES }}
           WAIT_MINUTES: ${{ inputs.wait_minutes }}
           GATEWAY_VERSION_ID: ${{ steps.upload_canary.outputs.version_id }}
         run: |

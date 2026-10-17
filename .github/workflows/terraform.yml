@@ -32,6 +32,7 @@ name: Terraform
 #   AXIOM_SPANS_DATASET           — Axiom dataset of the Worker OTLP spans
 #   AXIOM_LOGS_DATASET            — Axiom dataset of the Worker log lines
 #   AXIOM_NOTIFIER_IDS            — HCL list of Axiom notifier ids, e.g. ["abc123"]
+#   AXIOM_PAGE_NOTIFIER_IDS       — HCL list of paging notifier ids, or [] (explicit)
 #
 # See infra/terraform/versions.tf for the backend and
 # docs/runbooks/terraform-ops.md for the apply runbook.
@@ -144,6 +145,7 @@ jobs:
       TF_VAR_axiom_spans_dataset: ${{ vars.AXIOM_SPANS_DATASET }}
       TF_VAR_axiom_logs_dataset: ${{ vars.AXIOM_LOGS_DATASET }}
       TF_VAR_axiom_notifier_ids: ${{ vars.AXIOM_NOTIFIER_IDS }}
+      TF_VAR_axiom_page_notifier_ids: ${{ vars.AXIOM_PAGE_NOTIFIER_IDS }}
       TF_VAR_environment: ${{ inputs.environment || (github.event_name == 'schedule' && 'production') || 'staging' }}
       # HCP Terraform remote state token (see versions.tf backend block).
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_app_terraform_io }}
@@ -172,6 +174,7 @@ jobs:
           [ -n "${TF_VAR_axiom_spans_dataset}" ] || missing+=("vars.AXIOM_SPANS_DATASET")
           [ -n "${TF_VAR_axiom_logs_dataset}" ] || missing+=("vars.AXIOM_LOGS_DATASET")
           [ -n "${TF_VAR_axiom_notifier_ids}" ] || missing+=("vars.AXIOM_NOTIFIER_IDS")
+          [ -n "${TF_VAR_axiom_page_notifier_ids}" ] || missing+=("vars.AXIOM_PAGE_NOTIFIER_IDS")
           [ -n "${TF_TOKEN_app_terraform_io}" ] || missing+=("secrets.TF_TOKEN_app_terraform_io")
           [ -n "${TF_CLOUD_ORGANIZATION}" ] || missing+=("vars.TF_CLOUD_ORGANIZATION")
           if [ "${#missing[@]}" -eq 0 ]; then

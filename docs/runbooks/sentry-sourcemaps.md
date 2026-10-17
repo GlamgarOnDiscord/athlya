@@ -17,14 +17,16 @@ Make production stack traces **readable** (`file:line` instead of a minified bun
 
 ### Paths that ship a production Worker version
 
-| Path                                          | Bundles                                                                              | Sentry steps                                                                                                         |
-| --------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `deploy-production.yml` → `production-deploy` | `wrangler deploy --outdir dist[/<worker>]` (gateway + 3 sub-workers)                 | `sentry-release.sh all production` after the smoke                                                                   |
-| `deploy-production.yml` → `production-canary` | `canary-deploy.mjs upload --outdir dist` (gateway)                                   | `prepare production` after the upload, **before** the first traffic shift; `finalize production` after 100 %         |
-| `canary.yml` (push to `master`)               | sub-workers `wrangler deploy --outdir dist/<worker>`, gateway `upload --outdir dist` | `prepare production` after the gateway upload, **before** the first traffic shift; `finalize production` after 100 % |
-| `deploy-production.yml` → `staging-deploy`    | same as `production-deploy`                                                          | `sentry-release.sh all staging` (soft-gated)                                                                         |
+| Path                                          | Bundles                                                                                        | Sentry steps                                                                                                 |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `deploy-production.yml` → `production-deploy` | `wrangler deploy --outdir dist[/<worker>]` (gateway + 3 sub-workers)                           | `sentry-release.sh all production` after the smoke, i.e. **after** the Workers are live                      |
+| `deploy-production.yml` → `production-canary` | `canary-deploy.mjs upload --outdir dist` (gateway)                                             | `prepare production` after the upload, **before** the first traffic shift; `finalize production` after 100 % |
+| `canary.yml` (push to `master`)               | sub-workers `wrangler deploy --dry-run --outdir dist/<worker>`, gateway `upload --outdir dist` | `prepare production` **before** any sub-worker deploy or traffic shift; `finalize production` after 100 %    |
+| `deploy-production.yml` → `staging-deploy`    | same as `production-deploy`                                                                    | `sentry-release.sh all staging` (soft-gated)                                                                 |
 
-On the canary paths the gateway version is uploaded first (`wrangler versions upload` shifts no traffic), its maps reach Sentry, and `canary-deploy.mjs production-canary --version-id <id>` then promotes **that exact version**. The errors the canary error budget counts (`scripts/canary-error-budget.mjs`, same `<sha7>` release) are therefore already de-minified. In `canary.yml` the sub-workers take traffic right after their `wrangler deploy`; their maps are uploaded about a minute later, with the gateway's, so the first few sub-worker events of a rollout may stay minified.
+On the canary paths the gateway version is uploaded first (`wrangler versions upload` shifts no traffic), its maps reach Sentry, and `canary-deploy.mjs production-canary --version-id <id>` then promotes **that exact version**. The errors the canary error budget counts (`scripts/canary-error-budget.mjs`, same `<sha7>` release) are therefore already de-minified. In `canary.yml` the sub-workers are first bundled with `wrangler deploy --dry-run --outdir dist/<worker>` (same inputs and flags as the real deploy, so the same bundle; only the map's `sourceRoot` depends on the output directory, which is identical), their maps are uploaded with the gateway's, and only then are they deployed.
+
+`production-deploy` uploads the maps **after** the Workers are live: events from the first minutes of a direct deploy may stay minified until the upload completes. Its Sentry configuration is checked by `Require Sentry release config (production-deploy)` before any migration or deploy, so a missing value stops the run while nothing has shipped; only a failure of the upload itself (Sentry API error) can leave a live version without maps, and the run then ends red.
 
 The finalize step only runs when the canary succeeded: an aborted canary leaves an unfinalized release without a deploy marker, which is the intended signal.
 
@@ -36,7 +38,7 @@ The finalize step only runs when the canary succeeded: an aborted canary leaves 
 | `SENTRY_ORG`        | var    | Sentry organisation slug                                                   |
 | `SENTRY_PROJECT`    | var    | project slug (e.g. `athlya-api`)                                           |
 
-Soft gate **staging only**: when `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` are missing, `sentry-release.sh` warns and skips without breaking `staging-deploy`. In **production** their absence **fails** the run on every path: `production-deploy`, `production-canary` (also guarded earlier by `Require Sentry config for production canary`, which checks `SENTRY_DSN` too) and `canary.yml` (`Check canary provisioning`) (#415).
+Soft gate **staging only**: when `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` are missing, `sentry-release.sh` warns and skips without breaking `staging-deploy`. In **production** their absence **fails** the run on every path, before anything ships: `production-deploy` (`Require Sentry release config (production-deploy)`), `production-canary` (also guarded earlier by `Require Sentry config for production canary`, which checks `SENTRY_DSN` too) and `canary.yml` (`Check canary provisioning`) (#415).
 
 ## Verification (acceptance criteria)
 

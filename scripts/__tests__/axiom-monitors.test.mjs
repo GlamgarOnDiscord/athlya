@@ -36,7 +36,6 @@ describe('axiom-monitors.tf', () => {
     const resource = /resource "axiom_monitor" "slo" \{([\s\S]*?)\n\}/.exec(tf);
     assert.ok(resource, 'axiom_monitor.slo missing');
     assert.match(resource[1], /for_each\s*=\s*local\.axiom_slo_monitors/);
-    assert.match(resource[1], /notifier_ids\s*=\s*var\.axiom_notifier_ids/);
   });
 
   it('declares fail-closed variables (no defaults, validated)', () => {
@@ -45,12 +44,35 @@ describe('axiom-monitors.tf', () => {
       'axiom_api_token',
       'axiom_logs_dataset',
       'axiom_notifier_ids',
+      'axiom_page_notifier_ids',
       'axiom_spans_dataset',
     ]);
     for (const [, name, body] of variables) {
       assert.doesNotMatch(body, /\bdefault\s*=/, `${name} must not have a default`);
       assert.match(body, /validation \{/, `${name} must be validated`);
     }
+  });
+
+  it('scales the 5xx ratio by the OTEL_SAMPLE_RATE wrangler.toml deploys', () => {
+    const wrangler = readFileSync(
+      new URL('../../packages/api/wrangler.toml', import.meta.url),
+      'utf8',
+    );
+    for (const env of ['staging', 'production']) {
+      const vars = wrangler.split(`[env.${env}.vars]`)[1]?.split(/\n\[/)[0] ?? '';
+      const deployed = /OTEL_SAMPLE_RATE\s*=\s*"([\d.]+)"/.exec(vars)?.[1];
+      const local = new RegExp(`\\b${env}\\s*=\\s*([\\d.]+)`).exec(tf)?.[1];
+      assert.ok(deployed, `OTEL_SAMPLE_RATE missing for ${env}`);
+      assert.equal(Number(local), Number(deployed), env);
+    }
+    assert.match(tf, /todouble\(total - errors\) \/ \$\{local\.otel_sample_rate\}/);
+  });
+
+  it('pages on-call only through the page flag', () => {
+    assert.match(
+      tf,
+      /notifier_ids\s*=\s*each\.value\.page \? concat\(var\.axiom_notifier_ids, var\.axiom_page_notifier_ids\) : var\.axiom_notifier_ids/,
+    );
   });
 
   it('queries only signals the runtime emits', () => {

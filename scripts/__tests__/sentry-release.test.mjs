@@ -42,30 +42,37 @@ describe('sentry-release.sh configuration gate (#415)', () => {
 });
 
 /**
- * Every path that ships a production Worker version uploads source maps
- * and records the Sentry release (#415).
+ * Every path that ships a production API Worker version (canary.yml and
+ * deploy-production.yml) uploads source maps and records the Sentry
+ * release (#415). The web/studio frontends (deploy-frontend.yml) are a
+ * separate application and out of this contract.
  */
-describe('production deploy paths wire Sentry releases', () => {
+describe('API production deploy paths wire Sentry releases', () => {
   const index = (text, needle) => {
     const at = text.indexOf(needle);
     assert.notEqual(at, -1, `missing: ${needle}`);
     return at;
   };
 
-  it('canary.yml uploads maps before promotion and finalizes after', () => {
+  it('canary.yml uploads every map before any new code takes traffic', () => {
     const yaml = workflow('canary.yml');
+    const bundle = index(yaml, '--outdir "dist/${worker}" --dry-run');
     const upload = index(yaml, 'canary-deploy.mjs upload --env production');
     const prepare = index(yaml, 'sentry-release.sh prepare production');
+    const deploy = index(yaml, '--var "VERSION:${VERSION}" --outdir "dist/${worker}"\n');
     const promote = index(yaml, 'canary-deploy.mjs production-canary');
     const finalize = index(yaml, 'sentry-release.sh finalize production');
-    assert.ok(upload < prepare && prepare < promote && promote < finalize);
+    assert.ok(bundle < upload && upload < prepare && prepare < deploy);
+    assert.ok(deploy < promote && promote < finalize);
     assert.match(yaml, /--outdir dist\b/);
-    assert.match(yaml, /--outdir "dist\/\$\{worker\}"/);
     assert.match(yaml, /--version-id "\$\{GATEWAY_VERSION_ID\}"/);
   });
 
   it('deploy-production.yml covers production-deploy and production-canary', () => {
     const yaml = workflow('deploy-production.yml');
+    const precheck = index(yaml, 'name: Require Sentry release config (production-deploy)');
+    const firstDeploy = index(yaml, 'name: Run DB migrations (production)');
+    assert.ok(precheck < firstDeploy, 'Sentry config must be checked before anything ships');
     index(yaml, 'sentry-release.sh all "${DEPLOY_ENV_NAME}"');
     const upload = index(yaml, 'canary-deploy.mjs upload --env production');
     const prepare = index(yaml, 'sentry-release.sh prepare production');
@@ -75,7 +82,7 @@ describe('production deploy paths wire Sentry releases', () => {
     assert.match(yaml, /--version-id "\$\{GATEWAY_VERSION_ID\}"/);
   });
 
-  it('every production path verifies the Worker telemetry secrets', () => {
+  it('both API production workflows verify the Worker telemetry secrets', () => {
     assert.match(
       workflow('deploy-production.yml'),
       /if: inputs\.phase == 'production-deploy' \|\| inputs\.phase == 'production-canary'\n\s+run: node scripts\/verify-secrets\.mjs --env production/,
@@ -83,7 +90,7 @@ describe('production deploy paths wire Sentry releases', () => {
     assert.match(workflow('canary.yml'), /node scripts\/verify-secrets\.mjs --env production/);
   });
 
-  it('no workflow keeps an inline sentry-cli upload', () => {
+  it('neither API production workflow keeps an inline sentry-cli upload', () => {
     for (const name of ['canary.yml', 'deploy-production.yml']) {
       assert.doesNotMatch(workflow(name), /sentry-cli/);
     }

@@ -11,4 +11,5 @@ waf_bot_fight_mode    = false
 axiom_api_token       = "TODO: Axiom → Settings → API tokens (advanced: monitors + query)"
 axiom_spans_dataset   = "TODO: dataset in X-Axiom-Dataset of OTEL_EXPORTER_OTLP_HEADERS"
 axiom_logs_dataset    = "TODO: dataset receiving the Worker log lines"
-axiom_notifier_ids    = ["TODO: Axiom → Monitors → Notifiers → id"]
+axiom_notifier_ids    = ["TODO: Axiom → Monitors → Notifiers → Slack notifier id"]
+axiom_page_notifier_ids = ["TODO: PagerDuty notifier id"] # or [] to never page

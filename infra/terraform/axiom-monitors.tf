@@ -17,15 +17,25 @@
 #
 # Spans come from packages/api/src/middleware/otel.ts (OTLP/HTTP JSON);
 # log lines from packages/api/src/events/drain-scheduled.ts and
-# drain-dlq.ts. scripts/__tests__/axiom-monitors.test.mjs keeps every
-# SLO covered and every variable fail-closed (no defaults).
+# drain-dlq.ts. The log queries assume the documented ingest shape of
+# docs/operations/axiom-queries.md: one event per log line with the label
+# in `message` and the metadata fields at the top level. The log pipeline
+# into Axiom is not provisioned by this repository; check the shape on the
+# first apply (docs/runbooks/axiom-alerts-provision.md).
+# scripts/__tests__/axiom-monitors.test.mjs keeps every SLO covered and
+# every variable fail-closed (no defaults).
 #
-# Provider: axiomhq/axiom ~> 1.7. The API token needs the "Monitors" and
-# "Notifiers" read/write permissions plus query access to both datasets.
+# Datasets are per environment (GitHub environment variables): the
+# queries do not filter by environment, so staging and production must
+# never share a dataset.
+#
+# Provider: axiomhq/axiom ~> 1.7. The API token needs "Monitors"
+# read/write plus query access to both datasets; notifiers are referenced
+# by id, not managed here.
 # Import a monitor already created in the UI with:
-#   terraform import axiom_monitor.slo["queue_lag"] <monitor-id>
+#   terraform import 'axiom_monitor.slo["queue_lag"]' <monitor-id>
 # Variables: axiom_api_token, axiom_spans_dataset, axiom_logs_dataset,
-#            axiom_notifier_ids
+#            axiom_notifier_ids, axiom_page_notifier_ids
 # =====================================================================
 
 variable "axiom_api_token" {
@@ -39,7 +49,7 @@ variable "axiom_api_token" {
 }
 
 variable "axiom_spans_dataset" {
-  description = "Axiom dataset receiving the Worker OTLP spans (X-Axiom-Dataset of OTEL_EXPORTER_OTLP_HEADERS)"
+  description = "Axiom dataset receiving this environment's Worker OTLP spans (X-Axiom-Dataset of OTEL_EXPORTER_OTLP_HEADERS); never shared between environments"
   type        = string
   validation {
     condition     = can(regex("^[A-Za-z0-9._-]+$", var.axiom_spans_dataset))
@@ -48,7 +58,7 @@ variable "axiom_spans_dataset" {
 }
 
 variable "axiom_logs_dataset" {
-  description = "Axiom dataset receiving the Worker log lines (outbox.backlog, [dlq] drain cycle complete)"
+  description = "Axiom dataset receiving this environment's Worker log lines (outbox.backlog, [dlq] drain cycle complete); never shared between environments"
   type        = string
   validation {
     condition     = can(regex("^[A-Za-z0-9._-]+$", var.axiom_logs_dataset))
@@ -57,11 +67,20 @@ variable "axiom_logs_dataset" {
 }
 
 variable "axiom_notifier_ids" {
-  description = "Ids of the Axiom notifiers (Slack #ops-athlya-alerts, PagerDuty) every SLO monitor notifies"
+  description = "Ids of the Axiom notifiers every SLO monitor notifies (Slack #ops-athlya-alerts)"
   type        = list(string)
   validation {
     condition     = length(var.axiom_notifier_ids) > 0 && alltrue([for id in var.axiom_notifier_ids : length(trimspace(id)) > 0])
     error_message = "axiom_notifier_ids must list at least one notifier: a monitor nobody hears is not an alert."
+  }
+}
+
+variable "axiom_page_notifier_ids" {
+  description = "Ids of the paging notifiers (PagerDuty) added to the monitors that page on-call; [] is an explicit choice not to page"
+  type        = list(string)
+  validation {
+    condition     = alltrue([for id in var.axiom_page_notifier_ids : length(trimspace(id)) > 0])
+    error_message = "axiom_page_notifier_ids must not contain empty ids."
   }
 }
 
@@ -73,110 +92,134 @@ locals {
   axiom_spans = "['${var.axiom_spans_dataset}']"
   axiom_logs  = "['${var.axiom_logs_dataset}']"
 
+  # OTEL_SAMPLE_RATE per environment — keep in sync with
+  # packages/api/wrangler.toml (asserted by axiom-monitors.test.mjs).
+  # Non-5xx spans are exported at this rate, 5xx spans always.
+  otel_sample_rate = {
+    staging    = 0.5
+    production = 0.1
+  }[var.environment]
+
   # Every query returns one numeric column per time bin, which the
-  # Threshold monitor compares against `threshold`.
+  # Threshold monitor compares against `threshold`. `page` adds the paging
+  # notifiers (routes from docs/runbooks/axiom-alerts-provision.md).
   axiom_slo_monitors = {
-    # A1 / S3 — 5xx share of exported spans. 5xx spans are always exported
-    # while the rest is sampled at OTEL_SAMPLE_RATE (0.1 in production), so
-    # the ratio overstates the true rate: the monitor fires early, never late.
+    # A1 / S3 — 5xx share of requests. Non-5xx spans are scaled back up by
+    # 1 / OTEL_SAMPLE_RATE because only 5xx spans are always exported.
     api_5xx_rate = {
-      name             = "API 5xx rate > 1% / 5 min"
-      description      = "A1 / SLO S3 — share of 5xx responses (docs/operations/axiom-alerts.md § A1)"
-      apl_query        = <<-APL
+      name                = "API 5xx rate > 1% / 5 min"
+      description         = "A1 / SLO S3 — share of 5xx responses (docs/operations/axiom-alerts.md § A1)"
+      apl_query           = <<-APL
         ${local.axiom_spans}
         | summarize total = count(), errors = countif(['status.code'] == "ERROR") by bin_auto(_time)
-        | extend rate_pct = 100.0 * todouble(errors) / todouble(total)
+        | extend requests = todouble(errors) + todouble(total - errors) / ${local.otel_sample_rate}
+        | extend rate_pct = 100.0 * todouble(errors) / requests
         | project _time, rate_pct
       APL
-      threshold        = 1
-      interval_minutes = 5
-      range_minutes    = 5
-      alert_on_no_data = false
+      threshold           = 1
+      interval_minutes    = 5
+      range_minutes       = 5
+      trigger_from_n_runs = 1
+      alert_on_no_data    = false
+      page                = false
     }
 
     # A2 / S2 — ignores windows with 10 samples or fewer (low traffic).
     auth_login_p95 = {
-      name             = "auth.login p95 > 200 ms"
-      description      = "A2 / SLO S2 — login latency (docs/operations/axiom-alerts.md § A2)"
-      apl_query        = <<-APL
+      name                = "auth.login p95 > 200 ms"
+      description         = "A2 / SLO S2 — login latency (docs/operations/axiom-alerts.md § A2)"
+      apl_query           = <<-APL
         ${local.axiom_spans}
         | where name == "auth.login"
         | summarize p95_ms = percentile(duration, 95) / 1ms, samples = count() by bin_auto(_time)
         | where samples > 10
         | project _time, p95_ms
       APL
-      threshold        = 200
-      interval_minutes = 5
-      range_minutes    = 5
-      alert_on_no_data = false
+      threshold           = 200
+      interval_minutes    = 5
+      range_minutes       = 5
+      trigger_from_n_runs = 1
+      alert_on_no_data    = false
+      page                = false
     }
 
-    # A3 / S1 — booking is the contention-critical path.
+    # A3 / S1 — booking is the contention-critical path; pages on-call.
     reservations_book_p99 = {
-      name             = "reservations.book p99 > 500 ms"
-      description      = "A3 / SLO S1 — booking latency (docs/operations/axiom-alerts.md § A3)"
-      apl_query        = <<-APL
+      name                = "reservations.book p99 > 500 ms"
+      description         = "A3 / SLO S1 — booking latency (docs/operations/axiom-alerts.md § A3)"
+      apl_query           = <<-APL
         ${local.axiom_spans}
         | where name == "reservations.book"
         | summarize p99_ms = percentile(duration, 99) / 1ms, samples = count() by bin_auto(_time)
         | where samples > 5
         | project _time, p99_ms
       APL
-      threshold        = 500
-      interval_minutes = 5
-      range_minutes    = 5
-      alert_on_no_data = false
+      threshold           = 500
+      interval_minutes    = 5
+      range_minutes       = 5
+      trigger_from_n_runs = 1
+      alert_on_no_data    = false
+      page                = true
     }
 
     # A4 / S4 — age of the oldest pending outbox event. The drain cron logs
     # outbox.backlog every minute, so no data means the cron or the log
     # pipeline stopped: that alerts too.
     queue_lag = {
-      name             = "Queue lag (oldest outbox event) > 60 s"
-      description      = "A4 / SLO S4 — event delivery lag (docs/operations/slos.md § S4)"
-      apl_query        = <<-APL
+      name                = "Queue lag (oldest outbox event) > 60 s"
+      description         = "A4 / SLO S4 — event delivery lag (docs/operations/slos.md § S4)"
+      apl_query           = <<-APL
         ${local.axiom_logs}
         | where ['message'] == "outbox.backlog"
         | summarize max_age_ms = max(tolong(['ageMs'])) by bin_auto(_time)
         | project _time, max_age_ms
       APL
-      threshold        = 60000
-      interval_minutes = 5
-      range_minutes    = 5
-      alert_on_no_data = true
+      threshold           = 60000
+      interval_minutes    = 5
+      range_minutes       = 5
+      trigger_from_n_runs = 1
+      alert_on_no_data    = true
+      page                = false
     }
 
-    # A16 — the backlog stayed above 500 for the whole 5-minute window.
+    # A16 — the backlog must stay above 500 for five consecutive one-minute
+    # runs (each over the last two cron ticks), so one partial window or a
+    # single spike cannot fire it.
     outbox_backlog = {
-      name             = "Outbox backlog > 500 for 5 min"
-      description      = "A16 — drain falling behind (docs/runbooks/outbox-ops.md)"
-      apl_query        = <<-APL
+      name                = "Outbox backlog > 500 for 5 min"
+      description         = "A16 — drain falling behind (docs/runbooks/outbox-ops.md)"
+      apl_query           = <<-APL
         ${local.axiom_logs}
         | where ['message'] == "outbox.backlog"
-        | summarize min_pending = min(toint(['pending'])) by bin(_time, 5m)
+        | summarize min_pending = min(toint(['pending'])) by bin_auto(_time)
         | project _time, min_pending
       APL
-      threshold        = 500
-      interval_minutes = 5
-      range_minutes    = 5
-      alert_on_no_data = true
+      threshold           = 500
+      interval_minutes    = 1
+      range_minutes       = 2
+      trigger_from_n_runs = 5
+      alert_on_no_data    = true
+      page                = false
     }
 
     # A5 / S6 — the DLQ consumer logs the pending set after every batch; it
-    # is silent while the DLQ receives nothing, so no data is healthy.
+    # is silent while the DLQ receives nothing, so no data is healthy. Each
+    # new DLQ entry also raises a Sentry error (drain-dlq.ts alertOnDlqEntry).
     dlq_depth = {
-      name             = "DLQ pending > 100"
-      description      = "A5 — dead-letter backlog; inspect GET /admin/dlq/stats (docs/runbooks/event-bus.md)"
-      apl_query        = <<-APL
+      name                = "DLQ pending > 100"
+      description         = "A5 — dead-letter backlog; inspect GET /admin/dlq/stats (docs/runbooks/event-bus.md)"
+      apl_query           = <<-APL
         ${local.axiom_logs}
         | where ['message'] == "[dlq] drain cycle complete"
         | summarize max_pending = max(toint(['totalPending'])) by bin_auto(_time)
         | project _time, max_pending
       APL
-      threshold        = 100
-      interval_minutes = 15
-      range_minutes    = 15
-      alert_on_no_data = false
+      threshold           = 100
+      interval_minutes    = 15
+      range_minutes       = 15
+      trigger_from_n_runs = 1
+      alert_on_no_data    = false
+      page                = false
     }
   }
 }
@@ -184,15 +227,16 @@ locals {
 resource "axiom_monitor" "slo" {
   for_each = local.axiom_slo_monitors
 
-  name             = "[${var.environment}] ${each.value.name}"
-  description      = each.value.description
-  type             = "Threshold"
-  apl_query        = each.value.apl_query
-  operator         = "Above"
-  threshold        = each.value.threshold
-  interval_minutes = each.value.interval_minutes
-  range_minutes    = each.value.range_minutes
-  alert_on_no_data = each.value.alert_on_no_data
-  notify_by_group  = false
-  notifier_ids     = var.axiom_notifier_ids
+  name                = "[${var.environment}] ${each.value.name}"
+  description         = each.value.description
+  type                = "Threshold"
+  apl_query           = each.value.apl_query
+  operator            = "Above"
+  threshold           = each.value.threshold
+  interval_minutes    = each.value.interval_minutes
+  range_minutes       = each.value.range_minutes
+  trigger_from_n_runs = each.value.trigger_from_n_runs
+  alert_on_no_data    = each.value.alert_on_no_data
+  notify_by_group     = false
+  notifier_ids        = each.value.page ? concat(var.axiom_notifier_ids, var.axiom_page_notifier_ids) : var.axiom_notifier_ids
 }
