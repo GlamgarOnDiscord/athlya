@@ -43,6 +43,8 @@ import { classes, outbox, reservations } from '@athlya/db/schema';
 import { ClassCapacityExceededError, UniqueViolationError } from '@athlya/reservations';
 import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
 
+import { noteOutboxWrite } from '../events/outbox-kick.js';
+
 import { withConnectionRetry } from './db-retry.js';
 
 import type { ReservationRow } from '@athlya/db/schema';
@@ -367,4 +369,5 @@ async function insertOutboxRow(
     payload: event.payload as Record<string, unknown>,
     occurredAt: event.occurredAt,
   });
+  noteOutboxWrite(event.eventType);
 }

@@ -339,6 +339,8 @@ Si une régression survient sur une combinaison spécifique
 
 **Routage** : `src/events/route-queue.ts` — publish, outbox drain et DLQ replay utilisent la même table.
 
+**Outbox kick (issue #311)** : `athlya-outbox-kick` (`-staging`, `-preview-pr-<N>`) ne transporte aucun événement. Chaque Worker qui écrit dans `outbox` y envoie un message `outbox.kick` (au plus un par seconde et par isolate). Le gateway le consomme (`max_concurrency = 1`) et lance un drain borné (`runKickDrain`) sans attendre le cron. Voir `docs/runbooks/outbox-ops.md` § Outbox kick.
+
 **Migration** : le topic legacy reste actif pour vider le backlog ; retirer le consumer `athlya-events` une fois `pending=0` sur les types migrés.
 
 ### Types inconnus (issue #132)

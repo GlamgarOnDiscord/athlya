@@ -11,7 +11,12 @@
  * This script NEVER prints secret values — it only checks presence via
  * `wrangler secret list`, which returns secret names only.
  *
- * Issues #328, #410.
+ * Also checks that every queue the four Wrangler configs bind for the
+ * target env exists (`wrangler queues list`), so a queue that was never
+ * created — e.g. the outbox kick queue (issue #311) — fails here instead
+ * of half-way through the multi-Worker deploy.
+ *
+ * Issues #328, #410, #311.
  *
  * Secret tiers
  * ------------
@@ -21,7 +26,10 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
+
+import { parseQueueList, queuesForEnv } from './wrangler-queues.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -125,7 +133,9 @@ for (const [worker, required] of Object.entries(REQUIRED)) {
     console.error(`[verify-secrets] MISSING on ${worker} (${env}): ${missing.join(', ')}`);
     anyMissing = true;
   } else {
-    console.log(`[verify-secrets] OK    ${worker} (${env}): all ${required.length} required secrets present`);
+    console.log(
+      `[verify-secrets] OK    ${worker} (${env}): all ${required.length} required secrets present`,
+    );
   }
 
   const productionRequired = PRODUCTION_REQUIRED[worker] ?? [];
@@ -150,9 +160,63 @@ for (const [worker, required] of Object.entries(REQUIRED)) {
   }
 }
 
+/**
+ * Names of the account's queues, across pages. `null` when listing fails
+ * (the check then fails closed: a deploy would fail on the same call).
+ *
+ * @returns {Set<string> | null}
+ */
+function listQueues() {
+  const names = new Set();
+  for (let page = 1; page <= 20; page += 1) {
+    let output;
+    try {
+      output = execFileSync(
+        'pnpm',
+        ['--filter', '@athlya/api', 'exec', 'wrangler', 'queues', 'list', '--page', String(page)],
+        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
+      );
+    } catch (err) {
+      console.error('[verify-secrets] Failed to list queues');
+      console.error(String(err));
+      return null;
+    }
+    const before = names.size;
+    for (const name of parseQueueList(output)) names.add(name);
+    if (names.size === before) break;
+  }
+  return names;
+}
+
+const declaredQueues = new Set();
+for (const configFile of Object.values(CONFIG_FILES)) {
+  const toml = readFileSync(
+    new URL(`../packages/api/${configFile ?? 'wrangler.toml'}`, import.meta.url),
+    'utf8',
+  );
+  for (const name of queuesForEnv(toml, env)) declaredQueues.add(name);
+}
+const existingQueues = listQueues();
+if (existingQueues === null) {
+  anyMissing = true;
+} else {
+  const missingQueues = [...declaredQueues].filter((name) => !existingQueues.has(name));
+  if (missingQueues.length > 0) {
+    console.error(
+      `[verify-secrets] MISSING queues (${env}): ${missingQueues.join(', ')} — create each with: wrangler queues create <name>`,
+    );
+    anyMissing = true;
+  } else {
+    console.log(
+      `[verify-secrets] OK    queues (${env}): all ${declaredQueues.size} bound queues exist`,
+    );
+  }
+}
+
 if (anyMissing) {
   console.error(
-    '[verify-secrets] One or more secrets are missing. Run: wrangler secret put <NAME> --env ' + env,
+    '[verify-secrets] One or more secrets are missing. Run: wrangler secret put <NAME> --env ' +
+      env,
   );
   process.exit(1);
 }

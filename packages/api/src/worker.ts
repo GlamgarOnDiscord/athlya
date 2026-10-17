@@ -27,7 +27,8 @@ import { buildExportDeps } from './adapters/export-deps.js';
 import { buildNotificationsDeps } from './adapters/notifications-deps.js';
 import { buildApp } from './app.js';
 import { handleDlqBatch } from './events/drain-dlq.js';
-import { runScheduledDrain } from './events/drain-scheduled.js';
+import { runKickDrain, runScheduledDrain } from './events/drain-scheduled.js';
+import { handleOutboxKickBatch, isOutboxKickQueue } from './events/outbox-kick.js';
 import { rejectUnknownQueueEvent } from './events/reject-unknown-queue-event.js';
 import { isNotificationsConsumerQueue, isRgpdConsumerQueue } from './events/route-queue.js';
 import { runScheduledCapacityReconcile } from './maintenance/capacity-reconcile-runner.js';
@@ -263,6 +264,10 @@ const worker = {
    *
    * Branches:
    *
+   *   0. `athlya-outbox-kick*` → one bounded outbox drain for the whole
+   *      batch (issue #311, {@link runOutboxKickBatch}). The promise is
+   *      returned so `max_concurrency = 1` serialises kick drains.
+   *
    *   1. `athlya-events-dlq` (and its per-env equivalents
    *      `athlya-events-staging-dlq` / `athlya-events-production-dlq`)
    *      → DLQ tracker drain (hardening task H2). Per-message
@@ -303,7 +308,11 @@ const worker = {
     batch: MessageBatch<unknown>,
     env: AthlyaBindings & DlqBindings,
     ctx: ExecutionContext,
-  ): void {
+  ): void | Promise<void> {
+    if (isOutboxKickQueue(batch.queue)) {
+      return runOutboxKickBatch(batch, env);
+    }
+
     // The DLQ queues used in dev / staging / production each
     // carry the `-dlq` suffix; matching on the suffix keeps the
     // dispatch loop env-agnostic without enumerating every name.
@@ -354,6 +363,25 @@ const worker = {
 };
 
 export default worker;
+
+/**
+ * Outbox kick consumer (issue #311): coalesce the batch into one bounded
+ * drain as `athlya_cron`, exactly like the cron drain. Without a drain
+ * connection the kicks are acked: the cron logs the configuration error
+ * every minute already.
+ */
+export function runOutboxKickBatch(
+  batch: MessageBatch<unknown>,
+  env: AthlyaBindings,
+): Promise<void> {
+  return handleOutboxKickBatch(batch, async () => {
+    const drainDbUrl = resolveDrainDbUrl(env);
+    if (drainDbUrl === null) return null;
+    return withDrainDb(drainDbUrl, (db) =>
+      runKickDrain({ ...(env as unknown as ScheduledEnv), getDb: () => db }),
+    );
+  });
+}
 
 /* ------------------------------------------------------------------ */
 /*  Events dispatcher (Slice 1.3 — Sprint 1 — SP1.4)                  */

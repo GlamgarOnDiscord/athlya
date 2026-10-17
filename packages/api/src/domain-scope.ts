@@ -8,7 +8,10 @@
  *     fails if DB_URL connects with a BYPASSRLS role outside dev,
  *   • a per-request `cf` scope via AsyncLocalStorage, so concurrent
  *     requests in one isolate never share the continent used for EU
- *     read-replica routing (issue #303).
+ *     read-replica routing (issue #303),
+ *   • the outbox kick scope (issue #311): a request whose handler wrote
+ *     an outbox row enqueues one `outbox.kick` after it returns, so the
+ *     gateway drains it without waiting for the cron.
  *
  * Returns a resolver that runs `build` against the captured env and the
  * current request's `cf`. Callers wrap it in the lazy facades of
@@ -19,6 +22,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { assertRlsRole } from '@athlya/db/client';
+
+import { runWithOutboxKickScope } from './events/outbox-kick.js';
 
 import type { RequestCf } from './domain-deps.js';
 import type { AthlyaBindings, HonoEnv } from './types.js';
@@ -49,7 +54,7 @@ export function installDomainScope<D>(
       await rlsCheckPromise;
     }
     const cf = (c.req.raw.cf as { continent?: string } | undefined) ?? undefined;
-    await cfStorage.run(cf, () => next());
+    await runWithOutboxKickScope(c, () => cfStorage.run(cf, () => next()));
   });
 
   return () => {

@@ -127,6 +127,22 @@ export interface AthlyaBindings {
   readonly EVENTS_DLQ: Queue<unknown>;
 
   /**
+   * Outbox kick queue (`athlya-outbox-kick*`, issue #311). Every Worker
+   * that commits outbox rows produces a lightweight `outbox.kick` message
+   * after the request; the gateway consumes it and runs one bounded
+   * drain, so delivery does not wait for the next cron tick. Optional:
+   * without it the once-per-minute cron drain is the only path.
+   */
+  readonly OUTBOX_KICK_QUEUE?: Queue<unknown>;
+
+  /**
+   * Outbox drain claim size under backlog (issue #311), as a `[vars]`
+   * string. Defaults to `ADAPTIVE_BATCH_SIZE` (500), bounded to
+   * `[1, MAX_DRAIN_BATCH_SIZE]` (1000). See `docs/runbooks/outbox-ops.md`.
+   */
+  readonly OUTBOX_DRAIN_BATCH_SIZE?: string;
+
+  /**
    * Postgres connection string. Injected as a secret by CI; the
    * dev value is loaded from `.dev.vars` (git-ignored).
    *

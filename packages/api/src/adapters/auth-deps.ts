@@ -64,6 +64,7 @@ import {
   type SessionStore,
 } from '@athlya/auth';
 
+import { noteOutboxWrite } from '../events/outbox-kick.js';
 import { buildRoutedPublishDeps } from '../events/publish-deps.js';
 import { publish } from '../events/publish.js';
 
@@ -306,6 +307,7 @@ export function buildPublishEvent(env: AthlyaBindings): (event: AthlyaEvent) => 
     const dbHttp = getOrCreateDbHttp(env.DB_URL);
     try {
       await queryRows(dbHttp, serviceFn.recordAuthEvent(event));
+      noteOutboxWrite(event.type);
     } catch (outboxErr) {
       console.error('[auth-deps] publishEvent: outbox write failed', {
         eventId: event.id,

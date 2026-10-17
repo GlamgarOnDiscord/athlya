@@ -98,13 +98,14 @@ sufficient). The DLQ entry is a separate concern handled in
 
 ## Recovery
 
-| Situation                        | Action                                                             |
-| -------------------------------- | ------------------------------------------------------------------ |
-| Backlog < 1 000, drain healthy   | Wait 1–2 cron cycles; verify `pending` decreases                   |
-| Backlog > 1 000, drain healthy   | `ADAPTIVE_BATCH_SIZE = 200` — recovery takes `ceil(N/200)` minutes |
-| Drain erroring every cycle       | Fix root cause (A–D above), then verify `drain_errors` drops to 0  |
-| Poison-pill row blocking a shard | Mark row published manually (step D above)                         |
-| Cron missing                     | Re-deploy via `wrangler deploy` with correct `[triggers]`          |
+| Situation                            | Action                                                                                             |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| Backlog < 1 000, drain healthy       | Wait 1–2 cron cycles; verify `pending` decreases                                                   |
+| Backlog > 1 000, drain healthy       | One cycle chains up to 50 × 500 rows (`OUTBOX_DRAIN_BATCH_SIZE`); see outbox-ops.md capacity model |
+| Drain erroring every cycle           | Fix root cause (A–D above), then verify `drain_errors` drops to 0                                  |
+| Poison-pill row blocking a shard     | Mark row published manually (step D above)                                                         |
+| Cron missing                         | Re-deploy via `wrangler deploy` with correct `[triggers]`                                          |
+| Kicks failing (`outbox.kick_failed`) | Check `athlya-outbox-kick*` exists (`wrangler queues list`); the cron keeps delivering meanwhile   |
 
 ## Escalation
 

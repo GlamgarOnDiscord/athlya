@@ -33,6 +33,8 @@ import { withTenantHttp } from '@athlya/db';
 import { createDb } from '@athlya/db/client';
 import { sql } from 'drizzle-orm';
 
+import { noteOutboxWrite } from '../events/outbox-kick.js';
+
 import { createBillingWebhookAuditAppender } from './audit-log-wiring.js';
 import { getOrCreateDbHttp, getOrCreateWriteDb } from './deps-cache.js';
 import { withConnectionRetry } from './db-retry.js';
@@ -185,7 +187,9 @@ export async function applyStripeEvent(
     db,
     sql`SELECT billing_apply_stripe_event(${event.id}, ${event.type}, ${JSON.stringify(effect)}::jsonb) AS applied`,
   );
-  return rows[0]?.applied === true ? 'applied' : 'duplicate';
+  if (rows[0]?.applied !== true) return 'duplicate';
+  noteOutboxWrite(effect.event?.type);
+  return 'applied';
 }
 
 /**
