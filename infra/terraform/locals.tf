@@ -6,12 +6,12 @@ locals {
 
   # Queue names per environment (mirrors wrangler.toml [[queues.*]])
   queues = {
-    events        = "athlya-events${local.env_suffix}"
-    events_dlq    = "athlya-events${local.env_suffix}-dlq"
-    notifications = "athlya-events-notifications${local.env_suffix}"
+    events            = "athlya-events${local.env_suffix}"
+    events_dlq        = "athlya-events${local.env_suffix}-dlq"
+    notifications     = "athlya-events-notifications${local.env_suffix}"
     notifications_dlq = "athlya-events-notifications${local.env_suffix}-dlq"
-    rgpd          = "athlya-events-rgpd${local.env_suffix}"
-    rgpd_dlq      = "athlya-events-rgpd${local.env_suffix}-dlq"
+    rgpd              = "athlya-events-rgpd${local.env_suffix}"
+    rgpd_dlq          = "athlya-events-rgpd${local.env_suffix}-dlq"
   }
 
   # R2 bucket names per environment

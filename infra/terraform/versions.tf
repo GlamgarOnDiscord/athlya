@@ -3,8 +3,9 @@ terraform {
 
   required_providers {
     cloudflare = {
-      source  = "cloudflare/cloudflare"
-      version = "~> 4.0"
+      source = "cloudflare/cloudflare"
+      # v5 is a breaking rewrite (tf-migrate + reviewed plans) — tracked in #405.
+      version = "~> 4.52"
     }
     sentry = {
       source  = "jianyuan/sentry"
@@ -12,33 +13,17 @@ terraform {
     }
   }
 
-  # Remote state with locking — HCP Terraform (Terraform Cloud) free tier.
-  # Set TF_TOKEN_app_terraform_io in GitHub Environment secrets.
-  # Replace <org> with your HCP Terraform organisation slug.
+  # Remote state with locking — HCP Terraform (issue #405).
   #
-  # Create TWO workspaces: athlya-staging and athlya-production.
-  # CI sets TF_WORKSPACE=athlya-<environment> to target the correct one.
-  # Both workspaces use execution mode = Local (Terraform runs in CI).
-  #
-  # Uncomment once TF_TOKEN_app_terraform_io is set (issue #405):
-  #
-  # cloud {
-  #   organization = "<org>"
-  #   workspaces {
-  #     tags = ["athlya"]
-  #   }
-  # }
-  #
-  # Alternative — S3 backend with DynamoDB locking (one key per env):
-  #
-  # backend "s3" {
-  #   bucket                = "athlya-tf-state"
-  #   key                   = "athlya/${TF_VAR_environment}/terraform.tfstate"
-  #   region                = "eu-central-1"
-  #   dynamodb_table        = "athlya-tf-locks"
-  #   encrypt               = true
-  #   workspace_key_prefix  = "env"
-  # }
+  # The organisation comes from TF_CLOUD_ORGANIZATION and the workspace
+  # from TF_WORKSPACE (athlya-staging / athlya-production), both set by
+  # .github/workflows/terraform.yml; TF_TOKEN_app_terraform_io
+  # authenticates. There is no `workspaces` block on purpose: Terraform
+  # only reads TF_WORKSPACE as the sole selector when it is omitted. Workspaces use execution mode "Local" (CI runs plan
+  # and apply). There is deliberately no local-state fallback: without a
+  # backend, `terraform init` fails instead of producing state on a
+  # throwaway runner. Credential-free checks use `init -backend=false`.
+  cloud {}
 }
 
 provider "cloudflare" {
