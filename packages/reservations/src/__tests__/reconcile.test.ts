@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import {
   CAPACITY_DRIFT_LOG_MESSAGE,
@@ -13,8 +13,8 @@ function repoOf(rows: ClassCapacitySnapshot[]): CapacityReconcileRepo {
   return { listActiveClassCapacities: vi.fn().mockResolvedValue(rows) };
 }
 
-function healerOf(remaining: Record<string, number | null>): CapacityHealer & {
-  reset: ReturnType<typeof vi.fn>;
+function healerOf(remaining: Record<string, number | null>): Omit<CapacityHealer, 'reset'> & {
+  reset: Mock<CapacityHealer['reset']>;
 } {
   return {
     getRemaining: vi.fn(async (id: string) => remaining[id] ?? null),

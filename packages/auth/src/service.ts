@@ -248,6 +248,24 @@ export interface UserRepo {
   softDeleteUser(id: string): Promise<void>;
   /** Atomically increment `credentials_version` for `id`. */
   bumpCredentialsVersion(id: string): Promise<void>;
+  /**
+   * Durable variant of {@link createUser} (issue #411): inserts the user
+   * AND records the `auth.user.registered` event built by `buildEvent`
+   * in the outbox atomically — both commit or neither does. The repo
+   * chooses the user id so the event can reference it before the
+   * insert. When implemented, the service uses it instead of
+   * `createUser` + `publishEvent`.
+   */
+  createUserWithEvent?(
+    input: CreateUserInput,
+    buildEvent: (user: { readonly id: string; readonly studioId: string }) => AthlyaEvent,
+  ): Promise<UserRow>;
+  /**
+   * Durable variant of {@link softDeleteUser} (issue #411): tombstones
+   * the user AND records `event` (`auth.user.deleted`) in the outbox
+   * atomically, so a deleted account always has its RGPD cascade event.
+   */
+  softDeleteUserWithEvent?(id: string, event: AthlyaEvent): Promise<void>;
   findOrCreateOAuthUser(
     provider: 'apple' | 'google',
     sub: string,
@@ -418,6 +436,13 @@ export interface AuthServiceDeps {
   readonly signingKey: SigningKey;
   readonly jwks: Jwks;
   readonly publishEvent: (event: AthlyaEvent) => Promise<void>;
+  /**
+   * Best-effort low-latency delivery of an event the repo already
+   * recorded durably in the outbox (`createUserWithEvent`,
+   * `softDeleteUserWithEvent`). Must not write the outbox again; a
+   * failure is swallowed because the outbox drain delivers the event.
+   */
+  readonly dispatchRecordedEvent?: (event: AthlyaEvent) => Promise<void>;
   /**
    * Optional injected clock (seconds since epoch). Defaults to
    * `Math.floor(Date.now() / 1000)`. Tests pin it to keep JWT
@@ -701,16 +726,35 @@ export async function register(input: RegisterRequest, deps: AuthServiceDeps): P
     updatedAt: new Date(nowSec(deps) * 1000).toISOString(),
   };
 
+  const createInput: CreateUserInput = {
+    studioId: studio.id,
+    email,
+    passwordHash,
+    displayName: input.displayName,
+    role: 'member',
+    consents,
+  };
+
+  // The `auth.user.registered` payload's `userId` is a branded UserId
+  // in the shared schema. The repo-provided id is a plain string;
+  // we brand it here without an extra UUID parse (the DB returned a
+  // fresh UUID v7). Sprint-2 SP2.2 (S5-005) — the `email` field
+  // was removed; consumers fetch it from the user repo on demand.
+  const buildEvent = (created: { readonly id: string; readonly studioId: string }) =>
+    buildUserRegisteredEvent(deps, { userId: created.id as UserId }, created.studioId);
+
   let user: UserRow;
+  const recorded: { event: AthlyaEvent | null } = { event: null };
   try {
-    user = await deps.userRepo.createUser({
-      studioId: studio.id,
-      email,
-      passwordHash,
-      displayName: input.displayName,
-      role: 'member',
-      consents,
-    });
+    if (deps.userRepo.createUserWithEvent !== undefined) {
+      // Issue #411 — user row and outbox event commit together.
+      user = await deps.userRepo.createUserWithEvent(createInput, (created) => {
+        recorded.event = buildEvent(created);
+        return recorded.event;
+      });
+    } else {
+      user = await deps.userRepo.createUser(createInput);
+    }
   } catch (err) {
     if (err instanceof EmailTakenError) {
       throw new AuthError('email_taken');
@@ -720,20 +764,11 @@ export async function register(input: RegisterRequest, deps: AuthServiceDeps): P
 
   const session = await mintSession(user, deps);
 
-  // The `auth.user.registered` payload's `userId` is a branded UserId
-  // in the shared schema. The repo-provided id is a plain string;
-  // we brand it here without an extra UUID parse (the DB returned a
-  // fresh UUID v7). Sprint-2 SP2.2 (S5-005) — the `email` field
-  // was removed; consumers fetch it from the user repo on demand.
-  await deps.publishEvent(
-    buildUserRegisteredEvent(
-      deps,
-      {
-        userId: user.id as UserId,
-      },
-      user.studioId,
-    ),
-  );
+  if (recorded.event !== null) {
+    await dispatchRecorded(deps, recorded.event);
+  } else {
+    await deps.publishEvent(buildEvent(user));
+  }
 
   return session;
 }
@@ -1295,9 +1330,14 @@ function decodeUnsafeRefresh(token: string): { sub: string; sid: string } | null
  *      performs the full RGPD cascade (reservations, sessions,
  *      R2 avatars, …).
  *
- * Idempotent: calling `deleteMe` on an already-deleted user re-runs
- * steps 2–4 and returns normally. The second emission of
- * `auth.user.deleted` is deduped downstream on `event.id` (Req 17.4).
+ * Idempotent: calling `deleteMe` on an already-deleted user returns
+ * normally. With `softDeleteUserWithEvent` the original tombstone is
+ * kept and no second outbox row is written (migration 0037, issue #609).
+ * Sessions are revoked again and the freshly built event is dispatched
+ * best-effort only (not durable): if it is delivered, the consumer runs
+ * the full, idempotent erasure cascade again — the tombstone check
+ * passes and the deletions match no remaining rows — without moving
+ * `deleted_at`.
  */
 export async function deleteMe(userId: string, deps: AuthServiceDeps): Promise<void> {
   const user = await deps.userRepo.findUserById(userId);
@@ -1305,10 +1345,31 @@ export async function deleteMe(userId: string, deps: AuthServiceDeps): Promise<v
     throw new AuthError('not_found');
   }
 
+  const event = buildUserDeletedEvent(deps, { userId: user.id as UserId }, user.studioId);
+
+  if (deps.userRepo.softDeleteUserWithEvent !== undefined) {
+    // Issue #411 — the tombstone and the cascade event commit together,
+    // so a deleted account can never miss its RGPD cascade.
+    await deps.userRepo.softDeleteUserWithEvent(user.id, event);
+    await deps.sessionStore.revokeAllForUser(user.id);
+    await dispatchRecorded(deps, event);
+    return;
+  }
+
   await deps.userRepo.softDeleteUser(user.id);
   await deps.sessionStore.revokeAllForUser(user.id);
+  await deps.publishEvent(event);
+}
 
-  await deps.publishEvent(
-    buildUserDeletedEvent(deps, { userId: user.id as UserId }, user.studioId),
-  );
+/**
+ * Fast-path delivery of an event already durable in the outbox. Never
+ * fails the request: the outbox drain delivers it if the queue is down.
+ */
+async function dispatchRecorded(deps: AuthServiceDeps, event: AthlyaEvent): Promise<void> {
+  if (deps.dispatchRecordedEvent === undefined) return;
+  try {
+    await deps.dispatchRecordedEvent(event);
+  } catch {
+    // Durable in the outbox; the drain worker retries delivery.
+  }
 }

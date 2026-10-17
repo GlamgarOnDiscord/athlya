@@ -16,32 +16,31 @@
  *  • `email_taken` is surfaced via the dedicated {@link EmailTakenError}
  *    class from `@athlya/auth` rather than a raw Postgres SQLSTATE, so
  *    the service never has to peek at driver-specific error codes.
- *  • Every transaction is opened through `db.transaction(...)`
- *    WITHOUT `withTenant` because the auth paths run either:
- *      - pre-authentication (register / login / refresh) — no claims
- *        to scope to, reads target the public-ish auth tables only.
- *      - or already authenticated via `jwtAuth` + `projectUserId`, at
- *        which point the caller (`deleteMe`) owns the tenant scoping
- *        policy through its own `withTenant` if needed.
- *    Tenant scope is enforced **at the query layer**: every read
- *    filters explicitly by `users.id` (login, findById) or
- *    `users.email` (registration uniqueness) — the email is itself
- *    globally unique by the `citext` `users_email_unique` index, so
- *    cross-tenant collision is impossible by construction. The RLS
- *    policies installed in `0001_rls.sql` + `0004_rls_hardening.sql`
- *    are the defense-in-depth backstop: even if a future query
- *    forgets a `WHERE` clause, the FORCEd RLS on `athlya_app` keeps
- *    cross-tenant rows invisible.
+ *  • Every query goes through a SECURITY DEFINER service function from
+ *    migration 0032 (issue #224). These paths run pre-authentication
+ *    (register / login / refresh) or before the caller's tenant claims
+ *    are bound, so under `athlya_app` FORCE RLS a raw `users` query
+ *    matches zero rows. The functions are the narrow contract: lookup
+ *    by email / id / slug, member-only registration, credential
+ *    version bumps and soft delete.
+ *  • Registration and deletion record their `auth.user.*` event in the
+ *    outbox inside the same function call (migration 0033, issue #411),
+ *    so the mutation and its event commit or fail together.
  *
  * @see Requirements 1.1, 1.5, 5.1.
  */
 
 import { EmailTakenError, type UserRepo, type UserRow } from '@athlya/auth';
 import { isPostgresUniqueViolation } from '@athlya/db/errors';
-import { studios, users } from '@athlya/db/schema';
-import { and, eq, isNull, sql } from 'drizzle-orm';
 
-import { withConnectionRetry } from './db-retry.js';
+import {
+  queryRows,
+  serviceFn,
+  toDateOrNull,
+  uuidV7,
+  writeRows,
+  type ServiceUserRow,
+} from './service-functions.js';
 
 import type { AthlyaDbAny } from '@athlya/db/client';
 import type { Consents } from '@athlya/shared/schemas';
@@ -54,58 +53,48 @@ import type { Consents } from '@athlya/shared/schemas';
 export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
   return {
     async findUserByEmail(email) {
-      const rows = await withConnectionRetry(() =>
-        db
-          .select()
-          .from(users)
-          .where(and(eq(users.email, email), isNull(users.deletedAt)))
-          .limit(1),
-      );
+      const rows = await queryRows<ServiceUserRow>(db, serviceFn.findActiveUserByEmail(email));
       const row = rows[0];
       return row === undefined ? null : toUserRow(row);
     },
 
     async findUserById(id) {
-      const rows = await withConnectionRetry(() =>
-        db.select().from(users).where(eq(users.id, id)).limit(1),
-      );
+      const rows = await queryRows<ServiceUserRow>(db, serviceFn.findUserById(id));
       const row = rows[0];
       return row === undefined ? null : toUserRow(row);
     },
 
     async findStudioBySlug(slug) {
-      const rows = await withConnectionRetry(() =>
-        db
-          .select({
-            id: studios.id,
-            slug: studios.slug,
-            name: studios.name,
-          })
-          .from(studios)
-          .where(eq(studios.slug, slug))
-          .limit(1),
+      const rows = await queryRows<{ id: string; slug: string; name: string }>(
+        db,
+        serviceFn.findStudioBySlug(slug),
       );
       const row = rows[0];
-      return row === undefined ? null : row;
+      return row === undefined ? null : { id: row.id, slug: row.slug, name: row.name };
     },
 
     async createUser(input) {
-      try {
-        const [row] = await withConnectionRetry(() =>
-          db
-            .insert(users)
-            .values({
-              studioId: input.studioId,
-              email: input.email,
-              displayName: input.displayName,
-              passwordHash: input.passwordHash,
-              role: input.role,
-              consents: input.consents satisfies Consents,
-            })
-            .returning(),
+      // Self-registration is the only caller; the SQL function hard-codes
+      // the `member` role, so refuse anything else before hitting the DB.
+      if (input.role !== 'member') {
+        throw new Error(
+          `createUser: only member self-registration is supported (got ${input.role})`,
         );
+      }
+      try {
+        const rows = await writeRows<ServiceUserRow>(
+          db,
+          serviceFn.createMember({
+            studioId: input.studioId,
+            email: input.email,
+            displayName: input.displayName,
+            passwordHash: input.passwordHash,
+            consents: input.consents satisfies Consents,
+          }),
+        );
+        const row = rows[0];
         if (row === undefined) {
-          throw new Error('createUser: Drizzle returned an empty result set');
+          throw new Error('createUser: auth_create_member returned no row');
         }
         return toUserRow(row);
       } catch (err) {
@@ -120,25 +109,55 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
       }
     },
 
+    async createUserWithEvent(input, buildEvent) {
+      if (input.role !== 'member') {
+        throw new Error(
+          `createUser: only member self-registration is supported (got ${input.role})`,
+        );
+      }
+      // The id is chosen here so the `auth.user.registered` envelope can
+      // reference it; user row and outbox event commit in one statement
+      // (migration 0033, issue #411).
+      const userId = uuidV7();
+      const event = buildEvent({ id: userId, studioId: input.studioId });
+      try {
+        const rows = await writeRows<ServiceUserRow>(
+          db,
+          serviceFn.createMemberWithEvent({
+            userId,
+            studioId: input.studioId,
+            email: input.email,
+            displayName: input.displayName,
+            passwordHash: input.passwordHash,
+            consents: input.consents satisfies Consents,
+            event,
+          }),
+        );
+        const row = rows[0];
+        if (row === undefined) {
+          throw new Error('createUserWithEvent: auth_create_member_with_event returned no row');
+        }
+        return toUserRow(row);
+      } catch (err) {
+        if (isPostgresUniqueViolation(err)) {
+          throw new EmailTakenError();
+        }
+        throw err;
+      }
+    },
+
+    async softDeleteUserWithEvent(id, event) {
+      // Retry-safe since migration 0037: an already-deleted user is a
+      // no-op that keeps its tombstone and its recorded event.
+      await queryRows(db, serviceFn.softDeleteUserWithEvent(id, event));
+    },
+
     async softDeleteUser(id) {
-      await withConnectionRetry(async () => {
-        await db
-          .update(users)
-          .set({
-            deletedAt: new Date(),
-            credentialsVersion: sql`${users.credentialsVersion} + 1`,
-          })
-          .where(and(eq(users.id, id)));
-      });
+      await writeRows(db, serviceFn.softDeleteUser(id));
     },
 
     async bumpCredentialsVersion(id) {
-      await withConnectionRetry(async () => {
-        await db
-          .update(users)
-          .set({ credentialsVersion: sql`${users.credentialsVersion} + 1` })
-          .where(eq(users.id, id));
-      });
+      await writeRows(db, serviceFn.bumpCredentialsVersion(id));
     },
 
     findOrCreateOAuthUser() {
@@ -166,20 +185,18 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
 /* ------------------------------------------------------------------ */
 
 /**
- * Map the Drizzle row shape (uses `camelCase` property names but
- * emits Postgres `snake_case` columns) to the `UserRow` contract the
- * auth service reads. The two shapes differ only in the handling of
- * `avatarUrl` and `createdAt` which the service does not consume.
+ * Map the snake_case row returned by the `auth_*` service functions to
+ * the `UserRow` contract the auth service reads.
  */
-function toUserRow(row: typeof users.$inferSelect): UserRow {
+function toUserRow(row: ServiceUserRow): UserRow {
   return {
     id: row.id,
-    studioId: row.studioId,
+    studioId: row.studio_id,
     email: row.email,
-    displayName: row.displayName,
+    displayName: row.display_name,
     role: row.role,
-    passwordHash: row.passwordHash,
-    deletedAt: row.deletedAt,
-    credentialsVersion: row.credentialsVersion,
+    passwordHash: row.password_hash,
+    deletedAt: toDateOrNull(row.deleted_at),
+    credentialsVersion: Number(row.credentials_version),
   };
 }

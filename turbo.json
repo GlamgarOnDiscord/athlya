@@ -1,5 +1,6 @@
 {
   "ui": "tui",
+  "agentGuidance": false,
   "globalDependencies": ["**/.env", "**/.env.*", "tsconfig.json", ".nvmrc"],
   "globalEnv": ["NODE_ENV", "CI"],
   "tasks": {

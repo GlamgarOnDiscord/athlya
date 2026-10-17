@@ -81,22 +81,22 @@ Insérée entre Epic 8 et Epic 10. Règle les 4 vrais bloquants identifiés dans
 
 ## État des tests
 
-Suite complète (10 packages, Docker absent sur ce poste — `pnpm -r test` retourne exit 0) :
+Suite complète au 2026-10-12 après la mise à jour de stack (Node 24, pnpm 11, TS 6, Vitest 5) — nombres identiques à la baseline pré-upgrade, zéro régression. Docker absent du sandbox : suites Testcontainers skippées.
 
 | Package | Tests | Notes |
 |---|---|---|
-| `@athlya/shared` | **135/135** ⏫ | +27 brand-color (unit + property test numRuns 50) |
-| `@athlya/db` | **61/61** ⏫ | +16 CN.9.3 PGlite (P7 tenant isolation — 4 Docker-gated upgraded to always-run) |
-| `@athlya/auth` | **90/90** ⏫ | +5 IDN punycode throttle tests (#243) |
+| `@athlya/shared` | 146/146 | dont PBT round-trip (fast-check 4) |
+| `@athlya/db` | 104/104 | PGlite P4/P7 always-run |
+| `@athlya/auth` | 139/139 | — |
 | `@athlya/ratelimit` | 7/7 | — |
-| `@athlya/api` | **401/401** ⏫ | +6 B5.3 compress middleware (gzip/deflate negotiation, ETag weakening, threshold behavior) |
-| `@athlya/members` | **74/74** ⏫ | +7 CN.9.3 PGlite (P4 RGPD cascade — Docker-gated upgraded to always-run) |
-| `@athlya/reservations` | 113/113 (+ 2 Docker-gated) | dont PBT P1, P2, P3 |
+| `@athlya/api` | 823/824 (+1 todo) | l'échec = `turnstile.test.ts` round-trip réseau réel vers `challenges.cloudflare.com` (bloqué par le proxy sandbox, passe en CI) |
+| `@athlya/members` | 75/75 | — |
+| `@athlya/reservations` | 139/139 (+ 2 Docker-gated) | dont PBT P1, P2, P3 |
 | `@athlya/notifications` | 58/58 | — |
-| `@athlya/billing` | **32/32** ⏫ | +21 webhook; +2 CWE-601 (strict schema + trailing slash, #241) |
-| `@athlya/web` | **74/74** ⏫ | Epic 10 livré : 10.1 (10), 10.2 (+23), 10.3 (+10), 10.4 (+11), 10.5 (+9), 10.6 (+11). 10.7/10.8 : couche E2E Playwright (axe WCAG 2.2 AA + register→book→cancel) exécutée en CI uniquement (Chromium absent du sandbox Windows) |
+| `@athlya/billing` | 32/32 | — |
+| `@athlya/web` | 101/101 | jsdom 30 ; E2E Playwright (axe + flows) en CI uniquement |
 
-**Total : ~1043 tests verts** (+20 CN.6.4 chaos, +8 CN.8.3 EU read-replica cache, +6 B5.3 compress middleware). Suites P4 (5.6) et P7 (2.7) s'exécutent désormais localement sans Docker via PGlite (CN.9.3) — Testcontainers réservé au CI Linux. P1 (6.8 booking) reste `describe.skip` (bug withTenant hors scope CN.9.3). Playwright E2E (axe + flows) s'exécute dans `.github/workflows/axe.yml` avec 4 jobs parallèles : `a11y`, `e2e-flows`, `studio-a11y`, `studio-e2e-flows`.
+**Total : ~1 625 tests exécutés.** Playwright E2E (axe + flows) s'exécute dans `.github/workflows/axe.yml` avec 4 jobs parallèles : `a11y`, `e2e-flows`, `studio-a11y`, `studio-e2e-flows`.
 
 ## PBT validées (10/10)
 
@@ -112,11 +112,11 @@ Epic 14 fermé — Checkpoint v0.1 MVP livré. Reste deux gros chantiers front :
 
 ## Conventions maintenues
 
-- pnpm workspaces, Turborepo 2.x, Node 20, TS 5.9, ESLint 9 flat
+- pnpm 11 workspaces, Turborepo 2.x, Node 24 LTS, TS 6.0, ESLint 9 flat (ESLint 10 / TS 7 bloqués par l'écosystème lint — voir `docs/ACTION-ITEMS.md` U1/U2)
 - Framework-free avec ports injectés ; adapters Drizzle/Stripe/Resend/Expo en prod seulement
 - Hono peerDependency de `@athlya/api` — middleware duck-typés
 - Tests Testcontainers : `describe.skipIf(!dockerReady)` ; infra-probe test toujours enregistré
-- `fast-check@^3.23.2`, numRuns 20–200, seeds hex fixes
+- `fast-check@^4.10.2` (Vitest 5), numRuns 20–200, seeds hex fixes
 - Zod `.strict()` partout sauf `AuditLog.metadata`
 - Pas de hard-coded strings user-facing hors `@athlya/shared/i18n`
 - `AthlyaVariables` étendu incrémentalement : 8.1 (traceId/logger/startedAt), 8.2 (authClaims?), 8.6 (span?)

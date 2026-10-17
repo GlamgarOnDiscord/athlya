@@ -169,6 +169,20 @@ Premier jalon stable. Le backend est verrouillé Niveau Série A : auth hardenin
 
 ## [Unreleased]
 
+### Changed — Mise à jour de la stack (2026-10)
+
+- **Runtime** : Node 22 → **Node 24 LTS** (`.nvmrc` 24.21.0, `engines >=24.21.0 <25`), `@types/node` aligné `^24` (était resté `^20`). Override `testcontainers>undici ^7` retiré (n'existait que pour Node 20).
+- **pnpm 9 → 11** : overrides + `autoInstallPeers`/`ignoreScripts` déplacés dans `pnpm-workspace.yaml` (fin de la double source issue de #511), `.npmrc` supprimé, workflows CI pilotés par `packageManager` (plus de version pnpm codée en dur). `minimumReleaseAge` 24 h conservé (garde supply-chain) + `cooldown` Dependabot 1 jour aligné.
+- **TypeScript 5.9 → 6.0** (pont vers TS 7 ; aucune option dépréciée dans les presets). TS 7 natif bloqué tant que typescript-eslint plafonne à `<6.1`.
+- **Stack de test** : Vitest 4 → **5**, Vite 7 → **8** (Rolldown/Oxc), fast-check 3 → **4** (`stringOf` → `string({ unit })`), `@fast-check/vitest` 0.5, jsdom 26 → **30**, jest-dom 6 → **7** (+ peer `@testing-library/dom`). Configs Vitest des apps : `esbuild.jsx` → `oxc.jsx`, alias `@/` → `resolve.tsconfigPaths` natif. Polyfill `PointerEvent` (`apps/web/vitest.setup.ts`) supprimé — natif dans jsdom 30.
+- **Minor/patch** : Next 16.4, React 19.3, Hono 4.13, zod 4.6, `@hono/zod-openapi` 1.6, typescript-eslint 8.71, Tailwind 4.3.3, Turbo 2.11, Wrangler 4.149, Playwright 1.64, knip 6.41, `@base-ui/react` 1.9, lucide-react 1.55, shadcn 4.21, drizzle-orm 0.45.4, etc.
+
+### Fixed — Mise à jour de la stack (2026-10)
+
+- `@cloudflare/workers-types` déclare désormais `Buffer` en `any` : le codec de curseur de `GET /v1/reservations/me` passe en base64url Web-standard (`TextEncoder` + `btoa`), typé et indépendant de `nodejs_compat`.
+- Overrides de sécurité ré-écrits sous forme ciblée `pkg@<fixed>: ^fixed` : les `>=` ouverts faisaient basculer les consommateurs Babel 7 sur `@babel/core` 8 et `@eslint/eslintrc` sur js-yaml 5 à la re-résolution. Overrides obsolètes retirés (`dockerode>uuid`, `jsdom>ws`, `testcontainers>tmp`).
+- `unbound-method` (typescript-eslint 8.71) sur le stub `reset` de `reconcile.test.ts` ; `Uint8Array<ArrayBuffer>` pour `getRandomValues` (lib TS 6).
+
 ### Security — Session 2026-06
 
 - **#192 / #193** — `updateClass` scopé par `studioId` (anti-mutation cross-tenant ; defense-in-depth au niveau service, en plus de la RLS `withTenant`). Ordre des paramètres aligné `studioId`-first.

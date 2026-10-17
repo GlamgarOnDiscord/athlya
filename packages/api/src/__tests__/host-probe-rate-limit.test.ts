@@ -68,6 +68,9 @@ describe('host-probe rate limiting (issue #244)', () => {
     const res = await app.request('/health', { method: 'GET', headers: probeHeaders }, stagingEnv);
 
     expect(res.status).toBe(429);
+    // Host-check rejections still carry the global security headers.
+    expect(res.headers.get('strict-transport-security')).toMatch(/max-age=\d+/);
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
   it('fails open when Redis is unreachable for the host-probe check', async () => {
@@ -103,5 +106,45 @@ describe('host-probe rate limiting (issue #244)', () => {
     );
 
     expect(res.status).toBe(404);
+  });
+});
+
+describe('limiter responses carry the security headers', () => {
+  beforeEach(() => {
+    __resetRateLimitRedisCache();
+  });
+
+  afterEach(() => {
+    __resetRateLimitRedisCache();
+  });
+
+  it('applies the header policy to a fail-closed 503 on /v1/auth/*', async () => {
+    class BrokenRedis extends FakeRedis {
+      override pipeline(): ReturnType<FakeRedis['pipeline']> {
+        const base = super.pipeline();
+        return {
+          ...base,
+          async exec<T extends unknown[]>(): Promise<T> {
+            throw new Error('ECONNREFUSED');
+          },
+        };
+      }
+    }
+    __primeRateLimitRedisForTests(stagingEnv.REDIS_URL, new BrokenRedis() as unknown as Redis);
+
+    const app = buildAppNoDomainRoutes();
+    const res = await app.request(
+      '/v1/auth/login',
+      {
+        method: 'POST',
+        headers: { host: 'staging.api.athlya.app', 'CF-Connecting-IP': '6.6.6.6' },
+      },
+      stagingEnv,
+    );
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get('strict-transport-security')).toMatch(/max-age=\d+/);
+    expect(res.headers.get('x-frame-options')).toBe('DENY');
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
   });
 });
