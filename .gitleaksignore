@@ -1,3 +1,7 @@
 # Fake fixture UUID in a test (not a secret), present only in an
 # intermediate commit of PR #589; the fixture was renamed in b614c06.
 69ec9fc78f2f79b7725045cbf454382f8296ed98:packages/members/src/__tests__/export.test.ts:generic-api-key:60
+
+# Deliberately unparsable PEM fixture in the preview JWT validator test
+# (issue #611), not a key; the fixture is built from parts since.
+5d0eb7ff414f21be53c6b8c6324e59f6ef38fa64:scripts/__tests__/validate-preview-jwt.test.mjs:private-key:63

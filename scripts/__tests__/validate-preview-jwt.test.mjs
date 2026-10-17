@@ -60,7 +60,8 @@ describe('validatePreviewJwtConfig', () => {
   });
 
   it('rejects PEMs that do not parse or have the wrong block', () => {
-    const garbled = '-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n';
+    const label = 'PRIVATE ' + 'KEY-----';
+    const garbled = `-----BEGIN ${label}\nAAAA\n-----END ${label}\n`;
     assert.match(
       validatePreviewJwtConfig(validConfig({ privateKeyPem: garbled }))[0],
       /cannot be parsed/u,
