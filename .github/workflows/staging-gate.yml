@@ -29,10 +29,18 @@ name: Staging gate
 #   STAGING_SMOKE_EMAIL, STAGING_SMOKE_PASSWORD — dedicated smoke account
 #   K6_STAGING_AUTH_TOKEN, K6_STAGING_STUDIO_ID, K6_STAGING_CLASS_IDS
 # Optional:
-#   STAGING_SMOKE_TURNSTILE_TOKEN — when staging uses a non-test Turnstile secret
+#   STAGING_SMOKE_TURNSTILE_TOKEN — sent as `cf-turnstile-token` on the smoke
+#     login. A Turnstile token is single-use and short-lived, so a stored token
+#     only passes when staging runs Cloudflare's Turnstile test secret; the gate
+#     logs in exactly once (sub-check 3) and the E2E journey reuses that session.
 # Required var:
-#   vars.STAGING_SMOKE_STUDIO_SLUG — seeded studio with upcoming classes, used
-#                                    by the E2E booking journey (#470)
+#   vars.STAGING_SMOKE_STUDIO_SLUG — seeded studio with an upcoming class that
+#                                    has a free seat, used by the E2E booking
+#                                    journey (#470)
+#
+# The E2E journey books a real seat. A cancelled run (cancel-in-progress)
+# signals the script, which cancels its reservation before exiting; a class
+# already booked by a concurrent run on another ref is skipped.
 
 on:
   pull_request:
@@ -143,10 +151,13 @@ jobs:
           SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
           SMOKE_TURNSTILE_TOKEN: ${{ secrets.STAGING_SMOKE_TURNSTILE_TOKEN }}
           SMOKE_STUDIO_SLUG: ${{ vars.STAGING_SMOKE_STUDIO_SLUG }}
-        run: node scripts/smoke-routes.mjs --base-url "${STAGING_API_URL}" --require-auth
+        run: |
+          node scripts/smoke-routes.mjs --base-url "${STAGING_API_URL}" --require-auth \
+            --session-file "${RUNNER_TEMP}/smoke-session"
 
       # Issue #470 — member journey on the deployed system:
-      # login → list classes → book → cancel (always cleaned up).
+      # session from sub-check 3 → list classes → book → cancel (cleanup is
+      # attempted on failure and on SIGINT/SIGTERM).
       - name: '[3b/5] E2E booking journey'
         if: steps.prereq.outputs.skip != 'true'
         env:
@@ -154,7 +165,9 @@ jobs:
           SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
           SMOKE_TURNSTILE_TOKEN: ${{ secrets.STAGING_SMOKE_TURNSTILE_TOKEN }}
           SMOKE_STUDIO_SLUG: ${{ vars.STAGING_SMOKE_STUDIO_SLUG }}
-        run: node scripts/smoke-e2e-login-booking.mjs --base-url "${STAGING_API_URL}"
+        run: |
+          node scripts/smoke-e2e-login-booking.mjs --base-url "${STAGING_API_URL}" \
+            --session-file "${RUNNER_TEMP}/smoke-session"
 
       # Sub-check 4 — migration check: every .sql file in migrations/
       # must appear in the _athlya_migrations table on staging.

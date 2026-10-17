@@ -19,12 +19,20 @@
  * `--require-auth` turns missing credentials into a failure (trusted
  * release contexts); without it the authenticated pass is skipped.
  *
+ * `--session-file <path>` writes the access token (mode 0600) so a later
+ * step can reuse this session: a Turnstile token is single-use, so a
+ * second login with the same token would be rejected.
+ *
  * Exit 0 = all checks healthy. Exit 1 = at least one failed.
  */
 
+import { writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 
 const TIMEOUT_MS = 10_000;
+
+/** `GET /v1/classes` requires `from`/`to`; the API caps the range at 90 days. */
+const CLASS_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
 const PUBLIC_CHECKS = [
   { name: 'health/ready', method: 'GET', path: '/health/ready', expect200: true },
@@ -42,10 +50,11 @@ const PUBLIC_CHECKS = [
  *   turnstileToken?: string,
  *   studioSlug?: string,
  *   requireAuth?: boolean,
+ *   now?: () => Date,
  *   fetchImpl?: typeof fetch,
  *   log?: (line: string) => void,
  * }} options
- * @returns {Promise<{ ok: boolean, failures: string[] }>}
+ * @returns {Promise<{ ok: boolean, failures: string[], accessToken?: string }>}
  */
 export async function runSmoke({
   baseUrl,
@@ -54,6 +63,7 @@ export async function runSmoke({
   turnstileToken,
   studioSlug,
   requireAuth = false,
+  now = () => new Date(),
   fetchImpl = fetch,
   log = console.log,
 }) {
@@ -128,7 +138,7 @@ export async function runSmoke({
   const authChecks = [
     { name: 'members.me', path: '/v1/members/me' },
     { name: 'reservations.me', path: '/v1/reservations/me' },
-    ...(studioSlug ? [{ name: 'classes.list (studio)', path: '/v1/classes' }] : []),
+    ...(studioSlug ? [{ name: 'classes.list (studio)', path: `/v1/classes?${classRange()}` }] : []),
   ];
   for (const check of authChecks) {
     const res = await request('GET', check.path, { headers: authHeaders });
@@ -139,7 +149,15 @@ export async function runSmoke({
     }
   }
 
-  return { ok: failures.length === 0, failures };
+  return { ok: failures.length === 0, failures, accessToken };
+
+  function classRange() {
+    const from = now().getTime();
+    return new URLSearchParams({
+      from: new Date(from).toISOString(),
+      to: new Date(from + CLASS_WINDOW_MS).toISOString(),
+    });
+  }
 }
 
 if (import.meta.main) {
@@ -147,6 +165,7 @@ if (import.meta.main) {
     options: {
       'base-url': { type: 'string' },
       'require-auth': { type: 'boolean', default: false },
+      'session-file': { type: 'string' },
     },
   });
 
@@ -156,7 +175,7 @@ if (import.meta.main) {
     process.exit(1);
   }
 
-  const { ok } = await runSmoke({
+  const { ok, accessToken } = await runSmoke({
     baseUrl,
     email: process.env.SMOKE_EMAIL,
     password: process.env.SMOKE_PASSWORD,
@@ -168,6 +187,9 @@ if (import.meta.main) {
   if (!ok) {
     console.error('[smoke-routes] One or more checks failed');
     process.exit(1);
+  }
+  if (values['session-file'] && accessToken) {
+    await writeFile(values['session-file'], accessToken, { mode: 0o600 });
   }
   console.log('[smoke-routes] All checks healthy');
 }
