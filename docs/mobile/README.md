@@ -126,8 +126,8 @@ Queued cancellations are reconciled the same way on "My reservations".
 
 **Progression graphs** (`features/progression/`, task 22.2): `ProgressionController` keeps the last
 body and `ETag` of each window in memory, revalidates it with `If-None-Match` and reuses it on `304`
-(`RequestOptions.headers` carries the header). A newer load or the screen's abort signal cancels the
-one in flight. The charts (`components/SeriesChart.tsx`, `react-native-svg`) use the same scale and
+(`RequestOptions.headers` carries the header). A newer load, or leaving the screen (`cancel()`),
+aborts the one in flight; the screen is keyed by user id, so the cache never crosses accounts. The charts (`components/SeriesChart.tsx`, `react-native-svg`) use the same scale and
 path maths as the web ones (`@athlya/shared/charts`). Screen readers cannot explore SVG marks, so each
 chart is one `image` element whose label holds its key numbers: days trained, date range, latest,
 highest and lowest value, or weeks and sessions for the frequency chart. A chart with nothing to draw
