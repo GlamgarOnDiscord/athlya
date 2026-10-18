@@ -5,3 +5,7 @@
 # Deliberately unparsable PEM fixture in the preview JWT validator test
 # (issue #611), not a key; the fixture is built from parts since.
 5d0eb7ff414f21be53c6b8c6324e59f6ef38fa64:scripts/__tests__/validate-preview-jwt.test.mjs:private-key:63
+
+# Fake reset-token fixture in the password-reset transport test (PR #650),
+# not a secret; replaced by a low-entropy value in the next commit.
+e011ae100d61beccdfad3beef390e823417e9071:packages/api/src/__tests__/adapters/password-reset-email-transport.test.ts:generic-api-key:11

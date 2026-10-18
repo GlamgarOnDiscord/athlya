@@ -8,7 +8,7 @@ import {
 
 import type { AthlyaBindings } from '../../types.js';
 
-const TOKEN = 'Q9xR2vLmT7pK4sWn8bYc1dEf6gHj3kZa0uVw5iOoNq';
+const TOKEN = 'test-reset-token';
 const BASE_INPUT = {
   to: 'member@example.com',
   link: `https://athlya.app/reset-password/${TOKEN}`,
