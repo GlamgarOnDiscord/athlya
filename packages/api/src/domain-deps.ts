@@ -101,11 +101,9 @@ export function lazyAuditDeps(resolve: () => AuditDeps): AuditDeps {
  *   • `checkRefreshRateLimit` / `checkPasswordResetRateLimit` — getters,
  *     so the route's per-request `!== undefined` check sees whether the
  *     resolved bundle provides the throttle.
- *   • `idempotency` — `buildAuthRouter()` reads it once at mount time,
- *     before any request env exists, so it is always present here and
- *     its `db` handle is resolved per request. `ttlSec`,
- *     `mutationMethods` and `logger` are read at mount time and cannot
- *     be resolved lazily; the adapter leaves them to their defaults.
+ *   • `idempotencyFor` — resolved per request with the caller's claims
+ *     (issue #645), so a bundle without an idempotency store degrades
+ *     to no replay protection instead of failing the mutation.
  */
 export function lazyAuthDeps(resolve: () => AuthDeps): AuthDeps {
   const forward = forwarder(resolve);
@@ -118,15 +116,7 @@ export function lazyAuthDeps(resolve: () => AuthDeps): AuthDeps {
     deleteMe: forward('deleteMe'),
     requestPasswordReset: forward('requestPasswordReset'),
     confirmPasswordReset: forward('confirmPasswordReset'),
-    idempotency: {
-      get db() {
-        const idempotency = resolve().idempotency;
-        if (idempotency === undefined) {
-          throw new Error('auth idempotency dependency is not wired for this environment');
-        }
-        return idempotency.db;
-      },
-    },
+    idempotencyFor: (claims) => resolve().idempotencyFor?.(claims),
   };
   // Getters (not plain optional fields) so `exactOptionalPropertyTypes`
   // still holds: the value is `undefined` only when the bundle omits it.
@@ -356,11 +346,11 @@ export function defaultAuthDeps(env: AthlyaBindings): AuthDeps {
         confirmPasswordReset: () => notImplemented('auth.confirmPasswordReset'),
       };
 
-  // Fail-fast: idempotency must be wired for all mutation routes in
-  // non-dev environments. A missing idempotency dep means duplicate
-  // requests (double-click, proxy retry) can create duplicate accounts
-  // or trigger double-deletions silently. Issue #460.
-  if (auth.idempotency === undefined && env.ENVIRONMENT !== 'dev') {
+  // Fail-fast: idempotency must be wired for the authenticated mutation
+  // routes in non-dev environments. A missing idempotency dep means
+  // duplicate requests (double-click, proxy retry) can trigger
+  // double-deletions silently. Issue #460.
+  if (auth.idempotencyFor === undefined && env.ENVIRONMENT !== 'dev') {
     throw new Error(
       `[boot] idempotency middleware not wired for environment="${env.ENVIRONMENT}". ` +
         'Ensure DB_URL is set and buildAuthDeps returns an idempotency dep.',

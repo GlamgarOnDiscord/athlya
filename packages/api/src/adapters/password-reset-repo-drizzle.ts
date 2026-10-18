@@ -34,9 +34,16 @@
 
 import { PasswordResetTokenUnavailableError } from '@athlya/auth';
 
-import { queryRows, serviceFn, toDateOrNull, writeRows } from './service-functions.js';
+import { noteOutboxWrite } from '../events/outbox-kick.js';
 
-import type { PasswordResetRepo } from '@athlya/auth';
+import { queryRows, serviceFn, toDateOrNull, uuidV7, writeRows } from './service-functions.js';
+
+import type {
+  PasswordResetRepo,
+  PasswordResetRequestQueue,
+  PasswordResetRequestTokenStore,
+  RequestTokenIssue,
+} from '@athlya/auth';
 import type { AthlyaDbAny } from '@athlya/db/client';
 
 /**
@@ -93,6 +100,58 @@ export function createDrizzlePasswordResetRepo(db: AthlyaDbAny): PasswordResetRe
       if (rows.length === 0) {
         throw new PasswordResetTokenUnavailableError();
       }
+    },
+  };
+}
+
+/** Outbox event type recorded by {@link createPasswordResetRequestQueue}. */
+export const PASSWORD_RESET_REQUESTED = 'auth.password_reset.requested';
+
+/**
+ * `PasswordResetRequestQueue` adapter (issue #645). One call to
+ * `auth_request_password_reset` (migration 0043) looks up the live
+ * account and records the outbox row in the same statement; nothing is
+ * recorded for an unknown or soft-deleted address. The event id is
+ * chosen once per request, so the connection retry of `queryRows` is
+ * safe: a replay hits `ON CONFLICT (event_id) DO NOTHING`.
+ */
+export function createPasswordResetRequestQueue(db: AthlyaDbAny): PasswordResetRequestQueue {
+  return {
+    async enqueue(normalizedEmail) {
+      const rows = await queryRows<{ enqueued: boolean }>(
+        db,
+        serviceFn.requestPasswordReset(normalizedEmail, uuidV7()),
+      );
+      if (rows[0]?.enqueued === true) {
+        noteOutboxWrite(PASSWORD_RESET_REQUESTED);
+      }
+    },
+  };
+}
+
+const REQUEST_TOKEN_OUTCOMES: ReadonlySet<string> = new Set(['issued', 'superseded', 'inactive']);
+
+/**
+ * `PasswordResetRequestTokenStore` adapter (cubic review on #650).
+ * `auth_issue_password_reset_for_request` (migration 0043) stores the
+ * request's token, or finds it again on a retry instead of invalidating
+ * it. Replaying the call is idempotent, so the connection retry of
+ * `queryRows` is safe.
+ */
+export function createPasswordResetRequestTokenStore(
+  db: AthlyaDbAny,
+): PasswordResetRequestTokenStore {
+  return {
+    async issueForRequest(input) {
+      const rows = await queryRows<{ outcome: string }>(
+        db,
+        serviceFn.issuePasswordResetForRequest(input.userId, input.tokenHash, input.expiresAt),
+      );
+      const outcome = rows[0]?.outcome;
+      if (outcome === undefined || !REQUEST_TOKEN_OUTCOMES.has(outcome)) {
+        throw new Error('password reset issuance returned an unexpected outcome');
+      }
+      return outcome as RequestTokenIssue;
     },
   };
 }

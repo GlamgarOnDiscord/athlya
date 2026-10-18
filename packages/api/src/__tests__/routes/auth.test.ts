@@ -340,6 +340,57 @@ describe('POST /v1/auth/password-reset/request', () => {
     expect(res.status).toBe(204);
     expect(requestPasswordReset).toHaveBeenCalledWith('ada@example.com');
   });
+
+  it('answers identically before the enqueue settles, whatever its outcome (issue #645)', async () => {
+    // A live account records an outbox row, an unknown one records
+    // nothing, a database outage rejects, a slow one never settles in
+    // time: the response must not depend on any of them. With an
+    // ExecutionContext the enqueue runs in waitUntil, after the 204.
+    const outcomes = {
+      enqueued: () => Promise.resolve(),
+      unknown: () => Promise.resolve(),
+      failed: () => Promise.reject(new Error('db down')),
+      pending: () => new Promise<void>(() => undefined),
+    };
+    const responses: Record<string, unknown> = {};
+    for (const [name, outcome] of Object.entries(outcomes)) {
+      const requestPasswordReset = vi.fn(outcome);
+      const deps = buildStubDeps({
+        auth: {
+          checkPasswordResetRateLimit: vi.fn().mockResolvedValue(true),
+          requestPasswordReset,
+        },
+      });
+      const app = buildTestApp(deps);
+      const waitUntil = vi.fn();
+
+      const res = await app.request(
+        '/v1/auth/password-reset/request',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'cf-turnstile-token': 'test-token' },
+          body: JSON.stringify({ email: `${name}@example.com` }),
+        },
+        env(),
+        { waitUntil, passThroughOnException: vi.fn(), props: {} },
+      );
+
+      expect(requestPasswordReset).toHaveBeenCalledWith(`${name}@example.com`);
+      expect(waitUntil).toHaveBeenCalled();
+      const headers = Object.fromEntries(
+        // Per-request trace ids differ by design; everything else must match.
+        [...res.headers].filter(
+          ([key]) => !['x-trace-id', 'x-request-id', 'traceparent'].includes(key),
+        ),
+      );
+      responses[name] = { status: res.status, headers, body: await res.text() };
+    }
+
+    expect(responses['enqueued']).toMatchObject({ status: 204, body: '' });
+    for (const name of Object.keys(outcomes)) {
+      expect(responses[name]).toEqual(responses['enqueued']);
+    }
+  });
 });
 
 describe('POST /v1/auth/password-reset/confirm', () => {

@@ -19,16 +19,23 @@ import {
   type MembersExportRequestedEvent,
 } from '@athlya/shared/events';
 
+import { buildPasswordResetDeliveryDeps } from './adapters/auth-deps.js';
 import { buildCascadeDeps } from './adapters/cascade-deps.js';
 import { buildCronSqlExecutor } from './adapters/cron-sql-executor.js';
 import { getOrCreateRedis } from './adapters/deps-cache.js';
 import { resolveDrainDbUrl, withDrainDb } from './adapters/drain-db.js';
 import { buildExportDeps } from './adapters/export-deps.js';
 import { buildNotificationsDeps } from './adapters/notifications-deps.js';
+import { createRedisPasswordResetDeliveryStore } from './adapters/password-reset-delivery-store-redis.js';
 import { buildApp } from './app.js';
 import { handleDlqBatch } from './events/drain-dlq.js';
 import { runKickDrain, runScheduledDrain } from './events/drain-scheduled.js';
 import { handleOutboxKickBatch, isOutboxKickQueue } from './events/outbox-kick.js';
+import {
+  PASSWORD_RESET_IN_FLIGHT_TTL_SECONDS,
+  PasswordResetDeliveryInFlightError,
+  handlePasswordResetRequested,
+} from './events/password-reset-consumer.js';
 import { rejectUnknownQueueEvent } from './events/reject-unknown-queue-event.js';
 import { isNotificationsConsumerQueue, isRgpdConsumerQueue } from './events/route-queue.js';
 import { runScheduledCapacityReconcile } from './maintenance/capacity-reconcile-runner.js';
@@ -406,6 +413,53 @@ function readEventEnvelope(body: unknown): { type: string; id?: string; payload?
 
 const NOTIFICATION_EVENT_TYPES = new Set<string>(HANDLED_EVENT_TYPES);
 
+const PASSWORD_RESET_REQUESTED = 'auth.password_reset.requested';
+
+/**
+ * Deliver one `auth.password_reset.requested` message (issue #645).
+ * A malformed envelope is acked (retrying cannot fix it); a delivery
+ * failure throws so the caller retries the message, and the queue
+ * dead-letters it once `max_retries` is spent.
+ */
+async function deliverPasswordResetMessage(
+  msg: MessageBatch<unknown>['messages'][number],
+  queue: string,
+  env: AthlyaBindings,
+): Promise<void> {
+  let event: AthlyaEvent;
+  try {
+    event = parseEvent(msg.body);
+  } catch (err) {
+    console.warn('[worker] password-reset event malformed, acking', {
+      queue,
+      messageId: msg.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    msg.ack();
+    return;
+  }
+  if (event.type !== PASSWORD_RESET_REQUESTED) {
+    throw new Error(`unexpected event type ${event.type} on the password-reset path`);
+  }
+  try {
+    await handlePasswordResetRequested(event, {
+      deliveries: buildPasswordResetDeliveryStore(env),
+      delivery: buildPasswordResetDeliveryDeps(env),
+    });
+  } catch (err) {
+    if (!(err instanceof PasswordResetDeliveryInFlightError)) throw err;
+    // Another attempt holds the in-flight mark: come back once it has
+    // completed or, if that isolate died, once the mark has expired.
+    msg.retry({ delaySeconds: PASSWORD_RESET_IN_FLIGHT_TTL_SECONDS });
+    return;
+  }
+  msg.ack();
+}
+
+function buildPasswordResetDeliveryStore(env: AthlyaBindings) {
+  return createRedisPasswordResetDeliveryStore(getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN));
+}
+
 /**
  * Dispatch every message of a non-DLQ queue batch.
  *
@@ -500,6 +554,11 @@ export async function handleNotificationsBatch(
     }
 
     try {
+      if (envelope.type === PASSWORD_RESET_REQUESTED) {
+        await deliverPasswordResetMessage(msg, batch.queue, env);
+        continue;
+      }
+
       if (!NOTIFICATION_EVENT_TYPES.has(envelope.type)) {
         await rejectUnknownQueueEvent(
           msg,
@@ -599,6 +658,12 @@ export async function handleEventsBatch(
           // retrying the queue message would just loop the
           // failure forever.
           msg.ack();
+          break;
+        }
+        case PASSWORD_RESET_REQUESTED: {
+          // Backlog published to the monolithic queue (e.g. a DLQ
+          // replay) is delivered like the notifications lane does.
+          await deliverPasswordResetMessage(msg, batch.queue, env);
           break;
         }
         default: {
