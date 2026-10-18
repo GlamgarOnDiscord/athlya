@@ -71,6 +71,17 @@ export const exportJobStatusEnum = pgEnum('export_job_status', [
   'failed',
 ]);
 
+/**
+ * Lifecycle of a training program (Epic 24, migration 0042).
+ *
+ *   - `draft`     — being authored; only admins and coaches see it.
+ *   - `published` — listed to members, who may subscribe.
+ *   - `archived`  — terminal; hidden from the catalogue and closed to new
+ *                   subscriptions. Existing subscribers keep following it
+ *                   until they unsubscribe.
+ */
+export const programStatusEnum = pgEnum('program_status', ['draft', 'published', 'archived']);
+
 /* ------------------------------------------------------------------ */
 /*  Compile-time drift guards                                           */
 /* ------------------------------------------------------------------ */

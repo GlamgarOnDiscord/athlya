@@ -667,15 +667,22 @@ Use official CLI to create, init the project .. and recent package version and s
     - _Requirements: 12.1_
 
 - [ ] 24. Training programs
-  - [ ] 24.1 Define the `programs` and `program_weeks` schema
+  - [x] 24.1 Define the `programs` and `program_weeks` schema
     - Drizzle schema, migration, RLS policies scoped by studio
+    - Done (#640): migration `0042_training_programs` — `programs`, `program_weeks`, `program_workouts`, `program_subscriptions`, ENABLE + FORCE RLS, `athlya_app` grants, `rgpd_delete_program_subscriptions` for the Article 17 cascade; pgTAP `tests/rls/training_programs.sql`
     - _Requirements: 13.2, 13.6_
 
-  - [ ] 24.2 Implement the program service and assignment flow
-    - Admins create programs; members subscribe; daily prescribed workout shown in mobile home
+  - [x] 24.2 Implement the program service and assignment flow
+    - Admins create programs; members subscribe; daily prescribed workout served to the mobile home
+    - Done (#640): `@athlya/programs` domain + `/v1/programs/*` (reservations bulkhead Worker); `GET /v1/programs/today?date=YYYY-MM-DD` is the mobile home contract. Rendering it is task 24.4
     - _Requirements: 3.5_
 
-  - [ ] 24.3 Build the program authoring UI in the studio admin app
+  - [x] 24.3 Build the program authoring UI in the studio admin app
+    - Done (#640): `/dashboard/programs` — list, status filter, week/day/exercise editor, archive
+    - _Requirements: 3.5_
+
+  - [ ] 24.4 Show the daily prescribed workout on the mobile home
+    - Pending (later mobile PR): render `GET /v1/programs/today` (member local date) on the mobile home
     - _Requirements: 3.5_
 
 - [ ] 25. Final checkpoint — v0.3 complete
@@ -735,7 +742,7 @@ Use official CLI to create, init the project .. and recent package version and s
     { "id": 15, "tasks": ["16.3"] },
     { "id": 16, "tasks": ["21.1", "22.1", "23.1", "24.1"] },
     { "id": 17, "tasks": ["21.2", "22.2", "24.2"] },
-    { "id": 18, "tasks": ["24.3"] }
+    { "id": 18, "tasks": ["24.3", "24.4"] }
   ]
 }
 ```

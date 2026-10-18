@@ -145,6 +145,8 @@ export const serviceFn = {
   deletePushTokens: (userId: string) => sql`SELECT rgpd_delete_push_tokens(${userId}::uuid) AS n`,
   deleteIdempotencyKeys: (userId: string) =>
     sql`SELECT rgpd_delete_idempotency_keys(${userId}::uuid) AS n`,
+  deleteProgramSubscriptions: (userId: string) =>
+    sql`SELECT rgpd_delete_program_subscriptions(${userId}::uuid) AS n`,
   anonymizeUserAudit: (userId: string) =>
     sql`SELECT rgpd_anonymize_user_audit(${userId}::uuid) AS n`,
   confirmUserDeleted: (userId: string) =>

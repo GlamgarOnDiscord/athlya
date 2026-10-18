@@ -7,6 +7,7 @@
  *   • /v1/members/*      — profile, consents, export
  *   • /v1/me/*           — progression (served from the members deps)
  *   • /v1/studios/*      — studio read/update
+ *   • /v1/programs/*     — training programs, subscriptions, daily workout
  *
  * /v1/checkins/* is not routed to this Worker: the check-in adapter is
  * not implemented yet (issue #302), so its wrangler route was removed.
@@ -25,10 +26,12 @@ import {
   assertRequiredSecrets,
   defaultClassesDeps,
   defaultMembersDeps,
+  defaultProgramsDeps,
   defaultReservationsDeps,
   defaultStudiosDeps,
   lazyClassesDeps,
   lazyMembersDeps,
+  lazyProgramsDeps,
   lazyReservationsDeps,
   lazyStudiosDeps,
 } from '../domain-deps.js';
@@ -37,6 +40,7 @@ import { buildCapacityRouter } from '../routes/capacity.js';
 import { buildClassesRouter } from '../routes/classes.js';
 import { buildMeRouter } from '../routes/me.js';
 import { buildMembersRouter } from '../routes/members.js';
+import { buildProgramsRouter } from '../routes/programs.js';
 import { buildReservationsRouter } from '../routes/reservations.js';
 import { buildStudiosRouter } from '../routes/studios.js';
 
@@ -71,6 +75,7 @@ const app = buildBaseApp({
         reservations: defaultReservationsDeps(env, cf),
         members: defaultMembersDeps(env, cf),
         studios: defaultStudiosDeps(env),
+        programs: defaultProgramsDeps(env),
       };
     });
     // Capacity WebSocket mounts first: /v1/classes/:classId/capacity/ws
@@ -85,6 +90,7 @@ const app = buildBaseApp({
     base.route('/v1/members', buildMembersRouter(members));
     base.route('/v1/me', buildMeRouter(members));
     base.route('/v1/studios', buildStudiosRouter(lazyStudiosDeps(() => resolve().studios)));
+    base.route('/v1/programs', buildProgramsRouter(lazyProgramsDeps(() => resolve().programs)));
   },
 });
 

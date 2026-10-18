@@ -46,6 +46,7 @@ export default async function DashboardLayout({
           <DashboardNav
             links={[
               { href: '/dashboard/classes', label: t('studio.nav.classes') },
+              { href: '/dashboard/programs', label: t('studio.nav.programs') },
               { href: '/dashboard/members', label: t('studio.nav.members') },
               { href: '/dashboard/branding', label: t('studio.nav.branding') },
               { href: '/dashboard/billing', label: t('studio.nav.billing') },

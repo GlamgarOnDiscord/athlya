@@ -277,7 +277,8 @@
       "branding": "Identité",
       "billing": "Facturation",
       "checkin": "Check-in",
-      "audit": "Audit"
+      "audit": "Audit",
+      "programs": "Programmes"
     },
     "dashboard": {
       "title": "Tableau de bord",
@@ -305,6 +306,10 @@
       "audit": {
         "title": "Journal d'audit",
         "body": "Suivre toutes les actions admin effectuées dans votre studio."
+      },
+      "programs": {
+        "title": "Programmes",
+        "body": "Créez des programmes d'entraînement sur plusieurs semaines que vos membres suivent."
       }
     },
     "forbidden": {
@@ -440,6 +445,85 @@
       "invoices": {
         "title": "Factures",
         "empty": "Aucune facture pour le moment."
+      }
+    },
+    "programs": {
+      "title": "Programmes d'entraînement",
+      "subtitle": "Des plans sur plusieurs semaines que vos membres suivent jour après jour.",
+      "create": "+ Nouveau programme",
+      "empty": "Aucun programme pour le moment. Créez-en un pour commencer.",
+      "loading": "Chargement des programmes…",
+      "filter": {
+        "label": "Statut",
+        "all": "Tous"
+      },
+      "status": {
+        "draft": "Brouillon",
+        "published": "Publié",
+        "archived": "Archivé"
+      },
+      "columns": {
+        "title": "Titre",
+        "status": "Statut",
+        "weeks": "Semaines",
+        "updated": "Mis à jour",
+        "actions": "Actions"
+      },
+      "row": {
+        "edit": "Modifier",
+        "archive": "Archiver",
+        "editLabel": "Modifier {title}",
+        "archiveLabel": "Archiver {title}"
+      },
+      "archiveConfirm": {
+        "title": "Archiver ce programme ?",
+        "body": "Les membres ne pourront plus s'y abonner. Les abonnés actuels continuent de le suivre jusqu'à leur désabonnement. Action irréversible.",
+        "confirm": "Archiver"
+      },
+      "archived": "Programme archivé.",
+      "saved": "Programme enregistré.",
+      "editor": {
+        "createTitle": "Nouveau programme",
+        "editTitle": "Modifier le programme",
+        "fields": {
+          "title": "Titre",
+          "description": "Description",
+          "status": "Statut",
+          "weekTitle": "Titre de la semaine (facultatif)",
+          "day": "Jour",
+          "workoutTitle": "Titre de la séance",
+          "notes": "Notes",
+          "exercise": "Exercice",
+          "sets": "Séries",
+          "reps": "Répétitions",
+          "durationSec": "Durée (s)",
+          "weightKg": "Charge (kg)",
+          "restSec": "Repos (s)",
+          "exerciseNotes": "Notes de l'exercice"
+        },
+        "week": "Semaine {n}",
+        "dayOption": "Jour {n}",
+        "workout": "Séance du jour {day}",
+        "exercise": "Exercice {n}",
+        "addWeek": "+ Ajouter une semaine",
+        "removeWeek": "Supprimer la semaine {n}",
+        "addWorkout": "+ Ajouter une séance",
+        "removeWorkout": "Supprimer la séance du jour {day} de la semaine {week}",
+        "addExercise": "+ Ajouter un exercice",
+        "removeExercise": "Supprimer l'exercice {n} de la séance du jour {day} de la semaine {week}",
+        "restWeek": "Aucune séance cette semaine pour le moment : tous les jours sont des jours de repos.",
+        "help": "Le jour 1 est le jour où le membre commence. Les jours sans séance sont des jours de repos. Jusqu'à {weeks} semaines, 7 séances par semaine et {exercises} exercices par séance.",
+        "create": "Créer",
+        "save": "Enregistrer",
+        "saving": "Enregistrement…",
+        "back": "Retour aux programmes",
+        "errorsTitle": "Veuillez corriger les points suivants :",
+        "errors": {
+          "generic": "Échec de l'enregistrement.",
+          "versionConflict": "Le programme a été modifié entre temps. Rechargez-le et réessayez.",
+          "archived": "Ce programme est archivé et ne peut plus être modifié.",
+          "loadFailed": "Impossible de charger le programme."
+        }
       }
     }
   },
