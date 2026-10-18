@@ -119,7 +119,9 @@ const CLASS_IDS = (__ENV.K6_CLASS_IDS ?? '').split(',').filter(Boolean);
 // Tokens are read from __ENV in every VU's init context and are never
 // returned from setup(): k6 serializes setup data into the end-of-test
 // summary (`setup_data`), which is uploaded as a CI artifact.
-const RAW_TOKENS = __ENV.K6_AUTH_TOKENS ?? __ENV.K6_AUTH_TOKEN ?? '';
+// GitHub Actions passes an unset secret as '', so an empty value must fall
+// through to the legacy variable: `||`, not `??`.
+const RAW_TOKENS = __ENV.K6_AUTH_TOKENS || __ENV.K6_AUTH_TOKEN || '';
 const TOKENS = RAW_TOKENS.split(',').filter(Boolean);
 
 export function setup() {
