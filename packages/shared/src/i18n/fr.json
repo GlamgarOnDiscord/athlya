@@ -538,6 +538,7 @@
         "classes": "Réserver un cours",
         "reservations": "Mes réservations",
         "workout": "Enregistrer une séance",
+        "checkin": "Pointer à l'accueil",
         "settings": "Paramètres"
       }
     },
@@ -647,6 +648,17 @@
         "duration": "Saisissez une durée en minutes entières.",
         "notes": "Les notes sont limitées à 2 000 caractères."
       }
+    },
+    "checkin": {
+      "title": "Pointer à l'accueil",
+      "intro": "Présentez ce code à l'accueil. Il change toutes les 2 minutes et ne sert qu'une fois.",
+      "qrLabel": "QR code de pointage, encore valable {seconds} secondes",
+      "expiresIn": "Nouveau code dans {seconds} s",
+      "loading": "Récupération de votre code…",
+      "offline": "Vous êtes hors ligne. Un nouveau code de pointage nécessite une connexion.",
+      "loadError": "Impossible d'obtenir un code de pointage.",
+      "newCode": "Obtenir un nouveau code",
+      "limitReached": "Vous avez déjà pointé 5 fois au cours de la dernière heure."
     },
     "settings": {
       "title": "Paramètres",

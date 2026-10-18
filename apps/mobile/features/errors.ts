@@ -23,6 +23,7 @@ const PROBLEM_CODE_KEYS: Readonly<Record<string, TranslationKeys>> = {
   studio_not_found: 'mobile.auth.errors.studioNotFound',
   bot_challenge_failed: 'mobile.auth.errors.botCheck',
   rate_limit_exceeded: 'errors.rateLimited',
+  checkin_limit_reached: 'mobile.checkin.limitReached',
 };
 
 function statusKey(status: number): TranslationKeys {

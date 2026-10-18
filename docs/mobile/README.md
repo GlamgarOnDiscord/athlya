@@ -1,9 +1,8 @@
 # Mobile — Epic 10 (`apps/mobile`)
 
-**Status**: foundation (issue #638) and member screens (issue #647) delivered, 12/13 tasks. Sign-in
-and registration pass Cloudflare Turnstile through a WebView (issue #649). The QR check-in screen
-(11.9) is the last one; its API (token route and kiosk scan) ships with #654. Post-1.0 roadmap item
-v1.1, see
+**Status**: foundation (issue #638), member screens (issue #647) and the QR check-in screen (issue
+#648) delivered, 13/13 tasks. Sign-in and registration pass Cloudflare Turnstile through a
+WebView (issue #649). Post-1.0 roadmap item v1.1, see
 [`docs/roadmap/post-1.0.md`](../roadmap/post-1.0.md).
 
 ## Stack
@@ -17,6 +16,7 @@ v1.1, see
 | Biometrics    | `expo-local-authentication`                                                           |
 | Offline queue | `react-native-mmkv` 4 (AES-256, per-install key in secure storage)                    |
 | Connectivity  | `@react-native-community/netinfo`                                                     |
+| QR code       | `react-native-qrcode-svg` 6 on `react-native-svg` 15.16 (the SDK 58 version)          |
 | Bot check     | `react-native-webview` 14.0.1 (the SDK 58 pin) hosting the API's Turnstile page       |
 | Builds        | EAS Build / Submit — operator steps in [`mobile-eas.md`](../runbooks/mobile-eas.md)   |
 
@@ -30,7 +30,7 @@ v1.1, see
 - [x] 11.6 `drainMutationQueue` (design.md Algorithm 4)
 - [x] 11.7 NetInfo auto-drain + sync progress
 - [x] 11.8 Booking screen with optimistic update (+ "My reservations" with cancellation)
-- [ ] 11.9 QR check-in screen: API ready since #654 (`POST /v1/checkins/token`), screen open (#648)
+- [x] 11.9 QR check-in screen (rotating single-use code, #648)
 - [x] 11.10 Workout logging (offline enqueue)
 - [x] 11.11 RGPD export / delete screens (in Settings)
 - [x] 11.12 Property 5 (FIFO + idempotent drain), fast-check
@@ -102,6 +102,7 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
 | `/classes`      | Next 14 days of classes, booking with an optimistic seat count (11.8)                        | `GET /v1/classes?from=<ISO>&to=<ISO>` (both required, 90 days at most), `POST /v1/reservations` |
 | `/reservations` | Upcoming reservations, cancellation until 2 h before the class                               | `GET /v1/reservations/me`, `DELETE /v1/reservations/{id}`                                       |
 | `/workout`      | Workout log: exercises, sets, reps, weight, duration, notes (11.10)                          | `POST /v1/sessions`                                                                             |
+| `/checkin`      | Rotating single-use QR code staff scan at the front desk (11.9)                              | `POST /v1/checkins/token` (body `{}`)                                                           |
 | `/settings`     | Biometric unlock, rejected changes (DLQ), RGPD export and account deletion (11.11), sign-out | `POST /v1/members/me/export`, `DELETE /v1/auth/me`, `POST /v1/auth/logout`                      |
 
 Screens behind the sign-in gate (`<SignedIn>`, `components/AppSession.tsx`) redirect to `/login` when
@@ -124,15 +125,28 @@ again afterwards. A queued booking keeps its decrement (re-applied on every relo
 waiting to sync; once it leaves the queue (delivered or dead-lettered) the list is fetched again.
 Queued cancellations are reconciled the same way on "My reservations".
 
+**QR check-in** (`features/checkin/checkin-token.ts`, `CheckinTokenController`): the screen fetches a
+token when it gains focus with the app in the foreground and stops (timers cleared, request in
+flight aborted) when it loses focus or the app leaves the foreground (`AppState`). The next token is
+fetched 15 s before `expiresAt`, and a countdown shows the seconds left. The request is never queued:
+offline, a token that is still valid stays on screen (the kiosk is online and can scan it) and, once
+it expires, a notice says a connection is needed; the code is fetched again as soon as the device
+is back online. A network failure retries after 10 s, a 429 after 60 s (`checkin_limit_reached`, the
+5-per-hour bound of #338, has its own message); an expired session shows the sign-in action and stops
+the refresh. The QR is dark on a light quiet zone in both themes and has an accessibility label with
+the seconds left. Screen brightness is not raised (it needs `expo-brightness`, a native module not in
+the app yet). `react-native-svg` is a native module, so a new development or EAS build is needed.
+
 **Account deletion**: once the API accepted it, the device removes the user's queued and rejected
 changes, then clears the session (or locks it in memory if the secure storage fails) and leaves the
 signed-in area whatever happens locally.
 
 **Known gaps**:
 
-- The QR check-in screen (11.9) is not built yet (#648). Its API (`POST /v1/checkins/token`, kiosk
-  `POST /v1/checkins`) is routed on the reservations Worker since #654, once migration 0045 is
-  applied and that Worker is redeployed with the JWT signing secrets. `POST /v1/sessions` is routed on the reservations Worker
+- QR check-in needs its API: `POST /v1/checkins/token` (and the kiosk's `POST /v1/checkins`) is
+  routed on the reservations Worker since #654, once migration 0045 is applied and that Worker is
+  redeployed with the JWT signing secrets. Until then the screen shows the load error.
+  `POST /v1/sessions` is routed on the reservations Worker
   since #652, but only once the operator has applied migration 0044 and then, from `packages/api`,
   run `wrangler deploy --config wrangler.reservations.toml --env staging` followed by
   `wrangler deploy --config wrangler.reservations.toml --env production`. Until those named-env
