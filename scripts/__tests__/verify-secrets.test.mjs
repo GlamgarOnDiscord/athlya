@@ -80,7 +80,10 @@ describe('verify-secrets lists', () => {
 
   it('keep the AI coach key optional on the Workers serving /v1/coach', () => {
     for (const worker of ['main', 'reservations']) {
-      assert.ok(OPTIONAL[worker].includes('MISTRAL_API_KEY'), `${worker} is missing MISTRAL_API_KEY`);
+      assert.ok(
+        OPTIONAL[worker].includes('MISTRAL_API_KEY'),
+        `${worker} is missing MISTRAL_API_KEY`,
+      );
       assert.ok(!REQUIRED[worker].includes('MISTRAL_API_KEY'));
     }
     assert.deepEqual(
@@ -97,6 +100,11 @@ describe('verify-secrets lists', () => {
   it('require Turnstile and Resend on the auth Worker', () => {
     assert.ok(REQUIRED.auth.includes('TURNSTILE_SECRET'));
     assert.ok(REQUIRED.auth.includes('RESEND_API_KEY'));
+  });
+
+  it('warn only when the mobile Turnstile site key is missing on the auth Worker', () => {
+    const present = new Set([...REQUIRED.auth, ...PRODUCTION_REQUIRED.auth]);
+    assert.deepEqual(missingSecrets('auth', present).missingOptional, ['TURNSTILE_SITE_KEY']);
   });
 
   for (const [worker, configFile = 'wrangler.toml'] of Object.entries(CONFIG_FILES)) {
@@ -154,7 +162,7 @@ describe('missingSecrets', () => {
   });
 
   it('passes when every secret is present', () => {
-    const present = new Set([...REQUIRED.auth, ...PRODUCTION_REQUIRED.auth]);
+    const present = new Set([...REQUIRED.auth, ...PRODUCTION_REQUIRED.auth, ...OPTIONAL.auth]);
     assert.deepEqual(missingSecrets('auth', present), {
       missing: [],
       missingProduction: [],

@@ -41,7 +41,9 @@
  * OPTIONAL   — never fatal, warned when missing. Secrets of features
  *              behind a flag that is OFF by default: MISTRAL_API_KEY
  *              (AI coach, `ai-coach` flag) on the Workers serving
- *              /v1/coach (gateway and reservations).
+ *              /v1/coach (gateway and reservations). TURNSTILE_SITE_KEY
+ *              on auth: only the mobile app's challenge page needs it
+ *              (issue #649), the web clients ship their own key.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -111,7 +113,7 @@ export const PRODUCTION_REQUIRED = {
 /** Optional secrets: warned when missing, never fatal (flag-gated features). */
 export const OPTIONAL = {
   main: ['MISTRAL_API_KEY'],
-  auth: [],
+  auth: ['TURNSTILE_SITE_KEY'],
   reservations: ['MISTRAL_API_KEY'],
   billing: [],
 };
