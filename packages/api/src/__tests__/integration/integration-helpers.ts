@@ -49,8 +49,9 @@ import {
 
 import type { AuthClaims, JwksKeyResolver } from '../../middleware/auth.js';
 import type { RateLimitOptions } from '../../middleware/rate-limit.js';
-import type { DomainDeps, SessionsDeps } from '../../routes/index.js';
+import type { CheckinsDeps, DomainDeps, SessionsDeps } from '../../routes/index.js';
 import type { HonoEnv } from '../../types.js';
+import type { CheckInResponse } from '@athlya/shared/schemas/api';
 import type { WorkoutSession } from '@athlya/shared/schemas/domain';
 import type { Redis } from '@upstash/redis';
 import type { Hono } from 'hono';
@@ -438,19 +439,27 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
     listSessions: vi.fn(async () => []),
   };
 
-  const checkins: DomainDeps['checkins'] = {
-    checkIn: vi.fn(async (_studioId: string, _input) => {
+  const checkins: CheckinsDeps = {
+    issueToken: vi.fn(async () => ({
+      token: 'a.b.c',
+      expiresAt: new Date(Date.now() + 120_000).toISOString(),
+    })),
+    checkIn: vi.fn(async () => {
       // The integration tests do not verify the QR token itself
       // (Epic 11 owns that). We simulate a successful check-in:
-      // the caller's JWT already proved tenant scope via jwtAuth.
+      // the operator's JWT already proved tenant scope via jwtAuth.
       state.events.push({
         type: 'checkin.recorded',
         payload: { at: new Date().toISOString() },
       });
       return {
         kind: 'success' as const,
-        reservation: { id: 'r-checkin' },
-        member: { id: 'u-checkin', displayName: 'Test' },
+        reservationId: makeUuid(4242) as CheckInResponse['reservationId'],
+        member: {
+          id: TEST_USER_ID as CheckInResponse['member']['id'],
+          displayName: 'Test',
+          avatarUrl: null,
+        },
       };
     }),
   };

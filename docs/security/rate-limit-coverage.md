@@ -27,6 +27,8 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 | `export-post`          | `POST /v1/members/me/export`                            | POST    | 1 / 24h user                   | fail-closed      | user         |
 | `coach-ask`            | `POST /v1/coach/ask`                                    | POST    | 5 user + 10 / UTC day quota    | fail-closed      | user         |
 | `session-post`         | `POST /v1/sessions`                                     | POST    | 20 user                        | fail-closed      | user         |
+| `checkin-post`         | `POST /v1/checkins` (admin/coach)                       | POST    | 60 operator                    | fail-closed      | user         |
+| `checkin-token`        | `POST /v1/checkins/token`                               | POST    | 10 user                        | fail-closed      | user         |
 | `classes-search`       | `GET /v1/classes/search`                                | GET     | 30 IP                          | **fail-closed**  | ip (pre-jwt) |
 | `members-list`         | `GET /v1/members` (exact)                               | GET     | 20 IP                          | **fail-closed**  | ip (pre-jwt) |
 | `audit-list`           | `GET /v1/audit`                                         | GET     | 30 IP                          | **fail-closed**  | ip (pre-jwt) |
@@ -39,6 +41,8 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 Mutation limiters (issue #613) run an inline `jwtAuth()` pre-pass before the limiter: unauthenticated requests get a 401 without touching a mutation bucket (the global `/v1/*` IP bucket still applies), and authenticated ones are keyed on `rl:user:mutation-<scope>:<userId>`, so the budget follows the user across IPs and users behind one IP get independent budgets.
 
 `coach-ask` (Epic 21) is mounted in the coach router (`routes/coach.ts`), after `jwtAuth` and the `ai-coach` flag check: with the flag off the route answers 404 and no bucket is touched. It adds a daily quota per member (`AI_COACH_DAILY_LIMIT`, default 10, UTC day) kept in the Redis counter `coach:quota:<day>:<userId>` by the use case. It fails closed too: a Redis error answers 503 `dependency_unavailable` before any model call, and an exhausted quota answers 429 `coach_quota_exceeded` with `Retry-After` set to the next UTC midnight.
+
+`checkin-post` (issue #654) is keyed on the kiosk operator, not the member: only admins and coaches may call it, so a per-member bucket would lock a front desk out. The per-member bound of issue #338 stays: `checkin_mark_reservation` (migration 0045) refuses a sixth check-in of the same member within an hour, whoever the operator and whatever the studio, and the API answers 429 `checkin_limit_reached` with `Retry-After: 3600`. On top of it, each QR token is single-use (`jti` consumed with `SET NX`) and a reservation is stamped only once.
 
 Les limiters reads coûteux sont montés **avant** `jwtAuth` → bucket **IP** sur le limiter dédié ; le global `/v1/*` applique quand même le bucket user si le JWT est présent.
 

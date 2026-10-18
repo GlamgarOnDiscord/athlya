@@ -126,6 +126,7 @@ export function buildStubDeps(
       ...overrides.sessions,
     },
     checkins: {
+      issueToken: vi.fn(),
       checkIn: vi.fn(),
       ...overrides.checkins,
     },
