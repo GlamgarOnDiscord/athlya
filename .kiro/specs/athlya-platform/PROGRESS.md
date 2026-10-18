@@ -12,6 +12,8 @@
 
 - **#652** — `POST /v1/sessions` / `GET /v1/sessions/me` were routed nowhere in staging and production (no adapter, no bulkhead mount, no wrangler route), so the mobile `MutationQueue` dead-lettered every workout session. Now served by the reservations Worker (`/v1/sessions` + `/v1/sessions/*`), `withTenant` writes under the owner-only RLS policies, idempotency bound to the caller's claims, `session-post` mutation budget (20/min/user, fail-closed). Session writes store the request `Idempotency-Key` (migration `0044_workout_sessions_idempotency_key.sql`, expand only: nullable column + partial unique index on `(user_id, idempotency_key)`), so racing retries log one session. Operator steps: apply migration 0044 (staging, then production) **before** deploying the Worker, then from `packages/api` run `wrangler deploy --config wrangler.reservations.toml --env staging` and, once staging is verified, `wrangler deploy --config wrangler.reservations.toml --env production` so the new zone routes take effect.
 
+- **#649** — native sign-in and registration got `403 bot_challenge_failed` because the app had no Turnstile widget. The auth Worker now serves `GET /v1/auth/turnstile-challenge`, a minimal page (CSP `default-src 'none'`, nonce, `challenges.cloudflare.com` only, no secret) that renders the real widget with the public `TURNSTILE_SITE_KEY` and posts the token to `window.ReactNativeWebView`. The app (`react-native-webview` 14.0.1, the Expo SDK 58 pin) shows it on `/login` and `/register`, sends the token as `cf-turnstile-token` like the web, handles expiry, errors and retry (FR/EN strings, screen-reader notices), and asks for a fresh challenge after each attempt. Siteverify is unchanged and there is no mobile-only route. Operator steps: add `api.athlya.app` (and `staging.api.athlya.app` if staging uses a real widget) to the widget's allowed hostnames, then `wrangler secret put TURNSTILE_SITE_KEY --config wrangler.auth.toml --env staging|production` with the web app's site key of that environment (details in `docs/mobile/README.md` § Bot protection). App Attest / Play Integrity follow-up: #659.
+
 ## Session 2026-10-17/18 — clôture des issues
 
 Session de clôture du backlog P0/P1 ouvert par l'audit : RLS-safe sous les rôles runtime `NOBYPASSRLS`, outbox, export RGPD, billing Stripe, bulkhead Workers, canary, staging gate, Terraform, observabilité, déploiement frontend. Tout le code est sur `master` (tête `55f39f7`). Les issues fermées « code-complete » laissent des étapes opérateur, regroupées dans la [checklist opérateur](#checklist-opérateur-consolidée) ci-dessous.
@@ -289,7 +291,7 @@ Foundation delivered in #642 (issue #638): 11.1–11.7, 11.12 (P5) and 11.13 on 
 Restent ouverts :
 
 - 11.9 (QR check-in) : pas de route d'émission de token et `/v1/checkins` non monté en production (#648, suite de #302). `POST /v1/sessions` est en revanche routé depuis #652 (migration 0044 + déploiement du Worker reservations), donc le journal de séance mobile est servi de bout en bout.
-- Connexion depuis l'app en staging / production : `login` et `register` exigent un token Turnstile que l'app native ne sait pas produire (`403 bot_challenge_failed`), #649.
+- Connexion depuis l'app en staging / production : livrée par #649 (widget Turnstile dans une WebView, vérification serveur inchangée). Reste l'étape opérateur : hostname de l'API dans le widget Turnstile et `TURNSTILE_SITE_KEY` sur le Worker auth (staging et production).
 ### Epic 12 — Admin studio app (4 tâches restantes — 12.2 et 12.3 livrées)
 ### Epic 20 — Checkpoint v0.2
 ### Epics v0.3 (Epic 21–25 — 21.1 et 22.1 livrées, 21.2 et 22.2 web livrées partiellement, Epic 24 complet : 24.1–24.3 #640/#643, 24.4 mobile #647)
@@ -324,7 +326,7 @@ P1 capacity, P2 idempotence, P3 state-machine, P4 RGPD cascade, P6 JWT non-forge
 
 Epic 14 fermé — Checkpoint v0.1 MVP livré. Reste deux gros chantiers front :
 
-- **Epic 11 — Mobile Expo** (reste 11.9, bloquée par l'API #648 ; connexion mobile derrière Turnstile #649 ; fondation #642 et écrans #647 livrés)
+- **Epic 11 — Mobile Expo** (reste 11.9, bloquée par l'API #648 ; fondation #642, écrans #647 et connexion via Turnstile en WebView #649 livrés)
 - **Epic 12 — Admin studio app** (4 tâches restantes)
 
 ## Conventions maintenues

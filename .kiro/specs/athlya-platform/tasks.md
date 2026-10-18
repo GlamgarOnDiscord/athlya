@@ -441,7 +441,7 @@ Use official CLI to create, init the project .. and recent package version and s
 
 > ⏸️ **Renvoyé post-1.0** — voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-58`](../../../docs/roadmap/post-1.0.md). Effort ~3 sprints. Déclencheur : décision business "iOS/Android" + studio pilote.
 >
-> Foundation delivered in #638 (11.1–11.7, 11.12, 11.13) on Expo SDK 58 / React Native 0.88 — see [`docs/mobile/README.md`](../../../docs/mobile/README.md). Member screens delivered for #647 (11.8, 11.10, 11.11, plus 24.4); 11.9 is blocked on the API (#648). Brand (BR.4): the icon is `assets/brand/png/athlya-appicon-1024.png`; the splash image is `apps/mobile/assets/splash-mascot.png`, a crop of that icon (regenerate it from the icon when the brand changes).
+> Foundation delivered in #638 (11.1–11.7, 11.12, 11.13) on Expo SDK 58 / React Native 0.88 — see [`docs/mobile/README.md`](../../../docs/mobile/README.md). Member screens delivered for #647 (11.8, 11.10, 11.11, plus 24.4); sign-in and registration solve Cloudflare Turnstile in a WebView since #649 (Requirement 26.1, server-side verification unchanged); 11.9 is blocked on the API (#648). Brand (BR.4): the icon is `assets/brand/png/athlya-appicon-1024.png`; the splash image is `apps/mobile/assets/splash-mascot.png`, a crop of that icon (regenerate it from the icon when the brand changes).
 
 - [ ] 11. Build the Expo / React Native mobile app with offline-first queue
   - [x] 11.1 Scaffold the Expo SDK 58 app with NativeWind 4 and shared tokens
