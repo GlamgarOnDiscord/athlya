@@ -6,10 +6,14 @@
  *   2. POST / with invalid body still surfaces 401 (chain order).
  *   3. Unsupported GET → 404 Problem Details.
  *   4. Problem Details 401 body + trace id echo.
- *   5. Issue #338 — per-user rate limit: 5/hour, 6th → 429 Retry-After.
+ *
+ * Authenticated behaviour lives in `checkins-authenticated.test.ts`,
+ * rate limits in `checkin-rate-limit.test.ts`.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { readJson } from '../helpers/read-json.js';
 
 import { buildStubDeps, buildTestApp, env } from './route-test-helpers.js';
 
@@ -41,7 +45,7 @@ describe('/v1/checkins', () => {
 
     expect(res.status).toBe(401);
     expect(res.headers.get('content-type')).toBe('application/problem+json');
-    const body = (await res.json()) as any;
+    const body = await readJson<{ title?: string }>(res);
     expect(body.title).toBe('missing_authorization');
     expect(deps.checkins.checkIn).not.toHaveBeenCalled();
   });
@@ -91,7 +95,7 @@ describe('/v1/checkins', () => {
       env(),
     );
 
-    const body = (await res.json()) as any;
+    const body = await readJson<{ traceId?: string }>(res);
     expect(body.traceId).toBe(res.headers.get('x-trace-id'));
   });
 });

@@ -457,6 +457,21 @@ export const CheckInResponseSchema = z
 
 export type CheckInResponse = z.infer<typeof CheckInResponseSchema>;
 
+/**
+ * `POST /v1/checkins/token` response. `token` is the `QR_Checkin_Token`
+ * (RS256 JWT, `kind = 'checkin'`, single-use `jti`) the Mobile_App
+ * renders as a QR code; it expires 120 s after issuance (Requirement
+ * 11.1), at `expiresAt`.
+ */
+export const CheckInTokenResponseSchema = z
+  .object({
+    token: z.string().min(1),
+    expiresAt: IsoDateTimeSchema,
+  })
+  .strict();
+
+export type CheckInTokenResponse = z.infer<typeof CheckInTokenResponseSchema>;
+
 /* ------------------------------------------------------------------ */
 /*  sessions — /v1/sessions                                            */
 /* ------------------------------------------------------------------ */

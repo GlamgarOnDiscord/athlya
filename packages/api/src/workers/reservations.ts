@@ -10,9 +10,7 @@
  *   • /v1/studios/*      — studio read/update
  *   • /v1/programs/*     — training programs, subscriptions, daily workout
  *   • /v1/sessions, /v1/sessions/* — workout session log and history (issue #652)
- *
- * /v1/checkins/* is not routed to this Worker: the check-in adapter is
- * not implemented yet (issue #302), so its wrangler route was removed.
+ *   • /v1/checkins, /v1/checkins/* — QR check-in token and kiosk scan (issue #654)
  *
  * Owns the ClassCapacityDO Durable Object (real-time class capacity via
  * WebSocket). The `[[migrations]]` tag in `wrangler.reservations.toml`
@@ -26,6 +24,7 @@
 import { buildBaseApp, type ReadinessProbe } from '../base-app.js';
 import {
   assertRequiredSecrets,
+  defaultCheckinsDeps,
   defaultClassesDeps,
   defaultCoachDeps,
   defaultMembersDeps,
@@ -33,6 +32,7 @@ import {
   defaultReservationsDeps,
   defaultSessionsDeps,
   defaultStudiosDeps,
+  lazyCheckinsDeps,
   lazyClassesDeps,
   lazyCoachDeps,
   lazyMembersDeps,
@@ -43,6 +43,7 @@ import {
 } from '../domain-deps.js';
 import { installDomainScope } from '../domain-scope.js';
 import { buildCapacityRouter } from '../routes/capacity.js';
+import { buildCheckinsRouter } from '../routes/checkins.js';
 import { buildClassesRouter } from '../routes/classes.js';
 import { buildCoachRouter } from '../routes/coach.js';
 import { buildMeRouter } from '../routes/me.js';
@@ -86,6 +87,7 @@ const app = buildBaseApp({
         coach: defaultCoachDeps(env, cf),
         programs: defaultProgramsDeps(env),
         sessions: defaultSessionsDeps(env),
+        checkins: defaultCheckinsDeps(env),
       };
     });
     // Capacity WebSocket mounts first: /v1/classes/:classId/capacity/ws
@@ -103,6 +105,7 @@ const app = buildBaseApp({
     base.route('/v1/coach', buildCoachRouter(lazyCoachDeps(() => resolve().coach)));
     base.route('/v1/programs', buildProgramsRouter(lazyProgramsDeps(() => resolve().programs)));
     base.route('/v1/sessions', buildSessionsRouter(lazySessionsDeps(() => resolve().sessions)));
+    base.route('/v1/checkins', buildCheckinsRouter(lazyCheckinsDeps(() => resolve().checkins)));
   },
 });
 

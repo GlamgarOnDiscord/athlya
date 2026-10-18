@@ -1,7 +1,7 @@
 # Mobile — Epic 10 (`apps/mobile`)
 
 **Status**: foundation (issue #638) and member screens (issue #647) delivered, 12/13 tasks. The QR
-check-in screen (11.9) waits for an API token route (#648). Post-1.0 roadmap item v1.1, see
+check-in screen (11.9) is the last one; its API (token route and kiosk scan) ships with #654. Post-1.0 roadmap item v1.1, see
 [`docs/roadmap/post-1.0.md`](../roadmap/post-1.0.md).
 
 ## Stack
@@ -27,7 +27,7 @@ check-in screen (11.9) waits for an API token route (#648). Post-1.0 roadmap ite
 - [x] 11.6 `drainMutationQueue` (design.md Algorithm 4)
 - [x] 11.7 NetInfo auto-drain + sync progress
 - [x] 11.8 Booking screen with optimistic update (+ "My reservations" with cancellation)
-- [ ] 11.9 QR check-in screen: blocked, no token-issuance route on the API yet (#648)
+- [ ] 11.9 QR check-in screen: API ready since #654 (`POST /v1/checkins/token`), screen open (#648)
 - [x] 11.10 Workout logging (offline enqueue)
 - [x] 11.11 RGPD export / delete screens (in Settings)
 - [x] 11.12 Property 5 (FIFO + idempotent drain), fast-check
@@ -82,6 +82,11 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
   invalidates in-flight refreshes too (a rotated refresh token is kept, the store stays locked).
   Call `runtime.sync.refreshOwner()` after every sign-in and sign-out.
 - **Strings**: add keys under `mobile.*` in `packages/shared/src/i18n/{en,fr}.json`.
+- **QR check-in (11.9)**: `runtime.api.post<CheckInTokenResponse>('/v1/checkins/token', {})` returns
+  `{ token, expiresAt }` (`CheckInTokenResponseSchema`). Render `token` as the QR payload and fetch a
+  new one before `expiresAt` (the token lives 120 s and is single-use). Never queue it offline and
+  never cache it. The kiosk (staff) posts the scanned token to `POST /v1/checkins`; a member's own
+  session gets 403 there.
 
 ## Screens
 
@@ -124,8 +129,9 @@ signed-in area whatever happens locally.
 - Sign-in from a release build: `login` and `register` are behind Turnstile, which a native app
   cannot solve, so staging and production answer `403 bot_challenge_failed` (shown as "use the
   website"). Works against a local `wrangler dev` without a Turnstile secret. Tracked in #649.
-- `/v1/checkins` is not routed in production yet and has no token-issuance route (#648), so the
-  QR check-in screen (11.9) is not built. `POST /v1/sessions` is routed on the reservations Worker
+- The QR check-in screen (11.9) is not built yet (#648). Its API (`POST /v1/checkins/token`, kiosk
+  `POST /v1/checkins`) is routed on the reservations Worker since #654, once migration 0045 is
+  applied and that Worker is redeployed with the JWT signing secrets. `POST /v1/sessions` is routed on the reservations Worker
   since #652, but only once the operator has applied migration 0044 and then, from `packages/api`,
   run `wrangler deploy --config wrangler.reservations.toml --env staging` followed by
   `wrangler deploy --config wrangler.reservations.toml --env production`. Until those named-env
