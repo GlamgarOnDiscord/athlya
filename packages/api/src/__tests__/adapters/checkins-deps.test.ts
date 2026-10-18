@@ -121,14 +121,24 @@ describe('defaultCheckinsDeps', () => {
     expect(() => defaultCheckinsDeps(env)).toThrow(/JWT_PRIVATE_KEY_PEM/u);
   });
 
-  it('builds with the key pair, and keeps the stub without DB or Redis', () => {
+  it('builds working deps with the key pair, and keeps the stub without DB or Redis', async () => {
     const keyed = buildMockEnv({
       ...wired,
       ENVIRONMENT: 'staging',
+      JWT_KID: 'k1',
       JWT_PRIVATE_KEY_PEM: privatePem,
       JWT_PUBLIC_KEY_PEM: publicPem,
+      JWKS_JSON: JSON.stringify(jwks),
     } as never);
-    expect(defaultCheckinsDeps(keyed).idempotencyFor).toBeTypeOf('function');
+    const deps = defaultCheckinsDeps(keyed);
+    expect(deps.idempotencyFor).toBeTypeOf('function');
+    const issued = await deps.issueToken(claims);
+    await expect(
+      verifyAccessQR(issued.token, STUDIO, {
+        jwks,
+        replayStore: createAtomicReplayStore(memoryRedis()),
+      }),
+    ).resolves.toMatchObject({ userId: USER });
     const stub = defaultCheckinsDeps(buildMockEnv({ ENVIRONMENT: 'staging', DB_URL: '' } as never));
     expect(stub.idempotencyFor).toBeUndefined();
   });
