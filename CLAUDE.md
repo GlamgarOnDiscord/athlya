@@ -22,9 +22,13 @@ Any code/config/docs change goes through the **`/ship`** workflow
    (`gh api .../issues/<n>/comments`, where CodeRabbit posts its summary) AND
    review bodies (`gh pr view <n> --json reviews`) — and apply the good ones
    BEFORE merge and BEFORE close. Re-check right before merging — reviews land late.
-7. **Merge** only when **ALL** checks are green:
+7. **Merge** only when **ALL** checks are green, except `Staging gate`, ZAP
+   baseline and the k6 load tests, which fail closed until staging is
+   provisioned (still read their logs):
    `gh pr merge <n> --squash --delete-branch` (add `--admin` only to bypass a
-   _proven_ flake, never as the default).
+   _proven_ flake, never as the default). Exception: the sole code owner
+   cannot approve their own PR, so merging it needs `--admin` once the
+   required check is green and every thread is resolved.
 
 Watch CI with the **`Monitor`** tool, never `sleep`. Rerun known flakes
 (Docker registry timeout, `round-trip` property seed) with `gh run rerun <id> --failed`.
@@ -44,8 +48,12 @@ Watch CI with the **`Monitor`** tool, never `sleep`. Rerun known flakes
 - `format:check` is repo-wide — keep every tracked file prettier-clean.
 - In `packages/api` tests, read responses with the `readJson<T>(res)` helper,
   not an inline `(await res.json()) as T` (typescript-eslint vs tsc disagree).
-- Only `Lint, typecheck, and tests` is a required check; pgTAP runs on
-  `packages/db/migrations/**`, axe/E2E on `apps/**`.
+- `master` protection (`docs/runbooks/branch-protection.md`): only
+  `Lint, typecheck, and tests` is a required check (strict), plus one
+  code-owner approval, resolved conversations and linear history; force-push
+  and deletion are blocked; `enforce_admins: false`. pgTAP runs on
+  `packages/db/migrations/**` and `packages/db/tests/rls/**`, axe/E2E on
+  `apps/web/**`, `apps/studio/**` and `packages/shared/**`.
 - The repo is **public**: never commit secrets, `.dev.vars`, `.env*` or real
   DSNs (gitleaks runs in CI). `pull_request_target` workflows must never
   check out or run PR code (they hold write tokens and secrets).

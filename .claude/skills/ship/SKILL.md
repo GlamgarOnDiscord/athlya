@@ -66,9 +66,14 @@ The `.githooks/pre-push` hook runs it automatically on push — let it.
 
 ## 7. CI
 
-- Required check: **`Lint, typecheck, and tests`**. Also runs (by path):
-  pgTAP (`packages/db/migrations/**`), CodeQL, ZAP, secret-scan, Socket,
-  axe/E2E (`apps/**`), Docker PBT.
+- Required check: **`Lint, typecheck, and tests`**. Also runs, by path:
+  pgTAP (`packages/db/migrations/**`, `packages/db/tests/rls/**`), CodeQL,
+  axe/E2E (`apps/web/**`, `apps/studio/**`, `packages/shared/**`), Docker PBT,
+  k6 load tests; on every PR: secret-scan, ZAP baseline, Staging gate; plus
+  the Socket GitHub App. Full table: `docs/runbooks/branch-protection.md`.
+- `Staging gate`, ZAP baseline and the k6 load tests fail closed until
+  staging is provisioned. Red for that reason is expected; any other
+  failure in their logs is real.
 - Watch with the **`Monitor` tool**, never `sleep`. Use this poll loop so
   every terminal check emits a line and `ALL-CONCLUDED` fires when every
   check has left `pending`:
@@ -110,12 +115,17 @@ The `.githooks/pre-push` hook runs it automatically on push — let it.
 
 ## 9. Merge (wait for ALL checks green)
 
-- Branch protection: only `Lint, typecheck, and tests` is _required_;
-  `enforce_admins: false`, `required_conversation_resolution: true`, strict on.
-- **Policy: wait for ALL checks green** (pgTAP / axe / CodeQL / ZAP too), not
-  just the required one.
+- Branch protection: only `Lint, typecheck, and tests` is _required_ (strict);
+  1 code-owner approval (stale ones dismissed), `required_conversation_resolution: true`,
+  linear history, no force-push or deletion, `enforce_admins: false`.
+- **Policy: wait for ALL checks green** (pgTAP / axe / CodeQL too), not
+  just the required one. Only `Staging gate`, ZAP baseline and the k6 load
+  tests may stay red, and only with the missing-staging-prerequisite failure.
 - Default merge: `gh pr merge <n> --squash --delete-branch`. Add `--admin`
   **only** to bypass a check that is a _proven_ flake — never as the default.
+  Exception: the sole code owner cannot approve their own PR, so a PR from
+  that account needs `--admin`; it bypasses every rule at once, so confirm
+  the required check and thread resolution by hand first.
 - Verify the green run's head sha == PR HEAD first.
 - Issue auto-closes via `Closes #XX`.
 

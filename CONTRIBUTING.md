@@ -134,25 +134,48 @@ CI. Jamais de merge par-dessus un commentaire actionnable non traité.
 
 ### Merge
 
+La protection de `master` (détail et commande de vérification dans
+[`docs/runbooks/branch-protection.md`](docs/runbooks/branch-protection.md))
+exige :
+
+- le seul check requis `Lint, typecheck, and tests`, sur une branche à jour
+  (mode strict) ;
+- une review approbatrice d'un code owner (les reviews sont invalidées par un
+  nouveau push) ;
+- tous les threads de review résolus ;
+- un historique linéaire (squash merge) ; force-push et suppression de
+  `master` sont bloqués.
+
 On merge uniquement quand **tous** les checks sont verts (pas seulement le check
-requis), threads de review résolus. Les bumps dependabot minor/patch sont
-**groupés et auto-mergés** ; les majors sont testés en local puis revus
-manuellement.
+requis), threads de review résolus. Exception : `Staging gate`,
+`ZAP baseline scan (passive only)` et les tests de charge k6
+(`book-class load test`, `list-classes load test`) échouent volontairement
+(fail closed) tant que l'infra staging n'est pas provisionnée ; ils ne bloquent
+pas le merge, mais un échec autre que le message « prérequis manquant » reste
+une vraie régression. Les bumps dependabot minor/patch sont **groupés et
+auto-mergés** (l'auto-merge attend aussi la review du code owner) ; les majors
+sont testés en local puis revus manuellement.
 
 #### Break-glass (bypass admin)
 
-`enforce_admins: true` est actif — les admins sont soumis aux mêmes règles de
-protection que les autres contributeurs. En cas de flake CI **prouvé** (timeout
-registre Docker, seed aléatoire du test `round-trip`, billing block), et
-uniquement dans ce cas :
+`enforce_admins` est à `false` : un admin peut merger par-dessus **toutes** les
+règles de protection d'un coup (check requis, review, threads) avec :
 
 ```bash
 gh pr merge <n> --squash --delete-branch --admin
 ```
 
-Chaque utilisation doit être **documentée** (commentaire PR, lien vers le run
-flake) pour préserver la traçabilité. Ne jamais l'utiliser pour contourner un
-échec de code réel.
+GitHub interdit d'approuver sa propre PR et le seul code owner est
+`@GlamgarOnDiscord` : une PR ouverte depuis ce compte ne peut donc pas obtenir
+la review requise, et son merge passe par ce bypass. Avant de l'utiliser,
+vérifier à la main ce qu'il ne vérifie plus : `Lint, typecheck, and tests` vert
+sur le SHA de tête, threads résolus, reviews des bots appliquées.
+
+Passer outre un check **rouge** n'est permis qu'en cas de flake CI **prouvé**
+(timeout registre Docker, seed aléatoire du test `round-trip`, billing block).
+Chaque utilisation de ce type doit être **documentée** (commentaire PR, lien
+vers le run flake) pour préserver la traçabilité. Ne jamais l'utiliser pour
+contourner un échec de code réel.
 
 ---
 
