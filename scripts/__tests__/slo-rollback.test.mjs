@@ -17,6 +17,7 @@ import {
   queryAxiom,
   readOtelSampleRate,
   releaseOf,
+  runRollbackSequence,
 } from '../slo-rollback.mjs';
 
 const read = (file) => readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
@@ -50,6 +51,7 @@ describe('evaluateBreach', () => {
       _time: new Date(start.getTime() + i * 60_000).toISOString(),
       requests: 100,
       rate_pct: 0.1,
+      ok_samples: 90,
       p99_ms: 300,
       ...fn(i),
     }));
@@ -70,6 +72,17 @@ describe('evaluateBreach', () => {
   it('breaches on latency alone', () => {
     const verdict = evaluate(rows(() => ({ p99_ms: 2500 })));
     assert.deepEqual(verdict.signals, ['latency_p99']);
+  });
+
+  it('does not breach on latency at the threshold itself', () => {
+    assert.equal(evaluate(rows(() => ({ p99_ms: SLO_ROLLBACK.maxP99Ms }))).breached, false);
+    assert.equal(evaluate(rows(() => ({ p99_ms: SLO_ROLLBACK.maxP99Ms + 1 }))).breached, true);
+  });
+
+  it('does not judge latency on too few sampled non-5xx spans', () => {
+    const few = SLO_ROLLBACK.minLatencySamplesPerBin - 1;
+    assert.equal(evaluate(rows(() => ({ p99_ms: 5000, ok_samples: few }))).breached, false);
+    assert.equal(evaluate(rows(() => ({ p99_ms: 5000, ok_samples: null }))).breached, false);
   });
 
   it('does not breach when one bin recovers', () => {
@@ -121,6 +134,14 @@ describe('Axiom query and parsing', () => {
     assert.match(apl, /where not\(name contains " \/health"\)/);
     assert.match(apl, /by bin\(_time, 1m\)/);
     assert.match(apl, /todouble\(total - errors\) \/ 0\.1/);
+  });
+
+  it('takes the p99 over the uniformly sampled non-5xx spans only', () => {
+    const apl = buildBreachQuery({ dataset: 'athlya-prod', sampleRate: 0.1 });
+    assert.match(apl, /p99_ms = percentileif\(duration, 99, \['status\.code'\] != "ERROR"\)/);
+    assert.match(apl, /ok_samples = countif\(\['status\.code'\] != "ERROR"\)/);
+    assert.doesNotMatch(apl, /percentile\(duration/);
+    assert.match(apl, /project _time, requests, rate_pct, ok_samples, p99_ms/);
   });
 
   it('rejects an injected dataset name or a bad rate', () => {
@@ -444,6 +465,45 @@ describe('checkLiveAgainstPlan', () => {
   });
 });
 
+describe('runRollbackSequence', () => {
+  const planned = PRODUCTION_WORKERS.map((w) => ({
+    ...w,
+    currentVersionId: `${w.name}-new`,
+    targetVersionId: `${w.name}-old`,
+  }));
+  const deployer = (failing = []) => {
+    const calls = [];
+    const deploy = (worker) => {
+      calls.push(worker.name);
+      if (failing.includes(worker.name)) throw new Error('API 10220');
+    };
+    return { calls, deploy };
+  };
+
+  it('rolls back in order, gateway first', () => {
+    const { calls, deploy } = deployer();
+    const result = runRollbackSequence(planned, [], deploy);
+    assert.deepEqual(calls, ['gateway', 'billing', 'reservations', 'auth']);
+    assert.deepEqual(result.failures, []);
+  });
+
+  it('touches no sub-worker when the gateway rollback fails', () => {
+    const { calls, deploy } = deployer(['gateway']);
+    const result = runRollbackSequence(planned, [], deploy);
+    assert.deepEqual(calls, ['gateway']);
+    assert.deepEqual(result.failures, ['gateway']);
+    assert.deepEqual(result.skipped, ['billing', 'reservations', 'auth']);
+  });
+
+  it('keeps going after a sub-worker failure and skips Workers already done', () => {
+    const { calls, deploy } = deployer(['billing']);
+    const result = runRollbackSequence(planned, ['gateway'], deploy);
+    assert.deepEqual(calls, ['billing', 'reservations', 'auth']);
+    assert.deepEqual(result.failures, ['billing']);
+    assert.deepEqual(result.skipped, []);
+  });
+});
+
 describe('workflow and Terraform wiring', () => {
   const workflow = read('.github/workflows/slo-rollback.yml');
   const tf = read('infra/terraform/slo-auto-rollback.tf');
@@ -462,6 +522,30 @@ describe('workflow and Terraform wiring', () => {
     assert.match(tf, new RegExp(`threshold\\s+= ${SLO_ROLLBACK.maxP99Ms}\\n`));
     assert.match(tf, new RegExp(`trigger_from_n_runs = ${SLO_ROLLBACK.windowMinutes}\\n`));
     assert.match(tf, new RegExp(`where requests >= ${SLO_ROLLBACK.minRequestsPerBin}\\n`));
+    assert.match(
+      tf,
+      new RegExp(`where ok_samples >= ${SLO_ROLLBACK.minLatencySamplesPerBin}\\\\n`),
+    );
+    assert.match(tf, /percentileif\(duration, 99, \['status\.code'\] != "ERROR"\)/);
+  });
+
+  it('serializes every production-mutating workflow on one lock', () => {
+    const lock = /group: deploy-api-production-canary\n\s+cancel-in-progress: false/;
+    for (const file of ['slo-rollback.yml', 'canary.yml', 'rollback.yml']) {
+      assert.match(read(`.github/workflows/${file}`), lock, file);
+    }
+    assert.match(
+      read('.github/workflows/deploy-production.yml'),
+      /group: \$\{\{ startsWith\(inputs\.phase, 'staging-'\) && format\('deploy-api-\{0\}', inputs\.phase\) \|\| 'deploy-api-production-canary' \}\}/,
+    );
+  });
+
+  it('labels dry runs and never pages on them', () => {
+    assert.match(workflow, /SLO auto-rollback DRY RUN/);
+    assert.match(
+      workflow,
+      /name: Notify Slack and PagerDuty\n\s+if: >-\n\s+always\(\) && steps\.gate\.outputs\.enabled == 'true' && env\.DRY_RUN != 'true'/,
+    );
   });
 
   it('keeps the Axiom webhook off by default and production-only', () => {

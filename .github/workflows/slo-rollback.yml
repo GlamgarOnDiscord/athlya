@@ -41,7 +41,8 @@ on:
 permissions:
   contents: read
 
-# Shared with canary.yml / rollback.yml: never act while a rollout runs.
+# One lock for every production-mutating run: canary.yml, rollback.yml and the
+# production phases of deploy-production.yml.
 concurrency:
   group: deploy-api-production-canary
   cancel-in-progress: false
@@ -169,13 +170,14 @@ jobs:
           report="${RUNNER_TEMP}/slo-rollback-report.md"
           [ -f "${report}" ] || echo "## SLO auto-rollback — run ${GITHUB_RUN_ID}" > "${report}"
           printf '\nRun: %s\n' "${RUN_URL}" >> "${report}"
-          title="SLO auto-rollback ${ACTION:-failed} (${JOB_STATUS}) — run ${GITHUB_RUN_ID}"
+          prefix=$([ "${DRY_RUN}" = 'true' ] && echo 'SLO auto-rollback DRY RUN' || echo 'SLO auto-rollback')
+          title="${prefix}: ${ACTION:-failed} (${JOB_STATUS}) — run ${GITHUB_RUN_ID}"
           url=$(gh api "repos/${GITHUB_REPOSITORY}/issues" -f title="${title}" -F body=@"${report}" --jq .html_url)
           echo "url=${url}" >> "$GITHUB_OUTPUT"
 
       - name: Notify Slack and PagerDuty
         if: >-
-          always() && steps.gate.outputs.enabled == 'true' &&
+          always() && steps.gate.outputs.enabled == 'true' && env.DRY_RUN != 'true' &&
           (failure() || (steps.plan.outcome == 'success' && steps.plan.outputs.action != 'noop'))
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

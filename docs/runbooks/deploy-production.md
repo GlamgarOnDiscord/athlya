@@ -168,8 +168,11 @@ Une fois le canary terminé, [`slo-rollback.yml`](../../.github/workflows/slo-ro
 remet les quatre Workers de production (gateway, auth, reservations, billing)
 sur leur version précédente si le 5xx dépasse 2 % ou le p99 2 000 ms pendant
 10 minutes consécutives — ou ne touche à rien si un garde-fou bloque (canary en
-cours, secret changé, migration `-- athlya:contract`, cool-down…). Le
-`rollback` de ce workflow ne revient que sur la gateway. Setup et garde-fous :
+cours, secret changé, migration `-- athlya:contract`, cool-down…). Il est
+inactif tant que `vars.AUTO_ROLLBACK_ENABLED` ≠ `true` et que les monitors
+Axiom ne sont pas activés. Le rollback manuel `rollback.yml` (et la phase
+`rollback` de `deploy-production.yml`) ne revient que sur la gateway. Setup et
+garde-fous :
 [`automatic-rollback.md`](./automatic-rollback.md).
 
 ## Références

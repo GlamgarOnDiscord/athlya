@@ -47,10 +47,12 @@ locals {
 
   # Same span filter and sampling correction as api_5xx_rate; one-minute
   # bins with at least 20 estimated requests, like the workflow re-check.
+  # The p99 covers non-5xx spans only: they are sampled uniformly, while
+  # 5xx spans are always kept and would over-weight errors.
   slo_auto_rollback_base = <<-APL
     ${local.axiom_spans}
     | where not(name contains " /health")
-    | summarize total = count(), errors = countif(['status.code'] == "ERROR"), p99_ms = percentile(duration, 99) / 1ms by bin(_time, 1m)
+    | summarize total = count(), errors = countif(['status.code'] == "ERROR"), ok_samples = countif(['status.code'] != "ERROR"), p99_ms = percentileif(duration, 99, ['status.code'] != "ERROR") / 1ms by bin(_time, 1m)
     | extend requests = todouble(errors) + todouble(total - errors) / ${local.otel_sample_rate}
     | where requests >= 20
   APL
@@ -65,7 +67,7 @@ locals {
     latency_p99 = {
       name        = "SLO auto-rollback: p99 > 2000 ms for 10 min"
       description = "Dispatches slo-rollback.yml (CN.7.3, docs/runbooks/automatic-rollback.md)"
-      apl_query   = "${local.slo_auto_rollback_base}| project _time, p99_ms\n"
+      apl_query   = "${local.slo_auto_rollback_base}| where ok_samples >= 20\n| project _time, p99_ms\n"
       threshold   = 2000
     }
   }

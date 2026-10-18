@@ -17,7 +17,7 @@ span filter and sampling correction as the A1 `api_5xx_rate` monitor:
 | Signal         | Breach when, in **each** of the last 10 whole minutes   |
 | -------------- | ------------------------------------------------------- |
 | 5xx share      | > 2 %                                                   |
-| p99 latency    | > 2 000 ms                                              |
+| p99 latency    | > 2 000 ms over non-5xx spans, ≥ 20 sampled per minute  |
 | Request volume | ≥ 20 estimated requests in that minute (else no breach) |
 
 A missing or quiet minute is not a breach. The values live in `SLO_ROLLBACK`
@@ -32,7 +32,8 @@ A missing or quiet minute is not a breach. The values live in `SLO_ROLLBACK`
    `workflow_dispatch` API for `slo-rollback.yml` on `master`. The monitors
    also notify the usual Slack notifiers.
 2. `slo-rollback.yml` (environment `production-rollback`, concurrency group
-   shared with `canary.yml` / `rollback.yml`) does nothing unless
+   shared with `canary.yml`, `rollback.yml` and the production phases of
+   `deploy-production.yml`) does nothing unless
    `vars.AUTO_ROLLBACK_ENABLED == 'true'`, and fails when a prerequisite is
    missing.
 3. **Re-check** — `slo-rollback.mjs check` queries Axiom itself with a
@@ -66,12 +67,15 @@ A missing or quiet minute is not a breach. The values live in `SLO_ROLLBACK`
    gateway, billing, reservations and auth, in that order, with the message
    `slo-rollback <live> -> <target>: run <id>`. It then checks every Worker
    serves its target at 100 %. A Worker already on its target is skipped, so
-   a re-run finishes an interrupted rollback.
+   a re-run finishes an interrupted rollback. If the gateway fails, the
+   sub-workers are not touched (a new gateway in front of older sub-workers
+   is the skew the order avoids).
    `wrangler rollback` is not used: in CI it auto-confirms Cloudflare's
    "secrets have changed" refusal, `versions deploy` never does.
 6. `/health/ready` gate, a GitHub issue with the evidence (Axiom bins, plan,
    rollback log), Slack (`SLACK_WEBHOOK_URL`) and PagerDuty
    (`PAGERDUTY_ROUTING_KEY`, `critical` on failure, `warning` on success).
+   A dry run records a `DRY RUN` issue and pages nobody.
 
 Bound resources (D1, KV, R2, queues, Durable Object storage) and the database
 schema are **not** rolled back. That is why contract migrations block it.
@@ -146,8 +150,10 @@ state; it never reaches the repository or a workflow log.
 ## Manual rollback workflow
 
 `rollback.yml` stays available for a manual rollback of the **gateway only**
-(optionally to an explicit version). Prefer the commands above, or a manual
-dispatch of `slo-rollback.yml`, for a fleet-wide rollback.
+(optionally to an explicit version). For a fleet-wide manual rollback, use the
+commands above. A manual dispatch of `slo-rollback.yml` is **not** an
+unconditional rollback: it still requires Axiom to confirm a sustained breach
+and every guard to pass, otherwise it does nothing (or refuses).
 
 ## Re-promote after investigation
 

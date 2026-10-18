@@ -157,7 +157,10 @@ Pendant le canary, les gates (health, error budget Sentry, latence) font le
 rollback. Après 100 %, le rollback automatique de toute la flotte sur SLO
 breach (5xx > 2 % ou p99 > 2 000 ms pendant 10 min) est
 [`slo-rollback.yml`](../../.github/workflows/slo-rollback.yml) — voir
-[`automatic-rollback.md`](./automatic-rollback.md) (CN.7.3).
+[`automatic-rollback.md`](./automatic-rollback.md) (CN.7.3). Il est **inactif**
+tant que `vars.AUTO_ROLLBACK_ENABLED` ≠ `true` (environment
+`production-rollback`) et que les monitors Axiom
+(`slo_auto_rollback_enabled`, désactivé par défaut) ne sont pas appliqués.
 
 ## Références
 

@@ -44,6 +44,8 @@ export const SLO_ROLLBACK = Object.freeze({
   windowMinutes: 10,
   /** Estimated requests per bin below which a bin cannot count as a breach. */
   minRequestsPerBin: 20,
+  /** Sampled non-5xx spans per bin below which the p99 is not judged. */
+  minLatencySamplesPerBin: 20,
   /** 5xx share of requests, in percent. */
   maxErrorRatePct: 2,
   /** p99 request latency, in milliseconds. */
@@ -96,6 +98,11 @@ export function readOtelSampleRate(toml, env) {
  * dataset, with the same span filter and sampling correction as the
  * `api_5xx_rate` SLO monitor.
  *
+ * The p99 only covers non-5xx spans. Those are sampled uniformly at
+ * `sampleRate`, so their percentile is unbiased. 5xx spans are always kept,
+ * so mixing them in would over-weight errors (often slow timeouts) and
+ * inflate the p99. Errors are judged by the 5xx share instead.
+ *
  * @param {{ dataset: string, sampleRate: number }} input
  */
 export function buildBreachQuery({ dataset, sampleRate }) {
@@ -104,10 +111,10 @@ export function buildBreachQuery({ dataset, sampleRate }) {
   return [
     `['${dataset}']`,
     `| where not(name contains " /health")`,
-    `| summarize total = count(), errors = countif(['status.code'] == "ERROR"), p99_ms = percentile(duration, 99) / 1ms by bin(_time, 1m)`,
+    `| summarize total = count(), errors = countif(['status.code'] == "ERROR"), ok_samples = countif(['status.code'] != "ERROR"), p99_ms = percentileif(duration, 99, ['status.code'] != "ERROR") / 1ms by bin(_time, 1m)`,
     `| extend requests = todouble(errors) + todouble(total - errors) / ${sampleRate}`,
     `| extend rate_pct = 100.0 * todouble(errors) / requests`,
-    `| project _time, requests, rate_pct, p99_ms`,
+    `| project _time, requests, rate_pct, ok_samples, p99_ms`,
   ].join('\n');
 }
 
@@ -151,8 +158,8 @@ export function parseTabular(body) {
  * non-numeric value is not a breach.
  *
  * @param {Record<string, unknown>[]} rows
- * @param {{ start: Date, windowMinutes: number, minRequestsPerBin: number, maxErrorRatePct: number, maxP99Ms: number }} options
- * @returns {{ breached: boolean, signals: string[], reason: string, bins: { time: string, requests: number, ratePct: number, p99Ms: number }[] }}
+ * @param {{ start: Date, windowMinutes: number, minRequestsPerBin: number, minLatencySamplesPerBin: number, maxErrorRatePct: number, maxP99Ms: number }} options
+ * @returns {{ breached: boolean, signals: string[], reason: string, bins: { time: string, requests: number, ratePct: number, okSamples: number, p99Ms: number }[] }}
  */
 export function evaluateBreach(rows, options) {
   const byMinute = new Map();
@@ -168,6 +175,7 @@ export function evaluateBreach(rows, options) {
       time: new Date(minute).toISOString(),
       requests: Number(row?.requests ?? Number.NaN),
       ratePct: Number(row?.rate_pct ?? Number.NaN),
+      okSamples: Number(row?.ok_samples ?? Number.NaN),
       p99Ms: Number(row?.p99_ms ?? Number.NaN),
     });
   }
@@ -175,7 +183,12 @@ export function evaluateBreach(rows, options) {
   const checks = {
     error_rate: (bin) =>
       busy(bin) && Number.isFinite(bin.ratePct) && bin.ratePct > options.maxErrorRatePct,
-    latency_p99: (bin) => busy(bin) && Number.isFinite(bin.p99Ms) && bin.p99Ms > options.maxP99Ms,
+    latency_p99: (bin) =>
+      busy(bin) &&
+      Number.isFinite(bin.okSamples) &&
+      bin.okSamples >= options.minLatencySamplesPerBin &&
+      Number.isFinite(bin.p99Ms) &&
+      bin.p99Ms > options.maxP99Ms,
   };
   const signals = Object.entries(checks)
     .filter(([, breaches]) => bins.every(breaches))
@@ -184,7 +197,7 @@ export function evaluateBreach(rows, options) {
   const reason =
     signals.length > 0
       ? `${signals.join(' and ')} breached in each of the last ${window}`
-      : `no SLO breached in each of the last ${window} (5xx > ${options.maxErrorRatePct} %, p99 > ${options.maxP99Ms} ms, >= ${options.minRequestsPerBin} requests/min)`;
+      : `no SLO breached in each of the last ${window} (5xx > ${options.maxErrorRatePct} %, non-5xx p99 > ${options.maxP99Ms} ms, >= ${options.minRequestsPerBin} requests and ${options.minLatencySamplesPerBin} latency samples/min)`;
   return { breached: signals.length > 0, signals, reason, bins };
 }
 
@@ -482,6 +495,43 @@ export function checkLiveAgainstPlan(planned, liveDeployments) {
   return { ok: true, pending, done };
 }
 
+/**
+ * Redeploy each Worker's target in order. A Worker already on its target
+ * is skipped. When the gateway fails, the sub-workers are left alone: a new
+ * gateway in front of older sub-workers is the version skew the ordering
+ * exists to avoid. A sub-worker failure does not stop the others, since the
+ * gateway already serves the previous release.
+ *
+ * @param {{ name: string, currentVersionId: string, targetVersionId: string }[]} planned in rollback order
+ * @param {string[]} done Workers already on their target
+ * @param {(worker: object) => void} deploy throws on failure
+ * @returns {{ failures: string[], skipped: string[], lines: string[] }}
+ */
+export function runRollbackSequence(planned, done, deploy) {
+  const failures = [];
+  const skipped = [];
+  const lines = [];
+  for (const worker of planned) {
+    if (done.includes(worker.name)) {
+      lines.push(`- ${worker.name}: already on ${worker.targetVersionId}`);
+      continue;
+    }
+    if (failures.includes('gateway')) {
+      skipped.push(worker.name);
+      lines.push(`- ${worker.name}: not attempted (gateway rollback failed)`);
+      continue;
+    }
+    try {
+      deploy(worker);
+      lines.push(`- ${worker.name}: ${worker.currentVersionId} → ${worker.targetVersionId}`);
+    } catch (err) {
+      failures.push(worker.name);
+      lines.push(`- ${worker.name}: FAILED (${err instanceof Error ? err.message : String(err)})`);
+    }
+  }
+  return { failures, skipped, lines };
+}
+
 /* ------------------------------------------------------------------ */
 /*  CLI                                                                */
 /* ------------------------------------------------------------------ */
@@ -696,38 +746,26 @@ function commandRollback(flags) {
   const message = `slo-rollback ${plan.releases.current} -> ${plan.releases.target}: ${reason}`
     .replace(/[^\w .:>#/-]/g, '')
     .slice(0, 120);
-  const failures = [];
-  const lines = [];
-  for (const worker of planned) {
-    if (state.done.includes(worker.name)) {
-      lines.push(`- ${worker.name}: already on ${worker.targetVersionId}`);
-      continue;
-    }
-    try {
-      wrangler(
-        [
-          'versions',
-          'deploy',
-          '-c',
-          worker.config,
-          '--env',
-          'production',
-          '--version-id',
-          worker.targetVersionId,
-          '--percentage',
-          '100',
-          '--message',
-          message,
-          '-y',
-        ],
-        { capture: false },
-      );
-      lines.push(`- ${worker.name}: ${worker.currentVersionId} → ${worker.targetVersionId}`);
-    } catch (err) {
-      failures.push(worker.name);
-      lines.push(`- ${worker.name}: FAILED (${err instanceof Error ? err.message : String(err)})`);
-    }
-  }
+  const { failures, lines } = runRollbackSequence(planned, state.done, (worker) =>
+    wrangler(
+      [
+        'versions',
+        'deploy',
+        '-c',
+        worker.config,
+        '--env',
+        'production',
+        '--version-id',
+        worker.targetVersionId,
+        '--percentage',
+        '100',
+        '--message',
+        message,
+        '-y',
+      ],
+      { capture: false },
+    ),
+  );
 
   const after = Object.fromEntries(planned.map((w) => [w.name, listDeployments(w.config)]));
   const verified = checkLiveAgainstPlan(planned, after);
