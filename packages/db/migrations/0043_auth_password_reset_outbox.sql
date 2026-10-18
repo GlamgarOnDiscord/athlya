@@ -114,7 +114,16 @@ BEGIN
             USING ERRCODE = '22023';
     END IF;
 
-    -- Same serialisation as auth_issue_password_reset (0039).
+    -- Lock order matches `auth_consume_password_reset` (0037): the user's
+    -- token rows first, then the user row. Taking them the other way round
+    -- (as 0039's issuance does) can deadlock against a concurrent
+    -- confirmation. There is at most one unconsumed row per user (0029).
+    PERFORM 1 FROM password_reset_tokens t
+      WHERE t.user_id = p_user_id AND t.consumed_at IS NULL
+      FOR UPDATE;
+
+    -- The user lock serialises concurrent first issuances (no token row
+    -- to lock yet), like auth_issue_password_reset (0039).
     PERFORM 1 FROM users u WHERE u.id = p_user_id AND u.deleted_at IS NULL FOR UPDATE;
     IF NOT FOUND THEN
         RETURN 'inactive';

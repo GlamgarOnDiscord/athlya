@@ -391,8 +391,10 @@ Support and incidents:
   it was not used and no later request replaced it; otherwise the outcome
   is `skipped_superseded`. An account deleted in the meantime is skipped
   (`outcome: skipped_inactive`).
-- **`PASSWORD_RESET_TOKEN_KEY` (gateway, ≥ 32 chars)** is required outside dev.
-  Without it every delivery fails and is dead-lettered. Rotating it changes
+- **Gateway settings, both required outside dev:** `PASSWORD_RESET_TOKEN_KEY`
+  (at least 32 chars) and `WEB_APP_URL` (the base of the reset link). If
+  either is missing, every delivery fails and is dead-lettered;
+  `scripts/verify-secrets.mjs` checks both before a deploy. Rotating the key changes
   the link of a request still being retried; the retry then replaces the
   previous token, so rotate outside an incident.
 - **Do not confirm to a requester whether an email was sent or whether the

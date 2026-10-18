@@ -43,7 +43,10 @@ vi.mock('../adapters/deps-cache.js', async (importOriginal) => ({
   getOrCreateRedis: () => hoisted.redis,
 }));
 
-import { createRedisPasswordResetDeliveryStore } from '../adapters/password-reset-delivery-store-redis.js';
+import {
+  RELEASE_IF_OWNER_SCRIPT,
+  createRedisPasswordResetDeliveryStore,
+} from '../adapters/password-reset-delivery-store-redis.js';
 import {
   PASSWORD_RESET_IN_FLIGHT_TTL_SECONDS,
   handlePasswordResetRequested,
@@ -61,7 +64,10 @@ const EMAIL = 'member@athlya.test';
 const EVENT_ID = '0193f000-0000-7000-8000-000000000645';
 const DELIVERY_KEY = `auth:password-reset:delivery:${EVENT_ID}`;
 
-/** Minimal in-memory Redis with `SET NX EX`, `GET`, `DEL` (TTLs ignored). */
+/**
+ * Minimal in-memory Redis with `SET NX EX`, `GET` and the release
+ * script's compare-and-delete (TTLs ignored).
+ */
 class MemoryRedis implements DeliveryStoreRedis {
   public readonly values = new Map<string, string>();
   public set(key: string, value: string, opts: { nx?: true; ex: number }): Promise<unknown> {
@@ -72,7 +78,10 @@ class MemoryRedis implements DeliveryStoreRedis {
   public get(key: string): Promise<unknown> {
     return Promise.resolve(this.values.get(key) ?? null);
   }
-  public del(key: string): Promise<unknown> {
+  public eval(script: string, keys: string[], args: string[]): Promise<unknown> {
+    expect(script).toBe(RELEASE_IF_OWNER_SCRIPT);
+    const [key] = keys;
+    if (key === undefined || this.values.get(key) !== args[0]) return Promise.resolve(0);
     this.values.delete(key);
     return Promise.resolve(1);
   }
@@ -311,11 +320,28 @@ describe('handlePasswordResetRequested', () => {
   it('rethrows the delivery failure even when clearing the in-flight mark fails', async () => {
     deps.emailTransport.sendResetEmail.mockRejectedValueOnce(new Error('resend down'));
     const deliveries = createRedisPasswordResetDeliveryStore(redis);
-    vi.spyOn(redis, 'del').mockRejectedValueOnce(new Error('redis down'));
+    vi.spyOn(redis, 'eval').mockRejectedValueOnce(new Error('redis down'));
 
     await expect(
       handlePasswordResetRequested(resetEvent(), { deliveries, delivery: deps }),
     ).rejects.toThrow('resend down');
+  });
+
+  it('a late failing attempt does not clear a newer attempt’s mark', async () => {
+    const deliveries = createRedisPasswordResetDeliveryStore(redis);
+    const stale = await deliveries.begin(EVENT_ID, PASSWORD_RESET_IN_FLIGHT_TTL_SECONDS);
+    if (stale.state !== 'acquired') throw new Error(stale.state);
+
+    redis.values.delete(DELIVERY_KEY); // the stale attempt's in-flight TTL elapsed
+    const fresh = await deliveries.begin(EVENT_ID, PASSWORD_RESET_IN_FLIGHT_TTL_SECONDS);
+    if (fresh.state !== 'acquired') throw new Error(fresh.state);
+
+    await deliveries.release(EVENT_ID, stale.claim);
+    expect(redis.values.get(DELIVERY_KEY)).toBe(fresh.claim);
+
+    await deliveries.complete(EVENT_ID, 60);
+    await deliveries.release(EVENT_ID, stale.claim);
+    expect(redis.values.get(DELIVERY_KEY)).toBe('completed');
   });
 
   it('acks a sent email even when marking it completed fails', async () => {

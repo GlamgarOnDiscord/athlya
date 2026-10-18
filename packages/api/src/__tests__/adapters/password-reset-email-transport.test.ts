@@ -99,8 +99,12 @@ describe('resolveResetTokenDeriver (issue #645)', () => {
     const derive = resolveResetTokenDeriver(
       makeEnv({ ENVIRONMENT: 'production', PASSWORD_RESET_TOKEN_KEY: 'k'.repeat(32) }),
     );
+    expect(derive).toBeDefined();
+    if (derive === undefined) return;
     const request = { requestId: 'r-1', userId: 'u-1' };
-    expect(await derive?.(request)).toBe(await derive?.(request));
+    const token = await derive(request);
+    expect(token).toMatch(/^[\w-]{43}$/u);
+    expect(await derive(request)).toBe(token);
   });
 
   it('is absent in dev without a key', () => {

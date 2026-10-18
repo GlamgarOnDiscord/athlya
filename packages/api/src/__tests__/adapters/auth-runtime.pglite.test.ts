@@ -99,7 +99,7 @@ async function expectRlsRefusal(promise: Promise<unknown>): Promise<void> {
   expect(message).toMatch(/row-level security/u);
 }
 
-/** In-memory stand-in for the Upstash client (`SET NX`, `GET`, `DEL`). */
+/** In-memory stand-in for the Upstash client (`SET NX`, `GET`, compare-and-delete). */
 class MemoryRedis implements DeliveryStoreRedis {
   private readonly values = new Map<string, string>();
   public set(key: string, value: string, opts: { nx?: true; ex: number }): Promise<unknown> {
@@ -110,7 +110,9 @@ class MemoryRedis implements DeliveryStoreRedis {
   public get(key: string): Promise<unknown> {
     return Promise.resolve(this.values.get(key) ?? null);
   }
-  public del(key: string): Promise<unknown> {
+  public eval(_script: string, keys: string[], args: string[]): Promise<unknown> {
+    const [key] = keys;
+    if (key === undefined || this.values.get(key) !== args[0]) return Promise.resolve(0);
     this.values.delete(key);
     return Promise.resolve(1);
   }
@@ -305,12 +307,17 @@ describe('password-reset request → outbox → delivery under athlya_app', () =
   it('issueForRequest: refuses a hash owned by another user', async () => {
     const store = createPasswordResetRequestTokenStore(db);
     const expiresAt = new Date(Date.now() + 3_600_000);
+    const ownedByA2 = 'd'.repeat(64);
+    await expect(
+      store.issueForRequest({ userId: MEMBER_A2, tokenHash: ownedByA2, expiresAt }),
+    ).resolves.toBe('issued');
 
     await expect(
-      store.issueForRequest({ userId: MEMBER_A, tokenHash: 'b'.repeat(64), expiresAt }),
+      store.issueForRequest({ userId: MEMBER_A, tokenHash: ownedByA2, expiresAt }),
     ).rejects.toThrow();
   });
 });
+
 /* ------------------------------------------------------------------ */
 /*  B. Idempotency store scope                                        */
 /* ------------------------------------------------------------------ */

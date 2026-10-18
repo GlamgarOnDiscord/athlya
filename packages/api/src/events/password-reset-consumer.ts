@@ -32,16 +32,21 @@ export const PASSWORD_RESET_IN_FLIGHT_TTL_SECONDS = 120;
 /** How long a completed delivery is remembered (redelivery window). */
 export const PASSWORD_RESET_COMPLETED_TTL_SECONDS = 24 * 60 * 60;
 
-export type DeliveryBegin = 'acquired' | 'in_flight' | 'completed';
+export type DeliveryBegin =
+  /** This attempt owns the in-flight mark; `claim` identifies it. */
+  | { readonly state: 'acquired'; readonly claim: string }
+  | { readonly state: 'in_flight' }
+  | { readonly state: 'completed' };
 
 /**
  * Per-event delivery state. Implementations must make `begin` atomic
- * (`SET NX` on Upstash Redis).
+ * (`SET NX` on Upstash Redis) and `release` a compare-and-delete on the
+ * attempt's claim, so a late attempt never clears a newer one's mark.
  */
 export interface PasswordResetDeliveryStore {
   begin(eventId: string, inFlightTtlSec: number): Promise<DeliveryBegin>;
   complete(eventId: string, ttlSec: number): Promise<void>;
-  release(eventId: string): Promise<void>;
+  release(eventId: string, claim: string): Promise<void>;
 }
 
 /** Thrown when another delivery of the same event is still in flight. */
@@ -67,12 +72,12 @@ export async function handlePasswordResetRequested(
   event: AuthPasswordResetRequestedEvent,
   deps: PasswordResetConsumerDeps,
 ): Promise<PasswordResetConsumerOutcome> {
-  const state = await deps.deliveries.begin(event.id, PASSWORD_RESET_IN_FLIGHT_TTL_SECONDS);
-  if (state === 'completed') {
+  const begun = await deps.deliveries.begin(event.id, PASSWORD_RESET_IN_FLIGHT_TTL_SECONDS);
+  if (begun.state === 'completed') {
     logOutcome(event.id, 'skipped_duplicate');
     return 'skipped_duplicate';
   }
-  if (state === 'in_flight') {
+  if (begun.state === 'in_flight') {
     throw new PasswordResetDeliveryInFlightError();
   }
 
@@ -84,7 +89,7 @@ export async function handlePasswordResetRequested(
     );
   } catch (err) {
     try {
-      await deps.deliveries.release(event.id);
+      await deps.deliveries.release(event.id, begun.claim);
     } catch (releaseErr) {
       // The in-flight mark then expires on its own; the original failure
       // is the one the queue must act on.
