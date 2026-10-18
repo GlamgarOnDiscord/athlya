@@ -239,6 +239,7 @@ jobs:
             ['athlya-events-notifications-preview',     \`athlya-events-notifications-preview-pr-\${pr}\`],
             ['athlya-events-rgpd-preview',              \`athlya-events-rgpd-preview-pr-\${pr}\`],
             ['athlya-events-preview',                   \`athlya-events-preview-pr-\${pr}\`],
+            ['athlya-outbox-kick-preview',              \`athlya-outbox-kick-preview-pr-\${pr}\`],
           ];
           let src = fs.readFileSync('packages/api/wrangler.toml', 'utf8');
           for (const [from, to] of replacements) src = src.replaceAll(from, to);
@@ -306,7 +307,8 @@ jobs:
             "athlya-events-notifications-preview-pr-${PR_N}" \
             "athlya-events-notifications-preview-pr-${PR_N}-dlq" \
             "athlya-events-rgpd-preview-pr-${PR_N}" \
-            "athlya-events-rgpd-preview-pr-${PR_N}-dlq"; do
+            "athlya-events-rgpd-preview-pr-${PR_N}-dlq" \
+            "athlya-outbox-kick-preview-pr-${PR_N}"; do
             pnpm --filter @athlya/api exec wrangler queues create "$Q" || true
             echo "Queue $Q ready"
           done
@@ -429,6 +431,7 @@ jobs:
             "athlya-events-notifications-preview-pr-${PR_N}" \
             "athlya-events-rgpd-preview-pr-${PR_N}" \
             "athlya-events-preview-pr-${PR_N}" \
+            "athlya-outbox-kick-preview-pr-${PR_N}" \
             "athlya-events-notifications-preview-pr-${PR_N}-dlq" \
             "athlya-events-rgpd-preview-pr-${PR_N}-dlq" \
             "athlya-events-preview-pr-${PR_N}-dlq"; do

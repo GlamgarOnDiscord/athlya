@@ -4,7 +4,13 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { CONFIG_FILES, PRODUCTION_REQUIRED, REQUIRED, missingSecrets } from '../verify-secrets.mjs';
+import {
+  CONFIG_FILES,
+  PRODUCTION_REQUIRED,
+  REQUIRED,
+  declaredQueues,
+  missingSecrets,
+} from '../verify-secrets.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const API = path.join(ROOT, 'packages', 'api');
@@ -85,6 +91,39 @@ describe('verify-secrets lists', () => {
       assert.deepEqual([...documentedProduction].sort(), [...PRODUCTION_REQUIRED[worker]].sort());
     });
   }
+});
+
+/** Producer binding names of `[[env.<envName>.queues.producers]]` tables. */
+function producerBindings(toml, envName) {
+  const names = new Set();
+  let inProducers = false;
+  for (const line of toml.split('\n')) {
+    const header = /^\s*\[\[?([^\]]+)\]\]?/u.exec(line);
+    if (header !== null) {
+      inProducers = header[1].trim() === `env.${envName}.queues.producers`;
+      continue;
+    }
+    const binding = inProducers ? /^\s*binding\s*=\s*"([^"]+)"/u.exec(line) : null;
+    if (binding !== null) names.add(binding[1]);
+  }
+  return [...names].sort();
+}
+
+describe('queue bindings (issue #311)', () => {
+  for (const [worker, configFile = 'wrangler.toml'] of Object.entries(CONFIG_FILES)) {
+    it(`${configFile} documents every queue binding it declares`, () => {
+      const toml = readFileSync(path.join(API, configFile), 'utf8');
+      const documented = headerSecrets(toml, 'Queue bindings').sort();
+      for (const env of ['staging', 'production']) {
+        assert.deepEqual(producerBindings(toml, env), documented, `${worker} --env ${env}`);
+      }
+    });
+  }
+
+  it('checks the outbox kick queue of every env', () => {
+    assert.ok(declaredQueues('staging').has('athlya-outbox-kick-staging'));
+    assert.ok(declaredQueues('production').has('athlya-outbox-kick'));
+  });
 });
 
 describe('missingSecrets', () => {

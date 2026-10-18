@@ -115,7 +115,8 @@ wrangler secret put * --env preview --name athlya-api-pr-{N}
        ▼
 Provision per-PR queues: athlya-events-preview-pr-{N},
   athlya-events-preview-pr-{N}-dlq,
-  athlya-events-notifications-preview-pr-{N}, ...
+  athlya-events-notifications-preview-pr-{N}, ...,
+  athlya-outbox-kick-preview-pr-{N}
        │
        ▼
 wrangler deploy --config wrangler.preview-pr.toml
@@ -132,7 +133,9 @@ PR closed (merged or abandoned)
        │
        ▼
 wrangler delete --name athlya-api-pr-{N}
-Delete per-PR queues: athlya-events-preview-pr-{N}* (6 queues)
+Delete per-PR queues: athlya-events-preview-pr-{N}* and
+  athlya-events-*-preview-pr-{N}* (6 queues)
+  + athlya-outbox-kick-preview-pr-{N}
 Delete Neon branch "preview-pr-{N}"
 Flush Redis keys "pr-{N}:*"
 ```
@@ -166,7 +169,8 @@ for Q in \
   "athlya-events-notifications-preview-pr-${N}" \
   "athlya-events-notifications-preview-pr-${N}-dlq" \
   "athlya-events-rgpd-preview-pr-${N}" \
-  "athlya-events-rgpd-preview-pr-${N}-dlq"; do
+  "athlya-events-rgpd-preview-pr-${N}-dlq" \
+  "athlya-outbox-kick-preview-pr-${N}"; do
   pnpm --filter @athlya/api exec wrangler queues delete "$Q" || true
 done
 ```

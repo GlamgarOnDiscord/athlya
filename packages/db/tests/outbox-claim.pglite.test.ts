@@ -68,6 +68,33 @@ describe('claimLeasedBatch on Postgres (issues #311 / #424)', () => {
     ]);
   });
 
+  // PGlite runs on one connection, so the two claims below execute one after
+  // the other: this checks the lease filter (a second drain skips rows the
+  // first one leased), not a row-lock race between two connections.
+  it('does not hand rows leased by one drain to a second drain (issue #311)', async () => {
+    await handle.pglite.exec(`
+      INSERT INTO outbox (event_id, event_type, payload, occurred_at)
+      SELECT 'evt-burst-' || g, 'reservation.reminder', '{}', now() - make_interval(secs => g)
+        FROM generate_series(1, 40) g;
+    `);
+    const compliance = ['auth.user.deleted'];
+
+    const [kick, cron] = await Promise.all([
+      claimLeasedBatch(db, 25, 120, compliance),
+      claimLeasedBatch(db, 25, 120, compliance),
+    ]);
+    const again = await claimLeasedBatch(db, 25, 120, compliance);
+
+    const kickIds = kick.map((r) => r.eventId);
+    const cronIds = cron.map((r) => r.eventId);
+    expect(kickIds.filter((id) => cronIds.includes(id))).toEqual([]);
+    // 43 claimable rows (40 + 3 seeded, the 4th is under a live lease):
+    // the two drains split them, and a third claim finds nothing left.
+    expect(kick.length + cron.length).toBe(43);
+    expect([...kickIds, ...cronIds]).not.toContain('evt-leased');
+    expect(again).toEqual([]);
+  });
+
   it('is plain FIFO without priority types', async () => {
     const rows = await claimLeasedBatch(db, 1, 120);
 

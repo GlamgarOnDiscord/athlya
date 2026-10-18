@@ -8,12 +8,18 @@ import {
   DRAIN_CYCLE_DEADLINE_MS,
   DRAIN_LEASE_SECONDS,
   DRAIN_SEND_CONCURRENCY,
+  KICK_DRAIN_DEADLINE_MS,
+  KICK_DRAIN_MAX_ROUNDS,
+  MAX_DRAIN_BATCH_SIZE,
   OUTBOX_BACKLOG_BATCH_THRESHOLD,
   OUTBOX_DRAIN_OVERLAP_WARN_MS,
   emitOutboxBacklogMetric,
   emitOutboxDrainErrorsMetric,
+  drainCycleCapacity,
   pickBatchSize,
+  resolveConfiguredBatchSize,
   resolveDrainBatchSize,
+  runKickDrain,
   runScheduledDrain,
   warnOnDrainOverlapRisk,
 } from '../events/drain-scheduled.js';
@@ -531,5 +537,216 @@ describe('outbox lane metrics (issue #311)', () => {
       expect.objectContaining({ lane: 'rgpd', pending: 0, oldestAgeMs: 0 }),
       expect.objectContaining({ lane: 'legacy', pending: 0, oldestAgeMs: 0 }),
     ]);
+  });
+});
+
+describe('configurable batch size (issue #311)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('defaults the backlog batch to 500 events', () => {
+    expect(ADAPTIVE_BATCH_SIZE).toBe(500);
+    expect(resolveConfiguredBatchSize(undefined)).toBe(ADAPTIVE_BATCH_SIZE);
+    expect(resolveConfiguredBatchSize(' ')).toBe(ADAPTIVE_BATCH_SIZE);
+  });
+
+  it('accepts a positive integer and clamps it to the claim limit', () => {
+    expect(resolveConfiguredBatchSize('750')).toBe(750);
+    expect(resolveConfiguredBatchSize('5000')).toBe(MAX_DRAIN_BATCH_SIZE);
+    expect(MAX_DRAIN_BATCH_SIZE).toBe(1000);
+  });
+
+  it('ignores an invalid value with a configuration warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const raw of ['0', '-5', '12.5', 'lots']) {
+      expect(resolveConfiguredBatchSize(raw)).toBe(ADAPTIVE_BATCH_SIZE);
+    }
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('OUTBOX_DRAIN_BATCH_SIZE'),
+      expect.objectContaining({ code: 'configuration_error' }),
+    );
+  });
+
+  it('keeps the idle batch at the default and never above the configured size', () => {
+    expect(pickBatchSize(0, 750)).toBe(DEFAULT_BATCH_SIZE);
+    expect(pickBatchSize(OUTBOX_BACKLOG_BATCH_THRESHOLD + 1, 750)).toBe(750);
+    expect(pickBatchSize(0, 40)).toBe(40);
+  });
+
+  it('sizes the cron claim from OUTBOX_DRAIN_BATCH_SIZE under backlog', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    countByTypeMock
+      .mockReset()
+      .mockResolvedValue([
+        { eventType: 'reservation.created', pending: 900, oldestOccurredAt: null },
+      ]);
+    claimBatchMock.mockReset().mockResolvedValue([]);
+
+    await runScheduledDrain({
+      getDb: () => ({}) as never,
+      EVENTS_QUEUE: {} as never,
+      EVENTS_NOTIFICATIONS_QUEUE: {} as never,
+      EVENTS_RGPD_QUEUE: {} as never,
+      OUTBOX_DRAIN_BATCH_SIZE: '800',
+    });
+
+    expect(claimBatchMock).toHaveBeenCalledWith(
+      expect.anything(),
+      800,
+      DRAIN_LEASE_SECONDS,
+      COMPLIANCE_EVENT_TYPES,
+    );
+  });
+});
+
+describe('cycle capacity (issue #311 acceptance: 500+ per batch, 10k burst)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** In-memory outbox: `claimLeasedBatch` hands out FIFO slices of `total` rows. */
+  function backlog(total: number) {
+    let next = 0;
+    claimBatchMock.mockReset().mockImplementation(async (_db: unknown, size: number) => {
+      const rows = [];
+      for (let i = 0; i < size && next < total; i += 1, next += 1) {
+        rows.push({
+          id: `00000000-0000-4000-8000-${String(next).padStart(12, '0')}`,
+          eventId: `evt-${String(next)}`,
+          eventType: 'reservation.reminder',
+          payload: {},
+          attempts: 1,
+          occurredAt: new Date(),
+          studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          leaseToken: `lease-${String(next)}`,
+        });
+      }
+      return rows;
+    });
+    markPublishedMock.mockReset().mockResolvedValue(undefined);
+    countByTypeMock
+      .mockReset()
+      .mockResolvedValue([
+        { eventType: 'reservation.reminder', pending: total, oldestOccurredAt: null },
+      ]);
+  }
+
+  it('the default configuration bounds one cycle above the 10k burst target', () => {
+    expect(drainCycleCapacity(ADAPTIVE_BATCH_SIZE)).toBeGreaterThanOrEqual(10_000);
+    expect(drainCycleCapacity(ADAPTIVE_BATCH_SIZE, KICK_DRAIN_MAX_ROUNDS)).toBeGreaterThanOrEqual(
+      ADAPTIVE_BATCH_SIZE,
+    );
+  });
+
+  it('delivers a 10 000-event burst in ONE cron cycle with 500-event batches', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    backlog(10_000);
+    const send = vi.fn().mockResolvedValue(undefined);
+
+    const result = await runScheduledDrain({
+      getDb: () => ({}) as never,
+      EVENTS_QUEUE: { send },
+      EVENTS_NOTIFICATIONS_QUEUE: { send },
+      EVENTS_RGPD_QUEUE: { send },
+    });
+
+    expect(result).toEqual({ processed: 10_000, succeeded: 10_000, failed: 0, released: 0 });
+    expect(send).toHaveBeenCalledTimes(10_000);
+    // 20 full batches of 500, plus the empty claim that proves the backlog is gone.
+    expect(claimBatchMock).toHaveBeenCalledTimes(21);
+    for (const call of claimBatchMock.mock.calls) {
+      expect(call[1]).toBe(ADAPTIVE_BATCH_SIZE);
+    }
+  });
+
+  it('stops at batch × rounds when the backlog exceeds one cycle', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    backlog(30_000);
+    const send = vi.fn().mockResolvedValue(undefined);
+
+    const result = await runScheduledDrain({
+      getDb: () => ({}) as never,
+      EVENTS_QUEUE: { send },
+      EVENTS_NOTIFICATIONS_QUEUE: { send },
+      EVENTS_RGPD_QUEUE: { send },
+    });
+
+    expect(result.succeeded).toBe(drainCycleCapacity(ADAPTIVE_BATCH_SIZE, DRAIN_MAX_ROUNDS));
+  });
+});
+
+describe('runKickDrain (issue #311)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const row = (n: number) => ({
+    id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+    eventId: `evt-${String(n)}`,
+    eventType: 'auth.user.deleted',
+    payload: {},
+    attempts: 1,
+    occurredAt: new Date(),
+    studioId: null,
+    leaseToken: 'lease',
+  });
+
+  it('claims compliance-first at the backlog size without the pending snapshot', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    countByTypeMock.mockReset();
+    claimBatchMock
+      .mockReset()
+      .mockResolvedValueOnce([row(1)])
+      .mockResolvedValue([]);
+    markPublishedMock.mockReset().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(undefined);
+
+    const result = await runKickDrain({
+      getDb: () => ({}) as never,
+      EVENTS_QUEUE: { send },
+      EVENTS_NOTIFICATIONS_QUEUE: { send },
+      EVENTS_RGPD_QUEUE: { send },
+    });
+
+    expect(result.succeeded).toBe(1);
+    expect(countByTypeMock).not.toHaveBeenCalled();
+    expect(claimBatchMock).toHaveBeenCalledWith(
+      expect.anything(),
+      ADAPTIVE_BATCH_SIZE,
+      DRAIN_LEASE_SECONDS,
+      COMPLIANCE_EVENT_TYPES,
+    );
+    expect(log).toHaveBeenCalledWith(
+      'outbox.drain_cycle',
+      expect.objectContaining({
+        trigger: 'kick',
+        succeeded: 1,
+        deadlineMs: KICK_DRAIN_DEADLINE_MS,
+      }),
+    );
+    expect(log).not.toHaveBeenCalledWith('outbox.backlog', expect.anything());
+  });
+
+  it('is bounded to fewer rounds than the cron cycle', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    claimBatchMock
+      .mockReset()
+      .mockImplementation(async (_db: unknown, size: number) =>
+        Array.from({ length: size }, (_, i) => row(i)),
+      );
+    markPublishedMock.mockReset().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(undefined);
+
+    await runKickDrain({
+      getDb: () => ({}) as never,
+      EVENTS_QUEUE: { send },
+      EVENTS_NOTIFICATIONS_QUEUE: { send },
+      EVENTS_RGPD_QUEUE: { send },
+      OUTBOX_DRAIN_BATCH_SIZE: '2',
+    });
+
+    expect(claimBatchMock).toHaveBeenCalledTimes(KICK_DRAIN_MAX_ROUNDS);
+    expect(KICK_DRAIN_MAX_ROUNDS).toBeLessThan(DRAIN_MAX_ROUNDS);
+    expect(KICK_DRAIN_DEADLINE_MS).toBeLessThan(DRAIN_CYCLE_DEADLINE_MS);
+    // A kick drain must never outlive the lease it claims under.
+    expect(DRAIN_LEASE_SECONDS * 1000).toBeGreaterThan(
+      KICK_DRAIN_DEADLINE_MS + DEFAULT_QUEUE_SEND_TIMEOUT_MS + 10_000,
+    );
   });
 });

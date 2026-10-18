@@ -33,6 +33,8 @@
 import { EmailTakenError, type UserRepo, type UserRow } from '@athlya/auth';
 import { isPostgresUniqueViolation } from '@athlya/db/errors';
 
+import { noteOutboxWrite } from '../events/outbox-kick.js';
+
 import {
   queryRows,
   serviceFn,
@@ -137,6 +139,7 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
         if (row === undefined) {
           throw new Error('createUserWithEvent: auth_create_member_with_event returned no row');
         }
+        noteOutboxWrite(event.type);
         return toUserRow(row);
       } catch (err) {
         if (isPostgresUniqueViolation(err)) {
@@ -150,6 +153,7 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
       // Retry-safe since migration 0037: an already-deleted user is a
       // no-op that keeps its tombstone and its recorded event.
       await queryRows(db, serviceFn.softDeleteUserWithEvent(id, event));
+      noteOutboxWrite(event.type);
     },
 
     async softDeleteUser(id) {

@@ -30,6 +30,8 @@ import { isPostgresUniqueViolation } from '@athlya/db/errors';
 import { exportJobs } from '@athlya/db/schema';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 
+import { noteOutboxWrite } from '../events/outbox-kick.js';
+
 import { withConnectionRetry } from './db-retry.js';
 import { queryRows, toDateOrNull } from './service-functions.js';
 
@@ -141,6 +143,7 @@ export function createDrizzleExportJobStoreHttp(
               `),
             ),
           );
+          noteOutboxWrite(requestedEvent.type);
         }
         return jobId;
       } catch (err) {

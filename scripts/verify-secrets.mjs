@@ -11,7 +11,7 @@
  * This script NEVER prints secret values — it only checks presence via
  * `wrangler secret list`, which returns secret names only.
  *
- * Issues #328, #410, #343.
+ * Issues #328, #410, #343, #311.
  *
  * Each Worker inherits no secret from another (separate wrangler configs),
  * so every list below mirrors what that Worker reads at runtime:
@@ -27,6 +27,11 @@
  * scripts/__tests__/verify-secrets.test.mjs cross-checks these lists against
  * domain-deps.ts and the `# Secrets` header of each wrangler config.
  *
+ * Also checks that every queue the four Wrangler configs bind for the
+ * target env exists (`wrangler queues list`), so a queue that was never
+ * created — e.g. the outbox kick queue (issue #311) — fails here instead
+ * of half-way through the multi-Worker deploy.
+ *
  * Secret tiers
  * ------------
  * REQUIRED   — missing in either env fails the check immediately.
@@ -35,7 +40,10 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
+
+import { parseQueueList, queuesForEnv } from './wrangler-queues.mjs';
 
 // Core secrets required in every environment.
 const CORE_JWT = [
@@ -144,6 +152,52 @@ function listSecrets(configFile, envName) {
   }
 }
 
+/**
+ * Queue names the four Wrangler configs bind for `envName`.
+ *
+ * @param {string} envName
+ * @returns {Set<string>}
+ */
+export function declaredQueues(envName) {
+  const names = new Set();
+  for (const configFile of Object.values(CONFIG_FILES)) {
+    const toml = readFileSync(
+      new URL(`../packages/api/${configFile ?? 'wrangler.toml'}`, import.meta.url),
+      'utf8',
+    );
+    for (const name of queuesForEnv(toml, envName)) names.add(name);
+  }
+  return names;
+}
+
+/**
+ * Names of the account's queues, across pages. `null` when listing fails
+ * (the check then fails closed: a deploy would fail on the same call).
+ *
+ * @returns {Set<string> | null}
+ */
+function listQueues() {
+  const names = new Set();
+  for (let page = 1; page <= 20; page += 1) {
+    let output;
+    try {
+      output = execFileSync(
+        'pnpm',
+        ['--filter', '@athlya/api', 'exec', 'wrangler', 'queues', 'list', '--page', String(page)],
+        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
+      );
+    } catch (err) {
+      console.error('[verify-secrets] Failed to list queues');
+      console.error(String(err));
+      return null;
+    }
+    const before = names.size;
+    for (const name of parseQueueList(output)) names.add(name);
+    if (names.size === before) break;
+  }
+  return names;
+}
+
 if (import.meta.main) {
   const { values } = parseArgs({
     options: {
@@ -193,10 +247,28 @@ if (import.meta.main) {
     }
   }
 
+  const existingQueues = listQueues();
+  if (declaredQueues(env).size === 0) {
+    // A config the scanner cannot read must not pass as "all queues exist".
+    console.error(`[verify-secrets] MISSING queue bindings: none parsed for --env ${env}`);
+    anyMissing = true;
+  } else if (existingQueues === null) {
+    anyMissing = true;
+  } else {
+    const missingQueues = [...declaredQueues(env)].filter((name) => !existingQueues.has(name));
+    if (missingQueues.length > 0) {
+      console.error(
+        `[verify-secrets] MISSING queues (${env}): ${missingQueues.join(', ')} — create each with: wrangler queues create <name>`,
+      );
+      anyMissing = true;
+    } else {
+      console.log(`[verify-secrets] OK    queues (${env}): all bound queues exist`);
+    }
+  }
+
   if (anyMissing) {
     console.error(
-      '[verify-secrets] One or more secrets are missing. Run: wrangler secret put <NAME> [-c <wrangler config>] --env ' +
-        env,
+      `[verify-secrets] One or more checks failed — see the MISSING lines above. Missing secret: wrangler secret put <NAME> [-c <wrangler config>] --env ${env}. Missing queue: wrangler queues create <name>.`,
     );
     process.exit(1);
   }

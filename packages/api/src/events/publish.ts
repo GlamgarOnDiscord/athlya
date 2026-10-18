@@ -55,6 +55,8 @@
 import { insertOutbox, type OutboxEvent } from '@athlya/db/outbox';
 import { InvalidEventError, parseEvent, type AthlyaEvent } from '@athlya/shared/events';
 
+import { noteOutboxWrite } from './outbox-kick.js';
+
 import type { AthlyaTx } from '@athlya/db/client';
 
 /* ------------------------------------------------------------------ */
@@ -302,6 +304,7 @@ async function publishTransactional(
   // Step 1: durable record. A failure MUST propagate so the caller's
   // transaction rolls back (Req 16.3). Do not wrap in try/catch.
   await insertOutbox(tx, toOutboxEvent(event));
+  noteOutboxWrite(event.type);
 
   // Step 2: optionally try the queue. The outbox row is now part of
   // the caller's transaction, so a queue failure here only costs us

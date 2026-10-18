@@ -23,6 +23,8 @@
 # Production also: SENTRY_DSN, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS.
 # Binding (not a secret): HYPERDRIVE.
 # scripts/verify-secrets.mjs checks this list (keep both in sync).
+# Queue bindings: OUTBOX_KICK_QUEUE (producer only, issue #311).
+#   scripts/verify-secrets.mjs checks that every bound queue exists.
 # ----------------------------------------------------------------------------
 
 name = "athlya-api-reservations"
@@ -47,6 +49,16 @@ class_name = "ClassCapacityDO"
 tag = "v1"
 new_classes = ["ClassCapacityDO"]
 
+# Outbox kick producer (issue #311). This Worker commits outbox rows; after
+# such a request it sends one `outbox.kick` so the gateway (athlya-api,
+# which owns the consumer) drains them without waiting for the cron. See
+# the "Outbox kick queue" block of wrangler.toml. Named envs do not inherit
+# queue bindings, so each env declares it.
+
+[[queues.producers]]
+binding = "OUTBOX_KICK_QUEUE"
+queue = "athlya-outbox-kick"
+
 # ============================================================================
 # Staging
 # ============================================================================
@@ -62,6 +74,10 @@ name = "athlya-api-reservations-staging"
 ENVIRONMENT = "staging"
 VERSION = "0.0.0-staging"
 OTEL_SAMPLE_RATE = "0.5"
+
+[[env.staging.queues.producers]]
+binding = "OUTBOX_KICK_QUEUE"
+queue = "athlya-outbox-kick-staging"
 
 [env.staging.placement]
 mode = "smart"
@@ -105,6 +121,10 @@ name = "athlya-api-reservations-production"
 ENVIRONMENT = "production"
 VERSION = "0.1.0"
 OTEL_SAMPLE_RATE = "0.1"
+
+[[env.production.queues.producers]]
+binding = "OUTBOX_KICK_QUEUE"
+queue = "athlya-outbox-kick"
 
 [env.production.placement]
 mode = "smart"

@@ -8,7 +8,8 @@
 const ITEMS = [
   {
     id: 'O1',
-    label: 'Batch adaptatif (100 → 200 si pending > 500), snapshot pending queried 1×/cycle',
+    label:
+      'Batch adaptatif (100 → 500 si pending > 500, OUTBOX_DRAIN_BATCH_SIZE ≤ 1000), snapshot pending queried 1×/cycle',
     doc: 'packages/api/src/events/drain-scheduled.ts',
   },
   {
@@ -40,6 +41,12 @@ const ITEMS = [
     id: 'O7',
     label: 'Runbook outbox-ops relu (cadence, overlap, queries A16)',
     doc: 'docs/runbooks/outbox-ops.md',
+  },
+  {
+    id: 'O8',
+    label:
+      'Outbox kick queue athlya-outbox-kick(-staging) created; outbox.kick_drain logged after a write (issue #311)',
+    doc: 'docs/runbooks/outbox-ops.md § Outbox kick',
   },
 ];
 

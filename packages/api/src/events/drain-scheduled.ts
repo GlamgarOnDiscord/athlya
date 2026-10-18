@@ -7,8 +7,12 @@
  * once-per-minute (`*` in the minutes field). We accept that tradeoff
  * and ship a once-per-minute cron; the dropped 30 s cadence is harmless
  * because consumers already dedup on `event.id` for 24 h (Req 17.4) and
- * the drain pulls in batches of 100 rows per cycle, which is large
- * enough to keep steady-state backlog sub-second at our target load.
+ * the drain chains several leased batches per cycle (issue #311).
+ *
+ * The cron is the safety net. The fast path is the event-driven "outbox
+ * kick" (`./outbox-kick.ts`): a request that committed outbox rows
+ * enqueues a kick, and the gateway's kick consumer runs
+ * {@link runKickDrain} — the same cycle, with tighter bounds.
  *
  * This file ONLY exports the scheduled handler wrapper; it does NOT
  * wire anything into `wrangler.toml`. Task 8.1 owns the wrangler
@@ -70,11 +74,18 @@ import {
 import type { AthlyaDb } from '@athlya/db/client';
 import type { OutboxPendingSnapshot } from '@athlya/db/outbox';
 
-/** When pending exceeds this, the drain claims up to {@link ADAPTIVE_BATCH_SIZE}. */
+/** When pending exceeds this, the drain claims up to the backlog batch size. */
 export const OUTBOX_BACKLOG_BATCH_THRESHOLD = 500;
 
-/** Adaptive batch size under backlog (Worker CPU budget cap). */
-export const ADAPTIVE_BATCH_SIZE = 200;
+/**
+ * Default claim size under backlog (issue #311: "500+ events per batch").
+ * Overridable with the `OUTBOX_DRAIN_BATCH_SIZE` var, see
+ * {@link resolveConfiguredBatchSize}.
+ */
+export const ADAPTIVE_BATCH_SIZE = 500;
+
+/** Upper bound of a claim; matches `MAX_CLAIM_LIMIT` in `@athlya/db/outbox`. */
+export const MAX_DRAIN_BATCH_SIZE = 1000;
 
 /**
  * Overlap guard. Cron fires once per minute; a drain that runs longer
@@ -98,8 +109,8 @@ export const OUTBOX_DRAIN_OVERLAP_WARN_MS = 45_000;
  *     never has its rows re-claimed underneath it; a dead drain's rows
  *     come back once the lease lapses.
  *
- * Worst case per cycle with a fully hung queue: 200 rows / 8 workers ×
- * 5 s = 125 s of sends, cut at 40 s → ≤ 45 s wall clock, no DB
+ * Worst case per cycle with a fully hung queue: 500 rows / 8 workers ×
+ * 5 s = 315 s of sends, cut at 40 s → ≤ 45 s wall clock, no DB
  * connection or lock held meanwhile.
  */
 export const DRAIN_SEND_CONCURRENCY = 8;
@@ -110,11 +121,38 @@ export const DRAIN_LEASE_SECONDS = 120;
  * Issue #311 — a cycle keeps claiming batches until the backlog is
  * empty, the cycle deadline is reached, or a whole batch failed (queue
  * unhealthy: stop instead of spinning). Caps one cycle at
- * `DRAIN_MAX_ROUNDS × batch` rows (10 000 at the adaptive size), so a
- * 10k burst empties within one or two ticks at normal queue latency
- * instead of ~50 minutes at 200 rows/min.
+ * `DRAIN_MAX_ROUNDS × batch` rows (25 000 at the default backlog size of
+ * 500, see {@link drainCycleCapacity}), so a 10k burst empties within one
+ * tick at normal queue latency instead of ~50 minutes at 200 rows/min.
  */
 export const DRAIN_MAX_ROUNDS = 50;
+
+/**
+ * Bounds of one kick drain (issue #311). Tighter than the cron cycle: the
+ * kick consumer runs with `max_concurrency = 1`, so a long drain would
+ * delay the next kick. Rounds still re-claim compliance rows first, so a
+ * compliance event committed during a kick drain is picked up by its next
+ * round.
+ */
+export const KICK_DRAIN_MAX_ROUNDS = 10;
+export const KICK_DRAIN_DEADLINE_MS = 20_000;
+
+/** What started a drain cycle; reported on `outbox.drain_cycle`. */
+export type DrainTrigger = 'cron' | 'kick';
+
+/** Per-cycle bounds of {@link runScheduledDrain}. */
+export interface DrainCycleOptions {
+  readonly trigger?: DrainTrigger;
+  /** Defaults to {@link DRAIN_MAX_ROUNDS}. */
+  readonly maxRounds?: number;
+  /** Defaults to {@link DRAIN_CYCLE_DEADLINE_MS}. */
+  readonly deadlineMs?: number;
+  /**
+   * Take the per-type pending snapshot and emit the backlog metrics.
+   * Defaults to true; the kick drain skips it (the cron emits them).
+   */
+  readonly snapshot?: boolean;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Minimal Cloudflare Workers shapes                                  */
@@ -157,8 +195,16 @@ export interface ScheduledEnv extends EventQueueBindings {
   getDb(): AthlyaDb | Promise<AthlyaDb>;
   /** Optional swappable logger; defaults to the {@link drainOutbox} default. */
   readonly logger?: Logger;
-  /** Optional override for the batch size. Defaults to 100. */
+  /**
+   * Fixed batch size (tests / explicit callers). Skips the pending
+   * snapshot and the adaptive sizing.
+   */
   readonly batchSize?: number;
+  /**
+   * `[vars]` string: claim size under backlog. Defaults to
+   * {@link ADAPTIVE_BATCH_SIZE}, clamped to `[1, MAX_DRAIN_BATCH_SIZE]`.
+   */
+  readonly OUTBOX_DRAIN_BATCH_SIZE?: string;
 }
 
 /** Scheduled Worker handler signature, Cloudflare-compatible. */
@@ -231,8 +277,35 @@ export function createTxBackedStore(db: AthlyaDb): {
  * unified Worker entrypoint (e.g. `apps/api/src/worker.ts`) without
  * round-tripping through the default export.
  */
-export function pickBatchSize(pending: number): number {
-  return pending > OUTBOX_BACKLOG_BATCH_THRESHOLD ? ADAPTIVE_BATCH_SIZE : DEFAULT_BATCH_SIZE;
+export function pickBatchSize(pending: number, backlogBatch = ADAPTIVE_BATCH_SIZE): number {
+  return pending > OUTBOX_BACKLOG_BATCH_THRESHOLD
+    ? backlogBatch
+    : Math.min(DEFAULT_BATCH_SIZE, backlogBatch);
+}
+
+/**
+ * Parse the `OUTBOX_DRAIN_BATCH_SIZE` var. Unset → {@link ADAPTIVE_BATCH_SIZE};
+ * a value that is not a positive integer is ignored with a warning (a typo
+ * must not stop the drain); a value above {@link MAX_DRAIN_BATCH_SIZE} is
+ * clamped to it.
+ */
+export function resolveConfiguredBatchSize(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === '') return ADAPTIVE_BATCH_SIZE;
+  const parsed = Number(raw.trim());
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    console.warn('outbox drain: invalid OUTBOX_DRAIN_BATCH_SIZE, using the default', {
+      code: 'configuration_error',
+      value: raw,
+      default: ADAPTIVE_BATCH_SIZE,
+    });
+    return ADAPTIVE_BATCH_SIZE;
+  }
+  return Math.min(parsed, MAX_DRAIN_BATCH_SIZE);
+}
+
+/** Upper bound of rows one cycle can deliver: one claim per round. */
+export function drainCycleCapacity(batchSize: number, maxRounds = DRAIN_MAX_ROUNDS): number {
+  return batchSize * maxRounds;
 }
 
 export async function resolveDrainBatchSize(db: AthlyaDb, env: ScheduledEnv): Promise<number> {
@@ -240,7 +313,7 @@ export async function resolveDrainBatchSize(db: AthlyaDb, env: ScheduledEnv): Pr
     return env.batchSize;
   }
   const { pending } = await countPendingOutbox(db);
-  return pickBatchSize(pending);
+  return pickBatchSize(pending, resolveConfiguredBatchSize(env.OUTBOX_DRAIN_BATCH_SIZE));
 }
 
 /**
@@ -273,17 +346,28 @@ export function emitOutboxBacklogMetric(
   logger?.info('outbox drain: pending snapshot', meta);
 }
 
-export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult> {
+export async function runScheduledDrain(
+  env: ScheduledEnv,
+  options: DrainCycleOptions = {},
+): Promise<DrainResult> {
   const db = await env.getDb();
   const logger = env.logger;
+  const trigger = options.trigger ?? 'cron';
+  const maxRounds = options.maxRounds ?? DRAIN_MAX_ROUNDS;
+  const cycleDeadlineMs = options.deadlineMs ?? DRAIN_CYCLE_DEADLINE_MS;
+  const backlogBatch = resolveConfiguredBatchSize(env.OUTBOX_DRAIN_BATCH_SIZE);
 
   // Single pending snapshot reused for both batch sizing and the
   // backlog metric — the previous code queried `countPendingOutbox`
   // twice per cycle. Skipped entirely when `batchSize` is overridden
-  // (explicit/test path), which also short-circuits the metric.
-  const lanes = env.batchSize !== undefined ? null : await countPendingOutboxByType(db);
+  // (explicit/test path), which also short-circuits the metric, and on
+  // kick drains, which claim at the backlog size directly.
+  const takeSnapshot = env.batchSize === undefined && (options.snapshot ?? true);
+  const lanes = takeSnapshot ? await countPendingOutboxByType(db) : null;
   const snapshot = lanes === null ? null : totalSnapshot(lanes);
-  const batchSize = env.batchSize ?? pickBatchSize(snapshot?.pending ?? 0);
+  const batchSize =
+    env.batchSize ??
+    (snapshot === null ? backlogBatch : pickBatchSize(snapshot.pending, backlogBatch));
 
   if (snapshot !== null && lanes !== null) {
     emitOutboxBacklogMetric(snapshot, batchSize, logger);
@@ -318,15 +402,15 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
     resolveQueue: (eventType) => resolveEventQueueProducer(env, eventType) as QueueProducer,
     batchSize,
     concurrency: DRAIN_SEND_CONCURRENCY,
-    deadlineMs: DRAIN_CYCLE_DEADLINE_MS,
+    deadlineMs: cycleDeadlineMs,
     sendTimeoutMs: DEFAULT_QUEUE_SEND_TIMEOUT_MS,
     ...(logger !== undefined ? { logger } : {}),
   };
 
-  const cycleDeadline = startedAt + DRAIN_CYCLE_DEADLINE_MS;
+  const cycleDeadline = startedAt + cycleDeadlineMs;
   let result: DrainResult = { processed: 0, succeeded: 0, failed: 0, released: 0 };
   let rounds = 0;
-  while (rounds < DRAIN_MAX_ROUNDS) {
+  while (rounds < maxRounds) {
     const remainingMs = cycleDeadline - Date.now();
     if (remainingMs <= 0) break;
     const round = await drainOutbox({ ...opts, deadlineMs: remainingMs });
@@ -342,17 +426,40 @@ export async function runScheduledDrain(env: ScheduledEnv): Promise<DrainResult>
     if (round.processed < batchSize || round.succeeded === 0 || round.released > 0) break;
   }
   const durationMs = Date.now() - startedAt;
-  emitOutboxDrainCycleMetric(durationMs, result, batchSize, logger, rounds);
+  emitOutboxDrainCycleMetric(
+    durationMs,
+    result,
+    batchSize,
+    logger,
+    rounds,
+    trigger,
+    cycleDeadlineMs,
+  );
 
   // Overlap guard: a drain slower than the warn threshold risks
   // colliding with the next cron tick. SKIP LOCKED keeps that safe,
   // but we surface it as a metric (alert A16) so ops can bump cron
   // frequency or investigate a stuck consumer.
-  warnOnDrainOverlapRisk(durationMs, result, batchSize, logger);
+  if (trigger === 'cron') warnOnDrainOverlapRisk(durationMs, result, batchSize, logger);
 
   emitOutboxDrainErrorsMetric(result, logger);
 
   return result;
+}
+
+/**
+ * One bounded drain for the outbox kick consumer (issue #311): at most
+ * {@link KICK_DRAIN_MAX_ROUNDS} batches within {@link KICK_DRAIN_DEADLINE_MS},
+ * no pending snapshot. Leases keep it from sending a row the cron drain
+ * (or another kick drain) holds.
+ */
+export function runKickDrain(env: ScheduledEnv): Promise<DrainResult> {
+  return runScheduledDrain(env, {
+    trigger: 'kick',
+    maxRounds: KICK_DRAIN_MAX_ROUNDS,
+    deadlineMs: KICK_DRAIN_DEADLINE_MS,
+    snapshot: false,
+  });
 }
 
 /** Sum the per-type pending rows into the global snapshot. */
@@ -419,9 +526,12 @@ export function emitOutboxDrainCycleMetric(
   batchSize: number,
   logger?: Logger,
   rounds = 1,
+  trigger: DrainTrigger = 'cron',
+  deadlineMs = DRAIN_CYCLE_DEADLINE_MS,
 ): void {
   const meta = {
     metric: 'outbox_drain_cycle',
+    trigger,
     durationMs,
     rounds,
     throughputPerSec: durationMs > 0 ? Math.round((result.succeeded * 1000) / durationMs) : 0,
@@ -431,7 +541,7 @@ export function emitOutboxDrainCycleMetric(
     released: result.released,
     batchSize,
     concurrency: DRAIN_SEND_CONCURRENCY,
-    deadlineMs: DRAIN_CYCLE_DEADLINE_MS,
+    deadlineMs,
   };
   console.log('outbox.drain_cycle', meta);
   logger?.info('outbox drain: cycle', meta);
