@@ -203,6 +203,8 @@ describe('resolveMistralBaseUrl', () => {
     'https://evil.example/v1',
     'https://mistral.ai.evil.example/v1',
     'https://user:pass@api.mistral.ai/v1',
+    'https://api.mistral.ai/v1?region=eu',
+    'https://api.mistral.ai/v1#eu',
     'not a url',
   ])('rejects %s as not_configured', (raw) => {
     const error = (() => {

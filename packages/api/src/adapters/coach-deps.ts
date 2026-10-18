@@ -91,6 +91,11 @@ export function resolveMistralBaseUrl(raw: string | undefined): string | undefin
   if (url.protocol !== 'https:' || !mistralHost || url.username !== '' || url.password !== '') {
     throw new CoachError('not_configured', 'MISTRAL_BASE_URL must be an https URL on mistral.ai');
   }
+  // The provider appends `/chat/completions`: a query or fragment would
+  // produce a malformed endpoint.
+  if (url.search !== '' || url.hash !== '') {
+    throw new CoachError('not_configured', 'MISTRAL_BASE_URL must not have a query or fragment');
+  }
   return url.toString().replace(/\/+$/, '');
 }
 
