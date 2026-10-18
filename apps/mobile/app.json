@@ -30,6 +30,15 @@
         }
       ],
       [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": [],
+          "neverForLocation": true,
+          "bluetoothAlwaysPermission": "Athlya uses Bluetooth to read live data from connected fitness machines."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash-mascot.png",

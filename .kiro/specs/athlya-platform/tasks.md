@@ -671,10 +671,12 @@ Use official CLI to create, init the project .. and recent package version and s
     - Mobile done (#660): `/progression` screen with a 30/90/365 window selector, `react-native-svg` charts sharing the scale/path maths of `@athlya/shared/charts` with the web, ETag/`If-None-Match` revalidation, a screen-reader summary of the key numbers on every chart, empty states, FR/EN keys
     - _Requirements: 27.1, 27.3_
 
-- [ ] 23. Bluetooth FTMS integration (mobile)
-  - [ ] 23.1 Implement the FTMS BLE client
+- [x] 23. Bluetooth FTMS integration (mobile)
+  - [x] 23.1 Implement the FTMS BLE client
     - Use `react-native-ble-plx`; subscribe to FTMS characteristics; stream data into a live session
     - Requires EAS Build (native module)
+    - Done (#666): `features/ftms/` decodes Indoor Bike, Treadmill, Rower and Cross Trainer Data (both published layouts: FTMS 1.0 and GATT Supplement widths), folds the samples into a live session (time-weighted averages, machine totals first), and logs it through `POST /v1/sessions` / the offline queue (one exercise named after the machine, `durationSec`, summary in `notes`). `BleTransport` port with a `react-native-ble-plx` 3.5.1 adapter; `/machine` screen from home; FR/EN keys
+    - Follow-ups: structured cardio metrics (#667), FTMS Control Point (#668), heart-rate strap (#669)
     - _Requirements: 12.1_
 
 - [x] 24. Training programs
