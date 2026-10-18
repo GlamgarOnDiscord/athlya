@@ -351,11 +351,10 @@ describe('bookClass — waitlist branch (DECR < 0)', () => {
     });
 
     // Position computed from countWaitlistAhead + 1.
-    expect(d.countWaitlistAhead).toHaveBeenCalledExactlyOnceWith(
-      d.txSeen[0],
-      CLASS_ID,
-      WAITLIST_ROW.createdAt,
-    );
+    expect(d.countWaitlistAhead).toHaveBeenCalledExactlyOnceWith(d.txSeen[0], CLASS_ID, {
+      id: WAITLIST_ROW.id,
+      createdAt: WAITLIST_ROW.createdAt,
+    });
     expect(d.buildWaitlisted).toHaveBeenCalledExactlyOnceWith({
       reservationId: RESERVATION_ID,
       classId: CLASS_ID,

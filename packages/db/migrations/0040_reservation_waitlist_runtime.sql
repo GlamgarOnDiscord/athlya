@@ -160,12 +160,14 @@ $$;
 -- ---------------------------------------------------------------------
 -- 3. Waitlist position
 --
--- Number of waiters of the class created strictly before
--- `p_created_at`. Only answers for a class of the caller's studio on
--- which the caller is waitlisted; NULL otherwise.
+-- Number of waiters of the class ahead of the caller's own waitlist
+-- reservation `p_reservation_id`, in promotion order (`created_at`,
+-- then `id`), so two waiters with the same `created_at` never share a
+-- position. Only answers for the caller's own waitlist row on a class
+-- of the caller's studio; NULL otherwise.
 -- ---------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION reservation_waitlist_ahead(p_class_id uuid, p_created_at timestamptz)
+CREATE OR REPLACE FUNCTION reservation_waitlist_ahead(p_class_id uuid, p_reservation_id uuid)
 RETURNS integer
 LANGUAGE sql
 STABLE
@@ -175,23 +177,17 @@ AS $$
     SELECT (
         SELECT count(*)::integer
           FROM reservations r
-         WHERE r.class_id = p_class_id
+         WHERE r.class_id = own.class_id
            AND r.status = 'waitlist'
-           AND r.created_at < p_created_at
+           AND (r.created_at, r.id) < (own.created_at, own.id)
     )
-     WHERE EXISTS (
-         SELECT 1
-           FROM classes c
-          WHERE c.id = p_class_id
-            AND c.studio_id = public.app_studio_id()
-     )
-       AND EXISTS (
-         SELECT 1
-           FROM reservations own
-          WHERE own.class_id = p_class_id
-            AND own.user_id = public.app_user_id()
-            AND own.status = 'waitlist'
-     )
+      FROM reservations own
+      JOIN classes c ON c.id = own.class_id
+     WHERE own.id = p_reservation_id
+       AND own.class_id = p_class_id
+       AND own.user_id = public.app_user_id()
+       AND own.status = 'waitlist'
+       AND c.studio_id = public.app_studio_id()
 $$;
 --> statement-breakpoint
 
@@ -232,9 +228,9 @@ ALTER FUNCTION reservation_promote_oldest_waitlist(uuid) OWNER TO athlya_owner;-
 REVOKE ALL ON FUNCTION reservation_promote_oldest_waitlist(uuid) FROM PUBLIC;--> statement-breakpoint
 GRANT EXECUTE ON FUNCTION reservation_promote_oldest_waitlist(uuid) TO athlya_app;--> statement-breakpoint
 
-ALTER FUNCTION reservation_waitlist_ahead(uuid, timestamptz) OWNER TO athlya_owner;--> statement-breakpoint
-REVOKE ALL ON FUNCTION reservation_waitlist_ahead(uuid, timestamptz) FROM PUBLIC;--> statement-breakpoint
-GRANT EXECUTE ON FUNCTION reservation_waitlist_ahead(uuid, timestamptz) TO athlya_app;--> statement-breakpoint
+ALTER FUNCTION reservation_waitlist_ahead(uuid, uuid) OWNER TO athlya_owner;--> statement-breakpoint
+REVOKE ALL ON FUNCTION reservation_waitlist_ahead(uuid, uuid) FROM PUBLIC;--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION reservation_waitlist_ahead(uuid, uuid) TO athlya_app;--> statement-breakpoint
 
 ALTER FUNCTION capacity_reconcile_snapshot() OWNER TO athlya_owner;--> statement-breakpoint
 REVOKE ALL ON FUNCTION capacity_reconcile_snapshot() FROM PUBLIC;--> statement-breakpoint

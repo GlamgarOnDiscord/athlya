@@ -367,10 +367,10 @@ async function runWaitlistContract(tx, studioSlug, ok) {
   const [last] = await tx`
     INSERT INTO reservations (class_id, user_id, status, created_at)
     VALUES (${cls.id}::uuid, ${third}::uuid, 'waitlist', now() - interval '1 second')
-    RETURNING created_at::text AS created_at
+    RETURNING id::text AS id
   `;
   const [ahead] = await tx`
-    SELECT reservation_waitlist_ahead(${cls.id}::uuid, ${last.created_at}::timestamptz) AS n
+    SELECT reservation_waitlist_ahead(${cls.id}::uuid, ${last.id}::uuid) AS n
   `;
   check(ahead.n === 1, `waitlist position counted ${ahead.n} members ahead, expected 1`);
   ok('waitlist position counts the other members under member claims');

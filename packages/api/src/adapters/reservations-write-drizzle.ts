@@ -181,11 +181,12 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
       await insertOutboxRow(toAthlyaTx(tx), event);
     },
 
-    async countWaitlistAhead(tx, classId, reservationCreatedAt): Promise<number> {
+    async countWaitlistAhead(tx, classId, reservation): Promise<number> {
       // The other waiters are hidden by `reservations_read_own`; the
-      // function counts them for a class the caller is waitlisted on.
+      // function counts them ahead of the caller's own waitlist row, in
+      // promotion order (`created_at`, then `id`).
       const rows = await toAthlyaTx(tx).execute<{ ahead: number | string | null }>(
-        sql`SELECT reservation_waitlist_ahead(${classId}::uuid, ${reservationCreatedAt.toISOString()}::timestamptz) AS ahead`,
+        sql`SELECT reservation_waitlist_ahead(${classId}::uuid, ${reservation.id}::uuid) AS ahead`,
       );
       return Number(rows[0]?.ahead ?? 0);
     },

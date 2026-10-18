@@ -135,11 +135,20 @@ describe('cross-member reads and writes use the 0040 functions', () => {
 
   it('counts the waitlist ahead through reservation_waitlist_ahead', async () => {
     const { tx, calls } = sqlTx([{ ahead: '2' }]);
-    const createdAt = new Date('2026-01-03T00:00:00.000Z');
+    const reservation = {
+      id: '00000000-0000-4000-8000-000000000042',
+      createdAt: new Date('2026-01-03T00:00:00.000Z'),
+    };
     await expect(
-      createDrizzleBookingRepo(fakeDb, CLAIMS).countWaitlistAhead(tx as never, CLASS_ID, createdAt),
+      createDrizzleBookingRepo(fakeDb, CLAIMS).countWaitlistAhead(
+        tx as never,
+        CLASS_ID,
+        reservation,
+      ),
     ).resolves.toBe(2);
     expect(calls[0]?.sql).toContain('reservation_waitlist_ahead(');
-    expect(calls[0]?.params).toEqual([CLASS_ID, createdAt.toISOString()]);
+    // The reservation id, not its timestamp: ties on created_at are
+    // broken on id, as in promotion.
+    expect(calls[0]?.params).toEqual([CLASS_ID, reservation.id]);
   });
 });

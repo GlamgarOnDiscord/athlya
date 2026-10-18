@@ -468,7 +468,7 @@ function cronViolations(
   );
   const bad: string[] = [];
   for (const m of statement.matchAll(
-    /\b(?:from|join|update|into)\s+([a-z_][a-z_0-9]*)(\s*\()?/giu,
+    /\b(?:from|join|update|into|using)\s+([a-z_][a-z_0-9]*)(\s*\()?/giu,
   )) {
     const name = (m[1] ?? '').toLowerCase();
     const isCall = m[2] !== undefined;
@@ -495,6 +495,11 @@ describe('RLS inventory — cron executor statements need no BYPASSRLS', () => {
 
   it.each([
     ['a table athlya_cron has no grant on', 'SELECT id FROM classes', ['classes']],
+    [
+      'a table joined through DELETE ... USING',
+      'DELETE FROM outbox USING reservations r WHERE r.id = outbox.id',
+      ['reservations'],
+    ],
     [
       'a definer function granted to athlya_app only',
       'SELECT * FROM reservation_promote_oldest_waitlist($1)',

@@ -16,9 +16,12 @@
  * sent through this executor is admitted by an explicit grant and
  * `*_cron_*` policy (users, outbox, export_jobs) or goes through a
  * cron-only SECURITY DEFINER function (`anonymize_user_audit`,
- * `capacity_reconcile_snapshot`); none depends on BYPASSRLS. The
- * statements are replayed as the real role by
- * `scripts/verify-role-contract.mjs`.
+ * `capacity_reconcile_snapshot`); none depends on BYPASSRLS.
+ * `scripts/verify-role-contract.mjs` replays the outbox drain and the
+ * capacity snapshot as the real role. The maintenance SQL itself is
+ * checked statically by the "cron executor statements need no
+ * BYPASSRLS" test in `service-functions.test.ts`, and its policies by
+ * the `cron_role.sql` pgTAP suite.
  *
  * If `CRON_DB_URL` is missing the executor returns `null` so the
  * scheduled runner can skip the cycle gracefully — the maintenance
