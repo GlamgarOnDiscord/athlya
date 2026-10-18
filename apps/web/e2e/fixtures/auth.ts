@@ -1,130 +1,148 @@
 /**
- * Playwright fixture: log in a test user without hitting a real API.
+ * Playwright fixture: open an authenticated page without a real API.
  *
  * The Athlya web app stores the access token in memory (see
  * `apps/web/src/lib/auth/token-store.ts`) and gates authenticated
- * pages behind `<RequireAuth>`. For an accessibility sweep we do
- * not care about the correctness of the login flow itself — we just
- * need `/classes`, `/me`, `/me/export`, `/me/delete`, `/me/progression`, `/me/coach` to render their
- * authenticated state so axe can analyse the DOM.
+ * pages behind `<RequireAuth>`. Every `page.goto` reloads the app and
+ * drops that token, so `<AuthProvider>` runs the boot silent refresh
+ * (`POST /api/auth/refresh`). Without a refresh cookie it fails and
+ * `<RequireAuth>` redirects to `/login` — an axe scan would then
+ * analyse the login form instead of the page under test.
  *
  * Strategy:
- *  1. Stub `POST /api/auth/login` to return a fake `accessToken`.
- *  2. Stub the downstream reads (`/v1/members/me`, `/v1/classes`) so
- *     the authenticated pages render without 401/500 noise that
- *     would pollute the axe report with error-state markup.
- *  3. Submit the real login form so the client-side token store is
- *     populated exactly the way a human login would populate it —
- *     `RequireAuth` will then let us navigate freely.
+ *  1. Stub the boot refresh so the session is restored on load.
+ *  2. Stub the member API reads (`/v1/members/me`, `/v1/classes`,
+ *     `/v1/me/progression`, `/v1/coach`) so the authenticated pages
+ *     render their populated state instead of loading or error markup.
+ *  3. Wait for a locator that only exists inside the page's
+ *     `<RequireAuth>` subtree and check the URL did not move, so a
+ *     silent redirect to `/login` fails the test before axe runs.
  *
  * @see Requirements 27.1, 27.2.
  */
-import type { Page } from '@playwright/test';
+import { expect, type Locator, type Page, type Route } from '@playwright/test';
 
-export async function loginWithStub(page: Page): Promise<void> {
-  // Intercept the login proxy and return a fake session.
-  await page.route('**/api/auth/login', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        accessToken: 'fake-access-token',
-        accessTokenExpiresIn: 900,
-        user: {
-          id: 'user-1',
-          email: 'test@athlya.app',
-          displayName: 'Test',
+async function fulfillJson(route: Route, body: unknown): Promise<void> {
+  await route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  });
+}
+
+/** Make the boot silent refresh restore a session on every page load. */
+export async function stubBootRefresh(page: Page): Promise<void> {
+  await page.route('**/api/auth/refresh', (route) =>
+    fulfillJson(route, { accessToken: 'fake-access-token', accessTokenExpiresIn: 900 }),
+  );
+}
+
+/** Stub the member API reads the authenticated pages render from. */
+export async function stubMemberApi(page: Page): Promise<void> {
+  await page.route('**/v1/members/me', (route) =>
+    fulfillJson(route, {
+      id: 'user-1',
+      email: 'test@athlya.app',
+      displayName: 'Test',
+      avatarUrl: null,
+      consents: {
+        marketing: false,
+        analytics: false,
+        // Matches the coach status stub below (thirdPartyConsent: true).
+        thirdParty: true,
+        version: '2026-01',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    }),
+  );
+
+  // One bookable class and one full class, so both the booking and
+  // the waitlist call-to-action are part of the scan.
+  await page.route('**/v1/classes*', (route) =>
+    fulfillJson(route, {
+      items: [
+        {
+          id: '00000000-0000-4000-8000-000000000001',
+          studioId: '00000000-0000-4000-8000-0000000000aa',
+          coachId: null,
+          title: 'Morning yoga',
+          startsAt: '2026-10-20T07:00:00.000Z',
+          durationMin: 60,
+          capacity: 12,
+          version: 0,
+          createdAt: '2026-10-01T00:00:00.000Z',
+          remaining: 5,
         },
-      }),
-    });
-  });
-
-  // Stub the profile read so `/me` renders its populated state.
-  await page.route('**/v1/members/me', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        id: 'user-1',
-        email: 'test@athlya.app',
-        displayName: 'Test',
-        avatarUrl: null,
-        consents: {
-          marketing: false,
-          analytics: false,
-          // Matches the coach status stub below (thirdPartyConsent: true).
-          thirdParty: true,
-          version: '2026-01',
-          updatedAt: '2026-01-01T00:00:00.000Z',
+        {
+          id: '00000000-0000-4000-8000-000000000002',
+          studioId: '00000000-0000-4000-8000-0000000000aa',
+          coachId: null,
+          title: 'Evening HIIT',
+          startsAt: '2026-10-20T18:00:00.000Z',
+          durationMin: 45,
+          capacity: 10,
+          version: 0,
+          createdAt: '2026-10-01T00:00:00.000Z',
+          remaining: 0,
         },
-      }),
-    });
-  });
+      ],
+    }),
+  );
 
-  // Stub the classes list so `/classes` renders the empty-state
-  // markup instead of a loading spinner when axe runs.
-  await page.route('**/v1/classes*', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ items: [] }),
-    });
-  });
+  await page.route('**/v1/me/progression*', (route) =>
+    fulfillJson(route, {
+      windowDays: 90,
+      from: '2026-07-18T00:00:00.000Z',
+      to: '2026-10-16T00:00:00.000Z',
+      totals: { sessions: 2, volumeKg: 1860 },
+      exercises: [
+        {
+          key: 'back squat',
+          name: 'Back squat',
+          sessionCount: 2,
+          totalVolumeKg: 1860,
+          bestEstimatedOneRepMaxKg: 130,
+          points: [
+            { date: '2026-10-01', volumeKg: 960, estimatedOneRepMaxKg: 130 },
+            { date: '2026-10-08', volumeKg: 900, estimatedOneRepMaxKg: 125 },
+          ],
+        },
+      ],
+      weeklyFrequency: [
+        { weekStart: '2026-09-28', sessions: 1 },
+        { weekStart: '2026-10-05', sessions: 1 },
+        { weekStart: '2026-10-12', sessions: 0 },
+      ],
+      truncated: false,
+      skippedSessions: 0,
+    }),
+  );
 
-  // Stub the progression read so `/me/progression` renders its
-  // charts (focusable points, data tables) when axe runs.
-  await page.route('**/v1/me/progression*', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        windowDays: 90,
-        from: '2026-07-18T00:00:00.000Z',
-        to: '2026-10-16T00:00:00.000Z',
-        totals: { sessions: 2, volumeKg: 1860 },
-        exercises: [
-          {
-            key: 'back squat',
-            name: 'Back squat',
-            sessionCount: 2,
-            totalVolumeKg: 1860,
-            bestEstimatedOneRepMaxKg: 130,
-            points: [
-              { date: '2026-10-01', volumeKg: 960, estimatedOneRepMaxKg: 130 },
-              { date: '2026-10-08', volumeKg: 900, estimatedOneRepMaxKg: 125 },
-            ],
-          },
-        ],
-        weeklyFrequency: [
-          { weekStart: '2026-09-28', sessions: 1 },
-          { weekStart: '2026-10-05', sessions: 1 },
-          { weekStart: '2026-10-12', sessions: 0 },
-        ],
-        truncated: false,
-        skippedSessions: 0,
-      }),
-    });
-  });
+  // AI coach status (`ai-coach` flag on, consent granted) so `/me`
+  // shows the coach link and `/me/coach` renders its form.
+  await page.route('**/v1/coach', (route) =>
+    fulfillJson(route, {
+      enabled: true,
+      thirdPartyConsent: true,
+      quota: { limit: 10, remaining: 9, resetsAt: '2026-10-16T00:00:00.000Z' },
+    }),
+  );
+}
 
-  // Stub the AI coach status (`ai-coach` flag on, consent granted) so
-  // `/me` shows the coach link and `/me/coach` renders its form.
-  await page.route('**/v1/coach', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        enabled: true,
-        thirdPartyConsent: true,
-        quota: { limit: 10, remaining: 9, resetsAt: '2026-10-16T00:00:00.000Z' },
-      }),
-    });
-  });
-
-  // Walk the real form so the client-side token store is
-  // populated exactly as a human login would populate it.
-  await page.goto('/login');
-  await page.getByLabel(/adresse e-mail|email/i).fill('test@athlya.app');
-  await page.getByLabel(/mot de passe|password/i).fill('Password1234');
-  await page.getByRole('button', { name: /se connecter|sign in/i }).click();
-  await page.waitForURL('/');
+/**
+ * Open `path` as a signed-in member and wait until its authenticated
+ * content rendered. `rendered` must target markup that only exists
+ * inside the page's `<RequireAuth>` subtree: the server-rendered
+ * `<h1>` sits outside the guard and shows up even when signed out.
+ */
+export async function openAuthenticatedPage(
+  page: Page,
+  path: string,
+  rendered: Locator,
+): Promise<void> {
+  await stubBootRefresh(page);
+  await stubMemberApi(page);
+  await page.goto(path);
+  await expect(rendered).toBeVisible();
+  expect(new URL(page.url()).pathname, `${path} redirected away (to /login?)`).toBe(path);
 }
