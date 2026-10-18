@@ -41,12 +41,6 @@ on:
 permissions:
   contents: read
 
-# One lock for every production-mutating run: canary.yml, rollback.yml and the
-# production phases of deploy-production.yml.
-concurrency:
-  group: deploy-api-production-canary
-  cancel-in-progress: false
-
 jobs:
   slo-rollback:
     name: SLO auto-rollback (production)
@@ -54,6 +48,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production-rollback
+    # One lock for every production-mutating run: canary.yml, rollback.yml and
+    # the production phases of deploy-production.yml. Job-level so that
+    # `cancelled-alert` still runs when GitHub drops this job from the queue.
+    concurrency:
+      group: deploy-api-production-canary
+      cancel-in-progress: false
     permissions:
       contents: read
       issues: write
@@ -209,3 +209,36 @@ jobs:
           else
             echo "PAGERDUTY_ROUTING_KEY not configured — skipping PagerDuty"
           fi
+
+  # GitHub keeps one pending run per concurrency group: a later canary push or
+  # dispatch cancels a rollback still waiting for the lock, without running
+  # any of its steps. Make that loud so on-call re-dispatches it.
+  cancelled-alert:
+    name: Alert on a cancelled rollback
+    needs: slo-rollback
+    if: always() && needs.slo-rollback.result == 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Record the cancelled rollback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          msg="SLO auto-rollback run ${GITHUB_RUN_ID} was cancelled (queued behind another production run, or stopped by hand). If the SLO is still breached, re-dispatch slo-rollback.yml."
+          echo "### SLO auto-rollback CANCELLED" >> "$GITHUB_STEP_SUMMARY"
+          echo "${msg}" >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=SLO auto-rollback cancelled::${msg}"
+          gh api "repos/${GITHUB_REPOSITORY}/issues" \
+            -f title="SLO auto-rollback cancelled — run ${GITHUB_RUN_ID}" \
+            -f body="${msg}"$'\n\n'"Run: ${RUN_URL}"$'\n\n'"Runbook: docs/runbooks/automatic-rollback.md" --jq .html_url
+          if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
+            jq -n --arg text ":warning: ${msg} <${RUN_URL}|run>" '{text: $text}' \
+              | curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "${SLACK_WEBHOOK_URL}" > /dev/null \
+              || echo "::warning::Slack notification failed"
+          fi
+          exit 1

@@ -540,6 +540,14 @@ describe('workflow and Terraform wiring', () => {
     );
   });
 
+  it('alerts when the queued rollback is cancelled by the lock', () => {
+    assert.match(
+      workflow,
+      /cancelled-alert:\n[\s\S]*?needs: slo-rollback\n\s+if: always\(\) && needs\.slo-rollback\.result == 'cancelled'/,
+    );
+    assert.doesNotMatch(workflow.split('jobs:')[0], /concurrency:/);
+  });
+
   it('labels dry runs and never pages on them', () => {
     assert.match(workflow, /SLO auto-rollback DRY RUN/);
     assert.match(

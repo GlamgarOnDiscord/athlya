@@ -143,6 +143,14 @@ state; it never reaches the repository or a workflow log.
 - **Rollback incomplete** — some Workers may run the previous release and
   others the new one. Re-run the workflow (Re-run all jobs): Workers already on
   their target are skipped. If it fails again, finish by hand as above.
+- **Cancelled** — the production lock keeps only one pending run: a canary
+  push or another dispatch that queues behind a running deploy cancels a
+  rollback still waiting for the lock, before any step runs. The
+  `cancelled-alert` job then fails the run, opens a `SLO auto-rollback
+cancelled` issue and posts to Slack. If the SLO is still breached,
+  re-dispatch: `gh workflow run slo-rollback.yml -f reason="re-dispatch"`.
+  A cancelled `rollback` phase of `deploy-production.yml` or `rollback.yml`
+  run must likewise be re-dispatched by hand.
 - **Not provisioned** — a secret or variable listed above is missing.
 - **Axiom query failed** — no decision possible; check the token and the
   Axiom status, then roll back by hand if the incident is real.
