@@ -140,7 +140,7 @@ graph TD
 
 | Couche            | Choix                                                                                     |
 | ----------------- | ----------------------------------------------------------------------------------------- |
-| **Apps**          | Web membre et studio admin en Next.js 16 · mobile Expo en cours                           |
+| **Apps**          | Web membre et studio admin en Next.js 16 · mobile Expo en roadmap                         |
 | **API**           | Hono 4 sur Cloudflare Workers, découpée en workers bulkhead (auth, réservations, billing) |
 | **Données**       | Neon PostgreSQL 17 + RLS forcée · Drizzle · Upstash Redis · Cloudflare R2                 |
 | **Événements**    | Outbox transactionnelle + Cloudflare Queues, drain déclenché à chaque écriture            |
@@ -184,12 +184,12 @@ pnpm --filter @athlya/api deploy:staging    # déploiement staging
 Aucun secret dans `wrangler.toml` ni dans le repo (public, gitleaks en CI). Ils sont injectés par environnement :
 
 ```bash
-wrangler secret put DB_URL --env staging
-wrangler secret put REDIS_TOKEN --env staging
-wrangler secret put JWT_JWKS_URL --env staging
+pnpm --filter @athlya/api exec wrangler secret put DB_URL --env staging
+pnpm --filter @athlya/api exec wrangler secret put REDIS_TOKEN --env staging
+pnpm --filter @athlya/api exec wrangler secret put JWT_JWKS_URL --env staging
 ```
 
-La liste complète par Worker est vérifiée par `scripts/verify-secrets.mjs` avant chaque déploiement.
+Ce ne sont que des exemples : la liste complète, par Worker et par environnement, est dans [`deploy-production.md`](docs/runbooks/deploy-production.md) et [`rotate-secrets.md`](docs/runbooks/rotate-secrets.md). `scripts/verify-secrets.mjs` bloque tout déploiement auquel il manque un secret.
 
 </details>
 

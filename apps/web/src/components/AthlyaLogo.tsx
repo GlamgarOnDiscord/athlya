@@ -1,7 +1,9 @@
 /**
  * Athlya logo: the A-mi mascot (a running italic "A") and the ATHLYA wordmark.
  *
- * GENERATED from assets/brand/scripts/build-brand.mjs; see docs/brand/README.md.
+ * Hand-maintained: the geometry mirrors the SVG assets produced by
+ * assets/brand/scripts/build-brand.mjs. Keep both in sync by hand (see
+ * docs/brand/README.md); the web and studio copies must stay identical.
  * Inline SVG so it inherits `currentColor`; the eyes are cut out with a
  * mask so they show whatever background the logo sits on.
  */
@@ -66,7 +68,7 @@ function Mascot({
         fill="none"
       />
       <path
-        d="M84 54 L97 43"
+        d="M84 54 L95 44"
         stroke={color}
         strokeWidth="8"
         strokeLinecap="round"
@@ -121,6 +123,7 @@ export function AthlyaLogo({
         role="img"
         aria-label="Athlya"
         viewBox="0 0 100 100"
+        width={height}
         height={height}
         className={className}
       >
@@ -133,7 +136,8 @@ export function AthlyaLogo({
     <svg
       role="img"
       aria-label="Athlya"
-      viewBox="0 0 543.4 97.0"
+      viewBox="0 0 543.4 85.9"
+      width={Math.round((height * 543.4) / 85.9)}
       height={height}
       className={className}
     >

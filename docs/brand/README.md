@@ -73,8 +73,8 @@ Le volt ne s'utilise **jamais** pour du texte sur fond blanc : le contraste est 
 
 ## Espace et tailles
 
-- **Zone de protection** : autour du logo, laisser au minimum la largeur d'un œil × 4 (≈ la hauteur du bandeau × 2). Pas de texte ni de bord dans cette zone.
-- **Tailles minimales** : logo complet **≥ 96 px** de large (24 px de haut), mascotte seule **≥ 16 px**, favicon à partir de 16 px.
+- **Zone de protection** : autour du logo, laisser au minimum 4 largeurs d'œil (≈ 4 hauteurs de bandeau, soit environ un tiers de la hauteur de la mascotte). Pas de texte ni de bord dans cette zone.
+- **Tailles minimales** : logo complet **≥ 24 px de haut** (≈ 152 px de large, ratio 6,3:1), mascotte seule **≥ 16 px**, favicon à partir de 16 px.
 
 ---
 

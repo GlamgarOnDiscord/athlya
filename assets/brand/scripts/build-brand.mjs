@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 export const COLORS = { ink: '#0A0A0A', volt: '#D7FF3A', white: '#FFFFFF' };
 
@@ -37,7 +38,7 @@ export function mascot(body, eyes, band) {
     S(`M${sx(48, by).toFixed(1)} ${by + 1} L${(sx(48, by) - 8).toFixed(1)} ${by + 10}`, 4.5, band);
   const ey = 31;
   const eyesPath = E(sx(57, ey), ey, 2.9, 4.2, eyes) + E(sx(66.5, ey), ey, 2.9, 4.2, eyes);
-  const arms = S('M45 58 L31 52', 8, body) + S('M84 54 L97 43', 8, body);
+  const arms = S('M45 58 L31 52', 8, body) + S('M84 54 L95 44', 8, body);
   const speed = S('M3 50 H17', 6, body) + S('M7 64 H19', 6, body) + S('M3 78 H13', 6, body);
   return speed + arms + bodyPath + bandPath + eyesPath;
 }
@@ -125,12 +126,11 @@ export function buildAll(outDir) {
     const ms = (wm.h * 1.22) / 76; // body spans y 14..90
     const mw = 100 * ms;
     const gap = wm.h * 0.12;
-    const H = 100 * ms;
-    const top = 14 * ms; // align body top with cap top after offset
+    const top = 14 * ms; // body spans y 14..90 on the mascot grid
     const wy = 90 * ms - wm.h;
     return svg(
       mw + gap + wm.w,
-      H - top + 2,
+      76 * ms + 2,
       `<g transform="translate(0 ${(-top + 1).toFixed(2)}) scale(${ms.toFixed(4)})">${mascot(fg, eyes, band)}</g><path transform="translate(${(mw + gap).toFixed(2)} ${(wy - top + 1).toFixed(2)})" d="${wm.d}" fill="${fg}"/>`,
     );
   };
@@ -153,6 +153,6 @@ export function buildAll(outDir) {
   return Object.keys(files);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   console.log(buildAll(process.argv[2] ?? 'svg').join('\n'));
 }

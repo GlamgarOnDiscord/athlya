@@ -4,67 +4,13 @@
 
 ## État du projet
 
-**~277 / 313 tâches livrées (~88.5 %)** — v1.1 backend + web + studio. Mobile Expo (Epic 11, 0/13), AI coach et Stripe production-mature : roadmap post-1.0 — [`docs/mobile/README.md`](../docs/mobile/README.md).
+L'avancement détaillé, tâche par tâche et epic par epic, est tenu à jour dans [`PROGRESS.md`](../.kiro/specs/athlya-platform/PROGRESS.md) et [`tasks.md`](../.kiro/specs/athlya-platform/tasks.md) ; l'historique des versions dans le [CHANGELOG](../CHANGELOG.md). Cette page ne recopie pas ces compteurs pour éviter qu'ils divergent.
 
-Voir [`PROGRESS.md`](../.kiro/specs/athlya-platform/PROGRESS.md) et [CHANGELOG.md](../CHANGELOG.md) pour le détail.
-
-| Épic                                 | État     |
-| ------------------------------------ | -------- |
-| 1 — Bootstrap monorepo               | ✅ 6/6   |
-| 2 — Base de données, migrations, RLS | ✅ 7/7   |
-| 3 — Authentification                 | ✅ 7/7   |
-| 4 — Rate limiter & idempotency       | ✅ 3/3   |
-| 5 — Members & RGPD                   | ✅ 7/7   |
-| 6 — Reservations domain              | ✅ 11/11 |
-| 7 — Checkpoint domaine               | ⏳ 0/1   |
-| 8 — API Gateway Hono                 | 🟡 10/12 |
-| 9 — Event bus, outbox, notifications | ✅ 7/7   |
-| 10 — Web member app                  | ✅ 8/8   |
-| 11 — Mobile Expo                     | ⏳ 0/13  |
-| 12 — Admin studio app                | ✅ 6/6   |
-| 13 — CI/CD & observability           | ✅ 5/5   |
-| 14 — Checkpoint v0.1 MVP             | ⏳ 0/1   |
-| 15 — Multi-tenant rollout            | 🟡 1/3   |
-| 16 — Billing Stripe                  | 🟡 1/3   |
-| 17 — Notifications extension         | 🟡 1/2   |
-| 19 — i18n Accept-Language            | ✅ 2/2   |
-
-**Hardening phase livrée** (insérée entre Epic 8 et Epic 10, voir [`hardening-plan.md`](../.kiro/specs/athlya-platform/hardening-plan.md)) : H1 audit log SECURITY DEFINER, H2 DLQ drain, H3 circuit breaker per-isolate, H4 middleware chain tests, H5 `@athlya/ratelimit` extraction, H6 Axiom, H7 `.down.sql`, H8 README. Détail dans [CHANGELOG.md](../CHANGELOG.md#1.0.0).
+**Hardening phase livrée** (insérée entre Epic 8 et Epic 10, voir [`hardening-plan.md`](../.kiro/specs/athlya-platform/hardening-plan.md)) : H1 audit log SECURITY DEFINER, H2 DLQ drain, H3 circuit breaker per-isolate, H4 middleware chain tests, H5 `@athlya/ratelimit` extraction, H6 Axiom, H7 `.down.sql`, H8 README. Détail dans [CHANGELOG.md](../CHANGELOG.md).
 
 ## État des tests
 
-**~1 260 tests verts** répartis sur 10 packages.
-
-| Package                 | Tests                      | Notes                                                   |
-| ----------------------- | -------------------------- | ------------------------------------------------------- |
-| `@athlya/shared`        | 146/146                    | dont 7 PBT round-trip (Req 21.3)                        |
-| `@athlya/db`            | 57/57 (+ 4 Docker-gated)   | pgTAP RLS + audit anonymisation                         |
-| `@athlya/auth`          | 123/123                    | —                                                       |
-| `@athlya/ratelimit`     | 7/7                        | nouveau package (H5)                                    |
-| `@athlya/api`           | **567/567**                | dont 16 chain tests + 23 DLQ + 15 circuit breaker + PBT |
-| `@athlya/members`       | 72/72 (+ 2 Docker-gated)   | —                                                       |
-| `@athlya/reservations`  | 111/111 (+ 2 Docker-gated) | dont PBT P1, P2, P3                                     |
-| `@athlya/notifications` | 58/58                      | —                                                       |
-| `@athlya/billing`       | 30/30                      | —                                                       |
-| `@athlya/web`           | 89/89                      | —                                                       |
-
-### Property-based tests (PBT, fast-check)
-
-8 des 9 invariants formels sont validés. Un seul reste bloqué par le scaffolding mobile.
-
-| Invariant | Description                                   | Statut            |
-| --------- | --------------------------------------------- | ----------------- |
-| P1        | Capacité (pas de surbooking sous concurrence) | ✅                |
-| P2        | Idempotence de `bookClass`                    | ✅                |
-| P3        | Monotonie de la state-machine réservation     | ✅                |
-| P4        | Cascade RGPD complète                         | ✅                |
-| P5        | Drain offline FIFO + idempotent               | ⏳ bloqué Epic 11 |
-| P6        | JWT non-falsifiable et non-rejouable          | ✅                |
-| P7        | Isolation tenant (cross-tenant = 0 row)       | ✅                |
-| P8        | Exactitude sliding-window rate limit          | ✅                |
-| —         | Round-trip de sérialisation des domaines      | ✅                |
-
-Plus : property test circuit breaker "open state short-circuits fn" (H3) et "isolate independence".
+Les compteurs de tests par package évoluent à chaque PR : la référence à jour est dans [`PROGRESS.md`](../.kiro/specs/athlya-platform/PROGRESS.md). La CI exécute à chaque PR les tests unitaires et d'intégration (Vitest), les tests property-based (fast-check), la suite pgTAP RLS sur les migrations, et les parcours E2E + axe sur les apps.
 
 ## Coûts opérationnels
 
@@ -159,7 +105,7 @@ L'intégrité de l'`audit_log` est garantie par **quatre lignes de défense** su
 1. **Privilèges SQL** — `REVOKE UPDATE, DELETE FROM PUBLIC, athlya_app, athlya_cron`
 2. **Policies RLS** — `CREATE POLICY audit_no_update ... USING (false)`, idem pour DELETE
 3. **Trigger** — `audit_log_immutable()` raise `audit_log is append-only` pour tout `current_user` différent de `athlya_owner`
-4. **Ownership + BYPASSRLS** — table `audit_log` ownée par `athlya_owner`, seul rôle capable d'exécuter la fonction SECURITY DEFINER
+4. **Ownership + BYPASSRLS** — table `audit_log` ownée par `athlya_owner`, qui exécute la fonction SECURITY DEFINER `anonymize_user_audit` (appelable par `athlya_cron` uniquement)
 
 ### Résidence EU
 
@@ -175,16 +121,21 @@ Données **au repos** en UE (Neon Frankfurt, Upstash EU, R2/Queues compte EU). C
 
 ### Rollback d'une migration
 
-Chaque migration a un `.down.sql` FK-safe. Rollback en incident, ordre inverse :
+Préférer un **correctif en avant** : avec le schéma expand/contract, une migration fautive se neutralise par une nouvelle migration plutôt qu'en défaisant l'historique (voir [`expand-contract-migrations.md`](runbooks/expand-contract-migrations.md)).
+
+Si un rollback est vraiment nécessaire :
+
+1. Ne revenir que sur les **dernières** migrations appliquées, une par une, dans l'ordre inverse (la plus récente d'abord).
+2. Vérifier que chaque migration visée a son `.down.sql`. Certaines n'en ont pas et sont **non réversibles** par conception (par exemple `0022` à `0025` : durcissement RLS, contraintes et index). Pour celles-là, écrire une migration corrective.
+3. Appliquer, par exemple pour revenir sur `0041` :
 
 ```bash
-psql $DB_URL -f packages/db/migrations/0003_audit_anonymization.down.sql
-psql $DB_URL -f packages/db/migrations/0002_export_jobs.down.sql
-psql $DB_URL -f packages/db/migrations/0001_rls.down.sql
-psql $DB_URL -f packages/db/migrations/0000_init.down.sql
+psql "$MIGRATION_DB_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/0041_users_email_nullable.down.sql
 ```
 
-Tous les rollbacks sont idempotents (`DROP ... IF EXISTS`). Les extensions PostgreSQL (`pgcrypto`, `citext`) ne sont **jamais** droppées (cluster-shared). Voir [`packages/db/migrations/README.md`](../packages/db/migrations/README.md).
+4. Redéployer un Worker compatible avec le schéma obtenu, puis relancer `pnpm verify:role-contract`.
+
+Les `.down.sql` sont idempotents (`DROP ... IF EXISTS`) et ne droppent jamais les extensions (`pgcrypto`, `citext`). Procédure détaillée : [`packages/db/migrations/README.md`](../packages/db/migrations/README.md#rollback-procedure).
 
 ## Matrice fournisseurs
 
@@ -260,7 +211,7 @@ packages/
 
 | Niveau             | Outil                         | Nombre                   |
 | ------------------ | ----------------------------- | ------------------------ |
-| Unit + intégration | Vitest 5                      | ~1015                    |
+| Unit + intégration | Vitest 5                      | voir `PROGRESS.md`       |
 | Property-based     | fast-check 4                  | 9 invariants formels     |
 | RLS PostgreSQL     | pgTAP en CI                   | ~60 assertions           |
 | E2E + a11y         | Playwright 1.64 + axe-core    | CI `axe.yml` (`apps/**`) |
