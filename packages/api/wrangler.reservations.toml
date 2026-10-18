@@ -63,6 +63,10 @@ queue = "athlya-outbox-kick"
 # and download) and EXPORTS_BUCKET (RGPD export download). Same buckets as
 # the gateway's "R2 buckets" block of wrangler.toml, which provisions them.
 # Named envs do not inherit bindings, so each env declares them.
+# Avatar upload also needs AVATARS_PUBLIC_URL. The gateway does not set it
+# yet (uploads answer 503 avatar_upload_not_configured on both Workers); set
+# it here in the same envs and with the same value when the gateway does.
+# worker-routing.test.ts fails if the two configs differ.
 
 [[r2_buckets]]
 binding = "AVATARS_BUCKET"

@@ -113,8 +113,12 @@ Bindings (not secrets, declared in each wrangler config): the reservations
 Worker binds `HYPERDRIVE` (staging, production) and the `AVATARS_BUCKET` /
 `EXPORTS_BUCKET` R2 buckets in every env, with the gateway's bucket names,
 because it serves `/v1/members/*` (issue #625). Its `/health/ready` probes
-both buckets. `src/__tests__/worker-routing.test.ts` fails if a Worker mounts
-`/v1/members` without both R2 bindings in one of its envs.
+both buckets. `packages/api/src/__tests__/worker-routing.test.ts` fails if a
+Worker mounts `/v1/members` without both R2 bindings in one of its envs, with
+a bucket or an `AVATARS_PUBLIC_URL` var that differs from the gateway's, or
+without `EXPORT_URL_SIGNING_KEY` in its `# Secrets` header. If
+`AVATARS_PUBLIC_URL` is ever set as a secret instead of a var, set it on both
+Workers.
 
 ## Local (ops)
 
