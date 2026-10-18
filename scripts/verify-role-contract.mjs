@@ -34,7 +34,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-/** Functions athlya_app needs from migrations 0032–0042. */
+/** Functions athlya_app needs from migrations 0032–0045. */
 export const REQUIRED_FUNCTIONS = [
   'auth_find_active_user_by_email',
   'auth_find_user_by_id',
@@ -64,6 +64,7 @@ export const REQUIRED_FUNCTIONS = [
   'reservation_promote_oldest_waitlist',
   'reservation_waitlist_ahead',
   'rgpd_delete_program_subscriptions',
+  'checkin_mark_reservation',
 ];
 
 /** Stripe event application: athlya_billing only (migration 0036). */

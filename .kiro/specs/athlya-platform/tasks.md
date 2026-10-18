@@ -485,6 +485,7 @@ Use official CLI to create, init the project .. and recent package version and s
 
   - [ ] 11.9 Implement the QR check-in screen
     - Generate `QR_Checkin_Token` client-side (actually fetched from `/v1/checkins/token` since signing needs private key); display as QR; rotate every 120 s
+    - API side done (#654): `POST /v1/checkins/token` returns `{ token, expiresAt }` (RS256, `kind = 'checkin'`, 120 s, single-use `jti`), served by the reservations bulkhead Worker; the screen itself is still open (#648)
     - _Requirements: 11.1_
 
   - [ ] 11.10 Implement the workout session logging screen
@@ -537,6 +538,7 @@ Use official CLI to create, init the project .. and recent package version and s
 
   - [x] 12.4 Implement the check-in kiosk page (staff scans QR)
     - Use camera via `getUserMedia`, decode QR, POST to `/v1/checkins`, display member name + photo on 200, `no_reservation` or `invalid_token` on failure
+    - API routed in staging and production since #654: admin/coach only, `jti` consumed atomically, `checkin_mark_reservation` (migration 0045) lets a coach stamp `checked_in_at`
     - _Requirements: 11.2, 11.3, 11.4, 11.5, 11.6_
 
   - [x] 12.5 Implement the audit log viewer for admins

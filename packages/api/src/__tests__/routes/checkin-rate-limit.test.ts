@@ -1,8 +1,9 @@
 /**
- * Issue #338 — per-user rate limit on POST /v1/checkins.
+ * Rate limits of the check-in routes (issues #338, #654).
  *
- * A member cannot physically attend more than 5 classes per hour.
- * The 6th check-in attempt within the window returns 429 with Retry-After.
+ * `POST /v1/checkins` is the kiosk scan: the bucket is per operator
+ * (admin or coach), and members are refused before it is touched.
+ * `POST /v1/checkins/token` is per member.
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,6 +17,7 @@ import {
   __primeStudioRateLimitRedisForTests,
   __resetStudioRateLimitRedisCache,
 } from '../../middleware/studio-rate-limit.js';
+import { CHECKIN_BUDGET, CHECKIN_TOKEN_BUDGET } from '../../middleware/rate-limit-policies.js';
 import { buildApp } from '../../worker.js';
 
 import {
@@ -86,53 +88,98 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('POST /v1/checkins — per-user rate limit (issue #338)', () => {
-  it('allows 5 check-ins per hour then blocks the 6th with 429 + Retry-After', async () => {
-    const fakeRedis = new FakeRedis() as unknown as Redis;
+const stagingEnv = () =>
+  buildMockEnv({
+    ENVIRONMENT: 'staging',
+    JWT_AUDIENCE: 'athlya-api-dev',
+    CORS_ORIGIN: 'https://app.staging.athlya.app',
+  });
 
+async function headersFor(role: 'member' | 'coach' | 'admin', userId = TEST_USER_ID) {
+  const token = await signTestJwt(kp.privateKey, { sub: userId, studio: TEST_STUDIO_ID, role });
+  return {
+    authorization: `Bearer ${token}`,
+    'content-type': 'application/json',
+    host: 'staging.api.athlya.app',
+    'CF-Connecting-IP': '1.2.3.4',
+  };
+}
+
+describe('POST /v1/checkins — per-operator rate limit (issues #338, #654)', () => {
+  it('allows CHECKIN_BUDGET scans per minute for one operator, then 429 + Retry-After', async () => {
     const deps = buildStubDeps({
       checkins: {
         checkIn: vi.fn().mockResolvedValue({
           kind: 'success',
-          reservation: { id: 'r1' },
-          member: { id: 'u1' },
+          reservationId: 'r1',
+          member: { id: 'u1', displayName: 'Ada', avatarUrl: null },
         }),
-        rateLimitOpts: { redis: fakeRedis },
+        rateLimitOpts: { redis: new FakeRedis() as unknown as Redis },
       },
     });
     const app = buildApp({ deps });
-
-    const stagingEnv = buildMockEnv({
-      ENVIRONMENT: 'staging',
-      JWT_AUDIENCE: 'athlya-api-dev',
-      CORS_ORIGIN: 'https://app.staging.athlya.app',
-    });
-
-    const token = await signTestJwt(kp.privateKey, {
-      sub: TEST_USER_ID,
-      studio: TEST_STUDIO_ID,
-      role: 'member',
-    });
-
-    const headers = {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-      host: 'staging.api.athlya.app',
-      'CF-Connecting-IP': '1.2.3.4',
-    };
+    const env = stagingEnv();
+    const headers = await headersFor('coach');
     const body = JSON.stringify({ qrToken: 'valid.qr.token' });
+    const limit = CHECKIN_BUDGET.userLimit ?? 0;
 
-    for (let i = 0; i < 5; i++) {
-      const res = await app.request('/v1/checkins', { method: 'POST', headers, body }, stagingEnv);
-      expect(res.status, `request ${String(i + 1)} should be allowed`).not.toBe(429);
+    for (let i = 0; i < limit; i++) {
+      const res = await app.request('/v1/checkins', { method: 'POST', headers, body }, env);
+      expect(res.status, `scan ${String(i + 1)} should be allowed`).toBe(200);
     }
 
-    const blocked = await app.request(
-      '/v1/checkins',
-      { method: 'POST', headers, body },
-      stagingEnv,
-    );
+    const blocked = await app.request('/v1/checkins', { method: 'POST', headers, body }, env);
     expect(blocked.status).toBe(429);
     expect(blocked.headers.get('retry-after')).not.toBeNull();
+
+    const otherOperator = await app.request(
+      '/v1/checkins',
+      {
+        method: 'POST',
+        headers: await headersFor('admin', '33333333-3333-4333-8333-333333333333'),
+        body,
+      },
+      env,
+    );
+    expect(otherOperator.status).toBe(200);
+  });
+
+  it('answers 403 to a member before touching the bucket', async () => {
+    const redis = new FakeRedis();
+    const deps = buildStubDeps({
+      checkins: { rateLimitOpts: { redis: redis as unknown as Redis } },
+    });
+    const res = await buildApp({ deps }).request(
+      '/v1/checkins',
+      { method: 'POST', headers: await headersFor('member'), body: '{"qrToken":"x"}' },
+      stagingEnv(),
+    );
+    expect(res.status).toBe(403);
+    expect([...redis.sets.keys()]).toEqual([]);
+    expect(deps.checkins.checkIn).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /v1/checkins/token — per-user rate limit (issue #654)', () => {
+  it('allows CHECKIN_TOKEN_BUDGET tokens per minute, then 429', async () => {
+    const deps = buildStubDeps({
+      checkins: {
+        issueToken: vi
+          .fn()
+          .mockResolvedValue({ token: 'a.b.c', expiresAt: '2026-10-18T10:02:00.000Z' }),
+        rateLimitOpts: { redis: new FakeRedis() as unknown as Redis },
+      },
+    });
+    const app = buildApp({ deps });
+    const env = stagingEnv();
+    const headers = await headersFor('member');
+    const limit = CHECKIN_TOKEN_BUDGET.userLimit ?? 0;
+
+    for (let i = 0; i < limit; i++) {
+      const res = await app.request('/v1/checkins/token', { method: 'POST', headers }, env);
+      expect(res.status).toBe(201);
+    }
+    const blocked = await app.request('/v1/checkins/token', { method: 'POST', headers }, env);
+    expect(blocked.status).toBe(429);
   });
 });

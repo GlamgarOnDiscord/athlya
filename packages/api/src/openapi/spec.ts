@@ -23,6 +23,7 @@ import {
   CancelReservationParamsSchema,
   CheckInRequestSchema,
   CheckInResponseSchema,
+  CheckInTokenResponseSchema,
   CheckoutRequestSchema,
   CheckoutResponseSchema,
   ClassListResponseSchema,
@@ -847,13 +848,41 @@ const coachAskRoute = createRoute({
  * checkins — /v1/checkins
  */
 
+const checkInTokenRoute = createRoute({
+  method: 'post',
+  path: '/v1/checkins/token',
+  tags: ['checkins'],
+  summary: 'Issue a QR check-in token for the caller',
+  description:
+    'Returns a single-use RS256 `QR_Checkin_Token` (`kind = checkin`, 120 s lifetime) that the ' +
+    'app renders as a QR code and rotates before `expiresAt`. Never cached (`Cache-Control: no-store`).',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    201: {
+      description: 'Token issued',
+      content: { 'application/json': { schema: CheckInTokenResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    429: problemResponse('Rate limited (10 tokens per minute per user)'),
+    503: problemResponse('Rate limiter unavailable (fail-closed, code `dependency_unavailable`)'),
+  },
+});
+
 const checkInRoute = createRoute({
   method: 'post',
   path: '/v1/checkins',
   tags: ['checkins'],
-  summary: 'Validate a QR-code check-in',
+  summary: 'Check a member in from their QR token (kiosk, admin or coach)',
+  description:
+    "The operator's session must be an admin or coach of the studio; the QR token names the " +
+    'member. The token is verified before any database read and consumed once.',
   security: [{ bearerAuth: [] }],
   request: {
+    headers: z.object({
+      'idempotency-key': z.string().min(1).max(255).optional().openapi({
+        description: 'Client-generated key; a retry with the same key replays the first response.',
+      }),
+    }),
     body: {
       content: { 'application/json': { schema: CheckInRequestSchema } },
       required: true,
@@ -864,14 +893,17 @@ const checkInRoute = createRoute({
       description: 'Check-in successful',
       content: { 'application/json': { schema: CheckInResponseSchema } },
     },
-    401: {
-      description: 'Not authenticated',
-      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
-    },
-    422: {
-      description: 'QR token invalid / already used / class mismatch',
-      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
-    },
+    400: problemResponse('Empty `Idempotency-Key` or longer than 255 characters'),
+    401: problemResponse(
+      'Not authenticated, or the QR token was rejected (`code`: `invalid_signature`, ' +
+        '`token_expired`, `replay`, `wrong_studio`, `wrong_kind`, `malformed`)',
+    ),
+    403: problemResponse('The caller is not an admin or coach'),
+    422: problemResponse(
+      'Valid token but no check-in (`code`: `no_reservation`, `outside_window`, `already_checked_in`), or validation error',
+    ),
+    429: problemResponse('Rate limited (60 check-ins per minute per operator)'),
+    503: problemResponse('Rate limiter unavailable (fail-closed, code `dependency_unavailable`)'),
   },
 });
 
@@ -1241,6 +1273,7 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   app.openapi(listAuditRoute, stub);
 
   // checkins
+  app.openapi(checkInTokenRoute, stub);
   app.openapi(checkInRoute, stub);
 
   // billing

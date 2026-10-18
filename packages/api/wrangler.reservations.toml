@@ -9,6 +9,7 @@
 #               staging.api.athlya.app/v1/coach (exact) and /v1/coach/*
 #               staging.api.athlya.app/v1/studios/*
 #               staging.api.athlya.app/v1/programs (+ /v1/programs/*)
+#               staging.api.athlya.app/v1/checkins (+ /v1/checkins/*)
 #   production: api.athlya.app/v1/classes/*
 #               api.athlya.app/v1/reservations/*
 #               api.athlya.app/v1/members/*
@@ -16,6 +17,7 @@
 #               api.athlya.app/v1/coach (exact) and /v1/coach/*
 #               api.athlya.app/v1/studios/*
 #               api.athlya.app/v1/programs (+ /v1/programs/*)
+#               api.athlya.app/v1/checkins (+ /v1/checkins/*)
 #
 # Durable Objects:
 #   ClassCapacityDO — real-time class capacity via WebSocket.
@@ -150,6 +152,15 @@ zone_name = "athlya.app"
 pattern = "staging.api.athlya.app/v1/programs"
 zone_name = "athlya.app"
 
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/checkins/*"
+zone_name = "athlya.app"
+
+# `/v1/checkins/*` does not match the bare `POST /v1/checkins` (kiosk scan).
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/checkins"
+zone_name = "athlya.app"
+
 [[env.staging.hyperdrive]]
 binding = "HYPERDRIVE"
 id = "49e3db37042d4f2999b0c0061363929c"
@@ -226,6 +237,15 @@ zone_name = "athlya.app"
 # `/v1/programs/*` does not match the bare collection path (list, create).
 [[env.production.routes]]
 pattern = "api.athlya.app/v1/programs"
+zone_name = "athlya.app"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/checkins/*"
+zone_name = "athlya.app"
+
+# `/v1/checkins/*` does not match the bare `POST /v1/checkins` (kiosk scan).
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/checkins"
 zone_name = "athlya.app"
 
 [[env.production.hyperdrive]]

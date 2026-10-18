@@ -38,6 +38,7 @@ import {
   __resetRateLimitRedisCache,
 } from '../../middleware/rate-limit.js';
 import { __resetTenantDbCache } from '../../middleware/tenant.js';
+import { readJson } from '../helpers/read-json.js';
 
 import {
   FakeRedis,
@@ -305,15 +306,25 @@ describe('gateway integration â€” happy-path user journeys', () => {
     const reservationId = (bookBody.reservation as { id: string }).id;
 
     /* ------------- 4. check-in ------------- */
+    // The member fetches a QR token; a coach at the desk scans it.
+    const tokenRes = await app.request(
+      '/v1/checkins/token',
+      { method: 'POST', headers: { authorization: `Bearer ${accessToken}` } },
+      buildMockEnv(),
+    );
+    expect(tokenRes.status).toBe(201);
+    const { token: qrToken } = await readJson<{ token: string }>(tokenRes);
+
+    const coachToken = await signUserJwt(kp, { userId: makeUuid(78), role: 'coach' });
     const checkinRes = await app.request(
       '/v1/checkins',
       {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${accessToken}`,
+          authorization: `Bearer ${coachToken}`,
         },
-        body: JSON.stringify({ qrToken: 'a.b.c' }),
+        body: JSON.stringify({ qrToken }),
       },
       buildMockEnv(),
     );

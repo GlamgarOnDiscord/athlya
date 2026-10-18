@@ -80,6 +80,11 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
   invalidates in-flight refreshes too (a rotated refresh token is kept, the store stays locked).
   Call `runtime.sync.refreshOwner()` after every sign-in and sign-out.
 - **Strings**: add keys under `mobile.*` in `packages/shared/src/i18n/{en,fr}.json`.
+- **QR check-in (11.9)**: `runtime.api.post<CheckInTokenResponse>('/v1/checkins/token')` returns
+  `{ token, expiresAt }` (`CheckInTokenResponseSchema`). Render `token` as the QR payload and fetch a
+  new one before `expiresAt` (the token lives 120 s and is single-use). Never queue it offline and
+  never cache it. The kiosk (staff) posts the scanned token to `POST /v1/checkins`; a member's own
+  session gets 403 there.
 
 ## Drain semantics (Algorithm 4)
 

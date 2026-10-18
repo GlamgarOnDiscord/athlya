@@ -8,6 +8,10 @@
 
 ---
 
+## Session 2026-10-18 — mobile app unblock (API side)
+
+- **#654** (API half of #648) — QR check-in. `POST /v1/checkins/token` issues the member's `QR_Checkin_Token` (RS256, 120 s, single-use `jti`); `POST /v1/checkins` is the kiosk scan, now admin/coach only, with the `jti` consumed atomically (`SET NX`) and fine-grained 401/422 codes. Migration `0045_checkin_runtime.sql` adds `checkin_mark_reservation(uuid, timestamptz)` (SECURITY DEFINER, `athlya_owner`, EXECUTE for `athlya_app` only) because `reservations_update_admin` refused coaches. Routed on the reservations Worker (`/v1/checkins` + `/v1/checkins/*`). Operator steps: apply migration 0045 (staging, then production); make sure `athlya-api-reservations` has the same `JWT_KID`, `JWT_PRIVATE_KEY_PEM`, `JWT_PUBLIC_KEY_PEM` and `JWKS_JSON` as the auth Worker (`wrangler secret put … --config wrangler.reservations.toml --env <env>`); then from `packages/api` run `wrangler deploy --config wrangler.reservations.toml --env staging` and, once verified, `--env production`. The mobile check-in screen (11.9) is still open in #648.
+
 ## Session 2026-10-17/18 — clôture des issues
 
 Session de clôture du backlog P0/P1 ouvert par l'audit : RLS-safe sous les rôles runtime `NOBYPASSRLS`, outbox, export RGPD, billing Stripe, bulkhead Workers, canary, staging gate, Terraform, observabilité, déploiement frontend. Tout le code est sur `master` (tête `55f39f7`). Les issues fermées « code-complete » laissent des étapes opérateur, regroupées dans la [checklist opérateur](#checklist-opérateur-consolidée) ci-dessous.
