@@ -292,6 +292,28 @@ describe('claimLeasedBatch (issues #424 / #311)', () => {
     },
   );
 
+  it('maps the text occurred_at drizzle passes through onto a Date', async () => {
+    const { tx, enqueueResult } = makeFakeTx();
+    enqueueResult([
+      {
+        id: OUTBOX_ROW_ID,
+        event_id: EVENT.eventId,
+        event_type: 'auth.password_reset.requested',
+        payload: { userId: 'usr-1' },
+        occurred_at: '2026-10-18 14:30:00.123456+00',
+        attempts: 1,
+        studio_id: null,
+        lease_token: '2026-10-18 14:32:00.123456+00',
+      },
+    ]);
+
+    const [row] = await claimLeasedBatch(tx, 10, 120);
+
+    expect(row?.occurredAt).toBeInstanceOf(Date);
+    expect(row?.occurredAt.toISOString()).toBe('2026-10-18T14:30:00.123Z');
+    expect(row?.leaseToken).toBe('2026-10-18 14:32:00.123456+00');
+  });
+
   it.each([0, 3601, 1.5])('rejects a lease of %s seconds', async (lease) => {
     const { tx, execute } = makeFakeTx();
     await expect(claimLeasedBatch(tx, 50, lease)).rejects.toBeInstanceOf(InvalidOutboxInputError);

@@ -118,7 +118,8 @@ interface ClaimedOutboxRowRaw {
   event_id: string;
   event_type: string;
   payload: Record<string, unknown>;
-  occurred_at: Date;
+  /** Text on drizzle's postgres-js / PGlite drivers, which pass timestamps through. */
+  occurred_at: Date | string;
   attempts: number;
   studio_id: string | null;
   [key: string]: unknown;
@@ -223,7 +224,7 @@ export async function claimBatch(
     eventId: row.event_id,
     eventType: row.event_type,
     payload: row.payload,
-    occurredAt: row.occurred_at,
+    occurredAt: new Date(row.occurred_at),
     attempts: row.attempts,
     studioId: row.studio_id,
   }));
@@ -291,7 +292,7 @@ export async function claimLeasedBatch(
     eventId: row.event_id,
     eventType: row.event_type,
     payload: row.payload,
-    occurredAt: row.occurred_at,
+    occurredAt: new Date(row.occurred_at),
     attempts: row.attempts,
     studioId: row.studio_id,
     leaseToken: row.lease_token,
