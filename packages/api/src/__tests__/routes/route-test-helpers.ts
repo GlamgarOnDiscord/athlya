@@ -73,6 +73,7 @@ export function buildStubDeps(
     studios?: Partial<DomainDeps['studios']>;
     billing?: Partial<DomainDeps['billing']>;
     audit?: Partial<DomainDeps['audit']>;
+    coach?: Partial<DomainDeps['coach']>;
   } = {},
 ): DomainDeps & {
   readonly sessions: Required<DomainDeps>['sessions'];
@@ -140,6 +141,12 @@ export function buildStubDeps(
     audit: {
       listAuditLog: vi.fn(),
       ...overrides.audit,
+    },
+    coach: {
+      isEnabled: vi.fn(() => Promise.resolve(false)),
+      getStatus: vi.fn(),
+      ask: vi.fn(),
+      ...overrides.coach,
     },
   };
 }

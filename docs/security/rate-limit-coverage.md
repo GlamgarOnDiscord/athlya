@@ -25,6 +25,7 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 | `profile-patch`        | `PATCH /v1/me`                                          | PATCH   | 5 user                         | fail-closed      | user         |
 | `consents-patch`       | `PATCH /v1/me/consents`                                 | PATCH   | 5 user                         | fail-closed      | user         |
 | `export-post`          | `POST /v1/members/me/export`                            | POST    | 1 / 24h user                   | fail-closed      | user         |
+| `coach-ask`            | `POST /v1/coach/ask`                                    | POST    | 5 user + 10 / UTC day quota    | fail-closed      | user         |
 | `classes-search`       | `GET /v1/classes/search`                                | GET     | 30 IP                          | **fail-closed**  | ip (pre-jwt) |
 | `members-list`         | `GET /v1/members` (exact)                               | GET     | 20 IP                          | **fail-closed**  | ip (pre-jwt) |
 | `audit-list`           | `GET /v1/audit`                                         | GET     | 30 IP                          | **fail-closed**  | ip (pre-jwt) |
@@ -35,6 +36,8 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 `/v1/members/me` et sous-routes ne matchent **pas** le limiter `members-list` (garde `isMembersListGetPath`).
 
 Mutation limiters (issue #613) run an inline `jwtAuth()` pre-pass before the limiter: unauthenticated requests get a 401 without touching a mutation bucket (the global `/v1/*` IP bucket still applies), and authenticated ones are keyed on `rl:user:mutation-<scope>:<userId>`, so the budget follows the user across IPs and users behind one IP get independent budgets.
+
+`coach-ask` (Epic 21) adds a daily quota per member (`AI_COACH_DAILY_LIMIT`, default 10, UTC day) kept in the Redis counter `coach:quota:<day>:<userId>` by the use case. It fails closed too: a Redis error answers 503 `dependency_unavailable` before any model call, and an exhausted quota answers 429 `coach_quota_exceeded` with `Retry-After` set to the next UTC midnight.
 
 Les limiters reads coûteux sont montés **avant** `jwtAuth` → bucket **IP** sur le limiter dédié ; le global `/v1/*` applique quand même le bucket user si le JWT est présent.
 

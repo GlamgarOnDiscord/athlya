@@ -8,7 +8,7 @@
  * Usage :
  *
  *     import { isEnabled } from '@athlya/api/feature-flags';
- *     if (await isEnabled('coach-ai-enabled', { userId, studioId })) {
+ *     if (await isEnabled('ai-coach', { userId, studioId })) {
  *         // …
  *     }
  *
@@ -19,7 +19,8 @@
  *
  * Catalogue des flags pilotes (Sprint 14, Epic CN.4.3) :
  *
- *   - `coach-ai-enabled` — gates Epic 14 (AI coach service).
+ *   - `ai-coach` — gates Epic 21 (AI coach, `/v1/coach`), wired in
+ *     `adapters/coach-deps.ts`.
  *     Default OFF, enable on staging d'abord.
  *   - `waitlist-auto-promotion-v2` — alternative algorithm to
  *     `cancelReservation` (FIFO + priority par badge). Default
@@ -93,7 +94,7 @@ export const FLAG_CACHE_TTL_MS = 60 * 1000;
  * Sample :
  *
  *     {
- *       "coach-ai-enabled": false,
+ *       "ai-coach": false,
  *       "waitlist-auto-promotion-v2": {
  *         "rollout": 10,
  *         "studioAllowList": ["studio-test-uuid"]

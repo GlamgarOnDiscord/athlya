@@ -379,6 +379,28 @@ export interface AthlyaBindings {
   readonly API_PUBLIC_URL?: string;
 
   /**
+   * Static feature-flag catalogue read by `feature-flags.ts`, as JSON:
+   * `{ "<flag>": boolean | { rollout, allowList?, studioAllowList? } }`.
+   * Unset or malformed means every flag is OFF. Set as a `[vars]` entry
+   * or a secret. Flags: `ai-coach` (Epic 21).
+   */
+  readonly FEATURE_FLAGS_JSON?: string;
+
+  /**
+   * Mistral API key of the AI coach (Epic 21). Optional: without it
+   * `POST /v1/coach/ask` answers 503 `coach_not_configured` while the
+   * `ai-coach` flag is on. Set via
+   * `wrangler secret put MISTRAL_API_KEY --env <env>`; never committed.
+   */
+  readonly MISTRAL_API_KEY?: string;
+
+  /** Mistral model id of the AI coach. Defaults to `mistral-small-latest`. */
+  readonly AI_COACH_MODEL?: string;
+
+  /** AI coach requests per member and UTC day, as a string. Defaults to 10. */
+  readonly AI_COACH_DAILY_LIMIT?: string;
+
+  /**
    * Durable Object namespace for per-class WebSocket capacity fanout
    * (CN.8.1 — Sprint 8). Each class gets its own DO instance keyed by
    * `classId` via `idFromName`.

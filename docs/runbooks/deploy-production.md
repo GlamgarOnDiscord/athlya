@@ -120,6 +120,12 @@ without `EXPORT_URL_SIGNING_KEY` in its `# Secrets` header. If
 `AVATARS_PUBLIC_URL` is ever set as a secret instead of a var, set it on both
 Workers.
 
+Optional secrets (`OPTIONAL` in `verify-secrets.mjs`, `# Optional` header line of the wrangler
+configs) are only warned about when missing: `MISTRAL_API_KEY` on the gateway and the
+reservations Worker, for the AI coach behind the `ai-coach` flag (OFF by default). Without it the
+coach answers 503 `coach_not_configured` once the flag is on. The flag catalogue itself is the
+optional `FEATURE_FLAGS_JSON` var or secret ([`feature-flags.md`](../operations/feature-flags.md)).
+
 The reservations Worker also serves `/v1/me/*` (`GET /v1/me/progression`,
 issue #639) from the same members deps, through its own
 `staging.api.athlya.app/v1/me/*` and `api.athlya.app/v1/me/*` zone routes.
@@ -128,6 +134,11 @@ first `wrangler deploy --config wrangler.reservations.toml --env staging`
 (and `--env production`) after that change; a deploy without `--env` creates
 none. Until then the gateway's catch-all `/*` route serves the path, so there
 is no gap.
+
+The same holds for the AI coach (issue #644): `staging.api.athlya.app/v1/coach` and
+`/v1/coach/*` (and the production pair) route to the reservations Worker. Both patterns are
+needed because `/v1/coach/*` does not match the bare `GET /v1/coach`;
+`worker-routing.test.ts` fails if an exact route lacks its `/*` sibling.
 
 ## Local (ops)
 

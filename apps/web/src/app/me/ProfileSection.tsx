@@ -32,6 +32,7 @@ import { useApiClient } from '../../lib/api/use-api-client';
 import { useLocale } from '../../lib/i18n/LocaleContext';
 import { createTranslator, type Translator } from '../../lib/i18n/t';
 
+import { CoachLink } from './coach/CoachLink';
 import { ConsentsForm } from './ConsentsForm';
 import { ProfileForm } from './ProfileForm';
 
@@ -146,6 +147,7 @@ export function ProfileSection({
         >
           {t('workouts.progression.link')}
         </Link>
+        <CoachLink client={client} t={t} />
         <Link href="/me/export" className="text-sm text-muted-foreground hover:text-foreground">
           {t('profile.dataExport')}
         </Link>

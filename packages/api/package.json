@@ -127,6 +127,8 @@
     "generate:types": "openapi-typescript http://localhost:8787/openapi.json -o src/openapi/api-types.ts"
   },
   "dependencies": {
+    "@ai-sdk/mistral": "^4.0.66",
+    "@athlya/ai-coach": "workspace:*",
     "@athlya/auth": "workspace:*",
     "@athlya/billing": "workspace:*",
     "@athlya/db": "workspace:*",

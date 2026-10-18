@@ -67,6 +67,7 @@ export const MUTATION_BUDGETS = {
   reservation: { userLimit: 10, windowSec: 60 },
   profile: { userLimit: 5, windowSec: 60 },
   export: { userLimit: 1, windowSec: 86400 },
+  coach: { userLimit: 5, windowSec: 60 },
 } as const satisfies Record<string, RateLimitBudget>;
 
 /** Issue #338 — a member cannot physically attend more than 5 classes per hour. */
@@ -194,6 +195,17 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
       'Issue #613 — jwtAuth pre-pass; 401 before the mutation bucket is touched; the global /v1 IP bucket still applies',
   },
   {
+    id: 'coach-ask',
+    route: '/v1/coach/ask',
+    methods: 'POST',
+    budget: MUTATION_BUDGETS.coach,
+    failPolicy: 'fail-closed',
+    bucket: 'user',
+    wiredIn: 'worker.ts',
+    notes:
+      'Epic 21 — burst limit on paid model calls; jwtAuth pre-pass, user bucket; the daily quota (Redis counter, fail-closed) is enforced by the use case',
+  },
+  {
     id: 'classes-search',
     route: '/v1/classes/search',
     methods: 'GET',
@@ -278,6 +290,7 @@ export const REQUIRED_FAIL_CLOSED_IDS = [
   'profile-patch',
   'consents-patch',
   'export-post',
+  'coach-ask',
   'classes-search',
   'members-list',
   'audit-list',

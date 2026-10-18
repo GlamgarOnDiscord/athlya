@@ -6,6 +6,7 @@
  *   • /v1/reservations/* — book, cancel, list
  *   • /v1/members/*      — profile, consents, export
  *   • /v1/me/*           — progression (served from the members deps)
+ *   • /v1/coach, /v1/coach/* — AI coach (Epic 21, `ai-coach` flag)
  *   • /v1/studios/*      — studio read/update
  *
  * /v1/checkins/* is not routed to this Worker: the check-in adapter is
@@ -24,10 +25,12 @@ import { buildBaseApp, type ReadinessProbe } from '../base-app.js';
 import {
   assertRequiredSecrets,
   defaultClassesDeps,
+  defaultCoachDeps,
   defaultMembersDeps,
   defaultReservationsDeps,
   defaultStudiosDeps,
   lazyClassesDeps,
+  lazyCoachDeps,
   lazyMembersDeps,
   lazyReservationsDeps,
   lazyStudiosDeps,
@@ -35,6 +38,7 @@ import {
 import { installDomainScope } from '../domain-scope.js';
 import { buildCapacityRouter } from '../routes/capacity.js';
 import { buildClassesRouter } from '../routes/classes.js';
+import { buildCoachRouter } from '../routes/coach.js';
 import { buildMeRouter } from '../routes/me.js';
 import { buildMembersRouter } from '../routes/members.js';
 import { buildReservationsRouter } from '../routes/reservations.js';
@@ -71,6 +75,7 @@ const app = buildBaseApp({
         reservations: defaultReservationsDeps(env, cf),
         members: defaultMembersDeps(env, cf),
         studios: defaultStudiosDeps(env),
+        coach: defaultCoachDeps(env, cf),
       };
     });
     // Capacity WebSocket mounts first: /v1/classes/:classId/capacity/ws
@@ -85,6 +90,7 @@ const app = buildBaseApp({
     base.route('/v1/members', buildMembersRouter(members));
     base.route('/v1/me', buildMeRouter(members));
     base.route('/v1/studios', buildStudiosRouter(lazyStudiosDeps(() => resolve().studios)));
+    base.route('/v1/coach', buildCoachRouter(lazyCoachDeps(() => resolve().coach)));
   },
 });
 

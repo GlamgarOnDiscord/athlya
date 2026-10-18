@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   CONFIG_FILES,
+  OPTIONAL,
   PRODUCTION_REQUIRED,
   REQUIRED,
   declaredQueues,
@@ -77,6 +78,17 @@ describe('verify-secrets lists', () => {
     assert.ok(REQUIRED.reservations.includes('EXPORT_URL_SIGNING_KEY'));
   });
 
+  it('keep the AI coach key optional on the Workers serving /v1/coach', () => {
+    for (const worker of ['main', 'reservations']) {
+      assert.ok(OPTIONAL[worker].includes('MISTRAL_API_KEY'), `${worker} is missing MISTRAL_API_KEY`);
+      assert.ok(!REQUIRED[worker].includes('MISTRAL_API_KEY'));
+    }
+    assert.deepEqual(
+      missingSecrets('reservations', new Set(REQUIRED.reservations)).missingOptional,
+      ['MISTRAL_API_KEY'],
+    );
+  });
+
   it('require Turnstile and Resend on the auth Worker', () => {
     assert.ok(REQUIRED.auth.includes('TURNSTILE_SECRET'));
     assert.ok(REQUIRED.auth.includes('RESEND_API_KEY'));
@@ -89,6 +101,8 @@ describe('verify-secrets lists', () => {
       assert.deepEqual([...documented].sort(), [...REQUIRED[worker]].sort());
       const documentedProduction = headerSecrets(toml, 'Production also');
       assert.deepEqual([...documentedProduction].sort(), [...PRODUCTION_REQUIRED[worker]].sort());
+      const documentedOptional = headerSecrets(toml, 'Optional');
+      assert.deepEqual([...documentedOptional].sort(), [...OPTIONAL[worker]].sort());
     });
   }
 });
@@ -136,6 +150,10 @@ describe('missingSecrets', () => {
 
   it('passes when every secret is present', () => {
     const present = new Set([...REQUIRED.auth, ...PRODUCTION_REQUIRED.auth]);
-    assert.deepEqual(missingSecrets('auth', present), { missing: [], missingProduction: [] });
+    assert.deepEqual(missingSecrets('auth', present), {
+      missing: [],
+      missingProduction: [],
+      missingOptional: [],
+    });
   });
 });

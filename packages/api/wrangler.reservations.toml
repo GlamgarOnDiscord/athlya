@@ -6,11 +6,13 @@
 #               staging.api.athlya.app/v1/reservations/*
 #               staging.api.athlya.app/v1/members/*
 #               staging.api.athlya.app/v1/me/*
+#               staging.api.athlya.app/v1/coach (exact) and /v1/coach/*
 #               staging.api.athlya.app/v1/studios/*
 #   production: api.athlya.app/v1/classes/*
 #               api.athlya.app/v1/reservations/*
 #               api.athlya.app/v1/members/*
 #               api.athlya.app/v1/me/*
+#               api.athlya.app/v1/coach (exact) and /v1/coach/*
 #               api.athlya.app/v1/studios/*
 #
 # Durable Objects:
@@ -23,6 +25,8 @@
 #   DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, CORS_ORIGIN, JWT_KID,
 #   JWT_PRIVATE_KEY_PEM, JWT_PUBLIC_KEY_PEM, JWKS_JSON, EXPORT_URL_SIGNING_KEY
 # Production also: SENTRY_DSN, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS.
+# Optional (warn only; needed once the ai-coach flag is on): MISTRAL_API_KEY
+# Feature flags: FEATURE_FLAGS_JSON var or secret, e.g. {"ai-coach": false}; unset = all OFF.
 # Bindings (not secrets): HYPERDRIVE, AVATARS_BUCKET, EXPORTS_BUCKET.
 # scripts/verify-secrets.mjs checks this list (keep both in sync).
 # Queue bindings: OUTBOX_KICK_QUEUE (producer only, issue #311).
@@ -121,6 +125,16 @@ zone_name = "athlya.app"
 pattern = "staging.api.athlya.app/v1/me/*"
 zone_name = "athlya.app"
 
+# `/v1/coach/*` does not match the bare `/v1/coach` (GET status), so both
+# patterns are declared.
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/coach"
+zone_name = "athlya.app"
+
+[[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/coach/*"
+zone_name = "athlya.app"
+
 [[env.staging.routes]]
 pattern = "staging.api.athlya.app/v1/studios/*"
 zone_name = "athlya.app"
@@ -178,6 +192,16 @@ zone_name = "athlya.app"
 
 [[env.production.routes]]
 pattern = "api.athlya.app/v1/me/*"
+zone_name = "athlya.app"
+
+# `/v1/coach/*` does not match the bare `/v1/coach` (GET status), so both
+# patterns are declared.
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/coach"
+zone_name = "athlya.app"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/coach/*"
 zone_name = "athlya.app"
 
 [[env.production.routes]]

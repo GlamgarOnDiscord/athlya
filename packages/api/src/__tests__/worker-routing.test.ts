@@ -58,6 +58,11 @@ describe('auth worker', () => {
     expect(s).toBe(404);
   });
 
+  it('returns 404 for /v1/coach and /v1/coach/* (reservations worker routes)', async () => {
+    expect(await status(authApp, '/v1/coach')).toBe(404);
+    expect(await status(authApp, '/v1/coach/ask', 'POST')).toBe(404);
+  });
+
   it('serves /health', async () => {
     const s = await status(authApp, '/health');
     expect(s).toBe(200);
@@ -88,6 +93,11 @@ describe('reservations worker', () => {
   it('serves /v1/me/progression (not 404)', async () => {
     const s = await status(reservationsApp, '/v1/me/progression');
     expect(s).not.toBe(404);
+  });
+
+  it('serves /v1/coach and /v1/coach/ask (not 404)', async () => {
+    expect(await status(reservationsApp, '/v1/coach')).not.toBe(404);
+    expect(await status(reservationsApp, '/v1/coach/ask', 'POST')).not.toBe(404);
   });
 
   it('returns 404 for /v1/auth/* (auth worker route)', async () => {
@@ -137,6 +147,11 @@ describe('billing worker', () => {
     expect(s).toBe(404);
   });
 
+  it('returns 404 for /v1/coach and /v1/coach/* (reservations worker routes)', async () => {
+    expect(await status(billingApp, '/v1/coach')).toBe(404);
+    expect(await status(billingApp, '/v1/coach/ask', 'POST')).toBe(404);
+  });
+
   it('serves /health', async () => {
     const s = await status(billingApp, '/health');
     expect(s).toBe(200);
@@ -162,12 +177,20 @@ function readPackageFile(relative: string): string {
   return readFileSync(new URL(`../../${relative}`, import.meta.url), 'utf8');
 }
 
-/** Path prefixes of every `pattern = "host/prefix/*"` route in a wrangler config. */
+/**
+ * Path prefixes of every route in a wrangler config: `host/prefix/*`
+ * and exact `host/prefix` patterns both yield `/prefix`.
+ */
 function routePrefixes(config: string): string[] {
-  const prefixes = [...readPackageFile(config).matchAll(/^pattern = "[^/"]+(\/[^"*]*)\*"$/gm)].map(
+  const prefixes = [...readPackageFile(config).matchAll(/^pattern = "[^/"]+(\/[^"*]*)\*?"$/gm)].map(
     (match) => (match[1] ?? '').replace(/\/$/, ''),
   );
   return [...new Set(prefixes)];
+}
+
+/** Every `pattern = "…"` value of a wrangler config. */
+function routePatterns(config: string): string[] {
+  return [...readPackageFile(config).matchAll(/^pattern = "([^"]+)"$/gm)].map((m) => m[1] ?? '');
 }
 
 describe.each(SUB_WORKERS)('$config route contract', ({ config, app, source }) => {
@@ -185,6 +208,13 @@ describe.each(SUB_WORKERS)('$config route contract', ({ config, app, source }) =
         route.method !== 'ALL' && (route.path === prefix || route.path.startsWith(`${prefix}/`)),
     );
     expect(served).toBe(true);
+  });
+
+  it('pairs every exact route with its /* route', () => {
+    const patterns = routePatterns(config);
+    for (const pattern of patterns.filter((p) => !p.endsWith('*'))) {
+      expect(patterns).toContain(`${pattern}/*`);
+    }
   });
 
   it('does not import the monolith entry point or the all-domain bundle', () => {
@@ -252,6 +282,7 @@ function declaredBindings(config: string): Set<string> {
   return new Set([
     ...headerSecrets(toml, 'Secrets (set once per env'),
     ...headerSecrets(toml, 'Production also'),
+    ...headerSecrets(toml, 'Optional'),
     ...bindings,
   ]);
 }
@@ -364,6 +395,12 @@ const ROUTER_NEEDS: readonly RouterNeeds[] = [
     vars: ['AVATARS_PUBLIC_URL'],
     secrets: ['EXPORT_URL_SIGNING_KEY'],
   },
+  {
+    prefix: '/v1/coach',
+    r2: [],
+    vars: [],
+    secrets: ['MISTRAL_API_KEY'],
+  },
 ];
 
 /** Every env where `worker` diverges from `gateway` on what `needs` reads. */
@@ -430,6 +467,15 @@ describe.each(BINDING_WORKERS)('$config router bindings', ({ config, app }) => {
       const missing = mounted ? needs.secrets.filter((name) => !declared.has(name)) : [];
       expect(missing).toEqual([]);
     });
+  });
+});
+
+describe('reservations Worker /v1/coach zone routes', () => {
+  const patterns = routePatterns('wrangler.reservations.toml');
+
+  it.each(['staging.api.athlya.app', 'api.athlya.app'])('routes %s/v1/coach and /*', (host) => {
+    expect(patterns).toContain(`${host}/v1/coach`);
+    expect(patterns).toContain(`${host}/v1/coach/*`);
   });
 });
 

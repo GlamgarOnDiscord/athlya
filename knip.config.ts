@@ -60,6 +60,10 @@ const config: KnipConfig = {
       project: ['src/**/*.ts'],
       ignore: ['src/**/*.test.ts'],
     },
+    'packages/ai-coach': {
+      entry: ['src/index.ts'],
+      project: ['src/**/*.ts'],
+    },
     'packages/members': {
       entry: ['src/index.ts'],
       project: ['src/**/*.ts'],

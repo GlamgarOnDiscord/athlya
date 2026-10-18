@@ -43,6 +43,7 @@ on:
     # build config they extend, the lockfile, and every script this workflow
     # runs (with its local imports) — checked by scripts/check-canary-paths.mjs (#404).
     paths:
+      - 'packages/ai-coach/**'
       - 'packages/api/**'
       - 'packages/auth/**'
       - 'packages/billing/**'
