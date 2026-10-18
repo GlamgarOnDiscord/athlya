@@ -18,6 +18,8 @@ export interface LiveSession {
   readonly machine: MachineType;
   readonly startedAtMs: number;
   readonly lastSampleAtMs: number | null;
+  /** When the session ended (finish or lost link); null while it runs. */
+  readonly endedAtMs: number | null;
   /** Last known value of every metric. */
   readonly latest: FtmsSample;
   readonly samples: number;
@@ -40,6 +42,7 @@ export function createLiveSession(machine: MachineType, startedAtMs: number): Li
     machine,
     startedAtMs,
     lastSampleAtMs: null,
+    endedAtMs: null,
     latest: {},
     samples: 0,
     integratedMs: 0,
@@ -93,7 +96,7 @@ export function addSample(session: LiveSession, sample: FtmsSample, atMs: number
 
 export interface SessionSummary {
   readonly machine: MachineType;
-  /** Start of the workout: the machine's elapsed time counted back from the last sample. */
+  /** Start of the workout: the connection time, or earlier when the console timer says so. */
   readonly startedAtMs: number;
   readonly elapsedSec: number;
   readonly distanceM: number | null;
@@ -110,17 +113,26 @@ function average(weighted: number, ms: number): number | null {
   return ms > 0 ? Math.round(weighted / ms) : null;
 }
 
+/** Marks the session as ended at `atMs` (finish or lost link); later calls keep the first time. */
+export function endSession(session: LiveSession, atMs: number): LiveSession {
+  return session.endedAtMs === null ? { ...session, endedAtMs: atMs } : session;
+}
+
 /** Summary at `nowMs`; the session may still be running. */
 export function summarise(session: LiveSession, nowMs: number): SessionSummary {
-  const endMs = session.lastSampleAtMs ?? nowMs;
+  // The wall clock keeps running between notifications until the session ends.
+  const endMs = session.endedAtMs ?? nowMs;
   const wallSec = Math.max(0, Math.floor((endMs - session.startedAtMs) / 1_000));
   // The console timer excludes pauses and includes time before the phone
-  // connected, so it wins whenever the machine reports one.
-  const elapsedSec = session.latest.elapsedSec ?? wallSec;
+  // connected, so it wins whenever the machine reports one; it is anchored
+  // at the notification that carried it.
+  const machineElapsed = session.latest.elapsedSec;
+  const elapsedSec = machineElapsed ?? wallSec;
+  const anchorMs = machineElapsed === undefined ? endMs : (session.lastSampleAtMs ?? endMs);
   const distance = session.latest.distanceM ?? null;
   return {
     machine: session.machine,
-    startedAtMs: Math.min(session.startedAtMs, endMs - elapsedSec * 1_000),
+    startedAtMs: Math.min(session.startedAtMs, anchorMs - elapsedSec * 1_000),
     elapsedSec,
     distanceM:
       distance ??

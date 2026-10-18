@@ -6,6 +6,7 @@ import { formatElapsed, liveMetricRows } from '../../features/ftms/live-metrics'
 import {
   addSample,
   createLiveSession,
+  endSession,
   MAX_GAP_MS,
   summarise,
   type LiveSession,
@@ -92,15 +93,23 @@ describe('live session', () => {
     expect(summary.startedAtMs).toBe(T0 + 1_000 - 400_000);
   });
 
-  it('falls back to wall-clock time', () => {
+  it('falls back to a wall clock that keeps running between notifications', () => {
     const session = feed(createLiveSession('indoorBike', T0), [
       [0, { powerW: 100 }],
       [125_000, { powerW: 100 }],
     ]);
     const summary = summarise(session, T0 + 130_000);
-    expect(summary.elapsedSec).toBe(125);
+    expect(summary.elapsedSec).toBe(130);
     expect(summary.startedAtMs).toBe(T0);
     expect(summary.distanceM).toBeNull();
+  });
+
+  it('stops the wall clock when the session ends', () => {
+    const running = feed(createLiveSession('indoorBike', T0), [[0, { powerW: 100 }]]);
+    const ended = endSession(running, T0 + 90_000);
+    expect(summarise(ended, T0 + 600_000).elapsedSec).toBe(90);
+    // Ending twice keeps the first time.
+    expect(endSession(ended, T0 + 120_000).endedAtMs).toBe(T0 + 90_000);
   });
 });
 

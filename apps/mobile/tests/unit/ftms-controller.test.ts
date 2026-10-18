@@ -150,6 +150,25 @@ describe('FtmsController — streaming', () => {
     expect(controller.get()).toMatchObject({ status: 'idle', session: null, devices: [] });
   });
 
+  it('keeps counting time between notifications and freezes it at finish', async () => {
+    const { transport, controller } = await streaming();
+    transport.notify(hex('4000 f609 c800'));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(controller.summary()?.elapsedSec).toBe(30);
+    controller.finish();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(controller.summary()?.elapsedSec).toBe(30);
+  });
+
+  it('freezes the time when the link drops', async () => {
+    const { transport, controller } = await streaming();
+    transport.notify(hex('4000 f609 c800'));
+    await vi.advanceTimersByTimeAsync(12_000);
+    transport.dropLink();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(controller.summary()?.elapsedSec).toBe(12);
+  });
+
   it('has no summary before the first sample', async () => {
     const { controller } = await streaming();
     expect(controller.summary()).toBeNull();

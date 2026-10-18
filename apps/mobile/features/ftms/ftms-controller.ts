@@ -13,6 +13,7 @@ import { Store } from '../store';
 import {
   addSample,
   createLiveSession,
+  endSession,
   summarise,
   type LiveSession,
   type SessionSummary,
@@ -216,7 +217,12 @@ export class FtmsController {
     if (status !== 'streaming' && status !== 'disconnected') return;
     this.#generation += 1;
     this.#teardown();
-    this.#store.set((state) => ({ ...state, status: 'finished' }));
+    const at = this.#now();
+    this.#store.set((state) => ({
+      ...state,
+      status: 'finished',
+      session: state.session === null ? null : endSession(state.session, at),
+    }));
   }
 
   /** Drops the session (after saving or discarding it). */
@@ -275,7 +281,13 @@ export class FtmsController {
   #linkLost(): void {
     this.#generation += 1;
     this.#teardown();
-    this.#store.set((state) => ({ ...state, status: 'disconnected', error: 'linkLost' }));
+    const at = this.#now();
+    this.#store.set((state) => ({
+      ...state,
+      status: 'disconnected',
+      error: 'linkLost',
+      session: state.session === null ? null : endSession(state.session, at),
+    }));
   }
 
   #fail(error: MachineError): void {

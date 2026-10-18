@@ -151,7 +151,16 @@ export function createBlePlxTransport(): BleTransport {
     connect: async (deviceId) => {
       const ble = getManager();
       await ble.connectToDevice(deviceId, { timeout: CONNECT_TIMEOUT_MS });
-      await ble.discoverAllServicesAndCharacteristicsForDevice(deviceId);
+      try {
+        await ble.discoverAllServicesAndCharacteristicsForDevice(deviceId);
+      } catch (error) {
+        // A failed discovery leaves the link open (Android): release it so a
+        // retry, or another app, can connect.
+        await ble.cancelDeviceConnection(deviceId).catch(() => {
+          // Already disconnected.
+        });
+        throw error;
+      }
       return createConnection(ble, deviceId);
     },
   };
