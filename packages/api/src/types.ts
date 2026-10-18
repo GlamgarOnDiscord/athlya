@@ -459,6 +459,14 @@ export interface AthlyaBindings {
   readonly WEB_APP_URL?: string;
 
   /**
+   * HMAC key (≥ 32 chars) the gateway's password-reset consumer derives
+   * each request's token from (issue #645), so a retried delivery sends
+   * the same link. Required outside dev. Set via
+   * `wrangler secret put PASSWORD_RESET_TOKEN_KEY --env <env>`.
+   */
+  readonly PASSWORD_RESET_TOKEN_KEY?: string;
+
+  /**
    * Neon read-replica connection string for the EU region (CN.8.3).
    *
    * When set, read-only queries originating from European Cloudflare

@@ -113,6 +113,7 @@ describe('lazyAuthDeps', () => {
     expect(full.checkRefreshRateLimit).toHaveBeenCalledWith('token');
     expect(full.idempotencyFor).toHaveBeenCalledWith(claims);
     expect(store).toBeDefined();
+    expect(store).toBe(vi.mocked(full.idempotencyFor).mock.results[0]?.value);
   });
 
   it('exposes the idempotency facade before any env is resolved', () => {

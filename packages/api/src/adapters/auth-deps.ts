@@ -54,6 +54,7 @@ import {
   requestReset as svcRequestReset,
   confirmReset as svcConfirmReset,
   shouldAllowLogin,
+  createResetTokenDeriver,
   type AuthServiceDeps,
   type DeliverResetDeps,
   type Jwks,
@@ -82,6 +83,7 @@ import { createRedisLoginAnomalyStore } from './login-anomaly-store-redis.js';
 import {
   createDrizzlePasswordResetRepo,
   createPasswordResetRequestQueue,
+  createPasswordResetRequestTokenStore,
 } from './password-reset-repo-drizzle.js';
 import { queryRows, serviceFn } from './service-functions.js';
 import { createTenantIdempotencyDb } from './tenant-idempotency.js';
@@ -524,12 +526,33 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
  */
 export function buildPasswordResetDeliveryDeps(env: AthlyaBindings): DeliverResetDeps {
   const db = getOrCreateDbHttp(env.DB_URL);
+  const resetLinkBaseUrl = resolveResetLinkBaseUrl(env);
+  const deriveToken = resolveResetTokenDeriver(env);
   return {
     userRepo: createDrizzleUserRepo(db),
-    passwordResetRepo: createDrizzlePasswordResetRepo(db),
+    tokens: createPasswordResetRequestTokenStore(db),
     emailTransport: buildPasswordResetEmailTransport(env),
-    resetLinkBaseUrl: resolveResetLinkBaseUrl(env),
+    resetLinkBaseUrl,
+    ...(deriveToken !== undefined ? { deriveToken } : {}),
   };
+}
+
+/**
+ * Per-request token deriver keyed by `PASSWORD_RESET_TOKEN_KEY`. Outside
+ * dev a missing key throws: without it a retry would mint a new token and
+ * could invalidate a link already delivered. Dev falls back to a random
+ * token per attempt.
+ */
+export function resolveResetTokenDeriver(
+  env: AthlyaBindings,
+): DeliverResetDeps['deriveToken'] | undefined {
+  const key = env.PASSWORD_RESET_TOKEN_KEY;
+  if (key !== undefined && key.length > 0) return createResetTokenDeriver(key);
+  if (env.ENVIRONMENT === 'dev') return undefined;
+  throw new Error(
+    `[auth-deps] PASSWORD_RESET_TOKEN_KEY is not configured in ${env.ENVIRONMENT}; ` +
+      'password reset emails cannot be delivered',
+  );
 }
 
 /**
@@ -620,11 +643,20 @@ export function buildPasswordResetEmailTransport(env: AthlyaBindings): PasswordR
       // timeout, full jitter. The forgot-password service
       // already swallows transport errors at boundary, so
       // throwing here is a true "Resend-down for >15s" signal.
+      //
+      // Issue #645 — the body depends on the request only (the link is
+      // derived from the request id and the copy carries no timestamp),
+      // so a retried send is byte-identical and Resend's
+      // `Idempotency-Key` returns the first result instead of emailing
+      // the link twice.
       const response = await fetchWithRetry('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           authorization: `Bearer ${apiKey}`,
           'content-type': 'application/json',
+          ...(input.idempotencyKey !== undefined
+            ? { 'idempotency-key': input.idempotencyKey }
+            : {}),
         },
         body: JSON.stringify({
           from: fromAddress,
@@ -634,7 +666,7 @@ export function buildPasswordResetEmailTransport(env: AthlyaBindings): PasswordR
             'Bonjour,',
             '',
             'Vous avez demandé la réinitialisation de votre mot de passe.',
-            `Cliquez sur le lien suivant (valide jusqu'au ${input.expiresAt.toISOString()}) :`,
+            'Cliquez sur le lien suivant (valide pendant une heure) :',
             '',
             input.link,
             '',

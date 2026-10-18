@@ -20,6 +20,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { createResetTokenDeriver } from '@athlya/auth';
 import { lookup, store } from '@athlya/db/idempotency';
 import * as schema from '@athlya/db/schema';
 import { parseEvent } from '@athlya/shared/events';
@@ -31,17 +32,18 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDrizzleUserRepo } from '../../adapters/auth-user-repo-drizzle.js';
+import { createRedisPasswordResetDeliveryStore } from '../../adapters/password-reset-delivery-store-redis.js';
 import {
-  createDrizzlePasswordResetRepo,
   createPasswordResetRequestQueue,
+  createPasswordResetRequestTokenStore,
 } from '../../adapters/password-reset-repo-drizzle.js';
 import { createTenantIdempotencyDb } from '../../adapters/tenant-idempotency.js';
 import { reconstructEnvelope } from '../../events/drain-worker.js';
 import { handlePasswordResetRequested } from '../../events/password-reset-consumer.js';
 
+import type { DeliveryStoreRedis } from '../../adapters/password-reset-delivery-store-redis.js';
 import type { AthlyaDb, AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
 import type { IdempotencyDb } from '@athlya/db/idempotency';
-import type { DedupStore } from '@athlya/notifications';
 import type { SQL } from 'drizzle-orm';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -97,19 +99,21 @@ async function expectRlsRefusal(promise: Promise<unknown>): Promise<void> {
   expect(message).toMatch(/row-level security/u);
 }
 
-function memoryDedup(): DedupStore {
-  const seen = new Set<string>();
-  return {
-    tryAcquire(eventId) {
-      if (seen.has(eventId)) return Promise.resolve(false);
-      seen.add(eventId);
-      return Promise.resolve(true);
-    },
-    release(eventId) {
-      seen.delete(eventId);
-      return Promise.resolve();
-    },
-  };
+/** In-memory stand-in for the Upstash client (`SET NX`, `GET`, `DEL`). */
+class MemoryRedis implements DeliveryStoreRedis {
+  private readonly values = new Map<string, string>();
+  public set(key: string, value: string, opts: { nx?: true; ex: number }): Promise<unknown> {
+    if (opts.nx === true && this.values.has(key)) return Promise.resolve(null);
+    this.values.set(key, value);
+    return Promise.resolve('OK');
+  }
+  public get(key: string): Promise<unknown> {
+    return Promise.resolve(this.values.get(key) ?? null);
+  }
+  public del(key: string): Promise<unknown> {
+    this.values.delete(key);
+    return Promise.resolve(1);
+  }
 }
 
 beforeAll(async () => {
@@ -204,6 +208,23 @@ describe('password-reset request → outbox → delivery under athlya_app', () =
     ).rejects.toThrow(/row-level security|permission denied/u);
   });
 
+  it('records one row when a committed enqueue is replayed with the same event id', async () => {
+    const eventId = '0193f000-0000-7000-8000-0000000006a1';
+    await pglite.query(`SELECT auth_request_password_reset($1, $2::uuid)`, [
+      'member-a@test.dev',
+      eventId,
+    ]);
+    // The response of the first call was lost; the connection retry
+    // replays the same statement.
+    await pglite.query(`SELECT auth_request_password_reset($1, $2::uuid)`, [
+      'member-a@test.dev',
+      eventId,
+    ]);
+
+    const rows = await resetRows();
+    expect(rows.map((r) => r.event_id)).toEqual([eventId]);
+  });
+
   it('delivers the drained event: one active token, link sent to the account address', async () => {
     await createPasswordResetRequestQueue(db).enqueue('MEMBER-A@test.dev');
     const [row] = await resetRows();
@@ -222,33 +243,74 @@ describe('password-reset request → outbox → delivery under athlya_app', () =
     );
     if (event.type !== 'auth.password_reset.requested') throw new Error(event.type);
 
-    const sendResetEmail = vi.fn().mockResolvedValue(undefined);
-    const outcome = await handlePasswordResetRequested(event, {
-      dedup: memoryDedup(),
+    const sendResetEmail = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('socket hang up'))
+      .mockResolvedValue(undefined);
+    const consumerDeps = {
+      deliveries: createRedisPasswordResetDeliveryStore(new MemoryRedis()),
       delivery: {
         userRepo: createDrizzleUserRepo(db),
-        passwordResetRepo: createDrizzlePasswordResetRepo(db),
+        tokens: createPasswordResetRequestTokenStore(db),
         emailTransport: { sendResetEmail },
+        deriveToken: createResetTokenDeriver('k'.repeat(32)),
         resetLinkBaseUrl: 'https://app.athlya.test',
       },
-    });
+    };
+
+    // First attempt: ambiguous transport failure; the queue retries.
+    await expect(handlePasswordResetRequested(event, consumerDeps)).rejects.toThrow(
+      'socket hang up',
+    );
+    const outcome = await handlePasswordResetRequested(event, consumerDeps);
 
     expect(outcome).toBe('sent');
-    expect(sendResetEmail).toHaveBeenCalledOnce();
-    const { to, link } = sendResetEmail.mock.calls[0]![0] as { to: string; link: string };
-    expect(to).toBe('member-a@test.dev');
-    const token = link.split('/').pop()!;
+    const links = (sendResetEmail.mock.calls as [{ to: string; link: string }][]).map(
+      ([input]) => input,
+    );
+    expect(links.map((l) => l.to)).toEqual(['member-a@test.dev', 'member-a@test.dev']);
+    expect(links[1]?.link).toBe(links[0]?.link);
+    const token = links[0]!.link.split('/').pop()!;
     const tokenHash = createHash('sha256').update(token).digest('hex');
 
-    const tokens = await asOwner<{ token_hash: string }>(
-      `SELECT token_hash FROM password_reset_tokens
-        WHERE user_id = $1 AND consumed_at IS NULL`,
+    // The retry found its own token instead of invalidating it: the link
+    // possibly delivered by the first attempt still works.
+    const tokens = await asOwner<{ token_hash: string; consumed: boolean }>(
+      `SELECT token_hash, consumed_at IS NOT NULL AS consumed FROM password_reset_tokens
+        WHERE user_id = $1 ORDER BY requested_at`,
       [MEMBER_A],
     );
-    expect(tokens).toEqual([{ token_hash: tokenHash }]);
+    expect(tokens.filter((t) => !t.consumed)).toEqual([{ token_hash: tokenHash, consumed: false }]);
+    expect(tokens.filter((t) => t.token_hash === tokenHash)).toHaveLength(1);
+  });
+
+  it('issueForRequest: a later request supersedes an earlier token', async () => {
+    const store = createPasswordResetRequestTokenStore(db);
+    const expiresAt = new Date(Date.now() + 3_600_000);
+
+    await expect(
+      store.issueForRequest({ userId: MEMBER_A2, tokenHash: 'a'.repeat(64), expiresAt }),
+    ).resolves.toBe('issued');
+    await expect(
+      store.issueForRequest({ userId: MEMBER_A2, tokenHash: 'b'.repeat(64), expiresAt }),
+    ).resolves.toBe('issued');
+    await expect(
+      store.issueForRequest({ userId: MEMBER_A2, tokenHash: 'a'.repeat(64), expiresAt }),
+    ).resolves.toBe('superseded');
+    await expect(
+      store.issueForRequest({ userId: DELETED_A, tokenHash: 'c'.repeat(64), expiresAt }),
+    ).resolves.toBe('inactive');
+  });
+
+  it('issueForRequest: refuses a hash owned by another user', async () => {
+    const store = createPasswordResetRequestTokenStore(db);
+    const expiresAt = new Date(Date.now() + 3_600_000);
+
+    await expect(
+      store.issueForRequest({ userId: MEMBER_A, tokenHash: 'b'.repeat(64), expiresAt }),
+    ).rejects.toThrow();
   });
 });
-
 /* ------------------------------------------------------------------ */
 /*  B. Idempotency store scope                                        */
 /* ------------------------------------------------------------------ */

@@ -13,6 +13,7 @@ import { buildRecipientRepo } from '../../adapters/notifications-deps.js';
 import {
   createDrizzlePasswordResetRepo,
   createPasswordResetRequestQueue,
+  createPasswordResetRequestTokenStore,
 } from '../../adapters/password-reset-repo-drizzle.js';
 import { queryRows, serviceFn, uuidV7, writeRows } from '../../adapters/service-functions.js';
 import { OutboxKickCoalescer, runWithOutboxKickScope } from '../../events/outbox-kick.js';
@@ -78,8 +79,8 @@ describe('service function contract with migration 0032', () => {
     (m) => m[1],
   );
 
-  it('references the 22 service functions', () => {
-    expect(new Set(used).size).toBe(22);
+  it('references the 23 service functions', () => {
+    expect(new Set(used).size).toBe(23);
   });
 
   const granted = grantedToApp(migration);
@@ -882,17 +883,52 @@ describe('createPasswordResetRequestQueue — durable reset requests (issue #645
     );
   });
 
-  it('replays a dropped connection with the same event id (outbox dedups it)', async () => {
+  it('a committed insert whose response is lost is replayed into one outbox row', async () => {
+    // Models the outbox's `ON CONFLICT (event_id) DO NOTHING`: the first
+    // call commits its row, then the connection drops before the answer.
+    // `auth-runtime.pglite.test.ts` checks the same against the real SQL.
+    const outbox = new Set<string>();
     let attempt = 0;
-    const { db, calls } = fakeDb(() => {
+    const { db, calls } = fakeDb((call) => {
       attempt += 1;
-      return attempt === 1 ? Object.assign(new Error('fetch failed'), { code: 'ECONNRESET' }) : [];
+      outbox.add(String(call.params[1]));
+      return attempt === 1
+        ? Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })
+        : [{ enqueued: true }];
     });
 
     await createPasswordResetRequestQueue(db).enqueue('ada@example.com');
 
     expect(calls).toHaveLength(2);
     expect(calls[1]?.params).toEqual(calls[0]?.params);
+    expect(outbox.size).toBe(1);
+  });
+
+  it('issues a request token through auth_issue_password_reset_for_request', async () => {
+    const { db, calls } = fakeDb(() => [{ outcome: 'superseded' }]);
+    const expiresAt = new Date('2026-10-18T12:00:00.000Z');
+
+    await expect(
+      createPasswordResetRequestTokenStore(db).issueForRequest({
+        userId: userRow.id,
+        tokenHash: 'a'.repeat(64),
+        expiresAt,
+      }),
+    ).resolves.toBe('superseded');
+    expect(calls[0]?.sql).toContain('auth_issue_password_reset_for_request(');
+    expect(calls[0]?.params).toEqual([userRow.id, 'a'.repeat(64), expiresAt.toISOString()]);
+  });
+
+  it('rejects an unexpected issuance outcome', async () => {
+    const { db } = fakeDb(() => [{ outcome: 'maybe' }]);
+
+    await expect(
+      createPasswordResetRequestTokenStore(db).issueForRequest({
+        userId: userRow.id,
+        tokenHash: 'a'.repeat(64),
+        expiresAt: new Date(),
+      }),
+    ).rejects.toThrow(/unexpected outcome/u);
   });
 
   it.each([

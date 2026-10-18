@@ -133,6 +133,8 @@ export const serviceFn = {
   bumpCredentialsVersion: (id: string) => sql`SELECT auth_bump_credentials_version(${id}::uuid)`,
   requestPasswordReset: (email: string, eventId: string) =>
     sql`SELECT auth_request_password_reset(${email}, ${eventId}::uuid) AS enqueued`,
+  issuePasswordResetForRequest: (userId: string, tokenHash: string, expiresAt: Date) =>
+    sql`SELECT auth_issue_password_reset_for_request(${userId}::uuid, ${tokenHash}, ${expiresAt.toISOString()}::timestamptz) AS outcome`,
   issuePasswordReset: (userId: string, tokenHash: string, expiresAt: Date) =>
     sql`SELECT auth_issue_password_reset(${userId}::uuid, ${tokenHash}, ${expiresAt.toISOString()}::timestamptz) AS issued`,
   findPasswordReset: (tokenHash: string) =>

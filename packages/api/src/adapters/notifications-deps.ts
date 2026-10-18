@@ -43,8 +43,7 @@ import type {
 
 const NOTIFICATIONS_DEDUP_PREFIX = 'notifications:seen';
 
-/** Also used by the password-reset delivery consumer (issue #645). */
-export function buildDedupStore(env: AthlyaBindings): DedupStore {
+function buildDedupStore(env: AthlyaBindings): DedupStore {
   const redis = getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN);
   const keyOf = (eventId: string) => `${NOTIFICATIONS_DEDUP_PREFIX}:${eventId}`;
 

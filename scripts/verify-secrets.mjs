@@ -23,7 +23,8 @@
  *   - billing: Stripe checkout + webhook (STRIPE_*, BILLING_REDIRECT_URL,
  *     BILLING_DB_URL) and /admin/* (JWT rotation keys, CF Access);
  *   - main gateway: cron (CRON_DB_URL), queue consumers (RESEND_API_KEY,
- *     EXPORT_URL_SIGNING_KEY) and the Stripe fallback on *.workers.dev.
+ *     EXPORT_URL_SIGNING_KEY, PASSWORD_RESET_TOKEN_KEY) and the Stripe
+ *     fallback on *.workers.dev.
  * scripts/__tests__/verify-secrets.test.mjs cross-checks these lists against
  * domain-deps.ts and the `# Secrets` header of each wrangler config.
  *
@@ -81,6 +82,7 @@ export const REQUIRED = {
     'CORS_ORIGIN',
     'RESEND_API_KEY',
     'EXPORT_URL_SIGNING_KEY',
+    'PASSWORD_RESET_TOKEN_KEY',
   ],
   auth: [
     ...CORE_DB,

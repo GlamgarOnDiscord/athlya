@@ -25,12 +25,17 @@ import { buildCronSqlExecutor } from './adapters/cron-sql-executor.js';
 import { getOrCreateRedis } from './adapters/deps-cache.js';
 import { resolveDrainDbUrl, withDrainDb } from './adapters/drain-db.js';
 import { buildExportDeps } from './adapters/export-deps.js';
-import { buildDedupStore, buildNotificationsDeps } from './adapters/notifications-deps.js';
+import { buildNotificationsDeps } from './adapters/notifications-deps.js';
+import { createRedisPasswordResetDeliveryStore } from './adapters/password-reset-delivery-store-redis.js';
 import { buildApp } from './app.js';
 import { handleDlqBatch } from './events/drain-dlq.js';
 import { runKickDrain, runScheduledDrain } from './events/drain-scheduled.js';
 import { handleOutboxKickBatch, isOutboxKickQueue } from './events/outbox-kick.js';
-import { handlePasswordResetRequested } from './events/password-reset-consumer.js';
+import {
+  PASSWORD_RESET_IN_FLIGHT_TTL_SECONDS,
+  PasswordResetDeliveryInFlightError,
+  handlePasswordResetRequested,
+} from './events/password-reset-consumer.js';
 import { rejectUnknownQueueEvent } from './events/reject-unknown-queue-event.js';
 import { isNotificationsConsumerQueue, isRgpdConsumerQueue } from './events/route-queue.js';
 import { runScheduledCapacityReconcile } from './maintenance/capacity-reconcile-runner.js';
@@ -436,11 +441,23 @@ async function deliverPasswordResetMessage(
   if (event.type !== PASSWORD_RESET_REQUESTED) {
     throw new Error(`unexpected event type ${event.type} on the password-reset path`);
   }
-  await handlePasswordResetRequested(event, {
-    dedup: buildDedupStore(env),
-    delivery: buildPasswordResetDeliveryDeps(env),
-  });
+  try {
+    await handlePasswordResetRequested(event, {
+      deliveries: buildPasswordResetDeliveryStore(env),
+      delivery: buildPasswordResetDeliveryDeps(env),
+    });
+  } catch (err) {
+    if (!(err instanceof PasswordResetDeliveryInFlightError)) throw err;
+    // Another attempt holds the in-flight mark: come back once it has
+    // completed or, if that isolate died, once the mark has expired.
+    msg.retry({ delaySeconds: PASSWORD_RESET_IN_FLIGHT_TTL_SECONDS });
+    return;
+  }
   msg.ack();
+}
+
+function buildPasswordResetDeliveryStore(env: AthlyaBindings) {
+  return createRedisPasswordResetDeliveryStore(getOrCreateRedis(env.REDIS_URL, env.REDIS_TOKEN));
 }
 
 /**

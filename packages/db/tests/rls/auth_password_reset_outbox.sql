@@ -16,20 +16,22 @@
 -- =====================================================================
 
 BEGIN;
-SELECT plan(8);
+SELECT plan(15);
 
 UPDATE users SET deleted_at = now() WHERE id = '11111111-1111-4111-8111-111111111112';
 
 SELECT ok(
-    (SELECT p.prosecdef
-        AND pg_get_userbyid(p.proowner) = 'athlya_owner'
-        AND 'search_path=public, pg_temp' = ANY (p.proconfig)
-        AND has_function_privilege('athlya_app', p.oid, 'EXECUTE')
-        AND NOT has_function_privilege('public', p.oid, 'EXECUTE')
-        AND NOT has_function_privilege('athlya_cron', p.oid, 'EXECUTE')
+    (SELECT bool_and(
+                p.prosecdef
+            AND pg_get_userbyid(p.proowner) = 'athlya_owner'
+            AND 'search_path=public, pg_temp' = ANY (p.proconfig)
+            AND has_function_privilege('athlya_app', p.oid, 'EXECUTE')
+            AND NOT has_function_privilege('public', p.oid, 'EXECUTE')
+            AND NOT has_function_privilege('athlya_cron', p.oid, 'EXECUTE'))
        FROM pg_proc p
-      WHERE p.oid = 'auth_request_password_reset(text, uuid)'::regprocedure),
-    '0043 function: SECURITY DEFINER, athlya_owner, pinned search_path, athlya_app only'
+      WHERE p.oid IN ('auth_request_password_reset(text, uuid)'::regprocedure,
+                      'auth_issue_password_reset_for_request(uuid, text, timestamptz)'::regprocedure)),
+    '0043 functions: SECURITY DEFINER, athlya_owner, pinned search_path, athlya_app only'
 );
 
 SET LOCAL ROLE athlya_app;
@@ -83,6 +85,53 @@ SELECT is(
         AND (payload::text ILIKE '%@%' OR payload ? 'token')),
     0,
     'no password-reset outbox row holds an email address or a token'
+);
+
+-- ---------- per-request token issuance ----------
+
+SET LOCAL ROLE athlya_app;
+
+SELECT is(
+    auth_issue_password_reset_for_request('11111111-1111-4111-8111-111111111113', 'req-token-1', now() + interval '1 hour'),
+    'issued',
+    'auth_issue_password_reset_for_request: issues the request token'
+);
+
+SELECT is(
+    auth_issue_password_reset_for_request('11111111-1111-4111-8111-111111111113', 'req-token-1', now() + interval '2 hours'),
+    'issued',
+    'auth_issue_password_reset_for_request: a retry finds its own token instead of invalidating it'
+);
+
+SELECT is(
+    (SELECT user_id FROM auth_find_password_reset('req-token-1')),
+    '11111111-1111-4111-8111-111111111113'::uuid,
+    'auth_issue_password_reset_for_request: the retried token is still active'
+);
+
+SELECT is(
+    auth_issue_password_reset_for_request('11111111-1111-4111-8111-111111111113', 'req-token-2', now() + interval '1 hour'),
+    'issued',
+    'auth_issue_password_reset_for_request: a later request issues its own token'
+);
+
+SELECT is(
+    auth_issue_password_reset_for_request('11111111-1111-4111-8111-111111111113', 'req-token-1', now() + interval '1 hour'),
+    'superseded',
+    'auth_issue_password_reset_for_request: a retry of the earlier request is superseded'
+);
+
+SELECT is(
+    auth_issue_password_reset_for_request('11111111-1111-4111-8111-111111111112', 'req-token-3', now() + interval '1 hour'),
+    'inactive',
+    'auth_issue_password_reset_for_request: nothing for a soft-deleted account'
+);
+
+SELECT throws_ok(
+    $$ SELECT auth_issue_password_reset_for_request('11111111-1111-4111-8111-111111111111', 'req-token-2', now() + interval '1 hour') $$,
+    '22023',
+    NULL,
+    'auth_issue_password_reset_for_request: refuses a hash owned by another user'
 );
 
 SELECT * FROM finish();

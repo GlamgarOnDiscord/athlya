@@ -23,6 +23,7 @@ import {
   DEFAULT_RESET_TOKEN_TTL_SEC,
   PasswordResetTokenUnavailableError,
   confirmReset,
+  createResetTokenDeriver,
   deliverResetEmail,
   requestReset,
 } from '../forgot-password.js';
@@ -125,134 +126,156 @@ describe('requestReset (issue #645 — durable hand-off)', () => {
 /*  deliverResetEmail                                                  */
 /* ================================================================== */
 
-describe('deliverResetEmail (issue #645 — outbox consumer)', () => {
-  it('mints a token, stores only its hash and emails the link', async () => {
-    const userRepo = makeUserRepo(makeUser());
-    const passwordResetRepo = makeResetRepo();
-    const emailTransport = makeTransport();
+describe('deliverResetEmail (issues #645, #650 — outbox consumer)', () => {
+  const REQUEST = { requestId: '0193f000-0000-7000-8000-000000000645', userId: USER_ID };
+  const KEY = 'k'.repeat(32);
 
-    const result = await deliverResetEmail(USER_ID, {
-      userRepo,
-      passwordResetRepo,
-      emailTransport,
+  function makeTokens(outcome: 'issued' | 'superseded' | 'inactive' = 'issued') {
+    return { issueForRequest: vi.fn().mockResolvedValue(outcome) };
+  }
+
+  function deps(overrides: Partial<Parameters<typeof deliverResetEmail>[1]> = {}) {
+    return {
+      userRepo: makeUserRepo(makeUser()),
+      tokens: makeTokens(),
+      emailTransport: makeTransport(),
+      deriveToken: createResetTokenDeriver(KEY),
       resetLinkBaseUrl: 'https://app.athlya.test',
-    });
+      ...overrides,
+    };
+  }
+
+  function issued(tokens: ReturnType<typeof makeTokens>) {
+    return (tokens.issueForRequest.mock.calls as [{ tokenHash: string; expiresAt: Date }][]).map(
+      ([input]) => input,
+    );
+  }
+
+  it('stores the sha256 of the emailed token and sends it with the request idempotency key', async () => {
+    const tokens = makeTokens();
+    const emailTransport = makeTransport();
+    const userRepo = makeUserRepo(makeUser());
+
+    const result = await deliverResetEmail(REQUEST, deps({ tokens, emailTransport, userRepo }));
 
     expect(result.kind).toBe('sent');
     expect(userRepo.findUserById).toHaveBeenCalledWith(USER_ID);
-    expect(passwordResetRepo.insertToken).toHaveBeenCalledTimes(1);
-    const tokenCall = passwordResetRepo.insertToken.mock.calls[0]![0]!;
-    expect(tokenCall.userId).toBe(USER_ID);
-    // Hash is 64 hex chars (SHA-256). The plain token never
-    // shows up in the repo call.
-    expect(tokenCall.tokenHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(emailTransport.sendResetEmail).toHaveBeenCalledTimes(1);
-    const emailCall = emailTransport.sendResetEmail.mock.calls[0]![0]!;
+    const emailCall = sent(emailTransport)[0]!;
     expect(emailCall.to).toBe('alice@example.com');
+    expect(emailCall.idempotencyKey).toBe(`password-reset/${REQUEST.requestId}`);
     expect(emailCall.link).toMatch(/^https:\/\/app\.athlya\.test\/reset-password\/[A-Za-z0-9_-]+$/);
-    const plainToken = emailCall.link.split('/').pop()!;
-    expect(tokenCall.tokenHash).not.toBe(plainToken);
+    const plainToken = emailCall.link.split('/').pop() ?? '';
+    expect(issued(tokens)[0]?.tokenHash).toBe(await sha256Hex(plainToken));
   });
 
   it('strips trailing slashes from the reset link base URL', async () => {
     const emailTransport = makeTransport();
 
-    await deliverResetEmail(USER_ID, {
-      userRepo: makeUserRepo(makeUser()),
-      passwordResetRepo: makeResetRepo(),
-      emailTransport,
-      resetLinkBaseUrl: 'https://app.athlya.test///',
-    });
+    await deliverResetEmail(
+      REQUEST,
+      deps({ emailTransport, resetLinkBaseUrl: 'https://app.athlya.test///' }),
+    );
 
     const emailCall = emailTransport.sendResetEmail.mock.calls[0]![0]!;
     expect(emailCall.link).toMatch(/^https:\/\/app\.athlya\.test\/reset-password\/[A-Za-z0-9_-]+$/);
   });
 
-  it('skips an account that no longer exists', async () => {
-    const passwordResetRepo = makeResetRepo();
+  it('retries of the same request store the same hash and email the same link', async () => {
+    const tokens = makeTokens();
+    const emailTransport = makeTransport();
+    emailTransport.sendResetEmail.mockRejectedValueOnce(new Error('connection reset'));
+
+    await expect(deliverResetEmail(REQUEST, deps({ tokens, emailTransport }))).rejects.toThrow(
+      'connection reset',
+    );
+    await deliverResetEmail(REQUEST, deps({ tokens, emailTransport }));
+
+    const [first, second] = issued(tokens);
+    expect(first?.tokenHash).toBe(second?.tokenHash);
+    const links = sent(emailTransport).map((input) => input.link);
+    expect(links[0]).toBe(links[1]);
+  });
+
+  it('derives a different token for another request or with another key', async () => {
+    const derive = createResetTokenDeriver(KEY);
+    const base = await derive(REQUEST);
+
+    expect(
+      await derive({ ...REQUEST, requestId: '0193f000-0000-7000-8000-000000000646' }),
+    ).not.toBe(base);
+    expect(await createResetTokenDeriver('x'.repeat(32))(REQUEST)).not.toBe(base);
+    expect(base).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+  });
+
+  it('refuses a short token key', () => {
+    expect(() => createResetTokenDeriver('short')).toThrow(/at least 32 characters/u);
+  });
+
+  it('mints a random token per attempt when no deriver is configured (dev)', async () => {
+    const tokens = makeTokens();
+    const { deriveToken: _omit, ...rest } = deps({ tokens });
+
+    await deliverResetEmail(REQUEST, rest);
+    await deliverResetEmail(REQUEST, rest);
+
+    const [first, second] = issued(tokens);
+    expect(first?.tokenHash).not.toBe(second?.tokenHash);
+  });
+
+  it.each([
+    ['an account that no longer exists', makeUserRepo(null)],
+    [
+      'an account soft-deleted after the request',
+      makeUserRepo(makeUser({ deletedAt: '2026-01-01T00:00:00.000Z' as unknown as Date })),
+    ],
+  ])('skips %s', async (_label, userRepo) => {
+    const tokens = makeTokens();
     const emailTransport = makeTransport();
 
-    const result = await deliverResetEmail(USER_ID, {
-      userRepo: makeUserRepo(null),
-      passwordResetRepo,
-      emailTransport,
-      resetLinkBaseUrl: 'https://app.athlya.test',
-    });
+    const result = await deliverResetEmail(REQUEST, deps({ userRepo, tokens, emailTransport }));
 
     expect(result.kind).toBe('skipped_inactive');
-    expect(passwordResetRepo.insertToken).not.toHaveBeenCalled();
+    expect(tokens.issueForRequest).not.toHaveBeenCalled();
     expect(emailTransport.sendResetEmail).not.toHaveBeenCalled();
   });
 
-  it('skips an account soft-deleted after the request', async () => {
-    const passwordResetRepo = makeResetRepo();
+  it.each([
+    ['superseded', 'skipped_superseded'],
+    ['inactive', 'skipped_inactive'],
+  ] as const)('sends nothing when issuance reports %s', async (outcome, kind) => {
     const emailTransport = makeTransport();
 
-    const result = await deliverResetEmail(USER_ID, {
-      userRepo: makeUserRepo(
-        makeUser({ deletedAt: '2026-01-01T00:00:00.000Z' as unknown as Date }),
-      ),
-      passwordResetRepo,
-      emailTransport,
-      resetLinkBaseUrl: 'https://app.athlya.test',
-    });
+    const result = await deliverResetEmail(
+      REQUEST,
+      deps({ tokens: makeTokens(outcome), emailTransport }),
+    );
 
-    expect(result.kind).toBe('skipped_inactive');
-    expect(passwordResetRepo.insertToken).not.toHaveBeenCalled();
+    expect(result.kind).toBe(kind);
     expect(emailTransport.sendResetEmail).not.toHaveBeenCalled();
-  });
-
-  it('rethrows a transport failure so the queue retries the message', async () => {
-    const passwordResetRepo = makeResetRepo();
-    const emailTransport = {
-      sendResetEmail: vi.fn().mockRejectedValue(new Error('resend down')),
-    } satisfies PasswordResetEmailTransport;
-
-    await expect(
-      deliverResetEmail(USER_ID, {
-        userRepo: makeUserRepo(makeUser()),
-        passwordResetRepo,
-        emailTransport,
-        resetLinkBaseUrl: 'https://app.athlya.test',
-      }),
-    ).rejects.toThrow('resend down');
-    expect(passwordResetRepo.insertToken).toHaveBeenCalledTimes(1);
-  });
-
-  it('mints a different token on every attempt', async () => {
-    const passwordResetRepo = makeResetRepo();
-    const deps = {
-      userRepo: makeUserRepo(makeUser()),
-      passwordResetRepo,
-      emailTransport: makeTransport(),
-      resetLinkBaseUrl: 'https://app.athlya.test',
-    };
-
-    await deliverResetEmail(USER_ID, deps);
-    await deliverResetEmail(USER_ID, deps);
-
-    const calls = passwordResetRepo.insertToken.mock.calls as [{ tokenHash: string }][];
-    const hashes = calls.map(([input]) => input.tokenHash);
-    expect(hashes).toHaveLength(2);
-    expect(hashes[0]).not.toBe(hashes[1]);
   });
 
   it('stamps expiresAt at TTL_SEC seconds after delivery', async () => {
-    const passwordResetRepo = makeResetRepo();
+    const tokens = makeTokens();
     const fixedNowSec = 1750000000;
 
-    await deliverResetEmail(USER_ID, {
-      userRepo: makeUserRepo(makeUser()),
-      passwordResetRepo,
-      emailTransport: makeTransport(),
-      resetLinkBaseUrl: 'https://app.athlya.test',
-      now: () => fixedNowSec,
-    });
+    await deliverResetEmail(REQUEST, deps({ tokens, now: () => fixedNowSec }));
 
-    const tokenCall = passwordResetRepo.insertToken.mock.calls[0]![0]!;
-    expect(tokenCall.expiresAt.getTime()).toBe((fixedNowSec + DEFAULT_RESET_TOKEN_TTL_SEC) * 1000);
+    expect(issued(tokens)[0]?.expiresAt.getTime()).toBe(
+      (fixedNowSec + DEFAULT_RESET_TOKEN_TTL_SEC) * 1000,
+    );
   });
 });
+
+function sent(transport: ReturnType<typeof makeTransport>) {
+  return (
+    transport.sendResetEmail.mock.calls as [{ to: string; link: string; idempotencyKey?: string }][]
+  ).map(([input]) => input);
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 /* ================================================================== */
 /*  confirmReset                                                       */

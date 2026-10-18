@@ -63,6 +63,7 @@ export const REQUIRED_FUNCTIONS = [
   'auth_issue_password_reset',
   'auth_find_password_reset',
   'auth_request_password_reset',
+  'auth_issue_password_reset_for_request',
   'rgpd_anonymize_user_audit',
   'reservation_lock_class_for_cancel',
   'reservation_promote_oldest_waitlist',
@@ -196,6 +197,18 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     `;
     check(unknownReset.enqueued === false, 'password reset request recorded for an unknown address');
     ok('password reset request: outbox event recorded without claims, none for an unknown address');
+
+    const requestHash = randomUUID().replaceAll('-', '').repeat(2);
+    const issueForRequest = () => tx`
+      SELECT auth_issue_password_reset_for_request(${userId}::uuid, ${requestHash}, now() + interval '1 hour') AS outcome
+    `;
+    const [firstIssue] = await issueForRequest();
+    const [retryIssue] = await issueForRequest();
+    check(
+      firstIssue.outcome === 'issued' && retryIssue.outcome === 'issued',
+      'password reset request token could not be issued, or a retry invalidated it',
+    );
+    ok('password reset delivery: request token issued and found again on retry without claims');
 
     const idemKey = `role-contract-${randomUUID()}`;
     const claimless = await tx

@@ -3,14 +3,17 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   buildPasswordResetEmailTransport,
   resolveResetLinkBaseUrl,
+  resolveResetTokenDeriver,
 } from '../../adapters/auth-deps.js';
 
 import type { AthlyaBindings } from '../../types.js';
 
+const TOKEN = 'Q9xR2vLmT7pK4sWn8bYc1dEf6gHj3kZa0uVw5iOoNq';
 const BASE_INPUT = {
   to: 'member@example.com',
-  link: 'https://athlya.app/reset-password/tok',
+  link: `https://athlya.app/reset-password/${TOKEN}`,
   expiresAt: new Date('2026-01-01T00:00:00Z'),
+  idempotencyKey: 'password-reset/0193f000-0000-7000-8000-000000000645',
 };
 
 function makeEnv(overrides: Partial<AthlyaBindings> = {}): AthlyaBindings {
@@ -39,6 +42,7 @@ describe('buildPasswordResetEmailTransport', () => {
       const logged = JSON.stringify(warnSpy.mock.calls[0]);
       expect(logged).not.toContain('reset-password');
       expect(logged).not.toContain(BASE_INPUT.link);
+      expect(logged).not.toContain(TOKEN);
       expect(logged).not.toContain(BASE_INPUT.to);
       warnSpy.mockRestore();
     });
@@ -68,6 +72,45 @@ describe('buildPasswordResetEmailTransport', () => {
         /RESEND_API_KEY is not configured in production/,
       );
     });
+  });
+});
+
+describe('Resend transport (issue #645)', () => {
+  it('sends the idempotency key and a body that does not change between retries', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(() => Promise.resolve(new Response('{}', { status: 200 })));
+    const transport = buildPasswordResetEmailTransport(
+      makeEnv({ ENVIRONMENT: 'production', RESEND_API_KEY: 're_test' }),
+    );
+
+    await transport.sendResetEmail(BASE_INPUT);
+    await transport.sendResetEmail({ ...BASE_INPUT, expiresAt: new Date('2026-01-01T00:30:00Z') });
+
+    const [first, second] = fetchSpy.mock.calls.map(([, init]) => init);
+    expect(new Headers(first?.headers).get('idempotency-key')).toBe(BASE_INPUT.idempotencyKey);
+    expect(second?.body).toBe(first?.body);
+    fetchSpy.mockRestore();
+  });
+});
+
+describe('resolveResetTokenDeriver (issue #645)', () => {
+  it('derives a stable token when PASSWORD_RESET_TOKEN_KEY is set', async () => {
+    const derive = resolveResetTokenDeriver(
+      makeEnv({ ENVIRONMENT: 'production', PASSWORD_RESET_TOKEN_KEY: 'k'.repeat(32) }),
+    );
+    const request = { requestId: 'r-1', userId: 'u-1' };
+    expect(await derive?.(request)).toBe(await derive?.(request));
+  });
+
+  it('is absent in dev without a key', () => {
+    expect(resolveResetTokenDeriver(makeEnv({ ENVIRONMENT: 'dev' }))).toBeUndefined();
+  });
+
+  it.each(['staging', 'production'] as const)('throws in %s without a key', (environment) => {
+    expect(() => resolveResetTokenDeriver(makeEnv({ ENVIRONMENT: environment }))).toThrow(
+      /PASSWORD_RESET_TOKEN_KEY is not configured/u,
+    );
   });
 });
 
