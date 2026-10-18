@@ -21,7 +21,7 @@
 #   DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, CORS_ORIGIN, JWT_KID,
 #   JWT_PRIVATE_KEY_PEM, JWT_PUBLIC_KEY_PEM, JWKS_JSON, EXPORT_URL_SIGNING_KEY
 # Production also: SENTRY_DSN, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS.
-# Binding (not a secret): HYPERDRIVE.
+# Bindings (not secrets): HYPERDRIVE, AVATARS_BUCKET, EXPORTS_BUCKET.
 # scripts/verify-secrets.mjs checks this list (keep both in sync).
 # Queue bindings: OUTBOX_KICK_QUEUE (producer only, issue #311).
 #   scripts/verify-secrets.mjs checks that every bound queue exists.
@@ -58,6 +58,23 @@ new_classes = ["ClassCapacityDO"]
 [[queues.producers]]
 binding = "OUTBOX_KICK_QUEUE"
 queue = "athlya-outbox-kick"
+
+# R2 buckets (issue #625). /v1/members/* reads AVATARS_BUCKET (avatar upload
+# and download) and EXPORTS_BUCKET (RGPD export download). Same buckets as
+# the gateway's "R2 buckets" block of wrangler.toml, which provisions them.
+# Named envs do not inherit bindings, so each env declares them.
+# Avatar upload also needs AVATARS_PUBLIC_URL. The gateway does not set it
+# yet (uploads answer 503 avatar_upload_not_configured on both Workers); set
+# it here in the same envs and with the same value when the gateway does.
+# worker-routing.test.ts fails if the two configs differ.
+
+[[r2_buckets]]
+binding = "AVATARS_BUCKET"
+bucket_name = "athlya-avatars-dev"
+
+[[r2_buckets]]
+binding = "EXPORTS_BUCKET"
+bucket_name = "athlya-exports-dev"
 
 # ============================================================================
 # Staging
@@ -106,6 +123,14 @@ zone_name = "athlya.app"
 binding = "HYPERDRIVE"
 id = "49e3db37042d4f2999b0c0061363929c"
 
+[[env.staging.r2_buckets]]
+binding = "AVATARS_BUCKET"
+bucket_name = "athlya-avatars-staging"
+
+[[env.staging.r2_buckets]]
+binding = "EXPORTS_BUCKET"
+bucket_name = "athlya-exports-staging"
+
 # ============================================================================
 # Production
 # ============================================================================
@@ -153,6 +178,14 @@ zone_name = "athlya.app"
 binding = "HYPERDRIVE"
 id = "4cdf25a926de4c84a810dc25fd19135d"
 
+[[env.production.r2_buckets]]
+binding = "AVATARS_BUCKET"
+bucket_name = "athlya-avatars-production"
+
+[[env.production.r2_buckets]]
+binding = "EXPORTS_BUCKET"
+bucket_name = "athlya-exports-production"
+
 # ============================================================================
 # Preview (per-PR, deployed by preview.yml with --name override)
 # ============================================================================
@@ -167,3 +200,14 @@ VERSION = "0.0.0-preview"
 [[env.preview.durable_objects.bindings]]
 name = "CLASS_CAPACITY_DO"
 class_name = "ClassCapacityDO"
+
+# Shared by every preview, like the gateway's preview buckets (not renamed
+# per PR by .github/workflows/preview.yml).
+
+[[env.preview.r2_buckets]]
+binding = "AVATARS_BUCKET"
+bucket_name = "athlya-avatars-preview"
+
+[[env.preview.r2_buckets]]
+binding = "EXPORTS_BUCKET"
+bucket_name = "athlya-exports-preview"
