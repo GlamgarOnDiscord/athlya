@@ -539,6 +539,7 @@
         "reservations": "Mes réservations",
         "workout": "Enregistrer une séance",
         "progression": "Ma progression",
+        "machine": "Machine connectée",
         "checkin": "Pointer à l'accueil",
         "settings": "Paramètres"
       }
@@ -723,6 +724,73 @@
         "lineSummary": "Jours d’entraînement : {count}, du {from} au {to}. Dernière valeur : {latest} kg, maximum : {max} kg, minimum : {min} kg.",
         "barSummary": "Semaines : {weeks}, du {from} au {to}. Séances : {total} au total, {max} pour la semaine la plus chargée, {latest} pour la dernière semaine.",
         "noSessions": "Aucune séance enregistrée sur cette période : pas de fréquence hebdomadaire à afficher."
+      }
+    },
+    "machine": {
+      "title": "Machine connectée",
+      "intro": "Connectez un vélo, un tapis, un rameur ou un elliptique compatible Bluetooth FTMS. Gardez l’app ouverte pendant la séance.",
+      "scan": "Rechercher les machines",
+      "scanning": "Recherche des machines à proximité…",
+      "stopScan": "Arrêter la recherche",
+      "devices": "Machines à proximité",
+      "unnamed": "Machine sans nom",
+      "connectTo": "Se connecter à {name}",
+      "connecting": "Connexion à {name}…",
+      "streaming": "Connecté à {name}",
+      "nothingFound": "Aucune machine trouvée. Réveillez la machine (pédalez ou appuyez sur une touche) puis réessayez.",
+      "finish": "Terminer la séance",
+      "save": "Enregistrer la séance",
+      "discard": "Ignorer",
+      "saved": "Séance enregistrée.",
+      "queued": "Séance gardée sur cet appareil : elle sera envoyée au retour de la connexion.",
+      "empty": "Rien n’a été enregistré pendant cette séance.",
+      "unavailable": {
+        "poweredOff": "Le Bluetooth est désactivé. Activez-le puis réessayez.",
+        "unauthorized": "Athlya n’est pas autorisée à utiliser le Bluetooth. Autorisez-la dans les réglages du système puis réessayez.",
+        "unsupported": "Cet appareil ne prend pas en charge le Bluetooth Low Energy."
+      },
+      "errors": {
+        "scanFailed": "La recherche des machines a échoué. Réessayez.",
+        "connectFailed": "Connexion à la machine impossible. Rapprochez-vous et réessayez.",
+        "notFtms": "Cette machine ne partage pas ses données d’entraînement via FTMS.",
+        "linkLost": "Connexion à la machine perdue. Les données déjà enregistrées sont conservées."
+      },
+      "metrics": {
+        "label": "Données en direct",
+        "elapsed": "Durée",
+        "speed": "Vitesse",
+        "cadence": "Cadence",
+        "power": "Puissance",
+        "distance": "Distance",
+        "energy": "Énergie",
+        "heartRate": "Fréquence cardiaque",
+        "strokeRate": "Cadence de coups",
+        "incline": "Inclinaison",
+        "unit": {
+          "kmh": "{value} km/h",
+          "rpm": "{value} tr/min",
+          "watts": "{value} W",
+          "km": "{value} km",
+          "kcal": "{value} kcal",
+          "bpm": "{value} bpm",
+          "spm": "{value} /min",
+          "percent": "{value} %"
+        }
+      },
+      "types": {
+        "indoorBike": "Vélo d’intérieur",
+        "treadmill": "Tapis de course",
+        "rower": "Rameur",
+        "crossTrainer": "Vélo elliptique"
+      },
+      "summary": {
+        "distance": "Distance {km} km",
+        "avgPower": "Puissance moy. {watts} W",
+        "maxPower": "Puissance max. {watts} W",
+        "avgCadence": "Cadence moy. {rpm} tr/min",
+        "strokes": "{count} coups",
+        "energy": "{kcal} kcal",
+        "avgHeartRate": "FC moy. {bpm} bpm"
       }
     }
   },

@@ -539,6 +539,7 @@
         "reservations": "My reservations",
         "workout": "Log a workout",
         "progression": "My progression",
+        "machine": "Connected machine",
         "checkin": "Check in at the desk",
         "settings": "Settings"
       }
@@ -723,6 +724,73 @@
         "lineSummary": "Days trained: {count}, from {from} to {to}. Latest: {latest} kg, highest: {max} kg, lowest: {min} kg.",
         "barSummary": "Weeks: {weeks}, from {from} to {to}. Sessions: {total} in total, {max} in the busiest week, {latest} in the latest week.",
         "noSessions": "No session logged in this period, so there is no weekly frequency to show."
+      }
+    },
+    "machine": {
+      "title": "Connected machine",
+      "intro": "Connect a bike, treadmill, rower or cross trainer that supports Bluetooth FTMS. Keep the app open during your workout.",
+      "scan": "Find machines",
+      "scanning": "Looking for machines nearby…",
+      "stopScan": "Stop searching",
+      "devices": "Machines nearby",
+      "unnamed": "Unnamed machine",
+      "connectTo": "Connect to {name}",
+      "connecting": "Connecting to {name}…",
+      "streaming": "Connected to {name}",
+      "nothingFound": "No machine found. Wake the machine up (start pedalling or press a key) and try again.",
+      "finish": "End the session",
+      "save": "Log this session",
+      "discard": "Discard",
+      "saved": "Session logged.",
+      "queued": "Session saved on this device: it will be sent when you are back online.",
+      "empty": "Nothing was recorded during this session.",
+      "unavailable": {
+        "poweredOff": "Bluetooth is off. Turn it on, then try again.",
+        "unauthorized": "Athlya is not allowed to use Bluetooth. Allow it in the system settings, then try again.",
+        "unsupported": "This device does not support Bluetooth Low Energy."
+      },
+      "errors": {
+        "scanFailed": "Searching for machines failed. Try again.",
+        "connectFailed": "Could not connect to the machine. Move closer and try again.",
+        "notFtms": "This machine does not share its workout data over FTMS.",
+        "linkLost": "Connection to the machine lost. The data recorded so far is kept."
+      },
+      "metrics": {
+        "label": "Live data",
+        "elapsed": "Time",
+        "speed": "Speed",
+        "cadence": "Cadence",
+        "power": "Power",
+        "distance": "Distance",
+        "energy": "Energy",
+        "heartRate": "Heart rate",
+        "strokeRate": "Stroke rate",
+        "incline": "Incline",
+        "unit": {
+          "kmh": "{value} km/h",
+          "rpm": "{value} rpm",
+          "watts": "{value} W",
+          "km": "{value} km",
+          "kcal": "{value} kcal",
+          "bpm": "{value} bpm",
+          "spm": "{value} /min",
+          "percent": "{value} %"
+        }
+      },
+      "types": {
+        "indoorBike": "Indoor bike",
+        "treadmill": "Treadmill",
+        "rower": "Rower",
+        "crossTrainer": "Cross trainer"
+      },
+      "summary": {
+        "distance": "Distance {km} km",
+        "avgPower": "Avg power {watts} W",
+        "maxPower": "Max power {watts} W",
+        "avgCadence": "Avg cadence {rpm} rpm",
+        "strokes": "{count} strokes",
+        "energy": "{kcal} kcal",
+        "avgHeartRate": "Avg heart rate {bpm} bpm"
       }
     }
   },
