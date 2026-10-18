@@ -14,6 +14,7 @@
 import { buildAuditDeps } from './adapters/audit-deps.js';
 import { buildAuthDeps } from './adapters/auth-deps.js';
 import { buildBillingDeps } from './adapters/billing-deps.js';
+import { buildCoachDeps } from './adapters/coach-deps.js';
 import { buildMembersDeps } from './adapters/members-deps.js';
 import { buildProgramsDeps } from './adapters/programs-deps.js';
 import { buildClassesDeps, buildReservationsDeps } from './adapters/reservations-deps.js';
@@ -24,6 +25,7 @@ import type { AuthDeps } from './routes/auth.js';
 import type { BillingDeps } from './routes/billing.js';
 import type { CheckinsDeps } from './routes/checkins.js';
 import type { ClassesDeps } from './routes/classes.js';
+import type { CoachDeps } from './routes/coach.js';
 import type { MembersDeps } from './routes/members.js';
 import type { ProgramsDeps } from './routes/programs.js';
 import type { ReservationsDeps } from './routes/reservations.js';
@@ -58,6 +60,8 @@ export interface DomainDeps {
   readonly checkins?: CheckinsDeps;
   readonly studios: StudiosDeps;
   readonly billing: BillingDeps;
+  /** AI coach (Epic 21), gated by the `ai-coach` feature flag. */
+  readonly coach: CoachDeps;
   /**
    * Training programs (Epic 24). Optional so partial test bundles stay
    * valid; production and the lazy facade always provide it.
@@ -188,6 +192,15 @@ export function lazyBillingDeps(resolve: () => BillingDeps): BillingDeps {
   };
 }
 
+export function lazyCoachDeps(resolve: () => CoachDeps): CoachDeps {
+  const forward = forwarder(resolve);
+  return {
+    isEnabled: forward('isEnabled'),
+    getStatus: forward('getStatus'),
+    ask: forward('ask'),
+  };
+}
+
 /**
  * Lazy programs facade. `idempotencyFor` resolves per request, so a
  * bundle without an idempotency store (dev stub) degrades to no replay
@@ -219,6 +232,7 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
     reservations: lazyReservationsDeps(() => resolve().reservations),
     studios: lazyStudiosDeps(() => resolve().studios),
     billing: lazyBillingDeps(() => resolve().billing),
+    coach: lazyCoachDeps(() => resolve().coach),
     programs: lazyProgramsDeps(() => {
       const programs = resolve().programs;
       if (programs === undefined) {
@@ -440,6 +454,21 @@ export function defaultBillingDeps(env: AthlyaBindings): BillingDeps {
 }
 
 /**
+ * The coach reads sessions and consents (DB) and keeps its daily quota
+ * in Redis. Without both, the flag is reported OFF so the stub bundle
+ * never answers a request.
+ */
+export function defaultCoachDeps(env: AthlyaBindings, cf?: RequestCf): CoachDeps {
+  return nonEmpty(env.DB_URL) && nonEmpty(env.REDIS_URL)
+    ? buildCoachDeps(env, cf)
+    : {
+        isEnabled: () => Promise.resolve(false),
+        getStatus: () => notImplemented('coach.getStatus'),
+        ask: () => notImplemented('coach.ask'),
+      };
+}
+
+/**
  * Build the full production dependency bundle from the Worker bindings
  * (monolith gateway).
  */
@@ -453,6 +482,7 @@ export function buildDefaultDeps(env: AthlyaBindings, cf?: RequestCf): DomainDep
     studios: defaultStudiosDeps(env),
     billing: defaultBillingDeps(env),
     audit: defaultAuditDeps(env),
+    coach: defaultCoachDeps(env, cf),
     programs: defaultProgramsDeps(env),
   };
 }

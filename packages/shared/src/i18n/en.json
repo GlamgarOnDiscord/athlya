@@ -589,5 +589,35 @@
         "body": "Payment for your subscription {subscriptionId} failed: {reason}. Please update your payment details."
       }
     }
+  },
+  "coach": {
+    "title": "AI coach",
+    "link": "AI coach",
+    "description": "Ask a question about your training. An AI model answers from your workouts of the last 30 days.",
+    "privacy": "When you ask a question, your question and a summary of your workouts of the last 30 days are sent to Mistral AI to generate the answer: session dates and durations, exercises with sets, repetitions and top weights, weekly session counts, total volume, and estimated one-rep maxes. Your name, e-mail address and workout notes are never sent. Athlya does not store the question or the answer.",
+    "disabled": "The AI coach is not available for your account yet.",
+    "consentRequired": "The AI coach needs your consent to share data with third parties. You can grant it in the consents section of your profile.",
+    "consentLink": "Manage my consents",
+    "question": {
+      "label": "Your question",
+      "hint": "Up to {max} characters. Do not share health details you want to keep private.",
+      "counterOne": "1 of {max} characters",
+      "counterOther": "{count} of {max} characters"
+    },
+    "submit": "Ask the coach",
+    "thinking": "The coach is preparing an answer…",
+    "quotaOne": "1 question left today out of {limit}",
+    "quotaOther": "{remaining} of {limit} questions left today",
+    "quotaExhausted": "You have used all your questions for today. Come back tomorrow.",
+    "answer": {
+      "title": "Coach's answer",
+      "recommendations": "Recommendations",
+      "caution": "Caution",
+      "disclaimer": "AI-generated advice. It does not replace a coach or a health professional."
+    },
+    "errors": {
+      "unavailable": "The coach is unavailable right now. Please try again in a moment.",
+      "rateLimited": "Too many questions in a short time. Please wait a minute."
+    }
   }
 }

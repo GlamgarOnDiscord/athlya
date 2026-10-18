@@ -46,6 +46,7 @@ import { buildBillingRouter, type BillingDeps } from './billing.js';
 import { buildCapacityRouter } from './capacity.js';
 import { buildCheckinsRouter, type CheckinsDeps } from './checkins.js';
 import { buildClassesRouter, type ClassesDeps } from './classes.js';
+import { buildCoachRouter, type CoachDeps } from './coach.js';
 import { buildMeRouter, type MeDeps } from './me.js';
 import { buildMembersRouter, type MembersDeps } from './members.js';
 import { buildProgramsRouter, type ProgramsDeps } from './programs.js';
@@ -64,6 +65,7 @@ export {
   buildCapacityRouter,
   buildCheckinsRouter,
   buildClassesRouter,
+  buildCoachRouter,
   buildMeRouter,
   buildMembersRouter,
   buildProgramsRouter,
@@ -79,6 +81,7 @@ export type {
   BillingDeps,
   CheckinsDeps,
   ClassesDeps,
+  CoachDeps,
   MeDeps,
   MembersDeps,
   ProgramsDeps,
@@ -106,6 +109,7 @@ export function mountDomainRoutes(app: Hono<HonoEnv>, deps: DomainDeps): Hono<Ho
   app.route('/v1/auth', buildAuthRouter(deps.auth));
   app.route('/v1/members', buildMembersRouter(deps.members));
   app.route('/v1/me', buildMeRouter(deps.members));
+  app.route('/v1/coach', buildCoachRouter(deps.coach));
   // Capacity WebSocket must mount before the authenticated classes router
   // so the public /v1/classes/:classId/capacity/ws path is matched first.
   app.route('/v1/classes', buildCapacityRouter());

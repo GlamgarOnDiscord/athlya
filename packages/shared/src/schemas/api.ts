@@ -587,6 +587,100 @@ export const ProgressionResponseSchema = z
 export type ProgressionResponse = z.infer<typeof ProgressionResponseSchema>;
 
 /* ------------------------------------------------------------------ */
+/*  coach — /v1/coach                                                  */
+/* ------------------------------------------------------------------ */
+
+/** Longest question a member may ask the AI coach, in characters. */
+export const COACH_QUESTION_MAX_LENGTH = 500;
+
+/** Languages the AI coach answers in. */
+export const COACH_LOCALES = ['fr', 'en'] as const;
+
+export type CoachLocale = (typeof COACH_LOCALES)[number];
+
+/** `POST /v1/coach/ask` body (task 21.2). */
+export const CoachAskRequestSchema = z
+  .object({
+    question: z.string().trim().min(1).max(COACH_QUESTION_MAX_LENGTH),
+    locale: z.enum(COACH_LOCALES).default('fr'),
+  })
+  .strict();
+
+export type CoachAskRequest = z.infer<typeof CoachAskRequestSchema>;
+
+/** One actionable recommendation of the AI coach. */
+export const CoachRecommendationSchema = z
+  .object({
+    title: z.string().trim().min(1).max(80),
+    detail: z.string().trim().min(1).max(400),
+  })
+  .strict();
+
+export type CoachRecommendation = z.infer<typeof CoachRecommendationSchema>;
+
+/**
+ * Structured advice produced by the language model (task 21.1). The
+ * model output is parsed with this schema before it reaches the client;
+ * anything that does not match is discarded server-side.
+ */
+export const CoachAdviceSchema = z
+  .object({
+    summary: z.string().trim().min(1).max(600),
+    recommendations: z.array(CoachRecommendationSchema).min(1).max(5),
+    /** Safety note (pain, injury, medical topic), or `null`. */
+    caution: z.string().trim().min(1).max(300).nullable(),
+  })
+  .strict();
+
+export type CoachAdvice = z.infer<typeof CoachAdviceSchema>;
+
+/** Daily AI coach quota of the caller (UTC calendar day). */
+export const CoachQuotaSchema = z
+  .object({
+    limit: z.number().int().positive(),
+    remaining: z.number().int().nonnegative(),
+    /** Next UTC midnight, when the counter resets. */
+    resetsAt: IsoDateTimeSchema,
+  })
+  .strict()
+  .refine((quota) => quota.remaining <= quota.limit, {
+    message: 'remaining must not exceed limit',
+    path: ['remaining'],
+  });
+
+export type CoachQuota = z.infer<typeof CoachQuotaSchema>;
+
+/**
+ * `GET /v1/coach` response. `enabled: false` when the `ai-coach`
+ * feature flag is off for the caller; clients hide the coach then.
+ * `thirdPartyConsent` is the member's opt-in to send their training
+ * data to the model provider.
+ */
+export const CoachStatusResponseSchema = z.discriminatedUnion('enabled', [
+  z.object({ enabled: z.literal(false) }).strict(),
+  z
+    .object({
+      enabled: z.literal(true),
+      thirdPartyConsent: z.boolean(),
+      quota: CoachQuotaSchema,
+    })
+    .strict(),
+]);
+
+export type CoachStatusResponse = z.infer<typeof CoachStatusResponseSchema>;
+
+/** `POST /v1/coach/ask` response. */
+export const CoachAskResponseSchema = z
+  .object({
+    advice: CoachAdviceSchema,
+    quota: CoachQuotaSchema,
+    generatedAt: IsoDateTimeSchema,
+  })
+  .strict();
+
+export type CoachAskResponse = z.infer<typeof CoachAskResponseSchema>;
+
+/* ------------------------------------------------------------------ */
 /*  studios — /v1/studios/*                                            */
 /* ------------------------------------------------------------------ */
 

@@ -33,6 +33,8 @@
 #   BILLING_REDIRECT_URL, BILLING_DB_URL (Stripe fallback on *.workers.dev)
 # Production also: SENTRY_DSN, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS,
 #   CF_ACCESS_AUD, CF_ACCESS_CERTS_URL.
+# Optional (warn only; needed once the ai-coach flag is on): MISTRAL_API_KEY
+# Feature flags: FEATURE_FLAGS_JSON var or secret, e.g. {"ai-coach": false}; unset = all OFF.
 # scripts/verify-secrets.mjs checks these lists (keep both in sync).
 # Queue bindings: EVENTS_QUEUE, EVENTS_DLQ, EVENTS_NOTIFICATIONS_QUEUE,
 #   EVENTS_RGPD_QUEUE, OUTBOX_KICK_QUEUE (producer + consumer, issue #311).

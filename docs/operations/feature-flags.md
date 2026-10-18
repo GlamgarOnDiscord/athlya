@@ -25,7 +25,7 @@ Cloudflare ops.
 
 ```json
 {
-  "coach-ai-enabled": false,
+  "ai-coach": false,
   "waitlist-auto-promotion-v2": {
     "rollout": 10,
     "studioAllowList": ["22222222-2222-4222-8222-222222222222"]
@@ -133,11 +133,11 @@ prédictibilité du delta de propagation est plus précieuse que les
 
 ## Catalogue de flags pilotes (Sprint 14)
 
-| Flag                         | Default | Phase actuelle     | Usage                                                                                                                    |
-| ---------------------------- | ------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `coach-ai-enabled`           | `false` | Phase 0 (internal) | Gate Epic 14 (AI coach service avec Mistral). Active la route `POST /v1/coach/ask`.                                      |
-| `waitlist-auto-promotion-v2` | `false` | Phase 0 (internal) | Algorithme alternatif pour `cancelReservation` qui promote la waitlist en FIFO + priority badge (vs FIFO simple actuel). |
-| `new-billing-flow`           | `false` | Phase 0 (internal) | Stripe PaymentIntent au lieu de Subscription Checkout. À activer quand on supportera les paiements one-shot.             |
+| Flag                         | Default | Phase actuelle     | Usage                                                                                                                                                                                                                             |
+| ---------------------------- | ------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ai-coach`                   | `false` | Phase 0 (internal) | Gate Epic 21 (AI coach, Mistral). OFF : `GET /v1/coach` → `{ enabled: false }`, `POST /v1/coach/ask` → 404, lien web masqué. Câblé dans `adapters/coach-deps.ts` ; requiert `MISTRAL_API_KEY` (sinon 503 `coach_not_configured`). |
+| `waitlist-auto-promotion-v2` | `false` | Phase 0 (internal) | Algorithme alternatif pour `cancelReservation` qui promote la waitlist en FIFO + priority badge (vs FIFO simple actuel).                                                                                                          |
+| `new-billing-flow`           | `false` | Phase 0 (internal) | Stripe PaymentIntent au lieu de Subscription Checkout. À activer quand on supportera les paiements one-shot.                                                                                                                      |
 
 ## Provisioning
 
@@ -145,11 +145,11 @@ Configuration initiale (à faire une fois par environnement) :
 
 ```bash
 # Staging
-echo '{"coach-ai-enabled":false,"waitlist-auto-promotion-v2":false,"new-billing-flow":false}' \
+echo '{"ai-coach":false,"waitlist-auto-promotion-v2":false,"new-billing-flow":false}' \
   | wrangler secret put FEATURE_FLAGS_JSON --env staging
 
 # Production
-echo '{"coach-ai-enabled":false,"waitlist-auto-promotion-v2":false,"new-billing-flow":false}' \
+echo '{"ai-coach":false,"waitlist-auto-promotion-v2":false,"new-billing-flow":false}' \
   | wrangler secret put FEATURE_FLAGS_JSON --env production
 ```
 

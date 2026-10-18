@@ -26,6 +26,9 @@ import {
   CheckoutRequestSchema,
   CheckoutResponseSchema,
   ClassListResponseSchema,
+  CoachAskRequestSchema,
+  CoachAskResponseSchema,
+  CoachStatusResponseSchema,
   ClassWithRemainingSchema,
   CreateClassRequestSchema,
   CreateProgramRequestSchema,
@@ -774,6 +777,73 @@ const progressionRoute = createRoute({
 });
 
 /*
+ * coach — /v1/coach (Epic 21, behind the `ai-coach` feature flag)
+ */
+
+const problemResponse = (description: string) => ({
+  description,
+  content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+});
+
+const coachStatusRoute = createRoute({
+  method: 'get',
+  path: '/v1/coach',
+  tags: ['coach'],
+  summary: 'AI coach availability, consent and daily quota for the caller',
+  description:
+    'Returns `{ enabled: false }` when the `ai-coach` feature flag is off for the caller; ' +
+    'clients hide the coach then. Otherwise returns the `thirdPartyConsent` opt-in and the ' +
+    'daily quota (UTC day). Sends `Cache-Control: no-store`.',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Coach status',
+      content: { 'application/json': { schema: CoachStatusResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    429: problemResponse('Rate limited'),
+    503: problemResponse('Quota store unavailable (fail-closed, code `dependency_unavailable`)'),
+  },
+});
+
+const coachAskRoute = createRoute({
+  method: 'post',
+  path: '/v1/coach/ask',
+  tags: ['coach'],
+  summary: 'Ask the AI coach a training question',
+  description:
+    'Sends a minimised summary of the caller workout sessions of the last 30 days (no ' +
+    'identifiers, no notes) and the question to the model provider (Mistral), and returns ' +
+    'structured advice validated against `CoachAdviceSchema`. Requires the `thirdParty` ' +
+    'consent. Limited to 5 requests per minute and a daily quota per member (default 10). ' +
+    'With the `ai-coach` flag off it answers 404 before any limiter or body validation. ' +
+    'Nothing but the quota counter is stored. Sends `Cache-Control: no-store`.',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: { required: true, content: { 'application/json': { schema: CoachAskRequestSchema } } },
+  },
+  responses: {
+    200: {
+      description: 'Advice and remaining quota',
+      content: { 'application/json': { schema: CoachAskResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Third-party consent missing (code `third_party_consent_required`)'),
+    404: problemResponse('Feature flag `ai-coach` off for the caller (code `coach_disabled`)'),
+    422: problemResponse('Invalid body'),
+    429: problemResponse(
+      'Burst limit of 5/min (code `coach_rate_limited`) or daily quota reached (code `coach_quota_exceeded`); see `Retry-After`',
+    ),
+    502: problemResponse(
+      'Model provider failed or answered with invalid output (codes `coach_upstream_failed`, `coach_invalid_output`)',
+    ),
+    503: problemResponse(
+      'Rate limiter or quota store unavailable (fail-closed, code `dependency_unavailable`) or provider not configured (code `coach_not_configured`)',
+    ),
+  },
+});
+
+/*
  * checkins — /v1/checkins
  */
 
@@ -1162,6 +1232,10 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
 
   // me
   app.openapi(progressionRoute, stub);
+
+  // coach
+  app.openapi(coachStatusRoute, stub);
+  app.openapi(coachAskRoute, stub);
 
   // audit
   app.openapi(listAuditRoute, stub);

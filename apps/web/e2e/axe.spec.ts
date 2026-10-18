@@ -6,6 +6,8 @@
  *  - Authenticated: `/classes`, `/me`, `/me/export`, `/me/delete`
  *  - `/me/progression` in its own case: the boot refresh is stubbed so
  *    the charts render from the stubbed payload before axe runs
+ *  - `/me/coach` in its own case: the coach status and answer are
+ *    stubbed so axe runs over the form and a rendered answer
  *
  * For authenticated pages we use the `loginWithStub` fixture so the
  * token store is populated without a real API round-trip — we care
@@ -61,6 +63,45 @@ test('axe: /me/progression (authenticated, charts rendered)', async ({ page }) =
   await page.goto('/me/progression');
   // Analyse the rendered charts (marks, data tables), not the loading state.
   await expect(page.getByRole('figure')).toHaveCount(3);
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
+    .analyze();
+  expect(results.violations).toEqual([]);
+});
+
+test('axe: /me/coach (authenticated, answer rendered)', async ({ page }) => {
+  await loginWithStub(page);
+  await page.route('**/api/auth/refresh', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accessToken: 'fake-access-token', accessTokenExpiresIn: 900 }),
+    });
+  });
+  await page.route('**/v1/coach/ask', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        advice: {
+          summary: 'Your squat volume is steady over the last four weeks.',
+          recommendations: [
+            { title: 'Add a back-off set', detail: 'One set at 80 % after your top set.' },
+          ],
+          caution: null,
+        },
+        quota: { limit: 10, remaining: 8, resetsAt: '2026-10-16T00:00:00.000Z' },
+        generatedAt: '2026-10-15T14:30:00.000Z',
+      }),
+    });
+  });
+  await page.goto('/me/coach');
+  await page.getByRole('textbox').fill('How do I add weight to my squat?');
+  // Submit with the keyboard: the fixed cookie banner covers the button
+  // for pointer clicks, and keeping it on screen keeps it in the scan.
+  await page.getByRole('button', { name: /interroger le coach|ask the coach/i }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('article')).toBeVisible();
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
     .analyze();

@@ -13,6 +13,7 @@ Run on the schedule below or immediately on suspected compromise.
 | Stripe keys             | Per Stripe recommendation (annual) | Immediate                          |
 | SENTRY_DSN              | Annual                             | Immediate                          |
 | TURNSTILE_SECRET        | Annual                             | Immediate                          |
+| MISTRAL_API_KEY         | Annual                             | Immediate                          |
 
 ---
 
@@ -190,6 +191,32 @@ for cfg in "" "-c wrangler.auth.toml"; do
 done
 # 3. Run a smoke test through the register flow to confirm Turnstile passes.
 ```
+
+---
+
+## MISTRAL_API_KEY
+
+Mistral AI key of the AI coach (Epic 21, `ai-coach` flag). Read by the gateway and the
+reservations Worker, which both serve `/v1/coach`. Optional: `verify-secrets.mjs` only warns
+when it is missing, and the coach then answers 503 `coach_not_configured` while the flag is on.
+A leaked key allows model calls billed to the Athlya account, nothing more: no member data
+is reachable with it.
+
+```bash
+# 1. Mistral console → API keys → create a new key (workspace "athlya-<env>").
+# 2. Set it on both Workers of each env that runs the coach (prompted value, never on
+#    the command line). Use the key of the matching workspace for each env:
+for env in staging production; do
+  for cfg in "" "-c wrangler.reservations.toml"; do
+    pnpm --filter @athlya/api exec wrangler secret put MISTRAL_API_KEY --env $env $cfg
+  done
+done
+# 3. Ask the coach once per env from a staff account in the flag allow-list.
+# 4. Revoke the old keys in the Mistral console.
+```
+
+To switch the coach off without touching the key, set the flag to `false` in
+`FEATURE_FLAGS_JSON` ([`feature-flags.md`](../operations/feature-flags.md)).
 
 ---
 
