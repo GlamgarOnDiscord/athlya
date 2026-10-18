@@ -1189,3 +1189,10 @@ _Score critique attendu après Epic CN-suite_ : **9.0/10 → 9.5/10**
 **Total : ~46 sous-tâches sur ~10 jours effort cumulés**
 
 Les 10 sous-tâches **C1 + C2** (~10h effort) sont les **vrais bloquants prod** identifiés par l'audit code source. Le reste est de la maturité ops — important mais pas urgent avant le premier utilisateur réel.
+
+### Epic Brand — Identité visuelle (octobre 2026)
+
+- [x] BR.1 Nouvelle identité : mascotte A-mi (« A » italique qui court) + wordmark ATHLYA (Archivo Black italique), palette encre `#0A0A0A` / volt `#D7FF3A` / blanc. Sources SVG générées par `assets/brand/scripts/build-brand.mjs`, guide dans `docs/brand/README.md`.
+- [x] BR.2 Intégration web + studio : favicon, icônes d'app, image Open Graph, logo JSON-LD, composant `<AthlyaLogo />` (nav, accueil, login studio).
+- [x] BR.3 README refondu autour de la nouvelle identité ; détails opérationnels déplacés dans `docs/project-handbook.md`.
+- [ ] BR.4 Icône et splash de l'app mobile Expo à partir de `assets/brand/png/` (avec l'Epic 10 — app mobile, tâches 11.x).
