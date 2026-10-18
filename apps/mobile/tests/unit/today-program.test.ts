@@ -6,6 +6,7 @@ import { formatLocalDate } from '../../features/format';
 import {
   exerciseLine,
   localDate,
+  msUntilNextLocalMidnight,
   programCard,
   TodayProgramController,
   todayPath,
@@ -103,6 +104,28 @@ describe('exerciseLine', () => {
       { key: 'mobile.program.sets', values: { sets: 1 } },
     ]);
   });
+
+  it('shows the duration too when reps and a duration are both prescribed', () => {
+    expect(exerciseLine({ name: 'Burpees', sets: 3, reps: 10, durationSec: 30 }).parts).toEqual([
+      { key: 'mobile.program.setsReps', values: { sets: 3, reps: 10 } },
+      { key: 'mobile.program.duration', values: { seconds: 30 } },
+    ]);
+  });
+
+  it('carries the exercise notes', () => {
+    expect(exerciseLine({ name: 'Squat', sets: 4, reps: 8, notes: ' Knees out ' }).notes).toBe(
+      'Knees out',
+    );
+    expect(exerciseLine({ name: 'Squat', sets: 4, reps: 8, notes: ' ' }).notes).toBeNull();
+    expect(exerciseLine({ name: 'Squat', sets: 4, reps: 8 }).notes).toBeNull();
+  });
+});
+
+describe('msUntilNextLocalMidnight', () => {
+  it('counts down to the next local day', () => {
+    expect(msUntilNextLocalMidnight(new Date(2026, 9, 18, 23, 59, 0))).toBe(60_000);
+    expect(msUntilNextLocalMidnight(new Date(2026, 9, 18, 0, 0, 0))).toBe(86_400_000);
+  });
 });
 
 describe('TodayProgramController', () => {
@@ -128,13 +151,21 @@ describe('TodayProgramController', () => {
     expect(controller.get().error).toEqual({ key: 'errors.network', authRequired: false });
   });
 
-  it('ignores a cancelled load', async () => {
+  it('forwards the caller’s signal and ignores the cancelled load', async () => {
     const api = createFakeApi();
-    const abort = new Error('aborted');
-    abort.name = 'AbortError';
-    api.get.mockRejectedValue(abort);
-    const controller = new TodayProgramController(api);
-    await controller.load();
+    const controller = new TodayProgramController(api, () => new Date(2026, 9, 18, 9, 0));
+    const abort = new AbortController();
+    api.get.mockImplementation((...args: unknown[]) => {
+      expect((args[1] as { signal?: AbortSignal }).signal).toBe(abort.signal);
+      abort.abort();
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      return Promise.reject(error);
+    });
+    await controller.load(abort.signal);
+    expect(api.get).toHaveBeenCalledWith('/v1/programs/today?date=2026-10-18', {
+      signal: abort.signal,
+    });
     expect(controller.get().error).toBeNull();
   });
 });

@@ -109,13 +109,27 @@ describe('signIn', () => {
   it('rethrows when cancelled', async () => {
     const { deps, api } = setup();
     const controller = new AbortController();
-    api.post.mockImplementation(() => {
+    let received: AbortSignal | undefined;
+    api.post.mockImplementation((...args: unknown[]) => {
+      received = (args[2] as { signal?: AbortSignal }).signal;
       controller.abort();
       return Promise.reject(new Error('aborted'));
     });
     await expect(
       signIn(deps, { email: 'ada@example.com', password: 'x' }, controller.signal),
     ).rejects.toThrow('aborted');
+    // The caller's signal reaches the request, so leaving the screen cancels it.
+    expect(received).toBe(controller.signal);
+  });
+
+  it('starts a drain for the changes the user queued before signing in', async () => {
+    const { deps, api, sync } = setup();
+    api.post.mockResolvedValue(session());
+    await signIn(deps, { email: 'ada@example.com', password: 'secret' });
+    expect(sync.syncNow).toHaveBeenCalledTimes(1);
+    expect(sync.refreshOwner.mock.invocationCallOrder[0]).toBeLessThan(
+      sync.syncNow.mock.invocationCallOrder[0] ?? 0,
+    );
   });
 });
 
@@ -174,13 +188,13 @@ describe('signOut', () => {
     await store.saveSession({ ...session(), userId: USER_ID });
     api.post.mockResolvedValue(null);
 
-    await signOut(deps);
+    expect(await signOut(deps)).toBe(true);
 
-    expect(api.post).toHaveBeenCalledWith(
-      '/v1/auth/logout',
-      undefined,
-      expect.objectContaining({ signal: expect.any(AbortSignal) as AbortSignal }),
-    );
+    // No refresh-and-retry on 401: no biometric prompt, and the timeout bounds the call.
+    expect(api.post).toHaveBeenCalledWith('/v1/auth/logout', undefined, {
+      signal: expect.any(AbortSignal) as AbortSignal,
+      refreshOnUnauthorized: false,
+    });
     expect(secure.items.has(REFRESH_TOKEN_KEY)).toBe(false);
     expect(secure.items.has(USER_ID_KEY)).toBe(false);
     expect(store.getAccessToken()).toBeNull();
@@ -223,6 +237,19 @@ describe('signOut', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('locks the session and reports it when the secure storage cannot be cleared', async () => {
+    const { deps, api, sync, store, secure } = setup();
+    await store.saveSession({ ...session(), userId: USER_ID });
+    api.post.mockResolvedValue(null);
+    secure.deleteItem = () => Promise.reject(new Error('keychain'));
+
+    expect(await signOut(deps)).toBe(false);
+
+    expect(store.getAccessToken()).toBeNull();
+    expect(store.isUnlocked()).toBe(false);
+    expect(sync.refreshOwner).toHaveBeenCalledTimes(1);
   });
 });
 

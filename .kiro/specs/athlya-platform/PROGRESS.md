@@ -280,11 +280,11 @@ Insérée entre Epic 8 et Epic 10. Règle les 4 vrais bloquants identifiés dans
 
 Foundation delivered in #642 (issue #638): 11.1–11.7, 11.12 (P5) and 11.13 on Expo SDK 58, plus the BR.4 icon and splash. See `docs/mobile/README.md`.
 
-Écrans membres livrés pour #647 : connexion / inscription, réservation de cours avec mise à jour optimiste (11.8) et « Mes réservations » (annulation), journal de séance (11.10), paramètres avec export / suppression RGPD (11.11), déverrouillage biométrique, déconnexion et vue « modifications refusées » (DLQ), plus la séance du jour du programme sur l'accueil (24.4). Toutes les écritures passent par `features/writes.ts` : envoi direct avec une `Idempotency-Key` UUID v4, mise en file avec la même clé sur `NetworkError`, hors ligne, ou quand des écritures plus anciennes de l'utilisateur attendent encore (ordre FIFO). La logique des écrans est testée en Node (vitest).
+Écrans membres livrés pour #647 : connexion / inscription, réservation de cours avec mise à jour optimiste (11.8) et « Mes réservations » (annulation), journal de séance (11.10), paramètres avec export / suppression RGPD (11.11), déverrouillage biométrique, déconnexion et vue « modifications refusées » (DLQ), plus la séance du jour du programme sur l'accueil (24.4). Les réservations, annulations et séances passent par `features/writes.ts` (l'authentification, l'export et la suppression RGPD appellent l'API directement, en ligne uniquement) : envoi direct avec une `Idempotency-Key` UUID v4, mise en file avec la même clé sur `NetworkError`, hors ligne, ou quand des écritures plus anciennes de l'utilisateur attendent encore (ordre FIFO). La logique des écrans est testée en Node (vitest).
 
 Restent ouverts :
 
-- 11.9 (QR check-in) : pas de route d'émission de token et `/v1/checkins` non monté en production (#648, suite de #302). `POST /v1/sessions` n'est pas routé non plus : les séances enregistrées depuis l'app arrivent dans « modifications refusées » tant que l'adaptateur n'est pas livré.
+- 11.9 (QR check-in) : pas de route d'émission de token et `/v1/checkins` non monté en production (#648, suite de #302). `POST /v1/sessions` n'est pas routé non plus : une séance enregistrée en ligne échoue tout de suite (404), une séance mise en file hors ligne arrive dans « modifications refusées » au moment du drain, tant que l'adaptateur n'est pas livré.
 - Connexion depuis l'app en staging / production : `login` et `register` exigent un token Turnstile que l'app native ne sait pas produire (`403 bot_challenge_failed`), #649.
 ### Epic 12 — Admin studio app (4 tâches restantes — 12.2 et 12.3 livrées)
 ### Epic 20 — Checkpoint v0.2

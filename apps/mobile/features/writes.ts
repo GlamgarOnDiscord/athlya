@@ -8,7 +8,8 @@
  *   replays it, and a drain starts.
  * - Offline, or while older writes of this user wait in the queue, the
  *   write is queued straight away: sending it directly could apply it
- *   before the queued ones and break the FIFO order of the drain.
+ *   before the queued ones and break the FIFO order of the drain. Writes of
+ *   one user are serialized for the same reason (see `serialized`).
  * - A request cancelled through `signal` rethrows its abort error and is
  *   never queued; API errors (4xx/5xx) are rethrown for the screen.
  */
@@ -94,9 +95,45 @@ function enqueue(
   return { kind: 'queued', mutation };
 }
 
+/**
+ * Tail of the write chain per queue and owner. Writes of one user run one
+ * at a time, so a newer write only decides "send or queue" once every older
+ * one has either been acknowledged or taken its place in the queue: an
+ * older write that fails with `NetworkError` is always queued first.
+ */
+const writeChains = new WeakMap<object, Map<string, Promise<void>>>();
+
+function serialized<R>(queue: object, ownerId: string, task: () => Promise<R>): Promise<R> {
+  let chains = writeChains.get(queue);
+  if (chains === undefined) {
+    chains = new Map();
+    writeChains.set(queue, chains);
+  }
+  const owned = chains;
+  const previous = owned.get(ownerId) ?? Promise.resolve();
+  const run = previous.then(task);
+  const tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  owned.set(ownerId, tail);
+  void tail.then(() => {
+    if (owned.get(ownerId) === tail) owned.delete(ownerId);
+  });
+  return run;
+}
+
 export async function submitWrite<T>(deps: WriteDeps, input: WriteInput): Promise<WriteOutcome<T>> {
   const ownerId = await deps.getOwnerId();
   if (ownerId === null) throw new AuthRequiredError();
+  return serialized(deps.queue, ownerId, () => submitInOrder<T>(deps, ownerId, input));
+}
+
+async function submitInOrder<T>(
+  deps: WriteDeps,
+  ownerId: string,
+  input: WriteInput,
+): Promise<WriteOutcome<T>> {
   if (isAborted(input.signal)) throw createAbortError();
   const idempotencyKey = deps.uuid();
 

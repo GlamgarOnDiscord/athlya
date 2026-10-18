@@ -1,6 +1,8 @@
+import { ClassListResponseSchema } from '@athlya/shared/schemas/api';
 import { describe, expect, it } from 'vitest';
 
 import {
+  applyQueuedBookings,
   CLASS_WINDOW_DAYS,
   ClassesController,
   classesPath,
@@ -239,6 +241,49 @@ describe('ClassesController.book (useBookClass)', () => {
     await load;
     expect(remainingOf(controller, CLASS_ID)).toBe(2);
     expect(controller.get().load).toBe('ready');
+  });
+});
+
+describe('queued bookings reconciliation', () => {
+  it('keeps the decrement of a still-queued booking on every reload', async () => {
+    const writes = createWriteDeps();
+    const api = createFakeApi();
+    api.get.mockResolvedValue({ items: [klass(CLASS_ID, 3), klass(OTHER_CLASS_ID, 0)] });
+    const controller = new ClassesController({
+      api,
+      writes: writes.deps,
+      queuedClassIds: () => new Set([CLASS_ID, OTHER_CLASS_ID]),
+    });
+    await controller.load();
+    expect(remainingOf(controller, CLASS_ID)).toBe(2);
+    expect(remainingOf(controller, OTHER_CLASS_ID)).toBe(0);
+    const listed = ClassListResponseSchema.parse({ items: [klass(CLASS_ID, 3)] }).items;
+    expect(applyQueuedBookings(listed, new Set())).toBe(listed);
+  });
+
+  it('clears the "waiting to sync" mark and refetches once the booking leaves the queue', async () => {
+    const { controller, api, writes } = await setup();
+    writes.api.post.mockRejectedValue(new NetworkError('offline'));
+    await controller.book(CLASS_ID);
+    controller.reconcileQueued(new Set([CLASS_ID]));
+    await flush();
+    expect(api.get).not.toHaveBeenCalled();
+    expect(controller.get().bookings[CLASS_ID]).toEqual({ kind: 'queued' });
+
+    // Delivered or dead-lettered by the drain: the server is the source of truth again.
+    api.get.mockResolvedValue({ items: [klass(CLASS_ID, 2), klass(OTHER_CLASS_ID, 5)] });
+    controller.reconcileQueued(new Set());
+    await flush();
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect(controller.get().bookings[CLASS_ID]).toBeUndefined();
+  });
+
+  it('also refetches for a booking queued in an earlier session', async () => {
+    const { controller, api } = await setup();
+    controller.reconcileQueued(new Set([OTHER_CLASS_ID]));
+    controller.reconcileQueued(new Set());
+    await flush();
+    expect(api.get).toHaveBeenCalledTimes(1);
   });
 });
 

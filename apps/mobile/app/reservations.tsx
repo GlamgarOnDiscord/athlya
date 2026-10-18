@@ -26,7 +26,13 @@ function Reservations({ userId }: { readonly userId: string }) {
     [runtime, writes],
   );
   const state = useSyncExternalStore(controller.subscribe, controller.get);
-  const queued = queuedCancellationIds(usePendingMutations(userId));
+  const pending = usePendingMutations(userId);
+  const queued = useMemo(() => queuedCancellationIds(pending), [pending]);
+
+  // A queued cancellation that leaves the queue (delivered or rejected) is fetched again.
+  useEffect(() => {
+    controller.reconcileQueued(queued);
+  }, [controller, queued]);
 
   useEffect(() => {
     const abort = new AbortController();

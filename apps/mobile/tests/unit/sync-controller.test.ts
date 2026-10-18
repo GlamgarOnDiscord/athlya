@@ -242,4 +242,29 @@ describe('SyncController (task 11.7)', () => {
     await controller.syncNow();
     expect(controller.getState()).toMatchObject({ status: 'auth-required', pending: 1 });
   });
+
+  it('stops a running drain when the signed-in user changes', async () => {
+    const { queue } = createQueue();
+    queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
+    queue.enqueue({ ownerId: OWNER, kind: 'b', path: '/v1/b' });
+    let current: string | null = OWNER;
+    const sent: string[] = [];
+    const api: Pick<ApiClient, 'send'> = {
+      send: (_method, path) => {
+        sent.push(path);
+        // The account is deleted / signed out while its first mutation is in flight.
+        current = null;
+        return Promise.resolve<ApiResponse>({ status: 201, headers: new Headers(), body: null });
+      },
+    };
+    const controller = new SyncController({
+      queue,
+      api,
+      getOwnerId: () => Promise.resolve(current),
+      connectivity: new FakeConnectivity(true),
+    });
+    await controller.syncNow();
+    expect(sent).toEqual(['/v1/a']);
+    expect(queue.size).toBe(1);
+  });
 });

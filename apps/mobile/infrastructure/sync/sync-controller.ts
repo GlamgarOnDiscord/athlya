@@ -161,6 +161,7 @@ export class SyncController {
         result = await drainMutationQueue(this.#options.queue, this.#options.api, {
           ...this.#options.drainOptions,
           ownerId,
+          isOwnerSignedIn: async () => (await this.#options.getOwnerId()) === ownerId,
           isOnline: () => this.#options.connectivity.isOnline(),
           onProgress: ({ total, processed }) => {
             this.#update({ total, processed });

@@ -209,8 +209,13 @@ export function buildLogSessionRequest(draft: WorkoutDraft): BuildResult {
   // Range checks the text parsing above does not cover (reps > 1000,
   // weight > 1000 kg, notes > 2000 chars, more than 50/30 items).
   for (const issue of parsed.error.issues) {
-    const [root, exercise, , set, part] = issue.path;
-    if (
+    const [root, exercise, child, set, part] = issue.path;
+    if (root === 'exercises' && typeof exercise === 'number' && child === 'name') {
+      errors.push({
+        field: { kind: 'exerciseName', exercise },
+        key: 'mobile.workout.errors.exerciseName',
+      });
+    } else if (
       root === 'exercises' &&
       typeof exercise === 'number' &&
       typeof set === 'number' &&

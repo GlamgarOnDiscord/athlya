@@ -19,22 +19,24 @@ import { createQueue, createTokenStore } from '../helpers';
 describe('toggleBiometricUnlock', () => {
   it('renders the state the token store actually reached', async () => {
     const { store, biometrics } = createTokenStore();
-    expect(await toggleBiometricUnlock(store, true)).toBe(true);
+    expect(await toggleBiometricUnlock(store, true)).toEqual({ enabled: true, failed: false });
     expect(await store.isBiometricUnlockEnabled()).toBe(true);
 
-    expect(await toggleBiometricUnlock(store, false)).toBe(false);
+    expect(await toggleBiometricUnlock(store, false)).toEqual({ enabled: false, failed: false });
 
     biometrics.accept = false;
-    expect(await toggleBiometricUnlock(store, true)).toBe(false);
+    expect(await toggleBiometricUnlock(store, true)).toEqual({ enabled: false, failed: true });
     biometrics.available = false;
     biometrics.accept = true;
-    expect(await toggleBiometricUnlock(store, true)).toBe(false);
+    expect(await toggleBiometricUnlock(store, true)).toEqual({ enabled: false, failed: true });
     expect(await store.isBiometricUnlockEnabled()).toBe(false);
   });
 
-  it('shows the switch off when the store fails', async () => {
+  it('keeps the previous state when the store fails', async () => {
     const failing = { setBiometricUnlockEnabled: () => Promise.reject(new Error('keychain')) };
-    expect(await toggleBiometricUnlock(failing, true)).toBe(false);
+    expect(await toggleBiometricUnlock(failing, true)).toEqual({ enabled: false, failed: true });
+    // A failed disable leaves the protection on: the switch must say so.
+    expect(await toggleBiometricUnlock(failing, false)).toEqual({ enabled: true, failed: true });
   });
 });
 
@@ -139,7 +141,7 @@ describe('account deletion', () => {
     const { deps, api, sync, queue, secure, mine, theirs } = await setup();
     api.del.mockResolvedValue({ deleted: true });
 
-    expect(await deleteAccount(deps, USER_ID)).toEqual({ ok: true });
+    expect(await deleteAccount(deps, USER_ID)).toEqual({ ok: true, cleanupFailed: false });
 
     expect(api.del).toHaveBeenCalledWith('/v1/auth/me', {
       idempotencyKey: expect.any(String) as string,
@@ -165,4 +167,35 @@ describe('account deletion', () => {
     expect(secure.items.has(REFRESH_TOKEN_KEY)).toBe(true);
     expect(refreshOwner).not.toHaveBeenCalled();
   });
+
+  it('never rejects once the server deleted the account, and still clears what it can', async () => {
+    const { deps, api, sync, store } = await setupWithFailingStorage();
+    api.del.mockResolvedValue({ deleted: true });
+
+    const result = await deleteAccount(deps, USER_ID);
+
+    expect(result).toEqual({ ok: true, cleanupFailed: true });
+    // The secure storage refused to forget the session: it is locked in memory instead.
+    expect(store.getAccessToken()).toBeNull();
+    expect(store.isUnlocked()).toBe(false);
+    expect(sync.refreshOwner).toHaveBeenCalledTimes(1);
+  });
+
+  async function setupWithFailingStorage() {
+    const base = await setup();
+    base.secure.deleteItem = () => Promise.reject(new Error('keychain'));
+    const queue = {
+      pendingFor: () => {
+        throw new Error('mmkv');
+      },
+      remove: () => false,
+      deadLetters: () => [],
+      discardDeadLetter: () => false,
+    };
+    return {
+      ...base,
+      store: base.deps.tokenStore,
+      deps: { ...base.deps, queue },
+    };
+  }
 });

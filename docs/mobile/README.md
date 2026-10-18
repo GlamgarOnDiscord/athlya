@@ -85,29 +85,39 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
 
 ## Screens
 
-| Route           | What it does                                                                                 | API                                                                        |
-| --------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `/login`        | Email + password sign-in                                                                     | `POST /v1/auth/login`                                                      |
-| `/register`     | Account creation with studio slug and consents                                               | `POST /v1/auth/register`                                                   |
-| `/`             | Sync banner, today's program workout (24.4), navigation                                      | `GET /v1/programs/today?date=<local date>`                                 |
-| `/classes`      | Next 14 days of classes, booking with an optimistic seat count (11.8)                        | `GET /v1/classes`, `POST /v1/reservations`                                 |
-| `/reservations` | Upcoming reservations, cancellation until 2 h before the class                               | `GET /v1/reservations/me`, `DELETE /v1/reservations/{id}`                  |
-| `/workout`      | Workout log: exercises, sets, reps, weight, duration, notes (11.10)                          | `POST /v1/sessions`                                                        |
-| `/settings`     | Biometric unlock, rejected changes (DLQ), RGPD export and account deletion (11.11), sign-out | `POST /v1/members/me/export`, `DELETE /v1/auth/me`, `POST /v1/auth/logout` |
+| Route           | What it does                                                                                 | API                                                                                             |
+| --------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `/login`        | Email + password sign-in                                                                     | `POST /v1/auth/login`                                                                           |
+| `/register`     | Account creation with studio slug and consents                                               | `POST /v1/auth/register`                                                                        |
+| `/`             | Sync banner, today's program workout (24.4), navigation                                      | `GET /v1/programs/today?date=<local date>`                                                      |
+| `/classes`      | Next 14 days of classes, booking with an optimistic seat count (11.8)                        | `GET /v1/classes?from=<ISO>&to=<ISO>` (both required, 90 days at most), `POST /v1/reservations` |
+| `/reservations` | Upcoming reservations, cancellation until 2 h before the class                               | `GET /v1/reservations/me`, `DELETE /v1/reservations/{id}`                                       |
+| `/workout`      | Workout log: exercises, sets, reps, weight, duration, notes (11.10)                          | `POST /v1/sessions`                                                                             |
+| `/settings`     | Biometric unlock, rejected changes (DLQ), RGPD export and account deletion (11.11), sign-out | `POST /v1/members/me/export`, `DELETE /v1/auth/me`, `POST /v1/auth/logout`                      |
 
 Screens behind the sign-in gate (`<SignedIn>`, `components/AppSession.tsx`) redirect to `/login` when
-no session is stored. Every response is validated with the `@athlya/shared` Zod schemas.
+no session is stored. Every response body the app reads (sessions, class and reservation lists,
+booking result, export job, today's program) is validated with the `@athlya/shared` Zod schemas;
+the bodies of cancellation, workout and deletion responses are not read.
 
 **Write path** (`features/writes.ts`, `submitWrite`): online, the request goes out with a fresh UUID
 v4 `Idempotency-Key`; on `NetworkError` it is queued with that same key and a drain starts. It is
 queued straight away while the device is offline, or while older writes of the same user are still
-queued, so a direct call never overtakes them (the drain is FIFO). A cancelled request is never
-queued. Queue kinds: `bookClass`, `cancelReservation`, `logSession`; the Settings screen labels
-rejected ones by kind. Export and account deletion are online only.
+queued, so a direct call never overtakes them (the drain is FIFO). Writes of one user are also
+serialized: a newer write only goes out once every older one was acknowledged or queued. A
+cancelled request is never queued. Queue kinds: `bookClass`, `cancelReservation`, `logSession`; the
+Settings screen labels rejected ones by kind. Sign-in, sign-out, export and account deletion call the
+API directly and are online only. Signing in starts a drain for changes queued earlier.
 
 **Optimistic booking** (`ClassesController.book`): the seat count drops at once, the decrement is
 undone on an API error (never on a full class, which only joins the waitlist), and the list is fetched
-again afterwards. A queued booking keeps its decrement and shows as waiting to sync.
+again afterwards. A queued booking keeps its decrement (re-applied on every reload) and shows as
+waiting to sync; once it leaves the queue (delivered or dead-lettered) the list is fetched again.
+Queued cancellations are reconciled the same way on "My reservations".
+
+**Account deletion**: once the API accepted it, the device removes the user's queued and rejected
+changes, then clears the session (or locks it in memory if the secure storage fails) and leaves the
+signed-in area whatever happens locally.
 
 **Known gaps**:
 
@@ -115,7 +125,8 @@ again afterwards. A queued booking keeps its decrement and shows as waiting to s
   cannot solve, so staging and production answer `403 bot_challenge_failed` (shown as "use the
   website"). Works against a local `wrangler dev` without a Turnstile secret. Tracked in #649.
 - `POST /v1/sessions` and `/v1/checkins` are not routed in production yet (#302, #648): workouts
-  logged from the app end up in "rejected changes" until the sessions adapter ships.
+  saved online get an error (404) on the spot, and workouts queued offline end up in "rejected
+  changes" when the drain sends them, until the sessions adapter ships.
 
 ## Drain semantics (Algorithm 4)
 
@@ -124,7 +135,9 @@ FIFO; `2xx`/`409` remove; other `4xx` go to the DLQ with the problem `code`; `5x
 mutation stays at the head of the queue and the drain stops so nothing overtakes it. The drain also
 stops when the device goes offline (checked before every mutation and every retry), and when no
 user is signed in or the session cannot be refreshed (`auth-required`, the queue is left untouched
-until the user signs in again).
+until the user signs in again). Before every attempt it re-checks that the mutation is still queued
+and that its owner is still the signed-in user, so a sign-out, an account deletion or another
+sign-in stops it before anything is sent under the wrong session.
 
 ## Brand
 

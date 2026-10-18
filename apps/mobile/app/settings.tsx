@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Text } from 'react-native';
+import { Alert, Text } from 'react-native';
 
 import { SignedIn, useDeadLetters, useSessionStore } from '../components/AppSession';
 import { ErrorNotice } from '../components/ErrorNotice';
@@ -25,6 +25,8 @@ import {
   type ExportResult,
 } from '../features/settings/settings';
 
+import type { TranslationKeys } from '@athlya/shared/i18n';
+
 function SectionTitle({ children }: { readonly children: string }) {
   return (
     <Text
@@ -46,7 +48,7 @@ function Settings({ userId }: { readonly userId: string }) {
 
   const [biometric, setBiometric] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(true);
-  const [biometricRefused, setBiometricRefused] = useState(false);
+  const [biometricRefused, setBiometricRefused] = useState<TranslationKeys | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
@@ -72,24 +74,45 @@ function Settings({ userId }: { readonly userId: string }) {
 
   const onToggleBiometric = (enabled: boolean) => {
     setBiometricBusy(true);
-    setBiometricRefused(false);
-    void toggleBiometricUnlock(tokenStore, enabled).then((actual) => {
-      setBiometric(actual);
-      setBiometricRefused(enabled && !actual);
+    setBiometricRefused(null);
+    void toggleBiometricUnlock(tokenStore, enabled).then((result) => {
+      setBiometric(result.enabled);
+      if (result.failed) {
+        setBiometricRefused(
+          enabled
+            ? 'mobile.settings.biometric.unavailable'
+            : 'mobile.settings.biometric.disableFailed',
+        );
+      }
       setBiometricBusy(false);
     });
   };
 
-  const leave = async () => {
-    await session.refresh();
-    router.replace('/login');
+  /** Leaves the signed-in area; local cleanup problems are reported, never block. */
+  const leave = (cleanupFailed: boolean) => {
+    if (cleanupFailed) {
+      Alert.alert(
+        t('mobile.settings.cleanupFailed.title'),
+        t('mobile.settings.cleanupFailed.message'),
+      );
+    }
+    void session
+      .refresh()
+      .catch(() => undefined)
+      .finally(() => {
+        router.replace('/login');
+      });
   };
 
   const onSignOut = () => {
     setSigningOut(true);
-    void signOut(runtime).finally(() => {
-      void leave();
-    });
+    signOut(runtime)
+      .then((cleared) => {
+        leave(!cleared);
+      })
+      .catch(() => {
+        leave(true);
+      });
   };
 
   const onExport = () => {
@@ -108,7 +131,7 @@ function Settings({ userId }: { readonly userId: string }) {
     setDeleteResult(null);
     void deleteAccount({ ...runtime, uuid: Crypto.randomUUID }, userId).then((result) => {
       if (result.ok) {
-        void leave();
+        leave(result.cleanupFailed);
         return;
       }
       setDeleteResult(result);
@@ -127,9 +150,7 @@ function Settings({ userId }: { readonly userId: string }) {
         busy={biometricBusy}
         onValueChange={onToggleBiometric}
       />
-      {biometricRefused ? (
-        <Notice tone="error" message={t('mobile.settings.biometric.unavailable')} />
-      ) : null}
+      {biometricRefused === null ? null : <Notice tone="error" message={t(biometricRefused)} />}
 
       <SectionTitle>{t('mobile.settings.rejected.title')}</SectionTitle>
       <AppText variant="muted">{t('mobile.settings.rejected.description')}</AppText>

@@ -24,9 +24,13 @@ export function ErrorNotice({ error }: { readonly error: ErrorModel }) {
           title={t('mobile.errors.signIn')}
           variant="secondary"
           onPress={() => {
-            void session.refresh().then(() => {
-              router.push('/login');
-            });
+            // Replace, so Back cannot return to the protected screen.
+            void session
+              .refresh()
+              .catch(() => undefined)
+              .finally(() => {
+                router.replace('/login');
+              });
           }}
         />
       ) : null}

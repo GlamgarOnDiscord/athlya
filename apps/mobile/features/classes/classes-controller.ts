@@ -54,6 +54,8 @@ export interface ClassesDeps {
   readonly api: Pick<ApiClient, 'get'>;
   readonly writes: WriteDeps;
   readonly now?: () => Date;
+  /** Class ids of this user's bookings still in the offline queue. */
+  readonly queuedClassIds?: () => ReadonlySet<string>;
 }
 
 const INITIAL: ClassesState = { load: 'idle', items: [], error: null, bookings: {}, notice: null };
@@ -90,6 +92,21 @@ function adjustRemaining(
   );
 }
 
+/**
+ * The server does not count a booking still waiting in the offline queue:
+ * keep its optimistic decrement on every fresh listing.
+ */
+export function applyQueuedBookings(
+  items: readonly ClassWithRemaining[],
+  queued: ReadonlySet<string>,
+): readonly ClassWithRemaining[] {
+  return queued.size === 0
+    ? items
+    : items.map((item) =>
+        queued.has(item.id) ? { ...item, remaining: Math.max(0, item.remaining - 1) } : item,
+      );
+}
+
 function withoutBooking(
   bookings: ClassesState['bookings'],
   classId: string,
@@ -103,6 +120,7 @@ export class ClassesController {
   readonly #deps: ClassesDeps;
   readonly #store = new Store<ClassesState>(INITIAL);
   #loadGeneration = 0;
+  #lastQueued: ReadonlySet<string> = new Set();
 
   public constructor(deps: ClassesDeps) {
     this.#deps = deps;
@@ -128,11 +146,37 @@ export class ClassesController {
       });
       const { items } = ClassListResponseSchema.parse(raw);
       if (generation !== this.#loadGeneration) return;
-      this.#store.set((state) => ({ ...state, load: 'ready', items, error: null }));
+      const reconciled = applyQueuedBookings(items, this.#deps.queuedClassIds?.() ?? new Set());
+      this.#store.set((state) => ({ ...state, load: 'ready', items: reconciled, error: null }));
     } catch (error) {
       if (generation !== this.#loadGeneration || isAbortError(error)) return;
       this.#store.set((state) => ({ ...state, load: 'error', error: toErrorModel(error) }));
     }
+  }
+
+  /**
+   * Called with the class ids still queued whenever the queue changes. A
+   * queued booking that left the queue was either delivered or rejected
+   * (dead letter): its "waiting to sync" mark goes and the list is fetched
+   * again, so the seat count and the booking state come from the server.
+   */
+  public reconcileQueued(queued: ReadonlySet<string>): void {
+    const marked = Object.entries(this.#store.get().bookings)
+      .filter(([, mark]) => mark.kind === 'queued')
+      .map(([classId]) => classId);
+    const settled = new Set(
+      [...this.#lastQueued, ...marked].filter((classId) => !queued.has(classId)),
+    );
+    this.#lastQueued = new Set(queued);
+    if (settled.size === 0) return;
+    this.#store.set((state) => {
+      let bookings = state.bookings;
+      for (const classId of settled) {
+        if (bookings[classId]?.kind === 'queued') bookings = withoutBooking(bookings, classId);
+      }
+      return { ...state, bookings };
+    });
+    void this.load();
   }
 
   public async book(classId: string): Promise<BookingMark | null> {

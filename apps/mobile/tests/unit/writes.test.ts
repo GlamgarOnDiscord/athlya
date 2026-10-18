@@ -4,7 +4,7 @@ import { isAbortError, toErrorModel } from '../../features/errors';
 import { submitWrite, toJsonPayload } from '../../features/writes';
 import { ApiError, AuthRequiredError, NetworkError } from '../../infrastructure/api/errors';
 import { isUuidV4 } from '../../infrastructure/ids';
-import { createWriteDeps } from '../features-helpers';
+import { createWriteDeps, flush } from '../features-helpers';
 import { OWNER } from '../helpers';
 
 const INPUT = {
@@ -137,6 +137,51 @@ describe('submitWrite', () => {
     const { deps } = createWriteDeps({ ownerId: null });
     await expect(submitWrite(deps, INPUT)).rejects.toBeInstanceOf(AuthRequiredError);
   });
+
+  it('serializes a user’s writes: an older write that fails offline is queued first', async () => {
+    const { deps, api, queue } = createWriteDeps();
+    let failFirst: (error: unknown) => void = () => undefined;
+    api.post.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        failFirst = reject;
+      }),
+    );
+    api.post.mockResolvedValue({ ok: true });
+
+    const first = submitWrite(deps, { ...INPUT, payload: { classId: 'older' } });
+    const second = submitWrite(deps, { ...INPUT, payload: { classId: 'newer' } });
+    await flush();
+    // The newer write waits for the older one instead of going out alongside it.
+    expect(api.post).toHaveBeenCalledTimes(1);
+
+    failFirst(new NetworkError('offline'));
+    expect((await first).kind).toBe('queued');
+    expect((await second).kind).toBe('queued');
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(queue.peek().map((item) => item.payload)).toEqual([
+      { classId: 'older' },
+      { classId: 'newer' },
+    ]);
+  });
+
+  it('keeps going after a write of the chain fails', async () => {
+    const { deps, api } = createWriteDeps();
+    api.post.mockRejectedValueOnce(new ApiError(422)).mockResolvedValueOnce({ ok: true });
+    const first = submitWrite(deps, INPUT);
+    const second = submitWrite(deps, INPUT);
+    await expect(first).rejects.toBeInstanceOf(ApiError);
+    expect(await second).toEqual({ kind: 'sent', body: { ok: true } });
+  });
+
+  it('does not make different users wait for each other', async () => {
+    const shared = createWriteDeps();
+    const other = { ...shared.deps, getOwnerId: () => Promise.resolve('user-2') };
+    shared.api.post
+      .mockReturnValueOnce(new Promise(() => undefined))
+      .mockResolvedValueOnce({ ok: true });
+    void submitWrite(shared.deps, INPUT);
+    expect(await submitWrite(other, INPUT)).toEqual({ kind: 'sent', body: { ok: true } });
+  });
 });
 
 describe('toJsonPayload', () => {
@@ -164,11 +209,21 @@ describe('toErrorModel', () => {
     expect(toErrorModel(new ApiError(422, { ...problem, code: 'unknown' })).key).toBe(
       'errors.validation',
     );
-    expect(toErrorModel(new ApiError(401), { 401: 'auth.errors.invalidCredentials' }).key).toBe(
+    // The override wins even over a known problem code.
+    const coded401 = new ApiError(401, { ...problem, status: 401, code: 'rate_limit_exceeded' });
+    expect(toErrorModel(coded401, { 401: 'auth.errors.invalidCredentials' }).key).toBe(
       'auth.errors.invalidCredentials',
     );
+    expect(toErrorModel(coded401).key).toBe('errors.rateLimited');
     expect(toErrorModel(new ApiError(404)).key).toBe('errors.notFound');
     expect(toErrorModel(new ApiError(429)).key).toBe('errors.rateLimited');
     expect(toErrorModel(new ApiError(503)).key).toBe('errors.generic');
+  });
+
+  it('ignores problem codes that name inherited object properties', () => {
+    for (const code of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      const error = new ApiError(422, { type: 'about:blank', title: 'x', status: 422, code });
+      expect(toErrorModel(error).key).toBe('errors.validation');
+    }
   });
 });

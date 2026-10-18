@@ -4,16 +4,16 @@ import type { ReactNode } from 'react';
 
 export interface CardProps {
   readonly children: ReactNode;
-  /** Read by screen readers as the card's name when set. */
-  readonly accessibilityLabel?: string;
 }
 
-export function Card({ children, accessibilityLabel }: CardProps) {
+/**
+ * Visual grouping only: the card is not an accessibility element, so the
+ * text, fields and buttons inside stay individually reachable. Give a card
+ * a heading as its first child when it needs a name.
+ */
+export function Card({ children }: CardProps) {
   return (
-    <View
-      {...(accessibilityLabel === undefined ? {} : { accessibilityLabel })}
-      className="gap-sm rounded-lg border border-border bg-background p-md dark:border-dark-border dark:bg-dark-background"
-    >
+    <View className="gap-sm rounded-lg border border-border bg-background p-md dark:border-dark-border dark:bg-dark-background">
       {children}
     </View>
   );

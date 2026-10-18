@@ -24,8 +24,8 @@ import type { z } from 'zod';
 
 export interface AuthDeps {
   readonly api: Pick<ApiClient, 'post'>;
-  readonly tokenStore: Pick<TokenStore, 'saveSession' | 'clear' | 'getAccessToken'>;
-  readonly sync: Pick<SyncController, 'refreshOwner'>;
+  readonly tokenStore: Pick<TokenStore, 'saveSession' | 'clear' | 'getAccessToken' | 'lock'>;
+  readonly sync: Pick<SyncController, 'refreshOwner' | 'syncNow'>;
 }
 
 export type FieldErrors = Readonly<Partial<Record<string, TranslationKeys>>>;
@@ -57,7 +57,9 @@ function fieldErrors(error: z.ZodError): FieldErrors {
   for (const issue of error.issues) {
     const field = issue.path[0];
     if (typeof field !== 'string' || field in result) continue;
-    result[field] = FIELD_KEYS[field] ?? 'errors.validation';
+    result[field] = Object.hasOwn(FIELD_KEYS, field)
+      ? (FIELD_KEYS[field] ?? 'errors.validation')
+      : 'errors.validation';
   }
   return result;
 }
@@ -76,6 +78,8 @@ async function startSession(
     const session = SessionResponseSchema.parse(raw);
     await deps.tokenStore.saveSession({ ...session, userId: session.user.id });
     await deps.sync.refreshOwner();
+    // Changes this user queued before (offline, or while signed out) go out now.
+    void deps.sync.syncNow();
     return { ok: true, userId: session.user.id };
   } catch (error) {
     if (signal?.aborted === true) throw error;
@@ -125,24 +129,38 @@ export const LOGOUT_TIMEOUT_MS = 5_000;
 
 /**
  * Revokes the refresh token server-side when an access token is at hand
- * (best effort: no refresh, no biometric prompt, bounded wait), then
- * forgets the local session. The user's queued mutations stay queued and
- * are sent when they sign in again.
+ * (best effort: no refresh on 401, so no biometric prompt, and a bounded
+ * wait), then forgets the local session. The user's queued mutations stay
+ * queued and are sent when they sign in again.
+ *
+ * Resolves `false` when the secure storage could not be cleared: the
+ * session is then at least locked in memory (no access token, a new unlock
+ * required) and the caller should tell the user.
  */
-export async function signOut(deps: AuthDeps): Promise<void> {
+export async function signOut(deps: AuthDeps): Promise<boolean> {
   if (deps.tokenStore.getAccessToken() !== null) {
     const controller = new AbortController();
     const timer = setTimeout(() => {
       controller.abort();
     }, LOGOUT_TIMEOUT_MS);
     try {
-      await deps.api.post('/v1/auth/logout', undefined, { signal: controller.signal });
+      await deps.api.post('/v1/auth/logout', undefined, {
+        signal: controller.signal,
+        refreshOnUnauthorized: false,
+      });
     } catch {
       // The local session is cleared anyway; the refresh token expires on its own.
     } finally {
       clearTimeout(timer);
     }
   }
-  await deps.tokenStore.clear();
+  let cleared = true;
+  try {
+    await deps.tokenStore.clear();
+  } catch {
+    cleared = false;
+    deps.tokenStore.lock();
+  }
   await deps.sync.refreshOwner();
+  return cleared;
 }

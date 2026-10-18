@@ -35,7 +35,20 @@ export const MyReservationsResponseSchema = z
 
 export type MyReservation = z.infer<typeof MyReservationSchema>;
 
-export const MY_RESERVATIONS_PATH = '/v1/reservations/me?limit=100';
+/** Longest class (480 min): a reservation that started this long ago may still be running. */
+const MAX_CLASS_DURATION_MS = 480 * 60_000;
+/** Safety bound on cursor pages followed in one load (100 rows each). */
+export const MAX_RESERVATION_PAGES = 10;
+
+/**
+ * One page of the member's reservations whose class may not have ended
+ * yet: `from` skips past ones, so the pages hold upcoming reservations.
+ */
+export function myReservationsPath(now: Date, cursor: string | null = null): string {
+  const from = new Date(now.getTime() - MAX_CLASS_DURATION_MS).toISOString();
+  const query = `from=${encodeURIComponent(from)}&limit=100`;
+  return `/v1/reservations/me?${query}${cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`}`;
+}
 
 export function cancelPath(reservationId: string): string {
   return `/v1/reservations/${encodeURIComponent(reservationId)}`;
@@ -92,6 +105,7 @@ export interface ReservationsState {
 export interface ReservationsDeps {
   readonly api: Pick<ApiClient, 'get'>;
   readonly writes: WriteDeps;
+  readonly now?: () => Date;
 }
 
 const INITIAL: ReservationsState = {
@@ -120,6 +134,7 @@ export class ReservationsController {
   readonly #deps: ReservationsDeps;
   readonly #store = new Store<ReservationsState>(INITIAL);
   #loadGeneration = 0;
+  #lastQueued: ReadonlySet<string> = new Set();
 
   public constructor(deps: ReservationsDeps) {
     this.#deps = deps;
@@ -135,16 +150,36 @@ export class ReservationsController {
     const generation = this.#loadGeneration;
     this.#store.set((state) => ({ ...state, load: 'loading', error: null }));
     try {
-      const raw = await this.#deps.api.get<unknown>(MY_RESERVATIONS_PATH, {
-        ...(signal === undefined ? {} : { signal }),
-      });
-      const { items } = MyReservationsResponseSchema.parse(raw);
+      const now = this.#deps.now?.() ?? new Date();
+      const items: MyReservation[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < MAX_RESERVATION_PAGES; page += 1) {
+        const raw = await this.#deps.api.get<unknown>(myReservationsPath(now, cursor), {
+          ...(signal === undefined ? {} : { signal }),
+        });
+        const parsed = MyReservationsResponseSchema.parse(raw);
+        items.push(...parsed.items);
+        cursor = parsed.nextCursor;
+        if (cursor === null || generation !== this.#loadGeneration) break;
+      }
       if (generation !== this.#loadGeneration) return;
       this.#store.set((state) => ({ ...state, load: 'ready', items, error: null }));
     } catch (error) {
       if (generation !== this.#loadGeneration || isAbortError(error)) return;
       this.#store.set((state) => ({ ...state, load: 'error', error: toErrorModel(error) }));
     }
+  }
+
+  /**
+   * Called with the reservation ids whose cancellation is still queued,
+   * whenever the queue changes. One that left the queue was delivered or
+   * rejected (dead letter, e.g. the 2-hour window had closed by then): the
+   * list is fetched again so the status shown is the server's.
+   */
+  public reconcileQueued(queued: ReadonlySet<string>): void {
+    const settled = [...this.#lastQueued].some((id) => !queued.has(id));
+    this.#lastQueued = new Set(queued);
+    if (settled) void this.load();
   }
 
   public async cancel(reservationId: string): Promise<boolean> {

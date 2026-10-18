@@ -50,7 +50,11 @@ export function toErrorModel(
     const override = overrides[error.status];
     if (override !== undefined) return { key: override, authRequired: false };
     const code = error.problem?.code;
-    const byCode = code === undefined ? undefined : PROBLEM_CODE_KEYS[code];
+    // Own keys only: a code such as `constructor` must not resolve to Object.prototype.
+    const byCode =
+      code !== undefined && Object.hasOwn(PROBLEM_CODE_KEYS, code)
+        ? PROBLEM_CODE_KEYS[code]
+        : undefined;
     return { key: byCode ?? statusKey(error.status), authRequired: false };
   }
   return { key: 'errors.generic', authRequired: false };

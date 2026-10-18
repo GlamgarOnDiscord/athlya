@@ -137,6 +137,18 @@ describe('buildLogSessionRequest', () => {
     ]);
   });
 
+  it('points at the exercise whose name is too long', () => {
+    const draft = workoutReducer(filled(), {
+      type: 'renameExercise',
+      exercise: 0,
+      name: 'x'.repeat(121),
+    });
+    const result = buildLogSessionRequest(draft);
+    expect(!result.ok && result.errors).toEqual([
+      { field: { kind: 'exerciseName', exercise: 0 }, key: 'mobile.workout.errors.exerciseName' },
+    ]);
+  });
+
   it('enforces the shared schema ranges', () => {
     const draft = apply(
       filled(),

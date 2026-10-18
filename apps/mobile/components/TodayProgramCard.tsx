@@ -1,33 +1,54 @@
-import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { Text, View } from 'react-native';
 
 import { formatLocalDate } from '../features/format';
 import {
+  msUntilNextLocalMidnight,
   TodayProgramController,
   type Message,
   type ProgramCard,
 } from '../features/programs/today-program';
 
+import { ErrorNotice } from './ErrorNotice';
 import { useRuntime } from './RuntimeProvider';
 import { AppText } from './ui/AppText';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
-import { Notice } from './ui/Notice';
 
-/** Today's prescribed workout per program subscription (task 24.4). */
+/**
+ * Today's prescribed workout per program subscription (task 24.4). It is
+ * fetched again whenever the home screen regains focus and at local
+ * midnight, so it never shows yesterday's workout as today's.
+ */
 export function TodayProgramCard() {
   const runtime = useRuntime();
   const { t, locale } = runtime;
   const controller = useMemo(() => new TodayProgramController(runtime.api), [runtime]);
   const state = useSyncExternalStore(controller.subscribe, controller.get);
 
+  useFocusEffect(
+    useCallback(() => {
+      const abort = new AbortController();
+      void controller.load(abort.signal);
+      return () => {
+        abort.abort();
+      };
+    }, [controller]),
+  );
+
+  // Re-armed after every load, so the timer always targets the next midnight.
   useEffect(() => {
-    const abort = new AbortController();
-    void controller.load(abort.signal);
+    const timer = setTimeout(
+      () => {
+        void controller.load();
+      },
+      msUntilNextLocalMidnight(new Date()) + 1_000,
+    );
     return () => {
-      abort.abort();
+      clearTimeout(timer);
     };
-  }, [controller]);
+  }, [controller, state.date]);
 
   const render = (message: Message): string => {
     const values = { ...message.values };
@@ -37,17 +58,20 @@ export function TodayProgramCard() {
     return t(message.key, values);
   };
 
-  if (state.load === 'error') {
+  if (state.load === 'error' && state.error !== null) {
     return (
       <View className="gap-sm">
-        <Notice tone="error" message={t('mobile.program.loadError')} />
-        <Button
-          title={t('common.retry')}
-          variant="secondary"
-          onPress={() => {
-            void controller.load();
-          }}
-        />
+        <AppText variant="muted">{t('mobile.program.loadError')}</AppText>
+        <ErrorNotice error={state.error} />
+        {state.error.authRequired ? null : (
+          <Button
+            title={t('common.retry')}
+            variant="secondary"
+            onPress={() => {
+              void controller.load();
+            }}
+          />
+        )}
       </View>
     );
   }
@@ -67,9 +91,10 @@ export function TodayProgramCard() {
           <AppText variant="muted">{render(card.headline)}</AppText>
           {card.workoutTitle === null ? null : <AppText>{card.workoutTitle}</AppText>}
           {card.exercises.map((exercise, index) => (
-            <AppText key={`${String(index)}-${exercise.name}`}>
-              {`${exercise.name}: ${exercise.parts.map(render).join(', ')}`}
-            </AppText>
+            <View key={`${String(index)}-${exercise.name}`}>
+              <AppText>{`${exercise.name}: ${exercise.parts.map(render).join(', ')}`}</AppText>
+              {exercise.notes === null ? null : <AppText variant="muted">{exercise.notes}</AppText>}
+            </View>
           ))}
           {card.notes === null ? null : <AppText variant="muted">{card.notes}</AppText>}
         </Card>

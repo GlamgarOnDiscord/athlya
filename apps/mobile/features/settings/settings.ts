@@ -27,15 +27,18 @@ import type { TranslationKeys } from '@athlya/shared/i18n';
  * Turns the biometric unlock on or off and resolves the state to render:
  * enabling resolves `false` when biometrics are unavailable or the prompt
  * was declined, so the switch never shows a protection that is not active.
+ * When the secure store fails, the previous state is kept: a failed
+ * enable stays off, a failed disable stays on.
  */
 export async function toggleBiometricUnlock(
   tokenStore: Pick<TokenStore, 'setBiometricUnlockEnabled'>,
   enabled: boolean,
-): Promise<boolean> {
+): Promise<{ readonly enabled: boolean; readonly failed: boolean }> {
   try {
-    return await tokenStore.setBiometricUnlockEnabled(enabled);
+    const actual = await tokenStore.setBiometricUnlockEnabled(enabled);
+    return { enabled: actual, failed: actual !== enabled };
   } catch {
-    return false;
+    return { enabled: !enabled, failed: true };
   }
 }
 
@@ -63,7 +66,9 @@ export function rejectedChanges(letters: readonly DeadLetter[]): readonly Reject
   return letters
     .map((letter) => ({
       id: letter.id,
-      kindKey: KIND_KEYS[letter.kind] ?? 'mobile.settings.rejected.kinds.other',
+      kindKey: Object.hasOwn(KIND_KEYS, letter.kind)
+        ? (KIND_KEYS[letter.kind] ?? 'mobile.settings.rejected.kinds.other')
+        : 'mobile.settings.rejected.kinds.other',
       status: letter.status,
       problemCode: letter.problemCode ?? null,
       failedAt: letter.failedAt,
@@ -107,7 +112,7 @@ export function isDeleteConfirmed(typed: string, confirmWord: string): boolean {
 }
 
 export interface DeleteAccountDeps extends RgpdDeps {
-  readonly tokenStore: Pick<TokenStore, 'clear'>;
+  readonly tokenStore: Pick<TokenStore, 'clear' | 'lock'>;
   readonly sync: Pick<SyncController, 'refreshOwner'>;
   readonly queue: Pick<
     MutationQueue,
@@ -116,12 +121,22 @@ export interface DeleteAccountDeps extends RgpdDeps {
 }
 
 export type DeleteResult =
-  { readonly ok: true } | { readonly ok: false; readonly error: ErrorModel };
+  | {
+      readonly ok: true;
+      /** The account is gone server-side but some local data could not be erased. */
+      readonly cleanupFailed: boolean;
+    }
+  | { readonly ok: false; readonly error: ErrorModel };
 
 /**
  * Article 17 deletion. Once the API accepted it, the device forgets the
- * account too: its queued and rejected changes (they could never be sent
- * again) and the session.
+ * account too, never rejecting from there on (the account no longer
+ * exists, so the screen must always move on):
+ * 1. its queued and rejected changes are removed first, so a drain still
+ *    running for the user finds nothing left to send (the drain also stops
+ *    as soon as the user is no longer signed in);
+ * 2. then the session is cleared, or at least locked in memory if the
+ *    secure storage fails, and the sync owner is re-read.
  */
 export async function deleteAccount(
   deps: DeleteAccountDeps,
@@ -132,11 +147,25 @@ export async function deleteAccount(
   } catch (error) {
     return { ok: false, error: toErrorModel(error) };
   }
-  for (const mutation of deps.queue.pendingFor(userId)) deps.queue.remove(mutation.id);
-  for (const letter of deps.queue.deadLetters(userId)) {
-    deps.queue.discardDeadLetter(letter.id, userId);
+  let cleanupFailed = false;
+  try {
+    for (const mutation of deps.queue.pendingFor(userId)) deps.queue.remove(mutation.id);
+    for (const letter of deps.queue.deadLetters(userId)) {
+      deps.queue.discardDeadLetter(letter.id, userId);
+    }
+  } catch {
+    cleanupFailed = true;
   }
-  await deps.tokenStore.clear();
-  await deps.sync.refreshOwner();
-  return { ok: true };
+  try {
+    await deps.tokenStore.clear();
+  } catch {
+    cleanupFailed = true;
+    deps.tokenStore.lock();
+  }
+  try {
+    await deps.sync.refreshOwner();
+  } catch {
+    cleanupFailed = true;
+  }
+  return { ok: true, cleanupFailed };
 }

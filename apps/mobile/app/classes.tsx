@@ -40,11 +40,22 @@ function Classes({ userId }: { readonly userId: string }) {
   const { t, locale } = runtime;
   const writes = useWriteDeps();
   const controller = useMemo(
-    () => new ClassesController({ api: runtime.api, writes }),
-    [runtime, writes],
+    () =>
+      new ClassesController({
+        api: runtime.api,
+        writes,
+        queuedClassIds: () => queuedBookingClassIds(runtime.queue.pendingFor(userId)),
+      }),
+    [runtime, writes, userId],
   );
   const state = useSyncExternalStore(controller.subscribe, controller.get);
-  const queued = queuedBookingClassIds(usePendingMutations(userId));
+  const pending = usePendingMutations(userId);
+  const queued = useMemo(() => queuedBookingClassIds(pending), [pending]);
+
+  // A queued booking that leaves the queue (delivered or rejected) is fetched again.
+  useEffect(() => {
+    controller.reconcileQueued(queued);
+  }, [controller, queued]);
 
   useEffect(() => {
     const abort = new AbortController();
@@ -89,7 +100,9 @@ function Classes({ userId }: { readonly userId: string }) {
               <Button
                 title={full ? t('mobile.classes.joinWaitlist') : t('mobile.classes.book')}
                 accessibilityLabel={`${full ? t('mobile.classes.joinWaitlist') : t('mobile.classes.book')}: ${item.title}`}
-                accessibilityHint={t('mobile.classes.bookHint')}
+                accessibilityHint={
+                  full ? t('mobile.classes.waitlistHint') : t('mobile.classes.bookHint')
+                }
                 busy={mark?.kind === 'pending'}
                 onPress={() => {
                   void controller.book(item.id);

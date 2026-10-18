@@ -571,7 +571,7 @@
         "studioSlug": "Enter your studio's short name (lowercase letters, digits and hyphens).",
         "emailTaken": "An account already exists with this email address.",
         "studioNotFound": "No studio matches this short name.",
-        "botCheck": "Signing in from the app is not available yet. Please use the website."
+        "botCheck": "This action is not available from the app yet. Please use the website."
       }
     },
     "errors": {
@@ -592,7 +592,8 @@
       "pendingSync": "Booking waiting to sync",
       "alreadyBooked": "You have already booked this class.",
       "starts": "{date} · {duration} min",
-      "refresh": "Refresh"
+      "refresh": "Refresh",
+      "waitlistHint": "Adds you to the waitlist of this full class."
     },
     "reservations": {
       "title": "My reservations",
@@ -629,7 +630,7 @@
       "limits": "Up to {exercises} exercises and {sets} sets per exercise.",
       "errors": {
         "noExercise": "Add at least one exercise.",
-        "exerciseName": "Enter the exercise name.",
+        "exerciseName": "Enter the exercise name (120 characters at most).",
         "reps": "Enter a whole number of reps (1000 at most).",
         "weight": "Enter a weight in kg, for example 42.5 (1000 at most).",
         "duration": "Enter a duration in whole minutes.",
@@ -641,7 +642,8 @@
       "biometric": {
         "label": "Unlock with biometrics",
         "hint": "Asks for your fingerprint or face before using your saved session.",
-        "unavailable": "Biometric unlock could not be turned on: it is unavailable on this device or the check was cancelled."
+        "unavailable": "Biometric unlock could not be turned on: it is unavailable on this device or the check was cancelled.",
+        "disableFailed": "Biometric unlock could not be turned off. It is still on."
       },
       "signOut": "Sign out",
       "signOutHint": "Signs you out on this device. Changes waiting to sync are sent when you sign in again.",
@@ -665,6 +667,10 @@
       },
       "delete": {
         "inputLabel": "Confirmation"
+      },
+      "cleanupFailed": {
+        "title": "Data left on this device",
+        "message": "Some data of your account could not be erased from this device. Sign in again or reinstall the app to remove it."
       }
     },
     "program": {
@@ -678,7 +684,8 @@
       "sets": "{sets} sets",
       "weight": "{weight} kg",
       "restBetweenSets": "rest {seconds} s",
-      "loadError": "Today's workout could not be loaded."
+      "loadError": "Today's workout could not be loaded.",
+      "duration": "{seconds} s"
     }
   },
   "notifications": {

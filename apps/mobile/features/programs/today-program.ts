@@ -31,10 +31,18 @@ export function todayPath(date: Date): string {
   return `/v1/programs/today?date=${localDate(date)}`;
 }
 
+/** Milliseconds until the next local midnight, when "today" changes. */
+export function msUntilNextLocalMidnight(now: Date): number {
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return next.getTime() - now.getTime();
+}
+
 export interface ExerciseLine {
   readonly name: string;
-  /** e.g. "4 × 8", "3 × 45 s", then optional load and rest. */
+  /** e.g. "4 × 8", "3 × 45 s", "4 × 8, 30 s", then optional load and rest. */
   readonly parts: readonly Message[];
+  /** The coach's note for this exercise. */
+  readonly notes: string | null;
 }
 
 export interface ProgramCard {
@@ -62,13 +70,18 @@ export function exerciseLine(exercise: ProgramExercise): ExerciseLine {
   } else {
     parts.push({ key: 'mobile.program.sets', values: { sets: exercise.sets } });
   }
+  // Both are allowed by the contract (e.g. 8 reps within 30 s): show both.
+  if (exercise.reps !== undefined && exercise.durationSec !== undefined) {
+    parts.push({ key: 'mobile.program.duration', values: { seconds: exercise.durationSec } });
+  }
   if (exercise.weightKg !== undefined) {
     parts.push({ key: 'mobile.program.weight', values: { weight: exercise.weightKg } });
   }
   if (exercise.restSec !== undefined) {
     parts.push({ key: 'mobile.program.restBetweenSets', values: { seconds: exercise.restSec } });
   }
-  return { name: exercise.name, parts };
+  const notes = exercise.notes?.trim() ?? '';
+  return { name: exercise.name, parts, notes: notes === '' ? null : notes };
 }
 
 function headline(item: TodayWorkoutItem): Message {

@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useEffect, useReducer, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { SignedIn, useWriteDeps } from '../components/AppSession';
 import { ErrorNotice } from '../components/ErrorNotice';
@@ -85,14 +85,15 @@ function Workout() {
         {t('mobile.workout.limits', { exercises: MAX_EXERCISES, sets: MAX_SETS })}
       </AppText>
       {draft.exercises.map((exercise, exerciseIndex) => (
-        <Card
-          key={`exercise-${String(exerciseIndex)}`}
-          accessibilityLabel={t('mobile.workout.exercise', { index: exerciseIndex + 1 })}
-        >
-          <AppText className="font-semibold">
+        <Card key={`exercise-${String(exerciseIndex)}`}>
+          <Text
+            accessibilityRole="header"
+            className="text-base font-semibold text-foreground dark:text-dark-foreground"
+          >
             {t('mobile.workout.exercise', { index: exerciseIndex + 1 })}
-          </AppText>
+          </Text>
           <TextField
+            editable={!busy}
             label={t('mobile.workout.exerciseName')}
             value={exercise.name}
             autoCapitalize="sentences"
@@ -107,6 +108,7 @@ function Workout() {
             <View key={`set-${String(setIndex)}`} className="gap-sm">
               <AppText variant="muted">{t('mobile.workout.set', { index: setIndex + 1 })}</AppText>
               <TextField
+                editable={!busy}
                 label={`${t('mobile.workout.set', { index: setIndex + 1 })}, ${t('mobile.workout.reps')}`}
                 value={set.reps}
                 keyboardType="number-pad"
@@ -122,6 +124,7 @@ function Workout() {
                 error={setError(exerciseIndex, setIndex, 'reps')}
               />
               <TextField
+                editable={!busy}
                 label={`${t('mobile.workout.set', { index: setIndex + 1 })}, ${t('mobile.workout.weight')}`}
                 value={set.weightKg}
                 keyboardType="decimal-pad"
@@ -140,6 +143,7 @@ function Workout() {
                 <Button
                   title={t('mobile.workout.removeSet', { index: setIndex + 1 })}
                   variant="secondary"
+                  disabled={busy}
                   onPress={() => {
                     dispatch({ type: 'removeSet', exercise: exerciseIndex, set: setIndex });
                   }}
@@ -150,7 +154,7 @@ function Workout() {
           <Button
             title={t('mobile.workout.addSet')}
             variant="secondary"
-            disabled={exercise.sets.length >= MAX_SETS}
+            disabled={busy || exercise.sets.length >= MAX_SETS}
             onPress={() => {
               dispatch({ type: 'addSet', exercise: exerciseIndex });
             }}
@@ -158,6 +162,7 @@ function Workout() {
           <Button
             title={t('mobile.workout.removeExercise', { index: exerciseIndex + 1 })}
             variant="secondary"
+            disabled={busy}
             onPress={() => {
               dispatch({ type: 'removeExercise', exercise: exerciseIndex });
             }}
@@ -167,12 +172,13 @@ function Workout() {
       <Button
         title={t('mobile.workout.addExercise')}
         variant="secondary"
-        disabled={draft.exercises.length >= MAX_EXERCISES}
+        disabled={busy || draft.exercises.length >= MAX_EXERCISES}
         onPress={() => {
           dispatch({ type: 'addExercise' });
         }}
       />
       <TextField
+        editable={!busy}
         label={t('mobile.workout.duration')}
         value={draft.durationMin}
         keyboardType="number-pad"
@@ -182,6 +188,7 @@ function Workout() {
         error={errorFor((field) => field.kind === 'duration')}
       />
       <TextField
+        editable={!busy}
         label={t('mobile.workout.notes')}
         value={draft.notes}
         multiline

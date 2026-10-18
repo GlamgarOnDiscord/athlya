@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   cancelPath,
   canCancel,
-  MY_RESERVATIONS_PATH,
+  MAX_RESERVATION_PAGES,
+  myReservationsPath,
   MyReservationSchema,
   queuedCancellationIds,
   ReservationsController,
@@ -94,10 +95,55 @@ describe('ReservationsController', () => {
       items: [row(RESERVATION_ID, '2026-10-20T17:00:00.000Z')],
       nextCursor: null,
     });
+    const controller = new ReservationsController({ api, writes: writes.deps, now: () => NOW });
+    await controller.load();
+    expect(api.get).toHaveBeenCalledWith(myReservationsPath(NOW), {});
+    expect(controller.get()).toMatchObject({ load: 'ready', items: [{ id: RESERVATION_ID }] });
+  });
+
+  it('asks only for classes that may not have ended, and follows the cursor', async () => {
+    const url = new URL(myReservationsPath(NOW, 'c+1'), 'https://api.test');
+    expect(url.searchParams.get('from')).toBe('2026-10-18T00:00:00.000Z');
+    expect(url.searchParams.get('limit')).toBe('100');
+    expect(url.searchParams.get('cursor')).toBe('c+1');
+
+    const writes = createWriteDeps();
+    const api = createFakeApi();
+    api.get
+      .mockResolvedValueOnce({
+        items: [row(RESERVATION_ID, '2026-10-20T17:00:00.000Z')],
+        nextCursor: 'page-2',
+      })
+      .mockResolvedValueOnce({
+        items: [row(OTHER_ID, '2026-10-21T17:00:00.000Z')],
+        nextCursor: null,
+      });
+    const controller = new ReservationsController({ api, writes: writes.deps, now: () => NOW });
+    await controller.load();
+    expect(api.get).toHaveBeenNthCalledWith(2, myReservationsPath(NOW, 'page-2'), {});
+    expect(controller.get().items.map((item) => item.id)).toEqual([RESERVATION_ID, OTHER_ID]);
+  });
+
+  it('stops after the page bound', async () => {
+    const writes = createWriteDeps();
+    const api = createFakeApi();
+    api.get.mockResolvedValue({ items: [], nextCursor: 'again' });
     const controller = new ReservationsController({ api, writes: writes.deps });
     await controller.load();
-    expect(api.get).toHaveBeenCalledWith(MY_RESERVATIONS_PATH, {});
-    expect(controller.get()).toMatchObject({ load: 'ready', items: [{ id: RESERVATION_ID }] });
+    expect(api.get).toHaveBeenCalledTimes(MAX_RESERVATION_PAGES);
+    expect(controller.get().load).toBe('ready');
+  });
+
+  it('refetches once a queued cancellation leaves the queue (delivered or rejected)', async () => {
+    const { controller, api } = await setup();
+    api.get.mockResolvedValue({ items: [], nextCursor: null });
+    controller.reconcileQueued(new Set([RESERVATION_ID]));
+    expect(api.get).not.toHaveBeenCalled();
+    controller.reconcileQueued(new Set([RESERVATION_ID]));
+    expect(api.get).not.toHaveBeenCalled();
+    controller.reconcileQueued(new Set());
+    await flush();
+    expect(api.get).toHaveBeenCalledTimes(1);
   });
 
   it('rejects rows with unexpected fields', async () => {
