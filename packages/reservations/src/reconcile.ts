@@ -50,9 +50,10 @@ export interface ClassCapacitySnapshot {
 export interface CapacityReconcileRepo {
   /**
    * Return one row per **active** class (not soft-deleted, not in the
-   * past) with its capacity and confirmed-booking count. The query
-   * must run with a connection that can read across tenants (the cron
-   * `BYPASSRLS` role), since reconciliation is studio-agnostic.
+   * past) with its capacity and confirmed-booking count, across every
+   * studio, since reconciliation is studio-agnostic. The API reads it
+   * through the cron-only `capacity_reconcile_snapshot()` function
+   * (migration 0040).
    */
   listActiveClassCapacities(): Promise<readonly ClassCapacitySnapshot[]>;
 }

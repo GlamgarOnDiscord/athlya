@@ -598,7 +598,7 @@ function buildBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
     async countWaitlistAhead(
       tx: BookingTx,
       classId: string,
-      reservationCreatedAt: Date,
+      reservation: { readonly id: string; readonly createdAt: Date },
     ): Promise<number> {
       const ctx = resolveCtx(tx);
       const result = await ctx.execute<{ count: string }>(sql`
@@ -606,7 +606,7 @@ function buildBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
                   FROM "reservations"
                  WHERE class_id = ${classId}
                    AND status = 'waitlist'
-                   AND created_at < ${reservationCreatedAt.toISOString()}
+                   AND (created_at, id) < (${reservation.createdAt.toISOString()}::timestamptz, ${reservation.id}::uuid)
             `);
       const rows = result as unknown as readonly { count: string }[];
       const raw = rows[0]?.count ?? '0';

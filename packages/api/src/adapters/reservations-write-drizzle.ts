@@ -18,7 +18,18 @@
  *     on the first commit. `SKIP LOCKED` on the waitlist-promotion
  *     query avoids a deadlock between two cancels fighting for the
  *     same promoted seat — each cancel sees a different row, or
- *     `null` when none is available.
+ *     `no_waiter` when none is available.
+ *
+ *   • Cross-member reads and writes go through SECURITY DEFINER
+ *     functions (migration 0040, issue #117). Under `athlya_app` with
+ *     member claims, `reservations_read_own` / `reservations_update_own`
+ *     hide and protect the other members' waitlist rows, and a locking
+ *     read of `classes` must pass `classes_update_admin`. The class
+ *     lock, the waitlist position and the promotion therefore call
+ *     `reservation_lock_class_for_cancel`, `reservation_waitlist_ahead`
+ *     and `reservation_promote_oldest_waitlist`, in the same
+ *     transaction, each scoped to the caller's studio and to a class
+ *     the caller holds a reservation on.
  *
  *   • `UNIQUE(class_id, user_id)` violation is detected on `.code
  *     === '23505'` (Postgres SQLSTATE 23505). We rethrow as
@@ -41,11 +52,12 @@ import { withTenant, type AthlyaDb, type AthlyaTx, type TenantClaims } from '@at
 import { isPostgresRaiseException, isPostgresUniqueViolation } from '@athlya/db/errors';
 import { classes, outbox, reservations } from '@athlya/db/schema';
 import { ClassCapacityExceededError, UniqueViolationError } from '@athlya/reservations';
-import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { noteOutboxWrite } from '../events/outbox-kick.js';
 
 import { withConnectionRetry } from './db-retry.js';
+import { toDateOrNull } from './service-functions.js';
 
 import type { ReservationRow } from '@athlya/db/schema';
 import type {
@@ -56,7 +68,12 @@ import type {
   BookingReservationRow,
   BookingTx,
 } from '@athlya/reservations';
-import type { CancelOutboxEvent, CancelRepo, ClassForCancel } from '@athlya/reservations/cancel';
+import type {
+  CancelOutboxEvent,
+  CancelRepo,
+  ClassForCancel,
+  WaitlistPromotion,
+} from '@athlya/reservations/cancel';
 
 /* ------------------------------------------------------------------ */
 /*  Adapter-boundary cast helpers                                      */
@@ -164,19 +181,14 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
       await insertOutboxRow(toAthlyaTx(tx), event);
     },
 
-    async countWaitlistAhead(tx, classId, reservationCreatedAt): Promise<number> {
-      const drizzleTx = toAthlyaTx(tx);
-      const result = await drizzleTx
-        .select({ count: sql<number>`count(*)::int` })
-        .from(reservations)
-        .where(
-          and(
-            eq(reservations.classId, classId),
-            eq(reservations.status, 'waitlist'),
-            lt(reservations.createdAt, reservationCreatedAt),
-          ),
-        );
-      return Number(result[0]?.count ?? 0);
+    async countWaitlistAhead(tx, classId, reservation): Promise<number> {
+      // The other waiters are hidden by `reservations_read_own`; the
+      // function counts them ahead of the caller's own waitlist row, in
+      // promotion order (`created_at`, then `id`).
+      const rows = await toAthlyaTx(tx).execute<{ ahead: number | string | null }>(
+        sql`SELECT reservation_waitlist_ahead(${classId}::uuid, ${reservation.id}::uuid) AS ahead`,
+      );
+      return Number(rows[0]?.ahead ?? 0);
     },
   };
 }
@@ -192,14 +204,15 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
  * Locking strategy (Algorithm 2 §Step 2-3):
  *   - `findReservationForUpdate`: `SELECT ... FOR UPDATE` narrows
  *     concurrent cancels of the same row to one winner.
- *   - `findClassForUpdate`: `SELECT ... FOR UPDATE` pins the class
- *     row so the `startsAt` read and the decision "inside 2h window
- *     or not" happen against the same snapshot the UPDATE commits
- *     against.
- *   - `findOldestWaitlistForClass`: `SELECT ... FOR UPDATE SKIP
- *     LOCKED LIMIT 1` so two cancels racing to promote see
- *     different rows (one promotes, the other gets `null` and
- *     increments the Redis counter instead).
+ *   - `findClassForUpdate`: `reservation_lock_class_for_cancel` locks
+ *     the class row (`FOR UPDATE`) so the `startsAt` read and the
+ *     decision "inside 2h window or not" happen against the same
+ *     snapshot the UPDATE commits against.
+ *   - `promoteOldestWaitlist`: `reservation_promote_oldest_waitlist`
+ *     takes the oldest waiter with `FOR UPDATE SKIP LOCKED` so two
+ *     cancels racing to promote see different rows (one promotes,
+ *     the other gets `no_waiter` and increments the Redis counter
+ *     instead), then re-checks capacity before promoting.
  */
 export function createDrizzleCancelRepo(db: AthlyaDb, claims: TenantClaims): CancelRepo {
   return {
@@ -219,14 +232,11 @@ export function createDrizzleCancelRepo(db: AthlyaDb, claims: TenantClaims): Can
     },
 
     async findClassForUpdate(tx, classId): Promise<ClassForCancel | null> {
-      const drizzleTx = tx as AthlyaTx;
-      const rows = await drizzleTx
-        .select({ startsAt: classes.startsAt })
-        .from(classes)
-        .where(and(eq(classes.id, classId), isNull(classes.deletedAt)))
-        .for('update')
-        .limit(1);
-      return rows[0] ?? null;
+      const rows = await (tx as AthlyaTx).execute<{ starts_at: Date | string | null }>(
+        sql`SELECT reservation_lock_class_for_cancel(${classId}::uuid) AS starts_at`,
+      );
+      const startsAt = toDateOrNull(rows[0]?.starts_at ?? null);
+      return startsAt === null ? null : { startsAt };
     },
 
     async updateReservationStatus(tx, reservationId, status, stampedAt): Promise<ReservationRow> {
@@ -253,39 +263,27 @@ export function createDrizzleCancelRepo(db: AthlyaDb, claims: TenantClaims): Can
       }
     },
 
-    async findOldestWaitlistForClass(tx, classId): Promise<ReservationRow | null> {
-      const drizzleTx = tx as AthlyaTx;
-      // `SKIP LOCKED` is the critical flag for Algorithm 2 —
-      // see cancel.ts for the full invariant.
-      const rows = await drizzleTx
-        .select()
-        .from(reservations)
-        .where(and(eq(reservations.classId, classId), eq(reservations.status, 'waitlist')))
-        .orderBy(asc(reservations.createdAt))
-        .for('update', { skipLocked: true })
-        .limit(1);
-      return rows[0] ?? null;
-    },
-
-    async classHasCapacityForConfirmed(tx, classId): Promise<boolean> {
-      const drizzleTx = tx as AthlyaTx;
-      const [row] = await drizzleTx
-        .select({
-          capacity: classes.capacity,
-          confirmed: sql<number>`(
-            SELECT count(*)::int
-              FROM ${reservations}
-             WHERE class_id = ${classId}
-               AND status = 'confirmed'
-          )`,
-        })
-        .from(classes)
-        .where(and(eq(classes.id, classId), isNull(classes.deletedAt)))
-        .limit(1);
-      if (row === undefined) {
-        return false;
+    async promoteOldestWaitlist(tx, classId): Promise<WaitlistPromotion> {
+      // The function holds the class row lock that the capacity
+      // trigger also takes, so a concurrent booking cannot fill the
+      // seat between its capacity check and the promotion.
+      const rows = await (tx as AthlyaTx).execute<{
+        outcome: string;
+        reservation_id: string | null;
+        user_id: string | null;
+      }>(
+        sql`SELECT outcome, reservation_id, user_id FROM reservation_promote_oldest_waitlist(${classId}::uuid)`,
+      );
+      const row = rows[0];
+      if (row?.outcome === 'promoted' && row.reservation_id !== null && row.user_id !== null) {
+        return {
+          outcome: 'promoted',
+          reservation: { id: row.reservation_id, classId, userId: row.user_id },
+        };
       }
-      return Number(row.confirmed) < row.capacity;
+      if (row?.outcome === 'no_capacity') return { outcome: 'no_capacity' };
+      if (row?.outcome === 'no_waiter') return { outcome: 'no_waiter' };
+      throw new Error(`promoteOldestWaitlist: unexpected outcome ${String(row?.outcome)}`);
     },
 
     async insertOutbox(tx, event: CancelOutboxEvent): Promise<void> {

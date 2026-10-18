@@ -254,18 +254,23 @@ export interface BookingRepo {
   insertOutbox(tx: BookingTx, event: BookingOutboxEvent): Promise<void>;
 
   /**
-   * Count waitlisted rows whose `created_at` is strictly earlier
-   * than `reservationCreatedAt` for the given class. Used to
-   * compute the 1-based position returned with the `waitlisted`
-   * result: `position = countWaitlistAhead(...) + 1`.
+   * Count waitlisted rows of the given class that come before
+   * `reservation` in promotion order (`created_at`, then `id`), so
+   * two waiters with the same `created_at` never share a position.
+   * Used to compute the 1-based position returned with the
+   * `waitlisted` result: `position = countWaitlistAhead(...) + 1`.
    *
    * SHOULD match the SQL
    * `SELECT COUNT(*) FROM reservations
    *    WHERE class_id = $1
    *      AND status = 'waitlist'
-   *      AND created_at < $2`.
+   *      AND (created_at, id) < ($2, $3)`.
    */
-  countWaitlistAhead(tx: BookingTx, classId: string, reservationCreatedAt: Date): Promise<number>;
+  countWaitlistAhead(
+    tx: BookingTx,
+    classId: string,
+    reservation: { readonly id: string; readonly createdAt: Date },
+  ): Promise<number>;
 }
 
 /**
@@ -520,7 +525,10 @@ async function completeWaitlistBooking(input: {
         userId,
         status: 'waitlist',
       });
-      const ahead = await repo.countWaitlistAhead(tx, classId, row.createdAt);
+      const ahead = await repo.countWaitlistAhead(tx, classId, {
+        id: row.id,
+        createdAt: row.createdAt,
+      });
       const pos = ahead + 1;
       const event = publisher.buildReservationWaitlisted({
         reservationId: row.id,

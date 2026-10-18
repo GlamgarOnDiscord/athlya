@@ -166,7 +166,7 @@ const RAW_QUERY_ALLOWLIST: Readonly<Record<string, string>> = {
     'connection cache; its handles are checked at their query sites',
   'drain-db.ts#createDrainDb': 'outbox drainer connects as athlya_cron (CRON_DB_URL)',
   'cron-sql-executor.ts#buildCronSqlExecutor':
-    'maintenance jobs connect as athlya_cron (CRON_DB_URL)',
+    'maintenance jobs connect as athlya_cron (CRON_DB_URL, NOBYPASSRLS); their statements are checked by "cron executor statements need no BYPASSRLS" below',
   'billing-deps.ts#buildBillingDeps':
     'Stripe events are applied as athlya_billing (BILLING_DB_URL), migration 0036',
   'audit-log-store-drizzle.ts#createDrizzleAuditLogStore':
@@ -376,6 +376,8 @@ describe('RLS inventory — every adapter query is tenant-scoped or a service-fu
     'members-repo-drizzle.ts',
     'members-consents-repo-drizzle.ts',
     'members-audit-writer-drizzle.ts',
+    'reservations-write-drizzle.ts',
+    'members-export-job-store-drizzle.ts',
   ])('%s is not allowlisted', (file) => {
     const entries = Object.keys(RAW_QUERY_ALLOWLIST).filter((key) => key.startsWith(`${file}#`));
     expect(entries).toEqual([]);
@@ -404,6 +406,128 @@ describe('RLS inventory — claim-less adapters never touch tenant tables direct
       .map((s) => s.trim())
       .filter(Boolean);
     expect(imports.filter((name) => tenantTables.includes(name))).toEqual([]);
+  });
+});
+
+/*
+ * Issue #117 — `cron-sql-executor.ts` is allowlisted because it opens
+ * the `athlya_cron` connection, so the statements sent through it are
+ * checked here instead: athlya_cron is NOBYPASSRLS, so every relation
+ * they read or write must be a table it holds a grant and `*_cron_*`
+ * policies on, or a SECURITY DEFINER function granted to it.
+ */
+const CRON_TABLES = new Set(['users', 'outbox', 'export_jobs']);
+const CRON_SQL_SOURCES = [
+  ...readdirSync(resolve(apiSrc, 'maintenance'))
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => `maintenance/${f}`),
+  'worker.ts',
+];
+
+/** Functions granted EXECUTE to `athlya_cron` by any forward migration. */
+function grantedToCron(): Set<string> {
+  const dir = resolve(here, '../../../../db/migrations');
+  const names = new Set<string>();
+  for (const file of readdirSync(dir).filter(
+    (f) => f.endsWith('.sql') && !f.endsWith('.down.sql'),
+  )) {
+    const text = readFileSync(resolve(dir, file), 'utf8');
+    for (const m of text.matchAll(
+      /GRANT EXECUTE ON FUNCTION ([a-z_0-9]+)\([^)]*\) TO athlya_cron;/gu,
+    )) {
+      names.add(m[1] ?? '');
+    }
+  }
+  return names;
+}
+
+/** SQL statements (string and template literals) of one source file. */
+function sqlStatements(file: string, text: string): string[] {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  const out: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+      out.push(node.text);
+    } else if (ts.isTemplateExpression(node)) {
+      out.push(node.getText(source).slice(1, -1));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return out.filter((s) => /^\s*(?:select|with|update|delete|insert)\s/iu.test(s));
+}
+
+/** Relations a statement needs athlya_cron to reach without BYPASSRLS. */
+function cronViolations(
+  statement: string,
+  definers: ReadonlySet<string>,
+  cronFunctions: ReadonlySet<string>,
+): string[] {
+  const ctes = new Set(
+    [...statement.matchAll(/\b([a-z_][a-z_0-9]*)\s+as\s*\(/giu)].map((m) => m[1]?.toLowerCase()),
+  );
+  const bad: string[] = [];
+  for (const m of statement.matchAll(
+    /\b(?:from|join|update|into|using)\s+([a-z_][a-z_0-9]*)(\s*\()?/giu,
+  )) {
+    const name = (m[1] ?? '').toLowerCase();
+    const isCall = m[2] !== undefined;
+    if (isCall ? !cronFunctions.has(name) : !CRON_TABLES.has(name) && !ctes.has(name)) {
+      bad.push(name);
+    }
+  }
+  for (const m of statement.matchAll(/\b([a-z_][a-z_0-9]*)\s*\(/giu)) {
+    const name = (m[1] ?? '').toLowerCase();
+    if (definers.has(name) && !cronFunctions.has(name)) bad.push(name);
+  }
+  return [...new Set(bad)];
+}
+
+describe('RLS inventory — cron executor statements need no BYPASSRLS', () => {
+  const definers = securityDefinerFunctions();
+  const cronFunctions = grantedToCron();
+
+  it('reads the cron-granted functions from the migrations', () => {
+    expect(cronFunctions).toContain('anonymize_user_audit');
+    expect(cronFunctions).toContain('capacity_reconcile_snapshot');
+    expect(cronFunctions).not.toContain('reservation_promote_oldest_waitlist');
+  });
+
+  it.each([
+    ['a table athlya_cron has no grant on', 'SELECT id FROM classes', ['classes']],
+    [
+      'a table joined through DELETE ... USING',
+      'DELETE FROM outbox USING reservations r WHERE r.id = outbox.id',
+      ['reservations'],
+    ],
+    [
+      'a definer function granted to athlya_app only',
+      'SELECT * FROM reservation_promote_oldest_waitlist($1)',
+      ['reservation_promote_oldest_waitlist'],
+    ],
+    [
+      'nothing for a CTE over a cron table',
+      'WITH expired AS (SELECT id FROM users) UPDATE users SET email = NULL WHERE id IN (SELECT id FROM expired)',
+      [],
+    ],
+    ['nothing for a cron-only function', 'SELECT * FROM capacity_reconcile_snapshot()', []],
+  ])('scanner reports %s', (_name, statement, expected) => {
+    expect(cronViolations(statement, definers, cronFunctions)).toEqual(expected);
+  });
+
+  it.each(CRON_SQL_SOURCES)('%s only reaches cron-granted relations', (file) => {
+    const statements = sqlStatements(file, readFileSync(resolve(apiSrc, file), 'utf8'));
+    const bad = statements.flatMap((s) => cronViolations(s, definers, cronFunctions));
+    expect(bad).toEqual([]);
+  });
+
+  it('covers the capacity reconcile and the RGPD statements', () => {
+    const all = CRON_SQL_SOURCES.flatMap((file) =>
+      sqlStatements(file, readFileSync(resolve(apiSrc, file), 'utf8')),
+    ).join('\n');
+    expect(all).toContain('capacity_reconcile_snapshot()');
+    expect(all).toContain('anonymize_user_audit(');
+    expect(all).toMatch(/DELETE FROM outbox/u);
   });
 });
 

@@ -23,7 +23,7 @@ Tant que `DB_URL` pointe sur `neondb_owner`, ces changements sont **non-disrupti
 ## Pré-requis
 
 - [ ] La migration `0004_rls_hardening.sql` est appliquée en production.
-- [ ] Les migrations `0032` → `0039` (fonctions de service `SECURITY DEFINER`) sont appliquées **et** le Worker qui les appelle est déployé (issues #224, #117). Sans elles, sous `athlya_app`, le login/register/reset, la résolution du slug studio, `/v1/studios/me`, la résolution des destinataires de notifications et la cascade RGPD voient zéro ligne (FORCE RLS sans claims) ou échouent en 42501. Vérification : `SELECT count(*) FROM pg_proc WHERE proowner = 'athlya_owner'::regrole AND proname ~ '^(auth|rgpd|notification|studio)_'` → 22, puis `pnpm verify:role-contract` (voir plus bas).
+- [ ] Les migrations `0032` → `0040` (fonctions de service `SECURITY DEFINER`) sont appliquées **et** le Worker qui les appelle est déployé (issues #224, #117). Sans elles, sous `athlya_app`, le login/register/reset, la résolution du slug studio, `/v1/studios/me`, la résolution des destinataires de notifications, la cascade RGPD et la promotion de liste d'attente (annulation membre) voient zéro ligne (FORCE RLS sans claims) ou échouent en 42501 ; sous `athlya_cron`, la réconciliation de capacité échoue en 42501. Vérification : `SELECT count(*) FROM pg_proc WHERE proowner = 'athlya_owner'::regrole AND proname ~ '^(auth|rgpd|notification|studio|reservation|capacity)_'` → 26, puis `pnpm verify:role-contract` (voir plus bas).
 - [ ] Le test d'isolation `multi-tenant-isolation.integration.test.ts` est vert sur la branche déployée.
 - [ ] Les 387+ tests api sont verts.
 - [ ] Un opérateur a accès Neon Console (rôle propriétaire) et Cloudflare Workers Dashboard (Secrets).
@@ -146,7 +146,7 @@ $env:SMOKE_STUDIO_SLUG = "<slug d'un studio existant>"
 pnpm verify:role-contract
 ```
 
-Prérequis : migrations `0031` → `0039` appliquées, `athlya_billing` en LOGIN
+Prérequis : migrations `0031` → `0040` appliquées, `athlya_billing` en LOGIN
 (voir `stripe-production.md`). Les **quatre** variables sont obligatoires : sans
 `CRON_DATABASE_URL` ou `BILLING_DATABASE_URL` le script échoue (exit 1) au lieu
 de sauter la vérification du rôle `athlya_cron` ou `athlya_billing`. Il échoue aussi si une connexion

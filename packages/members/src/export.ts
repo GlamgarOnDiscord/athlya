@@ -237,6 +237,12 @@ export interface ExportJobStore {
   findActiveByUser(userId: string): Promise<string | null>;
 }
 
+/**
+ * Member-facing slice of {@link ExportJobStore}: enqueue, dedup and
+ * read. State transitions belong to the export worker only.
+ */
+export type ExportJobRequestStore = Pick<ExportJobStore, 'create' | 'get' | 'findActiveByUser'>;
+
 /** Shape of a stored job row as exposed to the service layer. */
 export interface ExportJobRecord {
   id: string;
@@ -330,7 +336,7 @@ export type UuidFactory = () => string;
 
 /** Dependencies injected into {@link enqueueExport}. */
 export interface EnqueueExportDeps {
-  jobs: ExportJobStore;
+  jobs: ExportJobRequestStore;
   events: EventPublisher;
   clock: Clock;
   uuid: UuidFactory;

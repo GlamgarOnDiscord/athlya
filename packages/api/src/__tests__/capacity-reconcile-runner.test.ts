@@ -29,8 +29,10 @@ describe('runScheduledCapacityReconcile', () => {
 
     const result = await runScheduledCapacityReconcile({ executeSql, counter });
 
-    expect(capturedSql).toContain("status = 'confirmed'");
-    expect(capturedSql).toContain('starts_at > now()');
+    // Issue #117 — athlya_cron has no grant on classes / reservations:
+    // the read goes through the cron-only SECURITY DEFINER function.
+    expect(capturedSql).toContain('FROM capacity_reconcile_snapshot()');
+    expect(capturedSql).not.toMatch(/\bfrom\s+(classes|reservations)\b/iu);
     expect(result).toMatchObject({ checked: 1, drifted: 1, healed: 1 });
     expect(counter.reset).toHaveBeenCalledWith('c1', 2);
     vi.restoreAllMocks();
