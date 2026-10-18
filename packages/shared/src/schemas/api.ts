@@ -492,6 +492,101 @@ export const ListSessionsQuerySchema = refineDateRange(
 export type ListSessionsQuery = z.infer<typeof ListSessionsQuerySchema>;
 
 /* ------------------------------------------------------------------ */
+/*  progression — /v1/me/progression                                   */
+/* ------------------------------------------------------------------ */
+
+/** Window sizes, in days, the progression endpoint accepts (task 22.1). */
+export const PROGRESSION_WINDOWS = [30, 90, 365] as const;
+
+export type ProgressionWindow = (typeof PROGRESSION_WINDOWS)[number];
+
+/**
+ * `GET /v1/me/progression?window=30|90|365` query. The value arrives as
+ * a string; it defaults to 90 days when omitted.
+ */
+export const ProgressionQuerySchema = z
+  .object({
+    window: z.enum(['30', '90', '365']).default('90'),
+  })
+  .strict();
+
+export type ProgressionQuery = z.infer<typeof ProgressionQuerySchema>;
+
+/** `YYYY-MM-DD` UTC calendar day. */
+const UtcDaySchema = z.iso.date();
+
+/** One UTC day of one exercise in a progression series. */
+export const ProgressionPointSchema = z
+  .object({
+    date: UtcDaySchema,
+    /** Σ reps × weightKg over the day's sets, rounded to 0.1 kg. */
+    volumeKg: z.number().nonnegative(),
+    /** Best Epley estimate of the day, or `null` when no set qualifies. */
+    estimatedOneRepMaxKg: z.number().positive().nullable(),
+  })
+  .strict();
+
+export type ProgressionPoint = z.infer<typeof ProgressionPointSchema>;
+
+/** Per-exercise progression over the window. */
+export const ExerciseProgressionSchema = z
+  .object({
+    /** Stable grouping key: trimmed, lower-cased, inner whitespace collapsed. */
+    key: z.string().min(1).max(120),
+    /** Display name, as spelled in the most recent session. */
+    name: z.string().min(1).max(120),
+    /** Number of sessions in the window containing this exercise. */
+    sessionCount: z.number().int().positive(),
+    totalVolumeKg: z.number().nonnegative(),
+    bestEstimatedOneRepMaxKg: z.number().positive().nullable(),
+    /** One point per day the exercise was trained, ascending by date. */
+    points: z.array(ProgressionPointSchema),
+  })
+  .strict();
+
+export type ExerciseProgression = z.infer<typeof ExerciseProgressionSchema>;
+
+/** Sessions started in one ISO week (Monday, UTC). */
+export const WeeklyFrequencySchema = z
+  .object({
+    weekStart: UtcDaySchema,
+    sessions: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export type WeeklyFrequency = z.infer<typeof WeeklyFrequencySchema>;
+
+/**
+ * `GET /v1/me/progression` response.
+ *
+ * The window covers `windowDays` whole UTC days ending with today:
+ * `[from, to)` where `to` is the next UTC midnight. `exercises` is sorted
+ * by `sessionCount` then `totalVolumeKg`, descending, and capped at 20
+ * entries. `weeklyFrequency` is zero-filled and ascending. `truncated` is
+ * `true` when the window held more sessions than the server reads, and
+ * `skippedSessions` counts stored rows that failed schema validation.
+ */
+export const ProgressionResponseSchema = z
+  .object({
+    windowDays: z.union([z.literal(30), z.literal(90), z.literal(365)]),
+    from: IsoDateTimeSchema,
+    to: IsoDateTimeSchema,
+    totals: z
+      .object({
+        sessions: z.number().int().nonnegative(),
+        volumeKg: z.number().nonnegative(),
+      })
+      .strict(),
+    exercises: z.array(ExerciseProgressionSchema).max(20),
+    weeklyFrequency: z.array(WeeklyFrequencySchema),
+    truncated: z.boolean(),
+    skippedSessions: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export type ProgressionResponse = z.infer<typeof ProgressionResponseSchema>;
+
+/* ------------------------------------------------------------------ */
 /*  studios — /v1/studios/*                                            */
 /* ------------------------------------------------------------------ */
 

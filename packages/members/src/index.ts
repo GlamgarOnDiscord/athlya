@@ -11,11 +11,13 @@
  * task 5.3 contributes the RGPD export flow via `./export.js`; task
  * 5.4 contributes the RGPD deletion cascade consumer and the
  * 30-day audit anonymisation job via `./cascade.js`; task 5.5
- * contributes the workout session use cases via `./sessions.js`.
+ * contributes the workout session use cases via `./sessions.js`; task
+ * 22.1 contributes the progression aggregator via `./progression.js`.
  */
 
 export * from './service.js';
 export * from './consents.js';
 export * from './sessions.js';
+export * from './progression.js';
 export * from './export.js';
 export * from './cascade.js';
