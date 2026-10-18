@@ -11,7 +11,7 @@
  *   | PATCH  | /:id                    | admin | jwtAuth → requireRole → projectUserId → zValidator ×2 → idem|
  *   | POST   | /:id/archive            | admin | jwtAuth → requireRole → projectUserId → zValidator → idem   |
  *   | POST   | /:id/subscription       | any   | jwtAuth → projectUserId → zValidator ×2 → idem              |
- *   | DELETE | /:id/subscription       | any   | jwtAuth → projectUserId → zValidator → idem                 |
+ *   | DELETE | /:id/subscription (200) | any   | jwtAuth → projectUserId → zValidator → idem                 |
  *
  * `GET /today?date=YYYY-MM-DD` is the mobile home contract: one entry
  * per active subscription with the workout prescribed on the member's
@@ -336,7 +336,9 @@ export function buildProgramsRouter(deps: ProgramsDeps): Hono<HonoEnv> {
       if (outcome.kind === 'not_found') {
         return problem(c, 404, 'not_found', `no active subscription to program ${id}`);
       }
-      return c.body(null, 204);
+      // A JSON 200 (not 204) so the idempotency layer stores it and a
+      // retried DELETE replays the success instead of returning 404.
+      return c.json({ programId: id, unsubscribed: true }, 200);
     },
   );
 

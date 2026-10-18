@@ -105,7 +105,9 @@ describe('<ProgramsAdmin />', () => {
         }),
       ),
     );
-    expect((await screen.findByRole('status')).textContent).toBe(t('studio.programs.archived'));
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toBe(t('studio.programs.archived')),
+    );
   });
 
   it('opens the editor with the full program and saves with its version', async () => {
@@ -128,7 +130,34 @@ describe('<ProgramsAdmin />', () => {
         expect.anything(),
       ),
     );
-    expect((await screen.findByRole('status')).textContent).toBe(t('studio.programs.saved'));
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toBe(t('studio.programs.saved')),
+    );
+  });
+});
+
+describe('<ProgramsAdmin /> editor loading', () => {
+  it('opens the program of the latest Edit click when loads resolve out of order', async () => {
+    const other: ProgramSummary = { ...SUMMARY, id: 'p2', title: 'Mobility' };
+    const pending = new Map<string, (value: unknown) => void>();
+    const get = vi.fn((path: string) =>
+      path === '/v1/programs'
+        ? Promise.resolve({ items: [SUMMARY, other] })
+        : new Promise((resolve) => pending.set(path, resolve)),
+    );
+    render(
+      <ProgramsAdmin client={fakeClient({ get }) as unknown as ApiClient} t={t} locale="en" />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Strength 101' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Mobility' }));
+    pending.get('/v1/programs/p2')?.({ ...DETAIL, id: 'p2', title: 'Mobility' });
+    const title = (await screen.findByLabelText('Title')) as HTMLInputElement;
+    expect(title.value).toBe('Mobility');
+
+    pending.get(`/v1/programs/${SUMMARY.id}`)?.(DETAIL);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Mobility');
   });
 });
 
@@ -155,6 +184,9 @@ describe('<ProgramEditor />', () => {
     fireEvent.change(within(workout).getByLabelText('Exercise 1'), {
       target: { value: 'Back squat' },
     });
+    fireEvent.change(within(workout).getByLabelText('Exercise notes'), {
+      target: { value: 'Slow descent' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => expect(onDone).toHaveBeenCalledWith(true));
@@ -170,7 +202,7 @@ describe('<ProgramEditor />', () => {
               {
                 dayNumber: 1,
                 title: 'Squat',
-                exercises: [{ name: 'Back squat', sets: 3, reps: 10 }],
+                exercises: [{ name: 'Back squat', sets: 3, reps: 10, notes: 'Slow descent' }],
               },
             ],
           },

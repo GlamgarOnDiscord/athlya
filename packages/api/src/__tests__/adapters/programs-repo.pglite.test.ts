@@ -22,6 +22,7 @@ import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { drizzle } from 'drizzle-orm/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { createDrizzleDeletionRepo } from '../../adapters/cascade-repo-drizzle.js';
 import { createDrizzleProgramRepo } from '../../adapters/programs-repo-drizzle.js';
 
 import type { AthlyaDb, TenantClaims } from '@athlya/db/client';
@@ -117,10 +118,11 @@ describe('createDrizzleProgramRepo under athlya_app', () => {
   let draftId = '';
 
   it('runs as a NOBYPASSRLS role', async () => {
-    const { rows } = await pglite.query<{ role: string; bypass: boolean }>(
-      `SELECT current_user AS role, rolbypassrls AS bypass FROM pg_roles WHERE rolname = current_user`,
+    const { rows } = await pglite.query<{ role: string; bypass: boolean; superuser: boolean }>(
+      `SELECT current_user AS role, rolbypassrls AS bypass, rolsuper AS superuser
+         FROM pg_roles WHERE rolname = current_user`,
     );
-    expect(rows[0]).toEqual({ role: 'athlya_app', bypass: false });
+    expect(rows[0]).toEqual({ role: 'athlya_app', bypass: false, superuser: false });
   });
 
   it('lets an admin create a program with its schedule', async () => {
@@ -300,6 +302,33 @@ describe('createDrizzleProgramRepo under athlya_app', () => {
     const subscriptions = await repo(memberA).listSubscriptions(MEMBER_A);
     expect(subscriptions.map((s) => s.programStatus)).toEqual(['archived']);
     await expect(repo(memberA2).get(publishedId)).resolves.toBeNull();
+  });
+
+  it('purges a deleted member subscriptions through the RGPD cascade repo', async () => {
+    const fresh = await repo(adminA).create({
+      studioId: STUDIO_A,
+      createdBy: ADMIN_A,
+      title: 'Open',
+      description: null,
+      status: 'published',
+      weeks: [{ weekNumber: 1, workouts: [] }],
+    });
+    await repo(memberA2).subscribe({
+      programId: fresh.id,
+      studioId: STUDIO_A,
+      userId: MEMBER_A2,
+      startsOn: '2026-10-12',
+    });
+    const cascade = createDrizzleDeletionRepo(db);
+    // The cascade runs claim-less under athlya_app: a live account is untouched.
+    await expect(cascade.deleteProgramSubscriptionsForUser(MEMBER_A2)).resolves.toBe(0);
+    await asOwner(`UPDATE users SET deleted_at = now() WHERE id = '${MEMBER_A2}'`);
+    await expect(cascade.deleteProgramSubscriptionsForUser(MEMBER_A2)).resolves.toBe(1);
+    await expect(
+      asOwner<{ n: number }>(
+        `SELECT count(*)::int AS n FROM program_subscriptions WHERE user_id = '${MEMBER_A2}'`,
+      ),
+    ).resolves.toEqual([{ n: 0 }]);
   });
 
   it('unsubscribes the caller once', async () => {

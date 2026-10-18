@@ -26,7 +26,10 @@
 --   - weeks and workouts inherit the visibility of their program (the
 --     policy subquery runs under the caller's RLS on `programs`);
 --   - only admins insert / update programs and replace weeks / workouts;
---   - a user reads, creates and cancels only their own subscriptions.
+--     an archived program is terminal (the update policy only matches
+--     rows that are not archived yet, so archiving still works);
+--   - a user reads, creates and cancels only their own subscriptions;
+--     cancelling is one-way (`cancelled_at` cannot go back to NULL).
 --     `program_subscriptions` policies never reference `programs`, so
 --     the `programs` read policy that looks at subscriptions cannot
 --     recurse. Subscribing to a non-published program is refused by the
@@ -192,7 +195,11 @@ CREATE POLICY "programs_admin_insert" ON "programs"
 DROP POLICY IF EXISTS "programs_admin_update" ON "programs";--> statement-breakpoint
 CREATE POLICY "programs_admin_update" ON "programs"
     FOR UPDATE
-    USING (studio_id = public.app_studio_id() AND public.app_role() = 'admin')
+    USING (
+        studio_id = public.app_studio_id()
+        AND public.app_role() = 'admin'
+        AND status <> 'archived'
+    )
     WITH CHECK (studio_id = public.app_studio_id() AND public.app_role() = 'admin');
 --> statement-breakpoint
 
@@ -264,7 +271,11 @@ DROP POLICY IF EXISTS "program_subscriptions_cancel_own" ON "program_subscriptio
 CREATE POLICY "program_subscriptions_cancel_own" ON "program_subscriptions"
     FOR UPDATE
     USING (studio_id = public.app_studio_id() AND user_id = public.app_user_id())
-    WITH CHECK (studio_id = public.app_studio_id() AND user_id = public.app_user_id());
+    WITH CHECK (
+        studio_id = public.app_studio_id()
+        AND user_id = public.app_user_id()
+        AND cancelled_at IS NOT NULL
+    );
 --> statement-breakpoint
 
 -- ---------------------------------------------------------------------

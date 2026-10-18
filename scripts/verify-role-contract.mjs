@@ -10,7 +10,9 @@
  *                              read + admin branding update and member export
  *                              enqueue (tenant GUCs) → worker claim + data +
  *                              complete → account deletion with its event →
- *                              RGPD cascade (incl. audit anonymisation) →
+ *                              training program subscribe → RGPD cascade
+ *                              (incl. audit anonymisation and program
+ *                              subscriptions purge) →
  *                              book, waitlist position, cancel with
  *                              waitlist promotion (member claims)
  *   athlya_cron (CRON_DB_URL)  leased outbox claim privileges, capacity
@@ -201,6 +203,20 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     check(adminEdit.length === 1, 'a studio admin could not update the studio branding');
     await tx`SELECT set_config('app.role', 'member', true)`;
     ok('studio read is tenant-scoped; only an admin updates the branding');
+    await tx`SELECT set_config('app.role', 'admin', true)`;
+    const [program] = await tx`
+      INSERT INTO programs (studio_id, title, status)
+      VALUES (${studio.id}::uuid, 'Role contract', 'published') RETURNING id
+    `;
+    await tx`SELECT set_config('app.role', 'member', true)`;
+    const subscribed = await tx`
+      INSERT INTO program_subscriptions (program_id, studio_id, user_id, starts_on)
+      VALUES (${program.id}::uuid, ${studio.id}::uuid, ${userId}::uuid, current_date) RETURNING id
+    `;
+    check(subscribed.length === 1, 'a member could not subscribe to a published program');
+    const [livePurge] = await tx`SELECT rgpd_delete_program_subscriptions(${userId}::uuid) AS n`;
+    check(livePurge.n === 0, 'program subscriptions purge touched a live account');
+    ok('training programs: admin publishes, member subscribes under tenant claims');
     const jobId = randomUUID();
     const requested = {
       id: randomUUID(),
@@ -264,6 +280,8 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     `;
     const [anonymised] = await tx`SELECT rgpd_anonymize_user_audit(${userId}::uuid) AS n`;
     check(anonymised.n >= 1, 'audit rows of the deleted account were not anonymised');
+    const [purged] = await tx`SELECT rgpd_delete_program_subscriptions(${userId}::uuid) AS n`;
+    check(purged.n === 1, `program subscriptions purge removed ${purged.n} rows, expected 1`);
     ok('RGPD cascade functions run for the deleted account, audit rows anonymised');
 
     const invoices =

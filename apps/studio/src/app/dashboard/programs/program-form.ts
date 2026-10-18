@@ -28,6 +28,7 @@ export interface ExerciseDraft {
   readonly durationSec: string;
   readonly weightKg: string;
   readonly restSec: string;
+  readonly notes: string;
 }
 
 export interface WorkoutDraft {
@@ -70,6 +71,7 @@ export function emptyExercise(): ExerciseDraft {
     durationSec: '',
     weightKg: '',
     restSec: '',
+    notes: '',
   };
 }
 
@@ -90,6 +92,7 @@ function exerciseFromApi(exercise: ProgramExercise): ExerciseDraft {
     durationSec: numberText(exercise.durationSec),
     weightKg: numberText(exercise.weightKg),
     restSec: numberText(exercise.restSec),
+    notes: exercise.notes ?? '',
   };
 }
 
@@ -253,6 +256,7 @@ function exerciseToApi(exercise: ExerciseDraft): Record<string, unknown> {
     durationSec: optionalNumber(exercise.durationSec),
     weightKg: optionalNumber(exercise.weightKg),
     restSec: optionalNumber(exercise.restSec),
+    notes: optionalText(exercise.notes),
   };
   return Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
 }

@@ -256,6 +256,7 @@ describe('GET /today (mobile home contract)', () => {
     const res = await call(deps, 'GET', '/today?date=2030-01-01');
     expect(res.status).toBe(422);
     expect(await readJson<{ code: string }>(res)).toMatchObject({ code: 'invalid_date' });
+    expect(getToday).toHaveBeenCalledWith(expect.anything(), '2030-01-01');
   });
 });
 
@@ -409,18 +410,37 @@ describe('subscriptions', () => {
     expect(deps.programs.subscribe).not.toHaveBeenCalled();
   });
 
-  it('DELETE /:id/subscription → 204, then 404 without an active subscription', async () => {
+  it('DELETE /:id/subscription → 200 JSON, then 404 without an active subscription', async () => {
     const unsubscribe = vi
       .fn()
       .mockResolvedValueOnce({ kind: 'unsubscribed' })
       .mockResolvedValueOnce({ kind: 'not_found' });
     const deps = buildStubDeps({ programs: { unsubscribe } });
-    expect((await call(deps, 'DELETE', `/${PROGRAM_ID}/subscription`)).status).toBe(204);
+    const done = await call(deps, 'DELETE', `/${PROGRAM_ID}/subscription`);
+    expect(done.status).toBe(200);
+    expect(await readJson<unknown>(done)).toEqual({ programId: PROGRAM_ID, unsubscribed: true });
     expect((await call(deps, 'DELETE', `/${PROGRAM_ID}/subscription`)).status).toBe(404);
   });
 });
 
 describe('idempotency', () => {
+  it('stores the unsubscribe success so a retry replays it instead of a 404', async () => {
+    const idempotencyFor = vi.fn().mockReturnValue({ db: {} as AthlyaDb });
+    const unsubscribe = vi.fn().mockResolvedValue({ kind: 'unsubscribed' });
+    const deps = buildStubDeps({ programs: { unsubscribe, idempotencyFor } });
+    const res = await call(deps, 'DELETE', `/${PROGRAM_ID}/subscription`, {
+      headers: { 'Idempotency-Key': 'unsub-1' },
+    });
+    expect(res.status).toBe(200);
+    expect(hoisted.store).toHaveBeenCalledWith(
+      expect.anything(),
+      'unsub-1',
+      TEST_USER_ID,
+      { body: { programId: PROGRAM_ID, unsubscribed: true }, statusCode: 200 },
+      expect.any(Number),
+    );
+  });
+
   it('scopes the store to the caller claims and replays a stored response', async () => {
     const idempotencyFor = vi.fn().mockReturnValue({ db: {} as AthlyaDb });
     const createProgram = vi.fn().mockResolvedValue({ kind: 'created', program: PROGRAM });

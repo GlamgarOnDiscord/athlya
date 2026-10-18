@@ -41,7 +41,9 @@ const PROGRAM: ProgramDetail = {
           dayNumber: 3,
           title: 'Squat',
           notes: null,
-          exercises: [{ name: 'Back squat', sets: 5, reps: 5, weightKg: 82.5 }],
+          exercises: [
+            { name: 'Back squat', sets: 5, reps: 5, weightKg: 82.5, notes: 'Pause at the bottom' },
+          ],
         },
       ],
     },
@@ -68,8 +70,21 @@ describe('program-form', () => {
     for (let i = 0; i < 8; i += 1) draft = addWorkout(draft, 0);
     const days = draft.weeks[0]?.workouts.map((w) => w.dayNumber);
     expect(days).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    draft = updateWorkout(emptyDraft(), 0, 0, { dayNumber: 5 });
-    expect(draft.weeks[0]?.workouts).toEqual([]);
+  });
+
+  it('re-sorts workouts by day after a day change', () => {
+    let draft = addWorkout(addWorkout(addWorkout(emptyDraft(), 0), 0), 0);
+    draft = updateWorkout(draft, 0, 0, { title: 'Moved', dayNumber: 6 });
+    expect(draft.weeks[0]?.workouts.map((w) => [w.dayNumber, w.title])).toEqual([
+      [2, ''],
+      [3, ''],
+      [6, 'Moved'],
+    ]);
+  });
+
+  it('ignores an update to a workout that does not exist', () => {
+    const draft = emptyDraft();
+    expect(updateWorkout(draft, 0, 0, { dayNumber: 5 })).toBe(draft);
   });
 
   it('only offers free days, plus the current one', () => {
@@ -143,6 +158,7 @@ describe('program-form', () => {
       reps: '5',
       weightKg: '82.5',
       durationSec: '',
+      notes: 'Pause at the bottom',
     });
     const result = draftToUpdatePayload(draft, PROGRAM.version);
     expect(result).toEqual({
@@ -160,7 +176,15 @@ describe('program-form', () => {
               {
                 dayNumber: 3,
                 title: 'Squat',
-                exercises: [{ name: 'Back squat', sets: 5, reps: 5, weightKg: 82.5 }],
+                exercises: [
+                  {
+                    name: 'Back squat',
+                    sets: 5,
+                    reps: 5,
+                    weightKg: 82.5,
+                    notes: 'Pause at the bottom',
+                  },
+                ],
               },
             ],
           },

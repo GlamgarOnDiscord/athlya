@@ -9,7 +9,7 @@
  * fake client. Status changes are announced through a polite live
  * region.
  */
-import { useCallback, useEffect, useId, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -71,6 +71,8 @@ export function ProgramsAdmin({ client, t, locale }: ProgramsAdminProps): ReactE
   const [announcement, setAnnouncement] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const filterId = useId();
+  /** Only the latest "Edit" click may open the editor. */
+  const editRequest = useRef(0);
 
   const dateFormat = useMemo(
     () => new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric' }),
@@ -98,11 +100,15 @@ export function ProgramsAdmin({ client, t, locale }: ProgramsAdminProps): ReactE
   const openEditor = useCallback(
     async (program: ProgramSummary) => {
       setActionError(null);
+      editRequest.current += 1;
+      const request = editRequest.current;
       try {
         const detail = await client.get<ProgramDetail>(`/v1/programs/${program.id}`);
-        setEditor({ kind: 'edit', program: detail });
+        if (request === editRequest.current) setEditor({ kind: 'edit', program: detail });
       } catch {
-        setActionError(t('studio.programs.editor.errors.loadFailed'));
+        if (request === editRequest.current) {
+          setActionError(t('studio.programs.editor.errors.loadFailed'));
+        }
       }
     },
     [client, t],
@@ -141,7 +147,13 @@ export function ProgramsAdmin({ client, t, locale }: ProgramsAdminProps): ReactE
         <p role="status" aria-live="polite" className="sr-only">
           {announcement}
         </p>
-        <ProgramEditor mode={editor} client={client} t={t} onDone={closeEditor} />
+        <ProgramEditor
+          key={editor.kind === 'edit' ? editor.program.id : 'create'}
+          mode={editor}
+          client={client}
+          t={t}
+          onDone={closeEditor}
+        />
       </>
     );
   }

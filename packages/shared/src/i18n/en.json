@@ -453,7 +453,8 @@
           "reps": "Reps",
           "durationSec": "Duration (s)",
           "weightKg": "Load (kg)",
-          "restSec": "Rest (s)"
+          "restSec": "Rest (s)",
+          "exerciseNotes": "Exercise notes"
         },
         "week": "Week {n}",
         "dayOption": "Day {n}",

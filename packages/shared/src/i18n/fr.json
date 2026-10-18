@@ -453,7 +453,8 @@
           "reps": "Répétitions",
           "durationSec": "Durée (s)",
           "weightKg": "Charge (kg)",
-          "restSec": "Repos (s)"
+          "restSec": "Repos (s)",
+          "exerciseNotes": "Notes de l'exercice"
         },
         "week": "Semaine {n}",
         "dayOption": "Jour {n}",

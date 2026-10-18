@@ -676,6 +676,18 @@ export type AuditListResponse = z.infer<typeof AuditListResponseSchema>;
 export const MAX_PROGRAM_WEEKS = 16;
 export const MAX_PROGRAM_EXERCISES = 15;
 
+/**
+ * The per-field bounds alone allow a schedule far larger than the
+ * gateway's 256 KiB `/v1` body cap (16 weeks × 7 days × 15 exercises).
+ * The whole schedule is therefore also capped by its serialised UTF-8
+ * size, with headroom for the other fields, so every program the schema
+ * accepts also fits through the gateway.
+ */
+export const MAX_PROGRAM_SCHEDULE_BYTES = 200 * 1024;
+
+const utf8Length = (value: unknown): number =>
+  new TextEncoder().encode(JSON.stringify(value)).length;
+
 /** Calendar date without a time zone, `YYYY-MM-DD`. */
 export const LocalDateSchema = z.iso.date();
 
@@ -740,7 +752,11 @@ const ProgramWeeksSchema = z
         .sort((a, b) => a - b)
         .every((n, i) => n === i + 1),
     { message: 'weeks must be numbered 1..n without gaps', params: { code: 'week_sequence' } },
-  );
+  )
+  .refine((weeks) => utf8Length(weeks) <= MAX_PROGRAM_SCHEDULE_BYTES, {
+    message: `the schedule must not exceed ${String(MAX_PROGRAM_SCHEDULE_BYTES / 1024)} KiB`,
+    params: { code: 'schedule_too_large' },
+  });
 
 /** `POST /v1/programs` (admin). New programs start as drafts by default. */
 export const CreateProgramRequestSchema = z
@@ -872,6 +888,19 @@ export const ProgramSubscriptionListResponseSchema = z
   .strict();
 
 export type ProgramSubscriptionListResponse = z.infer<typeof ProgramSubscriptionListResponseSchema>;
+
+/**
+ * `DELETE /v1/programs/{id}/subscription` — a JSON body rather than 204
+ * so an idempotent retry replays the success.
+ */
+export const UnsubscribeProgramResponseSchema = z
+  .object({
+    programId: UuidSchema,
+    unsubscribed: z.literal(true),
+  })
+  .strict();
+
+export type UnsubscribeProgramResponse = z.infer<typeof UnsubscribeProgramResponseSchema>;
 
 /**
  * `GET /v1/programs/today?date=YYYY-MM-DD` — the mobile home "today's

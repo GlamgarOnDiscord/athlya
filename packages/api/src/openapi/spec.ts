@@ -50,6 +50,7 @@ import {
   SubscribeProgramRequestSchema,
   TodayWorkoutQuerySchema,
   TodayWorkoutResponseSchema,
+  UnsubscribeProgramResponseSchema,
   UpdateClassRequestSchema,
   UpdateConsentsRequestSchema,
   UpdateProfileRequestSchema,
@@ -1014,7 +1015,10 @@ const unsubscribeProgramRoute = createRoute({
   security: [{ bearerAuth: [] }],
   request: { params: ProgramIdParamsSchema },
   responses: {
-    204: { description: 'Unsubscribed' },
+    200: {
+      description: 'Unsubscribed (replayable with the same Idempotency-Key)',
+      content: { 'application/json': { schema: UnsubscribeProgramResponseSchema } },
+    },
     401: problem('Not authenticated'),
     404: problem('No active subscription'),
   },

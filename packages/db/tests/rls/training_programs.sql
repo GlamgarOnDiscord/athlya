@@ -27,7 +27,7 @@
 -- =====================================================================
 
 BEGIN;
-SELECT plan(46);
+SELECT plan(50);
 
 -- ---------- seed (migration superuser) ----------
 --
@@ -234,6 +234,13 @@ SELECT lives_ok(
 );
 
 SELECT throws_ok(
+    $$ UPDATE program_subscriptions SET cancelled_at = NULL
+        WHERE id = 'd0420000-0000-4000-8000-000000000003' $$,
+    '42501', NULL,
+    'program_subscriptions_cancel_own: a cancelled subscription cannot be reactivated'
+);
+
+SELECT throws_ok(
     $$ UPDATE program_subscriptions SET user_id = '11111111-1111-4111-8111-111111111112'
         WHERE id = 'd0420000-0000-4000-8000-000000000001' $$,
     '42501', NULL,
@@ -269,6 +276,18 @@ SELECT is(
     0,
     'program_subscriptions_read_own: member A2 does not see member A''s subscriptions'
 );
+
+UPDATE program_subscriptions SET cancelled_at = now()
+ WHERE id = 'd0420000-0000-4000-8000-000000000001';
+
+RESET ROLE;
+SELECT is(
+    (SELECT cancelled_at FROM program_subscriptions WHERE id = 'd0420000-0000-4000-8000-000000000001'),
+    NULL,
+    'program_subscriptions_cancel_own: member A2 cannot cancel member A''s subscription'
+);
+SET LOCAL ROLE athlya_app;
+SELECT test_set_tenant('11111111-1111-4111-8111-111111111112', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'member');
 
 -- ---------- coach A ----------
 
@@ -319,6 +338,25 @@ SELECT throws_ok(
         WHERE id = 'a0420000-0000-4000-8000-000000000002' $$,
     '42501', NULL,
     'column grant: an admin cannot move a program to another studio'
+);
+
+UPDATE programs SET status = 'published', archived_at = NULL
+ WHERE id = 'a0420000-0000-4000-8000-000000000003';
+
+SELECT results_eq(
+    $$ SELECT status::text, archived_at IS NOT NULL FROM programs
+        WHERE id = 'a0420000-0000-4000-8000-000000000003' $$,
+    $$ VALUES ('archived'::text, true) $$,
+    'programs_admin_update: an archived program cannot be revived'
+);
+
+UPDATE programs SET status = 'archived', archived_at = now(), version = version + 1
+ WHERE id = 'a0420000-0000-4000-8000-000000000005';
+
+SELECT is(
+    (SELECT status::text FROM programs WHERE id = 'a0420000-0000-4000-8000-000000000005'),
+    'archived',
+    'programs_admin_update: an admin archives a live program'
 );
 
 SELECT throws_ok(

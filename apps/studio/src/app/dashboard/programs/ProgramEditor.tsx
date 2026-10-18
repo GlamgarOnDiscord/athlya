@@ -480,6 +480,28 @@ export function ProgramEditor({ mode, client, t, onDone }: ProgramEditorProps): 
                             >
                               ✕
                             </Button>
+                            <div className="flex flex-col gap-1 sm:col-span-full">
+                              <Label
+                                htmlFor={fieldId(`${exercisePath}.notes`)}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {t('studio.programs.editor.fields.exerciseNotes')}
+                              </Label>
+                              <Input
+                                id={fieldId(`${exercisePath}.notes`)}
+                                maxLength={280}
+                                value={exercise.notes}
+                                onChange={(e) =>
+                                  setDraft((d) =>
+                                    updateExercise(d, weekIndex, workoutIndex, exerciseIndex, {
+                                      notes: e.target.value,
+                                    }),
+                                  )
+                                }
+                                {...describeField(`${exercisePath}.notes`)}
+                              />
+                              {fieldError(`${exercisePath}.notes`)}
+                            </div>
                           </li>
                         );
                       })}
