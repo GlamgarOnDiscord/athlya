@@ -19,7 +19,7 @@
  * auth or billing latency.
  */
 
-import { buildBaseApp } from '../base-app.js';
+import { buildBaseApp, type ReadinessProbe } from '../base-app.js';
 import {
   assertRequiredSecrets,
   defaultClassesDeps,
@@ -40,7 +40,22 @@ import { buildStudiosRouter } from '../routes/studios.js';
 
 export { ClassCapacityDO } from '../durable-objects/class-capacity.js';
 
+/**
+ * `/health/ready` probes backed by this Worker's bindings
+ * (wrangler.reservations.toml): Hyperdrive serves the write path, and
+ * consent updates on /v1/members/* append to `audit_log`. No cron or
+ * R2 binding.
+ */
+export const READINESS: readonly ReadinessProbe[] = [
+  'db',
+  'redis',
+  'hyperdrive',
+  'auditLogPartitions',
+  'sentryDsn',
+];
+
 const app = buildBaseApp({
+  readiness: READINESS,
   // Mounted through the base app hook so the routes sit at the same point
   // of the chain as in the monolith, behind the shared /v1/* scope (env
   // capture, BYPASSRLS guard, per-request cf).

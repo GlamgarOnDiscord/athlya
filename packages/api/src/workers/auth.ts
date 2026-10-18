@@ -17,12 +17,20 @@
  * affect reservation or billing latency.
  */
 
-import { buildBaseApp } from '../base-app.js';
+import { buildBaseApp, type ReadinessProbe } from '../base-app.js';
 import { assertRequiredSecrets, defaultAuthDeps, lazyAuthDeps } from '../domain-deps.js';
 import { installDomainScope } from '../domain-scope.js';
 import { buildAuthRouter } from '../routes/auth.js';
 
+/**
+ * `/health/ready` probes backed by this Worker's bindings
+ * (wrangler.auth.toml): no cron, Hyperdrive or R2 binding, and auth
+ * never writes `audit_log`.
+ */
+export const READINESS: readonly ReadinessProbe[] = ['db', 'redis', 'sentryDsn'];
+
 const app = buildBaseApp({
+  readiness: READINESS,
   // Mounted through the base app hook so the routes sit at the same point
   // of the chain as in the monolith, behind the shared /v1/* scope (env
   // capture, BYPASSRLS guard, per-request cf).

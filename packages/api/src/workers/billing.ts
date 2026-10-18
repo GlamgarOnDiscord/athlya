@@ -12,7 +12,7 @@
  */
 
 import { mountAdminRouters } from '../admin-routes.js';
-import { buildBaseApp } from '../base-app.js';
+import { buildBaseApp, type ReadinessProbe } from '../base-app.js';
 import {
   assertRequiredSecrets,
   defaultAuditDeps,
@@ -24,7 +24,20 @@ import { installDomainScope } from '../domain-scope.js';
 import { buildAuditRouter } from '../routes/audit.js';
 import { buildBillingRouter } from '../routes/billing.js';
 
+/**
+ * `/health/ready` probes backed by this Worker's bindings
+ * (wrangler.billing.toml): /admin/* and /v1/audit/* write and read
+ * `audit_log`. No cron, Hyperdrive or R2 binding.
+ */
+export const READINESS: readonly ReadinessProbe[] = [
+  'db',
+  'redis',
+  'auditLogPartitions',
+  'sentryDsn',
+];
+
 const app = buildBaseApp({
+  readiness: READINESS,
   // The /admin/* surface is served by this Worker only (wrangler.billing.toml).
   mountAdmin: mountAdminRouters,
   // Mounted through the base app hook so the routes sit at the same point

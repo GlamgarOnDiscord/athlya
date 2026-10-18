@@ -12,9 +12,13 @@ import { describe, it, expect } from 'vitest';
 
 import type { Hono } from 'hono';
 
-import { app as authApp } from '../workers/auth.js';
-import { app as reservationsApp } from '../workers/reservations.js';
-import { app as billingApp } from '../workers/billing.js';
+import { READINESS_PROBES, type ReadinessProbe } from '../base-app.js';
+import { app as authApp, READINESS as AUTH_READINESS } from '../workers/auth.js';
+import {
+  app as reservationsApp,
+  READINESS as RESERVATIONS_READINESS,
+} from '../workers/reservations.js';
+import { app as billingApp, READINESS as BILLING_READINESS } from '../workers/billing.js';
 
 import { buildMockEnv } from './helpers/test-app.js';
 
@@ -182,6 +186,85 @@ describe.each(SUB_WORKERS)('$config route contract', ({ config, app, source }) =
     } else {
       expect(s).toBe(404);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Readiness contract (issue #614): each Worker's /health/ready probe list
+// matches the bindings its wrangler config declares.
+// ---------------------------------------------------------------------------
+
+/** Bindings or secrets a probe reads. */
+const PROBE_BINDINGS: Record<ReadinessProbe, readonly string[]> = {
+  db: ['DB_URL'],
+  redis: ['REDIS_URL', 'REDIS_TOKEN'],
+  cron: ['CRON_DB_URL'],
+  hyperdrive: ['HYPERDRIVE'],
+  avatarsBucket: ['AVATARS_BUCKET'],
+  exportsBucket: ['EXPORTS_BUCKET'],
+  auditLogPartitions: ['DB_URL'],
+  sentryDsn: ['SENTRY_DSN'],
+};
+
+/**
+ * Probes that must be listed whenever their bindings are declared.
+ * `auditLogPartitions` reuses `DB_URL`, so it is required only where
+ * the Worker touches `audit_log`, and is checked one way only.
+ */
+const BINDING_BACKED_PROBES = READINESS_PROBES.filter((name) => name !== 'auditLogPartitions');
+
+const SECRET_NAME = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/gu;
+
+/** Secret names of a `# <label>` header block continued on `#   ` lines. */
+function headerSecrets(toml: string, label: string): string[] {
+  const lines = toml.split('\n');
+  const start = lines.findIndex((line) => line.startsWith(`# ${label}`));
+  if (start === -1) return [];
+  const first = lines[start] ?? '';
+  const block = [first.slice(first.indexOf(':') + 1)];
+  for (const line of lines.slice(start + 1)) {
+    if (!line.startsWith('#   ')) break;
+    block.push(line);
+  }
+  return block.join(' ').match(SECRET_NAME) ?? [];
+}
+
+/** Secrets documented in the header plus every `binding = "…"` entry. */
+function declaredBindings(config: string): Set<string> {
+  const toml = readPackageFile(config);
+  const bindings = [...toml.matchAll(/^binding = "([A-Z0-9_]+)"$/gm)].map((m) => m[1] ?? '');
+  return new Set([
+    ...headerSecrets(toml, 'Secrets (set once per env'),
+    ...headerSecrets(toml, 'Production also'),
+    ...bindings,
+  ]);
+}
+
+const READINESS_WORKERS: ReadonlyArray<{
+  config: string;
+  readiness: readonly ReadinessProbe[];
+}> = [
+  { config: 'wrangler.toml', readiness: READINESS_PROBES },
+  { config: 'wrangler.auth.toml', readiness: AUTH_READINESS },
+  { config: 'wrangler.reservations.toml', readiness: RESERVATIONS_READINESS },
+  { config: 'wrangler.billing.toml', readiness: BILLING_READINESS },
+];
+
+describe.each(READINESS_WORKERS)('$config readiness contract', ({ config, readiness }) => {
+  const declared = declaredBindings(config);
+
+  it('documents its secrets and bindings', () => {
+    expect(declared.has('DB_URL')).toBe(true);
+  });
+
+  it.each([...readiness])('declares every binding the %s probe reads', (probe) => {
+    const missing = PROBE_BINDINGS[probe].filter((name) => !declared.has(name));
+    expect(missing).toEqual([]);
+  });
+
+  it.each(BINDING_BACKED_PROBES)('requires %s when its bindings are declared', (probe) => {
+    const bound = PROBE_BINDINGS[probe].every((name) => declared.has(name));
+    expect(readiness.includes(probe)).toBe(bound);
   });
 });
 

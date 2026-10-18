@@ -49,7 +49,7 @@
  * the `main = "src/worker.ts"` entry.
  */
 
-import { createNeonHttpSql } from '@athlya/db';
+import { createNeonHttpSql, pingDb, pingDbHttp } from '@athlya/db';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
@@ -188,6 +188,11 @@ let sentryRegionWarned = false;
  *     Receives the admin env accessor for the lazy audit writers.
  *     Omitted → no `/admin/*` surface: only the gateway and the billing
  *     Worker (which owns the `/admin/*` route) opt in.
+ *   • `readiness` — the `/health/ready` probes this Worker requires
+ *     (issue #614). Only listed probes run and appear under `checks`;
+ *     a sub-worker lists the probes its own bindings support so a
+ *     binding it never receives cannot report it not-ready. Omitted →
+ *     every probe in {@link READINESS_PROBES} (the gateway).
  *
  * This module never imports domain or admin routers itself: the
  * monolith (`./app.ts`) and each bulkhead sub-worker (`./workers/*.ts`)
@@ -197,7 +202,25 @@ let sentryRegionWarned = false;
 export interface BaseAppOptions {
   readonly mountDomain?: (app: Hono<HonoEnv>) => void;
   readonly mountAdmin?: (app: Hono<HonoEnv>, getAdminEnv: () => AthlyaBindings) => void;
+  readonly readiness?: readonly ReadinessProbe[];
 }
+
+/**
+ * Probes `/health/ready` can run, keyed as they appear under `checks`
+ * in the response body. Order is the response order.
+ */
+export const READINESS_PROBES = [
+  'db',
+  'redis',
+  'cron',
+  'hyperdrive',
+  'avatarsBucket',
+  'exportsBucket',
+  'auditLogPartitions',
+  'sentryDsn',
+] as const;
+
+export type ReadinessProbe = (typeof READINESS_PROBES)[number];
 
 /**
  * Build a Hono instance with the full global middleware chain (host
@@ -971,10 +994,12 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
    *
    * Implementation notes:
    *
-   *   • Both probes run in parallel via {@link Promise.allSettled}
-   *     so a slow Redis does not delay the Postgres signal (and
-   *     vice-versa). The handler reports per-dependency status so
-   *     ops can see which side is the problem in a single curl.
+   *   • The probes listed in `options.readiness` (all of them by
+   *     default) run in parallel via {@link Promise.all} so a slow
+   *     Redis does not delay the Postgres signal (and vice-versa).
+   *     The handler reports per-dependency status so ops can see
+   *     which side is the problem in a single curl. Unlisted probes
+   *     neither run nor appear under `checks`.
    *
    *   • A two-second deadline per probe via
    *     `AbortSignal.timeout(2000)` guards against a hung dep
@@ -983,8 +1008,8 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
    *     "give up and report unhealthy" before the deploy
    *     automation bails out.
    *
-   *   • Returns `200 OK` with `{ status: 'ready' }` when both deps
-   *     answer; `503 Service Unavailable` with a per-dep status
+   *   • Returns `200 OK` with `{ status: 'ready' }` when every
+   *     listed probe passes; `503 Service Unavailable` with a per-dep status
    *     map otherwise. The 503 body is plain JSON (NOT Problem
    *     Details) — readiness probes are infrastructure-level, the
    *     consumer is a deploy script, not an app client.
@@ -994,6 +1019,9 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
    *     `pnpm --filter @athlya/api dev` boots cleanly without
    *     real infrastructure. Staging / production fail-CLOSED.
    */
+  const enabledProbes = READINESS_PROBES.filter((name) =>
+    (options.readiness ?? READINESS_PROBES).includes(name),
+  );
   app.get('/health/ready', async (c) => {
     const env = c.env;
     const isDev = env.ENVIRONMENT === 'dev';
@@ -1016,7 +1044,6 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
         // and runs `SELECT 1`. Bounded with a 2-second
         // deadline via `Promise.race` so a hung Postgres
         // does not lock up the readiness gate.
-        const { pingDbHttp } = await import('@athlya/db');
         await Promise.race([
           pingDbHttp(env.DB_URL),
           new Promise<never>((_, reject) =>
@@ -1085,7 +1112,6 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
       }
       const started = Date.now();
       try {
-        const { pingDb } = await import('@athlya/db');
         await Promise.race([
           pingDb(env.HYPERDRIVE.connectionString),
           new Promise<never>((_, reject) =>
@@ -1201,32 +1227,29 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
       }
     }
 
-    const [dbProbe, redisProbe, cronProbe, hyperdriveProbe, auditPartitionProbe] =
-      await Promise.all([
-        probeDb(),
-        probeRedis(),
-        Promise.resolve(probeCronConfig()),
-        probeHyperdriveWrite(),
-        probeAuditLogPartitions(),
-      ]);
-    const avatarsBucketProbe = probeAvatarsBucket();
-    const exportsBucketProbe = probeExportsBucket();
-    const sentryDsnProbe = probeSentryDsn();
+    const probes: Record<ReadinessProbe, () => ProbeResult | Promise<ProbeResult>> = {
+      db: probeDb,
+      redis: probeRedis,
+      cron: probeCronConfig,
+      hyperdrive: probeHyperdriveWrite,
+      avatarsBucket: probeAvatarsBucket,
+      exportsBucket: probeExportsBucket,
+      auditLogPartitions: probeAuditLogPartitions,
+      sentryDsn: probeSentryDsn,
+    };
+    // Unlisted probes never run: a Worker without a binding must not
+    // report it as missing (issue #614).
+    const results = await Promise.all(
+      enabledProbes.map(async (name) => [name, await probes[name]()] as const),
+    );
+    const checks = Object.fromEntries(results) as Partial<Record<ReadinessProbe, ProbeResult>>;
 
     // Dev: any `skipped` is acceptable (= no real binding wired).
     // Staging/prod: `skipped` is a configuration bug → not ready.
     const failed = (p: ProbeResult): boolean =>
       p.status === 'failed' || (!isDev && p.status === 'skipped');
 
-    const ready =
-      !failed(dbProbe) &&
-      !failed(redisProbe) &&
-      !failed(cronProbe) &&
-      !failed(hyperdriveProbe) &&
-      !failed(avatarsBucketProbe) &&
-      !failed(exportsBucketProbe) &&
-      !failed(auditPartitionProbe) &&
-      !failed(sentryDsnProbe);
+    const ready = results.every(([, result]) => !failed(result));
     const httpStatus = ready ? 200 : 503;
 
     return c.json(
@@ -1235,16 +1258,7 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
         environment: env.ENVIRONMENT,
         traceId,
         version: env.VERSION,
-        checks: {
-          db: dbProbe,
-          redis: redisProbe,
-          cron: cronProbe,
-          hyperdrive: hyperdriveProbe,
-          avatarsBucket: avatarsBucketProbe,
-          exportsBucket: exportsBucketProbe,
-          auditLogPartitions: auditPartitionProbe,
-          sentryDsn: sentryDsnProbe,
-        },
+        checks,
       },
       httpStatus,
     );
