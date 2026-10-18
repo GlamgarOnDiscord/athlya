@@ -62,6 +62,7 @@ on:
       - 'scripts/smoke-routes.mjs'
       - 'scripts/verify-secrets.mjs'
       - 'scripts/wait-health-ready.sh'
+      - 'scripts/wrangler-queues.mjs'
       - '.github/workflows/canary.yml'
 
 permissions:
