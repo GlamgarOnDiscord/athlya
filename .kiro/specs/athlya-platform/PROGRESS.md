@@ -1,9 +1,205 @@
 # Athlya Platform — Progress & Remaining Work
 
-**Dernière mise à jour :** Session 2026-06-16 — Ops sprint: migrations Neon 0000-0017 appliquées sur staging+production, RLS cutover `athlya_app` (NOBYPASSRLS — piège Console Neon documenté → role recréé via SQL), Stripe secrets + webhooks (staging PR #269 + prod PR #292), R2 buckets + Queues Cloudflare provisionnés, JWT keypairs générés, Upstash Redis configuré. Issues closes : #268 (PR #291), #270 (PR #292), #279 (direct). + esbuild/postcss overrides (#290), Sentry CRON alert (#286). Tasks.md CN.6.4 cochée (PR #293 — code existait déjà). Compteur vérifié : **283 / 313 tâches**.
+**Dernière mise à jour :** Session 2026-10-17/18 — clôture des issues : 45 PRs mergées sur `master`, 31 issues fermées (dont les P0 #117, #122, #224, #405, #404, #497, #498), migrations 0031 → 0041 livrées (#628, purge RGPD, fermée par #630). Le code est complet côté repo ; il reste des étapes opérateur, consolidées dans la section [Session 2026-10-17/18 — clôture des issues](#session-2026-101718--clôture-des-issues).
+**Mise à jour précédente :** Session 2026-06-16 — Ops sprint: migrations Neon 0000-0017 appliquées sur staging+production, RLS cutover `athlya_app` (NOBYPASSRLS — piège Console Neon documenté → role recréé via SQL), Stripe secrets + webhooks (staging PR #269 + prod PR #292), R2 buckets + Queues Cloudflare provisionnés, JWT keypairs générés, Upstash Redis configuré. Issues closes : #268 (PR #291), #270 (PR #292), #279 (direct). + esbuild/postcss overrides (#290), Sentry CRON alert (#286). Tasks.md CN.6.4 cochée (PR #293 — code existait déjà). Compteur vérifié : **283 / 313 tâches**.
 **Tâches complétées :** Epic 14 (1/1), Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.6.4 (cochée PR #293), CN.8.1, CN.8.2, CN.9.2, CN.9.3 — cases parents cochées
 **Hardening tasks livrées :** 8 / 8 (H1 à H8) + 6 issues GitHub (#47–#53 #56) + 8 Dependabot alerts (PR #58)
 **Niveau 2 (live wiring) :** 13 / 13 items ✅ COMPLET (voir section dédiée)
+
+---
+
+## Session 2026-10-17/18 — clôture des issues
+
+Session de clôture du backlog P0/P1 ouvert par l'audit : RLS-safe sous les rôles runtime `NOBYPASSRLS`, outbox, export RGPD, billing Stripe, bulkhead Workers, canary, staging gate, Terraform, observabilité, déploiement frontend. Tout le code est sur `master` (tête `55f39f7`). Les issues fermées « code-complete » laissent des étapes opérateur, regroupées dans la [checklist opérateur](#checklist-opérateur-consolidée) ci-dessous.
+
+Aucune case de `tasks.md` ne bouge : ces issues sortent de l'audit et ne correspondent à aucune tâche du plan. CN.7.3 (rollback auto sur SLO breach via Slack/PagerDuty) reste ouverte ; le gate error budget du canary (#579) n'en couvre qu'une partie.
+
+### PRs mergées (2026-10-17 → 2026-10-18)
+
+| PR   | Titre                                                                                       | Commit    | Issue               |
+| ---- | ------------------------------------------------------------------------------------------- | --------- | ------------------- |
+| #602 | fix(web): shrink oversized PNGs below the 500 KiB CI hygiene limit                          | `7c98187` | Closes #601         |
+| #600 | fix(deps): clear OSV lockfile findings for undici and braces                                | `4867a3f` | Closes #598         |
+| #585 | test(db/rls): fix three pgTAP files that were red on master                                 | `2cd07d2` | —                   |
+| #577 | fix(infra/waf): move login rate limit to an http_ratelimit ruleset                          | `170c894` | Refs #339           |
+| #599 | docs: refresh stack versions and conventions after toolchain upgrade                        | `7bc00a8` | Closes #597         |
+| #576 | ci(zap): fail closed when the DAST target is missing on trusted runs                        | `8b497df` | Refs #340           |
+| #604 | fix(ci): harden workflows and keep k6 tokens out of summaries                               | `5d59bc0` | Closes #603         |
+| #578 | ci(staging-gate): fail closed on trusted runs and gate prod on the same SHA                 | `33e4649` | Refs #343           |
+| #586 | fix(outbox): make the outbox producible and drainable without BYPASSRLS                     | `39ca897` | Refs #497           |
+| #594 | fix(frontend): make web and studio deployable as OpenNext Workers                           | `9566d05` | Refs #422           |
+| #587 | fix(db): RLS-safe service functions for pre-auth and queue adapters                         | `e03111a` | Refs #224           |
+| #588 | fix(auth): record auth.user events atomically with their mutation                           | `26416f5` | Refs #411           |
+| #579 | feat(canary): gate promotion on route smoke and the release error budget                    | `ddc96c2` | Refs #404           |
+| #608 | fix(infra): post-merge review findings on WAF, staging gate and frontend deploy             | `c9835fd` | Closes #606         |
+| #607 | fix(canary): address review findings on the error-budget gate (#579 follow-up)              | `3a02f38` | Closes #605         |
+| #580 | fix(observability): alert on signals the runtime emits and inject VERSION                   | `c514904` | Refs #415           |
+| #581 | fix(preview): make per-PR preview Workers actually serve the PR                             | `74f1fdf` | Refs #419           |
+| #589 | fix(members): make the RGPD export functional under athlya_app                              | `3baf4b6` | Refs #498           |
+| #582 | fix(infra/terraform): enforce remote state, lock providers, detect drift                    | `a33f2b4` | Refs #405           |
+| #583 | feat(release): E2E booking smoke on staging and a full config inventory                     | `f5a0e6f` | Refs #470, #471     |
+| #590 | fix(outbox): lease-based drain without locks across queue sends                             | `7fef6ca` | Refs #424           |
+| #591 | feat(outbox): drain the backlog within one cycle and prioritise compliance events           | `62f22d7` | Refs #311           |
+| #592 | feat(db): verify the runtime role contract for every workload                               | `f9c7c39` | Refs #117           |
+| #584 | refactor(api): isolate bulkhead workers from the monolith entry point                       | `1097d15` | Refs #230           |
+| #593 | feat(billing): operational studio subscription checkout, invoices and webhooks              | `c643f3d` | Refs #122           |
+| #612 | fix: post-merge review findings on #581 and #589                                            | `988cf27` | Closes #611         |
+| #610 | fix(auth/outbox): post-merge review findings on auth event recording and service functions  | `db49e06` | Closes #609         |
+| #595 | chore(deps): bump the prod-minor-patch group across 1 directory with 8 updates              | `ba52a51` | —                   |
+| #570 | chore(deps): bump the github-actions group across 1 directory with 8 updates                | `ee57b23` | —                   |
+| #541 | chore(deps): bump actions/setup-node from 6.4.0 to 7.0.0                                    | `7185d03` | —                   |
+| #542 | chore(deps): bump actions/attest-sbom from 2.4.0 to 4.1.0                                   | `217d2d3` | —                   |
+| #615 | ci(staging-gate): prove a 10-minute soak before production and align verify-secrets         | `625244d` | Closes #343         |
+| #617 | fix(members): complete RGPD export — v1 invoice decision and staging E2E                    | `df57657` | Closes #498         |
+| #618 | fix(db,api): make studios reads, updates and slug resolution RLS-safe                       | `ebb3cd2` | Closes #224, Refs #117, #470 |
+| #616 | fix(observability): canary source maps + Axiom SLO monitors as code (#415)                  | `d4edc51` | Closes #415         |
+| #596 | chore(deps-dev): bump the dev-minor-patch group across 1 directory with 11 updates          | `7c24b9d` | —                   |
+| #620 | feat(frontend): browser release smoke against the deployed web and studio                   | `23e3ca6` | Closes #422         |
+| #621 | fix(db,api): close the remaining athlya_app runtime RLS gaps                                | `5dca04b` | Refs #117           |
+| #619 | fix(infra): migrate Terraform to Cloudflare provider v5                                     | `ca06ba0` | Refs #405           |
+| #622 | feat(outbox): event-driven drain kick and configurable batch size                           | `95daebf` | Closes #311         |
+| #623 | fix(api): key mutation rate limits on the authenticated user                                | `85f6a68` | Closes #613         |
+| #624 | feat(api): scope /health/ready probes to each Worker's bindings                             | `3aec21d` | Closes #614         |
+| #626 | fix(db,api): waitlist promotion and capacity reconcile under the runtime roles              | `589c588` | Refs #117           |
+| #627 | fix(api): bind avatar and export R2 buckets on the reservations Worker                      | `356019b` | Closes #625         |
+| #630 | fix(db,api): make users.email nullable so the RGPD purge can anonymise users                | `55f39f7` | Closes #628         |
+
+Migrations livrées : 0031 (#586), 0032 (#587), 0033 (#588), 0034 (#589), 0035 (#590), 0036 (#593), 0037 (#610), 0038 (#618), 0039 (#621), 0040 (#626), 0041 (#630).
+
+### Issues fermées et pourquoi
+
+**Fermées par leur PR (`Closes`)** — correctifs complets, aucune étape opérateur propre :
+
+- #601 (PNGs > 500 KiB qui cassaient le check requis) → #602
+- #598 (findings OSV undici/braces) → #600
+- #597 (docs et conventions après l'upgrade toolchain) → #599
+- #603 (durcissement workflows + tokens k6 hors summaries, audit repo public) → #604
+- #605, #606, #609, #611 (findings de review post-merge) → #607, #608, #610, #612
+- #613 (rate limit des mutations par utilisateur, après `jwtAuth`) → #623
+- #614 (`/health/ready` restreint aux bindings de chaque Worker) → #624
+- #625 (buckets R2 avatars/exports liés au Worker reservations) → #627
+
+**Fermées par leur PR, étapes opérateur restantes** :
+
+- #343 staging gate qui prouve le système déployé → #578 + #615 (soak de 10 min avant prod)
+- #415 observabilité prod et rollback SLO non optionnels → #580 + #616 (source maps, moniteurs Axiom en Terraform)
+- #498 export RGPD fonctionnel, durable, contrôlé → #589 + #617 (factures v1 : décision documentée)
+- #224 adapters pré-auth/background RLS-safe → #587 + #618 (studios, résolution de slug)
+- #422 web/studio déployables + smoke réel → #594 + #620 (la description de #620 avait été écrasée avant merge ; issue fermée à la main, description restaurée)
+- #311 drain outbox mesurable et scalable → #591 + #622 (kick événementiel ; débits modélisés, pas encore mesurés)
+
+**Fermées « code-complete » à la main** (critères repo atteints, étapes opérateur listées dans le dernier commentaire de l'issue) :
+
+- #117 cutover rôles runtime RLS-safe → #592, #610, #618, #621, #626. Défaut restant extrait dans #628, corrigé depuis par #630.
+- #122 Stripe checkout/factures/webhooks → #593 (Stripe Connect pour les paiements membres hors scope)
+- #230 trafic prod via les bulkhead Workers → #584
+- #339 ruleset WAF rate limit → #577
+- #340 ZAP baseline + active réels → #576
+- #404 ordre de déploiement canary + rollback sur métriques → #579
+- #405 state Terraform + IaC → #582, #616, #619
+- #411 événements auth durables → #588, #610
+- #419 previews par PR → #581, #612
+- #424 plus de locks DB autour des envois queue → #590, #591
+- #470 E2E staging (domaine custom pour l'allowlist Host) → #583, #618
+- #471 infra prod avant v1.0.0 → #583, #593 (le reste = launch checklist)
+- #497 pipeline outbox RLS-safe → #586, #590, #591, #610
+
+### Purge RGPD — #628 fermée par #630 (`55f39f7`)
+
+- ✅ **#628 [P1][rgpd][db] — la purge RGPD échouait en `23502`** : `users.email` était resté `NOT NULL` depuis `0000_init.sql`, donc chaque tick de `anonymizeExpiredUsers` échouait et les comptes soft-deleted n'étaient jamais anonymisés (écart RGPD Art. 17). Correctif : migration expand-safe **0041** (`DROP NOT NULL` + check `users_email_live_check` : seul un compte soft-deleted peut avoir un email `NULL` ; `.down.sql` qui remet un placeholder unique avant `SET NOT NULL`), lecteurs de `users.email` tolérants au `NULL`, pgTAP en `athlya_cron` + tests API.
+- Changement de comportement : supprimer le compte d'un utilisateur déjà anonymisé renvoie désormais `not_found`.
+- Étapes opérateur : appliquer 0041 avant ou avec le déploiement, puis `pnpm verify:role-contract` (section 1). Le backlog de comptes à anonymiser se résorbe à 100 utilisateurs par tick du cron.
+
+### Checklist opérateur consolidée
+
+Dédupliquée depuis les derniers commentaires des issues fermées. Noms seulement, jamais de valeurs. Ordre : staging d'abord, prod ensuite, sauf mention contraire.
+
+#### 1. Base de données (Neon)
+
+- [ ] Appliquer les migrations **dans l'ordre**, avant le déploiement des Workers (expand/contract) : 0031 → 0032 → 0033 → 0034 → 0035 → 0036 → 0037 → 0038 → 0039 → 0040 → **0041** (#630 ; avant ou avec le déploiement, expand-safe). Staging, puis production. → [`expand-contract-migrations.md`](../../../docs/runbooks/expand-contract-migrations.md), [`db-role-switch.md`](../../../docs/runbooks/db-role-switch.md)
+- [ ] Vérifier les fonctions `SECURITY DEFINER` : `SELECT count(*) FROM pg_proc WHERE proowner = 'athlya_owner'::regrole AND proname ~ '^(auth|rgpd|notification|studio|reservation|capacity)_'` doit renvoyer 26.
+- [ ] Mots de passe des rôles : `athlya_app` (y compris sur la branche Neon parente des previews), `athlya_cron`, et `ALTER ROLE athlya_billing LOGIN PASSWORD …`. → [`db-role-switch.md`](../../../docs/runbooks/db-role-switch.md), [`stripe-production.md`](../../../docs/runbooks/stripe-production.md)
+- [ ] `pnpm verify:role-contract` contre staging puis production, avec les vraies URLs `athlya_app` / `athlya_cron`.
+
+#### 2. Cutover des rôles DB + soak staging
+
+- [ ] Staging : `DB_URL` → `athlya_app`, `CRON_DB_URL` → `athlya_cron`, `BILLING_DB_URL` → `athlya_billing` (jamais un superuser ni un rôle Console Neon, qui hérite de `BYPASSRLS`). → [`db-role-switch.md`](../../../docs/runbooks/db-role-switch.md)
+- [ ] Soak staging : surveiller les `42501` et les lectures vides dans Sentry/Axiom. Le staging gate exige en plus un soak de 10 min sur le SHA avant prod (#615). → [`deploy-production.md`](../../../docs/runbooks/deploy-production.md)
+- [ ] Production : même cutover, sign-off quand le soak ne montre aucune erreur RLS.
+
+#### 3. Secrets et vars Cloudflare Workers (par Worker, par env)
+
+Liste complète par Worker (gateway, auth, reservations, billing) dans le tableau « Secrets Worker vérifiés » de [`deploy-production.md`](../../../docs/runbooks/deploy-production.md) ; `scripts/verify-secrets.mjs` bloque le déploiement si un secret manque. Nouveautés de la session :
+
+- [ ] `EXPORT_URL_SIGNING_KEY` (≥ 32 caractères) : **même valeur** sur le gateway (signe) et le Worker reservations (vérifie). → [`rgpd-export.md`](../../../docs/runbooks/rgpd-export.md)
+- [ ] `CRON_DB_URL` (gateway), `BILLING_DB_URL` (gateway + billing).
+- [ ] Stripe : `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO`, `BILLING_REDIRECT_URL` (gateway + billing). → [`stripe-production.md`](../../../docs/runbooks/stripe-production.md)
+- [ ] Production uniquement : `SENTRY_DSN`, `OTEL_*` sur les 4 Workers ; `CF_ACCESS_*` sur le gateway et le billing Worker (`/admin/*`). → [`cf-access-admin.md`](../../../docs/runbooks/cf-access-admin.md)
+- [ ] Vars `API_PUBLIC_URL` (toutes les envs, preview incluse) et `AVATARS_PUBLIC_URL` (voir R2).
+- [ ] Hyperdrive staging + production (`/health/ready` → `checks.hyperdrive.status: ok`). → [`hyperdrive-provision.md`](../../../docs/runbooks/hyperdrive-provision.md)
+
+#### 4. Queues Cloudflare
+
+- [ ] `wrangler queues create athlya-outbox-kick` (dev + production) et `wrangler queues create athlya-outbox-kick-staging`. `verify-secrets` bloque le déploiement tant qu'elles n'existent pas. → [`outbox-ops.md`](../../../docs/runbooks/outbox-ops.md)
+- [ ] Après déploiement staging : une écriture doit logguer `outbox.kick_drain` et `outbox.drain_cycle` avec `trigger: "kick"`, et le cron doit drainer une ligne seedée.
+
+#### 5. R2
+
+- [ ] Buckets `athlya-exports-{env}` (privés, sans domaine public) + règle lifecycle `expire-exports` sur `exports/members/` à 3 jours. → [`rgpd-export.md`](../../../docs/runbooks/rgpd-export.md)
+- [ ] Buckets `athlya-avatars-{env}` avec un accès public (domaine custom R2) pour servir les avatars.
+- [ ] **Upload d'avatar en mode dégradé** : tant que `AVATARS_PUBLIC_URL` n'est pas posé, `PUT /v1/members/me/avatar` répond `503 avatar_upload_not_configured`. La var doit être posée **sur le gateway (`wrangler.toml`) et sur le Worker reservations (`wrangler.reservations.toml`)**, mêmes envs et même valeur (`worker-routing.test.ts` échoue si les deux configs divergent). → [`deploy-production.md`](../../../docs/runbooks/deploy-production.md)
+
+#### 6. Domaines et déploiements
+
+- [ ] DNS + domaine custom Cloudflare pour `staging.api.athlya.app` (allowlist Host). → [`deploy-production.md`](../../../docs/runbooks/deploy-production.md)
+- [ ] Déployer les sub-workers auth, reservations et billing (le canary les déploie avant le gateway depuis #579). → [`canary-deploy.md`](../../../docs/runbooks/canary-deploy.md)
+- [ ] Workers + domaines custom web et studio, seed des données de smoke, puis Deploy Frontend sur staging, puis production. → [`deploy-frontend.md`](../../../docs/runbooks/deploy-frontend.md)
+
+#### 7. GitHub Actions (secrets/vars)
+
+- [ ] Confirmer que les Actions démarrent des jobs : `node scripts/verify-ci-health.mjs --strict`. → [`ci-recovery.md`](../../../docs/runbooks/ci-recovery.md)
+- [ ] Environnement `staging` — secrets : `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `MIGRATION_DB_URL_STAGING`, `STAGING_SMOKE_EMAIL`, `STAGING_SMOKE_PASSWORD`, `STAGING_SMOKE_ADMIN_EMAIL`, `STAGING_SMOKE_ADMIN_PASSWORD` (comptes dédiés seedés), optionnel `STAGING_SMOKE_TURNSTILE_TOKEN` ; vars : `WEB_URL`, `STUDIO_URL`, `API_URL`, `TURNSTILE_SITE_KEY`. Environnement `production` : mêmes vars de déploiement frontend (le release smoke prod est anonyme, sans identifiants).
+- [ ] Variables de repo (inventaire `.github/workflows/ci-required-vars.yml`) : `STAGING_API_URL`, `PRODUCTION_API_URL`, `K6_STAGING_BASE_URL`, `ZAP_TARGET_URL`, `ZAP_ACTIVE_TARGET_URL`, `SYNTHETIC_TARGET_URL`, `SENTRY_ORG`, `SENTRY_PROJECT`, `NEON_PROJECT_ID`, `CLOUDFLARE_WORKERS_SUBDOMAIN`, `TF_CLOUD_ORGANIZATION`, `STAGING_SMOKE_STUDIO_SLUG` (studio seedé avec un cours à venir et une place libre). Optionnel : `CANARY_MAX_ERRORS`. → [`branch-protection.md`](../../../docs/runbooks/branch-protection.md)
+- [ ] Previews : `NEON_API_KEY` + secrets `PREVIEW_*` (`PREVIEW_JWT_KID` doit commencer par `preview-`), JWKS publié avec ce kid (le deploy ne le récupère pas), puis un vrai run de PR **teardown inclus**. → [`preview-pr.md`](../../../docs/runbooks/preview-pr.md)
+- [ ] ZAP : cible isolée à données synthétiques, `ZAP_TARGET_URL` + `ZAP_ACTIVE_TARGET_URL`, joindre les rapports des premiers runs qui scannent réellement. → [`zap-activation.md`](../../../docs/operations/zap-activation.md)
+- [ ] **Checks CI rouges tant que l'infra staging manque** (fail closed, avec un comportement fork/Dependabot propre à chaque workflow, détaillé ci-dessous). Seul `Lint, typecheck, and tests` est un check requis par la protection de `master` (API `branches/master/protection` ; le tableau « Required status checks » de [`branch-protection.md`](../../../docs/runbooks/branch-protection.md) décrit la cible, pas la config actuelle). Les autres ne bloquent pas le merge :
+  - `Staging gate` (`staging-gate.yml`, chaque PR vers `master` et chaque push sur `master` ; neutre sur les PRs de fork et les runs Dependabot) : exige, dans l'environnement `staging`, les secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `MIGRATION_DB_URL_STAGING`, `STAGING_SMOKE_EMAIL`, `STAGING_SMOKE_PASSWORD` et les vars `STAGING_API_URL`, `STAGING_SMOKE_STUDIO_SLUG`. Optionnels : `STAGING_SMOKE_TURNSTILE_TOKEN` ; l'étape k6 du gate ne tourne que si `K6_STAGING_BASE_URL` est posé (avec `K6_STAGING_AUTH_TOKEN`, `K6_STAGING_STUDIO_ID`, `K6_STAGING_CLASS_IDS`). `deploy-production.yml` exige ce check vert sur le SHA promu.
+  - `ZAP baseline` (`zap-baseline.yml`, chaque PR ; ignoré sur les PRs de fork, mais pas sur les PRs Dependabot) : exige `ZAP_TARGET_URL`.
+  - Tests de charge k6 (`load-test.yml`) : filtrés par chemins (`packages/reservations/**`, `packages/api/**`, `k6/**`, `.github/workflows/load-test.yml`), donc absents des PRs qui n'y touchent pas ; aucun traitement spécial fork/Dependabot. Les deux jobs exigent la var `K6_STAGING_BASE_URL`, puis :
+    - `book-class load test` : secrets `K6_STAGING_AUTH_TOKENS` (CSV de JWTs, forme canonique ; `K6_STAGING_AUTH_TOKEN` singulier accepté en fallback legacy), `K6_STAGING_STUDIO_ID`, `K6_STAGING_CLASS_IDS` ;
+    - `list-classes load test` : secret `K6_STAGING_AUTH_TOKEN` seulement.
+  - Filtrés par chemins, sans dépendance staging : `pgTAP` (`packages/db/migrations/**`, `packages/db/tests/rls/**`), `integration-docker` (`packages/{db,members,reservations,api}/**`), axe/E2E (`apps/web/**`, `apps/studio/**`, `packages/shared/**`).
+
+#### 8. Terraform / HCP
+
+- [ ] Workspaces HCP `athlya-staging` et `athlya-production` en exécution « Local » ; `TF_TOKEN_app_terraform_io` + `TF_CLOUD_ORGANIZATION`. → [`terraform-ops.md`](../../../docs/runbooks/terraform-ops.md)
+- [ ] `gh workflow run terraform.yml -f environment=staging -f action=plan` : relire tout le plan, aucun `must be replaced` ni `destroy` attendu (sinon `state rm` + `import` v5 du runbook). Importer d'abord les rulesets WAF existants.
+- [ ] Apply staging, re-plan → aucun changement ; idem production.
+- [ ] Var `CLOUDFLARE_ZONE_PLAN` sur chaque environnement GitHub (défaut `pro`) ; variable Terraform `sentry_alert_team_id` ; décider d'activer ou non Bot Fight Mode ; prouver que les requêtes bloquées par le WAF n'atteignent jamais le Worker.
+
+#### 9. Observabilité (Sentry / Axiom / Checkly)
+
+- [ ] Sentry : `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_DSN` ; upload des source maps obligatoire en prod. → [`sentry-sourcemaps.md`](../../../docs/runbooks/sentry-sourcemaps.md)
+- [ ] Axiom : moniteurs SLO A1–A5 et A16 via Terraform (`axiom-monitors.tf`, appliqués avec la section 8) ; moniteurs manuels A6–A15, A17, A18 (dont A14) dans l'UI Axiom. → [`axiom-alerts-provision.md`](../../../docs/runbooks/axiom-alerts-provision.md)
+- [ ] Alertes outbox : `outbox.drain_cycle` (cycle, chevauchement), âge et taille du backlog, lag de lane > 2 min, `outbox.kick_failed`, `outbox.kick_drain_failed`. → [`outbox-ops.md`](../../../docs/runbooks/outbox-ops.md)
+- [ ] Fire test staging : déclencher une erreur, vérifier que l'alerte Sentry et les moniteurs Axiom se déclenchent, consigner la preuve.
+- [ ] Checkly CK3/CK4 (`SYNTHETIC_TARGET_URL`), CK4 vert pendant 24 h. → [`synthetic-monitoring.md`](../../../docs/operations/synthetic-monitoring.md)
+- [ ] Alerte quota QStash. → [`qstash-quota.md`](../../../docs/runbooks/qstash-quota.md)
+
+#### 10. Stripe
+
+- [ ] Dashboard : produit, prix, endpoints webhook (staging + production). → [`stripe-production.md`](../../../docs/runbooks/stripe-production.md)
+- [ ] Secrets Workers (section 3), migrations 0032–0036 appliquées (section 1).
+- [ ] E2E en mode test sur staging (phase 4 du runbook).
+
+#### 11. Preuves de validation (staging puis prod)
+
+- [ ] Staging gate vert sur un SHA de `master`, puis un déploiement prod accepté par le check « même SHA ». → [`deploy-production.md`](../../../docs/runbooks/deploy-production.md)
+- [ ] Canary : un release qui promeut à 100 % et un release cassé qui rollback. → [`canary-deploy.md`](../../../docs/runbooks/canary-deploy.md), [`automatic-rollback.md`](../../../docs/runbooks/automatic-rollback.md)
+- [ ] Outbox : benchmark backlog 10k avec trafic réel (latence d'envoi, erreurs de limite de subrequests), événement RGPD mis en queue en < 30 s pendant le burst, exercice de panne de queue. → [`outbox-ops.md`](../../../docs/runbooks/outbox-ops.md)
+- [ ] Bulkheads : test de charge montrant qu'un Worker saturé ne dégrade pas le p99 des autres.
+- [ ] Export RGPD : E2E staging avec vrais Postgres, Queue et R2 (factures vides tant que la facturation ne persiste rien). → [`rgpd-export.md`](../../../docs/runbooks/rgpd-export.md)
+- [ ] Smoke E2E staging (login → réservation → annulation) en exit 0, puis cocher l'item E2E de la [launch checklist](../../../docs/operations/v1.0.0-launch-checklist.md) et y joindre toutes les preuves.
 
 ---
 
