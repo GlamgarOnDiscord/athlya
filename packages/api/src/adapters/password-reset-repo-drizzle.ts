@@ -104,7 +104,7 @@ export const PASSWORD_RESET_REQUESTED = 'auth.password_reset.requested';
 
 /**
  * `PasswordResetRequestQueue` adapter (issue #645). One call to
- * `auth_request_password_reset` (migration 0042) looks up the live
+ * `auth_request_password_reset` (migration 0043) looks up the live
  * account and records the outbox row in the same statement; nothing is
  * recorded for an unknown or soft-deleted address. The event id is
  * chosen once per request, so the connection retry of `queryRows` is

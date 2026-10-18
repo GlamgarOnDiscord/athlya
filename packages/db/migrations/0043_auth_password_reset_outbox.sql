@@ -1,5 +1,5 @@
 -- =====================================================================
--- 0042 — durable password-reset requests through the outbox (issue #645)
+-- 0043 — durable password-reset requests through the outbox (issue #645)
 --
 -- `POST /v1/auth/password-reset/request` used to look the account up,
 -- issue the token and call Resend inside `ctx.waitUntil()`: a Resend

@@ -100,6 +100,12 @@ describe('GET /openapi.json', () => {
       '/v1/billing/checkout',
       '/v1/billing/invoices',
       '/v1/billing/webhook',
+      '/v1/programs',
+      '/v1/programs/{id}',
+      '/v1/programs/{id}/archive',
+      '/v1/programs/{id}/subscription',
+      '/v1/programs/subscriptions/me',
+      '/v1/programs/today',
     ];
 
     for (const path of expected) {

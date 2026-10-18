@@ -21,6 +21,7 @@ assignees: ''
 - [ ] `@athlya/db` — schéma, migrations, RLS
 - [ ] `@athlya/members`
 - [ ] `@athlya/reservations`
+- [ ] `@athlya/programs`
 - [ ] `@athlya/billing`
 - [ ] `@athlya/notifications`
 - [ ] `@athlya/shared` — schemas Zod, i18n

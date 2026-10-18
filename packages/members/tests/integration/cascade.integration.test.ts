@@ -274,6 +274,11 @@ function buildRepo(client: Sql): DeletionRepo {
             `;
       return rows.length;
     },
+    // `program_subscriptions` (migration 0042) is not part of the
+    // 0000–0006 schema this suite applies.
+    deleteProgramSubscriptionsForUser() {
+      return Promise.resolve(0);
+    },
     async markUserDeleted(userId) {
       // Read-only, like `rgpd_confirm_user_deleted` (migration 0037).
       const [row] = await client<{ deleted: boolean }[]>`
@@ -520,6 +525,9 @@ function buildRepoPglite(pg: PGlite): DeletionRepo {
         [userId],
       );
       return r.rows.length;
+    },
+    deleteProgramSubscriptionsForUser() {
+      return Promise.resolve(0);
     },
     async markUserDeleted(userId) {
       // Read-only, like `rgpd_confirm_user_deleted` (migration 0037).
@@ -869,6 +877,7 @@ describe('handleUserDeleted + anonymizeAuditLog — Property 4 (RGPD cascade)', 
           sessions: 2,
           pushTokens: 4,
           idempotencyKeys: 0,
+          programSubscriptions: 0,
           // Anonymisation happens 30 days later — audit rows
           // are NOT touched during the cascade step itself.
           auditAnonymized: 0,

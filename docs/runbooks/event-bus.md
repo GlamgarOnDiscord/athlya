@@ -306,7 +306,7 @@ tests ?
 | `members.export.completed`                     | `packages/members/src/__tests__/export.test.ts`                               | couvert par le path générique (drain est event-type-blind) | `dedup.test.ts` (générique)                             |
 | `reservation.created` (queue dispatch)         | `packages/api/src/__tests__/queue-cascade.test.ts` (route vers notifications) | n/a (dispatcher consumer side)                             | `packages/notifications/src/__tests__/consumer.test.ts` |
 | `billing.subscription.failed` (queue dispatch) | couvert par le même routeur consumer (`worker.ts`)                            | n/a (dispatcher consumer side)                             | `packages/notifications/src/__tests__/consumer.test.ts` |
-| `auth.password_reset.requested`                | `adapters/auth-runtime.pglite.test.ts` (athlya_app, migration 0042)           | same file (drained row → envelope → consumer)              | `password-reset-delivery.test.ts`                       |
+| `auth.password_reset.requested`                | `adapters/auth-runtime.pglite.test.ts` (athlya_app, migration 0043)           | same file (drained row → envelope → consumer)              | `password-reset-delivery.test.ts`                       |
 
 **Décision B6.4** : pas de test integration outbox→drain→consumer
 end-to-end ajouté. Justifications :
@@ -360,7 +360,7 @@ Alerte Axiom **A15** : voir `docs/operations/axiom-alerts.md`.
 
 `POST /v1/auth/password-reset/request` answers 204 before any account
 lookup, then records the request with `auth_request_password_reset`
-(migration 0042). A live account gets one `auth.password_reset.requested`
+(migration 0043). A live account gets one `auth.password_reset.requested`
 outbox row; an unknown or soft-deleted address gets nothing. The payload
 is `{ userId }` only: no email address, no token.
 

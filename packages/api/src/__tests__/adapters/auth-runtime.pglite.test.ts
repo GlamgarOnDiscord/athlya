@@ -7,7 +7,7 @@
  * session switches to `athlya_app` (NOBYPASSRLS) after seeding.
  *
  *   A. Password-reset requests are recorded in the outbox by
- *      `auth_request_password_reset` (0042) without tenant claims, and
+ *      `auth_request_password_reset` (0043) without tenant claims, and
  *      the drained event is delivered by the consumer: token issued
  *      through `auth_issue_password_reset`, email sent.
  *   B. `idempotency_keys` is owner-only (`user_id = app_user_id()`): a

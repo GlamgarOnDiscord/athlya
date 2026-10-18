@@ -5,7 +5,7 @@
  * `0037_auth_outbox_review_fixes.sql` (issue #609),
  * `0038_studios_runtime.sql` (issue #224, tenant slug resolution) and
  * `0039_runtime_rls_gaps.sql` (issue #117, password reset issuance and
- * RGPD audit anonymisation) and `0042_auth_password_reset_outbox.sql`
+ * RGPD audit anonymisation) and `0043_auth_password_reset_outbox.sql`
  * (issue #645, durable password-reset requests).
  *
  * Pre-authentication auth flows, the tenant slug guard and the
@@ -148,6 +148,8 @@ export const serviceFn = {
   deletePushTokens: (userId: string) => sql`SELECT rgpd_delete_push_tokens(${userId}::uuid) AS n`,
   deleteIdempotencyKeys: (userId: string) =>
     sql`SELECT rgpd_delete_idempotency_keys(${userId}::uuid) AS n`,
+  deleteProgramSubscriptions: (userId: string) =>
+    sql`SELECT rgpd_delete_program_subscriptions(${userId}::uuid) AS n`,
   anonymizeUserAudit: (userId: string) =>
     sql`SELECT rgpd_anonymize_user_audit(${userId}::uuid) AS n`,
   confirmUserDeleted: (userId: string) =>

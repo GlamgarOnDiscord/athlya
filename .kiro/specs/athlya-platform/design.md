@@ -4,7 +4,7 @@
 
 Athlya est une plateforme fitness open-source, multi-tenant, event-driven et RGPD-first, conçue comme alternative aux SaaS propriétaires (bsport, Mywellness, Mindbody). Elle cible les studios boutique (yoga, crossfit, boxe), les chaînes mid-size, les coachs indépendants et les communautés sportives, avec un engagement fort sur l'ownership des données, la résilience by-design et l'edge-first.
 
-Le système est un monorepo Turborepo composé de trois applications clients (web Next.js 16, mobile Expo/React Native SDK 55, studio admin Next.js) et d'une API edge en Hono 4 déployée sur Cloudflare Workers. La persistance repose sur Neon PostgreSQL 17 (relationnel + RLS multi-tenant), Upstash Redis (cache chaud, compteurs, rate limits), Cloudflare R2 (assets) et Tinybird/ClickHouse (analytics). Les domaines métier (Auth, Members, Reservations, Content, Billing, Notifications, Analytics, AI/Coach) communiquent via un bus d'événements asynchrone composé de **Cloudflare Queues** (événements temps réel, retry/DLQ natifs) et **Upstash QStash** (jobs différés / planifiés — ex. rappels 1 h avant cours). Upstash Kafka, initialement envisagé, a été écarté : le service a été déprécié en septembre 2024 et discontinué le 11 mars 2025.
+Le système est un monorepo Turborepo composé de trois applications clients (web Next.js 16, mobile Expo/React Native SDK 58, studio admin Next.js) et d'une API edge en Hono 4 déployée sur Cloudflare Workers. La persistance repose sur Neon PostgreSQL 17 (relationnel + RLS multi-tenant), Upstash Redis (cache chaud, compteurs, rate limits), Cloudflare R2 (assets) et Tinybird/ClickHouse (analytics). Les domaines métier (Auth, Members, Reservations, Content, Billing, Notifications, Analytics, AI/Coach) communiquent via un bus d'événements asynchrone composé de **Cloudflare Queues** (événements temps réel, retry/DLQ natifs) et **Upstash QStash** (jobs différés / planifiés — ex. rappels 1 h avant cours). Upstash Kafka, initialement envisagé, a été écarté : le service a été déprécié en septembre 2024 et discontinué le 11 mars 2025.
 
 L'architecture applique quatre axiomes structurels : (1) chaque domaine vit dans son propre service avec des contrats d'API stricts, (2) aucun service n'est un point de défaillance unique grâce aux circuit breakers et fallbacks, (3) l'état client précède le réseau (mode offline avec queue de mutations persistée MMKV), (4) l'infrastructure est déclarative et reproductible (IaC, migrations expand/contract, blue/green). Cible SLO : p99 < 500 ms, availability 99,9 %, zéro double-booking sous contention.
 
@@ -16,7 +16,7 @@ L'architecture applique quatre axiomes structurels : (1) chaque domaine vit dans
 graph TD
     subgraph Clients
         Web["Web App<br/>Next.js 16 + React 19"]
-        Mobile["Mobile App<br/>Expo SDK 55 + RN 0.83"]
+        Mobile["Mobile App<br/>Expo SDK 58 + RN 0.88"]
         Studio["Studio Admin<br/>Next.js 16"]
     end
 

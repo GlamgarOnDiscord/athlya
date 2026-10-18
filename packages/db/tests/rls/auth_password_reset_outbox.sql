@@ -1,5 +1,5 @@
 -- =====================================================================
--- auth_password_reset_outbox.sql — migration 0042 under the real
+-- auth_password_reset_outbox.sql — migration 0043 under the real
 -- athlya_app role (issue #645)
 --
 -- Asserts that, without tenant GUCs:
@@ -29,7 +29,7 @@ SELECT ok(
         AND NOT has_function_privilege('athlya_cron', p.oid, 'EXECUTE')
        FROM pg_proc p
       WHERE p.oid = 'auth_request_password_reset(text, uuid)'::regprocedure),
-    '0042 function: SECURITY DEFINER, athlya_owner, pinned search_path, athlya_app only'
+    '0043 function: SECURITY DEFINER, athlya_owner, pinned search_path, athlya_app only'
 );
 
 SET LOCAL ROLE athlya_app;

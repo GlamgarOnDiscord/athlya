@@ -6,15 +6,17 @@ Mise à jour : sortie v1.0.0.
 
 ---
 
-## v1.1 — Mobile (Expo SDK 55)
+## v1.1 — Mobile (Expo SDK 58)
 
 **Effort estimé** : ~3 sprints (~3 semaines).
+
+**Status**: foundation (11.1–11.7, 11.12, 11.13) delivered on Expo SDK 58 / React Native 0.88 in #638 — see [`docs/mobile/README.md`](../mobile/README.md). Screens 11.8–11.11 remain.
 
 **Déclencheur** : décision business "rendre l'app dispo iOS/Android" + au moins un studio pilote prêt à tester l'app native.
 
 **Périmètre** (Epic 10 dans `tasks.md`, 13 tâches) :
 
-- **11.1** Scaffold Expo SDK 55 + NativeWind 4 + tokens partagés (`apps/mobile`).
+- **11.1** Scaffold Expo SDK 58 + NativeWind 4 + tokens partagés (`apps/mobile`).
 - **11.2** `expo-secure-store` pour le refresh token (Secure Enclave / Keystore).
 - **11.3** Biometric unlock via `expo-local-authentication`.
 - **11.4** API client avec `Idempotency-Key` automatique + refresh-on-401.
@@ -49,7 +51,7 @@ Mise à jour : sortie v1.0.0.
 - **21** AI coach : `packages/ai-coach/src/service.ts` + `/v1/coach/ask` streaming.
 - **22** Progression graphs : `packages/members/src/progression.ts` (volume + 1RM trends, 30/90/365j) + UI web/mobile. ✅ Agrégateur, `GET /v1/me/progression` et UI web livrés (#639) ; UI mobile restante.
 - **23** BLE FTMS (mobile, dépend v1.1).
-- **24** Programs : schéma `programs` / `program_weeks`, service + assignment + UI studio admin.
+- **24** Programs : schéma `programs` / `program_weeks`, service + assignment + UI studio admin. Shipped in #640 (migration 0042, `@athlya/programs`, `/v1/programs/*`, `/dashboard/programs`); the mobile home rendering of `GET /v1/programs/today` is still pending.
 - **25** Final checkpoint v0.3.
 
 **Pré-requis** : Mistral API key, consents `thirdParty` validés par les utilisateurs.

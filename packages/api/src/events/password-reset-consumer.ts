@@ -2,7 +2,7 @@
  * Consumer for `auth.password_reset.requested` (issue #645).
  *
  * The event is recorded by `auth_request_password_reset` (migration
- * 0042) when a reset is requested for a live account, drained from the
+ * 0043) when a reset is requested for a live account, drained from the
  * outbox onto the notifications lane, and handled here:
  *
  *   1. Claim `event.id` in the dedup store, so an at-least-once
