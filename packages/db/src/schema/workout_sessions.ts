@@ -21,7 +21,16 @@
  */
 
 import { sql } from 'drizzle-orm';
-import { index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { createdAt, uuidPrimaryKey } from './_shared.js';
 import { studios } from './studios.js';
@@ -48,6 +57,12 @@ export const workoutSessions = pgTable(
     exercises: jsonb('exercises').$type<Exercise[]>().notNull(),
     notes: text('notes'),
     createdAt: createdAt(),
+    /**
+     * `Idempotency-Key` of the `POST /v1/sessions` request that created
+     * the row (migration 0044). Nullable: rows written without a key
+     * stay outside the partial unique index.
+     */
+    idempotencyKey: text('idempotency_key'),
   },
   (table) => [
     /**
@@ -59,6 +74,10 @@ export const workoutSessions = pgTable(
       table.userId,
       sql`${table.startedAt} DESC`,
     ),
+    /** A retried log with the same key never inserts a second row. */
+    uniqueIndex('workout_sessions_user_idempotency_key_uniq')
+      .on(table.userId, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} IS NOT NULL`),
   ],
 );
 

@@ -18,6 +18,7 @@ import { buildCoachDeps } from './adapters/coach-deps.js';
 import { buildMembersDeps } from './adapters/members-deps.js';
 import { buildProgramsDeps } from './adapters/programs-deps.js';
 import { buildClassesDeps, buildReservationsDeps } from './adapters/reservations-deps.js';
+import { buildSessionsDeps } from './adapters/sessions-deps.js';
 import { buildStudiosDeps } from './adapters/studios-deps.js';
 
 import type { AuditDeps } from './routes/audit.js';
@@ -49,8 +50,8 @@ export interface DomainDeps {
   readonly classes: ClassesDeps;
   readonly reservations: ReservationsDeps;
   /**
-   * Optional — absent until the workout-session adapter ships.
-   * Routes are not mounted when undefined (issue #302).
+   * Workout sessions (issue #652). Optional so partial test bundles
+   * stay valid; production and the lazy facade always provide it.
    */
   readonly sessions?: SessionsDeps;
   /**
@@ -222,6 +223,19 @@ export function lazyProgramsDeps(resolve: () => ProgramsDeps): ProgramsDeps {
   };
 }
 
+/**
+ * Lazy sessions facade. `idempotencyFor` resolves per request, like
+ * {@link lazyProgramsDeps}.
+ */
+export function lazySessionsDeps(resolve: () => SessionsDeps): SessionsDeps {
+  const forward = forwarder(resolve);
+  return {
+    logSession: forward('logSession'),
+    listSessions: forward('listSessions'),
+    idempotencyFor: (claims) => resolve().idempotencyFor?.(claims),
+  };
+}
+
 /** Lazy facade over the full {@link DomainDeps} bundle (monolith gateway). */
 export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
   return {
@@ -239,6 +253,13 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
         throw new Error('buildLazyDomainDeps: programs dependency is not wired');
       }
       return programs;
+    }),
+    sessions: lazySessionsDeps(() => {
+      const sessions = resolve().sessions;
+      if (sessions === undefined) {
+        throw new Error('buildLazyDomainDeps: sessions dependency is not wired');
+      }
+      return sessions;
     }),
   };
 }
@@ -446,6 +467,19 @@ export function defaultProgramsDeps(env: AthlyaBindings): ProgramsDeps {
 }
 
 /**
+ * Workout sessions need DB_URL (the write path falls back to it
+ * without Hyperdrive); without it they fall back to the stub bundle.
+ */
+export function defaultSessionsDeps(env: AthlyaBindings): SessionsDeps {
+  return nonEmpty(env.DB_URL)
+    ? buildSessionsDeps(env)
+    : {
+        logSession: () => notImplemented('sessions.logSession'),
+        listSessions: () => notImplemented('sessions.listSessions'),
+      };
+}
+
+/**
  * Billing is always built — the adapter itself returns degraded
  * (`not_configured`) responses when STRIPE secrets are absent.
  */
@@ -484,5 +518,6 @@ export function buildDefaultDeps(env: AthlyaBindings, cf?: RequestCf): DomainDep
     audit: defaultAuditDeps(env),
     coach: defaultCoachDeps(env, cf),
     programs: defaultProgramsDeps(env),
+    sessions: defaultSessionsDeps(env),
   };
 }

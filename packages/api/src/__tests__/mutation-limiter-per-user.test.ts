@@ -191,6 +191,7 @@ describe('per-user mutation limiters (#613)', () => {
     ['POST', '/v1/reservations'],
     ['DELETE', '/v1/reservations/r-1'],
     ['POST', '/v1/members/me/export'],
+    ['POST', '/v1/sessions'],
   ] as const)(
     'unauthenticated %s %s → 401 without touching a mutation bucket',
     async (method, path) => {
@@ -264,6 +265,37 @@ describe('per-user mutation limiters (#613)', () => {
     expect(res.status).not.toBe(401);
     expect(res.status).not.toBe(429);
     expect(mutationKeys(redis)).toEqual([]);
+  });
+
+  it('caps POST /v1/sessions at the session budget per user (#652)', async () => {
+    const env = stagingEnv();
+    const redis = new FakeRedis();
+    primeRedis(env, redis);
+    const app = buildAppNoDomainRoutes();
+    const tokenA = await tokenFor(USER_A);
+
+    for (let i = 0; i < MUTATION_BUDGETS.session.userLimit; i++) {
+      const res = await app.request(
+        '/v1/sessions',
+        { method: 'POST', headers: headersFor('7.7.7.7', tokenA) },
+        env,
+      );
+      expect(res.status).not.toBe(429);
+    }
+    const denied = await app.request(
+      '/v1/sessions',
+      { method: 'POST', headers: headersFor('7.7.7.7', tokenA) },
+      env,
+    );
+    expect(denied.status).toBe(429);
+
+    const read = await app.request(
+      '/v1/sessions/me',
+      { method: 'GET', headers: headersFor('7.7.7.7', tokenA) },
+      env,
+    );
+    expect(read.status).not.toBe(429);
+    expect(mutationKeys(redis)).toEqual([`${MUTATION_USER_BUCKET_PREFIX}-session:${USER_A}`]);
   });
 
   it('stays fail-closed (503) for an authenticated mutation when Redis is down', async () => {
