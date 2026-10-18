@@ -486,7 +486,7 @@ Use official CLI to create, init the project .. and recent package version and s
 
   - [ ] 11.9 Implement the QR check-in screen
     - Generate `QR_Checkin_Token` client-side (actually fetched from `/v1/checkins/token` since signing needs private key); display as QR; rotate every 120 s
-    - Blocked (#648): the API has no token-issuance route and `/v1/checkins` is not mounted in production (#302)
+    - API side done (#654): `POST /v1/checkins/token` returns `{ token, expiresAt }` (RS256, `kind = 'checkin'`, 120 s, single-use `jti`), served by the reservations bulkhead Worker; the screen itself is still open (#648)
     - _Requirements: 11.1_
 
   - [x] 11.10 Implement the workout session logging screen
@@ -542,6 +542,7 @@ Use official CLI to create, init the project .. and recent package version and s
 
   - [x] 12.4 Implement the check-in kiosk page (staff scans QR)
     - Use camera via `getUserMedia`, decode QR, POST to `/v1/checkins`, display member name + photo on 200, `no_reservation` or `invalid_token` on failure
+    - API routed in staging and production since #654: admin/coach only, `jti` consumed atomically, `checkin_mark_reservation` (migration 0045) lets a coach stamp `checked_in_at`
     - _Requirements: 11.2, 11.3, 11.4, 11.5, 11.6_
 
   - [x] 12.5 Implement the audit log viewer for admins
@@ -1172,7 +1173,7 @@ Post-launch, à itérer dans l'année.
 
 - [x] CN.7.1 Canary deploys via Cloudflare Workers versions API — déploiement progressif 1% → 10% → 100% avec rollback automatique sur error rate > seuil 5min.
 - [x] CN.7.2 Preview environments par PR — Workers preview + Neon branch par PR. `wrangler versions upload` + `neon branches create` dans `.github/workflows/preview.yml`.
-- [ ] CN.7.3 Rollback automatique sur SLO breach — automation Slack/PagerDuty + `wrangler rollback`.
+- [x] CN.7.3 Rollback automatique sur SLO breach — automation Slack/PagerDuty + `wrangler versions deploy` (pas `wrangler rollback`, qui force les changements de secrets en CI). Code livré par `.github/workflows/slo-rollback.yml` + `scripts/slo-rollback.mjs` (re-check Axiom, rollback des 4 Workers via `wrangler versions deploy`, garde-fous fail-closed) et `infra/terraform/slo-auto-rollback.tf` (issue #632) ; **activation en attente** : inactif tant que l'opérateur n'a pas fait le setup de `docs/runbooks/automatic-rollback.md` (environment `production-rollback`, token Axiom, PAT, apply Terraform, puis `AUTO_ROLLBACK_ENABLED=true`).
 
 #### Architecture (post-Epic 14)
 

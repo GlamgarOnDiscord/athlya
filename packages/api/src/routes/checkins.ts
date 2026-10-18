@@ -1,43 +1,66 @@
 /**
- * `/v1/checkins/*` domain router — task 8.11.
+ * `/v1/checkins/*` domain router — task 8.11, issue #654 (part of #648).
  *
  * Endpoints and their middleware chains:
  *
- *   | Method | Path | Chain                                                                |
- *   |--------|------|----------------------------------------------------------------------|
- *   | POST   | /    | jwtAuth → projectUserId → zValidator(CheckInRequestSchema) → idempotency → handler |
+ *   | Method | Path   | Chain                                                                                         |
+ *   |--------|--------|-----------------------------------------------------------------------------------------------|
+ *   | POST   | /token | jwtAuth → studioRateLimit → tokenRateLimit → handler                                          |
+ *   | POST   | /      | jwtAuth → studioRateLimit → requireRole(admin, coach) → checkinRateLimit → zValidator → idempotency → handler |
  *
  * Requirements:
- *   • 11.1–11.6 — the QR token is verified by the service (via
- *                 `verifyAccessQR` from `@athlya/auth/qr`) before the
- *                 reservation lookup runs. Each failure code is mapped
- *                 to a specific 401 body so the UI can surface
- *                 actionable diagnostics (`invalid_signature`,
- *                 `token_expired`, `replay`, `wrong_studio`,
- *                 `wrong_kind`, `malformed`).
- *   • 14.1, 14.2, 20.1 — auth / validation / idempotency.
+ *   • 11.1 — `POST /token` issues the member's `QR_Checkin_Token`
+ *            (RS256, `kind = 'checkin'`, `exp = iat + 120 s`, fresh
+ *            `jti`). Signing needs the server private key, so the
+ *            Mobile_App fetches it here and renders it as a QR code.
+ *   • 11.2–11.6 — `POST /` is the kiosk scan (task 12.4): staff
+ *            present the member's token. The service verifies it
+ *            before any database read; each token failure maps to a
+ *            401 whose `code` names the reason (`invalid_signature`,
+ *            `token_expired`, `replay`, `wrong_studio`, `wrong_kind`,
+ *            `malformed`); a valid token without a reservation in the
+ *            window maps to 422.
+ *   • 14.1, 14.2, 20.1 — auth / validation / idempotency (bound per
+ *            request to the operator's claims).
  *
- * Although the QR payload is a JWT in its own right, the request
- * itself must still be authenticated via the member's session JWT —
- * the QR token is the credential for *this specific check-in*, not
- * for the whole API surface.
+ * Only admins and coaches may check a member in: the token proves who
+ * the member is, the operator's session proves the member is at the
+ * desk. A member posting their own token gets 403.
  */
 
 import { CheckInRequestSchema } from '@athlya/shared/schemas/api';
 import { Hono } from 'hono';
 
 import { jwtAuth } from '../middleware/auth.js';
-import { CHECKIN_BUDGET } from '../middleware/rate-limit-policies.js';
-import { rateLimit } from '../middleware/rate-limit.js';
+import { guardRateLimiter } from '../middleware/limiter-guard.js';
+import { CHECKIN_BUDGET, CHECKIN_TOKEN_BUDGET } from '../middleware/rate-limit-policies.js';
+import {
+  MUTATION_IP_BUCKET_PREFIX,
+  MUTATION_USER_BUCKET_PREFIX,
+  rateLimit,
+} from '../middleware/rate-limit.js';
+import { applySecurityHeaders, buildSecurityHeaders } from '../middleware/security-headers.js';
 import { studioRateLimit } from '../middleware/studio-rate-limit.js';
 import { zValidator } from '../middleware/validator.js';
 
-import { idempotency, projectUserIdFromClaims, readValidated, traceOperation } from './helpers.js';
+import {
+  idempotency,
+  projectUserIdFromClaims,
+  readValidated,
+  requireRole,
+  traceOperation,
+} from './helpers.js';
 
+import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
+import type { RateLimitBudget } from '../middleware/rate-limit-policies.js';
 import type { RateLimitOptions } from '../middleware/rate-limit.js';
 import type { HonoEnv } from '../types.js';
-import type { CheckInRequest } from '@athlya/shared/schemas/api';
+import type {
+  CheckInRequest,
+  CheckInResponse,
+  CheckInTokenResponse,
+} from '@athlya/shared/schemas/api';
 import type { Context, MiddlewareHandler } from 'hono';
 
 /* ------------------------------------------------------------------ */
@@ -46,9 +69,8 @@ import type { Context, MiddlewareHandler } from 'hono';
 
 /**
  * Fine-grained failure reasons surfaced by the check-in service.
- * Matches `QRVerifyFailReason` from
- * `@athlya/reservations/checkin` plus the two post-verification
- * failure modes (`outside_window`, `no_reservation`).
+ * Matches `QRVerifyFailReason` from `@athlya/reservations/checkin`
+ * plus the post-verification failure modes.
  */
 export type CheckInFailReason =
   | 'invalid_signature'
@@ -58,19 +80,31 @@ export type CheckInFailReason =
   | 'wrong_kind'
   | 'malformed'
   | 'outside_window'
-  | 'no_reservation';
+  | 'no_reservation'
+  | 'already_checked_in'
+  | 'checkin_limit_reached';
 
 /** Discriminated result returned by {@link CheckinsDeps.checkIn}. */
 export type CheckInOutcome =
-  | { readonly kind: 'success'; readonly reservation: unknown; readonly member: unknown }
+  | {
+      readonly kind: 'success';
+      readonly reservationId: CheckInResponse['reservationId'];
+      readonly member: CheckInResponse['member'];
+    }
   | { readonly kind: 'fail'; readonly reason: CheckInFailReason };
 
 /** Dependencies injected into {@link buildCheckinsRouter}. */
 export interface CheckinsDeps {
-  checkIn(studioId: string, input: CheckInRequest): Promise<CheckInOutcome>;
-
-  readonly idempotency?: IdempotencyMiddlewareDeps;
-  /** Redis options forwarded to the per-user rate limiter. Inject a fake in tests. */
+  /** Issue a `QR_Checkin_Token` for the caller (Requirement 11.1). */
+  issueToken(claims: AuthClaims): Promise<CheckInTokenResponse>;
+  /** Check in the member named by the token, at the operator's studio. */
+  checkIn(operator: AuthClaims, input: CheckInRequest): Promise<CheckInOutcome>;
+  /**
+   * Idempotency store bound to the caller's tenant claims, or
+   * `undefined` when the environment has none.
+   */
+  idempotencyFor?(claims: AuthClaims): IdempotencyMiddlewareDeps | undefined;
+  /** Redis options forwarded to the per-user rate limiters. Inject a fake in tests. */
   readonly rateLimitOpts?: RateLimitOptions;
 }
 
@@ -79,10 +113,10 @@ export interface CheckinsDeps {
 /* ------------------------------------------------------------------ */
 
 /**
- * Reasons that surface as HTTP 401 per Requirement 11.3. Everything
- * else (`outside_window`, `no_reservation`) surfaces as 422 because
- * the token itself was valid but the state machine rejected the
- * check-in.
+ * Reasons that surface as HTTP 401 per Requirement 11.3. The others
+ * surface as 422 (the token was valid but the reservation state
+ * rejected the check-in), except `checkin_limit_reached`: 429, the
+ * member was already checked in 5 times in the last hour (#338).
  */
 const TOKEN_FAILURE_REASONS = new Set<CheckInFailReason>([
   'invalid_signature',
@@ -93,9 +127,15 @@ const TOKEN_FAILURE_REASONS = new Set<CheckInFailReason>([
   'malformed',
 ]);
 
+const TITLES = { 401: 'Unauthorized', 422: 'Unprocessable Entity', 429: 'Too Many Requests' };
+
+/** Seconds a member waits after `checkin_limit_reached` (the bound is per hour). */
+const MEMBER_LIMIT_RETRY_AFTER_SEC = 3600;
+
 function problemCheckinFail(c: Context<HonoEnv>, reason: CheckInFailReason): Response {
-  const status: 401 | 422 = TOKEN_FAILURE_REASONS.has(reason) ? 401 : 422;
-  const title = status === 401 ? 'Unauthorized' : 'Unprocessable Entity';
+  const status: 401 | 422 | 429 =
+    reason === 'checkin_limit_reached' ? 429 : TOKEN_FAILURE_REASONS.has(reason) ? 401 : 422;
+  const title = TITLES[status];
   return c.body(
     JSON.stringify({
       type: 'about:blank',
@@ -106,8 +146,61 @@ function problemCheckinFail(c: Context<HonoEnv>, reason: CheckInFailReason): Res
       traceId: c.get('traceId'),
     }),
     status,
-    { 'content-type': 'application/problem+json' },
+    {
+      'content-type': 'application/problem+json',
+      ...(status === 429 ? { 'retry-after': String(MEMBER_LIMIT_RETRY_AFTER_SEC) } : {}),
+    },
   );
+}
+
+function claimsOf(c: Context<HonoEnv>): AuthClaims {
+  const claims = c.get('authClaims');
+  if (claims === undefined) {
+    throw new Error('authClaims unexpectedly missing after jwtAuth');
+  }
+  return claims;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Rate limits                                                        */
+/* ------------------------------------------------------------------ */
+
+const SECURITY_HEADERS: Readonly<Record<string, string>> = buildSecurityHeaders();
+
+/**
+ * Per-user limiter running after `jwtAuth` (keyed on
+ * `rl:user:mutation-<scope>:<userId>`), fail-closed: a Redis outage
+ * answers 503. `dev` is exempt like every gateway limiter.
+ */
+function perUserLimit(
+  scope: string,
+  budget: RateLimitBudget,
+  opts: RateLimitOptions | undefined,
+): MiddlewareHandler<HonoEnv> {
+  const guarded = guardRateLimiter(
+    'mutation',
+    rateLimit({
+      ...budget,
+      keyPrefix: `${MUTATION_IP_BUCKET_PREFIX}-${scope}`,
+      userKeyPrefix: `${MUTATION_USER_BUCKET_PREFIX}-${scope}`,
+      ...opts,
+    }),
+    'fail-closed',
+    false,
+  );
+  return async (c, next) => {
+    if (c.env.ENVIRONMENT === 'dev') {
+      await next();
+      return;
+    }
+    const result = await (
+      guarded as unknown as (
+        ctx: Context<HonoEnv>,
+        n: () => Promise<void>,
+      ) => Promise<Response | undefined>
+    )(c, next);
+    return result instanceof Response ? applySecurityHeaders(result, SECURITY_HEADERS) : undefined;
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -117,49 +210,53 @@ function problemCheckinFail(c: Context<HonoEnv>, reason: CheckInFailReason): Res
 /** Build the `/v1/checkins/*` sub-router. */
 export function buildCheckinsRouter(deps: CheckinsDeps): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  const idem = deps.idempotency;
+
+  /** Idempotency bound per request to the operator's tenant claims. */
+  const idem: MiddlewareHandler<HonoEnv> = async (c, next) => {
+    const store = deps.idempotencyFor?.(claimsOf(c));
+    if (store === undefined) {
+      await next();
+      return;
+    }
+    return idempotency(store)(c, next);
+  };
 
   router.use('*', jwtAuth());
 
   // Sprint 12 / Slice 12.14 (Epic B4.4) — per-studio burst cap.
   router.use('*', studioRateLimit() as Parameters<typeof router.use>[1]);
 
-  // Issue #338 — per-user hourly cap: a member cannot physically attend
-  // more than 5 classes in 60 min. Fail-closed: Redis outage blocks the
-  // endpoint (same policy as reservation mutations).
-  const checkinLimiter = rateLimit({ ...CHECKIN_BUDGET, ...deps.rateLimitOpts });
-  const checkinRateLimit: MiddlewareHandler<HonoEnv> = async (c, next) => {
-    if (c.env.ENVIRONMENT === 'dev') {
-      await next();
-      return;
-    }
-    return (await checkinLimiter(c, next)) ?? undefined;
-  };
+  /* ------------------------------ POST /token -------------------- */
+  router.post(
+    '/token',
+    perUserLimit('checkin-token', CHECKIN_TOKEN_BUDGET, deps.rateLimitOpts),
+    async (c) => {
+      traceOperation(c, 'checkins.issue-token');
+      const issued = await deps.issueToken(claimsOf(c));
+      return c.json(issued, 201, { 'cache-control': 'no-store' });
+    },
+  );
 
+  /* ------------------------------ POST / ------------------------- */
   router.post(
     '/',
-    checkinRateLimit,
+    requireRole('admin', 'coach'),
+    perUserLimit('checkin', CHECKIN_BUDGET, deps.rateLimitOpts),
     projectUserIdFromClaims(),
     zValidator('json', CheckInRequestSchema),
-    ...(idem ? [idempotency(idem)] : []),
+    idem,
     async (c) => {
       traceOperation(c, 'checkins.check-in');
-      const claims = c.get('authClaims');
-      if (claims === undefined) {
-        throw new Error('authClaims unexpectedly missing after jwtAuth');
-      }
       const body = readValidated<CheckInRequest>(c, 'json');
-      const outcome = await deps.checkIn(claims.studioId, body);
+      const outcome = await deps.checkIn(claimsOf(c), body);
 
       if (outcome.kind === 'success') {
-        return c.json(
-          {
-            success: true,
-            reservation: outcome.reservation,
-            member: outcome.member,
-          },
-          200,
-        );
+        const response: CheckInResponse = {
+          success: true,
+          reservationId: outcome.reservationId,
+          member: outcome.member,
+        };
+        return c.json(response, 200);
       }
       return problemCheckinFail(c, outcome.reason);
     },

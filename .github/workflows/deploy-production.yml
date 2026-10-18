@@ -56,8 +56,11 @@ on:
 permissions:
   contents: read
 
+# Every phase that changes production (production-deploy, production-canary,
+# rollback) shares one lock with canary.yml, rollback.yml and
+# slo-rollback.yml so no two runs mutate the fleet at once (#632).
 concurrency:
-  group: deploy-api-${{ inputs.phase }}
+  group: ${{ startsWith(inputs.phase, 'staging-') && format('deploy-api-{0}', inputs.phase) || 'deploy-api-production-canary' }}
   cancel-in-progress: false
 
 jobs:

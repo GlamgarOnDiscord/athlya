@@ -67,6 +67,11 @@ describe('auth worker', () => {
     expect(await status(authApp, '/v1/sessions/me')).toBe(404);
   });
 
+  it('returns 404 for /v1/checkins and /v1/checkins/* (reservations worker routes)', async () => {
+    expect(await status(authApp, '/v1/checkins', 'POST')).toBe(404);
+    expect(await status(authApp, '/v1/checkins/token', 'POST')).toBe(404);
+  });
+
   it('returns 404 for /v1/coach and /v1/coach/* (reservations worker routes)', async () => {
     expect(await status(authApp, '/v1/coach')).toBe(404);
     expect(await status(authApp, '/v1/coach/ask', 'POST')).toBe(404);
@@ -117,6 +122,11 @@ describe('reservations worker', () => {
   it('serves POST /v1/sessions and GET /v1/sessions/me (not 404, issue #652)', async () => {
     expect(await status(reservationsApp, '/v1/sessions', 'POST')).toBe(401);
     expect(await status(reservationsApp, '/v1/sessions/me')).toBe(401);
+  });
+
+  it('serves POST /v1/checkins and POST /v1/checkins/token (not 404, issue #654)', async () => {
+    expect(await status(reservationsApp, '/v1/checkins', 'POST')).toBe(401);
+    expect(await status(reservationsApp, '/v1/checkins/token', 'POST')).toBe(401);
   });
 
   it('returns 404 for /v1/auth/* (auth worker route)', async () => {
@@ -173,6 +183,11 @@ describe('billing worker', () => {
   it('returns 404 for /v1/sessions and /v1/sessions/* (reservations worker routes)', async () => {
     expect(await status(billingApp, '/v1/sessions', 'POST')).toBe(404);
     expect(await status(billingApp, '/v1/sessions/me')).toBe(404);
+  });
+
+  it('returns 404 for /v1/checkins and /v1/checkins/* (reservations worker routes)', async () => {
+    expect(await status(billingApp, '/v1/checkins', 'POST')).toBe(404);
+    expect(await status(billingApp, '/v1/checkins/token', 'POST')).toBe(404);
   });
 
   it('returns 404 for /v1/coach and /v1/coach/* (reservations worker routes)', async () => {
@@ -429,6 +444,12 @@ const ROUTER_NEEDS: readonly RouterNeeds[] = [
     vars: [],
     secrets: ['MISTRAL_API_KEY'],
   },
+  {
+    prefix: '/v1/checkins',
+    r2: [],
+    vars: [],
+    secrets: ['JWT_KID', 'JWT_PRIVATE_KEY_PEM', 'JWT_PUBLIC_KEY_PEM', 'JWKS_JSON'],
+  },
 ];
 
 /** Every env where `worker` diverges from `gateway` on what `needs` reads. */
@@ -524,6 +545,26 @@ describe('/v1/sessions zone routes (issue #652)', () => {
 
   it('is mounted on the gateway too', async () => {
     expect(await status(buildApp(), '/v1/sessions', 'POST')).toBe(401);
+  });
+});
+
+describe('/v1/checkins zone routes (issue #654)', () => {
+  const patterns = routePatterns('wrangler.reservations.toml');
+
+  it.each(['staging.api.athlya.app', 'api.athlya.app'])(
+    'routes %s/v1/checkins and /* to the reservations Worker',
+    (host) => {
+      expect(patterns).toContain(`${host}/v1/checkins`);
+      expect(patterns).toContain(`${host}/v1/checkins/*`);
+    },
+  );
+
+  it.each(['wrangler.auth.toml', 'wrangler.billing.toml'])('%s does not route it', (config) => {
+    expect(routePatterns(config).filter((p) => p.includes('/v1/checkins'))).toEqual([]);
+  });
+
+  it('is mounted on the gateway too', async () => {
+    expect(await status(buildApp(), '/v1/checkins/token', 'POST')).toBe(401);
   });
 });
 

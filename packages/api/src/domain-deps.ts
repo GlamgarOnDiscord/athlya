@@ -14,6 +14,7 @@
 import { buildAuditDeps } from './adapters/audit-deps.js';
 import { buildAuthDeps } from './adapters/auth-deps.js';
 import { buildBillingDeps } from './adapters/billing-deps.js';
+import { buildCheckinsDeps } from './adapters/checkins-deps.js';
 import { buildCoachDeps } from './adapters/coach-deps.js';
 import { buildMembersDeps } from './adapters/members-deps.js';
 import { buildProgramsDeps } from './adapters/programs-deps.js';
@@ -55,8 +56,8 @@ export interface DomainDeps {
    */
   readonly sessions?: SessionsDeps;
   /**
-   * Optional — absent until the check-in adapter ships.
-   * Routes are not mounted when undefined (issue #302).
+   * QR check-in (issue #654). Optional so partial test bundles stay
+   * valid; production and the lazy facade always provide it.
    */
   readonly checkins?: CheckinsDeps;
   readonly studios: StudiosDeps;
@@ -236,6 +237,19 @@ export function lazySessionsDeps(resolve: () => SessionsDeps): SessionsDeps {
   };
 }
 
+/**
+ * Lazy check-in facade. `idempotencyFor` resolves per request, like
+ * {@link lazyProgramsDeps}.
+ */
+export function lazyCheckinsDeps(resolve: () => CheckinsDeps): CheckinsDeps {
+  const forward = forwarder(resolve);
+  return {
+    issueToken: forward('issueToken'),
+    checkIn: forward('checkIn'),
+    idempotencyFor: (claims) => resolve().idempotencyFor?.(claims),
+  };
+}
+
 /** Lazy facade over the full {@link DomainDeps} bundle (monolith gateway). */
 export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
   return {
@@ -260,6 +274,13 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
         throw new Error('buildLazyDomainDeps: sessions dependency is not wired');
       }
       return sessions;
+    }),
+    checkins: lazyCheckinsDeps(() => {
+      const checkins = resolve().checkins;
+      if (checkins === undefined) {
+        throw new Error('buildLazyDomainDeps: checkins dependency is not wired');
+      }
+      return checkins;
     }),
   };
 }
@@ -480,6 +501,25 @@ export function defaultSessionsDeps(env: AthlyaBindings): SessionsDeps {
 }
 
 /**
+ * QR check-in reads reservations (DB) and consumes token `jti`s in
+ * Redis; without both it falls back to the stub bundle. With them, a
+ * deployed environment must also carry the signing key pair.
+ */
+export function defaultCheckinsDeps(env: AthlyaBindings): CheckinsDeps {
+  if (nonEmpty(env.DB_URL) && nonEmpty(env.REDIS_URL)) {
+    // Token issuance and verification need the RS256 key pair: a
+    // deployed Worker without it refuses to start instead of failing
+    // every check-in at runtime.
+    assertSigningKeySecrets(env);
+    return buildCheckinsDeps(env);
+  }
+  return {
+    issueToken: () => notImplemented('checkins.issueToken'),
+    checkIn: () => notImplemented('checkins.checkIn'),
+  };
+}
+
+/**
  * Billing is always built — the adapter itself returns degraded
  * (`not_configured`) responses when STRIPE secrets are absent.
  */
@@ -519,5 +559,6 @@ export function buildDefaultDeps(env: AthlyaBindings, cf?: RequestCf): DomainDep
     coach: defaultCoachDeps(env, cf),
     programs: defaultProgramsDeps(env),
     sessions: defaultSessionsDeps(env),
+    checkins: defaultCheckinsDeps(env),
   };
 }

@@ -99,6 +99,7 @@ describe('GET /openapi.json', () => {
       '/v1/coach/ask',
       '/v1/audit',
       '/v1/checkins',
+      '/v1/checkins/token',
       '/v1/billing/checkout',
       '/v1/billing/invoices',
       '/v1/billing/webhook',

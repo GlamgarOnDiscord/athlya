@@ -78,8 +78,21 @@ export const MUTATION_BUDGETS = {
   session: { userLimit: 20, windowSec: 60 },
 } as const satisfies Record<string, RateLimitBudget>;
 
-/** Issue #338 — a member cannot physically attend more than 5 classes per hour. */
-export const CHECKIN_BUDGET: RateLimitBudget = { userLimit: 5, windowSec: 3600 };
+/**
+ * `POST /v1/checkins` is called by the kiosk operator (admin or coach,
+ * issue #654), so the bucket is per operator: one scan per second
+ * sustained covers a class starting. The per-member bound of issue
+ * #338 (5 check-ins per hour) is enforced next to the stamp, by
+ * `checkin_mark_reservation` (migration 0045), across every operator
+ * and studio; it answers 429 `checkin_limit_reached`.
+ */
+export const CHECKIN_BUDGET: RateLimitBudget = { userLimit: 60, windowSec: 60 };
+
+/**
+ * `POST /v1/checkins/token` (issue #654). The app rotates the QR every
+ * 120 s; the headroom covers reopening the screen a few times.
+ */
+export const CHECKIN_TOKEN_BUDGET: RateLimitBudget = { userLimit: 10, windowSec: 60 };
 
 /**
  * Authoritative coverage matrix. Keep in sync with `worker.ts` mounts and
@@ -293,7 +306,18 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     failPolicy: 'fail-closed',
     bucket: 'user',
     wiredIn: 'domain-router',
-    notes: 'Issue #338 — 5/hour per user; a member cannot attend >5 classes/hour',
+    notes:
+      'Issue #654 — per kiosk operator (admin/coach only); the per-member 5/hour bound of #338 is enforced by checkin_mark_reservation (429 checkin_limit_reached)',
+  },
+  {
+    id: 'checkin-token',
+    route: '/v1/checkins/token',
+    methods: 'POST',
+    budget: CHECKIN_TOKEN_BUDGET,
+    failPolicy: 'fail-closed',
+    bucket: 'user',
+    wiredIn: 'domain-router',
+    notes: 'Issue #654 — QR token issuance, rotated every 120 s by the app',
   },
 ];
 
@@ -317,6 +341,7 @@ export const REQUIRED_FAIL_CLOSED_IDS = [
   'progression-read',
   'admin-stats',
   'checkin-post',
+  'checkin-token',
 ] as const;
 
 /** Rows that must stay fail-closed (mutations + expensive reads + auth). */

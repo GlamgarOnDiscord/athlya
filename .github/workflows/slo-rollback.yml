@@ -1,0 +1,245 @@
+name: SLO auto-rollback
+
+# CN.7.3 (issue #632) — roll every production Worker (gateway + auth /
+# reservations / billing) back to its previous 100 % version when an SLO
+# is breached for a sustained window after a release.
+# Runbook: docs/runbooks/automatic-rollback.md
+#
+# Dispatched by the Axiom `slo_auto_rollback` notifier
+# (infra/terraform/slo-auto-rollback.tf) or by hand. The dispatch is only a
+# hint: scripts/slo-rollback.mjs re-queries Axiom itself and refuses to act
+# (fail closed: no Worker touched, run red, on-call paged) when any guard
+# trips — canary in progress, release too young or too old, live deployment
+# already a rollback, cool-down, secret change or other version since the
+# previous release, unresolvable release SHAs, or a `-- athlya:contract`
+# migration between the two releases. Re-running is safe: a fleet already
+# rolled back within the cool-down is a no-op.
+#
+# Environment `production-rollback` (no reviewers, deployment branches:
+# master only) holds:
+#   vars.AUTO_ROLLBACK_ENABLED   kill switch — anything but 'true' does nothing
+#   vars.AXIOM_SPANS_DATASET     production spans dataset
+#   vars.AXIOM_URL               optional Axiom API base URL
+#   secrets.AXIOM_QUERY_TOKEN    Axiom token with query access to that dataset only
+# Repository secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID;
+# optional SLACK_WEBHOOK_URL, PAGERDUTY_ROUTING_KEY. Var: PRODUCTION_API_URL.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Why this run was triggered (informational only)
+        required: false
+        type: string
+        default: manual
+      dry_run:
+        description: Check and plan only; never roll back
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  slo-rollback:
+    name: SLO auto-rollback (production)
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production-rollback
+    # One lock for every production-mutating run: canary.yml, rollback.yml and
+    # the production phases of deploy-production.yml. Job-level so that
+    # `cancelled-alert` still runs when GitHub drops this job from the queue.
+    concurrency:
+      group: deploy-api-production-canary
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+    env:
+      AUTO_ROLLBACK_ENABLED: ${{ vars.AUTO_ROLLBACK_ENABLED }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+      AXIOM_QUERY_TOKEN: ${{ secrets.AXIOM_QUERY_TOKEN }}
+      AXIOM_SPANS_DATASET: ${{ vars.AXIOM_SPANS_DATASET }}
+      AXIOM_URL: ${{ vars.AXIOM_URL }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      TRIGGER_REASON: ${{ inputs.reason }}
+
+    steps:
+      - name: Kill switch
+        id: gate
+        run: |
+          set -euo pipefail
+          if [ "${AUTO_ROLLBACK_ENABLED}" != 'true' ]; then
+            echo "### SLO auto-rollback disabled (vars.AUTO_ROLLBACK_ENABLED != 'true')" >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::SLO auto-rollback is disabled; nothing done"
+            exit 0
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check prerequisites
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "${CLOUDFLARE_API_TOKEN}" ] || missing+=("secrets.CLOUDFLARE_API_TOKEN")
+          [ -n "${CLOUDFLARE_ACCOUNT_ID}" ] || missing+=("secrets.CLOUDFLARE_ACCOUNT_ID")
+          [ -n "${PRODUCTION_API_URL}" ] || missing+=("vars.PRODUCTION_API_URL")
+          [ -n "${AXIOM_QUERY_TOKEN}" ] || missing+=("secrets.AXIOM_QUERY_TOKEN")
+          [ -n "${AXIOM_SPANS_DATASET}" ] || missing+=("vars.AXIOM_SPANS_DATASET")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "### SLO auto-rollback: FAILED — not provisioned: ${missing[*]}" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=SLO auto-rollback not provisioned::missing ${missing[*]}"
+            exit 1
+          fi
+          {
+            echo "## SLO auto-rollback — run ${GITHUB_RUN_ID}"
+            echo
+            echo "Trigger: \`$(printf '%s' "${TRIGGER_REASON}" | tr -cd '[:alnum:] .:_/#-' | cut -c1-100)\`, dry run: \`${DRY_RUN}\`"
+            echo
+          } > "${RUNNER_TEMP}/slo-rollback-report.md"
+
+      # Full history: the planner diffs the migrations between the two releases.
+      - name: Checkout
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        if: steps.gate.outputs.enabled == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6
+
+      - name: Setup Node.js
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.gate.outputs.enabled == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Re-check the SLO in Axiom
+        id: check
+        if: steps.gate.outputs.enabled == 'true'
+        run: node scripts/slo-rollback.mjs check --report "${RUNNER_TEMP}/slo-rollback-report.md"
+
+      - name: Plan the rollback
+        id: plan
+        if: steps.check.outputs.breached == 'true'
+        run: node scripts/slo-rollback.mjs plan --out "${RUNNER_TEMP}/slo-rollback-plan.json" --report "${RUNNER_TEMP}/slo-rollback-report.md"
+
+      - name: Refuse (guard tripped)
+        if: steps.plan.outputs.action == 'refuse'
+        run: |
+          echo "::error title=SLO auto-rollback refused::a guard tripped; no Worker was touched — see the run summary"
+          exit 1
+
+      - name: Roll back every production Worker
+        id: rollback
+        if: steps.plan.outputs.action == 'rollback' && env.DRY_RUN != 'true'
+        run: |
+          set -euo pipefail
+          node scripts/slo-rollback.mjs rollback \
+            --plan "${RUNNER_TEMP}/slo-rollback-plan.json" \
+            --reason "run ${GITHUB_RUN_ID}" \
+            --report "${RUNNER_TEMP}/slo-rollback-report.md"
+
+      - name: Verify health after rollback
+        if: steps.rollback.outcome == 'success'
+        run: bash scripts/wait-health-ready.sh "${PRODUCTION_API_URL}" 30 5
+
+      - name: Record the evidence in an issue
+        id: issue
+        if: >-
+          always() && steps.gate.outputs.enabled == 'true' &&
+          (failure() || (steps.plan.outcome == 'success' && steps.plan.outputs.action != 'noop'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          ACTION: ${{ steps.plan.outputs.action }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          report="${RUNNER_TEMP}/slo-rollback-report.md"
+          [ -f "${report}" ] || echo "## SLO auto-rollback — run ${GITHUB_RUN_ID}" > "${report}"
+          printf '\nRun: %s\n' "${RUN_URL}" >> "${report}"
+          prefix=$([ "${DRY_RUN}" = 'true' ] && echo 'SLO auto-rollback DRY RUN' || echo 'SLO auto-rollback')
+          title="${prefix}: ${ACTION:-failed} (${JOB_STATUS}) — run ${GITHUB_RUN_ID}"
+          url=$(gh api "repos/${GITHUB_REPOSITORY}/issues" -f title="${title}" -F body=@"${report}" --jq .html_url)
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Slack and PagerDuty
+        if: >-
+          always() && steps.gate.outputs.enabled == 'true' && env.DRY_RUN != 'true' &&
+          (failure() || (steps.plan.outcome == 'success' && steps.plan.outputs.action != 'noop'))
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          PAGERDUTY_ROUTING_KEY: ${{ secrets.PAGERDUTY_ROUTING_KEY }}
+          JOB_STATUS: ${{ job.status }}
+          ACTION: ${{ steps.plan.outputs.action }}
+          ISSUE_URL: ${{ steps.issue.outputs.url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          summary="SLO auto-rollback: ${ACTION:-failed} (${JOB_STATUS}, dry run ${DRY_RUN})"
+          if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
+            emoji=$([ "${JOB_STATUS}" = 'success' ] && echo ':rewind:' || echo ':rotating_light:')
+            jq -n --arg text "${emoji} *${summary}* | <${RUN_URL}|run> ${ISSUE_URL:+| <${ISSUE_URL}|issue>}" '{text: $text}' \
+              | curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "${SLACK_WEBHOOK_URL}" > /dev/null \
+              || echo "::warning::Slack notification failed"
+          else
+            echo "SLACK_WEBHOOK_URL not configured — skipping Slack"
+          fi
+          if [ -n "${PAGERDUTY_ROUTING_KEY:-}" ]; then
+            severity=$([ "${JOB_STATUS}" = 'success' ] && echo 'warning' || echo 'critical')
+            jq -n --arg key "${PAGERDUTY_ROUTING_KEY}" --arg summary "${summary}" --arg severity "${severity}" \
+              --arg dedup "slo-rollback-${GITHUB_RUN_ID}" --arg run "${RUN_URL}" \
+              '{routing_key: $key, event_action: "trigger", dedup_key: $dedup,
+                payload: {summary: $summary, source: "github-actions/slo-rollback", severity: $severity},
+                links: [{href: $run, text: "Workflow run"}]}' \
+              | curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- https://events.pagerduty.com/v2/enqueue > /dev/null \
+              || echo "::warning::PagerDuty notification failed"
+          else
+            echo "PAGERDUTY_ROUTING_KEY not configured — skipping PagerDuty"
+          fi
+
+  # GitHub keeps one pending run per concurrency group: a later canary push or
+  # dispatch cancels a rollback still waiting for the lock, without running
+  # any of its steps. Make that loud so on-call re-dispatches it.
+  cancelled-alert:
+    name: Alert on a cancelled rollback
+    needs: slo-rollback
+    if: always() && needs.slo-rollback.result == 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Record the cancelled rollback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          msg="SLO auto-rollback run ${GITHUB_RUN_ID} was cancelled (queued behind another production run, or stopped by hand). If the SLO is still breached, re-dispatch slo-rollback.yml."
+          echo "### SLO auto-rollback CANCELLED" >> "$GITHUB_STEP_SUMMARY"
+          echo "${msg}" >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=SLO auto-rollback cancelled::${msg}"
+          gh api "repos/${GITHUB_REPOSITORY}/issues" \
+            -f title="SLO auto-rollback cancelled — run ${GITHUB_RUN_ID}" \
+            -f body="${msg}"$'\n\n'"Run: ${RUN_URL}"$'\n\n'"Runbook: docs/runbooks/automatic-rollback.md" --jq .html_url \
+            || echo "::warning::GitHub issue creation failed"
+          if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
+            jq -n --arg text ":warning: ${msg} <${RUN_URL}|run>" '{text: $text}' \
+              | curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "${SLACK_WEBHOOK_URL}" > /dev/null \
+              || echo "::warning::Slack notification failed"
+          fi
+          exit 1
