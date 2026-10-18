@@ -57,6 +57,7 @@ assignees: ''
 - [ ] `@athlya/db`
 - [ ] `@athlya/members`
 - [ ] `@athlya/reservations`
+- [ ] `@athlya/programs`
 - [ ] `@athlya/billing`
 - [ ] `@athlya/notifications`
 - [ ] `@athlya/shared`

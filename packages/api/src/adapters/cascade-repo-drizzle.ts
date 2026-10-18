@@ -11,7 +11,7 @@
  * RLS posture (issues #224, #117)
  * --------------------------------
  * The queue consumer runs as `athlya_app` with no tenant claims, so the
- * purge goes through the `rgpd_delete_*` (migration 0032),
+ * purge goes through the `rgpd_delete_*` (migrations 0032, 0042),
  * `rgpd_confirm_user_deleted` (migration 0037) and
  * `rgpd_anonymize_user_audit` (migration 0039) SECURITY DEFINER
  * functions. They only act on a user
@@ -71,6 +71,10 @@ export function createDrizzleDeletionRepo(db: AthlyaDbAny): DeletionRepo {
 
     async deleteIdempotencyKeysForUser(userId) {
       return callCount(db, serviceFn.deleteIdempotencyKeys(userId));
+    },
+
+    async deleteProgramSubscriptionsForUser(userId) {
+      return callCount(db, serviceFn.deleteProgramSubscriptions(userId));
     },
 
     async markUserDeleted(userId) {

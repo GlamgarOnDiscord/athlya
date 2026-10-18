@@ -49,6 +49,7 @@ on:
       - 'packages/db/**'
       - 'packages/members/**'
       - 'packages/notifications/**'
+      - 'packages/programs/**'
       - 'packages/ratelimit/**'
       - 'packages/reservations/**'
       - 'packages/shared/**'

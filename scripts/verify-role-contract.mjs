@@ -18,7 +18,7 @@
  *   athlya_billing             Stripe event application (the only role
  *     (BILLING_DB_URL)         allowed to; athlya_app is refused)
  *
- * Usage (staging, after migrations 0031–0041):
+ * Usage (staging, after migrations 0031–0042):
  *   APP_DATABASE_URL=postgresql://athlya_app:...@.../athlya \
  *   CRON_DATABASE_URL=postgresql://athlya_cron:...@.../athlya \
  *   BILLING_DATABASE_URL=postgresql://athlya_billing:...@.../athlya \
@@ -32,7 +32,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-/** Functions athlya_app needs from migrations 0032–0040. */
+/** Functions athlya_app needs from migrations 0032–0042. */
 export const REQUIRED_FUNCTIONS = [
   'auth_find_active_user_by_email',
   'auth_find_user_by_id',
@@ -61,6 +61,7 @@ export const REQUIRED_FUNCTIONS = [
   'reservation_lock_class_for_cancel',
   'reservation_promote_oldest_waitlist',
   'reservation_waitlist_ahead',
+  'rgpd_delete_program_subscriptions',
 ];
 
 /** Stripe event application: athlya_billing only (migration 0036). */
@@ -121,7 +122,7 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
   `;
   const present = new Set(fns.map((r) => r.name));
   const missing = REQUIRED_FUNCTIONS.filter((f) => !present.has(f));
-  check(missing.length === 0, `missing or not executable: ${missing.join(', ')} (apply 0032–0040)`);
+  check(missing.length === 0, `missing or not executable: ${missing.join(', ')} (apply 0032–0042)`);
   ok(`${REQUIRED_FUNCTIONS.length} service functions executable`);
 
   const [forge] = await app`SELECT has_function_privilege(${BILLING_APPLY}, 'EXECUTE') AS can`;

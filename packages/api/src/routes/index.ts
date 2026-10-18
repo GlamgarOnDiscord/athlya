@@ -47,6 +47,7 @@ import { buildCapacityRouter } from './capacity.js';
 import { buildCheckinsRouter, type CheckinsDeps } from './checkins.js';
 import { buildClassesRouter, type ClassesDeps } from './classes.js';
 import { buildMembersRouter, type MembersDeps } from './members.js';
+import { buildProgramsRouter, type ProgramsDeps } from './programs.js';
 import { buildReservationsRouter, type ReservationsDeps } from './reservations.js';
 import { buildSessionsRouter, type SessionsDeps } from './sessions.js';
 import { buildStudiosRouter, type StudiosDeps } from './studios.js';
@@ -63,6 +64,7 @@ export {
   buildCheckinsRouter,
   buildClassesRouter,
   buildMembersRouter,
+  buildProgramsRouter,
   buildReservationsRouter,
   buildSessionsRouter,
   buildStudiosRouter,
@@ -76,6 +78,7 @@ export type {
   CheckinsDeps,
   ClassesDeps,
   MembersDeps,
+  ProgramsDeps,
   ReservationsDeps,
   SessionsDeps,
   StudiosDeps,
@@ -112,5 +115,8 @@ export function mountDomainRoutes(app: Hono<HonoEnv>, deps: DomainDeps): Hono<Ho
   }
   app.route('/v1/studios', buildStudiosRouter(deps.studios));
   app.route('/v1/billing', buildBillingRouter(deps.billing));
+  if (deps.programs !== undefined) {
+    app.route('/v1/programs', buildProgramsRouter(deps.programs));
+  }
   return app;
 }

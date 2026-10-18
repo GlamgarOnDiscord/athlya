@@ -28,22 +28,32 @@ import {
   ClassListResponseSchema,
   ClassWithRemainingSchema,
   CreateClassRequestSchema,
+  CreateProgramRequestSchema,
   ExportJobResponseSchema,
   InvoicesPageSchema,
   ListClassesQuerySchema,
   ListInvoicesQuerySchema,
+  ListProgramsQuerySchema,
   ListSessionsQuerySchema,
   LogSessionRequestSchema,
   LoginRequestSchema,
   MembersPageResponseSchema,
+  ProgramDetailSchema,
+  ProgramListResponseSchema,
+  ProgramSubscriptionListResponseSchema,
+  ProgramSubscriptionSchema,
   RefreshRequestSchema,
   AuditListResponseSchema,
   RegisterRequestSchema,
   SessionResponseSchema,
   StudioMeResponseSchema,
+  SubscribeProgramRequestSchema,
+  TodayWorkoutQuerySchema,
+  TodayWorkoutResponseSchema,
   UpdateClassRequestSchema,
   UpdateConsentsRequestSchema,
   UpdateProfileRequestSchema,
+  UpdateProgramRequestSchema,
   UpdateStudioRequestSchema,
 } from '@athlya/shared/schemas/api';
 import { UserSchema } from '@athlya/shared/schemas/domain';
@@ -860,6 +870,188 @@ const webhookRoute = createRoute({
   },
 });
 
+/*
+ * programs — /v1/programs/*
+ */
+
+const ProgramIdParamsSchema = z.object({ id: z.uuid() });
+
+const problem = (description: string) => ({
+  description,
+  content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+});
+
+const listProgramsRoute = createRoute({
+  method: 'get',
+  path: '/v1/programs',
+  tags: ['programs'],
+  summary: 'List programs (members: published catalogue; staff: every status)',
+  security: [{ bearerAuth: [] }],
+  request: { query: ListProgramsQuerySchema },
+  responses: {
+    200: {
+      description: 'Programs of the caller studio',
+      content: { 'application/json': { schema: ProgramListResponseSchema } },
+    },
+    401: problem('Not authenticated'),
+  },
+});
+
+const createProgramRoute = createRoute({
+  method: 'post',
+  path: '/v1/programs',
+  tags: ['programs'],
+  summary: 'Create a program with its weeks and workouts (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: CreateProgramRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    201: {
+      description: 'Created program',
+      content: { 'application/json': { schema: ProgramDetailSchema } },
+    },
+    401: problem('Not authenticated'),
+    403: problem('Insufficient role'),
+    422: problem('Validation error'),
+  },
+});
+
+const getProgramRoute = createRoute({
+  method: 'get',
+  path: '/v1/programs/{id}',
+  tags: ['programs'],
+  summary: 'Get a program with its schedule',
+  security: [{ bearerAuth: [] }],
+  request: { params: ProgramIdParamsSchema },
+  responses: {
+    200: {
+      description: 'Program',
+      content: { 'application/json': { schema: ProgramDetailSchema } },
+    },
+    401: problem('Not authenticated'),
+    404: problem('Program not found or not visible to the caller'),
+  },
+});
+
+const updateProgramRoute = createRoute({
+  method: 'patch',
+  path: '/v1/programs/{id}',
+  tags: ['programs'],
+  summary: 'Update a program; `weeks` replaces the schedule (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: ProgramIdParamsSchema,
+    body: {
+      content: { 'application/json': { schema: UpdateProgramRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'Updated program',
+      content: { 'application/json': { schema: ProgramDetailSchema } },
+    },
+    401: problem('Not authenticated'),
+    403: problem('Insufficient role'),
+    404: problem('Program not found'),
+    409: problem('version_conflict or program_archived'),
+    422: problem('Validation error'),
+  },
+});
+
+const archiveProgramRoute = createRoute({
+  method: 'post',
+  path: '/v1/programs/{id}/archive',
+  tags: ['programs'],
+  summary: 'Archive a program (admin only, idempotent)',
+  security: [{ bearerAuth: [] }],
+  request: { params: ProgramIdParamsSchema },
+  responses: {
+    200: {
+      description: 'Archived program',
+      content: { 'application/json': { schema: ProgramDetailSchema } },
+    },
+    401: problem('Not authenticated'),
+    403: problem('Insufficient role'),
+    404: problem('Program not found'),
+  },
+});
+
+const subscribeProgramRoute = createRoute({
+  method: 'post',
+  path: '/v1/programs/{id}/subscription',
+  tags: ['programs'],
+  summary: 'Subscribe the caller to a published program',
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: ProgramIdParamsSchema,
+    body: {
+      content: { 'application/json': { schema: SubscribeProgramRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    201: {
+      description: 'Subscription',
+      content: { 'application/json': { schema: ProgramSubscriptionSchema } },
+    },
+    401: problem('Not authenticated'),
+    404: problem('Program not found'),
+    409: problem('already_subscribed or program_not_subscribable'),
+    422: problem('invalid_start or validation error'),
+  },
+});
+
+const unsubscribeProgramRoute = createRoute({
+  method: 'delete',
+  path: '/v1/programs/{id}/subscription',
+  tags: ['programs'],
+  summary: 'Unsubscribe the caller from a program',
+  security: [{ bearerAuth: [] }],
+  request: { params: ProgramIdParamsSchema },
+  responses: {
+    204: { description: 'Unsubscribed' },
+    401: problem('Not authenticated'),
+    404: problem('No active subscription'),
+  },
+});
+
+const mySubscriptionsRoute = createRoute({
+  method: 'get',
+  path: '/v1/programs/subscriptions/me',
+  tags: ['programs'],
+  summary: 'List the caller active program subscriptions',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Active subscriptions',
+      content: { 'application/json': { schema: ProgramSubscriptionListResponseSchema } },
+    },
+    401: problem('Not authenticated'),
+  },
+});
+
+const todayWorkoutRoute = createRoute({
+  method: 'get',
+  path: '/v1/programs/today',
+  tags: ['programs'],
+  summary: "Today's prescribed workout for each active subscription (mobile home)",
+  security: [{ bearerAuth: [] }],
+  request: { query: TodayWorkoutQuerySchema },
+  responses: {
+    200: {
+      description: 'Daily prescribed workouts',
+      content: { 'application/json': { schema: TodayWorkoutResponseSchema } },
+    },
+    401: problem('Not authenticated'),
+    422: problem('invalid_date or validation error'),
+  },
+});
+
 /* ------------------------------------------------------------------ */
 /*  Build spec app                                                     */
 /* ------------------------------------------------------------------ */
@@ -931,6 +1123,17 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   app.openapi(checkoutRoute, stub);
   app.openapi(listInvoicesRoute, stub);
   app.openapi(webhookRoute, stub);
+
+  // programs
+  app.openapi(listProgramsRoute, stub);
+  app.openapi(createProgramRoute, stub);
+  app.openapi(todayWorkoutRoute, stub);
+  app.openapi(mySubscriptionsRoute, stub);
+  app.openapi(getProgramRoute, stub);
+  app.openapi(updateProgramRoute, stub);
+  app.openapi(archiveProgramRoute, stub);
+  app.openapi(subscribeProgramRoute, stub);
+  app.openapi(unsubscribeProgramRoute, stub);
 
   app.doc31('/openapi.json', {
     openapi: '3.1.0',
