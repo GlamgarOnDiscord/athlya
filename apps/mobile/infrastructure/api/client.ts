@@ -28,6 +28,12 @@ export interface RequestOptions {
   readonly idempotencyKey?: string;
   /** `false` for anonymous endpoints (login, register): no token, no refresh on 401. */
   readonly authenticated?: boolean;
+  /**
+   * `false` returns a 401 as is instead of refreshing the session and
+   * retrying (e.g. sign-out, which must not prompt for biometrics or
+   * outlive its own timeout).
+   */
+  readonly refreshOnUnauthorized?: boolean;
 }
 
 export interface ApiResponse {
@@ -155,7 +161,9 @@ export function createApiClient(options: CreateApiClientOptions): ApiClient {
     const authenticated = requestOptions.authenticated ?? true;
     const token = authenticated ? options.tokens.getAccessToken() : null;
     const first = await attempt(method, url, body, requestOptions, token);
-    if (first.status !== 401 || !authenticated) return first;
+    if (first.status !== 401 || !authenticated || requestOptions.refreshOnUnauthorized === false) {
+      return first;
+    }
 
     const refreshed = options.refreshAccessToken ? await options.refreshAccessToken() : null;
     if (refreshed === null) throw new AuthRequiredError();

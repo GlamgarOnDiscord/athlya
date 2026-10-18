@@ -1,7 +1,12 @@
 import { colors, radii, spacing } from '@athlya/shared/tokens';
 import { describe, expect, it } from 'vitest';
 
-import { buttonA11yProps, syncBannerModel } from '../../components/ui/a11y';
+import {
+  buttonA11yProps,
+  switchA11yProps,
+  syncBannerModel,
+  textFieldA11yProps,
+} from '../../components/ui/a11y';
 import { resolveApiBaseUrl, resolveLocale } from '../../infrastructure/config';
 import {
   loadOrCreateStorageKey,
@@ -54,6 +59,39 @@ describe('buttonA11yProps', () => {
 
   it('refuses an empty label', () => {
     expect(() => buttonA11yProps({ label: '  ' })).toThrow(/label/u);
+  });
+});
+
+describe('textFieldA11yProps', () => {
+  it('reads the validation error first, then the hint', () => {
+    expect(textFieldA11yProps({ label: 'Email' })).toEqual({
+      accessible: true,
+      accessibilityLabel: 'Email',
+    });
+    expect(
+      textFieldA11yProps({ label: 'Slug', hint: 'Given by your studio', error: 'Invalid slug' }),
+    ).toEqual({
+      accessible: true,
+      accessibilityLabel: 'Slug',
+      accessibilityHint: 'Invalid slug. Given by your studio',
+    });
+    expect(textFieldA11yProps({ label: 'Notes', error: null }).accessibilityHint).toBeUndefined();
+  });
+
+  it('refuses an empty label', () => {
+    expect(() => textFieldA11yProps({ label: '' })).toThrow(/label/u);
+  });
+});
+
+describe('switchA11yProps', () => {
+  it('exposes the switch role and its checked state', () => {
+    expect(switchA11yProps({ label: 'Biometrics', checked: true, busy: true })).toEqual({
+      accessible: true,
+      accessibilityRole: 'switch',
+      accessibilityLabel: 'Biometrics',
+      accessibilityState: { checked: true, disabled: true, busy: true },
+    });
+    expect(() => switchA11yProps({ label: ' ', checked: false })).toThrow(/label/u);
   });
 });
 

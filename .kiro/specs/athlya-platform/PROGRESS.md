@@ -280,12 +280,19 @@ Insérée entre Epic 8 et Epic 10. Règle les 4 vrais bloquants identifiés dans
 
 ## Non démarré (~46 tâches)
 
-### Epic 11 — Mobile Expo (4 tâches restantes : écrans 11.8–11.11)
+### Epic 11 — Mobile Expo (1 tâche restante : 11.9, bloquée côté API)
 
 Foundation delivered in #642 (issue #638): 11.1–11.7, 11.12 (P5) and 11.13 on Expo SDK 58, plus the BR.4 icon and splash. See `docs/mobile/README.md`.
+
+Écrans membres livrés pour #647 : connexion / inscription, réservation de cours avec mise à jour optimiste (11.8) et « Mes réservations » (annulation), journal de séance (11.10), paramètres avec export / suppression RGPD (11.11), déverrouillage biométrique, déconnexion et vue « modifications refusées » (DLQ), plus la séance du jour du programme sur l'accueil (24.4). Les réservations, annulations et séances passent par `features/writes.ts` (l'authentification, l'export et la suppression RGPD appellent l'API directement, en ligne uniquement) : envoi direct avec une `Idempotency-Key` UUID v4, mise en file avec la même clé sur `NetworkError`, hors ligne, ou quand des écritures plus anciennes de l'utilisateur attendent encore (ordre FIFO). La logique des écrans est testée en Node (vitest).
+
+Restent ouverts :
+
+- 11.9 (QR check-in) : pas de route d'émission de token et `/v1/checkins` non monté en production (#648, suite de #302). `POST /v1/sessions` est en revanche routé depuis #652 (migration 0044 + déploiement du Worker reservations), donc le journal de séance mobile est servi de bout en bout.
+- Connexion depuis l'app en staging / production : `login` et `register` exigent un token Turnstile que l'app native ne sait pas produire (`403 bot_challenge_failed`), #649.
 ### Epic 12 — Admin studio app (4 tâches restantes — 12.2 et 12.3 livrées)
 ### Epic 20 — Checkpoint v0.2
-### Epics v0.3 (Epic 21–25, 8 tâches — 21.1 et 22.1 livrées, 21.2 et 22.2 web livrées partiellement)
+### Epics v0.3 (Epic 21–25 — 21.1 et 22.1 livrées, 21.2 et 22.2 web livrées partiellement, Epic 24 complet : 24.1–24.3 #640/#643, 24.4 mobile #647)
 
 ---
 
@@ -317,7 +324,7 @@ P1 capacity, P2 idempotence, P3 state-machine, P4 RGPD cascade, P6 JWT non-forge
 
 Epic 14 fermé — Checkpoint v0.1 MVP livré. Reste deux gros chantiers front :
 
-- **Epic 11 — Mobile Expo** (écrans 11.8–11.11 ; la fondation et la PBT P5 sont livrées, #642)
+- **Epic 11 — Mobile Expo** (reste 11.9, bloquée par l'API #648 ; connexion mobile derrière Turnstile #649 ; fondation #642 et écrans #647 livrés)
 - **Epic 12 — Admin studio app** (4 tâches restantes)
 
 ## Conventions maintenues

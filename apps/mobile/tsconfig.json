@@ -15,6 +15,7 @@
     "app/**/*.tsx",
     "components/**/*.ts",
     "components/**/*.tsx",
+    "features/**/*.ts",
     "infrastructure/**/*.ts",
     "theme/**/*.ts",
     "tests/**/*.ts",

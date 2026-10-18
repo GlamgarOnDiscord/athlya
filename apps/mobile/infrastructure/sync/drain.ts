@@ -66,6 +66,13 @@ export interface DrainOptions {
   /** Uniform random source in `[0, 1)` for the jitter. */
   readonly random?: () => number;
   readonly onProgress?: (progress: DrainProgress) => void;
+  /**
+   * Re-checked before every attempt: resolves `false` once `ownerId` is no
+   * longer the signed-in user (sign-out, account deletion, another sign-in),
+   * which stops the drain with `auth-required` so a mutation is never sent
+   * under another account's session.
+   */
+  readonly isOwnerSignedIn?: () => Promise<boolean>;
 }
 
 export const DRAIN_DEFAULTS = {
@@ -133,6 +140,15 @@ export async function drainMutationQueue(
     let attempt = 0;
     let settled = false;
     while (attempt < maxAttempts && !settled) {
+      if (options.isOwnerSignedIn !== undefined && !(await options.isOwnerSignedIn())) {
+        stoppedBy = 'auth-required';
+        break outer;
+      }
+      // Removed meanwhile (discarded by its owner, account deleted): nothing to send.
+      if (!queue.has(mutation.id)) {
+        settled = true;
+        break;
+      }
       let outcome: DeliveryOutcome;
       let status = 0;
       let body: unknown = null;
