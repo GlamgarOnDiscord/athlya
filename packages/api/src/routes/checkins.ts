@@ -81,7 +81,8 @@ export type CheckInFailReason =
   | 'malformed'
   | 'outside_window'
   | 'no_reservation'
-  | 'already_checked_in';
+  | 'already_checked_in'
+  | 'checkin_limit_reached';
 
 /** Discriminated result returned by {@link CheckinsDeps.checkIn}. */
 export type CheckInOutcome =
@@ -113,8 +114,9 @@ export interface CheckinsDeps {
 
 /**
  * Reasons that surface as HTTP 401 per Requirement 11.3. The others
- * surface as 422: the token was valid but the reservation state
- * rejected the check-in.
+ * surface as 422 (the token was valid but the reservation state
+ * rejected the check-in), except `checkin_limit_reached`: 429, the
+ * member was already checked in 5 times in the last hour (#338).
  */
 const TOKEN_FAILURE_REASONS = new Set<CheckInFailReason>([
   'invalid_signature',
@@ -125,9 +127,15 @@ const TOKEN_FAILURE_REASONS = new Set<CheckInFailReason>([
   'malformed',
 ]);
 
+const TITLES = { 401: 'Unauthorized', 422: 'Unprocessable Entity', 429: 'Too Many Requests' };
+
+/** Seconds a member waits after `checkin_limit_reached` (the bound is per hour). */
+const MEMBER_LIMIT_RETRY_AFTER_SEC = 3600;
+
 function problemCheckinFail(c: Context<HonoEnv>, reason: CheckInFailReason): Response {
-  const status: 401 | 422 = TOKEN_FAILURE_REASONS.has(reason) ? 401 : 422;
-  const title = status === 401 ? 'Unauthorized' : 'Unprocessable Entity';
+  const status: 401 | 422 | 429 =
+    reason === 'checkin_limit_reached' ? 429 : TOKEN_FAILURE_REASONS.has(reason) ? 401 : 422;
+  const title = TITLES[status];
   return c.body(
     JSON.stringify({
       type: 'about:blank',
@@ -138,7 +146,10 @@ function problemCheckinFail(c: Context<HonoEnv>, reason: CheckInFailReason): Res
       traceId: c.get('traceId'),
     }),
     status,
-    { 'content-type': 'application/problem+json' },
+    {
+      'content-type': 'application/problem+json',
+      ...(status === 429 ? { 'retry-after': String(MEMBER_LIMIT_RETRY_AFTER_SEC) } : {}),
+    },
   );
 }
 

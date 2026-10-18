@@ -84,11 +84,15 @@ async function call(
   path: string,
   options: {
     role?: 'member' | 'coach' | 'admin';
+    userId?: string;
     body?: unknown;
     headers?: Record<string, string>;
   } = {},
 ): Promise<Response> {
-  const token = await mintAuthJwt(kp, { role: options.role ?? 'member' });
+  const token = await mintAuthJwt(kp, {
+    role: options.role ?? 'member',
+    ...(options.userId !== undefined ? { userId: options.userId } : {}),
+  });
   const headers: Record<string, string> = { authorization: `Bearer ${token}`, ...options.headers };
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   return buildApp({ deps }).request(
@@ -165,6 +169,7 @@ describe('POST /v1/checkins (kiosk)', () => {
     ['no_reservation', 422],
     ['outside_window', 422],
     ['already_checked_in', 422],
+    ['checkin_limit_reached', 429],
   ] as const)('maps %s to %i with the reason as code', async (reason, status) => {
     const checkIn = vi
       .fn()
@@ -176,6 +181,7 @@ describe('POST /v1/checkins (kiosk)', () => {
     expect(res.status).toBe(status);
     expect(res.headers.get('content-type')).toBe('application/problem+json');
     expect(await readJson<{ code?: string }>(res)).toMatchObject({ code: reason });
+    expect(res.headers.get('retry-after')).toBe(status === 429 ? '3600' : null);
   });
 
   it('rejects a body without qrToken with 422 before the service runs', async () => {
@@ -185,31 +191,51 @@ describe('POST /v1/checkins (kiosk)', () => {
     expect(deps.checkins.checkIn).not.toHaveBeenCalled();
   });
 
-  it('binds idempotency to the operator claims and replays a stored success', async () => {
+  it('stores the success under the operator and replays it only to that operator', async () => {
+    const operatorA = '44444444-4444-4444-8444-444444444441';
+    const operatorB = '44444444-4444-4444-8444-444444444442';
     const checkIn = vi.fn().mockResolvedValue(SUCCESS);
     const idempotencyFor = vi.fn().mockReturnValue({ db: {} as AthlyaDb });
     const deps = buildStubDeps({ checkins: { checkIn, idempotencyFor } });
+    const scan = (userId: string) =>
+      call(deps, '', {
+        role: 'coach',
+        userId,
+        body: { qrToken: 'h.p.s' },
+        headers: { 'Idempotency-Key': 'scan-1' },
+      });
 
-    const first = await call(deps, '', {
-      role: 'coach',
-      body: { qrToken: 'h.p.s' },
-      headers: { 'Idempotency-Key': 'scan-1' },
-    });
+    const first = await scan(operatorA);
     expect(first.status).toBe(200);
-    expect(idempotencyFor).toHaveBeenCalledWith(expect.objectContaining({ role: 'coach' }));
+    const stored = await readJson<unknown>(first);
+    expect(idempotencyFor).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: operatorA, role: 'coach' }),
+    );
+    expect(hoisted.lookup).toHaveBeenCalledWith(expect.anything(), 'scan-1', operatorA);
+    expect(hoisted.store).toHaveBeenCalledWith(
+      expect.anything(),
+      'scan-1',
+      operatorA,
+      { body: stored, statusCode: 200 },
+      expect.any(Number),
+    );
 
-    hoisted.lookup.mockResolvedValueOnce({
-      response: await readJson<unknown>(first),
-      statusCode: 200,
-      createdAt: new Date(),
-      expiresAt: new Date(),
-    });
-    const retry = await call(deps, '', {
-      role: 'coach',
-      body: { qrToken: 'h.p.s' },
-      headers: { 'Idempotency-Key': 'scan-1' },
-    });
+    // The store is owner-scoped: operator A's retry finds the entry.
+    hoisted.lookup.mockImplementation((_db: unknown, key: string, userId: string) =>
+      Promise.resolve(
+        key === 'scan-1' && userId === operatorA
+          ? { response: stored, statusCode: 200, createdAt: new Date(), expiresAt: new Date() }
+          : null,
+      ),
+    );
+    const retry = await scan(operatorA);
     expect(retry.status).toBe(200);
     expect(checkIn).toHaveBeenCalledTimes(1);
+
+    // Operator B reusing the key does not replay A's response.
+    const other = await scan(operatorB);
+    expect(other.status).toBe(200);
+    expect(hoisted.lookup).toHaveBeenLastCalledWith(expect.anything(), 'scan-1', operatorB);
+    expect(checkIn).toHaveBeenCalledTimes(2);
   });
 });

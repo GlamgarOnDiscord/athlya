@@ -16,7 +16,7 @@
 -- =====================================================================
 
 BEGIN;
-SELECT plan(12);
+SELECT plan(13);
 
 -- Seed as the migration superuser: a cancelled reservation of member A2
 -- on "Extra A", and a confirmed one on a class of studio A that is then
@@ -32,6 +32,18 @@ INSERT INTO reservations (id, class_id, user_id, status) VALUES
 
 UPDATE classes SET deleted_at = '2026-01-01 00:00:00+00'
  WHERE id = 'cccccccc-cccc-4ccc-8ccc-cccccccc0045';
+
+-- Issue #338 bound: member A2 was already checked in 5 times in the hour
+-- before 2030-03-01 10:00 (classes C1..C5) and holds a 6th confirmed seat.
+INSERT INTO classes (id, studio_id, title, starts_at, duration_min, capacity, version)
+SELECT ('cccccccc-cccc-4ccc-8ccc-ccccccccc45' || n)::uuid, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+       'Cap ' || n, '2030-03-01 09:00:00+00'::timestamptz + (n || ' minutes')::interval, 60, 5, 0
+  FROM generate_series(1, 6) AS n;
+INSERT INTO reservations (id, class_id, user_id, status, checked_in_at)
+SELECT ('dddddddd-dddd-4ddd-8ddd-ddddddddd45' || n)::uuid, ('cccccccc-cccc-4ccc-8ccc-ccccccccc45' || n)::uuid,
+       '11111111-1111-4111-8111-111111111112', 'confirmed',
+       CASE WHEN n <= 5 THEN '2030-03-01 09:30:00+00'::timestamptz END
+  FROM generate_series(1, 6) AS n;
 
 -- ---------- hardening ----------
 
@@ -94,13 +106,13 @@ SELECT is(
 
 SELECT is_empty(
     $$ SELECT id FROM checkin_mark_reservation(
-           'dddddddd-dddd-4ddd-8ddd-dddddddd0441', now()) $$,
+           'dddddddd-dddd-4ddd-8ddd-dddddddd0451', now()) $$,
     'checkin_mark_reservation: a cancelled reservation is not stamped'
 );
 
 SELECT is_empty(
     $$ SELECT id FROM checkin_mark_reservation(
-           'dddddddd-dddd-4ddd-8ddd-dddddddd0442', now()) $$,
+           'dddddddd-dddd-4ddd-8ddd-dddddddd0452', now()) $$,
     'checkin_mark_reservation: a reservation of a deleted class is not stamped'
 );
 
@@ -108,6 +120,14 @@ SELECT is_empty(
     $$ SELECT id FROM checkin_mark_reservation(
            'dddddddd-dddd-4ddd-8ddd-dddddddddd03', now()) $$,
     'checkin_mark_reservation: another studio''s reservation is not stamped'
+);
+
+SELECT throws_ok(
+    $$ SELECT * FROM checkin_mark_reservation(
+           'dddddddd-dddd-4ddd-8ddd-ddddddddd456', '2030-03-01 10:00:00+00') $$,
+    'P0001',
+    'checkin_limit_reached',
+    'checkin_mark_reservation: a sixth check-in of the same member within an hour is refused (#338)'
 );
 
 -- ---------- admin B ----------

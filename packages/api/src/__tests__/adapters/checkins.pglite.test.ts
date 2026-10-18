@@ -26,7 +26,7 @@ import { SignJWT, generateKeyPair } from 'jose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
-  CheckinAlreadyStampedError,
+  CheckinStampRejectedError,
   checkInWith,
   createAtomicReplayStore,
   createDrizzleCheckinRepo,
@@ -45,6 +45,9 @@ const STUDIO_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const MEMBER_A = '11111111-1111-4111-8111-111111111111';
 const MEMBER_A2 = '11111111-1111-4111-8111-111111111112';
 const MEMBER_A3 = '11111111-1111-4111-8111-111111111115';
+const MEMBER_A4 = '11111111-1111-4111-8111-111111111116';
+const MEMBER_A5 = '11111111-1111-4111-8111-111111111117';
+const MEMBER_A6 = '11111111-1111-4111-8111-111111111118';
 const COACH_A = '11111111-1111-4111-8111-111111111114';
 const MEMBER_B = '22222222-2222-4222-8222-222222222221';
 const COACH_B = '22222222-2222-4222-8222-222222222224';
@@ -54,6 +57,10 @@ const CLASS_B = 'cccccccc-cccc-4ccc-8ccc-ccccccccc003';
 const RES_A = 'dddddddd-dddd-4ddd-8ddd-ddddddddd001';
 const RES_A2 = 'dddddddd-dddd-4ddd-8ddd-ddddddddd002';
 const RES_B = 'dddddddd-dddd-4ddd-8ddd-ddddddddd003';
+/** Member A4: already checked in on CLASS_NOW. */
+const RES_A4 = 'dddddddd-dddd-4ddd-8ddd-ddddddddd004';
+/** Member A6: confirmed on CLASS_NOW; cancelled or stamped behind the kiosk's back in the race tests. */
+const RES_A6 = 'dddddddd-dddd-4ddd-8ddd-ddddddddd006';
 
 /** The kiosk clock: 15 minutes before CLASS_NOW starts. */
 const NOW_MS = Date.parse('2030-01-01T08:45:00Z');
@@ -94,6 +101,16 @@ function ports(operator: AuthClaims, redis = memoryRedis()) {
   };
 }
 
+/** Run a raw statement as the migration owner, then switch back to athlya_app. */
+async function asOwner(query: string): Promise<void> {
+  await pglite.exec('RESET ROLE');
+  try {
+    await pglite.exec(query);
+  } finally {
+    await pglite.exec('SET ROLE athlya_app');
+  }
+}
+
 const qr = (userId: string, studioId = STUDIO_A, iat = nowSec()) =>
   generateAccessQR(userId, studioId, { signingKey, now: () => iat });
 
@@ -122,6 +139,9 @@ beforeAll(async () => {
         ('${MEMBER_A}',  '${STUDIO_A}', 'member-a@test.dev',  'Member A',  'member', 'https://avatars.athlya.app/a.jpg'),
         ('${MEMBER_A2}', '${STUDIO_A}', 'member-a2@test.dev', 'Member A2', 'member', NULL),
         ('${MEMBER_A3}', '${STUDIO_A}', 'member-a3@test.dev', 'Member A3', 'member', NULL),
+        ('${MEMBER_A4}', '${STUDIO_A}', 'member-a4@test.dev', 'Member A4', 'member', NULL),
+        ('${MEMBER_A5}', '${STUDIO_A}', 'member-a5@test.dev', 'Member A5', 'member', NULL),
+        ('${MEMBER_A6}', '${STUDIO_A}', 'member-a6@test.dev', 'Member A6', 'member', NULL),
         ('${COACH_A}',   '${STUDIO_A}', 'coach-a@test.dev',   'Coach A',   'coach',  NULL),
         ('${MEMBER_B}',  '${STUDIO_B}', 'member-b@test.dev',  'Member B',  'member', NULL),
         ('${COACH_B}',   '${STUDIO_B}', 'coach-b@test.dev',   'Coach B',   'coach',  NULL)
@@ -133,7 +153,22 @@ beforeAll(async () => {
     INSERT INTO reservations (id, class_id, user_id, status) VALUES
       ('${RES_A}',  '${CLASS_NOW}',   '${MEMBER_A}',  'confirmed'),
       ('${RES_A2}', '${CLASS_LATER}', '${MEMBER_A2}', 'confirmed'),
-      ('${RES_B}',  '${CLASS_B}',     '${MEMBER_B}',  'confirmed');
+      ('${RES_B}',  '${CLASS_B}',     '${MEMBER_B}',  'confirmed'),
+      ('${RES_A6}', '${CLASS_NOW}',   '${MEMBER_A6}', 'confirmed');
+    INSERT INTO reservations (id, class_id, user_id, status, checked_in_at) VALUES
+      ('${RES_A4}', '${CLASS_NOW}', '${MEMBER_A4}', 'confirmed', '2030-01-01 08:40:00+00');
+    -- Member A5: five check-ins in the last hour (issue #338) and a 6th seat on CLASS_NOW.
+    INSERT INTO classes (id, studio_id, title, starts_at, duration_min, capacity, version)
+    SELECT ('cccccccc-cccc-4ccc-8ccc-cccccccccd0' || n)::uuid, '${STUDIO_A}', 'Earlier ' || n,
+           '2030-01-01 08:00:00+00'::timestamptz + (n || ' minutes')::interval, 30, 10, 0
+      FROM generate_series(1, 5) AS n;
+    INSERT INTO reservations (id, class_id, user_id, status, checked_in_at)
+    SELECT ('dddddddd-dddd-4ddd-8ddd-dddddddddd5' || n)::uuid,
+           ('cccccccc-cccc-4ccc-8ccc-cccccccccd0' || n)::uuid, '${MEMBER_A5}', 'confirmed',
+           '2030-01-01 08:00:00+00'::timestamptz + (n || ' minutes')::interval
+      FROM generate_series(1, 5) AS n;
+    INSERT INTO reservations (id, class_id, user_id, status) VALUES
+      ('dddddddd-dddd-4ddd-8ddd-dddddddddd56', '${CLASS_NOW}', '${MEMBER_A5}', 'confirmed');
     SET ROLE athlya_app;
   `);
   db = drizzle(pglite, { schema }) as unknown as AthlyaDb;
@@ -163,9 +198,14 @@ describe('QR check-in under athlya_app', () => {
     expect(replay).toEqual({ kind: 'fail', reason: 'replay' });
   });
 
-  it('a fresh token for a member already checked in answers already_checked_in', async () => {
-    const outcome = await checkInWith(coachA, { qrToken: await qr(MEMBER_A) }, ports(coachA));
+  it('a member already checked in answers already_checked_in', async () => {
+    const outcome = await checkInWith(coachA, { qrToken: await qr(MEMBER_A4) }, ports(coachA));
     expect(outcome).toEqual({ kind: 'fail', reason: 'already_checked_in' });
+  });
+
+  it('a sixth check-in of the same member within an hour answers checkin_limit_reached (#338)', async () => {
+    const outcome = await checkInWith(coachA, { qrToken: await qr(MEMBER_A5) }, ports(coachA));
+    expect(outcome).toEqual({ kind: 'fail', reason: 'checkin_limit_reached' });
   });
 
   it('a class starting in 75 minutes is outside the ±30 min window', async () => {
@@ -232,13 +272,43 @@ describe('QR check-in under athlya_app', () => {
     expect(results.filter((r) => !r.ok)).toEqual([{ ok: false, reason: 'replay' }]);
   });
 
-  it('the stamp is single: a second markCheckedIn throws CheckinAlreadyStampedError', async () => {
+  it('the stamp is single: a second markCheckedIn throws CheckinStampRejectedError', async () => {
     const repo = createDrizzleCheckinRepo(db, tenant(coachB));
     const at = new Date(NOW_MS);
     const row = await repo.markCheckedIn(RES_B, at);
     expect(row.checkedInAt?.toISOString()).toBe(at.toISOString());
     expect(row.status).toBe('confirmed');
-    await expect(repo.markCheckedIn(RES_B, at)).rejects.toBeInstanceOf(CheckinAlreadyStampedError);
+    await expect(repo.markCheckedIn(RES_B, at)).rejects.toBeInstanceOf(CheckinStampRejectedError);
+  });
+
+  it('a stamp refused because another scan won reports already_checked_in', async () => {
+    await asOwner(`UPDATE reservations SET checked_in_at = now() WHERE id = '${RES_A6}'`);
+    try {
+      const err = await createDrizzleCheckinRepo(db, tenant(coachA))
+        .markCheckedIn(RES_A6, new Date(NOW_MS))
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(CheckinStampRejectedError);
+      expect((err as CheckinStampRejectedError).reason).toBe('already_checked_in');
+    } finally {
+      await asOwner(`UPDATE reservations SET checked_in_at = NULL WHERE id = '${RES_A6}'`);
+    }
+  });
+
+  it('a stamp refused because the reservation was cancelled reports no_reservation', async () => {
+    await asOwner(
+      `UPDATE reservations SET status = 'cancelled', cancelled_at = now() WHERE id = '${RES_A6}'`,
+    );
+    try {
+      const err = await createDrizzleCheckinRepo(db, tenant(coachA))
+        .markCheckedIn(RES_A6, new Date(NOW_MS))
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(CheckinStampRejectedError);
+      expect((err as CheckinStampRejectedError).reason).toBe('no_reservation');
+    } finally {
+      await asOwner(
+        `UPDATE reservations SET status = 'confirmed', cancelled_at = NULL WHERE id = '${RES_A6}'`,
+      );
+    }
   });
 
   it("another studio's coach sees neither the reservation nor the member", async () => {
@@ -247,7 +317,7 @@ describe('QR check-in under athlya_app', () => {
     expect(await repo.findConfirmedForCheckin(MEMBER_A, STUDIO_A, window)).toBeNull();
     expect(await repo.memberCard(MEMBER_A)).toBeNull();
     await expect(repo.markCheckedIn(RES_A2, new Date(NOW_MS))).rejects.toBeInstanceOf(
-      CheckinAlreadyStampedError,
+      CheckinStampRejectedError,
     );
   });
 });

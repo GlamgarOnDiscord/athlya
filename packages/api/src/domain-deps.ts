@@ -502,16 +502,21 @@ export function defaultSessionsDeps(env: AthlyaBindings): SessionsDeps {
 
 /**
  * QR check-in reads reservations (DB) and consumes token `jti`s in
- * Redis; without both it falls back to the stub bundle. The signing
- * key is checked when a token is issued or verified.
+ * Redis; without both it falls back to the stub bundle. With them, a
+ * deployed environment must also carry the signing key pair.
  */
 export function defaultCheckinsDeps(env: AthlyaBindings): CheckinsDeps {
-  return nonEmpty(env.DB_URL) && nonEmpty(env.REDIS_URL)
-    ? buildCheckinsDeps(env)
-    : {
-        issueToken: () => notImplemented('checkins.issueToken'),
-        checkIn: () => notImplemented('checkins.checkIn'),
-      };
+  if (nonEmpty(env.DB_URL) && nonEmpty(env.REDIS_URL)) {
+    // Token issuance and verification need the RS256 key pair: a
+    // deployed Worker without it refuses to start instead of failing
+    // every check-in at runtime.
+    assertSigningKeySecrets(env);
+    return buildCheckinsDeps(env);
+  }
+  return {
+    issueToken: () => notImplemented('checkins.issueToken'),
+    checkIn: () => notImplemented('checkins.checkIn'),
+  };
 }
 
 /**

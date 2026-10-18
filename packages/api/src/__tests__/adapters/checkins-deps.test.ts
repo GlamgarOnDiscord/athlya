@@ -12,7 +12,10 @@ import {
   __resetCheckinKeysForTests,
   buildCheckinsDeps,
   createAtomicReplayStore,
+  createQrVerifier,
+  loadQrKeys,
 } from '../../adapters/checkins-deps.js';
+import { defaultCheckinsDeps } from '../../domain-deps.js';
 import { buildMockEnv } from '../helpers/test-app.js';
 
 import type { AuthClaims } from '../../middleware/auth.js';
@@ -80,13 +83,54 @@ describe('buildCheckinsDeps().issueToken', () => {
       JWKS_JSON: '',
     } as never);
     const deps = buildCheckinsDeps(env, { now: () => NOW_MS });
-    await expect(deps.issueToken(claims)).resolves.toMatchObject({ token: expect.any(String) });
+    const issued = await deps.issueToken(claims);
+
+    // The check-in side verifies with the derived JWKS.
+    const { jwks: derived } = await loadQrKeys(env);
+    const verifier = createQrVerifier(
+      derived,
+      createAtomicReplayStore(memoryRedis()),
+      () => NOW_MS + 60_000,
+    );
+    await expect(verifier.verify(issued.token, STUDIO)).resolves.toMatchObject({
+      ok: true,
+      userId: USER,
+    });
   });
 
   it('fails loudly without the signing key', async () => {
     const env = buildMockEnv({ JWT_KID: 'k1', JWT_PRIVATE_KEY_PEM: '' } as never);
     const deps = buildCheckinsDeps(env, { now: () => NOW_MS });
     await expect(deps.issueToken(claims)).rejects.toThrow(/JWT_PRIVATE_KEY_PEM/u);
+  });
+});
+
+describe('defaultCheckinsDeps', () => {
+  const wired = {
+    DB_URL: 'postgres://u:p@db.invalid/athlya',
+    REDIS_URL: 'https://redis.invalid',
+  };
+
+  it('refuses to build in a deployed environment without the signing key pair', () => {
+    const env = buildMockEnv({
+      ...wired,
+      ENVIRONMENT: 'staging',
+      JWT_PRIVATE_KEY_PEM: '',
+      JWT_PUBLIC_KEY_PEM: '',
+    } as never);
+    expect(() => defaultCheckinsDeps(env)).toThrow(/JWT_PRIVATE_KEY_PEM/u);
+  });
+
+  it('builds with the key pair, and keeps the stub without DB or Redis', () => {
+    const keyed = buildMockEnv({
+      ...wired,
+      ENVIRONMENT: 'staging',
+      JWT_PRIVATE_KEY_PEM: privatePem,
+      JWT_PUBLIC_KEY_PEM: publicPem,
+    } as never);
+    expect(defaultCheckinsDeps(keyed).idempotencyFor).toBeTypeOf('function');
+    const stub = defaultCheckinsDeps(buildMockEnv({ ENVIRONMENT: 'staging', DB_URL: '' } as never));
+    expect(stub.idempotencyFor).toBeUndefined();
   });
 });
 

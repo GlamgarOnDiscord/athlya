@@ -42,7 +42,7 @@ Mutation limiters (issue #613) run an inline `jwtAuth()` pre-pass before the lim
 
 `coach-ask` (Epic 21) is mounted in the coach router (`routes/coach.ts`), after `jwtAuth` and the `ai-coach` flag check: with the flag off the route answers 404 and no bucket is touched. It adds a daily quota per member (`AI_COACH_DAILY_LIMIT`, default 10, UTC day) kept in the Redis counter `coach:quota:<day>:<userId>` by the use case. It fails closed too: a Redis error answers 503 `dependency_unavailable` before any model call, and an exhausted quota answers 429 `coach_quota_exceeded` with `Retry-After` set to the next UTC midnight.
 
-`checkin-post` (issue #654) is keyed on the kiosk operator, not the member: only admins and coaches may call it, so a per-member bucket would lock a front desk out. The per-member bound of issue #338 is structural: a check-in needs a single-use QR token (`jti` consumed with `SET NX`) and stamps a confirmed reservation within ±30 min only once (`checkin_mark_reservation`, migration 0045).
+`checkin-post` (issue #654) is keyed on the kiosk operator, not the member: only admins and coaches may call it, so a per-member bucket would lock a front desk out. The per-member bound of issue #338 stays: `checkin_mark_reservation` (migration 0045) refuses a sixth check-in of the same member within an hour, whoever the operator and whatever the studio, and the API answers 429 `checkin_limit_reached` with `Retry-After: 3600`. On top of it, each QR token is single-use (`jti` consumed with `SET NX`) and a reservation is stamped only once.
 
 Les limiters reads coûteux sont montés **avant** `jwtAuth` → bucket **IP** sur le limiter dédié ; le global `/v1/*` applique quand même le bucket user si le JWT est présent.
 

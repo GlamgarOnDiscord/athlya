@@ -25,6 +25,7 @@ import {
   type ReplayStore,
 } from '@athlya/auth/qr';
 import { withTenant } from '@athlya/db/client';
+import { isPostgresRaiseException } from '@athlya/db/errors';
 import { classes, reservations, users, type ReservationRow } from '@athlya/db/schema';
 import {
   checkIn,
@@ -158,12 +159,20 @@ export function createQrVerifier(
 /*  Repository                                                         */
 /* ------------------------------------------------------------------ */
 
-/** `checkin_mark_reservation` stamped nothing: a concurrent check-in won. */
-export class CheckinAlreadyStampedError extends Error {
-  public override readonly name = 'CheckinAlreadyStampedError';
+/** Why `checkin_mark_reservation` refused to stamp a reservation. */
+export type CheckinStampRejection =
+  'already_checked_in' | 'no_reservation' | 'checkin_limit_reached';
 
-  public constructor() {
-    super('reservation was checked in concurrently');
+/**
+ * `checkin_mark_reservation` stamped nothing. Between the lookup and the
+ * stamp the reservation was checked in by another scan, cancelled, or
+ * its class deleted, or the member hit the 5-per-hour bound (#338).
+ */
+export class CheckinStampRejectedError extends Error {
+  public override readonly name = 'CheckinStampRejectedError';
+
+  public constructor(public readonly reason: CheckinStampRejection) {
+    super(`check-in stamp rejected: ${reason}`);
   }
 }
 
@@ -241,16 +250,35 @@ export function createDrizzleCheckinRepo(db: AthlyaDb, claims: TenantClaims): Ch
     },
 
     async markCheckedIn(reservationId, at) {
-      const result: unknown = await withTenant(db, claims, (tx) =>
-        tx.execute(
-          sql`SELECT * FROM checkin_mark_reservation(${reservationId}::uuid, ${at.toISOString()}::timestamptz)`,
-        ),
-      );
-      const [row] = rowsOf(result);
-      if (row === undefined) {
-        throw new CheckinAlreadyStampedError();
-      }
-      return toReservationRow(row);
+      return withTenant(db, claims, async (tx) => {
+        let result: unknown;
+        try {
+          result = await tx.execute(
+            sql`SELECT * FROM checkin_mark_reservation(${reservationId}::uuid, ${at.toISOString()}::timestamptz)`,
+          );
+        } catch (err) {
+          if (isPostgresRaiseException(err, 'checkin_limit_reached')) {
+            throw new CheckinStampRejectedError('checkin_limit_reached');
+          }
+          throw err;
+        }
+        const [row] = rowsOf(result);
+        if (row !== undefined) {
+          return toReservationRow(row);
+        }
+        // Nothing stamped: tell a concurrent check-in apart from a
+        // reservation cancelled or a class deleted since the lookup.
+        const [state] = await tx
+          .select({ checkedInAt: reservations.checkedInAt })
+          .from(reservations)
+          .where(eq(reservations.id, reservationId))
+          .limit(1);
+        throw new CheckinStampRejectedError(
+          state !== undefined && state.checkedInAt !== null
+            ? 'already_checked_in'
+            : 'no_reservation',
+        );
+      });
     },
 
     async memberCard(userId) {
@@ -275,7 +303,7 @@ export function createDrizzleCheckinRepo(db: AthlyaDb, claims: TenantClaims): Ch
 /*  Key material                                                       */
 /* ------------------------------------------------------------------ */
 
-interface QrKeys {
+export interface QrKeys {
   readonly signingKey: SigningKey;
   readonly jwks: Jwks;
 }
@@ -296,7 +324,7 @@ function nonEmpty(value: unknown): value is string {
  * previous key too during a rotation, so a QR minted just before the
  * switch still verifies; without it the current public key is used.
  */
-function loadQrKeys(env: AthlyaBindings): Promise<QrKeys> {
+export function loadQrKeys(env: AthlyaBindings): Promise<QrKeys> {
   const wider = env as AthlyaBindings & {
     JWT_KID?: string;
     JWT_PRIVATE_KEY_PEM?: string;
@@ -340,8 +368,8 @@ export interface CheckInPorts {
 /**
  * Run the `@athlya/reservations` check-in for `operator` and shape the
  * kiosk outcome. The token is checked against the operator's studio, so
- * another studio's QR answers `wrong_studio`; a stamp lost to a
- * concurrent scan answers `already_checked_in`.
+ * another studio's QR answers `wrong_studio`; a stamp the database
+ * refuses answers its {@link CheckinStampRejection}.
  */
 export async function checkInWith(
   operator: AuthClaims,
@@ -358,8 +386,8 @@ export async function checkInWith(
       clock: ports.now,
     });
   } catch (err) {
-    if (err instanceof CheckinAlreadyStampedError) {
-      return { kind: 'fail', reason: 'already_checked_in' };
+    if (err instanceof CheckinStampRejectedError) {
+      return { kind: 'fail', reason: err.reason };
     }
     throw err;
   }

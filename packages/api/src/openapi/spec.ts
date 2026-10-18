@@ -95,6 +95,17 @@ const problemResponse = (description: string) => ({
   content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
 });
 
+/**
+ * The idempotency middleware answers a malformed key with
+ * `application/json` (title `invalid_idempotency_key`), not
+ * `application/problem+json`.
+ */
+const invalidIdempotencyKeyResponse = {
+  description:
+    'Empty `Idempotency-Key` or longer than 255 characters (title `invalid_idempotency_key`)',
+  content: { 'application/json': { schema: ProblemDetailsSchema } },
+};
+
 /* ------------------------------------------------------------------ */
 /*  Route definitions                                                  */
 /* ------------------------------------------------------------------ */
@@ -716,7 +727,7 @@ const logSessionRoute = createRoute({
       description: 'Session logged',
       content: { 'application/json': { schema: WorkoutSessionSchema } },
     },
-    400: problemResponse('Empty `Idempotency-Key` or longer than 255 characters'),
+    400: invalidIdempotencyKeyResponse,
     401: problemResponse('Not authenticated'),
     422: problemResponse(
       'Validation error (more than 50 exercises, more than 30 sets per exercise, …) or `studio_mismatch`',
@@ -883,7 +894,7 @@ const checkInRoute = createRoute({
   summary: 'Check a member in from their QR token (kiosk, admin or coach)',
   description:
     "The operator's session must be an admin or coach of the studio; the QR token names the " +
-    'member. The token is verified before any database read and consumed once.',
+    'member. The token is verified before any reservation or member read and consumed once.',
   security: [{ bearerAuth: [] }],
   request: {
     headers: z.object({
@@ -901,7 +912,7 @@ const checkInRoute = createRoute({
       description: 'Check-in successful',
       content: { 'application/json': { schema: CheckInResponseSchema } },
     },
-    400: problemResponse('Empty `Idempotency-Key` or longer than 255 characters'),
+    400: invalidIdempotencyKeyResponse,
     401: problemResponse(
       'Not authenticated, or the QR token was rejected (`code`: `invalid_signature`, ' +
         '`token_expired`, `replay`, `wrong_studio`, `wrong_kind`, `malformed`)',
@@ -910,7 +921,9 @@ const checkInRoute = createRoute({
     422: problemResponse(
       'Valid token but no check-in (`code`: `no_reservation`, `outside_window`, `already_checked_in`), or validation error',
     ),
-    429: problemResponse('Rate limited (60 check-ins per minute per operator)'),
+    429: problemResponse(
+      'Rate limited (60 check-ins per minute per operator), or `checkin_limit_reached`: the member was already checked in 5 times in the last hour',
+    ),
     503: problemResponse('Rate limiter unavailable (fail-closed, code `dependency_unavailable`)'),
   },
 });

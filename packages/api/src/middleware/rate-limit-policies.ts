@@ -82,8 +82,9 @@ export const MUTATION_BUDGETS = {
  * `POST /v1/checkins` is called by the kiosk operator (admin or coach,
  * issue #654), so the bucket is per operator: one scan per second
  * sustained covers a class starting. The per-member bound of issue
- * #338 is structural now: a check-in needs a single-use QR token and a
- * confirmed reservation within ±30 min, and stamps it only once.
+ * #338 (5 check-ins per hour) is enforced next to the stamp, by
+ * `checkin_mark_reservation` (migration 0045), across every operator
+ * and studio; it answers 429 `checkin_limit_reached`.
  */
 export const CHECKIN_BUDGET: RateLimitBudget = { userLimit: 60, windowSec: 60 };
 
@@ -306,7 +307,7 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     bucket: 'user',
     wiredIn: 'domain-router',
     notes:
-      'Issue #654 — per kiosk operator (admin/coach only); one check-in per reservation is enforced by the single-use token and checkin_mark_reservation (#338)',
+      'Issue #654 — per kiosk operator (admin/coach only); the per-member 5/hour bound of #338 is enforced by checkin_mark_reservation (429 checkin_limit_reached)',
   },
   {
     id: 'checkin-token',
