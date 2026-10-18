@@ -101,6 +101,7 @@ export function buildStubDeps(
       getExportJob: vi.fn(),
       openExportDownload: vi.fn(),
       listMembersByStudio: vi.fn(),
+      getProgression: vi.fn(),
       ...overrides.members,
     },
     classes: {

@@ -42,6 +42,8 @@ import {
   ProgramListResponseSchema,
   ProgramSubscriptionListResponseSchema,
   ProgramSubscriptionSchema,
+  ProgressionQuerySchema,
+  ProgressionResponseSchema,
   RefreshRequestSchema,
   AuditListResponseSchema,
   RegisterRequestSchema,
@@ -731,6 +733,47 @@ const listSessionsRoute = createRoute({
 });
 
 /*
+ * me — /v1/me/*
+ */
+
+const progressionRoute = createRoute({
+  method: 'get',
+  path: '/v1/me/progression',
+  tags: ['members'],
+  summary: 'Per-exercise volume and estimated 1RM trends plus weekly session frequency',
+  description:
+    'Aggregates the caller workout sessions over the last 30, 90 or 365 UTC days. ' +
+    'Volume = reps × weightKg; estimated 1RM uses the Epley formula w × (1 + r/30) ' +
+    'on sets of 1–12 reps with a weight. Sends `Cache-Control: private, max-age=60` ' +
+    'and an ETag; a matching `If-None-Match` returns 304.',
+  security: [{ bearerAuth: [] }],
+  request: { query: ProgressionQuerySchema },
+  responses: {
+    200: {
+      description: 'Progression for the requested window',
+      content: { 'application/json': { schema: ProgressionResponseSchema } },
+    },
+    304: { description: 'Not modified (ETag matched)' },
+    401: {
+      description: 'Not authenticated',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    422: {
+      description: 'Invalid window',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    429: {
+      description: 'Rate limited',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    503: {
+      description: 'Rate limiter unavailable (fail-closed, code `dependency_unavailable`)',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+  },
+});
+
+/*
  * checkins — /v1/checkins
  */
 
@@ -1116,6 +1159,9 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   // sessions
   app.openapi(logSessionRoute, stub);
   app.openapi(listSessionsRoute, stub);
+
+  // me
+  app.openapi(progressionRoute, stub);
 
   // audit
   app.openapi(listAuditRoute, stub);

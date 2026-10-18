@@ -47,7 +47,7 @@ Mise à jour : sortie v1.0.0.
 **Périmètre** (Epics 21-25, ~22 tâches) :
 
 - **21** AI coach : `packages/ai-coach/src/service.ts` + `/v1/coach/ask` streaming.
-- **22** Progression graphs : `packages/members/src/progression.ts` (volume + 1RM trends, 30/90/365j) + UI web/mobile.
+- **22** Progression graphs : `packages/members/src/progression.ts` (volume + 1RM trends, 30/90/365j) + UI web/mobile. ✅ Agrégateur, `GET /v1/me/progression` et UI web livrés (#639) ; UI mobile restante.
 - **23** BLE FTMS (mobile, dépend v1.1).
 - **24** Programs : schéma `programs` / `program_weeks`, service + assignment + UI studio admin. Shipped in #640 (migration 0042, `@athlya/programs`, `/v1/programs/*`, `/dashboard/programs`); the mobile home rendering of `GET /v1/programs/today` is still pending.
 - **25** Final checkpoint v0.3.

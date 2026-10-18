@@ -10,20 +10,20 @@ Cette page liste les requêtes hot path et l'index Drizzle (ou contrainte) qui l
 
 ## Synthèse
 
-| Table              | Index                                                           | Sert                                      |
-| ------------------ | --------------------------------------------------------------- | ----------------------------------------- |
-| `users`            | `users_email_unique` (UNIQUE)                                   | login by email                            |
-| `users`            | `users_studio_active_idx` (partial, `deleted_at IS NULL`)       | listMembersByStudio (admin/coach scope)   |
-| `studios`          | `studios_slug_unique` (UNIQUE)                                  | tenant resolver subdomain → studio        |
-| `classes`          | `classes_studio_starts_at_idx` (composite)                      | listClasses by studio + range             |
-| `reservations`     | `reservations_class_user_unique` (UNIQUE composite)             | book idempotency, cancel by composite key |
-| `outbox`           | `outbox_event_id_unique` (UNIQUE)                               | dedup on enqueue                          |
-| `outbox`           | `outbox_pending_idx` (partial, `published_at IS NULL`)          | drain worker primary query                |
-| `idempotency_keys` | composite primary key `(key, user_id)`                          | idempotency lookup                        |
-| `idempotency_keys` | `idempotency_keys_expires_at_idx`                               | TTL janitor                               |
-| `push_tokens`      | `push_tokens_token_unique` (UNIQUE)                             | dedup push registration                   |
-| `export_jobs`      | `export_jobs_user_active_idx` (partial, status pending/running) | "is there an export job in flight?"       |
-| `workout_sessions` | `workout_sessions_user_started_at_desc_idx`                     | listSessions (last 30 sessions)           |
+| Table              | Index                                                           | Sert                                                       |
+| ------------------ | --------------------------------------------------------------- | ---------------------------------------------------------- |
+| `users`            | `users_email_unique` (UNIQUE)                                   | login by email                                             |
+| `users`            | `users_studio_active_idx` (partial, `deleted_at IS NULL`)       | listMembersByStudio (admin/coach scope)                    |
+| `studios`          | `studios_slug_unique` (UNIQUE)                                  | tenant resolver subdomain → studio                         |
+| `classes`          | `classes_studio_starts_at_idx` (composite)                      | listClasses by studio + range                              |
+| `reservations`     | `reservations_class_user_unique` (UNIQUE composite)             | book idempotency, cancel by composite key                  |
+| `outbox`           | `outbox_event_id_unique` (UNIQUE)                               | dedup on enqueue                                           |
+| `outbox`           | `outbox_pending_idx` (partial, `published_at IS NULL`)          | drain worker primary query                                 |
+| `idempotency_keys` | composite primary key `(key, user_id)`                          | idempotency lookup                                         |
+| `idempotency_keys` | `idempotency_keys_expires_at_idx`                               | TTL janitor                                                |
+| `push_tokens`      | `push_tokens_token_unique` (UNIQUE)                             | dedup push registration                                    |
+| `export_jobs`      | `export_jobs_user_active_idx` (partial, status pending/running) | "is there an export job in flight?"                        |
+| `workout_sessions` | `workout_sessions_user_started_at_desc_idx`                     | listSessions (last 30 sessions), progression window (#639) |
 
 ## Détail par requête
 

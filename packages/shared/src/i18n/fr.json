@@ -124,6 +124,51 @@
       "addSet": "Ajouter une série",
       "notes": "Notes",
       "save": "Enregistrer la séance"
+    },
+    "progression": {
+      "title": "Ma progression",
+      "description": "Volume d'entraînement, 1RM estimé et fréquence hebdomadaire, calculés à partir des séances que vous enregistrez.",
+      "window": {
+        "legend": "Période",
+        "d30": "30 jours",
+        "d90": "90 jours",
+        "d365": "1 an"
+      },
+      "exercise": "Exercice",
+      "summary": {
+        "sessions": "Séances",
+        "volume": "Volume total",
+        "bestOneRepMax": "Meilleur 1RM estimé"
+      },
+      "volume": {
+        "title": "Volume — {exercise}",
+        "description": "Volume quotidien (répétitions × charge, cumulé sur toutes les séries), en kg.",
+        "point": "{date} : {value} kg"
+      },
+      "oneRepMax": {
+        "title": "1RM estimé — {exercise}",
+        "description": "Meilleur 1RM estimé du jour, formule d'Epley : charge × (1 + répétitions / 30), sur les séries de 1 à 12 répétitions.",
+        "point": "{date} : {value} kg",
+        "empty": "Aucune série chargée de 1 à 12 répétitions sur cette période."
+      },
+      "frequency": {
+        "title": "Fréquence hebdomadaire",
+        "description": "Nombre de séances commencées chaque semaine (du lundi au dimanche).",
+        "point": "Semaine du {date} : {sessions}",
+        "sessionsOne": "1 séance",
+        "sessionsOther": "{count} séances"
+      },
+      "table": {
+        "date": "Date",
+        "week": "Semaine du",
+        "kg": "kg",
+        "sessions": "Séances"
+      },
+      "keyboardHint": "Placez le focus sur un point du graphique, puis utilisez les flèches, Début et Fin pour passer d'une valeur à l'autre.",
+      "empty": "Aucune séance enregistrée sur cette période.",
+      "noWeight": "Aucune série chargée pour cet exercice sur cette période.",
+      "truncated": "Seules les 1 000 séances les plus récentes de cette période sont prises en compte.",
+      "link": "Ma progression"
     }
   },
   "consents": {

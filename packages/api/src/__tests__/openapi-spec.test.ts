@@ -94,6 +94,7 @@ describe('GET /openapi.json', () => {
       '/v1/studios/me',
       '/v1/sessions',
       '/v1/sessions/me',
+      '/v1/me/progression',
       '/v1/audit',
       '/v1/checkins',
       '/v1/billing/checkout',

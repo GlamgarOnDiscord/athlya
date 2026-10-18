@@ -57,6 +57,11 @@ describe('auth worker', () => {
     expect(await status(authApp, '/v1/programs')).toBe(404);
   });
 
+  it('returns 404 for /v1/me/* (reservations worker route)', async () => {
+    const s = await status(authApp, '/v1/me/progression');
+    expect(s).toBe(404);
+  });
+
   it('serves /health', async () => {
     const s = await status(authApp, '/health');
     expect(s).toBe(200);
@@ -87,6 +92,11 @@ describe('reservations worker', () => {
   it('serves /v1/programs/* (not 404)', async () => {
     expect(await status(reservationsApp, '/v1/programs')).not.toBe(404);
     expect(await status(reservationsApp, '/v1/programs/today')).not.toBe(404);
+  });
+
+  it('serves /v1/me/progression (not 404)', async () => {
+    const s = await status(reservationsApp, '/v1/me/progression');
+    expect(s).not.toBe(404);
   });
 
   it('returns 404 for /v1/auth/* (auth worker route)', async () => {
@@ -133,6 +143,11 @@ describe('billing worker', () => {
 
   it('returns 404 for /v1/programs/* (reservations worker route)', async () => {
     expect(await status(billingApp, '/v1/programs')).toBe(404);
+  });
+
+  it('returns 404 for /v1/me/* (reservations worker route)', async () => {
+    const s = await status(billingApp, '/v1/me/progression');
+    expect(s).toBe(404);
   });
 
   it('serves /health', async () => {
