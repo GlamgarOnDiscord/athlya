@@ -37,6 +37,10 @@
  * REQUIRED   — missing in either env fails the check immediately.
  * PRODUCTION — missing only on production fails the check.
  *              On staging, missing secrets are warned but not fatal.
+ * OPTIONAL   — never fatal, warned when missing. Secrets of features
+ *              behind a flag that is OFF by default: MISTRAL_API_KEY
+ *              (AI coach, `ai-coach` flag) on the Workers serving
+ *              /v1/coach (gateway and reservations).
  */
 
 import { execFileSync } from 'node:child_process';
@@ -101,6 +105,14 @@ export const PRODUCTION_REQUIRED = {
   billing: [...OBSERVABILITY, ...CF_ACCESS],
 };
 
+/** Optional secrets: warned when missing, never fatal (flag-gated features). */
+export const OPTIONAL = {
+  main: ['MISTRAL_API_KEY'],
+  auth: [],
+  reservations: ['MISTRAL_API_KEY'],
+  billing: [],
+};
+
 export const CONFIG_FILES = {
   main: undefined,
   auth: 'wrangler.auth.toml',
@@ -114,14 +126,16 @@ export const CONFIG_FILES = {
  *
  * @param {string} worker key of REQUIRED
  * @param {Set<string>} present secret names reported by wrangler
- * @returns {{ missing: string[], missingProduction: string[] }}
+ * @returns {{ missing: string[], missingProduction: string[], missingOptional: string[] }}
  */
 export function missingSecrets(worker, present) {
   const required = REQUIRED[worker] ?? [];
   const productionRequired = PRODUCTION_REQUIRED[worker] ?? [];
+  const optional = OPTIONAL[worker] ?? [];
   return {
     missing: required.filter((name) => !present.has(name)),
     missingProduction: productionRequired.filter((name) => !present.has(name)),
+    missingOptional: optional.filter((name) => !present.has(name)),
   };
 }
 
@@ -216,7 +230,7 @@ if (import.meta.main) {
 
   for (const worker of Object.keys(REQUIRED)) {
     const present = listSecrets(CONFIG_FILES[worker], env);
-    const { missing, missingProduction } = missingSecrets(worker, present);
+    const { missing, missingProduction, missingOptional } = missingSecrets(worker, present);
 
     if (missing.length > 0) {
       console.error(`[verify-secrets] MISSING on ${worker} (${env}): ${missing.join(', ')}`);
@@ -224,6 +238,12 @@ if (import.meta.main) {
     } else {
       console.log(
         `[verify-secrets] OK    ${worker} (${env}): all ${REQUIRED[worker].length} required secrets present`,
+      );
+    }
+
+    if (missingOptional.length > 0) {
+      console.warn(
+        `[verify-secrets] WARN  ${worker} (${env}): optional secret(s) not set (flag-gated features stay unavailable): ${missingOptional.join(', ')}`,
       );
     }
 

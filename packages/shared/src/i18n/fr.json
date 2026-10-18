@@ -724,5 +724,35 @@
         "body": "Le paiement de votre abonnement {subscriptionId} a échoué : {reason}. Merci de mettre à jour vos informations de paiement."
       }
     }
+  },
+  "coach": {
+    "title": "Coach IA",
+    "link": "Coach IA",
+    "description": "Posez une question sur votre entraînement. Un modèle d'IA répond à partir de vos séances des 30 derniers jours.",
+    "privacy": "Quand vous posez une question, votre question et un résumé de vos séances des 30 derniers jours sont envoyés à Mistral AI pour générer la réponse : dates et durées des séances, exercices avec séries, répétitions et charges maximales, nombre de séances par semaine, volume total et 1RM estimés. Votre nom, votre adresse e-mail et vos notes de séance ne sont jamais envoyés. Athlya ne conserve ni la question ni la réponse.",
+    "disabled": "Le coach IA n'est pas encore disponible pour votre compte.",
+    "consentRequired": "Le coach IA a besoin de votre consentement au partage de données avec des tiers. Vous pouvez le donner dans la section consentements de votre profil.",
+    "consentLink": "Gérer mes consentements",
+    "question": {
+      "label": "Votre question",
+      "hint": "{max} caractères maximum. Ne partagez pas d'informations de santé que vous souhaitez garder privées.",
+      "counterOne": "1 caractère sur {max}",
+      "counterOther": "{count} caractères sur {max}"
+    },
+    "submit": "Interroger le coach",
+    "thinking": "Le coach prépare sa réponse…",
+    "quotaOne": "1 question restante sur {limit} aujourd'hui",
+    "quotaOther": "{remaining} questions restantes sur {limit} aujourd'hui",
+    "quotaExhausted": "Vous avez utilisé toutes vos questions pour aujourd'hui. Revenez demain.",
+    "answer": {
+      "title": "Réponse du coach",
+      "recommendations": "Recommandations",
+      "caution": "Attention",
+      "disclaimer": "Conseils générés par IA. Ils ne remplacent ni un coach ni un professionnel de santé."
+    },
+    "errors": {
+      "unavailable": "Le coach est indisponible pour le moment. Réessayez dans un instant.",
+      "rateLimited": "Trop de questions en peu de temps. Patientez une minute."
+    }
   }
 }

@@ -124,7 +124,7 @@ const flagProvider = (env as { GROWTHBOOK_CLIENT_KEY?: string }).GROWTHBOOK_CLIE
 
 // Usage:
 const showCoachAI = await isEnabled(
-  'coach-ai-enabled',
+  'ai-coach',
   { userId: claims.userId, studioId: claims.studioId },
   flagProvider,
 );

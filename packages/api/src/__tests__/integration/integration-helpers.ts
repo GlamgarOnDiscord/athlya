@@ -541,7 +541,26 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
     listAuditLog: vi.fn(async () => ({ items: [], nextCursor: null })),
   };
 
-  return { auth, classes, reservations, sessions, checkins, members, studios, billing, audit };
+  const coach: DomainDeps['coach'] = {
+    isEnabled: vi.fn(async () => false),
+    getStatus: vi.fn(async () => ({ enabled: false as const })),
+    ask: vi.fn(async () => {
+      throw new Error('coach disabled in integration tests');
+    }),
+  };
+
+  return {
+    auth,
+    classes,
+    reservations,
+    sessions,
+    checkins,
+    members,
+    studios,
+    billing,
+    audit,
+    coach,
+  };
 }
 
 /* ------------------------------------------------------------------ */
