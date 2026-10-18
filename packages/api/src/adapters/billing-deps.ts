@@ -219,7 +219,12 @@ export function buildBillingDeps(env: AthlyaBindings): BillingDeps {
 
       const db = getOrCreateDbHttp(env.DB_URL);
       const [user] = await queryRows<ServiceUserRow>(db, serviceFn.findUserById(input.userId));
-      if (user === undefined || user.deleted_at !== null || user.studio_id !== input.studioId) {
+      if (
+        user === undefined ||
+        user.deleted_at !== null ||
+        user.email === null ||
+        user.studio_id !== input.studioId
+      ) {
         return { kind: 'user_not_found' as const };
       }
 

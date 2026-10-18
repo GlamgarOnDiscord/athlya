@@ -126,7 +126,9 @@ export interface AnonymizeUsersResult {
  * (Req 22.2), so in-place anonymisation is the only reconciliation.
  *
  * Anonymisation in-place:
- *   - `email` → `NULL` (the column is nullable since 0001_anonymise_email.sql)
+ *   - `email` → `NULL` (the column is nullable since
+ *               `0041_users_email_nullable.sql`, issue #628; readers
+ *               treat a NULL email as an erased account)
  *   - `display_name` → `'[deleted]'` (sentinel surfaced in any
  *                                     historical export — the user is
  *                                     visibly anonymised)

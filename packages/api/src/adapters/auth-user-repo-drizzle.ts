@@ -94,11 +94,11 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
             consents: input.consents satisfies Consents,
           }),
         );
-        const row = rows[0];
-        if (row === undefined) {
+        const user = rows[0] === undefined ? null : toUserRow(rows[0]);
+        if (user === null) {
           throw new Error('createUser: auth_create_member returned no row');
         }
-        return toUserRow(row);
+        return user;
       } catch (err) {
         // postgres-js surfaces unique-violation as SQLSTATE
         // 23505. Re-throw as the domain-level sentinel so the
@@ -135,12 +135,12 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
             event,
           }),
         );
-        const row = rows[0];
-        if (row === undefined) {
+        const user = rows[0] === undefined ? null : toUserRow(rows[0]);
+        if (user === null) {
           throw new Error('createUserWithEvent: auth_create_member_with_event returned no row');
         }
         noteOutboxWrite(event.type);
-        return toUserRow(row);
+        return user;
       } catch (err) {
         if (isPostgresUniqueViolation(err)) {
           throw new EmailTakenError();
@@ -191,8 +191,14 @@ export function createDrizzleUserRepo(db: AthlyaDbAny): UserRepo {
 /**
  * Map the snake_case row returned by the `auth_*` service functions to
  * the `UserRow` contract the auth service reads.
+ *
+ * A row whose `email` is NULL is a soft-deleted user already anonymised
+ * by the RGPD purge (migration 0041, issue #628). It maps to `null`:
+ * for the auth service that account no longer exists, exactly like an
+ * unknown id.
  */
-function toUserRow(row: ServiceUserRow): UserRow {
+function toUserRow(row: ServiceUserRow): UserRow | null {
+  if (row.email === null) return null;
   return {
     id: row.id,
     studioId: row.studio_id,

@@ -238,6 +238,27 @@ describe('createCheckoutSession when configured', () => {
     expect(form.get('metadata[studioId]')).toBe(STUDIO);
     expect(form.get('success_url')).toMatch(/^https:\/\/studio\.athlya\.test\/billing\/success/u);
   });
+
+  it('answers user_not_found for an account anonymised by the RGPD purge (issue #628)', async () => {
+    const env = {
+      ENVIRONMENT: 'staging',
+      DB_URL: 'postgres://billing-anonymised',
+      WEB_APP_URL: 'https://studio.athlya.test',
+      STRIPE_SECRET_KEY: 'sk_test_x',
+      STRIPE_PRICE_ID_PRO: 'price_pro',
+    };
+    const { db } = fakeDb(() => [{ id: ADMIN, studio_id: STUDIO, email: null, deleted_at: null }]);
+    dbHttpCache.set(env.DB_URL, db as unknown as AthlyaDbHttp);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const deps = buildBillingDeps(env as unknown as AthlyaBindings);
+
+    await expect(
+      deps.createCheckoutSession({ userId: ADMIN, studioId: STUDIO, plan: 'pro' }),
+    ).resolves.toEqual({ kind: 'user_not_found' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('checkoutIdempotencyKey', () => {

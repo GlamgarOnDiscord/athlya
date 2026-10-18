@@ -43,4 +43,5 @@
 \i tests/rls/outbox_lease.sql
 \i tests/rls/billing_runtime.sql
 \i tests/rls/cron_role.sql
+\i tests/rls/users_email_nullable.sql
 \i tests/rls/constraints.sql

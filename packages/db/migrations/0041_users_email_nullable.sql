@@ -1,0 +1,28 @@
+-- =====================================================================
+-- Athlya Platform — users.email becomes nullable (0041)
+--
+-- Issue #628. The RGPD retention cron (`anonymizeExpiredUsers`,
+-- `packages/api/src/maintenance/rgpd-purge.ts`) anonymises soft-deleted
+-- users past the retention window with `SET email = NULL`, but
+-- `users.email` was still `NOT NULL` from `0000_init.sql`. Every purge
+-- tick failed with SQLSTATE 23502, so expired accounts were never
+-- anonymised.
+--
+-- An anonymised row keeps its id (FKs from reservations, workout
+-- sessions and the audit log stay valid) and its `deleted_at`
+-- tombstone, with `email` NULL. Readers that can see such a row treat
+-- it as gone:
+--   - `auth_find_active_user_by_email` and `notification_recipient`
+--     filter `deleted_at IS NULL`, and `email = $1` never matches NULL;
+--   - `users_email_active_unique` (0026) is partial on
+--     `deleted_at IS NULL` and ignores NULLs anyway;
+--   - the API adapters narrow `email` and drop rows where it is NULL.
+-- No SECURITY DEFINER function changes, so owners, search_path and
+-- EXECUTE grants are untouched.
+--
+-- Expand-only (canary-safe): relaxing a constraint cannot break an old
+-- Worker. Old Workers never write NULL and only read live users, whose
+-- email stays set. Apply before, or together with, the deploy.
+-- =====================================================================
+
+ALTER TABLE "users" ALTER COLUMN "email" DROP NOT NULL;

@@ -14,11 +14,11 @@
  *                              book, waitlist position, cancel with
  *                              waitlist promotion (member claims)
  *   athlya_cron (CRON_DB_URL)  leased outbox claim privileges, capacity
- *                              reconcile snapshot
+ *                              reconcile snapshot, RGPD user anonymisation
  *   athlya_billing             Stripe event application (the only role
  *     (BILLING_DB_URL)         allowed to; athlya_app is refused)
  *
- * Usage (staging, after migrations 0031–0040):
+ * Usage (staging, after migrations 0031–0041):
  *   APP_DATABASE_URL=postgresql://athlya_app:...@.../athlya \
  *   CRON_DATABASE_URL=postgresql://athlya_cron:...@.../athlya \
  *   BILLING_DATABASE_URL=postgresql://athlya_billing:...@.../athlya \
@@ -315,6 +315,32 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     await tx`SELECT class_id, capacity, confirmed FROM capacity_reconcile_snapshot()`;
   });
   ok('capacity reconcile: cross-tenant snapshot through capacity_reconcile_snapshot()');
+
+  await rolledBack(cron, async (tx) => {
+    const [column] = await tx`
+      SELECT is_nullable FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'email'
+    `;
+    check(
+      column?.is_nullable === 'YES',
+      'users.email is NOT NULL: the RGPD purge fails with 23502 (apply 0041)',
+    );
+    await tx`
+      WITH expired AS (
+        SELECT id FROM users
+         WHERE deleted_at IS NOT NULL
+           AND deleted_at < now() - interval '30 days'
+           AND email IS NOT NULL
+         ORDER BY deleted_at ASC
+         LIMIT 1
+      )
+      UPDATE users
+         SET email = NULL, display_name = '[deleted]', avatar_url = NULL,
+             consents = '{}'::jsonb, password_hash = NULL
+       WHERE id IN (SELECT id FROM expired)
+    `;
+  });
+  ok('RGPD purge: users.email nullable, anonymisation UPDATE admitted (migration 0041)');
 }
 
 /**
