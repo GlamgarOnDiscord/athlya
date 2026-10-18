@@ -266,7 +266,7 @@ Insérée entre Epic 8 et Epic 10. Règle les 4 vrais bloquants identifiés dans
 
 ### Epic 22 — Progression graphs (1/2, #639)
 - 22.1 ✅ Agrégateur `packages/members/src/progression.ts` : fonction pure `computeProgression` (volume = reps × charge, 1RM Epley `w × (1 + r/30)` sur les séries de 1 à 12 reps, fréquence par semaine ISO complétée par des zéros, lignes revalidées avec `WorkoutSessionSchema`), tests unitaires + propriétés fast-check. Lecture RLS (`withTenantHttp`, policy `workout_sessions_read_own`) sur le handle routé par région (réplica EU, CN.8.3). Route `GET /v1/me/progression?window=30|90|365` sur le Worker bulkhead reservations (+ gateway), ETag + `Cache-Control: private, max-age=60`, limiter `progression-read` fail-closed.
-- 22.2 🟡 Web livré (`/me/progression`, SVG maison sans casser la CSP, focus clavier par flèches, tables de données pour lecteurs d'écran, clés FR/EN, sweep axe). Mobile restant (PR séparée, même endpoint).
+- 22.2 🟡 Web livré (`/me/progression`, SVG maison sans casser la CSP, accents de marque encre `#0A0A0A` / volt `#D7FF3A` (#637), focus clavier par flèches, tables de données pour lecteurs d'écran, clés FR/EN, sweep axe). Mobile restant (PR séparée, même endpoint).
 
 ---
 

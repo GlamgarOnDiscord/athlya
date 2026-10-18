@@ -13,8 +13,10 @@
  *
  * Rendering is plain SVG with presentation attributes, so the strict
  * CSP (no inline script, no `style=""`, no `unsafe-eval`) is kept.
- * Colours come from theme tokens: the series uses `primary`, text uses
- * the foreground / muted tokens, the grid uses `border`.
+ * Colours come from theme tokens: the series uses `chart-1` (brand ink
+ * on light surfaces, volt on dark ones), markers `chart-2`, the
+ * hover/focus band `chart-3`; text uses the foreground / muted tokens
+ * and the grid uses `border`.
  */
 'use client';
 
@@ -205,7 +207,7 @@ export function SeriesChart({
               y={CHART_MARGIN.top}
               width={band}
               height={PLOT_HEIGHT}
-              className="fill-muted"
+              className="fill-chart-3/60"
             />
           ) : null}
           {activePoint !== undefined && kind === 'line' ? (
@@ -224,7 +226,7 @@ export function SeriesChart({
                 <path
                   key={p.d.key}
                   d={barPath(p.x - barWidth / 2, p.y, barWidth)}
-                  className="fill-primary"
+                  className="fill-chart-1"
                 />
               ))
             : null}
@@ -232,7 +234,7 @@ export function SeriesChart({
             <path
               d={linePath}
               fill="none"
-              className="stroke-primary"
+              className="stroke-chart-1"
               strokeWidth={2}
               strokeLinejoin="round"
               strokeLinecap="round"
@@ -284,7 +286,7 @@ export function SeriesChart({
                   cx={p.x}
                   cy={p.y}
                   r={4.5}
-                  className="fill-primary stroke-background"
+                  className="fill-chart-2 stroke-chart-1"
                   strokeWidth={2}
                 />
               ) : null}
