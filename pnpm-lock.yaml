@@ -345,6 +345,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^5.20261016.1
         version: 5.20261016.1
+      '@electric-sql/pglite':
+        specifier: ^0.5.10
+        version: 0.5.10
       '@sentry/cli':
         specifier: 3.8.0
         version: 3.8.0

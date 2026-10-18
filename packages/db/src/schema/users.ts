@@ -9,7 +9,11 @@
  *     `CREATE EXTENSION citext` step so `UNIQUE(email)` is
  *     case-insensitive by construction. The application keeps
  *     normalising emails to lowercase on the way in for defence in
- *     depth.
+ *     depth. It is nullable since migration 0041 (issue #628): the RGPD
+ *     purge sets it to NULL once a soft-deleted user is past the
+ *     retention window. `users_email_live_check` makes live users
+ *     (`deleted_at IS NULL`) always hold one; readers drop rows whose
+ *     email is NULL instead of asserting it.
  *   - `password_hash` is nullable: OAuth-only accounts (Apple / Google)
  *     never hold a local bcrypt digest. The Auth service (task 3.1)
  *     enforces that either `passwordHash` or a linked provider identity
@@ -19,8 +23,8 @@
  *     before sending a campaign). The shape is validated by
  *     `ConsentsSchema` on every write.
  *   - `users_email_active_unique` is a PARTIAL unique index (WHERE
- *     deleted_at IS NULL). Soft-deleted users' emails are eventually
- *     retained until the 30-day RGPD audit-log anonymisation pass, but during
+ *     deleted_at IS NULL). Soft-deleted users' emails are retained until
+ *     the 30-day RGPD anonymisation pass sets them to NULL, but during
  *     that window a new user must be able to re-register with the same
  *     address (RGPD Art 17 — right to erasure must not silently prevent
  *     future re-use). The global `users_email_unique` index was dropped
@@ -33,7 +37,17 @@
  * delete), 13.2 (tenant isolation), 17.1 (consent gating).
  */
 
-import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { createdAt, deletedAt, sqlIsNull, uuidPrimaryKey } from './_shared.js';
 import { userRoleEnum } from './enums.js';
@@ -48,7 +62,7 @@ export const users = pgTable(
     studioId: uuid('studio_id')
       .notNull()
       .references(() => studios.id, { onDelete: 'cascade' }),
-    email: text('email').notNull(),
+    email: text('email'),
     displayName: text('display_name').notNull(),
     avatarUrl: text('avatar_url'),
     role: userRoleEnum('role').notNull().default('member'),
@@ -79,6 +93,10 @@ export const users = pgTable(
      * admins / coaches (Requirement 3.5).
      */
     index('users_studio_active_idx').on(table.studioId).where(sqlIsNull('deleted_at')),
+    check(
+      'users_email_live_check',
+      sql`${table.email} IS NOT NULL OR ${table.deletedAt} IS NOT NULL`,
+    ),
   ],
 );
 

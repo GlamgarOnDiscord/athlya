@@ -22,11 +22,17 @@ import { withConnectionRetry } from './db-retry.js';
 
 import type { AthlyaDbAny } from '@athlya/db/client';
 
-/** Row shape returned by the `auth_*` user functions (snake_case, as in SQL). */
+/**
+ * Row shape returned by the `auth_*` user functions (snake_case, as in SQL).
+ *
+ * `email` is NULL only for a soft-deleted user anonymised by the RGPD
+ * purge (migration 0041, issue #628), which `auth_find_user_by_id` can
+ * still return. Callers narrow it before use.
+ */
 export interface ServiceUserRow {
   readonly id: string;
   readonly studio_id: string;
-  readonly email: string;
+  readonly email: string | null;
   readonly display_name: string;
   readonly role: 'member' | 'coach' | 'admin';
   readonly password_hash: string | null;

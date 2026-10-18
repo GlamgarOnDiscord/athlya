@@ -630,6 +630,13 @@ describe('createDrizzleUserRepo', () => {
     });
   });
 
+  it('treats a tombstone anonymised by the RGPD purge as not found (issue #628)', async () => {
+    const { db } = fakeDb(() => [
+      { ...userRow, email: null, deleted_at: '2026-01-01T00:00:00.000Z' },
+    ]);
+    await expect(createDrizzleUserRepo(db).findUserById(userRow.id)).resolves.toBeNull();
+  });
+
   it('looks users up by email through the active-user function', async () => {
     const { db, calls } = fakeDb(() => []);
     await expect(createDrizzleUserRepo(db).findUserByEmail('x@athlya.test')).resolves.toBeNull();
@@ -781,6 +788,17 @@ describe('buildRecipientRepo', () => {
   it('returns null for an unknown or deleted user', async () => {
     const { db } = fakeDb(() => []);
     await expect(buildRecipientRepo(db).getRecipient(userRow.id)).resolves.toBeNull();
+  });
+
+  it('passes a NULL email through so the consumer skips the email leg (issue #628)', async () => {
+    const { db } = fakeDb(() => [
+      { id: userRow.id, email: null, consents: { marketing: false }, push_tokens: null },
+    ]);
+    await expect(buildRecipientRepo(db).getRecipient(userRow.id)).resolves.toMatchObject({
+      userId: userRow.id,
+      email: null,
+      pushTokens: [],
+    });
   });
 });
 

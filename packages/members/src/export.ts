@@ -79,7 +79,8 @@ export const EXPORT_R2_PREFIX = 'exports/members';
 export interface ExportProfile {
   id: string;
   studioId: string;
-  email: string;
+  /** NULL once the RGPD purge has anonymised the account (migration 0041). */
+  email: string | null;
   displayName: string;
   avatarUrl: string | null;
   role: 'member' | 'coach' | 'admin';

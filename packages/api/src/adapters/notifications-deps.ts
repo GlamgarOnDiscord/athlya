@@ -74,7 +74,7 @@ export function buildRecipientRepo(db: AthlyaDbAny): RecipientRepo {
       // `push_tokens` reads that FORCE RLS would hide from `athlya_app`.
       const rows = await queryRows<{
         id: string;
-        email: string;
+        email: string | null;
         consents: Recipient['consents'];
         push_tokens: string[] | null;
       }>(db, serviceFn.notificationRecipient(userId));
