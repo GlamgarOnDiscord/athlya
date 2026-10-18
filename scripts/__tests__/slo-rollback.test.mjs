@@ -551,7 +551,10 @@ describe('workflow and Terraform wiring', () => {
       alert,
       /--jq \.html_url \\\n\s+\|\| echo "::warning::GitHub issue creation failed"/,
     );
-    assert.match(alert, /SLACK_WEBHOOK_URL[\s\S]*\n\s+exit 1\n?$/);
+    assert.match(
+      alert,
+      /creation failed"\n\s+if \[ -n "\$\{SLACK_WEBHOOK_URL:-\}" \]; then\n[^\n]*\n\s+\| curl [^\n]*"\$\{SLACK_WEBHOOK_URL\}"[^\n]*\n[^\n]*\n\s+fi\n\s+exit 1\n?$/,
+    );
   });
 
   it('labels dry runs and never pages on them', () => {
