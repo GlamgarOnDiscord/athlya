@@ -7,6 +7,7 @@
  */
 import { headers } from 'next/headers';
 
+import { AthlyaLogo } from '../../components/AthlyaLogo';
 import { getLocale } from '../../lib/i18n/getLocale';
 import { createTranslator } from '../../lib/i18n/t';
 
@@ -25,6 +26,7 @@ export default async function LoginPage(): Promise<ReactElement> {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 px-6 py-12">
+      <AthlyaLogo height={36} className="self-start text-foreground" />
       <h1 className="text-3xl font-semibold">{t('studio.login.title')}</h1>
       <p className="text-sm text-muted-foreground">{t('studio.login.subtitle')}</p>
       <LoginForm nonce={nonce} />

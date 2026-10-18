@@ -1,77 +1,66 @@
 <div align="center">
 
-# Athlya
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/readme/banner-dark.svg">
+  <img alt="Athlya, plateforme fitness open-source" src="assets/brand/readme/banner-light.svg" width="100%">
+</picture>
 
-**Plateforme fitness open-source, multi-tenant, RGPD-first**
+<br/>
 
-Alternative auto-hébergeable à bsport, Mywellness et Mindbody pour les studios boutique, chaînes mid-size, coachs indépendants et communautés sportives.
+**La plateforme fitness open-source qui laisse les studios propriétaires de leurs données.**<br/>
+Réservations, membres, paiements et suivi d'entraînement. Multi-tenant, RGPD-first, servie à l'edge.
 
-[![CI](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/ci.yml/badge.svg)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/ci.yml)
-[![Integration (Docker / PBT)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/integration-docker.yml/badge.svg)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/integration-docker.yml)
-[![pgTAP RLS](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/pgtap.yml/badge.svg)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/pgtap.yml)
-[![CodeQL](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/codeql.yml/badge.svg)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/codeql.yml)
-[![Daily deps audit](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/deps-audit.yml/badge.svg)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/deps-audit.yml)
-[![License](https://img.shields.io/badge/license-AGPL--3.0-8b5cf6?style=flat-square)](#licence)
+<br/>
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178c6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Node](https://img.shields.io/badge/Node-24%20LTS-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
-[![pnpm](https://img.shields.io/badge/pnpm-11-f69220?style=flat-square&logo=pnpm&logoColor=white)](https://pnpm.io/)
-[![Turborepo](https://img.shields.io/badge/Turborepo-2.11-ef4444?style=flat-square&logo=turborepo&logoColor=white)](https://turborepo.dev/)
-[![Hono](https://img.shields.io/badge/Hono-4-ff6b00?style=flat-square)](https://hono.dev/)
-[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-f38020?style=flat-square&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Drizzle](https://img.shields.io/badge/Drizzle-ORM-c5f74f?style=flat-square&logo=drizzle&logoColor=black)](https://orm.drizzle.team/)
-[![Zod](https://img.shields.io/badge/Zod-4-3068b7?style=flat-square)](https://zod.dev/)
-[![Vitest](https://img.shields.io/badge/Vitest-5-6e9f18?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/)
-[![fast-check](https://img.shields.io/badge/fast--check-PBT-8b5cf6?style=flat-square)](https://fast-check.dev/)
+[![CI](https://img.shields.io/github/actions/workflow/status/GlamgarOnDiscord/athlya/ci.yml?branch=master&style=for-the-badge&label=CI&labelColor=0A0A0A&color=D7FF3A)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/ci.yml)
+[![pgTAP RLS](https://img.shields.io/github/actions/workflow/status/GlamgarOnDiscord/athlya/pgtap.yml?branch=master&style=for-the-badge&label=RLS&labelColor=0A0A0A&color=D7FF3A)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/pgtap.yml)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/GlamgarOnDiscord/athlya/codeql.yml?branch=master&style=for-the-badge&label=CodeQL&labelColor=0A0A0A&color=D7FF3A)](https://github.com/GlamgarOnDiscord/athlya/actions/workflows/codeql.yml)
+[![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-D7FF3A?style=for-the-badge&labelColor=0A0A0A)](#licence)
 
-[![Tests](https://img.shields.io/badge/tests-1260%20✓-22c55e?style=flat-square)](#état-des-tests)
-[![Couverture domaines](<https://img.shields.io/badge/tâches-277%2F313%20(88.5%25)-0ea5e9?style=flat-square>)](.kiro/specs/athlya-platform/tasks.md)
-[![PBT](https://img.shields.io/badge/property--based-9%2F10-8b5cf6?style=flat-square)](.kiro/specs/athlya-platform/PROGRESS.md)
-[![RGPD](https://img.shields.io/badge/RGPD-by%20design-22c55e?style=flat-square)](#vie-privée--rgpd)
-[![Changelog](https://img.shields.io/badge/changelog-v1.1.0-22c55e?style=flat-square)](CHANGELOG.md)
+[Démarrer](#-démarrer) · [Architecture](#-architecture) · [Stack](#-stack) · [Documentation](#-documentation) · [Contribuer](#-contribuer)
 
 </div>
 
 ---
 
-## Table des matières
+## ⚡ En bref
 
-- [Aperçu](#aperçu)
-- [Architecture](#architecture)
-- [Stack technique](#stack-technique)
-- [Démarrage](#démarrage)
-- [État du projet](#état-du-projet)
-- [État des tests](#état-des-tests)
-- [Coûts opérationnels](#coûts-opérationnels)
-- [Limites assumées (v0.1)](#limites-assumées-v01)
-- [Vie privée — RGPD](#vie-privée--rgpd)
-- [Procédure incident](#procédure-incident)
-- [Matrice fournisseurs](#matrice-fournisseurs)
-- [Conventions du monorepo](#conventions-du-monorepo)
-- [Contribution](#contribution)
-- [Licence](#licence)
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### 🏋️ Pour les studios
+
+Planning, réservations sans double-booking, liste d'attente automatique, abonnements Stripe, programmes d'entraînement et back-office dédié.
+
+</td>
+<td width="33%" valign="top">
+
+### 📱 Pour les membres
+
+Réserver en deux taps, check-in QR, suivi des séances et de la progression, export et suppression de ses données en self-service.
+
+</td>
+<td width="33%" valign="top">
+
+### 🔐 Pour les opérateurs
+
+Auto-hébergeable, licence AGPL, données en UE, isolation par Row-Level Security et audit log append-only.
+
+</td>
+</tr>
+</table>
+
+|                     |                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------- |
+| 🌍 **Edge-first**   | Requêtes terminées au PoP Cloudflare le plus proche (Hono sur Workers)                                  |
+| 📨 **Event-driven** | Emails, push et analytics passent par une outbox transactionnelle et des queues, jamais dans la requête |
+| 🛡️ **Zero-trust**   | JWT vérifié à l'edge, validation Zod à chaque frontière, RLS PostgreSQL en dernier rempart              |
+| 🎯 **SLO**          | p99 &lt; 500 ms · 99,9 % de disponibilité · zéro double-booking sous contention                         |
 
 ---
 
-## Aperçu
-
-Athlya est un monorepo Turborepo : **deux applications livrées en v1.0** (web membre Next.js 16, studio admin Next.js 16) et une API edge Hono sur Cloudflare Workers. L'application mobile Expo (Epic 11) est **roadmap v1.1** — voir [`docs/mobile/README.md`](docs/mobile/README.md) (fondation livrée dans `apps/mobile`, 9/13). La persistance repose sur Neon PostgreSQL 17 avec Row-Level Security, Upstash Redis pour les compteurs et limites, et un bus d'événements combinant Cloudflare Queues et Upstash QStash.
-
-Quatre axiomes structurent l'architecture :
-
-1. **Edge-first** — terminaison des requêtes au PoP Cloudflare le plus proche.
-2. **Event-driven** — les effets de bord (emails, push, analytics) passent par un bus asynchrone, jamais en RPC dans la requête utilisateur.
-3. **Local-first (cible mobile v1.1)** — objectif 72 h lecture hors-ligne + queue MMKV ; non livré en v1.0 backend-only.
-4. **Zero-trust / defense-in-depth** — JWT vérifié à l'edge, RLS PostgreSQL comme dernier rempart, validation Zod à chaque frontière.
-
-Cibles SLO : p99 < 500 ms, disponibilité 99,9 %, zéro double-booking sous contention.
-
-Les documents de spécification et de décision vivent dans [`.kiro/specs/athlya-platform/`](.kiro/specs/athlya-platform/) (`requirements.md`, `design.md`, `tasks.md`, `PROGRESS.md`, `hardening-plan.md`).
-
----
-
-## Architecture
+## 🧭 Architecture
 
 ```mermaid
 graph TD
@@ -81,7 +70,7 @@ graph TD
     end
 
     subgraph Clients_v11["Roadmap v1.1"]
-        Mobile["Mobile<br/>Expo SDK 55<br/>(0/13)"]
+        Mobile["Mobile<br/>Expo SDK 58<br/>(9/13)"]
     end
 
     subgraph Edge["Edge Cloudflare"]
@@ -132,386 +121,116 @@ graph TD
 
 ---
 
-## Stack technique
+## 🧰 Stack
 
-### Runtime
+<p>
+<img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-6.0-0A0A0A?style=flat-square&logo=typescript&logoColor=D7FF3A">
+<img alt="Node" src="https://img.shields.io/badge/Node-24_LTS-0A0A0A?style=flat-square&logo=node.js&logoColor=D7FF3A">
+<img alt="pnpm" src="https://img.shields.io/badge/pnpm-11-0A0A0A?style=flat-square&logo=pnpm&logoColor=D7FF3A">
+<img alt="Turborepo" src="https://img.shields.io/badge/Turborepo-2-0A0A0A?style=flat-square&logo=turborepo&logoColor=D7FF3A">
+<img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-0A0A0A?style=flat-square&logo=nextdotjs&logoColor=D7FF3A">
+<img alt="Hono" src="https://img.shields.io/badge/Hono-4-0A0A0A?style=flat-square&logo=hono&logoColor=D7FF3A">
+<img alt="Cloudflare Workers" src="https://img.shields.io/badge/Cloudflare-Workers-0A0A0A?style=flat-square&logo=cloudflare&logoColor=D7FF3A">
+<img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-17_+_RLS-0A0A0A?style=flat-square&logo=postgresql&logoColor=D7FF3A">
+<img alt="Drizzle" src="https://img.shields.io/badge/Drizzle-ORM-0A0A0A?style=flat-square&logo=drizzle&logoColor=D7FF3A">
+<img alt="Zod" src="https://img.shields.io/badge/Zod-4-0A0A0A?style=flat-square&logo=zod&logoColor=D7FF3A">
+<img alt="Vitest" src="https://img.shields.io/badge/Vitest-5-0A0A0A?style=flat-square&logo=vitest&logoColor=D7FF3A">
+<img alt="Playwright" src="https://img.shields.io/badge/Playwright-a11y-0A0A0A?style=flat-square&logo=playwright&logoColor=D7FF3A">
+</p>
 
-| Couche                         | Technologie                        | Version |
-| ------------------------------ | ---------------------------------- | ------- |
-| Langage                        | TypeScript                         | 6.0     |
-| Runtime serveur                | Node 24 LTS / Cloudflare Workers   | —       |
-| Gestionnaire                   | pnpm workspaces                    | 11      |
-| Build                          | Turborepo                          | 2.11    |
-| Framework API                  | Hono                               | 4.x     |
-| ORM                            | Drizzle                            | dernier |
-| Base de données                | PostgreSQL + RLS                   | 17      |
-| Cache / compteurs / rate limit | Upstash Redis                      | —       |
-| Storage binaire                | Cloudflare R2                      | —       |
-| Bus d'événements               | Cloudflare Queues + Upstash QStash | —       |
-| Validation                     | Zod `.strict()`                    | 4.x     |
+| Couche            | Choix                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| **Apps**          | Web membre et studio admin en Next.js 16 · mobile Expo (fondation, 9/13)                  |
+| **API**           | Hono 4 sur Cloudflare Workers, découpée en workers bulkhead (auth, réservations, billing) |
+| **Données**       | Neon PostgreSQL 17 + RLS forcée · Drizzle · Upstash Redis · Cloudflare R2                 |
+| **Événements**    | Outbox transactionnelle + Cloudflare Queues, drain déclenché à chaque écriture            |
+| **Paiements**     | Stripe (abonnements, webhooks idempotents)                                                |
+| **Observabilité** | OpenTelemetry → Axiom, Sentry, monitors SLO en Terraform                                  |
+| **Qualité**       | Vitest, fast-check (property-based), pgTAP, Playwright + axe, CodeQL, gitleaks            |
 
-### Observabilité
-
-| Signal      | Outil                        | Configuration                                           |
-| ----------- | ---------------------------- | ------------------------------------------------------- |
-| Traces OTel | **Axiom** (OTLP/HTTP JSON)   | endpoint configurable via `OTEL_EXPORTER_OTLP_ENDPOINT` |
-| Logs        | JSON structuré, Axiom        | `traceId`, `method`, `path`, `status`, `durationMs`     |
-| Métriques   | Cloudflare Analytics         | natif                                                   |
-| Erreurs     | Sentry (envelope v7 minimal) | —                                                       |
-| Uptime      | BetterStack                  | à configurer                                            |
-
-### Sécurité
-
-| Aspect           | Approche                                                      |
-| ---------------- | ------------------------------------------------------------- |
-| TLS              | 1.3 Cloudflare                                                |
-| Auth             | JWT RS256 (access 15 min, refresh rotatif 30 j)               |
-| Password         | bcrypt cost 12 + contrôle HIBP                                |
-| Isolation tenant | RLS PostgreSQL `FORCE ROW LEVEL SECURITY`                     |
-| Bot protection   | Cloudflare Turnstile sur register/login                       |
-| Headers          | HSTS, X-Frame-Options, Referrer-Policy, CSP                   |
-| Audit log        | Append-only (trigger + RLS `USING(false)` + SECURITY DEFINER) |
-
-### Tests
-
-| Niveau             | Outil                         | Nombre                   |
-| ------------------ | ----------------------------- | ------------------------ |
-| Unit + intégration | Vitest 5                      | ~1015                    |
-| Property-based     | fast-check 4                  | 9 invariants formels     |
-| RLS PostgreSQL     | pgTAP en CI                   | ~60 assertions           |
-| E2E + a11y         | Playwright 1.64 + axe-core    | CI `axe.yml` (`apps/**`) |
-| Mobile (prévu)     | Maestro ou EAS Device Testing | —                        |
+Le détail (observabilité, sécurité, tests) est dans le [manuel du projet](docs/project-handbook.md#stack-détaillée).
 
 ---
 
-## Démarrage
+## 🚀 Démarrer
 
-### Prérequis
-
-- **Node 24 LTS** (voir `.nvmrc`)
-- **pnpm 11** (`corepack enable` suffit — version lue dans `packageManager`)
-- **Docker** optionnel — requis uniquement pour les suites Testcontainers (RLS, cascade, booking property). Sans Docker, ces suites se skippent proprement via `describe.skipIf(!dockerReady)`.
-
-### Installation
+**Prérequis** : Node 24 LTS (`.nvmrc`), pnpm 11 (`corepack enable`). Docker est optionnel : sans lui, les suites Testcontainers se désactivent proprement.
 
 ```bash
-git clone https://github.com/GlamgarOnDiscord/athlya.git athlya
+git clone https://github.com/GlamgarOnDiscord/athlya.git
 cd athlya
 pnpm install
+pnpm preflight   # install figé · format · lint · typecheck · tests · build
 ```
 
-### Commandes racine
+<details>
+<summary><b>Commandes utiles</b></summary>
 
 ```bash
-pnpm -r build             # build de tous les packages
-pnpm -r test              # suite complète (suites Docker-gated s'auto-skippent)
-pnpm -r typecheck         # typecheck global
-pnpm -r lint              # ESLint 9 flat config
-pnpm format               # Prettier write
-pnpm format:check         # Prettier check
+pnpm -r test                                # toute la suite
+pnpm -r typecheck                           # typecheck global
+pnpm format                                 # Prettier
+pnpm --filter @athlya/api dev               # API locale (wrangler dev)
+pnpm --filter @athlya/web dev               # web membre
+pnpm --filter @athlya/studio dev            # studio admin
+pnpm --filter @athlya/api deploy:staging    # déploiement staging
 ```
 
-### Commandes par package
+</details>
+
+<details>
+<summary><b>Secrets</b></summary>
+
+Aucun secret dans `wrangler.toml` ni dans le repo (public, gitleaks en CI). Ils sont injectés par environnement :
 
 ```bash
-pnpm --filter @athlya/api dev              # wrangler dev local
-pnpm --filter @athlya/api test             # ~315 tests
-pnpm --filter @athlya/api typecheck
-pnpm --filter @athlya/api deploy:staging
-pnpm --filter @athlya/api deploy:production
-
-pnpm --filter @athlya/db test              # vitest + pgTAP si Docker
-pnpm --filter @athlya/ratelimit test       # 7 tests
-pnpm --filter @athlya/auth test            # 85 tests
+pnpm --filter @athlya/api exec wrangler secret put DB_URL --env staging
+pnpm --filter @athlya/api exec wrangler secret put REDIS_TOKEN --env staging
+pnpm --filter @athlya/api exec wrangler secret put JWT_JWKS_URL --env staging
 ```
 
-### Secrets
+Ce ne sont que des exemples : la liste complète, par Worker et par environnement, est dans [`deploy-production.md`](docs/runbooks/deploy-production.md) et [`rotate-secrets.md`](docs/runbooks/rotate-secrets.md). `scripts/verify-secrets.mjs` bloque tout déploiement auquel il manque un secret.
 
-Les secrets ne vivent **jamais** dans `wrangler.toml`. Ils sont injectés par environnement via `wrangler secret put` :
-
-```bash
-wrangler secret put DB_URL                    --env staging
-wrangler secret put REDIS_TOKEN               --env staging
-wrangler secret put JWT_JWKS_URL              --env staging
-wrangler secret put SENTRY_DSN                --env staging
-wrangler secret put OTEL_EXPORTER_OTLP_ENDPOINT  --env staging
-wrangler secret put OTEL_EXPORTER_OTLP_HEADERS   --env staging
-# Exemple de valeur pour Axiom :
-# https://api.axiom.co/v1/traces
-# Authorization=Bearer <token>,X-Axiom-Dataset=athlya-staging
-```
+</details>
 
 ---
 
-## État du projet
+## 📚 Documentation
 
-**~277 / 313 tâches livrées (~88.5 %)** — v1.1 backend + web + studio. Mobile Expo (Epic 11, 9/13 — fondation livrée), AI coach et Stripe production-mature : roadmap post-1.0 — [`docs/mobile/README.md`](docs/mobile/README.md).
-
-Voir [`PROGRESS.md`](.kiro/specs/athlya-platform/PROGRESS.md) et [CHANGELOG.md](CHANGELOG.md) pour le détail.
-
-| Épic                                 | État     |
-| ------------------------------------ | -------- |
-| 1 — Bootstrap monorepo               | ✅ 6/6   |
-| 2 — Base de données, migrations, RLS | ✅ 7/7   |
-| 3 — Authentification                 | ✅ 7/7   |
-| 4 — Rate limiter & idempotency       | ✅ 3/3   |
-| 5 — Members & RGPD                   | ✅ 7/7   |
-| 6 — Reservations domain              | ✅ 11/11 |
-| 7 — Checkpoint domaine               | ⏳ 0/1   |
-| 8 — API Gateway Hono                 | 🟡 10/12 |
-| 9 — Event bus, outbox, notifications | ✅ 7/7   |
-| 10 — Web member app                  | ✅ 8/8   |
-| 11 — Mobile Expo                     | ⏳ 0/13  |
-| 12 — Admin studio app                | ✅ 6/6   |
-| 13 — CI/CD & observability           | ✅ 5/5   |
-| 14 — Checkpoint v0.1 MVP             | ⏳ 0/1   |
-| 15 — Multi-tenant rollout            | 🟡 1/3   |
-| 16 — Billing Stripe                  | 🟡 1/3   |
-| 17 — Notifications extension         | 🟡 1/2   |
-| 19 — i18n Accept-Language            | ✅ 2/2   |
-
-**Hardening phase livrée** (insérée entre Epic 8 et Epic 10, voir [`hardening-plan.md`](.kiro/specs/athlya-platform/hardening-plan.md)) : H1 audit log SECURITY DEFINER, H2 DLQ drain, H3 circuit breaker per-isolate, H4 middleware chain tests, H5 `@athlya/ratelimit` extraction, H6 Axiom, H7 `.down.sql`, H8 README. Détail dans [CHANGELOG.md](CHANGELOG.md#1.0.0).
+|                         |                                                                                                                                                                                                                                        |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 📐 **Spécifications**   | [Exigences](.kiro/specs/athlya-platform/requirements.md) · [Design](.kiro/specs/athlya-platform/design.md) · [Tâches](.kiro/specs/athlya-platform/tasks.md) · [Avancement](.kiro/specs/athlya-platform/PROGRESS.md)                    |
+| 📖 **Manuel du projet** | [État, tests, coûts, limites, RGPD, incidents, fournisseurs](docs/project-handbook.md)                                                                                                                                                 |
+| 🛠️ **Runbooks**         | [Déploiement](docs/runbooks/deploy-production.md) · [Rollback](docs/runbooks/automatic-rollback.md) · [Migrations](docs/runbooks/expand-contract-migrations.md) · [Rôles DB](docs/runbooks/db-role-switch.md) · [tous](docs/runbooks/) |
+| 🔒 **Sécurité**         | [Dossier sécurité](docs/security/) · [Politique](SECURITY.md)                                                                                                                                                                          |
+| 🎨 **Marque**           | [Logo, mascotte, couleurs](docs/brand/README.md)                                                                                                                                                                                       |
+| 📝 **Historique**       | [CHANGELOG](CHANGELOG.md)                                                                                                                                                                                                              |
 
 ---
 
-## État des tests
+## 🇪🇺 Vie privée
 
-**~1 260 tests verts** répartis sur 10 packages.
-
-| Package                 | Tests                      | Notes                                                   |
-| ----------------------- | -------------------------- | ------------------------------------------------------- |
-| `@athlya/shared`        | 146/146                    | dont 7 PBT round-trip (Req 21.3)                        |
-| `@athlya/db`            | 57/57 (+ 4 Docker-gated)   | pgTAP RLS + audit anonymisation                         |
-| `@athlya/auth`          | 123/123                    | —                                                       |
-| `@athlya/ratelimit`     | 7/7                        | nouveau package (H5)                                    |
-| `@athlya/api`           | **567/567**                | dont 16 chain tests + 23 DLQ + 15 circuit breaker + PBT |
-| `@athlya/members`       | 72/72 (+ 2 Docker-gated)   | —                                                       |
-| `@athlya/reservations`  | 111/111 (+ 2 Docker-gated) | dont PBT P1, P2, P3                                     |
-| `@athlya/notifications` | 58/58                      | —                                                       |
-| `@athlya/billing`       | 30/30                      | —                                                       |
-| `@athlya/web`           | 89/89                      | —                                                       |
-
-### Property-based tests (PBT, fast-check)
-
-8 des 9 invariants formels sont validés. Un seul reste bloqué par le scaffolding mobile.
-
-| Invariant | Description                                   | Statut            |
-| --------- | --------------------------------------------- | ----------------- |
-| P1        | Capacité (pas de surbooking sous concurrence) | ✅                |
-| P2        | Idempotence de `bookClass`                    | ✅                |
-| P3        | Monotonie de la state-machine réservation     | ✅                |
-| P4        | Cascade RGPD complète                         | ✅                |
-| P5        | Drain offline FIFO + idempotent               | ⏳ bloqué Epic 11 |
-| P6        | JWT non-falsifiable et non-rejouable          | ✅                |
-| P7        | Isolation tenant (cross-tenant = 0 row)       | ✅                |
-| P8        | Exactitude sliding-window rate limit          | ✅                |
-| —         | Round-trip de sérialisation des domaines      | ✅                |
-
-Plus : property test circuit breaker "open state short-circuits fn" (H3) et "isolate independence".
+Consentements versionnés, export de ses données en self-service, droit à l'oubli avec cascade et purge planifiée, audit log append-only, hébergement des données en UE. Détails dans le [manuel du projet](docs/project-handbook.md#vie-privée--rgpd).
 
 ---
 
-## Coûts opérationnels
+## 🤝 Contribuer
 
-La promesse "free tier solo" de l'analyse concurrentielle initiale n'est pas atteignable sur un déploiement prod + staging réel. Voici un TCO honnête pour un studio pilote.
-
-| Poste                    | Free tier          | Coût au 1er user payant                           |
-| ------------------------ | ------------------ | ------------------------------------------------- |
-| Neon Postgres            | 500 MB, 1 projet   | **~19 €/mois** (Launch plan pour staging + prod)  |
-| Upstash Redis            | 10 000 req/jour    | **~10 €/mois** dès le 1er studio actif            |
-| Cloudflare Workers       | 100 000 req/jour   | **~5 €/mois** (Paid plan pour CPU time + Queues)  |
-| Resend                   | 100 mails/jour     | **~20 €/mois** (Pro à partir de 3 000 mails/mois) |
-| Sentry                   | 5 000 events/mois  | **~26 €/mois** (Team)                             |
-| Axiom                    | 500 GB ingest/mois | **0 €** si volume modeste                         |
-| Stripe                   | % des ventes       | variable                                          |
-| Domaine + DNS            | —                  | **~15 €/an**                                      |
-| **Total staging + prod** |                    | **~80-100 €/mois** au démarrage                   |
-
-> Au-delà de ~5 studios actifs ou ~500 membres : prévoir **150-250 €/mois**.
-
-Alerting et seuils par fournisseur : [`docs/runbooks/cost-monitoring.md`](docs/runbooks/cost-monitoring.md).
-
-Si la contrainte budgétaire est forte, plusieurs composants ont des chemins d'éjection vers du self-hosted sans coût récurrent — voir [Matrice fournisseurs](#matrice-fournisseurs).
-
----
-
-## Limites assumées (v0.1)
-
-Décisions arrêtées lors de la hardening phase, documentées dans [`hardening-plan.md`](.kiro/specs/athlya-platform/hardening-plan.md).
-
-### Circuit breaker — state per-isolate (H3)
-
-L'état du circuit breaker (`packages/api/src/circuit-breaker.ts`) vit **en mémoire par isolate Cloudflare Workers**. Sous charge, un service downstream mort peut être touché par N requêtes (une par isolate vivant) à chaque cycle half-open, pas une seule globalement.
-
-Accepté parce que :
-
-- les isolates sont reapés après ~15 s d'inactivité, la dérive per-isolate se corrige d'elle-même
-- la plateforme (Cloudflare retries, Hyperdrive fast-fail, Upstash SLA) absorbe déjà 90 % de la pression
-- une version Redis coûterait +5-10 ms par appel downstream — contradiction directe avec le SLO p99 < 500 ms (Req 23.2)
-
-### DLQ Cloudflare Queues — drain manuel (H2)
-
-La DLQ `athlya-events-dlq` est drainée automatiquement par un worker consumer qui upsert chaque message dans un tracker Redis (`dlq:entry:<id>` + sorted set `dlq:pending`). La visibilité passe par des endpoints admin :
-
-- `GET /admin/dlq/stats` — snapshot de la DLQ (admin-only, 403 Problem Details sinon)
-- `POST /admin/dlq/replay/:id` — re-publication manuelle sur le bus (404 si inconnu)
-- `POST /admin/dlq/discard/:id` — abandon de l'entrée (idempotent)
-
-**Pas d'alerte automatique** sur DLQ non vide — à configurer côté Axiom avec une query sur le log structuré `"[dlq] drain cycle complete" AND totalPending > 0`.
-
-### Testcontainers — skip-on-Docker
-
-Les suites PBT P4 (cascade RGPD), P7 (tenant isolation) et properties `reservations` utilisent Testcontainers quand Docker est disponible. En local sans Docker, P7 peut retomber sur PGlite ; P4/P1 se skippent via `describe.skipIf(!dockerReady)`. En CI : **`integration-docker.yml`** exécute les PBT Docker sur chaque PR touchant `packages/db|members|reservations|api` ; **`pgtap.yml`** couvre les assertions SQL RLS sur les migrations.
-
-### Exporter OTel — hand-rolled (task 8.6)
-
-`packages/api/src/middleware/otel.ts` roule son propre exporter OTLP/HTTP JSON au lieu d'utiliser `@opentelemetry/sdk-trace-*`. Raison : bundle Worker ~200 KB évité. Compatible avec Axiom, Grafana Cloud, Honeycomb et tout backend OTLP standard. Conséquence : pas de debug via `otel-collector` CLI, envelope à maintenir nous-mêmes.
-
-### Sentry — envelope minimal (task 8.7)
-
-`packages/api/src/sentry.ts` envoie un envelope v7 POST direct au DSN ingest URL, sans `@sentry/cloudflare`. Fournit `captureException(err, { traceId, tags, extra })`. **Ne fournit pas** breadcrumbs, session tracking, release health, source maps upload. Pour passer à la vraie lib, remplacer le fichier le jour où le plan Sentry Team devient justifié.
-
----
-
-## Vie privée — RGPD
-
-Athlya est RGPD-first : le consentement granulaire, la portabilité et le droit à l'oubli sont des features de premier rang, pas une couche ajoutée.
-
-### Consentement versionné
-
-Chaque utilisateur a un champ `consents` JSON :
-
-```json
-{
-  "marketing": false,
-  "analytics": true,
-  "thirdParty": false,
-  "version": "2026-01",
-  "updatedAt": "2026-05-10T10:23:00Z"
-}
-```
-
-Chaque changement est horodaté avec la version des CGU en vigueur.
-
-### Export self-service (Req 4)
-
-`POST /v1/members/me/export` enfile un job asynchrone. Sous 48 h, un email avec un lien signé 72 h permet de télécharger un ZIP (JSON + CSV) contenant profil, consentements, réservations, séances, check-ins et factures.
-
-### Droit à l'oubli (Req 5)
-
-`DELETE /v1/auth/me` marque soft-delete puis un consumer Cloudflare Queues cascade les suppressions (réservations, sessions, push tokens, avatar R2). À J+30, un job cron anonymise les entrées `audit_log` référençant l'utilisateur via la fonction PostgreSQL **`SECURITY DEFINER`** `anonymize_user_audit(uuid)` — unique chemin de mutation autorisé sur la table append-only.
-
-### Append-only audit log
-
-L'intégrité de l'`audit_log` est garantie par **quatre lignes de défense** superposées :
-
-1. **Privilèges SQL** — `REVOKE UPDATE, DELETE FROM PUBLIC, athlya_app, athlya_cron`
-2. **Policies RLS** — `CREATE POLICY audit_no_update ... USING (false)`, idem pour DELETE
-3. **Trigger** — `audit_log_immutable()` raise `audit_log is append-only` pour tout `current_user` différent de `athlya_owner`
-4. **Ownership + BYPASSRLS** — table `audit_log` ownée par `athlya_owner`, seul rôle capable d'exécuter la fonction SECURITY DEFINER
-
-### Résidence EU
-
-Données **au repos** en UE (Neon Frankfurt, Upstash EU, R2/Queues compte EU). Compute Workers via Smart Placement (co-localisation perf, pas pin `region_exclusive_eu` — voir `docs/security/eu-data-residency-adr.md`, Req 5.5).
-
----
-
-## Procédure incident
-
-1. Récupérer le **`x-trace-id`** depuis le header de réponse ou le front
-2. **Axiom** — query `tags.trace_id = "<id>"` sur le dataset `athlya-api` (spans OTel avec `http.method`, `http.route`, `http.status_code`, `studio.id`, `user.id`)
-3. **Sentry** — event avec tag `trace_id` pour la stack backend
-4. **Wrangler Tail** — `wrangler tail --env production` pour les logs JSON en direct
-5. **DLQ** — `GET /admin/dlq/stats` pour les messages non consommés sur le bus
-
-### Rollback d'une migration
-
-Chaque migration a un `.down.sql` FK-safe. Rollback en incident, ordre inverse :
-
-```bash
-psql $DB_URL -f packages/db/migrations/0003_audit_anonymization.down.sql
-psql $DB_URL -f packages/db/migrations/0002_export_jobs.down.sql
-psql $DB_URL -f packages/db/migrations/0001_rls.down.sql
-psql $DB_URL -f packages/db/migrations/0000_init.down.sql
-```
-
-Tous les rollbacks sont idempotents (`DROP ... IF EXISTS`). Les extensions PostgreSQL (`pgcrypto`, `citext`) ne sont **jamais** droppées (cluster-shared). Voir [`packages/db/migrations/README.md`](packages/db/migrations/README.md).
-
----
-
-## Matrice fournisseurs
-
-Le vendor lock-in est un des griefs principaux adressés aux SaaS concurrents. Chaque fournisseur utilisé par Athlya a un chemin d'éjection documenté.
-
-| Service            | Alternative                                       | Effort de migration                                   |
-| ------------------ | ------------------------------------------------- | ----------------------------------------------------- |
-| Neon Postgres      | Postgres 17 standard (Supabase, RDS, self-hosted) | 🟢 Faible — Drizzle portable, migrations SQL pures    |
-| Upstash Redis      | Redis self-hosted, KeyDB, Dragonfly               | 🟢 Faible — API REST standard                         |
-| Cloudflare Queues  | RabbitMQ, AWS SQS, QStash seul                    | 🟡 Moyen — outbox pattern préserve l'invariant        |
-| Resend             | SMTP + nodemailer, Mailgun, Postmark              | 🟢 Faible — DI port dans `@athlya/notifications`      |
-| Cloudflare Workers | Node.js standalone (Hono), Bun, Deno              | 🟡 Moyen — code framework-free, bindings à rebrancher |
-| Stripe             | Adyen, Mollie, Lemon Squeezy                      | 🔴 Élevé — adapter Billing dédié                      |
-| Axiom              | Grafana Cloud, Honeycomb, tout backend OTLP       | 🟢 Nul — endpoint configurable                        |
-| Sentry             | Glitchtip (open-source), Highlight                | 🟡 Moyen — envelope v7 est un protocole stable        |
-
----
-
-## Conventions du monorepo
-
-- **pnpm 11 workspaces** + **Turborepo 2.11**
-- **Node 24 LTS** pinné via `.nvmrc` + `engines`
-- **TypeScript 6.0** strict, **ESLint 9** flat config, **Prettier 3**
-- Packages domaine **framework-free** avec DI ports (Repo, Counter, Publisher, Store)
-- **Hono** est peerDependency optionnelle de `@athlya/api` ; les middlewares sont duck-typés sur un contexte minimal `{ header(k,v); set; get; req; env }`
-- **Zod `.strict()`** sur tous les bodies de requête sauf `AuditLog.metadata`
-- **Branded IDs** via `.transform()` (pas `Zod.brand()`)
-- **fast-check ^4** + `@fast-check/vitest` pour les PBT, `numRuns` 20-200, seeds hex fixes
-- Testcontainers : sonde synchrone `docker info` au module load + `describe.skipIf(!dockerReady)` ; un test "infra probe" toujours enregistré
-- Worker bundle : aucun import Node-only, `crypto.getRandomValues` / `crypto.randomUUID` globaux Web
-
-### Structure des packages
-
-```
-packages/
-├── api/            # Gateway Hono + middlewares (auth, tenant, otel, ratelimit, validator, problem-details)
-├── auth/           # Service d'authentification, JWT, QR check-in
-├── billing/        # Stripe Connect (DI port)
-├── db/             # Schémas Drizzle, RLS policies, migrations + down.sql
-├── members/        # Profils, consents, export/cascade RGPD
-├── notifications/  # Consumer du bus → Resend + Expo Push
-├── ratelimit/      # Sliding window Upstash (extrait de api en H5)
-├── reservations/   # Domaine critique (bookClass, cancel, waitlist, checkin)
-├── shared/         # Tokens design, i18n, schémas Zod, codecs, événements
-├── eslint-config/  # Flat config partagée
-├── prettier-config/
-└── tsconfig/       # Presets base, node, react, next
-```
-
----
-
-## Contribution
-
-1. Lire [`project.md`](project.md) pour le pitch et la rationale de stack
-2. Lire [`.kiro/specs/athlya-platform/requirements.md`](.kiro/specs/athlya-platform/requirements.md) et [`design.md`](.kiro/specs/athlya-platform/design.md) avant tout PR qui touche un invariant formel
-3. `pnpm preflight` doit passer vert (install figé, format, lint, typecheck, tests, build)
-4. Suivre les conventions ESLint + Prettier (`pnpm format` avant push)
-5. Toute migration SQL doit avoir son `.down.sql`
-6. Tout nouveau middleware doit avoir ses unit tests **et** un cas dans `middleware-chain.test.ts`
+1. Lire [`project.md`](project.md), puis les [exigences](.kiro/specs/athlya-platform/requirements.md) et le [design](.kiro/specs/athlya-platform/design.md) avant de toucher un invariant.
+2. Suivre le workflow décrit dans [`CONTRIBUTING.md`](CONTRIBUTING.md) : issue → branche → PR, revues IA obligatoires.
+3. `pnpm preflight` doit être vert avant chaque push.
+4. Migrations SQL en expand/contract, toujours avec leur `.down.sql`.
 
 ---
 
 ## Licence
 
-[AGPL-3.0-only](LICENSE)
+[AGPL-3.0-only](LICENSE). Un copyleft fort, par choix : la valeur d'Athlya, c'est que l'opérateur reste propriétaire de ses données. Une licence permissive autoriserait un fork propriétaire qui recréerait le vendor lock-in que le projet combat.
 
-Copyleft fort par choix : la valeur d'Athlya repose sur la propriété des données pour l'opérateur — une licence permissive autoriserait un fork propriétaire qui reproduirait le vendor lock-in que le projet vise à combattre.
-
----
+<br/>
 
 <div align="center">
-
-**[Documentation](.kiro/specs/athlya-platform/) · [Progress](.kiro/specs/athlya-platform/PROGRESS.md) · [Hardening](.kiro/specs/athlya-platform/hardening-plan.md) · [Critique](critique.md)**
-
-Construit pour les studios qui veulent leurs données.
-
+<img src="assets/brand/svg/athlya-mascot-ink.svg" width="56" alt="A-mi, la mascotte Athlya">
+<br/>
+<sub>Construit pour les studios qui veulent garder leurs données.</sub>
 </div>
