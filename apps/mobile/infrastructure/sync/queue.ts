@@ -193,12 +193,21 @@ export class MutationQueue {
     return true;
   }
 
-  public deadLetters(): readonly DeadLetter[] {
-    return [...this.#deadLetters];
+  /** The given user's pending mutations, in FIFO order; none for `null`. */
+  public pendingFor(ownerId: string | null): readonly PendingMutation[] {
+    return this.#items.filter((item) => ownerId !== null && item.ownerId === ownerId);
   }
 
-  public discardDeadLetter(id: string): boolean {
-    const next = this.#deadLetters.filter((item) => item.id !== id);
+  /** The given user's dead letters; none for `null`, so no account sees another's. */
+  public deadLetters(ownerId: string | null): readonly DeadLetter[] {
+    return this.#deadLetters.filter((item) => ownerId !== null && item.ownerId === ownerId);
+  }
+
+  /** Discards one of the given user's dead letters; `false` for anyone else's. */
+  public discardDeadLetter(id: string, ownerId: string | null): boolean {
+    const next = this.#deadLetters.filter(
+      (item) => item.id !== id || ownerId === null || item.ownerId !== ownerId,
+    );
     if (next.length === this.#deadLetters.length) return false;
     this.#deadLetters = next;
     this.#store.set(this.#deadLetterKey, JSON.stringify(this.#deadLetters));

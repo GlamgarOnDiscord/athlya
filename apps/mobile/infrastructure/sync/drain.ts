@@ -108,7 +108,7 @@ export async function drainMutationQueue(
   const sleep = options.sleep ?? defaultSleep;
   const random = options.random ?? Math.random;
   const ownerId = options.ownerId;
-  const total = queue.peek().filter((m) => m.ownerId === ownerId).length;
+  const total = queue.pendingFor(ownerId).length;
   let processed = 0;
   let acknowledged = 0;
   let deadLettered = 0;

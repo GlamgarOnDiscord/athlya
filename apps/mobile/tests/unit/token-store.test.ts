@@ -145,14 +145,25 @@ describe('TokenStore (tasks 11.2 / 11.3)', () => {
     expect(secure.items.get(BIOMETRIC_UNLOCK_KEY)).toBe('true');
   });
 
-  it('rejects a session saved for an epoch that clear() invalidated', async () => {
+  it('rejects a session saved for a generation that clear() invalidated', async () => {
     const { store, secure } = createTokenStore();
-    const epoch = store.epoch;
+    const generation = store.generation();
     await store.clear();
 
-    await expect(store.saveSession(SESSION, epoch)).resolves.toBe(false);
+    await expect(store.saveSession(SESSION, generation)).resolves.toBe(false);
     expect(store.getAccessToken()).toBeNull();
     expect(secure.items.has(REFRESH_TOKEN_KEY)).toBe(false);
-    await expect(store.saveSession(SESSION, store.epoch)).resolves.toBe(true);
+    await expect(store.saveSession(SESSION, store.generation())).resolves.toBe(true);
+  });
+
+  it('keeps the rotated refresh token but stays locked when lock() ran meanwhile', async () => {
+    const { store, secure } = createTokenStore();
+    const generation = store.generation();
+    store.lock();
+
+    await expect(store.saveSession(SESSION, generation)).resolves.toBe(false);
+    expect(store.getAccessToken()).toBeNull();
+    expect(store.isUnlocked()).toBe(false);
+    expect(secure.items.get(REFRESH_TOKEN_KEY)).toBe('refresh-1');
   });
 });

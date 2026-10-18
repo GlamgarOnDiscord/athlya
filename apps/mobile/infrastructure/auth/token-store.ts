@@ -27,6 +27,12 @@ export interface SessionTokens {
   readonly accessTokenExpiresIn: number;
 }
 
+/** Snapshot taken by a refresh before its request; see `TokenStore.generation()`. */
+export interface SessionGeneration {
+  readonly epoch: number;
+  readonly lock: number;
+}
+
 export interface TokenStoreOptions {
   readonly now?: () => number;
   readonly unlockPrompt?: string;
@@ -69,27 +75,31 @@ export class TokenStore implements AccessTokenSource {
   }
 
   /**
-   * Session generation, bumped by `clear()`. A refresh captures it before
-   * its request and passes it to `saveSession`, so a response that lands
-   * after sign-out cannot restore the session.
+   * Generation counters a refresh captures before its request and passes to
+   * `saveSession`: `epoch` is bumped by `clear()` (sign-out), `lock` by
+   * `lock()`. A response that lands after either cannot unlock the session.
    */
-  public get epoch(): number {
-    return this.#epoch;
+  public generation(): SessionGeneration {
+    return { epoch: this.#epoch, lock: this.#lockGeneration };
   }
 
   /**
    * Stores a freshly issued session: the rotated refresh token replaces the
    * previous one in secure storage, the access token stays in memory.
-   * Resolves `false`, storing nothing, when `expectedEpoch` is stale.
+   * With `expected`, a save after a sign-out stores nothing, and a save
+   * after a `lock()` keeps the rotated refresh token (the old one is spent)
+   * but leaves the store locked with no access token. Resolves whether the
+   * session is now usable.
    */
-  public async saveSession(tokens: SessionTokens, expectedEpoch?: number): Promise<boolean> {
-    if (expectedEpoch !== undefined && expectedEpoch !== this.#epoch) return false;
+  public async saveSession(tokens: SessionTokens, expected?: SessionGeneration): Promise<boolean> {
+    if (expected !== undefined && expected.epoch !== this.#epoch) return false;
     await this.#secure.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
     await this.#secure.setItem(USER_ID_KEY, tokens.userId);
-    if (expectedEpoch !== undefined && expectedEpoch !== this.#epoch) {
+    if (expected !== undefined && expected.epoch !== this.#epoch) {
       await this.#forget();
       return false;
     }
+    if (expected !== undefined && expected.lock !== this.#lockGeneration) return false;
     this.#accessToken = tokens.accessToken;
     this.#accessTokenExpiresAt = this.#now() + tokens.accessTokenExpiresIn * 1000;
     this.#unlocked = true;

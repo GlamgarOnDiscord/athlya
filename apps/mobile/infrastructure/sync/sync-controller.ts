@@ -38,7 +38,9 @@ export interface SyncState {
   /** Progress of the running drain; both 0 when idle. */
   readonly total: number;
   readonly processed: number;
+  /** The signed-in user's queued mutations (another account's never count). */
   readonly pending: number;
+  /** The signed-in user's rejected mutations. */
   readonly deadLetters: number;
   readonly lastResult: DrainResult | null;
 }
@@ -64,6 +66,7 @@ export class SyncController {
   #state: SyncState;
   #running: Promise<DrainResult | null> | null = null;
   #rerunRequested = false;
+  #ownerId: string | null = null;
 
   public constructor(options: SyncControllerOptions) {
     this.#options = options;
@@ -71,8 +74,8 @@ export class SyncController {
       status: options.connectivity.isOnline() ? 'idle' : 'offline',
       total: 0,
       processed: 0,
-      pending: options.queue.size,
-      deadLetters: options.queue.deadLetters().length,
+      pending: 0,
+      deadLetters: 0,
       lastResult: null,
     };
   }
@@ -91,11 +94,9 @@ export class SyncController {
       if (reconnected) this.#fireAndForget();
     });
     const stopQueue = this.#options.queue.subscribe(() => {
-      this.#update({
-        pending: this.#options.queue.size,
-        deadLetters: this.#options.queue.deadLetters().length,
-      });
+      this.#update(this.#counts());
     });
+    void this.refreshOwner();
     if (wasOnline) this.#fireAndForget();
     return () => {
       stopConnectivity();
@@ -120,6 +121,19 @@ export class SyncController {
     return this.#running;
   }
 
+  /**
+   * Re-reads the signed-in user and republishes their counts. Call it after
+   * sign-in and sign-out so the banner never shows another account's data.
+   */
+  public async refreshOwner(): Promise<void> {
+    try {
+      this.#ownerId = await this.#options.getOwnerId();
+      this.#update(this.#counts());
+    } catch (error) {
+      this.#options.onError?.(error);
+    }
+  }
+
   public getState(): SyncState {
     return this.#state;
   }
@@ -138,9 +152,10 @@ export class SyncController {
         this.#rerunRequested = false;
         if (!this.#options.connectivity.isOnline() || this.#options.queue.size === 0) break;
         const ownerId = await this.#options.getOwnerId();
+        this.#ownerId = ownerId;
         this.#update({
           status: 'syncing',
-          total: this.#options.queue.peek().filter((m) => m.ownerId === ownerId).length,
+          total: this.#options.queue.pendingFor(ownerId).length,
           processed: 0,
         });
         result = await drainMutationQueue(this.#options.queue, this.#options.api, {
@@ -172,11 +187,17 @@ export class SyncController {
       status,
       total: 0,
       processed: 0,
-      pending: this.#options.queue.size,
-      deadLetters: this.#options.queue.deadLetters().length,
+      ...this.#counts(),
       lastResult: result ?? this.#state.lastResult,
     });
     return result;
+  }
+
+  #counts(): Pick<SyncState, 'pending' | 'deadLetters'> {
+    return {
+      pending: this.#options.queue.pendingFor(this.#ownerId).length,
+      deadLetters: this.#options.queue.deadLetters(this.#ownerId).length,
+    };
   }
 
   #fireAndForget(): void {

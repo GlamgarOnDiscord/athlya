@@ -70,6 +70,7 @@ describe('SyncController (task 11.7)', () => {
     const { api, sent } = okApi();
     const controller = new SyncController({ queue, api, getOwnerId: owner, connectivity });
     const stop = controller.start();
+    await flush();
 
     expect(controller.getState().status).toBe('offline');
     expect(controller.getState().pending).toBe(1);
@@ -127,8 +128,13 @@ describe('SyncController (task 11.7)', () => {
     let inFlight = 0;
     let maxInFlight = 0;
     const sent: string[] = [];
+    let firstSent = (): void => undefined;
+    const firstInFlight = new Promise<void>((resolve) => {
+      firstSent = resolve;
+    });
     const api: Pick<ApiClient, 'send'> = {
       send: async (_method, path) => {
+        firstSent();
         inFlight += 1;
         maxInFlight = Math.max(maxInFlight, inFlight);
         sent.push(path);
@@ -145,6 +151,7 @@ describe('SyncController (task 11.7)', () => {
     });
 
     const first = controller.syncNow();
+    await firstInFlight;
     queue.enqueue({ ownerId: OWNER, kind: 'b', path: '/v1/b' });
     const second = controller.syncNow();
     const third = controller.syncNow();

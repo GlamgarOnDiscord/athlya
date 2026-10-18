@@ -108,7 +108,7 @@ describe('drainMutationQueue (Algorithm 4)', () => {
     });
     expect(result.acknowledged).toBe(1);
     expect(queue.size).toBe(0);
-    expect(queue.deadLetters()).toEqual([]);
+    expect(queue.deadLetters(OWNER)).toEqual([]);
   });
 
   it('dead-letters a permanent 4xx with its problem code and continues', async () => {
@@ -134,7 +134,7 @@ describe('drainMutationQueue (Algorithm 4)', () => {
 
     expect(calls).toHaveLength(2);
     expect(result).toMatchObject({ acknowledged: 1, deadLettered: 1, stoppedBy: 'completed' });
-    expect(queue.deadLetters()).toEqual([
+    expect(queue.deadLetters(OWNER)).toEqual([
       expect.objectContaining({ id: a.id, status: 422, problemCode: 'class_in_past' }),
     ]);
   });

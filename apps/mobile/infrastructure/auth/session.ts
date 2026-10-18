@@ -37,9 +37,11 @@ export function createSessionRefresher(
   let inflight: Promise<string | null> | null = null;
 
   async function refresh(): Promise<string | null> {
-    const epoch = options.tokenStore.epoch;
+    const generation = options.tokenStore.generation();
     const refreshToken = await options.tokenStore.readRefreshToken();
-    if (refreshToken === null || epoch !== options.tokenStore.epoch) return null;
+    if (refreshToken === null || generation.epoch !== options.tokenStore.generation().epoch) {
+      return null;
+    }
 
     const response = await anonymous.send(
       'POST',
@@ -48,7 +50,9 @@ export function createSessionRefresher(
       { authenticated: false },
     );
     if (response.status === 401) {
-      if (epoch === options.tokenStore.epoch) await options.tokenStore.clear();
+      if (generation.epoch === options.tokenStore.generation().epoch) {
+        await options.tokenStore.clear();
+      }
       return null;
     }
     if (response.status < 200 || response.status >= 300) {
@@ -57,7 +61,7 @@ export function createSessionRefresher(
     const session = SessionResponseSchema.parse(response.body);
     const saved = await options.tokenStore.saveSession(
       { ...session, userId: session.user.id },
-      epoch,
+      generation,
     );
     return saved ? session.accessToken : null;
   }

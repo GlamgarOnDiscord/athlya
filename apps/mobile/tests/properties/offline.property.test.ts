@@ -147,7 +147,7 @@ describe('Property 5: FIFO + idempotent offline drain', () => {
 
         const assertNothingLost = () => {
           const queued = new Set(queue.peek().map((m) => m.idempotencyKey));
-          const dead = new Set(queue.deadLetters().map((m) => m.idempotencyKey));
+          const dead = new Set(queue.deadLetters(OWNER).map((m) => m.idempotencyKey));
           const applied = new Set(server.applied);
           for (const key of enqueueOrder) {
             const accounted = queued.has(key) || dead.has(key) || applied.has(key);
@@ -188,7 +188,7 @@ describe('Property 5: FIFO + idempotent offline drain', () => {
         const positions = server.applied.map((key) => enqueueOrder.indexOf(key));
         expect(positions).toEqual([...positions].sort((a, b) => a - b));
 
-        const dead = new Set(queue.deadLetters().map((m) => m.idempotencyKey));
+        const dead = new Set(queue.deadLetters(OWNER).map((m) => m.idempotencyKey));
         for (const key of enqueueOrder) {
           const invalid = invalidPaths.has(pathOf.get(key) ?? '');
           if (invalid) {

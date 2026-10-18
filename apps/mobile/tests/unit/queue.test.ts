@@ -106,11 +106,26 @@ describe('MutationQueue', () => {
 
     expect(queue.moveToDeadLetter(a.id, { status: 422, problemCode: 'class_in_past' })).toBe(true);
     expect(queue.size).toBe(0);
-    expect(queue.deadLetters()).toEqual([
+    expect(queue.deadLetters(OWNER)).toEqual([
       expect.objectContaining({ id: a.id, status: 422, problemCode: 'class_in_past' }),
     ]);
-    expect(queue.discardDeadLetter(a.id)).toBe(true);
-    expect(queue.deadLetters()).toEqual([]);
+    expect(queue.discardDeadLetter(a.id, OWNER)).toBe(true);
+    expect(queue.deadLetters(OWNER)).toEqual([]);
+  });
+
+  it("scopes dead letters to their owner so no account sees or discards another's", () => {
+    const { queue } = createQueue();
+    const mine = queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
+    const theirs = queue.enqueue({ ownerId: 'user-2', kind: 'b', path: '/v1/b' });
+    queue.moveToDeadLetter(mine.id, { status: 422 });
+    queue.moveToDeadLetter(theirs.id, { status: 422 });
+
+    expect(queue.deadLetters(OWNER).map((d) => d.id)).toEqual([mine.id]);
+    expect(queue.deadLetters(null)).toEqual([]);
+    expect(queue.discardDeadLetter(theirs.id, OWNER)).toBe(false);
+    expect(queue.discardDeadLetter(theirs.id, null)).toBe(false);
+    expect(queue.deadLetters('user-2').map((d) => d.id)).toEqual([theirs.id]);
+    expect(queue.pendingFor(OWNER)).toEqual([]);
   });
 
   it('caps the dead-letter queue, dropping the oldest entries', () => {
@@ -122,7 +137,7 @@ describe('MutationQueue', () => {
       (n) => capped.enqueue({ ownerId: OWNER, kind: `k${String(n)}`, path: '/v1/x' }).id,
     );
     for (const id of ids) capped.moveToDeadLetter(id, { status: 400 });
-    expect(capped.deadLetters().map((d) => d.id)).toEqual(ids.slice(1));
+    expect(capped.deadLetters(OWNER).map((d) => d.id)).toEqual(ids.slice(1));
   });
 
   it('notifies subscribers on every change', () => {
@@ -184,7 +199,7 @@ describe('MutationQueue persistence (task 11.13)', () => {
     const after = createQueue(disk).queue;
 
     expect(after.peek().map((m) => m.id)).toEqual([c.id]);
-    expect(after.deadLetters().map((d) => d.id)).toEqual([b.id]);
+    expect(after.deadLetters(OWNER).map((d) => d.id)).toEqual([b.id]);
   });
 
   it('keeps idempotency keys stable across restarts', () => {

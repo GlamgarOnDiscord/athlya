@@ -69,13 +69,16 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
   is not applied twice. A request cancelled through `signal` rethrows its abort error and must
   not be queued.
 - **Sync status**: `runtime.sync.subscribe()` / `getState()` (`useSyncExternalStore`), rendered by
-  `<SyncStatusBanner>`. `runtime.queue.deadLetters()` / `discardDeadLetter(id)` back the "rejected
-  changes" view.
+  `<SyncStatusBanner>`; its `pending` / `deadLetters` counts only cover the signed-in user.
+  `runtime.queue.deadLetters(userId)` / `discardDeadLetter(id, userId)` back the "rejected changes"
+  view and never return or delete another account's entries.
 - **Sign-in**: after `POST /v1/auth/login` (`{ authenticated: false }`), pass
   `{ ...session, userId: session.user.id }` to `runtime.tokenStore.saveSession()`.
   `await setBiometricUnlockEnabled(true)` resolves `true` only when the gate is on: it resolves
   `false`, enabling nothing, when biometrics are unavailable or the prompt is declined, so show the
-  setting from that result. `clear()` signs out and invalidates any refresh in flight.
+  setting from that result. `clear()` signs out and invalidates any refresh in flight; `lock()`
+  invalidates in-flight refreshes too (a rotated refresh token is kept, the store stays locked).
+  Call `runtime.sync.refreshOwner()` after every sign-in and sign-out.
 - **Strings**: add keys under `mobile.*` in `packages/shared/src/i18n/{en,fr}.json`.
 
 ## Drain semantics (Algorithm 4)
