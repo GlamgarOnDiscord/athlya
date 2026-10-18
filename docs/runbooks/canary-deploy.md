@@ -153,11 +153,11 @@ node scripts/canary-deploy.mjs rollback --env production
 wrangler rollback --env production -y
 ```
 
-Critères rollback auto (Phase 3 — monitoring manuel v1) :
-
-- 5xx rate > baseline × 1.5 pendant 5 min (Axiom A1)
-- Sentry new issue rate spike vs baseline
-- `/health/ready` → `not_ready` sur prod pendant 2 polls consécutifs
+Pendant le canary, les gates (health, error budget Sentry, latence) font le
+rollback. Après 100 %, le rollback automatique de toute la flotte sur SLO
+breach (5xx > 2 % ou p99 > 2 000 ms pendant 10 min) est
+[`slo-rollback.yml`](../../.github/workflows/slo-rollback.yml) — voir
+[`automatic-rollback.md`](./automatic-rollback.md) (CN.7.3).
 
 ## Références
 

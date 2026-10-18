@@ -1,12 +1,12 @@
 name: Rollback Production
 
-# CN.7.3 — manual or webhook-triggered rollback to the previous stable deployment.
-# Runbook: docs/runbooks/automatic-rollback.md
+# Manual rollback of the production GATEWAY Worker only, to the previous
+# stable deployment or an explicit version:
+#   gh workflow run rollback.yml -f reason="..." [-f version_id=...]
 #
-# Trigger modes:
-#   1. Manual:          gh workflow run rollback.yml -f reason="..."
-#   2. Axiom webhook:   POST /repos/{owner}/{repo}/actions/workflows/rollback.yml/dispatches
-#      Fired when p99_ms > 2000 OR error_rate_5min > 0.02 for 5 consecutive minutes.
+# Nothing dispatches this workflow automatically. The SLO-driven rollback of
+# the whole fleet (gateway + auth / reservations / billing) is
+# slo-rollback.yml (CN.7.3). Runbook: docs/runbooks/automatic-rollback.md
 #
 # Required secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, SLACK_WEBHOOK_URL (optional)
 # Required vars:    PRODUCTION_API_URL

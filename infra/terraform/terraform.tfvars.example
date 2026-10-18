@@ -13,3 +13,6 @@ axiom_spans_dataset   = "TODO: dataset in X-Axiom-Dataset of OTEL_EXPORTER_OTLP_
 axiom_logs_dataset    = "TODO: dataset receiving the Worker log lines"
 axiom_notifier_ids    = ["TODO: Axiom → Monitors → Notifiers → Slack notifier id"]
 axiom_page_notifier_ids = ["TODO: PagerDuty notifier id"] # or [] to never page
+# SLO auto-rollback (CN.7.3) — off by default, production only
+# slo_auto_rollback_enabled      = true
+# slo_auto_rollback_github_token = "TODO: fine-grained PAT, this repository only, Actions: write"

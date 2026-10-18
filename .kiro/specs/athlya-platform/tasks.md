@@ -1168,7 +1168,7 @@ Post-launch, à itérer dans l'année.
 
 - [x] CN.7.1 Canary deploys via Cloudflare Workers versions API — déploiement progressif 1% → 10% → 100% avec rollback automatique sur error rate > seuil 5min.
 - [x] CN.7.2 Preview environments par PR — Workers preview + Neon branch par PR. `wrangler versions upload` + `neon branches create` dans `.github/workflows/preview.yml`.
-- [ ] CN.7.3 Rollback automatique sur SLO breach — automation Slack/PagerDuty + `wrangler rollback`.
+- [x] CN.7.3 Rollback automatique sur SLO breach — automation Slack/PagerDuty + `wrangler rollback`. Livré par `.github/workflows/slo-rollback.yml` + `scripts/slo-rollback.mjs` (re-check Axiom, rollback des 4 Workers via `wrangler versions deploy`, garde-fous fail-closed) et `infra/terraform/slo-auto-rollback.tf` (issue #632) ; étapes opérateur dans `docs/runbooks/automatic-rollback.md`.
 
 #### Architecture (post-Epic 14)
 

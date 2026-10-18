@@ -33,10 +33,17 @@ column). Let the canary complete.
 Once 100% of traffic is on the new Worker and the old version is gone:
 
 ```sql
+-- athlya:contract
 -- Now safe: add NOT NULL, rename, or drop the old column
 ALTER TABLE reservations ALTER COLUMN cancelled_reason SET NOT NULL;
 ALTER TABLE reservations DROP COLUMN legacy_field;
 ```
+
+Start every contract migration with a `-- athlya:contract` line. The
+automatic SLO rollback (`slo-rollback.yml`, CN.7.3) refuses to roll the
+Workers back across a release that ships one: the previous Worker version
+would run against a schema it no longer matches. See
+[automatic-rollback.md](./automatic-rollback.md).
 
 ## Anti-patterns
 
@@ -56,6 +63,7 @@ Before merging a migration with a Worker deploy:
 - [ ] Does the migration `DROP COLUMN` or rename a column the current Worker uses? → Split.
 - [ ] Does the migration change a column type incompatibly? → Split.
 - [ ] Is the migration purely additive (new nullable column, new index, new table)? → Safe to ship together.
+- [ ] Is it a contract step? → First line `-- athlya:contract` (blocks the automatic SLO rollback across it).
 
 ## References
 

@@ -162,8 +162,19 @@ Le script `wait-health-ready.sh` échoue (exit 1) si :
 
 Préférer **`production-canary`** pour trafic réel ; réserver **`production-deploy`** aux hotfix ou environnements sans traffic split.
 
+## Rollback automatique après la release (CN.7.3)
+
+Une fois le canary terminé, [`slo-rollback.yml`](../../.github/workflows/slo-rollback.yml)
+remet les quatre Workers de production (gateway, auth, reservations, billing)
+sur leur version précédente si le 5xx dépasse 2 % ou le p99 2 000 ms pendant
+10 minutes consécutives — ou ne touche à rien si un garde-fou bloque (canary en
+cours, secret changé, migration `-- athlya:contract`, cool-down…). Le
+`rollback` de ce workflow ne revient que sur la gateway. Setup et garde-fous :
+[`automatic-rollback.md`](./automatic-rollback.md).
+
 ## Références
 
 - `scripts/wait-health-ready.sh` (issue #71)
 - `docs/runbooks/canary-deploy.md`
+- `docs/runbooks/automatic-rollback.md` (CN.7.3)
 - `rules.md`

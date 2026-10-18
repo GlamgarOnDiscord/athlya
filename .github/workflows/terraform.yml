@@ -25,6 +25,8 @@ name: Terraform
 #   TF_VAR_sentry_alert_team_id   — Sentry team id notified by metric alerts
 #   TF_VAR_axiom_api_token        — Axiom advanced API token (SLO monitors, #415)
 #   TF_TOKEN_app_terraform_io     — HCP Terraform API token (remote state)
+#   TF_VAR_slo_auto_rollback_github_token — optional: fine-grained PAT (Actions: write,
+#                                   this repository) for the SLO auto-rollback notifier (#632)
 #
 # Required variables (vars.*):
 #   TF_CLOUD_ORGANIZATION         — HCP Terraform organisation slug
@@ -33,6 +35,8 @@ name: Terraform
 #   AXIOM_LOGS_DATASET            — Axiom dataset of the Worker log lines
 #   AXIOM_NOTIFIER_IDS            — HCL list of Axiom notifier ids, e.g. ["abc123"]
 #   AXIOM_PAGE_NOTIFIER_IDS       — HCL list of paging notifier ids, or [] (explicit)
+#   SLO_AUTO_ROLLBACK_MONITOR_ENABLED — optional: 'true' creates the SLO auto-rollback
+#                                   monitors + webhook (production only, #632)
 #
 # See infra/terraform/versions.tf for the backend and
 # docs/runbooks/terraform-ops.md for the apply runbook.
@@ -146,6 +150,8 @@ jobs:
       TF_VAR_axiom_logs_dataset: ${{ vars.AXIOM_LOGS_DATASET }}
       TF_VAR_axiom_notifier_ids: ${{ vars.AXIOM_NOTIFIER_IDS }}
       TF_VAR_axiom_page_notifier_ids: ${{ vars.AXIOM_PAGE_NOTIFIER_IDS }}
+      TF_VAR_slo_auto_rollback_enabled: ${{ vars.SLO_AUTO_ROLLBACK_MONITOR_ENABLED == 'true' }}
+      TF_VAR_slo_auto_rollback_github_token: ${{ secrets.TF_VAR_slo_auto_rollback_github_token }}
       TF_VAR_environment: ${{ inputs.environment || (github.event_name == 'schedule' && 'production') || 'staging' }}
       # HCP Terraform remote state token (see versions.tf backend block).
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_app_terraform_io }}
