@@ -124,9 +124,10 @@ signed-in area whatever happens locally.
 - Sign-in from a release build: `login` and `register` are behind Turnstile, which a native app
   cannot solve, so staging and production answer `403 bot_challenge_failed` (shown as "use the
   website"). Works against a local `wrangler dev` without a Turnstile secret. Tracked in #649.
-- `POST /v1/sessions` and `/v1/checkins` are not routed in production yet (#302, #648): workouts
-  saved online get an error (404) on the spot, and workouts queued offline end up in "rejected
-  changes" when the drain sends them, until the sessions adapter ships.
+- `/v1/checkins` is not routed in production yet and has no token-issuance route (#648), so the
+  QR check-in screen (11.9) is not built. `POST /v1/sessions` is routed on the reservations Worker
+  since #652 (once migration 0044 and the Worker deploy are applied), so workouts logged online or
+  drained from the queue are stored.
 
 ## Drain semantics (Algorithm 4)
 

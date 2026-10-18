@@ -288,7 +288,7 @@ Foundation delivered in #642 (issue #638): 11.1–11.7, 11.12 (P5) and 11.13 on 
 
 Restent ouverts :
 
-- 11.9 (QR check-in) : pas de route d'émission de token et `/v1/checkins` non monté en production (#648, suite de #302). `POST /v1/sessions` n'est pas routé non plus : une séance enregistrée en ligne échoue tout de suite (404), une séance mise en file hors ligne arrive dans « modifications refusées » au moment du drain, tant que l'adaptateur n'est pas livré.
+- 11.9 (QR check-in) : pas de route d'émission de token et `/v1/checkins` non monté en production (#648, suite de #302). `POST /v1/sessions` est en revanche routé depuis #652 (migration 0044 + déploiement du Worker reservations), donc le journal de séance mobile est servi de bout en bout.
 - Connexion depuis l'app en staging / production : `login` et `register` exigent un token Turnstile que l'app native ne sait pas produire (`403 bot_challenge_failed`), #649.
 ### Epic 12 — Admin studio app (4 tâches restantes — 12.2 et 12.3 livrées)
 ### Epic 20 — Checkpoint v0.2
