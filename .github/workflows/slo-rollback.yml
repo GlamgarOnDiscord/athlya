@@ -235,7 +235,8 @@ jobs:
           echo "::error title=SLO auto-rollback cancelled::${msg}"
           gh api "repos/${GITHUB_REPOSITORY}/issues" \
             -f title="SLO auto-rollback cancelled — run ${GITHUB_RUN_ID}" \
-            -f body="${msg}"$'\n\n'"Run: ${RUN_URL}"$'\n\n'"Runbook: docs/runbooks/automatic-rollback.md" --jq .html_url
+            -f body="${msg}"$'\n\n'"Run: ${RUN_URL}"$'\n\n'"Runbook: docs/runbooks/automatic-rollback.md" --jq .html_url \
+            || echo "::warning::GitHub issue creation failed"
           if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
             jq -n --arg text ":warning: ${msg} <${RUN_URL}|run>" '{text: $text}' \
               | curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "${SLACK_WEBHOOK_URL}" > /dev/null \

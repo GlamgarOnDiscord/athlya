@@ -546,6 +546,12 @@ describe('workflow and Terraform wiring', () => {
       /cancelled-alert:\n[\s\S]*?needs: slo-rollback\n\s+if: always\(\) && needs\.slo-rollback\.result == 'cancelled'/,
     );
     assert.doesNotMatch(workflow.split('jobs:')[0], /concurrency:/);
+    const alert = workflow.split('cancelled-alert:')[1];
+    assert.match(
+      alert,
+      /--jq \.html_url \\\n\s+\|\| echo "::warning::GitHub issue creation failed"/,
+    );
+    assert.match(alert, /SLACK_WEBHOOK_URL[\s\S]*\n\s+exit 1\n?$/);
   });
 
   it('labels dry runs and never pages on them', () => {
