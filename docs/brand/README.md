@@ -13,7 +13,7 @@
 
 ---
 
-<img alt="Brand board Athlya : mascotte, palette, typo, mockups app, site, papeterie, réseaux, signalétique et merch" src="board.png" width="100%">
+<img alt="Brand board Athlya : mascotte, palette, typo, mockups app, site, papeterie, réseaux, signalétique et merch" src="board.jpg" width="100%">
 
 ---
 
