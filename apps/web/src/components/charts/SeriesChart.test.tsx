@@ -98,6 +98,8 @@ describe('chart-utils', () => {
   it('clamps keyboard navigation to the data bounds', () => {
     expect(nextIndex('ArrowRight', 2, 3)).toBe(2);
     expect(nextIndex('ArrowLeft', 0, 3)).toBe(0);
+    expect(nextIndex('ArrowDown', 0, 3)).toBe(1);
+    expect(nextIndex('ArrowUp', 2, 3)).toBe(1);
     expect(nextIndex('End', 0, 3)).toBe(2);
     expect(nextIndex('Enter', 1, 3)).toBeNull();
     expect(nextIndex('Home', 0, 0)).toBeNull();

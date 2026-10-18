@@ -200,6 +200,15 @@ describe('computeProgression', () => {
     expect(out.totals.sessions).toBe(3);
   });
 
+  it('stays schema-valid when a tiny weight rounds its estimate to 0', () => {
+    const light = session('2026-10-10T08:00:00.000Z', [
+      { name: 'Band pull-apart', sets: [{ reps: 1, weightKg: 0.01 }] },
+    ]);
+    const out = computeProgression([light], { windowDays: 30, now: NOW });
+    expect(out.exercises[0]?.bestEstimatedOneRepMaxKg).toBe(0);
+    expect(ProgressionResponseSchema.safeParse(out).success).toBe(true);
+  });
+
   it('ignores sessions outside the window', () => {
     const old = session('2026-09-15T23:59:59.999Z', [
       { name: 'Deadlift', sets: [{ reps: 5, weightKg: 200 }] },
@@ -339,8 +348,11 @@ describe('getProgression', () => {
   });
 
   it('flags truncation and keeps the newest rows when the repo returns one row too many', async () => {
-    const rows = Array.from({ length: PROGRESSION_SESSION_LIMIT + 1 }, () =>
-      session('2026-10-15T08:00:00.000Z', []),
+    // Newest first, as the repo returns them; each row has its own exercise.
+    const rows = Array.from({ length: PROGRESSION_SESSION_LIMIT + 1 }, (_, i) =>
+      session(new Date(NOW - i * 60_000).toISOString(), [
+        { name: `Move ${i}`, sets: [{ reps: 1, weightKg: 1 }] },
+      ]),
     );
     const out = await getProgression(USER_ID, 365, {
       repo: { listInWindow: () => Promise.resolve(rows) },
@@ -348,6 +360,14 @@ describe('getProgression', () => {
     });
     expect(out.truncated).toBe(true);
     expect(out.totals.sessions).toBe(PROGRESSION_SESSION_LIMIT);
+    // The volume of the dropped (oldest) row is missing from the total.
+    expect(out.totals.volumeKg).toBe(PROGRESSION_SESSION_LIMIT);
+    const computed = computeProgression(rows.slice(0, PROGRESSION_SESSION_LIMIT), {
+      windowDays: 365,
+      now: NOW,
+    });
+    expect(out.exercises).toEqual(computed.exercises);
+    expect(out.exercises.some((e) => e.key === `move ${PROGRESSION_SESSION_LIMIT}`)).toBe(false);
   });
 
   it('rejects a window outside 30 / 90 / 365 before any I/O', async () => {

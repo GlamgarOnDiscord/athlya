@@ -20,7 +20,10 @@ import { ProgressionPanel } from './ProgressionPanel';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Ma progression' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = createTranslator(await getLocale());
+  return { title: t('workouts.progression.title') };
+}
 
 export default async function MeProgressionPage(): Promise<ReactElement> {
   const locale = await getLocale();

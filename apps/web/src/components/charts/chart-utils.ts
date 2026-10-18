@@ -37,10 +37,10 @@ export function nextIndex(key: string, current: number, length: number): number 
   if (length === 0) return null;
   switch (key) {
     case 'ArrowRight':
-    case 'ArrowUp':
+    case 'ArrowDown':
       return Math.min(current + 1, length - 1);
     case 'ArrowLeft':
-    case 'ArrowDown':
+    case 'ArrowUp':
       return Math.max(current - 1, 0);
     case 'Home':
       return 0;

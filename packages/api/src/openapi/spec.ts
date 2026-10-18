@@ -755,6 +755,10 @@ const progressionRoute = createRoute({
       description: 'Rate limited',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
+    503: {
+      description: 'Rate limiter unavailable (fail-closed, code `dependency_unavailable`)',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
   },
 });
 

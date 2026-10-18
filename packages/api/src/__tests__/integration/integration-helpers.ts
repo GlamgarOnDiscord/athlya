@@ -466,7 +466,16 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
     getExportJob: vi.fn(async () => null),
     openExportDownload: vi.fn(async () => ({ kind: 'not_found' as const })),
     listMembersByStudio: vi.fn(async () => ({ items: [], nextCursor: null })),
-    getProgression: vi.fn(async () => ({})),
+    getProgression: vi.fn(async (_userId: string, windowDays: 30 | 90 | 365) => ({
+      windowDays,
+      from: '2026-01-01T00:00:00.000Z',
+      to: '2026-01-31T00:00:00.000Z',
+      totals: { sessions: 0, volumeKg: 0 },
+      exercises: [],
+      weeklyFrequency: [],
+      truncated: false,
+      skippedSessions: 0,
+    })),
   };
 
   /* --------------------- studios --------------------- */

@@ -522,7 +522,7 @@ export const ProgressionPointSchema = z
     /** Σ reps × weightKg over the day's sets, rounded to 0.1 kg. */
     volumeKg: z.number().nonnegative(),
     /** Best Epley estimate of the day, or `null` when no set qualifies. */
-    estimatedOneRepMaxKg: z.number().positive().nullable(),
+    estimatedOneRepMaxKg: z.number().nonnegative().nullable(),
   })
   .strict();
 
@@ -538,7 +538,7 @@ export const ExerciseProgressionSchema = z
     /** Number of sessions in the window containing this exercise. */
     sessionCount: z.number().int().positive(),
     totalVolumeKg: z.number().nonnegative(),
-    bestEstimatedOneRepMaxKg: z.number().positive().nullable(),
+    bestEstimatedOneRepMaxKg: z.number().nonnegative().nullable(),
     /** One point per day the exercise was trained, ascending by date. */
     points: z.array(ProgressionPointSchema),
   })

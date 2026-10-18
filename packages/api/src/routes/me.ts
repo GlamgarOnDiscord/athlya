@@ -43,6 +43,20 @@ export interface MeDeps {
 /** `Cache-Control` of `GET /v1/me/progression`. */
 export const PROGRESSION_CACHE_CONTROL = 'private, max-age=60, must-revalidate';
 
+/**
+ * True when an `If-None-Match` header matches `etag` (RFC 9110 §13.1.2):
+ * `*`, or any entry of the comma-separated list, compared weakly.
+ */
+export function ifNoneMatchHits(header: string | undefined, etag: string): boolean {
+  if (header === undefined) return false;
+  const value = header.trim();
+  if (value === '*') return true;
+  return value
+    .split(',')
+    .map((tag) => tag.trim().replace(/^W\//, ''))
+    .includes(etag);
+}
+
 /** Build the `/v1/me/*` sub-router. */
 export function buildMeRouter(deps: MeDeps): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -64,8 +78,7 @@ export function buildMeRouter(deps: MeDeps): Hono<HonoEnv> {
     c.header('etag', etag);
     c.header('cache-control', PROGRESSION_CACHE_CONTROL);
     c.header('vary', 'authorization');
-    const ifNoneMatch = c.req.header('if-none-match')?.trim().replace(/^W\//, '');
-    if (ifNoneMatch === etag) {
+    if (ifNoneMatchHits(c.req.header('if-none-match'), etag)) {
       return c.body(null, 304);
     }
     return c.body(body, 200, { 'content-type': 'application/json' });

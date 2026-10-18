@@ -6,7 +6,7 @@ import { ProgressionResponseSchema } from '@athlya/shared/schemas/api';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { __resetJwksCacheForTests } from '../../middleware/auth.js';
-import { PROGRESSION_CACHE_CONTROL } from '../../routes/me.js';
+import { PROGRESSION_CACHE_CONTROL, ifNoneMatchHits } from '../../routes/me.js';
 import { buildApp } from '../../worker.js';
 import { readJson } from '../helpers/read-json.js';
 
@@ -169,5 +169,21 @@ describe('GET /v1/me/progression', () => {
     expect(second.status).toBe(304);
     expect(second.headers.get('etag')).toBe(etag);
     expect(await second.text()).toBe('');
+  });
+});
+
+describe('ifNoneMatchHits', () => {
+  const etag = '"0123456789abcdef"';
+
+  it('matches a strong, weak, listed or wildcard tag', () => {
+    expect(ifNoneMatchHits(etag, etag)).toBe(true);
+    expect(ifNoneMatchHits(`W/${etag}`, etag)).toBe(true);
+    expect(ifNoneMatchHits(`"other", W/${etag}`, etag)).toBe(true);
+    expect(ifNoneMatchHits(' * ', etag)).toBe(true);
+  });
+
+  it('misses an absent or different tag', () => {
+    expect(ifNoneMatchHits(undefined, etag)).toBe(false);
+    expect(ifNoneMatchHits('"other"', etag)).toBe(false);
   });
 });

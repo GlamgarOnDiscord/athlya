@@ -123,9 +123,11 @@ Workers.
 The reservations Worker also serves `/v1/me/*` (`GET /v1/me/progression`,
 issue #639) from the same members deps, through its own
 `staging.api.athlya.app/v1/me/*` and `api.athlya.app/v1/me/*` zone routes.
-The first `wrangler deploy --config wrangler.reservations.toml` after that
-change creates the routes; until then the gateway's catch-all `/*` route
-serves the path, so there is no gap.
+Both routes live in the named environments, so they are created by the
+first `wrangler deploy --config wrangler.reservations.toml --env staging`
+(and `--env production`) after that change; a deploy without `--env` creates
+none. Until then the gateway's catch-all `/*` route serves the path, so there
+is no gap.
 
 ## Local (ops)
 

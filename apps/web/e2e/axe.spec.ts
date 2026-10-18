@@ -39,6 +39,10 @@ for (const path of authPaths) {
   test(`axe: ${path} (authenticated)`, async ({ page }) => {
     await loginWithStub(page);
     await page.goto(path);
+    if (path === '/me/progression') {
+      // Analyse the rendered charts, not the loading state.
+      await expect(page.getByRole('figure')).toHaveCount(3);
+    }
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
       .analyze();
