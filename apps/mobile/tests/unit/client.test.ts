@@ -65,6 +65,24 @@ describe('createApiClient', () => {
     });
   });
 
+  it('sends extra headers but never lets them replace the client-owned ones', async () => {
+    const { client, fetchImpl } = setup([jsonResponse(200, {})]);
+    await client.get('/v1/me/progression?window=30', {
+      headers: {
+        'If-None-Match': '"abc"',
+        authorization: 'Bearer forged',
+        ACCEPT: 'text/html',
+        'idempotency-key': 'forged',
+      },
+    });
+    const [, init] = fetchImpl.mock.calls[0] as FetchArgs;
+    expect(headersOf(init)).toEqual({
+      'If-None-Match': '"abc"',
+      Accept: 'application/json',
+      Authorization: 'Bearer access-1',
+    });
+  });
+
   it('omits the Authorization header when there is no token', async () => {
     const { client, fetchImpl } = setup([jsonResponse(200, {})], { token: null });
     await client.get('/v1/classes');

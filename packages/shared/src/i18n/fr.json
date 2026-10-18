@@ -538,6 +538,7 @@
         "classes": "Réserver un cours",
         "reservations": "Mes réservations",
         "workout": "Enregistrer une séance",
+        "progression": "Ma progression",
         "settings": "Paramètres"
       }
     },
@@ -686,6 +687,20 @@
       "restBetweenSets": "repos {seconds} s",
       "loadError": "La séance du jour n'a pas pu être chargée.",
       "duration": "{seconds} s"
+    },
+    "progression": {
+      "title": "Ma progression",
+      "windowLabel": "Période",
+      "windowHint": "Charge la progression sur cette période.",
+      "exerciseLabel": "Exercice",
+      "exerciseHint": "Affiche les graphiques de cet exercice.",
+      "kg": "{value} kg",
+      "bestOneRepMax": "Meilleur 1RM estimé — {exercise}",
+      "chart": {
+        "lineSummary": "Jours d’entraînement : {count}, du {from} au {to}. Dernière valeur : {latest} kg, maximum : {max} kg, minimum : {min} kg.",
+        "barSummary": "Semaines : {weeks}, du {from} au {to}. Séances : {total} au total, {max} pour la semaine la plus chargée, {latest} pour la dernière semaine.",
+        "noSessions": "Aucune séance enregistrée sur cette période : pas de fréquence hebdomadaire à afficher."
+      }
     }
   },
   "notifications": {

@@ -34,6 +34,12 @@ export interface RequestOptions {
    * outlive its own timeout).
    */
   readonly refreshOnUnauthorized?: boolean;
+  /**
+   * Extra request headers, e.g. `If-None-Match`. `Accept`, `Content-Type`,
+   * `Authorization` and `Idempotency-Key` belong to the client: a copy of
+   * one of them here is ignored, whatever its case.
+   */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 export interface ApiResponse {
@@ -95,6 +101,18 @@ async function readBody(response: Response): Promise<unknown> {
   }
 }
 
+/** Headers the client owns; a caller-supplied copy, in any case, is dropped. */
+const RESERVED_HEADERS = new Set(['accept', 'content-type', 'authorization', 'idempotency-key']);
+
+function extraHeaders(
+  headers: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  if (headers === undefined) return {};
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name]) => !RESERVED_HEADERS.has(name.toLowerCase())),
+  );
+}
+
 export function parseProblem(body: unknown): ProblemDetails | undefined {
   const parsed = ProblemDetailsSchema.safeParse(body);
   return parsed.success ? parsed.data : undefined;
@@ -111,7 +129,8 @@ export function createApiClient(options: CreateApiClientOptions): ApiClient {
     requestOptions: RequestOptions,
     accessToken: string | null,
   ): Promise<ApiResponse> {
-    const headers: Record<string, string> = { Accept: 'application/json' };
+    const headers: Record<string, string> = { ...extraHeaders(requestOptions.headers) };
+    headers.Accept = 'application/json';
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (accessToken !== null) headers.Authorization = `Bearer ${accessToken}`;
     if (requestOptions.idempotencyKey !== undefined) {
