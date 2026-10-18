@@ -532,7 +532,14 @@
       "title": "Athlya",
       "tagline": "Votre studio dans la poche.",
       "syncNow": "Synchroniser",
-      "syncNowHint": "Envoie les modifications enregistrées hors ligne."
+      "syncNowHint": "Envoie les modifications enregistrées hors ligne.",
+      "nav": {
+        "label": "Menu principal",
+        "classes": "Réserver un cours",
+        "reservations": "Mes réservations",
+        "workout": "Enregistrer une séance",
+        "settings": "Paramètres"
+      }
     },
     "sync": {
       "label": "État de la synchronisation",
@@ -544,6 +551,141 @@
     },
     "unlock": {
       "prompt": "Déverrouiller Athlya"
+    },
+    "auth": {
+      "login": {
+        "title": "Connexion",
+        "submit": "Se connecter",
+        "toRegister": "Créer un compte"
+      },
+      "register": {
+        "title": "Créer un compte",
+        "submit": "Créer mon compte",
+        "toLogin": "J'ai déjà un compte",
+        "studioSlugHint": "Le nom court de votre studio, communiqué par votre studio (lettres, chiffres et tirets)."
+      },
+      "errors": {
+        "email": "Saisissez une adresse e-mail valide.",
+        "password": "Saisissez un mot de passe de 8 à 72 caractères.",
+        "displayName": "Saisissez un nom d'affichage (80 caractères au plus).",
+        "studioSlug": "Saisissez le nom court de votre studio (minuscules, chiffres et tirets).",
+        "emailTaken": "Un compte existe déjà avec cette adresse e-mail.",
+        "studioNotFound": "Aucun studio ne correspond à ce nom court.",
+        "botCheck": "Cette action n'est pas encore disponible depuis l'application. Utilisez le site web."
+      }
+    },
+    "errors": {
+      "sessionExpired": "Votre session a expiré. Reconnectez-vous.",
+      "signIn": "Se connecter"
+    },
+    "classes": {
+      "title": "Réserver un cours",
+      "empty": "Aucun cours prévu dans les 14 prochains jours.",
+      "remaining": "{count} place(s) restante(s)",
+      "full": "Complet : la réservation vous inscrit sur liste d'attente",
+      "book": "Réserver",
+      "bookHint": "Réserve une place dans ce cours.",
+      "joinWaitlist": "Rejoindre la liste d'attente",
+      "confirmed": "Réservé",
+      "waitlisted": "Sur liste d'attente (position {position})",
+      "queued": "Réservation enregistrée : elle sera envoyée dès votre retour en ligne.",
+      "pendingSync": "Réservation en attente de synchronisation",
+      "alreadyBooked": "Vous avez déjà réservé ce cours.",
+      "starts": "{date} · {duration} min",
+      "refresh": "Actualiser",
+      "waitlistHint": "Cette action vous inscrit sur la liste d'attente de ce cours complet."
+    },
+    "reservations": {
+      "title": "Mes réservations",
+      "empty": "Aucune réservation à venir.",
+      "status": {
+        "confirmed": "Confirmée",
+        "waitlist": "Liste d'attente",
+        "cancelled": "Annulée",
+        "no_show": "Absence"
+      },
+      "cancel": "Annuler",
+      "cancelHint": "Annule cette réservation.",
+      "cancelClosed": "L'annulation ferme 2 heures avant le cours.",
+      "cancelled": "Réservation annulée.",
+      "queued": "Annulation enregistrée : elle sera envoyée dès votre retour en ligne.",
+      "pendingSync": "Annulation en attente de synchronisation"
+    },
+    "workout": {
+      "title": "Enregistrer une séance",
+      "duration": "Durée (minutes, facultatif)",
+      "notes": "Notes (facultatif)",
+      "exercise": "Exercice {index}",
+      "exerciseName": "Nom de l'exercice",
+      "removeExercise": "Supprimer l'exercice {index}",
+      "set": "Série {index}",
+      "reps": "Répétitions",
+      "weight": "Charge (kg, facultatif)",
+      "removeSet": "Supprimer la série {index}",
+      "addExercise": "Ajouter un exercice",
+      "addSet": "Ajouter une série",
+      "save": "Enregistrer la séance",
+      "saved": "Séance enregistrée.",
+      "queued": "Séance enregistrée sur cet appareil : elle sera envoyée dès votre retour en ligne.",
+      "limits": "Jusqu'à {exercises} exercices et {sets} séries par exercice.",
+      "errors": {
+        "noExercise": "Ajoutez au moins un exercice.",
+        "exerciseName": "Saisissez le nom de l'exercice (120 caractères au plus).",
+        "reps": "Saisissez un nombre entier de répétitions (1000 au plus).",
+        "weight": "Saisissez une charge en kg, par exemple 42,5 (1000 au plus).",
+        "duration": "Saisissez une durée en minutes entières.",
+        "notes": "Les notes sont limitées à 2 000 caractères."
+      }
+    },
+    "settings": {
+      "title": "Paramètres",
+      "biometric": {
+        "label": "Déverrouiller par biométrie",
+        "hint": "Demande votre empreinte ou votre visage avant d'utiliser votre session enregistrée.",
+        "unavailable": "Le déverrouillage biométrique n'a pas pu être activé : il est indisponible sur cet appareil ou la vérification a été annulée.",
+        "disableFailed": "Le déverrouillage biométrique n'a pas pu être désactivé. Il reste actif."
+      },
+      "signOut": "Se déconnecter",
+      "signOutHint": "Vous déconnecte sur cet appareil. Les modifications en attente seront envoyées à votre prochaine connexion.",
+      "rejected": {
+        "title": "Modifications refusées",
+        "empty": "Aucune modification refusée.",
+        "description": "Le serveur a refusé ces modifications faites hors ligne. Elles n'ont pas été appliquées.",
+        "item": "{kind}, refusée le {date} (erreur {status})",
+        "discard": "Ignorer",
+        "discardHint": "Retire cette modification refusée de la liste.",
+        "kinds": {
+          "bookClass": "Réservation de cours",
+          "cancelReservation": "Annulation de réservation",
+          "logSession": "Séance enregistrée",
+          "other": "Modification"
+        }
+      },
+      "export": {
+        "requested": "Export demandé (référence {jobId}). Vous recevrez un e-mail sous 48 heures.",
+        "alreadyRequested": "Un export a déjà été demandé au cours des dernières 24 heures."
+      },
+      "delete": {
+        "inputLabel": "Confirmation"
+      },
+      "cleanupFailed": {
+        "title": "Données restées sur cet appareil",
+        "message": "Certaines données de votre compte n'ont pas pu être effacées de cet appareil. Reconnectez-vous ou réinstallez l'application pour les supprimer."
+      }
+    },
+    "program": {
+      "title": "Séance du jour",
+      "weekDay": "Semaine {week} sur {total} · Jour {day}",
+      "restDay": "Jour de repos : aucune séance prévue aujourd'hui.",
+      "notStarted": "Ce programme commence le {date}.",
+      "completed": "Programme terminé. Bravo !",
+      "setsReps": "{sets} × {reps}",
+      "setsDuration": "{sets} × {seconds} s",
+      "sets": "{sets} séries",
+      "weight": "{weight} kg",
+      "restBetweenSets": "repos {seconds} s",
+      "loadError": "La séance du jour n'a pas pu être chargée.",
+      "duration": "{seconds} s"
     }
   },
   "notifications": {

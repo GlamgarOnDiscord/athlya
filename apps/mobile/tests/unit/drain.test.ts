@@ -162,6 +162,43 @@ describe('drainMutationQueue (Algorithm 4)', () => {
     expect(result.stoppedBy).toBe('completed');
   });
 
+  it('stops before any further attempt once its owner is no longer signed in', async () => {
+    const { queue } = createQueue();
+    queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
+    queue.enqueue({ ownerId: OWNER, kind: 'b', path: '/v1/b' });
+    let signedIn = true;
+    const { api, calls } = scriptedApi(() => respond(503));
+    const result = await drainMutationQueue(queue, api, {
+      ownerId: OWNER,
+      isOnline: () => true,
+      isOwnerSignedIn: () => Promise.resolve(signedIn),
+      sleep: () => {
+        // The account is deleted (or another user signs in) during the backoff.
+        signedIn = false;
+        return Promise.resolve();
+      },
+    });
+    expect(calls).toHaveLength(1);
+    expect(result).toMatchObject({ remaining: 2, stoppedBy: 'auth-required' });
+  });
+
+  it('skips a mutation removed from the queue during its backoff', async () => {
+    const { queue } = createQueue();
+    const removed = queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
+    queue.enqueue({ ownerId: OWNER, kind: 'b', path: '/v1/b' });
+    const { api, calls } = scriptedApi((call) => (call === 1 ? respond(503) : respond(201)));
+    const result = await drainMutationQueue(queue, api, {
+      ownerId: OWNER,
+      isOnline: () => true,
+      sleep: () => {
+        queue.remove(removed.id);
+        return Promise.resolve();
+      },
+    });
+    expect(calls.map((call) => call.path)).toEqual(['/v1/a', '/v1/b']);
+    expect(result).toMatchObject({ remaining: 0, stoppedBy: 'completed' });
+  });
+
   it('stops as offline when the network drops during a backoff', async () => {
     const { queue } = createQueue();
     queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });

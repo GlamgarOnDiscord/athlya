@@ -119,6 +119,15 @@ describe('createApiClient', () => {
     });
   });
 
+  it('returns a 401 as is when refreshOnUnauthorized is false', async () => {
+    const { client, fetchImpl, refresh } = setup([jsonResponse(401, { title: 'x', status: 401 })]);
+    await expect(
+      client.post('/v1/auth/logout', undefined, { refreshOnUnauthorized: false }),
+    ).rejects.toMatchObject({ name: 'ApiError', status: 401 });
+    expect(refresh).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('raises AuthRequiredError when the retry is still 401', async () => {
     const { client, refresh } = setup([jsonResponse(401), jsonResponse(401)]);
     await expect(client.get('/v1/members/me')).rejects.toBeInstanceOf(AuthRequiredError);
