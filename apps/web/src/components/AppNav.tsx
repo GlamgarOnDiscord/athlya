@@ -12,6 +12,7 @@ import { useAuth } from '../lib/auth/AuthContext';
 import { useLocale } from '../lib/i18n/LocaleContext';
 import { createTranslator } from '../lib/i18n/t';
 
+import { AthlyaLogo } from './AthlyaLogo';
 import { LocaleSwitcher } from './LocaleSwitcher';
 
 export function AppNav(): ReactElement {
@@ -57,8 +58,8 @@ export function AppNav(): ReactElement {
         className="mx-auto flex max-w-3xl items-center justify-between px-6 py-3"
         aria-label="Navigation principale"
       >
-        <Link href="/" className="text-sm font-semibold">
-          {t('common.appName')}
+        <Link href="/" aria-label={t('common.appName')} className="text-foreground">
+          <AthlyaLogo height={24} />
         </Link>
 
         <div className="flex items-center gap-4">
