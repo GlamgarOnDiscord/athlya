@@ -4,9 +4,8 @@
  * Handles:
  *   • /v1/auth/*   — register, login, logout, refresh, password reset
  *
- * /v1/sessions/* is not routed to this Worker: the sessions adapter is
- * not implemented yet (issue #302), so its wrangler route was removed
- * rather than sending traffic to a Worker that 404s.
+ * /v1/sessions/* (workout sessions) is served by the reservations
+ * Worker, next to the members domain (issue #652).
  *
  * Shares the same global middleware chain as the monolith (host check,
  * CORS, tracing, rate limiters, security headers, error handlers) via

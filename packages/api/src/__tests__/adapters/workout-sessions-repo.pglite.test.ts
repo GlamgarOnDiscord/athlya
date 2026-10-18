@@ -1,0 +1,165 @@
+/**
+ * `createDrizzleWorkoutSessionRepo` against the real migration chain,
+ * run as the `athlya_app` runtime role (issue #652).
+ *
+ * PGlite applies every forward migration, then the session switches to
+ * `athlya_app` (NOBYPASSRLS): every repo call goes through `withTenant`,
+ * so the assertions below are what the owner-only policies of migration
+ * 0001 let each caller write and read.
+ */
+
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { logSession } from '@athlya/members';
+import * as schema from '@athlya/db/schema';
+import { PGlite } from '@electric-sql/pglite';
+import { btree_gin } from '@electric-sql/pglite/contrib/btree_gin';
+import { citext } from '@electric-sql/pglite/contrib/citext';
+import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
+import { drizzle } from 'drizzle-orm/pglite';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { createDrizzleWorkoutSessionRepo } from '../../adapters/workout-sessions-repo-drizzle.js';
+
+import type { AthlyaDb, TenantClaims } from '@athlya/db/client';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const migrationsDir = resolve(here, '../../../../db/migrations');
+
+const STUDIO_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const MEMBER_A = '11111111-1111-4111-8111-111111111111';
+const MEMBER_A2 = '11111111-1111-4111-8111-111111111112';
+const ADMIN_A = '11111111-1111-4111-8111-111111111113';
+
+const memberA: TenantClaims = { userId: MEMBER_A, studioId: STUDIO_A, role: 'member' };
+const memberA2: TenantClaims = { userId: MEMBER_A2, studioId: STUDIO_A, role: 'member' };
+const adminA: TenantClaims = { userId: ADMIN_A, studioId: STUDIO_A, role: 'admin' };
+
+const EXERCISES = [{ name: 'Back squat', sets: [{ reps: 5, weightKg: 80 }] }];
+
+let pglite: PGlite;
+let db: AthlyaDb;
+
+const repo = (claims: TenantClaims) => createDrizzleWorkoutSessionRepo(db, claims);
+
+beforeAll(async () => {
+  pglite = new PGlite({ extensions: { btree_gin, citext, pgcrypto } });
+  const forward = readdirSync(migrationsDir)
+    .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+    .sort();
+  for (const file of forward) {
+    const body = readFileSync(resolve(migrationsDir, file), 'utf8');
+    await pglite.exec(body.replace(/\bCONCURRENTLY\b/gu, ''));
+  }
+  await pglite.exec(`
+    INSERT INTO studios (id, slug, name) VALUES ('${STUDIO_A}', 'studio-a', 'Studio A');
+    INSERT INTO users (id, studio_id, email, display_name, role, consents)
+    SELECT id::uuid, '${STUDIO_A}'::uuid, email, name, role::user_role,
+           '{"marketing":false,"analytics":false,"thirdParty":false,"version":1,"updatedAt":"2026-01-01T00:00:00Z"}'::jsonb
+      FROM (VALUES
+        ('${MEMBER_A}',  'member-a@test.dev',  'Member A',  'member'),
+        ('${MEMBER_A2}', 'member-a2@test.dev', 'Member A2', 'member'),
+        ('${ADMIN_A}',   'admin-a@test.dev',   'Admin A',   'admin')
+      ) AS seed (id, email, name, role);
+    SET ROLE athlya_app;
+  `);
+  db = drizzle(pglite, { schema }) as unknown as AthlyaDb;
+}, 120_000);
+
+afterAll(async () => {
+  await pglite.close();
+});
+
+describe('createDrizzleWorkoutSessionRepo under athlya_app', () => {
+  it('runs as a NOBYPASSRLS role', async () => {
+    const { rows } = await pglite.query<{ rolbypassrls: boolean }>(
+      'SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user',
+    );
+    expect(rows[0]?.rolbypassrls).toBe(false);
+  });
+
+  it('stores a session for the caller with the exercises as a jsonb array', async () => {
+    const created = await repo(memberA).create({
+      userId: MEMBER_A,
+      studioId: STUDIO_A,
+      startedAt: '2026-10-12T08:00:00.000Z',
+      durationMin: 45,
+      exercises: EXERCISES,
+      notes: 'Felt strong',
+    });
+    expect(created).toMatchObject({
+      userId: MEMBER_A,
+      studioId: STUDIO_A,
+      startedAt: '2026-10-12T08:00:00.000Z',
+      durationMin: 45,
+      exercises: EXERCISES,
+      notes: 'Felt strong',
+    });
+    expect(created.createdAt).toMatch(/Z$/u);
+
+    await pglite.exec('RESET ROLE');
+    const { rows } = await pglite.query<{ kind: string }>(
+      `SELECT jsonb_typeof(exercises) AS kind FROM workout_sessions WHERE id = '${created.id}'`,
+    );
+    await pglite.exec('SET ROLE athlya_app');
+    expect(rows[0]?.kind).toBe('array');
+  });
+
+  it('stores a solo session without a studio through the members use case', async () => {
+    const created = await logSession(
+      MEMBER_A,
+      { startedAt: '2026-10-10T07:00:00Z', exercises: [] },
+      { repo: repo(memberA) },
+    );
+    expect(created.studioId).toBeNull();
+    expect(created.durationMin).toBeNull();
+    expect(created.notes).toBeNull();
+  });
+
+  it('refuses a row owned by another member (workout_sessions_insert_own)', async () => {
+    await expect(
+      repo(memberA).create({
+        userId: MEMBER_A2,
+        startedAt: '2026-10-12T08:00:00.000Z',
+        exercises: [],
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('lists only the caller sessions in the window, newest first', async () => {
+    await repo(memberA2).create({
+      userId: MEMBER_A2,
+      startedAt: '2026-10-11T08:00:00.000Z',
+      exercises: [],
+    });
+
+    const mine = await repo(memberA).listByUser(MEMBER_A, {
+      from: new Date('2026-10-01T00:00:00Z'),
+      to: new Date('2026-10-31T00:00:00Z'),
+      limit: 100,
+    });
+    expect(mine.map((s) => s.startedAt)).toEqual([
+      '2026-10-12T08:00:00.000Z',
+      '2026-10-10T07:00:00.000Z',
+    ]);
+
+    const outsideWindow = await repo(memberA).listByUser(MEMBER_A, {
+      from: new Date('2026-10-11T00:00:00Z'),
+      to: new Date('2026-10-12T08:00:00Z'),
+      limit: 100,
+    });
+    expect(outsideWindow).toEqual([]);
+  });
+
+  it("hides another member's sessions even when asked by user id, and from an admin", async () => {
+    const window = {
+      from: new Date('2026-10-01T00:00:00Z'),
+      to: new Date('2026-10-31T00:00:00Z'),
+      limit: 100,
+    };
+    expect(await repo(memberA2).listByUser(MEMBER_A, window)).toEqual([]);
+    expect(await repo(adminA).listByUser(MEMBER_A, window)).toEqual([]);
+  });
+});
