@@ -72,7 +72,18 @@ describe('GET /v1/auth/turnstile-challenge', () => {
     expect(res.headers.get('cache-control')).toBe('no-store');
     const csp = res.headers.get('content-security-policy') ?? '';
     const nonce = nonceOf(csp);
-    expect(csp).toBe(buildChallengeCsp(nonce));
+    expect(csp).toBe(
+      [
+        "default-src 'none'",
+        `script-src 'nonce-${nonce}' https://challenges.cloudflare.com`,
+        `style-src 'nonce-${nonce}'`,
+        'frame-src https://challenges.cloudflare.com',
+        'connect-src https://challenges.cloudflare.com',
+        "base-uri 'none'",
+        "form-action 'none'",
+        "frame-ancestors 'none'",
+      ].join('; '),
+    );
     expect(csp).toContain("default-src 'none'");
     expect(csp).toContain("frame-ancestors 'none'");
 

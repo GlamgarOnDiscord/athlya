@@ -30,7 +30,14 @@ await fetch('/v1/auth/login', {/* envoyer `token` */});
 
 L'app native résout Turnstile dans une WebView qui charge `GET /v1/auth/turnstile-challenge` sur le Worker auth (#649, détails dans [`docs/mobile/README.md`](../mobile/README.md#bot-protection-turnstile)).
 
-- **La page répond `500 configuration_error`** : `TURNSTILE_SITE_KEY` absent ou mal formé sur le Worker auth. `wrangler secret put TURNSTILE_SITE_KEY --config wrangler.auth.toml --env <staging|production>` (même site key que l'app web de l'environnement).
+- **La page répond `500 configuration_error`** : `TURNSTILE_SITE_KEY` absent ou mal formé sur le Worker auth. Depuis la racine du repo, même site key que l'app web de l'environnement :
+
+  ```bash
+  cd packages/api
+  pnpm exec wrangler secret put TURNSTILE_SITE_KEY --config wrangler.auth.toml --env staging
+  pnpm exec wrangler secret put TURNSTILE_SITE_KEY --config wrangler.auth.toml --env production
+  ```
+
 - **Le widget affiche l'erreur `110200`** : le hostname de l'API (`api.athlya.app`, `staging.api.athlya.app`) n'est pas dans les hostnames autorisés du widget Turnstile (dashboard Cloudflare → Turnstile → widget → Hostname management).
 - **Le widget passe mais l'API répond 403** : site key et `TURNSTILE_SECRET` ne sont pas appairés (clé de test d'un côté, vraie clé de l'autre). Les logs API montrent `turnstile verification rejected` avec `invalid-input-response`.
 - **403 après un premier échec** : le token est à usage unique ; l'écran recharge le challenge après chaque tentative. Si ce n'est pas le cas, c'est un bug de l'app.

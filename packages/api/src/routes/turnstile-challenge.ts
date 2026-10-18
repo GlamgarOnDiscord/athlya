@@ -36,6 +36,9 @@ export const TURNSTILE_DEV_TEST_SITE_KEY = '1x00000000000000000000AA';
 
 export const TURNSTILE_ORIGIN = 'https://challenges.cloudflare.com';
 
+/** Mount path of the challenge page; the auth IP limiter skips it (see `base-app.ts`). */
+export const TURNSTILE_CHALLENGE_PATH = '/v1/auth/turnstile-challenge';
+
 const TURNSTILE_SCRIPT_URL = `${TURNSTILE_ORIGIN}/turnstile/v0/api.js?render=explicit`;
 
 /** Site keys are short base62-like identifiers; anything else is a misconfiguration. */

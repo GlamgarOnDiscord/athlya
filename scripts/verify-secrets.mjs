@@ -18,7 +18,8 @@
  *   - assertRequiredSecrets() (domain-deps.ts) — DB_URL, REDIS_URL,
  *     REDIS_TOKEN, JWT_JWKS_URL, JWT_KID on every Worker;
  *   - CORS_ORIGIN — base-app.ts refuses cross-origin requests without it;
- *   - auth: signing keys, TURNSTILE_SECRET (/login, /register), RESEND_API_KEY;
+ *   - auth: signing keys, TURNSTILE_SECRET (/login, /register),
+ *     TURNSTILE_SITE_KEY (/turnstile-challenge, the mobile app's widget page), RESEND_API_KEY;
  *   - reservations: EXPORT_URL_SIGNING_KEY (/v1/members/me/export download);
  *   - billing: Stripe checkout + webhook (STRIPE_*, BILLING_REDIRECT_URL,
  *     BILLING_DB_URL) and /admin/* (JWT rotation keys, CF Access);
@@ -41,9 +42,7 @@
  * OPTIONAL   — never fatal, warned when missing. Secrets of features
  *              behind a flag that is OFF by default: MISTRAL_API_KEY
  *              (AI coach, `ai-coach` flag) on the Workers serving
- *              /v1/coach (gateway and reservations). TURNSTILE_SITE_KEY
- *              on auth: only the mobile app's challenge page needs it
- *              (issue #649), the web clients ship their own key.
+ *              /v1/coach (gateway and reservations).
  */
 
 import { execFileSync } from 'node:child_process';
@@ -93,6 +92,7 @@ export const REQUIRED = {
     ...CORE_JWT,
     'CORS_ORIGIN',
     'TURNSTILE_SECRET',
+    'TURNSTILE_SITE_KEY',
     'RESEND_API_KEY',
   ],
   reservations: [...CORE_DB, ...CORE_REDIS, ...CORE_JWT, 'CORS_ORIGIN', 'EXPORT_URL_SIGNING_KEY'],
@@ -113,7 +113,7 @@ export const PRODUCTION_REQUIRED = {
 /** Optional secrets: warned when missing, never fatal (flag-gated features). */
 export const OPTIONAL = {
   main: ['MISTRAL_API_KEY'],
-  auth: ['TURNSTILE_SITE_KEY'],
+  auth: [],
   reservations: ['MISTRAL_API_KEY'],
   billing: [],
 };

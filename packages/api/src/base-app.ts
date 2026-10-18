@@ -90,6 +90,7 @@ import {
 import { tenantClaimGuard, tenantResolverMiddleware } from './middleware/tenant-resolver.js';
 import { handleCspReport } from './routes/csp-report.js';
 import { requireRole } from './routes/helpers.js';
+import { TURNSTILE_CHALLENGE_PATH } from './routes/turnstile-challenge.js';
 import { captureUnhandled, assertSentryDsnIsEu } from './sentry.js';
 import { extractTraceparentId, newTraceId } from './tracing/ids.js';
 
@@ -621,10 +622,23 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
     '/v1/*',
     guardLimiterWithDevBypass('global', ipLimiter, 'fail-open') as Parameters<typeof app.use>[1],
   );
-  app.use(
-    '/v1/auth/*',
-    guardLimiterWithDevBypass('auth', authLimiter, 'fail-closed') as Parameters<typeof app.use>[1],
-  );
+  // The Turnstile challenge page (issue #649) is loaded before every
+  // mobile sign-in attempt and on each widget retry. It is a static page
+  // with no credential check, so it stays under the global /v1/* budget
+  // only and does not spend the auth bucket that login/register rely on.
+  const guardedAuthLimiter = guardLimiterWithDevBypass('auth', authLimiter, 'fail-closed');
+  app.use('/v1/auth/*', (async (
+    c: Parameters<typeof guardedAuthLimiter>[0] & {
+      readonly req: { readonly method: string; readonly path: string };
+    },
+    next: () => Promise<void>,
+  ) => {
+    if (c.req.method === 'GET' && c.req.path === TURNSTILE_CHALLENGE_PATH) {
+      await next();
+      return undefined;
+    }
+    return guardedAuthLimiter(c, next);
+  }) as Parameters<typeof app.use>[1]);
 
   // Issue #466 — per-endpoint overlays on the /v1/auth/* general budget.
   // These tighter limits stack ON TOP of authLimiter (both buckets are

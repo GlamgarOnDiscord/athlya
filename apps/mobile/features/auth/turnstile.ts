@@ -101,6 +101,15 @@ export function isExternalLink(url: string): boolean {
   }
 }
 
+/**
+ * True for a refused navigation that should open in the system browser.
+ * Android does not report `isTopFrame`, so only an explicit nested-frame
+ * navigation (iOS) is kept out of the browser.
+ */
+export function shouldOpenExternally(url: string, isTopFrame: boolean | undefined): boolean {
+  return isTopFrame !== false && isExternalLink(url);
+}
+
 export type ChallengeState =
   | { readonly status: 'loading' }
   | { readonly status: 'pending' }

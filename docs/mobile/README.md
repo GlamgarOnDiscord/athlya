@@ -206,9 +206,9 @@ site key makes the page answer `500 configuration_error` and the app shows the f
    `1x0000000000000000000000000000000AA`); check that both halves on staging are test keys, or
    both real ones. A secret takes effect without a redeploy.
 
-3. **Check** — `node scripts/verify-secrets.mjs --env <staging|production>` warns while
-   `TURNSTILE_SITE_KEY` is missing on the auth Worker (optional tier: the web clients do not need
-   it, so a missing key does not block API deploys). Then open
+3. **Check** — `node scripts/verify-secrets.mjs --env staging` (then `--env production`) fails
+   while `TURNSTILE_SITE_KEY` is missing on the auth Worker: it is a required secret there, and the
+   deploy workflows run this check first, so set the key **before** the next API deploy. Then open
    `https://staging.api.athlya.app/v1/auth/turnstile-challenge` in a browser: the widget must
    render and pass, and the response must carry the `Content-Security-Policy` header.
 4. **Release build** — sign in and register from a `preview` build against staging, then from a

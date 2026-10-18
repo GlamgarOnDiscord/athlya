@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Linking, View, useColorScheme } from 'react-native';
 import { WebView, type WebViewMessageEvent, type WebViewProps } from 'react-native-webview';
 
@@ -8,9 +8,9 @@ import {
   challengeToken,
   challengeUrl,
   isAllowedNavigation,
-  isExternalLink,
   parseChallengeMessage,
   reduceChallenge,
+  shouldOpenExternally,
   type ChallengeEvent,
   type ChallengeState,
 } from '../features/auth/turnstile';
@@ -65,6 +65,16 @@ export function TurnstileChallenge({
     [apiBaseUrl, locale, theme],
   );
   const { dispatch, reset, state, attempt } = controller;
+
+  // A new source (theme or locale change) reloads the WebView, which drops
+  // the widget and its token: start a fresh challenge so a stale token is
+  // never sent.
+  const renderedUri = useRef(source.uri);
+  useEffect(() => {
+    if (renderedUri.current === source.uri) return;
+    renderedUri.current = source.uri;
+    reset();
+  }, [source.uri, reset]);
   const notice = challengeNotice(state);
 
   const onMessage = useCallback(
@@ -82,7 +92,7 @@ export function TurnstileChallenge({
   const onShouldStartLoadWithRequest = useCallback(
     (request: ShouldStartLoadRequest) => {
       if (isAllowedNavigation(request.url, apiBaseUrl)) return true;
-      if (request.isTopFrame && isExternalLink(request.url)) {
+      if (shouldOpenExternally(request.url, request.isTopFrame)) {
         Linking.openURL(request.url).catch(() => undefined);
       }
       return false;

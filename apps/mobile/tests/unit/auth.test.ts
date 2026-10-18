@@ -77,6 +77,7 @@ describe('signIn', () => {
     api.post.mockResolvedValue(session());
     await signIn(deps, { email: 'ada@example.com', password: 'secret', turnstileToken: null });
     await signIn(deps, { email: 'ada@example.com', password: 'secret', turnstileToken: '' });
+    expect(api.post).toHaveBeenCalledTimes(2);
     for (const call of api.post.mock.calls) {
       expect(call[2]).toEqual({ authenticated: false });
     }

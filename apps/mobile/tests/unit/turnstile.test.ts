@@ -10,6 +10,7 @@ import {
   isExternalLink,
   parseChallengeMessage,
   reduceChallenge,
+  shouldOpenExternally,
   type ChallengeEvent,
   type ChallengeState,
 } from '../../features/auth/turnstile';
@@ -89,6 +90,20 @@ describe('navigation policy', () => {
     expect(isExternalLink('http://example.test')).toBe(false);
     expect(isExternalLink('intent://scan')).toBe(false);
     expect(isExternalLink('garbage')).toBe(false);
+  });
+});
+
+describe('shouldOpenExternally', () => {
+  const link = 'https://www.cloudflare.com/privacypolicy/';
+
+  it('opens top-frame links, including Android where isTopFrame is missing', () => {
+    expect(shouldOpenExternally(link, true)).toBe(true);
+    expect(shouldOpenExternally(link, undefined)).toBe(true);
+  });
+
+  it('never opens nested-frame navigations or non-https links', () => {
+    expect(shouldOpenExternally(link, false)).toBe(false);
+    expect(shouldOpenExternally('intent://scan', undefined)).toBe(false);
   });
 });
 
