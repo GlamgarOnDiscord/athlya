@@ -1,6 +1,6 @@
 # Mobile — Epic 10 (`apps/mobile`)
 
-**Status**: foundation (issue #638) and member screens (issue #647) delivered, 12/13 tasks. The QR
+**Status**: foundation (issue #638) and member screens (issue #647, progression graphs #660) delivered, 12/13 tasks. The QR
 check-in screen (11.9) is the last one; its API (token route and kiosk scan) ships with #654. Post-1.0 roadmap item v1.1, see
 [`docs/roadmap/post-1.0.md`](../roadmap/post-1.0.md).
 
@@ -15,6 +15,7 @@ check-in screen (11.9) is the last one; its API (token route and kiosk scan) shi
 | Biometrics    | `expo-local-authentication`                                                           |
 | Offline queue | `react-native-mmkv` 4 (AES-256, per-install key in secure storage)                    |
 | Connectivity  | `@react-native-community/netinfo`                                                     |
+| Charts        | `react-native-svg` 15.16 (SDK 58 pin); maths in `@athlya/shared/charts`               |
 | Builds        | EAS Build / Submit — operator steps in [`mobile-eas.md`](../runbooks/mobile-eas.md)   |
 
 ## Checklist (`tasks.md` § 11)
@@ -98,12 +99,13 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
 | `/classes`      | Next 14 days of classes, booking with an optimistic seat count (11.8)                        | `GET /v1/classes?from=<ISO>&to=<ISO>` (both required, 90 days at most), `POST /v1/reservations` |
 | `/reservations` | Upcoming reservations, cancellation until 2 h before the class                               | `GET /v1/reservations/me`, `DELETE /v1/reservations/{id}`                                       |
 | `/workout`      | Workout log: exercises, sets, reps, weight, duration, notes (11.10)                          | `POST /v1/sessions`                                                                             |
+| `/progression`  | Progression graphs over 30/90/365 days: volume, estimated 1RM, weekly frequency (22.2)       | `GET /v1/me/progression?window=30\|90\|365` (ETag / `If-None-Match`)                            |
 | `/settings`     | Biometric unlock, rejected changes (DLQ), RGPD export and account deletion (11.11), sign-out | `POST /v1/members/me/export`, `DELETE /v1/auth/me`, `POST /v1/auth/logout`                      |
 
 Screens behind the sign-in gate (`<SignedIn>`, `components/AppSession.tsx`) redirect to `/login` when
 no session is stored. Every response body the app reads (sessions, class and reservation lists,
-booking result, export job, today's program) is validated with the `@athlya/shared` Zod schemas;
-the bodies of cancellation, workout and deletion responses are not read.
+booking result, export job, today's program, progression) is validated with the `@athlya/shared`
+Zod schemas; the bodies of cancellation, workout and deletion responses are not read.
 
 **Write path** (`features/writes.ts`, `submitWrite`): online, the request goes out with a fresh UUID
 v4 `Idempotency-Key`; on `NetworkError` it is queued with that same key and a drain starts. It is
@@ -119,6 +121,15 @@ undone on an API error (never on a full class, which only joins the waitlist), a
 again afterwards. A queued booking keeps its decrement (re-applied on every reload) and shows as
 waiting to sync; once it leaves the queue (delivered or dead-lettered) the list is fetched again.
 Queued cancellations are reconciled the same way on "My reservations".
+
+**Progression graphs** (`features/progression/`, task 22.2): `ProgressionController` keeps the last
+body and `ETag` of each window in memory, revalidates it with `If-None-Match` and reuses it on `304`
+(`RequestOptions.headers` carries the header). A newer load or the screen's abort signal cancels the
+one in flight. The charts (`components/SeriesChart.tsx`, `react-native-svg`) use the same scale and
+path maths as the web ones (`@athlya/shared/charts`). Screen readers cannot explore SVG marks, so each
+chart is one `image` element whose label holds its key numbers: days trained, date range, latest,
+highest and lowest value, or weeks and sessions for the frequency chart. A chart with nothing to draw
+shows a text empty state instead.
 
 **Account deletion**: once the API accepted it, the device removes the user's queued and rejected
 changes, then clears the session (or locks it in memory if the secure storage fails) and leaves the
