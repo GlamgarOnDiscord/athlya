@@ -532,7 +532,14 @@
       "title": "Athlya",
       "tagline": "Your studio in your pocket.",
       "syncNow": "Sync now",
-      "syncNowHint": "Sends the changes saved while offline."
+      "syncNowHint": "Sends the changes saved while offline.",
+      "nav": {
+        "label": "Main menu",
+        "classes": "Book a class",
+        "reservations": "My reservations",
+        "workout": "Log a workout",
+        "settings": "Settings"
+      }
     },
     "sync": {
       "label": "Sync status",
@@ -544,6 +551,134 @@
     },
     "unlock": {
       "prompt": "Unlock Athlya"
+    },
+    "auth": {
+      "login": {
+        "title": "Sign in",
+        "submit": "Sign in",
+        "toRegister": "Create an account"
+      },
+      "register": {
+        "title": "Create an account",
+        "submit": "Create my account",
+        "toLogin": "I already have an account",
+        "studioSlugHint": "The short name of your studio, given by your studio (letters, digits and hyphens)."
+      },
+      "errors": {
+        "email": "Enter a valid email address.",
+        "password": "Enter a password of 8 to 72 characters.",
+        "displayName": "Enter a display name (80 characters at most).",
+        "studioSlug": "Enter your studio's short name (lowercase letters, digits and hyphens).",
+        "emailTaken": "An account already exists with this email address.",
+        "studioNotFound": "No studio matches this short name.",
+        "botCheck": "Signing in from the app is not available yet. Please use the website."
+      }
+    },
+    "errors": {
+      "sessionExpired": "Your session has expired. Sign in again.",
+      "signIn": "Sign in"
+    },
+    "classes": {
+      "title": "Book a class",
+      "empty": "No class scheduled in the next 14 days.",
+      "remaining": "{count} seat(s) left",
+      "full": "Full: booking adds you to the waitlist",
+      "book": "Book",
+      "bookHint": "Books a seat in this class.",
+      "joinWaitlist": "Join the waitlist",
+      "confirmed": "Booked",
+      "waitlisted": "On the waitlist (position {position})",
+      "queued": "Booking saved: it will be sent when you are back online.",
+      "pendingSync": "Booking waiting to sync",
+      "alreadyBooked": "You have already booked this class.",
+      "starts": "{date} · {duration} min",
+      "refresh": "Refresh"
+    },
+    "reservations": {
+      "title": "My reservations",
+      "empty": "No upcoming reservation.",
+      "status": {
+        "confirmed": "Confirmed",
+        "waitlist": "Waitlist",
+        "cancelled": "Cancelled",
+        "no_show": "Missed"
+      },
+      "cancel": "Cancel",
+      "cancelHint": "Cancels this reservation.",
+      "cancelClosed": "Cancellation closes 2 hours before the class.",
+      "cancelled": "Reservation cancelled.",
+      "queued": "Cancellation saved: it will be sent when you are back online.",
+      "pendingSync": "Cancellation waiting to sync"
+    },
+    "workout": {
+      "title": "Log a workout",
+      "duration": "Duration (minutes, optional)",
+      "notes": "Notes (optional)",
+      "exercise": "Exercise {index}",
+      "exerciseName": "Exercise name",
+      "removeExercise": "Remove exercise {index}",
+      "set": "Set {index}",
+      "reps": "Reps",
+      "weight": "Weight (kg, optional)",
+      "removeSet": "Remove set {index}",
+      "addExercise": "Add an exercise",
+      "addSet": "Add a set",
+      "save": "Save the workout",
+      "saved": "Workout saved.",
+      "queued": "Workout saved on this device: it will be sent when you are back online.",
+      "limits": "Up to {exercises} exercises and {sets} sets per exercise.",
+      "errors": {
+        "noExercise": "Add at least one exercise.",
+        "exerciseName": "Enter the exercise name.",
+        "reps": "Enter a whole number of reps (1000 at most).",
+        "weight": "Enter a weight in kg, for example 42.5 (1000 at most).",
+        "duration": "Enter a duration in whole minutes.",
+        "notes": "Notes are limited to 2,000 characters."
+      }
+    },
+    "settings": {
+      "title": "Settings",
+      "biometric": {
+        "label": "Unlock with biometrics",
+        "hint": "Asks for your fingerprint or face before using your saved session.",
+        "unavailable": "Biometric unlock could not be turned on: it is unavailable on this device or the check was cancelled."
+      },
+      "signOut": "Sign out",
+      "signOutHint": "Signs you out on this device. Changes waiting to sync are sent when you sign in again.",
+      "rejected": {
+        "title": "Rejected changes",
+        "empty": "No rejected change.",
+        "description": "The server refused these changes made offline. They were not applied.",
+        "item": "{kind}, refused on {date} (error {status})",
+        "discard": "Dismiss",
+        "discardHint": "Removes this rejected change from the list.",
+        "kinds": {
+          "bookClass": "Class booking",
+          "cancelReservation": "Reservation cancellation",
+          "logSession": "Workout log",
+          "other": "Change"
+        }
+      },
+      "export": {
+        "requested": "Export requested (reference {jobId}). You will receive an email within 48 hours.",
+        "alreadyRequested": "An export was already requested in the last 24 hours."
+      },
+      "delete": {
+        "inputLabel": "Confirmation"
+      }
+    },
+    "program": {
+      "title": "Today's workout",
+      "weekDay": "Week {week} of {total} · Day {day}",
+      "restDay": "Rest day: no workout planned today.",
+      "notStarted": "This program starts on {date}.",
+      "completed": "Program completed. Well done!",
+      "setsReps": "{sets} × {reps}",
+      "setsDuration": "{sets} × {seconds} s",
+      "sets": "{sets} sets",
+      "weight": "{weight} kg",
+      "restBetweenSets": "rest {seconds} s",
+      "loadError": "Today's workout could not be loaded."
     }
   },
   "notifications": {

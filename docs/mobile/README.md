@@ -1,7 +1,8 @@
 # Mobile — Epic 10 (`apps/mobile`)
 
-**Status**: foundation delivered (issue #638, 9/13 tasks). The screens (11.8 to 11.11) follow in a
-separate PR. Post-1.0 roadmap item v1.1, see [`docs/roadmap/post-1.0.md`](../roadmap/post-1.0.md).
+**Status**: foundation (issue #638) and member screens (issue #647) delivered, 12/13 tasks. The QR
+check-in screen (11.9) waits for an API token route (#648). Post-1.0 roadmap item v1.1, see
+[`docs/roadmap/post-1.0.md`](../roadmap/post-1.0.md).
 
 ## Stack
 
@@ -25,10 +26,10 @@ separate PR. Post-1.0 roadmap item v1.1, see [`docs/roadmap/post-1.0.md`](../roa
 - [x] 11.5 `MutationQueue` persisted in MMKV, with a DLQ
 - [x] 11.6 `drainMutationQueue` (design.md Algorithm 4)
 - [x] 11.7 NetInfo auto-drain + sync progress
-- [ ] 11.8 Booking screen with optimistic update
-- [ ] 11.9 QR check-in screen
-- [ ] 11.10 Workout logging (offline enqueue)
-- [ ] 11.11 RGPD export / delete screens
+- [x] 11.8 Booking screen with optimistic update (+ "My reservations" with cancellation)
+- [ ] 11.9 QR check-in screen: blocked, no token-issuance route on the API yet (#648)
+- [x] 11.10 Workout logging (offline enqueue)
+- [x] 11.11 RGPD export / delete screens (in Settings)
 - [x] 11.12 Property 5 (FIFO + idempotent drain), fast-check
 - [x] 11.13 `MutationQueue` persistence unit tests
 
@@ -38,6 +39,7 @@ separate PR. Post-1.0 roadmap item v1.1, see [`docs/roadmap/post-1.0.md`](../roa
 apps/mobile/
 ├── app/                     expo-router routes (_layout.tsx boots the runtime)
 ├── components/              UI; components/ui/ holds the accessible primitives
+├── features/                screen logic: controllers, view models, the write path (Node-tested)
 ├── infrastructure/
 │   ├── api/client.ts        createApiClient(): send/get/post/put/patch/del
 │   ├── auth/                TokenStore, createSessionRefresher, Expo adapters
@@ -53,7 +55,7 @@ adapters and `runtime.ts` is plain TypeScript behind small ports (`KeyValueStore
 `BiometricAuthenticator`, `ConnectivitySource`), so `pnpm --filter @athlya/mobile test` runs in
 Node without a device or simulator.
 
-## Contracts for the screens PR
+## Runtime contracts
 
 - **Runtime**: `useRuntime()` (`components/RuntimeProvider.tsx`) returns `{ locale, t, api,
 tokenStore, queue, sync, dispose }`.
@@ -80,6 +82,40 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
   invalidates in-flight refreshes too (a rotated refresh token is kept, the store stays locked).
   Call `runtime.sync.refreshOwner()` after every sign-in and sign-out.
 - **Strings**: add keys under `mobile.*` in `packages/shared/src/i18n/{en,fr}.json`.
+
+## Screens
+
+| Route           | What it does                                                                                 | API                                                                        |
+| --------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `/login`        | Email + password sign-in                                                                     | `POST /v1/auth/login`                                                      |
+| `/register`     | Account creation with studio slug and consents                                               | `POST /v1/auth/register`                                                   |
+| `/`             | Sync banner, today's program workout (24.4), navigation                                      | `GET /v1/programs/today?date=<local date>`                                 |
+| `/classes`      | Next 14 days of classes, booking with an optimistic seat count (11.8)                        | `GET /v1/classes`, `POST /v1/reservations`                                 |
+| `/reservations` | Upcoming reservations, cancellation until 2 h before the class                               | `GET /v1/reservations/me`, `DELETE /v1/reservations/{id}`                  |
+| `/workout`      | Workout log: exercises, sets, reps, weight, duration, notes (11.10)                          | `POST /v1/sessions`                                                        |
+| `/settings`     | Biometric unlock, rejected changes (DLQ), RGPD export and account deletion (11.11), sign-out | `POST /v1/members/me/export`, `DELETE /v1/auth/me`, `POST /v1/auth/logout` |
+
+Screens behind the sign-in gate (`<SignedIn>`, `components/AppSession.tsx`) redirect to `/login` when
+no session is stored. Every response is validated with the `@athlya/shared` Zod schemas.
+
+**Write path** (`features/writes.ts`, `submitWrite`): online, the request goes out with a fresh UUID
+v4 `Idempotency-Key`; on `NetworkError` it is queued with that same key and a drain starts. It is
+queued straight away while the device is offline, or while older writes of the same user are still
+queued, so a direct call never overtakes them (the drain is FIFO). A cancelled request is never
+queued. Queue kinds: `bookClass`, `cancelReservation`, `logSession`; the Settings screen labels
+rejected ones by kind. Export and account deletion are online only.
+
+**Optimistic booking** (`ClassesController.book`): the seat count drops at once, the decrement is
+undone on an API error (never on a full class, which only joins the waitlist), and the list is fetched
+again afterwards. A queued booking keeps its decrement and shows as waiting to sync.
+
+**Known gaps**:
+
+- Sign-in from a release build: `login` and `register` are behind Turnstile, which a native app
+  cannot solve, so staging and production answer `403 bot_challenge_failed` (shown as "use the
+  website"). Works against a local `wrangler dev` without a Turnstile secret. Tracked in #649.
+- `POST /v1/sessions` and `/v1/checkins` are not routed in production yet (#302, #648): workouts
+  logged from the app end up in "rejected changes" until the sessions adapter ships.
 
 ## Drain semantics (Algorithm 4)
 
