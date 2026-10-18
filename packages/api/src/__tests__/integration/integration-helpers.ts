@@ -49,9 +49,10 @@ import {
 
 import type { AuthClaims, JwksKeyResolver } from '../../middleware/auth.js';
 import type { RateLimitOptions } from '../../middleware/rate-limit.js';
-import type { CheckinsDeps, DomainDeps } from '../../routes/index.js';
-import type { CheckInResponse } from '@athlya/shared/schemas/api';
+import type { CheckinsDeps, DomainDeps, SessionsDeps } from '../../routes/index.js';
 import type { HonoEnv } from '../../types.js';
+import type { CheckInResponse } from '@athlya/shared/schemas/api';
+import type { WorkoutSession } from '@athlya/shared/schemas/domain';
 import type { Redis } from '@upstash/redis';
 import type { Hono } from 'hono';
 
@@ -430,8 +431,11 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
   }
 
   /* --------------------- sessions / checkins / members --------- */
-  const sessions: DomainDeps['sessions'] = {
-    logSession: vi.fn(async () => ({ id: 'session-1' })),
+  const sessions: SessionsDeps = {
+    logSession: vi.fn(async () => ({
+      kind: 'created' as const,
+      session: { id: 'session-1' } as unknown as WorkoutSession,
+    })),
     listSessions: vi.fn(async () => []),
   };
 

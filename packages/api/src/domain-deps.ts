@@ -19,6 +19,7 @@ import { buildCoachDeps } from './adapters/coach-deps.js';
 import { buildMembersDeps } from './adapters/members-deps.js';
 import { buildProgramsDeps } from './adapters/programs-deps.js';
 import { buildClassesDeps, buildReservationsDeps } from './adapters/reservations-deps.js';
+import { buildSessionsDeps } from './adapters/sessions-deps.js';
 import { buildStudiosDeps } from './adapters/studios-deps.js';
 
 import type { AuditDeps } from './routes/audit.js';
@@ -50,8 +51,8 @@ export interface DomainDeps {
   readonly classes: ClassesDeps;
   readonly reservations: ReservationsDeps;
   /**
-   * Optional — absent until the workout-session adapter ships.
-   * Routes are not mounted when undefined (issue #302).
+   * Workout sessions (issue #652). Optional so partial test bundles
+   * stay valid; production and the lazy facade always provide it.
    */
   readonly sessions?: SessionsDeps;
   /**
@@ -102,11 +103,9 @@ export function lazyAuditDeps(resolve: () => AuditDeps): AuditDeps {
  *   • `checkRefreshRateLimit` / `checkPasswordResetRateLimit` — getters,
  *     so the route's per-request `!== undefined` check sees whether the
  *     resolved bundle provides the throttle.
- *   • `idempotency` — `buildAuthRouter()` reads it once at mount time,
- *     before any request env exists, so it is always present here and
- *     its `db` handle is resolved per request. `ttlSec`,
- *     `mutationMethods` and `logger` are read at mount time and cannot
- *     be resolved lazily; the adapter leaves them to their defaults.
+ *   • `idempotencyFor` — resolved per request with the caller's claims
+ *     (issue #645), so a bundle without an idempotency store degrades
+ *     to no replay protection instead of failing the mutation.
  */
 export function lazyAuthDeps(resolve: () => AuthDeps): AuthDeps {
   const forward = forwarder(resolve);
@@ -119,15 +118,7 @@ export function lazyAuthDeps(resolve: () => AuthDeps): AuthDeps {
     deleteMe: forward('deleteMe'),
     requestPasswordReset: forward('requestPasswordReset'),
     confirmPasswordReset: forward('confirmPasswordReset'),
-    idempotency: {
-      get db() {
-        const idempotency = resolve().idempotency;
-        if (idempotency === undefined) {
-          throw new Error('auth idempotency dependency is not wired for this environment');
-        }
-        return idempotency.db;
-      },
-    },
+    idempotencyFor: (claims) => resolve().idempotencyFor?.(claims),
   };
   // Getters (not plain optional fields) so `exactOptionalPropertyTypes`
   // still holds: the value is `undefined` only when the bundle omits it.
@@ -234,6 +225,19 @@ export function lazyProgramsDeps(resolve: () => ProgramsDeps): ProgramsDeps {
 }
 
 /**
+ * Lazy sessions facade. `idempotencyFor` resolves per request, like
+ * {@link lazyProgramsDeps}.
+ */
+export function lazySessionsDeps(resolve: () => SessionsDeps): SessionsDeps {
+  const forward = forwarder(resolve);
+  return {
+    logSession: forward('logSession'),
+    listSessions: forward('listSessions'),
+    idempotencyFor: (claims) => resolve().idempotencyFor?.(claims),
+  };
+}
+
+/**
  * Lazy check-in facade. `idempotencyFor` resolves per request, like
  * {@link lazyProgramsDeps}.
  */
@@ -263,6 +267,13 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
         throw new Error('buildLazyDomainDeps: programs dependency is not wired');
       }
       return programs;
+    }),
+    sessions: lazySessionsDeps(() => {
+      const sessions = resolve().sessions;
+      if (sessions === undefined) {
+        throw new Error('buildLazyDomainDeps: sessions dependency is not wired');
+      }
+      return sessions;
     }),
     checkins: lazyCheckinsDeps(() => {
       const checkins = resolve().checkins;
@@ -377,11 +388,11 @@ export function defaultAuthDeps(env: AthlyaBindings): AuthDeps {
         confirmPasswordReset: () => notImplemented('auth.confirmPasswordReset'),
       };
 
-  // Fail-fast: idempotency must be wired for all mutation routes in
-  // non-dev environments. A missing idempotency dep means duplicate
-  // requests (double-click, proxy retry) can create duplicate accounts
-  // or trigger double-deletions silently. Issue #460.
-  if (auth.idempotency === undefined && env.ENVIRONMENT !== 'dev') {
+  // Fail-fast: idempotency must be wired for the authenticated mutation
+  // routes in non-dev environments. A missing idempotency dep means
+  // duplicate requests (double-click, proxy retry) can trigger
+  // double-deletions silently. Issue #460.
+  if (auth.idempotencyFor === undefined && env.ENVIRONMENT !== 'dev') {
     throw new Error(
       `[boot] idempotency middleware not wired for environment="${env.ENVIRONMENT}". ` +
         'Ensure DB_URL is set and buildAuthDeps returns an idempotency dep.',
@@ -477,6 +488,19 @@ export function defaultProgramsDeps(env: AthlyaBindings): ProgramsDeps {
 }
 
 /**
+ * Workout sessions need DB_URL (the write path falls back to it
+ * without Hyperdrive); without it they fall back to the stub bundle.
+ */
+export function defaultSessionsDeps(env: AthlyaBindings): SessionsDeps {
+  return nonEmpty(env.DB_URL)
+    ? buildSessionsDeps(env)
+    : {
+        logSession: () => notImplemented('sessions.logSession'),
+        listSessions: () => notImplemented('sessions.listSessions'),
+      };
+}
+
+/**
  * QR check-in reads reservations (DB) and consumes token `jti`s in
  * Redis; without both it falls back to the stub bundle. The signing
  * key is checked when a token is issued or verified.
@@ -529,6 +553,7 @@ export function buildDefaultDeps(env: AthlyaBindings, cf?: RequestCf): DomainDep
     audit: defaultAuditDeps(env),
     coach: defaultCoachDeps(env, cf),
     programs: defaultProgramsDeps(env),
+    sessions: defaultSessionsDeps(env),
     checkins: defaultCheckinsDeps(env),
   };
 }

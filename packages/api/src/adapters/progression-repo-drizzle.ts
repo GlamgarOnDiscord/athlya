@@ -24,23 +24,10 @@ import { workoutSessions } from '@athlya/db/schema';
 import { and, desc, eq, gte, lt } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
+import { toWireWorkoutSession } from './workout-session-wire.js';
 
 import type { AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
-import type { WorkoutSessionRow } from '@athlya/db/schema';
 import type { ProgressionRepo } from '@athlya/members';
-
-function toWireSession(row: WorkoutSessionRow): Record<string, unknown> {
-  return {
-    id: row.id,
-    userId: row.userId,
-    studioId: row.studioId,
-    startedAt: row.startedAt.toISOString(),
-    durationMin: row.durationMin,
-    exercises: row.exercises,
-    notes: row.notes,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
 
 export function createDrizzleProgressionRepoHttp(
   db: AthlyaDbHttp,
@@ -66,7 +53,7 @@ export function createDrizzleProgressionRepoHttp(
             .limit(limit),
         ),
       );
-      return rows.map(toWireSession);
+      return rows.map(toWireWorkoutSession);
     },
   };
 }

@@ -63,7 +63,7 @@ import {
   UpdateProgramRequestSchema,
   UpdateStudioRequestSchema,
 } from '@athlya/shared/schemas/api';
-import { UserSchema } from '@athlya/shared/schemas/domain';
+import { UserSchema, WorkoutSessionSchema } from '@athlya/shared/schemas/domain';
 import { OpenAPIHono, createRoute, extendZodWithOpenApi } from '@hono/zod-openapi';
 import { z } from 'zod';
 
@@ -89,6 +89,11 @@ const ProblemDetailsSchema = z
     traceId: z.string().optional(),
   })
   .openapi({ description: 'RFC 9457 Problem Details error envelope' });
+
+const problemResponse = (description: string) => ({
+  description,
+  content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+});
 
 /* ------------------------------------------------------------------ */
 /*  Route definitions                                                  */
@@ -683,8 +688,24 @@ const logSessionRoute = createRoute({
   path: '/v1/sessions',
   tags: ['sessions'],
   summary: 'Log a workout session',
+  description:
+    'The owner is the JWT subject. `studioId` is optional (solo workouts) and must be the ' +
+    "caller's studio when present. Send an `Idempotency-Key` header: a retry with the same key " +
+    'replays the stored response instead of logging the session twice.',
   security: [{ bearerAuth: [] }],
   request: {
+    headers: z.object({
+      'idempotency-key': z
+        .string()
+        .min(1)
+        .max(255)
+        .optional()
+        .openapi({
+          description:
+            'Client-generated key (a UUID v4 is recommended). A retry with the same key ' +
+            'returns the first response and never logs a second session.',
+        }),
+    }),
     body: {
       content: { 'application/json': { schema: LogSessionRequestSchema } },
       required: true,
@@ -693,16 +714,15 @@ const logSessionRoute = createRoute({
   responses: {
     201: {
       description: 'Session logged',
-      content: { 'application/json': { schema: z.object({ id: z.uuid() }) } },
+      content: { 'application/json': { schema: WorkoutSessionSchema } },
     },
-    401: {
-      description: 'Not authenticated',
-      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
-    },
-    422: {
-      description: 'Validation error',
-      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
-    },
+    400: problemResponse('Empty `Idempotency-Key` or longer than 255 characters'),
+    401: problemResponse('Not authenticated'),
+    422: problemResponse(
+      'Validation error (more than 50 exercises, more than 30 sets per exercise, …) or `studio_mismatch`',
+    ),
+    429: problemResponse('Rate limited (20 sessions per minute per user)'),
+    503: problemResponse('Rate limiter unavailable (fail-closed, code `dependency_unavailable`)'),
   },
 });
 
@@ -711,6 +731,8 @@ const listSessionsRoute = createRoute({
   path: '/v1/sessions/me',
   tags: ['sessions'],
   summary: 'List the current user workout sessions in a date range',
+  description:
+    'Newest first (`startedAt` descending), at most 100 sessions, window of 90 days at most.',
   security: [{ bearerAuth: [] }],
   request: { query: ListSessionsQuerySchema },
   responses: {
@@ -718,21 +740,12 @@ const listSessionsRoute = createRoute({
       description: 'Session list',
       content: {
         'application/json': {
-          schema: z.object({
-            items: z.array(z.object({ id: z.uuid() })),
-            nextCursor: z.string().nullable(),
-          }),
+          schema: z.object({ items: z.array(WorkoutSessionSchema) }),
         },
       },
     },
-    401: {
-      description: 'Not authenticated',
-      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
-    },
-    422: {
-      description: 'Invalid date range',
-      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
-    },
+    401: problemResponse('Not authenticated'),
+    422: problemResponse('Invalid date range'),
   },
 });
 
@@ -780,11 +793,6 @@ const progressionRoute = createRoute({
 /*
  * coach — /v1/coach (Epic 21, behind the `ai-coach` feature flag)
  */
-
-const problemResponse = (description: string) => ({
-  description,
-  content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
-});
 
 const coachStatusRoute = createRoute({
   method: 'get',

@@ -23,6 +23,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AthlyaEventSchema,
+  AuthPasswordResetRequestedEventSchema,
   AuthUserDeletedEventSchema,
   AuthUserRegisteredEventSchema,
   BillingSubscriptionFailedEventSchema,
@@ -181,6 +182,24 @@ describe('AthlyaEventSchema — happy paths', () => {
     expect(AuthUserDeletedEventSchema.parse(event).type).toBe('auth.user.deleted');
   });
 
+  it('parses auth.password_reset.requested', () => {
+    const event = {
+      ...baseEnvelope('auth.password_reset.requested'),
+      payload: { userId: USER_ID },
+    };
+    expect(AuthPasswordResetRequestedEventSchema.parse(event).payload.userId).toBe(USER_ID);
+  });
+
+  it('rejects an auth.password_reset.requested payload carrying the email or a token', () => {
+    for (const extra of [{ email: 'ada@example.com' }, { token: 'plain-token' }]) {
+      const event = {
+        ...baseEnvelope('auth.password_reset.requested'),
+        payload: { userId: USER_ID, ...extra },
+      };
+      expect(AuthPasswordResetRequestedEventSchema.safeParse(event).success).toBe(false);
+    }
+  });
+
   it('parses billing.subscription.started', () => {
     const event = {
       ...baseEnvelope('billing.subscription.started'),
@@ -263,6 +282,7 @@ describe('AthlyaEventSchema — discriminator', () => {
         'billing.subscription.failed',
         'members.export.completed',
         'members.export.requested',
+        'auth.password_reset.requested',
       ]),
     );
   });

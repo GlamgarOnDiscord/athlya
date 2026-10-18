@@ -26,6 +26,7 @@
 \i tests/rls/reservations.sql
 \i tests/rls/capacity_guard.sql
 \i tests/rls/workout_sessions.sql
+\i tests/rls/workout_sessions_idempotency.sql
 \i tests/rls/audit_log.sql
 \i tests/rls/audit_anonymization.sql
 \i tests/rls/audit_anonymization_scalar_guard.sql
@@ -40,6 +41,7 @@
 \i tests/rls/reservation_waitlist_runtime.sql
 \i tests/rls/checkin_runtime.sql
 \i tests/rls/auth_event_recording.sql
+\i tests/rls/auth_password_reset_outbox.sql
 \i tests/rls/export_runtime.sql
 \i tests/rls/outbox_lease.sql
 \i tests/rls/billing_runtime.sql

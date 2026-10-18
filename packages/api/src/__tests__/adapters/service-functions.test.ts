@@ -5,13 +5,18 @@ import { fileURLToPath } from 'node:url';
 import { EmailTakenError } from '@athlya/auth';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import ts from 'typescript';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createDrizzleUserRepo } from '../../adapters/auth-user-repo-drizzle.js';
 import { createDrizzleDeletionRepo } from '../../adapters/cascade-repo-drizzle.js';
 import { buildRecipientRepo } from '../../adapters/notifications-deps.js';
-import { createDrizzlePasswordResetRepo } from '../../adapters/password-reset-repo-drizzle.js';
+import {
+  createDrizzlePasswordResetRepo,
+  createPasswordResetRequestQueue,
+  createPasswordResetRequestTokenStore,
+} from '../../adapters/password-reset-repo-drizzle.js';
 import { queryRows, serviceFn, uuidV7, writeRows } from '../../adapters/service-functions.js';
+import { OutboxKickCoalescer, runWithOutboxKickScope } from '../../events/outbox-kick.js';
 
 import type { AthlyaDbAny, AthlyaDbHttp } from '@athlya/db/client';
 import type { SQL } from 'drizzle-orm';
@@ -30,6 +35,7 @@ const migration = [
   '0038_studios_runtime.sql',
   '0039_runtime_rls_gaps.sql',
   '0042_training_programs.sql',
+  '0043_auth_password_reset_outbox.sql',
 ]
   .map((file) => readFileSync(resolve(here, '../../../../db/migrations', file), 'utf8'))
   .join('\n');
@@ -73,8 +79,8 @@ describe('service function contract with migration 0032', () => {
     (m) => m[1],
   );
 
-  it('references the 21 service functions', () => {
-    expect(new Set(used).size).toBe(21);
+  it('references the 23 service functions', () => {
+    expect(new Set(used).size).toBe(23);
   });
 
   const granted = grantedToApp(migration);
@@ -860,6 +866,85 @@ describe('createDrizzleDeletionRepo', () => {
     expect(calls[0]?.sql).toContain('rgpd_anonymize_user_audit(');
     expect(calls[0]?.sql).not.toMatch(/update\s+"?audit_log/iu);
     expect(calls[0]?.params).toEqual([userRow.id]);
+  });
+});
+
+describe('createPasswordResetRequestQueue — durable reset requests (issue #645)', () => {
+  it('records the request through auth_request_password_reset with a v7 event id', async () => {
+    const { db, calls } = fakeDb(() => [{ enqueued: true }]);
+
+    await createPasswordResetRequestQueue(db).enqueue('ada@example.com');
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.sql).toContain('auth_request_password_reset(');
+    expect(calls[0]?.params[0]).toBe('ada@example.com');
+    expect(calls[0]?.params[1]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+    );
+  });
+
+  it('a committed insert whose response is lost is replayed into one outbox row', async () => {
+    // Models the outbox's `ON CONFLICT (event_id) DO NOTHING`: the first
+    // call commits its row, then the connection drops before the answer.
+    // `auth-runtime.pglite.test.ts` checks the same against the real SQL.
+    const outbox = new Set<string>();
+    let attempt = 0;
+    const { db, calls } = fakeDb((call) => {
+      attempt += 1;
+      outbox.add(String(call.params[1]));
+      return attempt === 1
+        ? Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })
+        : [{ enqueued: true }];
+    });
+
+    await createPasswordResetRequestQueue(db).enqueue('ada@example.com');
+
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.params).toEqual(calls[0]?.params);
+    expect(outbox.size).toBe(1);
+  });
+
+  it('issues a request token through auth_issue_password_reset_for_request', async () => {
+    const { db, calls } = fakeDb(() => [{ outcome: 'superseded' }]);
+    const expiresAt = new Date('2026-10-18T12:00:00.000Z');
+
+    await expect(
+      createPasswordResetRequestTokenStore(db).issueForRequest({
+        userId: userRow.id,
+        tokenHash: 'a'.repeat(64),
+        expiresAt,
+      }),
+    ).resolves.toBe('superseded');
+    expect(calls[0]?.sql).toContain('auth_issue_password_reset_for_request(');
+    expect(calls[0]?.params).toEqual([userRow.id, 'a'.repeat(64), expiresAt.toISOString()]);
+  });
+
+  it('rejects an unexpected issuance outcome', async () => {
+    const { db } = fakeDb(() => [{ outcome: 'maybe' }]);
+
+    await expect(
+      createPasswordResetRequestTokenStore(db).issueForRequest({
+        userId: userRow.id,
+        tokenHash: 'a'.repeat(64),
+        expiresAt: new Date(),
+      }),
+    ).rejects.toThrow(/unexpected outcome/u);
+  });
+
+  it.each([
+    [true, 1],
+    [false, 0],
+  ])('kicks the drain only when a row was recorded (enqueued=%s)', async (enqueued, kicks) => {
+    const { db } = fakeDb(() => [{ enqueued }]);
+    const send = vi.fn(() => Promise.resolve());
+
+    await runWithOutboxKickScope(
+      { env: { OUTBOX_KICK_QUEUE: { send } }, executionCtx: undefined as never },
+      () => createPasswordResetRequestQueue(db).enqueue('ada@example.com'),
+      new OutboxKickCoalescer(),
+    );
+
+    expect(send).toHaveBeenCalledTimes(kicks);
   });
 });
 

@@ -9,6 +9,7 @@
  *   • /v1/coach, /v1/coach/* — AI coach (Epic 21, `ai-coach` flag)
  *   • /v1/studios/*      — studio read/update
  *   • /v1/programs/*     — training programs, subscriptions, daily workout
+ *   • /v1/sessions, /v1/sessions/* — workout session log and history (issue #652)
  *   • /v1/checkins, /v1/checkins/* — QR check-in token and kiosk scan (issue #654)
  *
  * Owns the ClassCapacityDO Durable Object (real-time class capacity via
@@ -29,6 +30,7 @@ import {
   defaultMembersDeps,
   defaultProgramsDeps,
   defaultReservationsDeps,
+  defaultSessionsDeps,
   defaultStudiosDeps,
   lazyCheckinsDeps,
   lazyClassesDeps,
@@ -36,6 +38,7 @@ import {
   lazyMembersDeps,
   lazyProgramsDeps,
   lazyReservationsDeps,
+  lazySessionsDeps,
   lazyStudiosDeps,
 } from '../domain-deps.js';
 import { installDomainScope } from '../domain-scope.js';
@@ -47,6 +50,7 @@ import { buildMeRouter } from '../routes/me.js';
 import { buildMembersRouter } from '../routes/members.js';
 import { buildProgramsRouter } from '../routes/programs.js';
 import { buildReservationsRouter } from '../routes/reservations.js';
+import { buildSessionsRouter } from '../routes/sessions.js';
 import { buildStudiosRouter } from '../routes/studios.js';
 
 export { ClassCapacityDO } from '../durable-objects/class-capacity.js';
@@ -82,6 +86,7 @@ const app = buildBaseApp({
         studios: defaultStudiosDeps(env),
         coach: defaultCoachDeps(env, cf),
         programs: defaultProgramsDeps(env),
+        sessions: defaultSessionsDeps(env),
         checkins: defaultCheckinsDeps(env),
       };
     });
@@ -99,6 +104,7 @@ const app = buildBaseApp({
     base.route('/v1/studios', buildStudiosRouter(lazyStudiosDeps(() => resolve().studios)));
     base.route('/v1/coach', buildCoachRouter(lazyCoachDeps(() => resolve().coach)));
     base.route('/v1/programs', buildProgramsRouter(lazyProgramsDeps(() => resolve().programs)));
+    base.route('/v1/sessions', buildSessionsRouter(lazySessionsDeps(() => resolve().sessions)));
     base.route('/v1/checkins', buildCheckinsRouter(lazyCheckinsDeps(() => resolve().checkins)));
   },
 });

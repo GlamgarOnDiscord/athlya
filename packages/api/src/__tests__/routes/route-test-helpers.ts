@@ -59,8 +59,8 @@ export async function mintAuthJwt(
 /**
  * Build a `DomainDeps` bundle where every method is a `vi.fn()` spy.
  * Callers override specific methods per test via `overrides`. No
- * `idempotency` field is set so the routers skip the idempotency
- * middleware (see the `...(idem ? [...] : [])` guard).
+ * `idempotencyFor` is set so the auth router skips the idempotency
+ * middleware.
  */
 export function buildStubDeps(
   overrides: {
