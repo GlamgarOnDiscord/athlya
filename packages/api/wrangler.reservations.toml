@@ -5,10 +5,12 @@
 #   staging:    staging.api.athlya.app/v1/classes/*
 #               staging.api.athlya.app/v1/reservations/*
 #               staging.api.athlya.app/v1/members/*
+#               staging.api.athlya.app/v1/me/*
 #               staging.api.athlya.app/v1/studios/*
 #   production: api.athlya.app/v1/classes/*
 #               api.athlya.app/v1/reservations/*
 #               api.athlya.app/v1/members/*
+#               api.athlya.app/v1/me/*
 #               api.athlya.app/v1/studios/*
 #
 # Durable Objects:
@@ -116,6 +118,10 @@ pattern = "staging.api.athlya.app/v1/members/*"
 zone_name = "athlya.app"
 
 [[env.staging.routes]]
+pattern = "staging.api.athlya.app/v1/me/*"
+zone_name = "athlya.app"
+
+[[env.staging.routes]]
 pattern = "staging.api.athlya.app/v1/studios/*"
 zone_name = "athlya.app"
 
@@ -168,6 +174,10 @@ zone_name = "athlya.app"
 
 [[env.production.routes]]
 pattern = "api.athlya.app/v1/members/*"
+zone_name = "athlya.app"
+
+[[env.production.routes]]
+pattern = "api.athlya.app/v1/me/*"
 zone_name = "athlya.app"
 
 [[env.production.routes]]

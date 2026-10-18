@@ -648,13 +648,16 @@ Use official CLI to create, init the project .. and recent package version and s
     - _Requirements: 14.1, 14.2_
 
 - [ ] 22. Progression graphs
-  - [ ] 22.1 Implement the progression aggregator
+  - [x] 22.1 Implement the progression aggregator
     - `packages/members/src/progression.ts`: compute per-exercise volume and 1RM trends over 30/90/365-day windows
     - Use Neon read replicas for the query
+    - Done (#639): pure `computeProgression` (volume = reps × weight, Epley 1RM on 1–12-rep sets, zero-filled ISO-week frequency, rows re-validated with `WorkoutSessionSchema`), RLS-scoped read via `withTenantHttp` on the region-routed handle (EU replica, CN.8.3), served as `GET /v1/me/progression?window=30|90|365` by the reservations bulkhead Worker
     - _Requirements: 12.4_
 
   - [ ] 22.2 Build the progression graph UI in web and mobile
     - Line charts for volume, bar charts for frequency; accessible (keyboard + screen-reader)
+    - Web done (#639): `/me/progression`, hand-rolled SVG (CSP intact), roving keyboard focus on data points, screen-reader data tables, FR/EN keys, axe sweep
+    - Mobile pending (separate PR, consumes `GET /v1/me/progression`)
     - _Requirements: 27.1, 27.3_
 
 - [ ] 23. Bluetooth FTMS integration (mobile)

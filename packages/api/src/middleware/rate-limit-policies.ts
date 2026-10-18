@@ -224,6 +224,17 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     notes: 'Issue #133 — gateway mount pre-jwtAuth → IP bucket',
   },
   {
+    id: 'progression-read',
+    route: '/v1/me/progression',
+    methods: 'GET',
+    budget: EXPENSIVE_READ_BUDGET,
+    failPolicy: 'fail-closed',
+    bucket: 'ip',
+    wiredIn: 'worker.ts',
+    notes:
+      'Issue #639 — aggregates up to a year of sessions; gateway mount pre-jwtAuth → IP bucket under its own rl:ip:progression namespace',
+  },
+  {
     id: 'admin-stats',
     route: '/admin/{dlq,outbox,jwt}/stats|state',
     methods: 'GET',
@@ -270,6 +281,7 @@ export const REQUIRED_FAIL_CLOSED_IDS = [
   'classes-search',
   'members-list',
   'audit-list',
+  'progression-read',
   'admin-stats',
   'checkin-post',
 ] as const;

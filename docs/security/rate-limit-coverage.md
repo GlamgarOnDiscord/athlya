@@ -28,6 +28,7 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 | `classes-search`       | `GET /v1/classes/search`                                | GET     | 30 IP                          | **fail-closed**  | ip (pre-jwt) |
 | `members-list`         | `GET /v1/members` (exact)                               | GET     | 20 IP                          | **fail-closed**  | ip (pre-jwt) |
 | `audit-list`           | `GET /v1/audit`                                         | GET     | 30 IP                          | **fail-closed**  | ip (pre-jwt) |
+| `progression-read`     | `GET /v1/me/progression`                                | GET     | 30 IP (`rl:ip:progression`)    | **fail-closed**  | ip (pre-jwt) |
 | `admin-stats`          | `GET /admin/{dlq,outbox}/stats`, `GET /admin/jwt/state` | GET     | 10 user / 5 IP                 | **fail-closed**  | ip+user      |
 | `studio-burst`         | Domain routers authentifiés                             | \*      | 1000 / studio                  | fail-open        | studio       |
 
