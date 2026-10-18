@@ -75,7 +75,13 @@ import {
   MUTATION_BUDGETS,
   REGISTER_BUDGET,
 } from './middleware/rate-limit-policies.js';
-import { rateLimit, HOST_PROBE_BUCKET_PREFIX, deriveClientIp } from './middleware/rate-limit.js';
+import {
+  rateLimit,
+  HOST_PROBE_BUCKET_PREFIX,
+  MUTATION_IP_BUCKET_PREFIX,
+  MUTATION_USER_BUCKET_PREFIX,
+  deriveClientIp,
+} from './middleware/rate-limit.js';
 import {
   applySecurityHeaders,
   buildSecurityHeaders,
@@ -648,13 +654,20 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   //      defend against targeted abuse of expensive endpoints.
   //
   //      Each limiter shares the same Upstash-backed primitive but
-  //      uses its own Redis key namespace via `ipLimit` /
-  //      `userLimit` overrides. The middleware reads
-  //      `authClaims.userId` from the context — populated by the
-  //      domain router's `jwtAuth()` mount earlier in the chain —
-  //      so the user bucket wins for authenticated requests.
-  //      Anonymous traffic falls through to the IP bucket as
-  //      usual.
+  //      uses its own Redis key namespace (`keyPrefix` /
+  //      `userKeyPrefix`) so budgets never share a sliding window.
+  //
+  //      Issue #613 — these overlays are registered before the
+  //      domain routers, whose own `jwtAuth()` would run too late
+  //      for the limiter to see `authClaims`. `guardMutationLimiter`
+  //      therefore runs an inline `jwtAuth()` pre-pass first: an
+  //      unauthenticated request gets the router's 401 envelope
+  //      without touching any bucket, and an authenticated one is
+  //      keyed on `rl:user:mutation-<scope>:<userId>`, so the
+  //      budget follows the user across IPs and users sharing an
+  //      IP (NAT, gym Wi-Fi) do not throttle each other. The
+  //      router's `jwtAuth()` re-verifies against the same cached
+  //      JWKS, as the tenant claim guard below already does.
   //
   //      Budgets:
   //        - POST   /v1/reservations          — 10/min/user (book)
@@ -667,9 +680,15 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   //      runs on every method by default; we wrap each limiter in
   //      a method guard so a benign GET on `/v1/reservations` is
   //      not throttled by the booking budget.
-  const reservationLimiter = rateLimit(MUTATION_BUDGETS.reservation);
-  const profileLimiter = rateLimit(MUTATION_BUDGETS.profile);
-  const exportLimiter = rateLimit(MUTATION_BUDGETS.export);
+  const mutationLimiter = (scope: keyof typeof MUTATION_BUDGETS) =>
+    rateLimit({
+      ...MUTATION_BUDGETS[scope],
+      keyPrefix: `${MUTATION_IP_BUCKET_PREFIX}-${scope}`,
+      userKeyPrefix: `${MUTATION_USER_BUCKET_PREFIX}-${scope}`,
+    });
+  const reservationLimiter = mutationLimiter('reservation');
+  const profileLimiter = mutationLimiter('profile');
+  const exportLimiter = mutationLimiter('export');
 
   const searchReadLimiter = rateLimit(EXPENSIVE_READ_BUDGET);
   const membersListReadLimiter = rateLimit(MEMBERS_LIST_BUDGET);
@@ -677,19 +696,23 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   const adminStatsReadLimiter = rateLimit(ADMIN_STATS_BUDGET);
 
   // `guardLimiter` — mutations fail-closed, reads fail-open (issue #65).
+  // Issue #613 — authenticate before the limiter so it keys on the user.
   const guardMutationLimiter = (
     method: 'POST' | 'PATCH' | 'DELETE',
     inner: ReturnType<typeof rateLimit>,
   ) => {
-    const guarded = guardLimiterWithDevBypass('mutation', inner, 'fail-closed');
-    return async (c: { req: { method: string } }, next: () => Promise<void>) => {
-      if (c.req.method !== method) {
+    const guarded = guardLimiter('mutation', inner, 'fail-closed');
+    const authenticate = jwtAuth();
+    return async (c: Context<HonoEnv>, next: () => Promise<void>) => {
+      if (c.req.method !== method || isDevEnv(c.env)) {
         await next();
         return undefined;
       }
-      return (
-        guarded as unknown as (ctx: typeof c, n: typeof next) => Promise<Response | undefined>
-      )(c, next);
+      const authResult = await authenticate(c, async () => {});
+      if (authResult instanceof Response) {
+        return authResult;
+      }
+      return guarded(c, next);
     };
   };
 

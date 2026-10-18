@@ -20,11 +20,11 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 | ---------------------- | ------------------------------------------------------- | ------- | ------------------------------ | ---------------- | ------------ |
 | `global-v1`            | `/v1/*`                                                 | \*      | 1000 IP / 5000 user (defaults) | fail-closed-soft | ip+user      |
 | `auth`                 | `/v1/auth/*`                                            | \*      | 20 IP                          | fail-closed      | ip           |
-| `reservation-mutation` | `POST /v1/reservations`                                 | POST    | 10 user+IP                     | fail-closed      | ip+user      |
-| `reservation-cancel`   | `DELETE /v1/reservations/:id`                           | DELETE  | 10 user+IP                     | fail-closed      | ip+user      |
-| `profile-patch`        | `PATCH /v1/me`                                          | PATCH   | 5 user+IP                      | fail-closed      | ip+user      |
-| `consents-patch`       | `PATCH /v1/me/consents`                                 | PATCH   | 5 user+IP                      | fail-closed      | ip+user      |
-| `export-post`          | `POST /v1/members/me/export`                            | POST    | 1 / 24h user+IP                | fail-closed      | ip+user      |
+| `reservation-mutation` | `POST /v1/reservations`                                 | POST    | 10 user                        | fail-closed      | user         |
+| `reservation-cancel`   | `DELETE /v1/reservations/:id`                           | DELETE  | 10 user                        | fail-closed      | user         |
+| `profile-patch`        | `PATCH /v1/me`                                          | PATCH   | 5 user                         | fail-closed      | user         |
+| `consents-patch`       | `PATCH /v1/me/consents`                                 | PATCH   | 5 user                         | fail-closed      | user         |
+| `export-post`          | `POST /v1/members/me/export`                            | POST    | 1 / 24h user                   | fail-closed      | user         |
 | `classes-search`       | `GET /v1/classes/search`                                | GET     | 30 IP                          | **fail-closed**  | ip (pre-jwt) |
 | `members-list`         | `GET /v1/members` (exact)                               | GET     | 20 IP                          | **fail-closed**  | ip (pre-jwt) |
 | `audit-list`           | `GET /v1/audit`                                         | GET     | 30 IP                          | **fail-closed**  | ip (pre-jwt) |
@@ -32,6 +32,8 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 | `studio-burst`         | Domain routers authentifiés                             | \*      | 1000 / studio                  | fail-open        | studio       |
 
 `/v1/members/me` et sous-routes ne matchent **pas** le limiter `members-list` (garde `isMembersListGetPath`).
+
+Mutation limiters (issue #613) run an inline `jwtAuth()` pre-pass before the limiter: unauthenticated requests get a 401 without touching a mutation bucket (the global `/v1/*` IP bucket still applies), and authenticated ones are keyed on `rl:user:mutation-<scope>:<userId>`, so the budget follows the user across IPs and users behind one IP get independent budgets.
 
 Les limiters reads coûteux sont montés **avant** `jwtAuth` → bucket **IP** sur le limiter dédié ; le global `/v1/*` applique quand même le bucket user si le JWT est présent.
 

@@ -59,10 +59,14 @@ export const FORGOT_PASSWORD_BUDGET: RateLimitBudget = { ipLimit: 3, windowSec: 
 /** Issue #240 — per-user refresh throttle (10 per 15-min window). */
 export const REFRESH_BUDGET: RateLimitBudget = { userLimit: 10, windowSec: 900 };
 
+/**
+ * Per-user only (issue #613): the gateway authenticates before these
+ * limiters, so no request reaching them falls back to an IP bucket.
+ */
 export const MUTATION_BUDGETS = {
-  reservation: { userLimit: 10, ipLimit: 10, windowSec: 60 },
-  profile: { userLimit: 5, ipLimit: 5, windowSec: 60 },
-  export: { userLimit: 1, ipLimit: 1, windowSec: 86400 },
+  reservation: { userLimit: 10, windowSec: 60 },
+  profile: { userLimit: 5, windowSec: 60 },
+  export: { userLimit: 1, windowSec: 86400 },
 } as const satisfies Record<string, RateLimitBudget>;
 
 /** Issue #338 — a member cannot physically attend more than 5 classes per hour. */
@@ -140,8 +144,10 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     methods: 'POST',
     budget: MUTATION_BUDGETS.reservation,
     failPolicy: 'fail-closed',
-    bucket: 'ip+user',
+    bucket: 'user',
     wiredIn: 'worker.ts',
+    notes:
+      'Issue #613 — jwtAuth pre-pass; 401 before the mutation bucket is touched; the global /v1 IP bucket still applies',
   },
   {
     id: 'reservation-cancel',
@@ -149,8 +155,10 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     methods: 'DELETE',
     budget: MUTATION_BUDGETS.reservation,
     failPolicy: 'fail-closed',
-    bucket: 'ip+user',
+    bucket: 'user',
     wiredIn: 'worker.ts',
+    notes:
+      'Issue #613 — jwtAuth pre-pass; 401 before the mutation bucket is touched; the global /v1 IP bucket still applies',
   },
   {
     id: 'profile-patch',
@@ -158,8 +166,10 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     methods: 'PATCH',
     budget: MUTATION_BUDGETS.profile,
     failPolicy: 'fail-closed',
-    bucket: 'ip+user',
+    bucket: 'user',
     wiredIn: 'worker.ts',
+    notes:
+      'Issue #613 — jwtAuth pre-pass; 401 before the mutation bucket is touched; the global /v1 IP bucket still applies',
   },
   {
     id: 'consents-patch',
@@ -167,8 +177,10 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     methods: 'PATCH',
     budget: MUTATION_BUDGETS.profile,
     failPolicy: 'fail-closed',
-    bucket: 'ip+user',
+    bucket: 'user',
     wiredIn: 'worker.ts',
+    notes:
+      'Issue #613 — jwtAuth pre-pass; 401 before the mutation bucket is touched; the global /v1 IP bucket still applies',
   },
   {
     id: 'export-post',
@@ -176,8 +188,10 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     methods: 'POST',
     budget: MUTATION_BUDGETS.export,
     failPolicy: 'fail-closed',
-    bucket: 'ip+user',
+    bucket: 'user',
     wiredIn: 'worker.ts',
+    notes:
+      'Issue #613 — jwtAuth pre-pass; 401 before the mutation bucket is touched; the global /v1 IP bucket still applies',
   },
   {
     id: 'classes-search',
