@@ -10,6 +10,8 @@ Mise à jour : sortie v1.0.0.
 
 **Effort estimé** : ~3 sprints (~3 semaines).
 
+**Status**: foundation (11.1–11.7, 11.12, 11.13) delivered on Expo SDK 58 / React Native 0.88 in #638 — see [`docs/mobile/README.md`](../mobile/README.md). Screens 11.8–11.11 remain.
+
 **Déclencheur** : décision business "rendre l'app dispo iOS/Android" + au moins un studio pilote prêt à tester l'app native.
 
 **Périmètre** (Epic 10 dans `tasks.md`, 13 tâches) :

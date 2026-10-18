@@ -440,40 +440,42 @@ Use official CLI to create, init the project .. and recent package version and s
 ### Epic 10 — Mobile app (v0.1)
 
 > ⏸️ **Renvoyé post-1.0** — voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-55`](../../../docs/roadmap/post-1.0.md). Effort ~3 sprints. Déclencheur : décision business "iOS/Android" + studio pilote.
+>
+> Foundation delivered in #638 (11.1–11.7, 11.12, 11.13) on Expo SDK 58 / React Native 0.88 — see [`docs/mobile/README.md`](../../../docs/mobile/README.md). Screens 11.8–11.11 follow in a separate PR. Brand (A-mi icon + splash) is wired by BR.4; the app ships an ink `#0A0A0A` placeholder until then.
 
 - [ ] 11. Build the Expo / React Native mobile app with offline-first queue
-  - [ ] 11.1 Scaffold the Expo SDK 55 app with NativeWind 4 and shared tokens
-    - `apps/mobile` using expo-router 5, React Native 0.83, Hermes
-    - NativeWind preset from `packages/config/tailwind/mobile.ts`
+  - [x] 11.1 Scaffold the Expo SDK 58 app with NativeWind 4 and shared tokens
+    - `apps/mobile` using expo-router (SDK 58), React Native 0.88, Hermes
+    - NativeWind theme built from `@athlya/shared/tokens` in `apps/mobile/theme/preset.ts`
     - Configure accessible labels/roles/hints on every interactive primitive
     - _Requirements: 27.3_
 
-  - [ ] 11.2 Implement secure token storage
+  - [x] 11.2 Implement secure token storage
     - Use `expo-secure-store` for refresh token only (Secure Enclave / Keystore)
     - Access token kept in-memory; rotated on refresh
     - _Requirements: 1.5, 2.1, 2.2_
 
-  - [ ] 11.3 Implement biometric unlock of stored refresh token
+  - [x] 11.3 Implement biometric unlock of stored refresh token
     - Use `expo-local-authentication` to gate access to the stored refresh token
     - _Requirements: 1.7_
 
-  - [ ] 11.4 Implement the API client with `Idempotency-Key` header support
+  - [x] 11.4 Implement the API client with `Idempotency-Key` header support
     - `apps/mobile/infrastructure/api/client.ts`: `post(path, body, { idempotencyKey })`
     - Auto-attach access token, refresh on 401, retry once
     - _Requirements: 20.1, 20.3_
 
-  - [ ] 11.5 Implement the `MutationQueue` persisted in MMKV
+  - [x] 11.5 Implement the `MutationQueue` persisted in MMKV
     - `apps/mobile/infrastructure/sync/queue.ts`: `enqueue`, `drain`, `remove`, `peek`, plus a DLQ
     - Each enqueued mutation has a fresh UUID v4 `idempotencyKey`
     - FIFO ordering preserved across app restarts
     - _Requirements: 19.1, 19.2, 20.3_
 
-  - [ ] 11.6 Implement `drainMutationQueue` following Algorithm 4
+  - [x] 11.6 Implement `drainMutationQueue` following Algorithm 4
     - For each mutation in FIFO order, POST with `Idempotency-Key`; on 2xx or 409 remove; on 4xx ≠ 409 move to DLQ; on 5xx / network retry with exponential backoff up to 5 attempts with jitter
     - Break the outer loop on network loss
     - _Requirements: 19.3, 19.4, 19.5, 19.6, 19.7_
 
-  - [ ] 11.7 Implement network connectivity detection and auto-drain
+  - [x] 11.7 Implement network connectivity detection and auto-drain
     - Use `@react-native-community/netinfo`; on reconnection, run `drainMutationQueue` and show sync progress in UI
     - _Requirements: 19.3_
 
@@ -494,7 +496,7 @@ Use official CLI to create, init the project .. and recent package version and s
     - Trigger the same endpoints as the web app
     - _Requirements: 4.1, 5.1_
 
-  - [ ] 11.12 Write property test for FIFO + idempotent offline drain
+  - [x] 11.12 Write property test for FIFO + idempotent offline drain
     - **Property 5: FIFO + idempotent drain**
     - Use fast-check to generate a sequence of mutations; simulate random failure patterns (5xx, network, 200, 409, 4xx permanent)
     - Assert FIFO order of successful applications server-side (via a fake server)
@@ -502,7 +504,7 @@ Use official CLI to create, init the project .. and recent package version and s
     - Place in `apps/mobile/tests/properties/offline.property.test.ts`
     - \*\*Validates: Requirements 19.3, 19.4, 19.5, 19.6, 19.7, 20.1, 20.3\_
 
-  - [ ] 11.13 Write unit tests for `MutationQueue` persistence
+  - [x] 11.13 Write unit tests for `MutationQueue` persistence
     - Enqueue, kill app, restart, drain returns the same items in the same order
     - _Requirements: 19.1, 19.2_
 

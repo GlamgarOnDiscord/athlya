@@ -8,3 +8,31 @@ reason = """braces <=3.0.3 stack exhaustion on deeply nested patterns. No fixed 
 release exists. Only reached via micromatch/fast-glob in dev and CLI tooling \
 (eslint-config-next, shadcn CLI, ts-morph) that expands repo-authored globs, \
 never user input. Drop once braces publishes a fix or the consumers move off it."""
+
+# The three entries below arrive with the Expo toolchain of apps/mobile
+# (issue #638). None of them reaches the shipped app bundle.
+
+[[IgnoredVulns]]
+id = "GHSA-86w9-cpqp-85rv"
+ignoreUntil = 2027-01-17T00:00:00Z
+reason = """node-forge <=1.4.0 accepts malformed PKCS#1 v1.5 signatures. No fixed \
+release exists. Only reached via @expo/cli (dev-server certificates and \
+expo-updates manifest signing, which the app does not use); never bundled into \
+the app and never verifies third-party signatures. Drop once node-forge ships a \
+fix or @expo/cli moves off it."""
+
+[[IgnoredVulns]]
+id = "GHSA-w5hq-g745-h8pq"
+ignoreUntil = 2027-01-17T00:00:00Z
+reason = """uuid <11.1.1 misses a bounds check in v3/v5/v6 when a caller passes \
+an output buffer. Only reached via xcode@3 (Expo config plugins, prebuild time), \
+which calls uuid.v4() without a buffer. Drop once xcode or @expo/config-plugins \
+moves to uuid >=11.1.1."""
+
+[[IgnoredVulns]]
+id = "GHSA-rj75-hqrm-r3gf"
+ignoreUntil = 2027-01-17T00:00:00Z
+reason = """postcss-selector-parser <7.1.6 has quadratic parsing on crafted flat \
+selectors. Only reached via tailwindcss@3 (pinned by NativeWind 4) at build \
+time on repo-authored CSS, never on user input. Drop once NativeWind moves to \
+Tailwind 4 or tailwindcss@3 takes postcss-selector-parser >=7.1.6."""

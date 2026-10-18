@@ -1,32 +1,108 @@
-# Mobile — Epic 10 / issue #70
+# Mobile — Epic 10 (`apps/mobile`)
 
-**Statut** : post-1.0 (v1.1). Pas de `apps/mobile` en prod v0.1.
+**Status**: foundation delivered (issue #638, 9/13 tasks). The screens (11.8 to 11.11) follow in a
+separate PR. Post-1.0 roadmap item v1.1, see [`docs/roadmap/post-1.0.md`](../roadmap/post-1.0.md).
 
-## Checklist (13 tâches — `tasks.md` § 11)
+## Stack
 
-- [ ] 11.1 Scaffold Expo SDK 55 + NativeWind 4
-- [ ] 11.2 `expo-secure-store` refresh token
-- [ ] 11.3 Biometric unlock
-- [ ] 11.4 API client + `Idempotency-Key`
-- [ ] 11.5 `MutationQueue` MMKV
-- [ ] 11.6 `drainMutationQueue` (Algorithm 4)
-- [ ] 11.7 NetInfo auto-drain
-- [ ] 11.8 Booking optimistic UI
-- [ ] 11.9 QR check-in
-- [ ] 11.10 Workout logging offline
-- [ ] 11.11 RGPD export/delete
-- [ ] 11.12 Property test offline drain
-- [ ] 11.13 MutationQueue persistence tests
+| Concern       | Choice                                                                              |
+| ------------- | ----------------------------------------------------------------------------------- |
+| Runtime       | Expo SDK 58, React Native 0.88, Hermes (the SDK 58 default; no `jsEngine` switch)   |
+| Navigation    | expo-router (file routes under `apps/mobile/app/`)                                  |
+| Styling       | NativeWind 4 (Tailwind 3), theme generated from `@athlya/shared/tokens`             |
+| Secrets       | `expo-secure-store` (Keychain / Keystore, `WHEN_UNLOCKED_THIS_DEVICE_ONLY`)         |
+| Biometrics    | `expo-local-authentication`                                                         |
+| Offline queue | `react-native-mmkv` 4 (AES-256, per-install key in secure storage)                  |
+| Connectivity  | `@react-native-community/netinfo`                                                   |
+| Builds        | EAS Build / Submit — operator steps in [`mobile-eas.md`](../runbooks/mobile-eas.md) |
 
-## Déclencheur business
+## Checklist (`tasks.md` § 11)
 
-Décision iOS/Android + studio pilote — voir [`docs/roadmap/post-1.0.md`](../roadmap/post-1.0.md).
+- [x] 11.1 Expo scaffold + NativeWind + shared tokens + accessible primitives
+- [x] 11.2 Refresh token in `expo-secure-store`, access token in memory
+- [x] 11.3 Biometric unlock of the stored refresh token
+- [x] 11.4 API client: bearer token, refresh-on-401 + single retry, `Idempotency-Key`
+- [x] 11.5 `MutationQueue` persisted in MMKV, with a DLQ
+- [x] 11.6 `drainMutationQueue` (design.md Algorithm 4)
+- [x] 11.7 NetInfo auto-drain + sync progress
+- [ ] 11.8 Booking screen with optimistic update
+- [ ] 11.9 QR check-in screen
+- [ ] 11.10 Workout logging (offline enqueue)
+- [ ] 11.11 RGPD export / delete screens
+- [x] 11.12 Property 5 (FIFO + idempotent drain), fast-check
+- [x] 11.13 `MutationQueue` persistence unit tests
 
-## Compliance mobile
+## Layout
 
-Expo Push SCC : [`docs/compliance/expo-push-transfers.md`](../compliance/expo-push-transfers.md) (#86).
+```
+apps/mobile/
+├── app/                     expo-router routes (_layout.tsx boots the runtime)
+├── components/              UI; components/ui/ holds the accessible primitives
+├── infrastructure/
+│   ├── api/client.ts        createApiClient(): send/get/post/put/patch/del
+│   ├── auth/                TokenStore, createSessionRefresher, Expo adapters
+│   ├── storage/             KeyValueStore port, MMKV adapter, storage key
+│   ├── sync/                MutationQueue, drainMutationQueue, SyncController, NetInfo adapter
+│   └── runtime.ts           composition root (the only place wiring native modules)
+├── theme/preset.ts          Tailwind theme from @athlya/shared/tokens
+└── tests/                   vitest (Node): unit/ and properties/
+```
 
-## Prérequis techniques
+Everything under `infrastructure/` except the `expo-*`, `mmkv-store` and `netinfo-connectivity`
+adapters and `runtime.ts` is plain TypeScript behind small ports (`KeyValueStore`, `SecureStorage`,
+`BiometricAuthenticator`, `ConnectivitySource`), so `pnpm --filter @athlya/mobile test` runs in
+Node without a device or simulator.
 
-- Compte EAS Build
-- API staging stable + feature flags
+## Contracts for the screens PR
+
+- **Runtime**: `useRuntime()` (`components/RuntimeProvider.tsx`) returns `{ locale, t, api,
+tokenStore, queue, sync }`.
+- **Online calls**: `runtime.api.post<T>(path, body, { idempotencyKey })` and friends throw
+  `ApiError` (with the parsed `ProblemDetails`) on non-2xx, `AuthRequiredError` when the session
+  cannot be refreshed, `NetworkError` when no response arrived.
+- **Offline writes**: `runtime.queue.enqueue({ kind, method?, path, payload? })` returns the
+  `PendingMutation` with a fresh UUID v4 `idempotencyKey`; then call `runtime.sync.syncNow()`.
+  When the user is online, call the API directly with a fresh key and fall back to the queue on
+  `NetworkError`, reusing that same key.
+- **Sync status**: `runtime.sync.subscribe()` / `getState()` (`useSyncExternalStore`), rendered by
+  `<SyncStatusBanner>`. `runtime.queue.deadLetters()` / `discardDeadLetter(id)` back the "rejected
+  changes" view.
+- **Sign-in**: after `POST /v1/auth/login` (`{ authenticated: false }`), pass the
+  `SessionResponse` to `runtime.tokenStore.saveSession()`. `setBiometricUnlockEnabled(true)` turns on
+  the biometric gate; `clear()` signs out.
+- **Strings**: add keys under `mobile.*` in `packages/shared/src/i18n/{en,fr}.json`.
+
+## Drain semantics (Algorithm 4)
+
+FIFO; `2xx`/`409` remove; other `4xx` go to the DLQ with the problem `code`; `5xx`, network errors,
+`408` and `429` retry with `min(2^attempt × 1 s, 30 s) + jitter` up to 5 attempts, after which the
+mutation stays at the head of the queue and the drain stops so nothing overtakes it. The drain also
+stops when the device goes offline, and when the session cannot be refreshed (`auth-required`, the
+queue is left untouched until the user signs in again).
+
+## Brand
+
+`assets/brand/` (A-mi mascot, ink `#0A0A0A` / volt `#D7FF3A`) is not on `master` yet. The app ships a
+plain ink icon and an ink splash; BR.4 wires the mascot icon and splash.
+
+## Local development
+
+```bash
+pnpm --filter @athlya/shared build          # Metro resolves @athlya/shared through dist/
+cd apps/mobile
+EXPO_PUBLIC_API_URL=http://10.0.2.2:8787 pnpm android   # or: pnpm ios (macOS)
+```
+
+Native modules (MMKV, SecureStore, LocalAuthentication, NetInfo) need a development build
+(`expo run:*` or EAS); Expo Go is not supported. `EXPO_PUBLIC_API_URL` must be HTTPS except for
+loopback hosts.
+
+## CI
+
+`lint`, `typecheck` and `test` run in the required `Lint, typecheck, and tests` job like every
+workspace. The package has no `build` script, so `pnpm build:ci` never starts a native build.
+
+## Compliance
+
+Expo Push SCC: [`docs/compliance/expo-push-transfers.md`](../compliance/expo-push-transfers.md)
+(#86).

@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Athlya",
+    "slug": "athlya",
+    "scheme": "athlya",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#0A0A0A",
+    "ios": {
+      "bundleIdentifier": "app.athlya.mobile",
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "app.athlya.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0A0A"
+      },
+      "allowBackup": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Athlya uses Face ID to unlock your session."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0A0A0A"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

@@ -43,6 +43,21 @@ Même stack que `apps/web`, avec en plus :
 
 Les deux apps tournent sur Next.js 16 avec proxy-middleware (`src/proxy.ts`) qui injecte un nonce CSP par requête.
 
+### `apps/mobile` — Member mobile app (foundation, post-1.0 v1.1)
+
+| Dependency                      | Version  |
+| ------------------------------- | -------- |
+| Expo SDK                        | `~58.0`  |
+| React Native (Hermes)           | `0.88.0` |
+| expo-router                     | `~58.0`  |
+| NativeWind (Tailwind 3)         | `^4.2.7` |
+| react-native-mmkv               | `^4.3.2` |
+| expo-secure-store               | `~58.0`  |
+| expo-local-authentication       | `~58.0`  |
+| @react-native-community/netinfo | `12.0.1` |
+
+Details: [`docs/mobile/README.md`](docs/mobile/README.md).
+
 ---
 
 ## Packages internes

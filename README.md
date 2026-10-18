@@ -56,7 +56,7 @@ Alternative auto-hébergeable à bsport, Mywellness et Mindbody pour les studios
 
 ## Aperçu
 
-Athlya est un monorepo Turborepo : **deux applications livrées en v1.0** (web membre Next.js 16, studio admin Next.js 16) et une API edge Hono sur Cloudflare Workers. L'application mobile Expo (Epic 11) est **roadmap v1.1** — voir [`docs/mobile/README.md`](docs/mobile/README.md) (0/13, pas de `apps/mobile`). La persistance repose sur Neon PostgreSQL 17 avec Row-Level Security, Upstash Redis pour les compteurs et limites, et un bus d'événements combinant Cloudflare Queues et Upstash QStash.
+Athlya est un monorepo Turborepo : **deux applications livrées en v1.0** (web membre Next.js 16, studio admin Next.js 16) et une API edge Hono sur Cloudflare Workers. L'application mobile Expo (Epic 11) est **roadmap v1.1** — voir [`docs/mobile/README.md`](docs/mobile/README.md) (fondation livrée dans `apps/mobile`, 9/13). La persistance repose sur Neon PostgreSQL 17 avec Row-Level Security, Upstash Redis pour les compteurs et limites, et un bus d'événements combinant Cloudflare Queues et Upstash QStash.
 
 Quatre axiomes structurent l'architecture :
 
@@ -245,7 +245,7 @@ wrangler secret put OTEL_EXPORTER_OTLP_HEADERS   --env staging
 
 ## État du projet
 
-**~277 / 313 tâches livrées (~88.5 %)** — v1.1 backend + web + studio. Mobile Expo (Epic 11, 0/13), AI coach et Stripe production-mature : roadmap post-1.0 — [`docs/mobile/README.md`](docs/mobile/README.md).
+**~277 / 313 tâches livrées (~88.5 %)** — v1.1 backend + web + studio. Mobile Expo (Epic 11, 9/13 — fondation livrée), AI coach et Stripe production-mature : roadmap post-1.0 — [`docs/mobile/README.md`](docs/mobile/README.md).
 
 Voir [`PROGRESS.md`](.kiro/specs/athlya-platform/PROGRESS.md) et [CHANGELOG.md](CHANGELOG.md) pour le détail.
 
