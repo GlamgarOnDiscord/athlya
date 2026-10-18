@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 
 import type { Hono } from 'hono';
 
+import { buildApp } from '../app.js';
 import { READINESS_PROBES, type ReadinessProbe } from '../base-app.js';
 import { app as authApp, READINESS as AUTH_READINESS } from '../workers/auth.js';
 import {
@@ -265,6 +266,219 @@ describe.each(READINESS_WORKERS)('$config readiness contract', ({ config, readin
   it.each(BINDING_BACKED_PROBES)('requires %s when its bindings are declared', (probe) => {
     const bound = PROBE_BINDINGS[probe].every((name) => declared.has(name));
     expect(readiness.includes(probe)).toBe(bound);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Binding drift (issue #625): a Worker that mounts a router binds the
+// resources and sets the vars that router reads, in every environment of
+// its wrangler config, exactly as the gateway does.
+// ---------------------------------------------------------------------------
+
+interface WranglerEnv {
+  /** R2 binding name to bucket name. */
+  r2: Map<string, string>;
+  /** `[vars]` name to value. */
+  vars: Map<string, string>;
+}
+
+const TABLE_HEADER = /^\[\[?([^\]]+)\]\]?\s*(?:#.*)?$/;
+const STRING_KEY = /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"([^"]*)"/;
+
+/**
+ * R2 bindings and vars of a wrangler config text, keyed by environment
+ * (`''` is the top level). Every environment the config declares is
+ * present, bound or not.
+ */
+function parseWranglerEnvs(toml: string): Map<string, WranglerEnv> {
+  const envs = new Map<string, WranglerEnv>();
+  const envOf = (name: string): WranglerEnv => {
+    const found = envs.get(name);
+    if (found !== undefined) return found;
+    const created: WranglerEnv = { r2: new Map(), vars: new Map() };
+    envs.set(name, created);
+    return created;
+  };
+  envOf('');
+  let section: 'r2' | 'vars' | null = null;
+  let env = '';
+  let bucket: { binding?: string; name?: string } = {};
+  const flushBucket = (): void => {
+    if (bucket.binding !== undefined && bucket.name !== undefined) {
+      envOf(env).r2.set(bucket.binding, bucket.name);
+    }
+    bucket = {};
+  };
+  for (const raw of toml.split('\n')) {
+    const line = raw.trim();
+    const header = TABLE_HEADER.exec(line);
+    if (header !== null) {
+      flushBucket();
+      const table = (header[1] ?? '').trim();
+      env = /^env\.([^.]+)/.exec(table)?.[1] ?? '';
+      envOf(env);
+      const local = env === '' ? table : table.slice(`env.${env}.`.length);
+      section = local === 'r2_buckets' ? 'r2' : local === 'vars' ? 'vars' : null;
+      continue;
+    }
+    const [, key, value] = STRING_KEY.exec(line) ?? [];
+    if (section === null || key === undefined || value === undefined) continue;
+    if (section === 'vars') envOf(env).vars.set(key, value);
+    else if (key === 'binding') bucket.binding = value;
+    else if (key === 'bucket_name') bucket.name = value;
+  }
+  flushBucket();
+  return envs;
+}
+
+/** What a router reads from its Worker's env (`members-deps.ts`). */
+interface RouterNeeds {
+  prefix: string;
+  /** R2 bindings, required in every env with the gateway's bucket. */
+  r2: readonly string[];
+  /** Vars, set in every env exactly as the gateway sets them (or unset). */
+  vars: readonly string[];
+  /** Secrets, listed in the wrangler `# Secrets` header. */
+  secrets: readonly string[];
+}
+
+const ROUTER_NEEDS: readonly RouterNeeds[] = [
+  {
+    prefix: '/v1/members',
+    r2: ['AVATARS_BUCKET', 'EXPORTS_BUCKET'],
+    vars: ['AVATARS_PUBLIC_URL'],
+    secrets: ['EXPORT_URL_SIGNING_KEY'],
+  },
+];
+
+/** Every env where `worker` diverges from `gateway` on what `needs` reads. */
+function routerDrift(
+  worker: Map<string, WranglerEnv>,
+  gateway: Map<string, WranglerEnv>,
+  needs: RouterNeeds,
+): string[] {
+  const drift: string[] = [];
+  for (const [env, bound] of worker) {
+    const label = env === '' ? 'top level' : `env.${env}`;
+    const reference = gateway.get(env);
+    for (const name of needs.r2) {
+      const bucket = bound.r2.get(name);
+      const expected = reference?.r2.get(name);
+      if (bucket === undefined) drift.push(`${label}: ${name} not bound`);
+      else if (bucket !== expected) {
+        drift.push(`${label}: ${name} = ${bucket}, gateway ${String(expected)}`);
+      }
+    }
+    for (const name of needs.vars) {
+      const value = bound.vars.get(name);
+      const expected = reference?.vars.get(name);
+      if (value !== expected) {
+        drift.push(`${label}: var ${name} = ${String(value)}, gateway ${String(expected)}`);
+      }
+    }
+  }
+  return drift;
+}
+
+/** True when `app` has a real handler under `prefix`. */
+function mounts(app: Hono<HonoEnv>, prefix: string): boolean {
+  return app.routes.some(
+    (route) =>
+      route.method !== 'ALL' && (route.path === prefix || route.path.startsWith(`${prefix}/`)),
+  );
+}
+
+const GATEWAY_CONFIG = 'wrangler.toml';
+
+const BINDING_WORKERS: ReadonlyArray<{ config: string; app: Hono<HonoEnv> }> = [
+  { config: GATEWAY_CONFIG, app: buildApp() },
+  ...SUB_WORKERS.map(({ config, app }) => ({ config, app })),
+];
+
+describe.each(BINDING_WORKERS)('$config router bindings', ({ config, app }) => {
+  const worker = parseWranglerEnvs(readPackageFile(config));
+  const gateway = parseWranglerEnvs(readPackageFile(GATEWAY_CONFIG));
+
+  it('parses at least the top-level and staging environments', () => {
+    expect([...worker.keys()]).toEqual(expect.arrayContaining(['', 'staging']));
+  });
+
+  describe.each(ROUTER_NEEDS)('$prefix', (needs) => {
+    const mounted = mounts(app, needs.prefix);
+
+    it('binds its R2 buckets and sets its vars like the gateway in every env', () => {
+      expect(mounted ? routerDrift(worker, gateway, needs) : []).toEqual([]);
+    });
+
+    it('documents the secrets it reads', () => {
+      const declared = declaredBindings(config);
+      const missing = mounted ? needs.secrets.filter((name) => !declared.has(name)) : [];
+      expect(missing).toEqual([]);
+    });
+  });
+});
+
+describe('router bindings check', () => {
+  it('applies to the reservations Worker, which serves /v1/members', () => {
+    expect(mounts(reservationsApp, '/v1/members')).toBe(true);
+  });
+
+  it('reports a missing bucket, a renamed bucket and a var that differs from the gateway', () => {
+    const gateway = parseWranglerEnvs(
+      [
+        '[vars]',
+        'AVATARS_PUBLIC_URL = "https://avatars.example"',
+        '',
+        '[[r2_buckets]]',
+        'binding = "AVATARS_BUCKET"',
+        'bucket_name = "athlya-avatars-dev"',
+        '',
+        '[[r2_buckets]]',
+        'binding = "EXPORTS_BUCKET"',
+        'bucket_name = "athlya-exports-dev"',
+        '',
+        '[[env.staging.r2_buckets]]',
+        'binding = "AVATARS_BUCKET"',
+        'bucket_name = "athlya-avatars-staging"',
+        '',
+        '[[env.staging.r2_buckets]]',
+        'binding = "EXPORTS_BUCKET"',
+        'bucket_name = "athlya-exports-staging"',
+      ].join('\n'),
+    );
+    const worker = parseWranglerEnvs(
+      [
+        '[vars]',
+        'ENVIRONMENT = "dev"',
+        '',
+        '[[r2_buckets]]',
+        'binding = "AVATARS_BUCKET"',
+        'bucket_name = "athlya-avatars-dev"',
+        '',
+        '[env.staging]',
+        'name = "worker-staging"',
+        '',
+        '[[env.staging.r2_buckets]]',
+        'binding = "AVATARS_BUCKET"',
+        'bucket_name = "athlya-avatars-staging"',
+        '',
+        '[[env.staging.r2_buckets]]',
+        'binding = "EXPORTS_BUCKET"',
+        'bucket_name = "athlya-exports-production"',
+        '',
+        '[[env.staging.durable_objects.bindings]]',
+        'name = "CLASS_CAPACITY_DO"',
+      ].join('\n'),
+    );
+    const needs = ROUTER_NEEDS.find(({ prefix }) => prefix === '/v1/members');
+    if (needs === undefined) throw new Error('no /v1/members needs');
+
+    expect(routerDrift(worker, gateway, needs)).toEqual([
+      'top level: EXPORTS_BUCKET not bound',
+      'top level: var AVATARS_PUBLIC_URL = undefined, gateway https://avatars.example',
+      'env.staging: EXPORTS_BUCKET = athlya-exports-production, gateway athlya-exports-staging',
+    ]);
+    expect(routerDrift(gateway, gateway, needs)).toEqual([]);
   });
 });
 
