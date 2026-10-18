@@ -261,6 +261,7 @@ describe('per-user mutation limiters (#613)', () => {
       { method: 'GET', headers: headersFor('5.5.5.5') },
       env,
     );
+    expect(res.status).not.toBe(401);
     expect(res.status).not.toBe(429);
     expect(mutationKeys(redis)).toEqual([]);
   });
