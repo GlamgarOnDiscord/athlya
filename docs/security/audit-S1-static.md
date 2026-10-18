@@ -139,6 +139,7 @@ Posture globale : la codebase montre une **hygiène SAST très au-dessus de la m
 - **Impact** : informatif.
 - **Mitigation recommandée** : le `FIXME(B8.3)` sur le cast `Queue` mérite résolution ; les autres sont acceptables avec leur commentaire de justification.
 - **Effort** : medium.
+- **Statut (2026-10-18, issue #631)** : le marqueur `FIXME(B8.3)` n'existe plus dans le code, et `members-deps.ts` / `auth-deps.ts` ne castent plus le binding Queue eux-mêmes : ils passent par `buildRoutedPublishDeps()` (`packages/api/src/events/publish-deps.ts`, routage par lane, issue #125). Le cast reste, centralisé à cet endroit : `resolveEventQueueProducer(...) as unknown as Queue`, sans commentaire de justification. Finding toujours informatif. Le texte ci-dessus est conservé tel quel.
 
 ### S1-011 [INFO] [PROD-RISK] `process.env` directement lu hors helpers typés
 
@@ -243,4 +244,4 @@ Pistes complémentaires (post-priorités) :
 
 - Remplacer `_shared.ts:sqlIsNull/sqlIsNotNull` par les helpers natifs de drizzle pour éliminer l'usage de `sql.raw`.
 - Valider `JWKS_JSON` au boot avec un Zod schema (S1-007).
-- Résoudre le `FIXME(B8.3)` sur le cast Queue Cloudflare.
+- Résoudre le `FIXME(B8.3)` sur le cast Queue Cloudflare. _(2026-10-18 : marqueur retiré, cast centralisé dans `packages/api/src/events/publish-deps.ts`, voir S1-010.)_

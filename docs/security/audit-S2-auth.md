@@ -98,6 +98,7 @@ Méthode : revue statique du code, lecture des tests d'intégration, traçage du
   2. Sur `rotate(oldSid, ...) → false` ET si `oldSid` a un `rotatedAt` non-null (déjà rotaté, pas juste expiré), faire `revokeAllForUser(userId)` ou mieux, `revokeFamilyByRootSid(rootSid)` + écrire un audit `token.refresh.reuse.detected` + publier `auth.suspicious.refresh.reuse` event.
   3. Idéalement, fournir un endpoint `POST /v1/auth/logout-all` (TODO B3.3) pour permettre à l'utilisateur de couper toutes ses sessions depuis une notification.
 - **Effort** : medium (2-3 jours, schéma Redis + service + tests).
+- **Statut (2026-10-18, issue #631)** : résolu dans le code. B3.2 est livré (Sprint 2 / Vague 29) : index Redis `auth:family:<rootSid>` + `auth:sid_to_root:<sid>`, `SessionStore.revokeFamilyByRootSid` (`packages/api/src/adapters/auth-session-store-redis.ts`), et `refresh()` (`packages/auth/src/service.ts`) révoque toute la family sur réutilisation, écrit l'audit `token.refresh.reuse.detected` et publie `auth.suspicious.refresh.reuse`. B3.3 (`POST /v1/auth/logout-all`) est livré, voir S2-010. Le texte ci-dessus est conservé tel quel (état au 2026-05-15).
 
 ---
 
@@ -191,6 +192,7 @@ Méthode : revue statique du code, lecture des tests d'intégration, traçage du
   - Soit lire le refresh-cookie côté gateway et appeler `svcLogout(refreshToken)` pour ne révoquer qu'un sid.
   - Soit ajouter un endpoint dédié `POST /v1/auth/logout-all` (TODO B3.3) en gardant `/v1/auth/logout` sur le sid courant.
 - **Effort** : small.
+- **Statut (2026-10-18, issue #631)** : partiellement résolu. B3.3 est livré (Sprint 4 / Vague 32) : `POST /v1/auth/logout-all` (`packages/api/src/routes/auth.ts`, derrière `jwtAuth()`) révoque toutes les sessions du user via `revokeAllForUser` (`packages/api/src/adapters/auth-deps.ts`). En revanche `POST /v1/auth/logout` révoque toujours toutes les sessions du user (`revokeAllForUser` dans `packages/api/src/adapters/auth-deps.ts`) : le logout limité au sid courant reste à faire. Le texte ci-dessus est conservé tel quel (état au 2026-05-15).
 
 ---
 

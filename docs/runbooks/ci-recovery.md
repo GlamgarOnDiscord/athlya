@@ -62,19 +62,21 @@ runs-on: [self-hosted, linux, athlya-docker]
 
 ## Branch protection (post-recovery)
 
-Verifier [`branch-protection.md`](./branch-protection.md) :
-
-| Check requis               | Workflow                 |
-| -------------------------- | ------------------------ |
-| Lint, typecheck, and tests | `ci.yml`                 |
-| Property tests (Docker)    | `integration-docker.yml` |
-| pgTAP RLS suite            | `pgtap.yml`              |
+Verifier que la protection de `master` correspond a la section « Currently
+enforced » de [`branch-protection.md`](./branch-protection.md) :
 
 ```powershell
-gh api repos/GlamgarOnDiscord/athlya/branches/master/protection 2>$null
+gh api repos/GlamgarOnDiscord/athlya/branches/master/protection
 ```
 
-Si absent : appliquer manuellement dans Settings → Branches → `master`.
+Un seul check est requis : `Lint, typecheck, and tests` (`ci.yml`, strict).
+`Property tests (Docker)` (`integration-docker.yml`) et `pgTAP RLS suite`
+(`pgtap.yml`) ne sont **pas** requis : ils sont filtres par chemins, et un
+check requis qui ne se declenche pas bloquerait les PRs hors de ces chemins.
+Ils doivent quand meme repasser au vert sur `master` apres la recuperation.
+
+Si la protection a disparu : la recreer dans Settings → Branches → `master`
+avec les valeurs de `branch-protection.md`.
 
 ---
 
@@ -88,7 +90,7 @@ node scripts/verify-ci-provision-checklist.mjs
 Critere issue #123 :
 
 - [ ] 3 runs `master` verts consecutifs (`ci` + `pgtap` + `integration-docker`)
-- [ ] Branch protection avec checks requis
+- [ ] Branch protection conforme a `branch-protection.md` (check requis `Lint, typecheck, and tests`)
 - [ ] README badge CI a jour (ou note si billing limite)
 
 ---
