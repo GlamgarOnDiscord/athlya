@@ -24,6 +24,7 @@ interface SectionLink {
   readonly href: string;
   readonly titleKey:
     | 'studio.dashboard.classes.title'
+    | 'studio.dashboard.programs.title'
     | 'studio.dashboard.members.title'
     | 'studio.dashboard.branding.title'
     | 'studio.dashboard.billing.title'
@@ -31,6 +32,7 @@ interface SectionLink {
     | 'studio.dashboard.audit.title';
   readonly bodyKey:
     | 'studio.dashboard.classes.body'
+    | 'studio.dashboard.programs.body'
     | 'studio.dashboard.members.body'
     | 'studio.dashboard.branding.body'
     | 'studio.dashboard.billing.body'
@@ -43,6 +45,11 @@ const SECTIONS: ReadonlyArray<SectionLink> = [
     href: '/dashboard/classes',
     titleKey: 'studio.dashboard.classes.title',
     bodyKey: 'studio.dashboard.classes.body',
+  },
+  {
+    href: '/dashboard/programs',
+    titleKey: 'studio.dashboard.programs.title',
+    bodyKey: 'studio.dashboard.programs.body',
   },
   {
     href: '/dashboard/members',

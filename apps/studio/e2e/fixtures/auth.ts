@@ -31,6 +31,41 @@ export async function loginAsAdmin(page: Page): Promise<void> {
     });
   });
 
+  await page.route('**/v1/programs*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [
+          {
+            id: '0b000000-0000-4000-8000-000000000001',
+            studioId: 'studio-1',
+            title: 'Strength 101',
+            description: null,
+            status: 'published',
+            version: 0,
+            weekCount: 4,
+            createdAt: '2026-10-01T08:00:00.000Z',
+            updatedAt: '2026-10-01T08:00:00.000Z',
+            archivedAt: null,
+          },
+          {
+            id: '0b000000-0000-4000-8000-000000000002',
+            studioId: 'studio-1',
+            title: 'Mobility draft',
+            description: null,
+            status: 'draft',
+            version: 0,
+            weekCount: 2,
+            createdAt: '2026-10-02T08:00:00.000Z',
+            updatedAt: '2026-10-02T08:00:00.000Z',
+            archivedAt: null,
+          },
+        ],
+      }),
+    });
+  });
+
   await page.route('**/v1/members*', async (route) => {
     await route.fulfill({
       status: 200,

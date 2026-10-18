@@ -232,7 +232,8 @@
       "branding": "Branding",
       "billing": "Billing",
       "checkin": "Check-in",
-      "audit": "Audit"
+      "audit": "Audit",
+      "programs": "Programs"
     },
     "dashboard": {
       "title": "Dashboard",
@@ -260,6 +261,10 @@
       "audit": {
         "title": "Audit log",
         "body": "Track all admin actions performed in your studio."
+      },
+      "programs": {
+        "title": "Programs",
+        "body": "Author multi-week training programs your members follow."
       }
     },
     "forbidden": {
@@ -395,6 +400,84 @@
       "invoices": {
         "title": "Invoices",
         "empty": "No invoices yet."
+      }
+    },
+    "programs": {
+      "title": "Training programs",
+      "subtitle": "Multi-week plans your members follow day by day.",
+      "create": "+ New program",
+      "empty": "No programs yet. Create one to get started.",
+      "loading": "Loading programs…",
+      "filter": {
+        "label": "Status",
+        "all": "All"
+      },
+      "status": {
+        "draft": "Draft",
+        "published": "Published",
+        "archived": "Archived"
+      },
+      "columns": {
+        "title": "Title",
+        "status": "Status",
+        "weeks": "Weeks",
+        "updated": "Updated",
+        "actions": "Actions"
+      },
+      "row": {
+        "edit": "Edit",
+        "archive": "Archive",
+        "editLabel": "Edit {title}",
+        "archiveLabel": "Archive {title}"
+      },
+      "archiveConfirm": {
+        "title": "Archive this program?",
+        "body": "Members can no longer subscribe. Current subscribers keep following it until they unsubscribe. This cannot be undone.",
+        "confirm": "Archive"
+      },
+      "archived": "Program archived.",
+      "saved": "Program saved.",
+      "editor": {
+        "createTitle": "New program",
+        "editTitle": "Edit program",
+        "fields": {
+          "title": "Title",
+          "description": "Description",
+          "status": "Status",
+          "weekTitle": "Week title (optional)",
+          "day": "Day",
+          "workoutTitle": "Workout title",
+          "notes": "Notes",
+          "exercise": "Exercise",
+          "sets": "Sets",
+          "reps": "Reps",
+          "durationSec": "Duration (s)",
+          "weightKg": "Load (kg)",
+          "restSec": "Rest (s)"
+        },
+        "week": "Week {n}",
+        "dayOption": "Day {n}",
+        "workout": "Day {day} workout",
+        "exercise": "Exercise {n}",
+        "addWeek": "+ Add week",
+        "removeWeek": "Remove week {n}",
+        "addWorkout": "+ Add workout",
+        "removeWorkout": "Remove the day {day} workout of week {week}",
+        "addExercise": "+ Add exercise",
+        "removeExercise": "Remove exercise {n} of the day {day} workout of week {week}",
+        "restWeek": "No workout this week yet: every day is a rest day.",
+        "help": "Day 1 is the day a member starts. Days without a workout are rest days. Up to {weeks} weeks, 7 workouts per week and {exercises} exercises per workout.",
+        "create": "Create",
+        "save": "Save",
+        "saving": "Saving…",
+        "back": "Back to programs",
+        "errorsTitle": "Please fix the following:",
+        "errors": {
+          "generic": "Failed to save.",
+          "versionConflict": "The program was edited meanwhile. Reload it and retry.",
+          "archived": "This program is archived and can no longer be edited.",
+          "loadFailed": "Could not load the program."
+        }
       }
     }
   },
