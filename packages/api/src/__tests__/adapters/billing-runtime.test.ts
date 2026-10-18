@@ -247,7 +247,9 @@ describe('createCheckoutSession when configured', () => {
       STRIPE_SECRET_KEY: 'sk_test_x',
       STRIPE_PRICE_ID_PRO: 'price_pro',
     };
-    const { db } = fakeDb(() => [{ id: ADMIN, studio_id: STUDIO, email: null, deleted_at: null }]);
+    const { db } = fakeDb(() => [
+      { id: ADMIN, studio_id: STUDIO, email: null, deleted_at: '2026-01-01T00:00:00.000Z' },
+    ]);
     dbHttpCache.set(env.DB_URL, db as unknown as AthlyaDbHttp);
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

@@ -325,7 +325,33 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
       column?.is_nullable === 'YES',
       'users.email is NOT NULL: the RGPD purge fails with 23502 (apply 0041)',
     );
-    await tx`
+
+    // Target: the oldest expired soft-deleted user when there is one.
+    // Otherwise a user with an email (soft-deleted first) is backdated
+    // past the window inside this transaction, so the purge always has
+    // a known row to anonymise. Everything is rolled back.
+    let [target] = await tx`
+      SELECT id FROM users
+       WHERE deleted_at IS NOT NULL
+         AND deleted_at < now() - interval '30 days'
+         AND email IS NOT NULL
+       ORDER BY deleted_at ASC
+       LIMIT 1
+    `;
+    if (target === undefined) {
+      [target] = await tx`
+        SELECT id FROM users WHERE email IS NOT NULL
+         ORDER BY deleted_at IS NULL, id
+         LIMIT 1
+      `;
+      check(target !== undefined, 'no user to replay the RGPD purge on');
+      await tx`
+        UPDATE users SET deleted_at = timestamptz '2000-01-01 00:00:00+00'
+         WHERE id = ${target.id}::uuid
+      `;
+    }
+
+    const anonymised = await tx`
       WITH expired AS (
         SELECT id FROM users
          WHERE deleted_at IS NOT NULL
@@ -338,9 +364,21 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
          SET email = NULL, display_name = '[deleted]', avatar_url = NULL,
              consents = '{}'::jsonb, password_hash = NULL
        WHERE id IN (SELECT id FROM expired)
+      RETURNING id
     `;
+    check(
+      anonymised.length === 1 && anonymised[0].id === target.id,
+      'RGPD purge as athlya_cron did not anonymise the expired user (RLS or grants)',
+    );
+    const [after] = await tx`
+      SELECT email, display_name FROM users WHERE id = ${target.id}::uuid
+    `;
+    check(
+      after?.email === null && after.display_name === '[deleted]',
+      'RGPD purge left PII on the expired user',
+    );
   });
-  ok('RGPD purge: users.email nullable, anonymisation UPDATE admitted (migration 0041)');
+  ok('RGPD purge: an expired soft-deleted user is anonymised as athlya_cron (migration 0041)');
 }
 
 /**

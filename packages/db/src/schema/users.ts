@@ -11,8 +11,9 @@
  *     normalising emails to lowercase on the way in for defence in
  *     depth. It is nullable since migration 0041 (issue #628): the RGPD
  *     purge sets it to NULL once a soft-deleted user is past the
- *     retention window. Live users always hold one; readers drop rows
- *     whose email is NULL instead of asserting it.
+ *     retention window. `users_email_live_check` makes live users
+ *     (`deleted_at IS NULL`) always hold one; readers drop rows whose
+ *     email is NULL instead of asserting it.
  *   - `password_hash` is nullable: OAuth-only accounts (Apple / Google)
  *     never hold a local bcrypt digest. The Auth service (task 3.1)
  *     enforces that either `passwordHash` or a linked provider identity
@@ -36,7 +37,17 @@
  * delete), 13.2 (tenant isolation), 17.1 (consent gating).
  */
 
-import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { createdAt, deletedAt, sqlIsNull, uuidPrimaryKey } from './_shared.js';
 import { userRoleEnum } from './enums.js';
@@ -82,6 +93,10 @@ export const users = pgTable(
      * admins / coaches (Requirement 3.5).
      */
     index('users_studio_active_idx').on(table.studioId).where(sqlIsNull('deleted_at')),
+    check(
+      'users_email_live_check',
+      sql`${table.email} IS NOT NULL OR ${table.deletedAt} IS NOT NULL`,
+    ),
   ],
 );
 

@@ -10,7 +10,10 @@
 --      expired soft-deleted user across studios.
 --   3. Users soft-deleted inside the window and live users are left
 --      untouched; a second pass is a no-op.
---   4. Readers tolerate the anonymised row: the login lookup and the
+--   4. `users_email_live_check` confines NULL emails to soft-deleted
+--      rows: a live user with a NULL email is rejected (23514), a purged
+--      tombstone is accepted.
+--   5. Readers tolerate the anonymised row: the login lookup and the
 --      notification recipient never return it, the id lookup returns
 --      it with a NULL email, and its old address can be registered
 --      again.
@@ -48,7 +51,7 @@ VALUES
      '{"marketing":false,"analytics":false,"thirdParty":false,"version":1,"updatedAt":"2026-01-01T00:00:00Z"}'::jsonb,
      NULL, NOW() - INTERVAL '60 days');
 
-SELECT plan(16);
+SELECT plan(20);
 
 SELECT col_is_null('users', 'email', 'users.email is nullable (0041)');
 
@@ -208,6 +211,41 @@ SELECT is(
         'dddddddd-dd41-4ddd-8ddd-dddddddd0041', 'dddddddd-dd42-4ddd-8ddd-dddddddd0042')),
     2,
     'several anonymised users coexist with a NULL email'
+);
+
+-- ------------------------------------------------------------------ --
+-- users_email_live_check: NULL only on soft-deleted rows.             --
+-- ------------------------------------------------------------------ --
+SELECT throws_ok(
+    $$ INSERT INTO users (id, studio_id, email, display_name, role, consents)
+       VALUES ('dddddddd-dd47-4ddd-8ddd-dddddddd0047', 'cccccccc-cc41-4ccc-8ccc-cccccccc0041',
+               NULL, 'No Email', 'member',
+               '{"marketing":false,"analytics":false,"thirdParty":false,"version":1,"updatedAt":"2026-01-01T00:00:00Z"}'::jsonb) $$,
+    '23514',
+    NULL,
+    'a live user with a NULL email is rejected (users_email_live_check)'
+);
+
+SELECT throws_ok(
+    $$ SELECT * FROM auth_create_member('cccccccc-cc41-4ccc-8ccc-cccccccc0041', NULL, 'No Email', 'hash',
+           '{"marketing":false,"analytics":false,"thirdParty":false,"version":1,"updatedAt":"2026-01-01T00:00:00Z"}'::jsonb) $$,
+    '23514',
+    NULL,
+    'auth_create_member cannot create a live member without an email'
+);
+
+SELECT lives_ok(
+    $$ INSERT INTO users (id, studio_id, email, display_name, role, consents, deleted_at)
+       VALUES ('dddddddd-dd48-4ddd-8ddd-dddddddd0048', 'cccccccc-cc41-4ccc-8ccc-cccccccc0041',
+               NULL, '[deleted]', 'member', '{}'::jsonb, NOW() - INTERVAL '40 days') $$,
+    'a purged tombstone (soft-deleted, NULL email) is accepted'
+);
+
+SELECT throws_ok(
+    $$ UPDATE users SET deleted_at = NULL WHERE id = 'dddddddd-dd41-4ddd-8ddd-dddddddd0041' $$,
+    '23514',
+    NULL,
+    'an anonymised tombstone cannot be restored to a live user without an email'
 );
 
 SELECT * FROM finish();
