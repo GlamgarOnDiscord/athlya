@@ -32,6 +32,7 @@ on:
     paths:
       - 'packages/db/migrations/**'
       - 'packages/db/tests/rls/**'
+      - 'packages/db/scripts/migrate*.mjs'
       - 'scripts/verify-role-contract.mjs'
       - '.github/workflows/pgtap.yml'
   push:
@@ -40,6 +41,7 @@ on:
     paths:
       - 'packages/db/migrations/**'
       - 'packages/db/tests/rls/**'
+      - 'packages/db/scripts/migrate*.mjs'
       - 'scripts/verify-role-contract.mjs'
       - '.github/workflows/pgtap.yml'
 
@@ -230,3 +232,23 @@ jobs:
             -c "ALTER ROLE athlya_cron LOGIN PASSWORD 'role-contract'" \
             -c "ALTER ROLE athlya_billing LOGIN PASSWORD 'role-contract'"
           node scripts/verify-role-contract.mjs
+
+      # Issue #664 — the steps above apply migrations with `psql -f`, which
+      # sends one statement per query. Deploys use `migrate.mjs` instead, so
+      # replay the whole chain through the real runner on a second, empty
+      # database (CONCURRENTLY migrations included), then re-run it to prove
+      # it is idempotent. Runs last: the athlya_* roles are cluster-wide.
+      - name: Apply every migration through migrate.mjs on a fresh database
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/athlya_runner
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d athlya_test \
+            -c "CREATE DATABASE athlya_runner"
+          node packages/db/scripts/migrate.mjs
+          second_run=$(node packages/db/scripts/migrate.mjs)
+          echo "$second_run"
+          if echo "$second_run" | grep -q '^\[apply\]'; then
+            echo "::error::migrate.mjs re-applied a migration on its second run"
+            exit 1
+          fi

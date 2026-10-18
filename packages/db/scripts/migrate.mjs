@@ -12,13 +12,16 @@
  *    timestamptz default now())` table so re-running is idempotent.
  *  • Migrations whose body contains `CONCURRENTLY` (e.g. `CREATE INDEX
  *    CONCURRENTLY`) are executed outside a transaction — PostgreSQL forbids
- *    CONCURRENTLY inside a transaction block. These migrations are run with
- *    `sql.unsafe()` directly, then the tracking row is inserted in a
- *    separate transaction. Note: there is a narrow atomicity gap between
- *    the `sql.unsafe()` call and the tracking INSERT — a crash between
- *    them leaves the migration applied but untracked. Mitigate by
- *    writing CONCURRENTLY migrations with `IF NOT EXISTS` so a retry
- *    is safe.
+ *    CONCURRENTLY inside a transaction block. The body is split into
+ *    statements (`splitSqlStatements()` in `migrate-lib.mjs`) and each one
+ *    is sent as its own query: a multi-statement simple query is itself an
+ *    implicit transaction block, so sending the file in one call fails
+ *    (issue #664). The tracking row is inserted afterwards in a separate
+ *    transaction. Statements are not atomic with each other or with the
+ *    tracking INSERT — a crash part-way leaves the migration partly
+ *    applied and untracked, and the next run replays it from the start.
+ *    Write every statement of such a migration to be replay-safe
+ *    (`CREATE ... IF NOT EXISTS`, `DROP ... IF EXISTS`).
  *  • All other migration files are wrapped in a single transaction so a
  *    partial failure leaves the schema untouched.
  *
@@ -53,6 +56,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import postgres from 'postgres';
+
+import { planMigration } from './migrate-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(HERE, '..', 'migrations');
@@ -134,23 +139,22 @@ async function main() {
         console.log(`[skip] ${name} (already applied)`);
         continue;
       }
-      const requiresNoTx = /\bCONCURRENTLY\b/i.test(body);
-      console.log(`[apply] ${name}${requiresNoTx ? ' (no-transaction)' : ''}...`);
-      if (requiresNoTx) {
-        // CONCURRENTLY DDL cannot run inside a transaction block, so
-        // we execute the body outside a transaction and then record it
-        // in a separate transaction. There is a narrow atomicity gap:
-        // a crash between these two steps leaves the migration applied
-        // but untracked; the next run will retry and fail if the object
-        // already exists. Mitigation: write CONCURRENTLY migrations with
-        // IF NOT EXISTS so a retry is idempotent.
-        await sql.unsafe(body);
-        await sql.begin((tx) => tx`INSERT INTO _athlya_migrations (name) VALUES (${name})`);
-      } else {
+      const { transactional, queries } = planMigration(body);
+      console.log(`[apply] ${name}${transactional ? '' : ' (no-transaction)'}...`);
+      if (transactional) {
         await sql.begin(async (tx) => {
-          await tx.unsafe(body);
+          for (const query of queries) {
+            await tx.unsafe(query);
+          }
           await tx`INSERT INTO _athlya_migrations (name) VALUES (${name})`;
         });
+      } else {
+        // One query per statement so each CONCURRENTLY statement runs at
+        // top level (see the header comment and migrate-lib.mjs).
+        for (const query of queries) {
+          await sql.unsafe(query);
+        }
+        await sql.begin((tx) => tx`INSERT INTO _athlya_migrations (name) VALUES (${name})`);
       }
       console.log(`[ok]    ${name}`);
     }
