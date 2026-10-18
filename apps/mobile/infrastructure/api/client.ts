@@ -34,6 +34,12 @@ export interface RequestOptions {
    * outlive its own timeout).
    */
   readonly refreshOnUnauthorized?: boolean;
+  /**
+   * Extra request headers, e.g. `cf-turnstile-token` on sign-in. They cannot
+   * replace the headers the client manages (`Accept`, `Content-Type`,
+   * `Authorization`, `Idempotency-Key`).
+   */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 export interface ApiResponse {
@@ -78,6 +84,13 @@ export interface CreateApiClientOptions {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+const MANAGED_HEADERS: ReadonlySet<string> = new Set([
+  'accept',
+  'content-type',
+  'authorization',
+  'idempotency-key',
+]);
+
 export function buildUrl(baseUrl: string, path: string): string {
   const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
@@ -111,7 +124,11 @@ export function createApiClient(options: CreateApiClientOptions): ApiClient {
     requestOptions: RequestOptions,
     accessToken: string | null,
   ): Promise<ApiResponse> {
-    const headers: Record<string, string> = { Accept: 'application/json' };
+    const headers: Record<string, string> = {};
+    for (const [name, value] of Object.entries(requestOptions.headers ?? {})) {
+      if (!MANAGED_HEADERS.has(name.toLowerCase())) headers[name] = value;
+    }
+    headers.Accept = 'application/json';
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (accessToken !== null) headers.Authorization = `Bearer ${accessToken}`;
     if (requestOptions.idempotencyKey !== undefined) {

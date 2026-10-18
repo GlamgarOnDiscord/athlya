@@ -16,6 +16,8 @@ import {
 
 import { toErrorModel, type ErrorModel } from '../errors';
 
+import { TURNSTILE_TOKEN_HEADER } from './turnstile';
+
 import type { ApiClient } from '../../infrastructure/api/client';
 import type { TokenStore } from '../../infrastructure/auth/token-store';
 import type { SyncController } from '../../infrastructure/sync/sync-controller';
@@ -37,6 +39,12 @@ export type AuthResult =
 export interface LoginInput {
   readonly email: string;
   readonly password: string;
+  /**
+   * Token from the Turnstile WebView, sent as `cf-turnstile-token` like on
+   * the web. Single-use: the screen asks for a fresh challenge after every
+   * attempt.
+   */
+  readonly turnstileToken?: string | null;
 }
 
 export interface RegisterInput extends LoginInput {
@@ -68,12 +76,16 @@ async function startSession(
   deps: AuthDeps,
   path: '/v1/auth/login' | '/v1/auth/register',
   body: LoginRequest | RegisterRequest,
+  turnstileToken: string | null | undefined,
   signal: AbortSignal | undefined,
 ): Promise<AuthResult> {
   try {
     const raw = await deps.api.post<unknown>(path, body, {
       authenticated: false,
       ...(signal === undefined ? {} : { signal }),
+      ...(turnstileToken === undefined || turnstileToken === null || turnstileToken === ''
+        ? {}
+        : { headers: { [TURNSTILE_TOKEN_HEADER]: turnstileToken } }),
     });
     const session = SessionResponseSchema.parse(raw);
     await deps.tokenStore.saveSession({ ...session, userId: session.user.id });
@@ -103,7 +115,7 @@ export function signIn(
   if (!parsed.success) {
     return Promise.resolve({ ok: false, error: null, fieldErrors: fieldErrors(parsed.error) });
   }
-  return startSession(deps, '/v1/auth/login', parsed.data, signal);
+  return startSession(deps, '/v1/auth/login', parsed.data, input.turnstileToken, signal);
 }
 
 export function register(
@@ -121,7 +133,7 @@ export function register(
   if (!parsed.success) {
     return Promise.resolve({ ok: false, error: null, fieldErrors: fieldErrors(parsed.error) });
   }
-  return startSession(deps, '/v1/auth/register', parsed.data, signal);
+  return startSession(deps, '/v1/auth/register', parsed.data, input.turnstileToken, signal);
 }
 
 /** How long sign-out waits for the server-side revocation before going on. */

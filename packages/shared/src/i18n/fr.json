@@ -571,7 +571,18 @@
         "studioSlug": "Saisissez le nom court de votre studio (minuscules, chiffres et tirets).",
         "emailTaken": "Un compte existe déjà avec cette adresse e-mail.",
         "studioNotFound": "Aucun studio ne correspond à ce nom court.",
-        "botCheck": "Cette action n'est pas encore disponible depuis l'application. Utilisez le site web."
+        "botCheck": "La vérification de sécurité a échoué ou expiré. Refaites-la, puis réessayez."
+      },
+      "turnstile": {
+        "label": "Vérification de sécurité",
+        "frameLabel": "Vérification de sécurité Cloudflare",
+        "pending": "Vérification de sécurité en cours…",
+        "verified": "Vérification de sécurité réussie.",
+        "expired": "La vérification de sécurité a expiré et est en cours de renouvellement…",
+        "failed": "La vérification de sécurité n'a pas pu aboutir. Vérifiez votre connexion et réessayez.",
+        "retry": "Relancer la vérification de sécurité",
+        "retryHint": "Recharge la vérification de sécurité Cloudflare.",
+        "required": "Terminez la vérification de sécurité avant de continuer."
       }
     },
     "errors": {
