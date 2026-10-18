@@ -35,7 +35,7 @@
 
 import { withTenantHttp } from '@athlya/db';
 import { users } from '@athlya/db/schema';
-import { and, eq, isNull, lt, or, desc, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, lt, or, desc, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
@@ -52,8 +52,15 @@ import type { UpdateProfileRequest } from '@athlya/shared/schemas/api';
  * the service consumes. `password_hash` and `deleted_at` are
  * intentionally dropped — the service (and anything downstream of
  * it) must never see them.
+ *
+ * Returns `null` for a row whose `email` is NULL: only a soft-deleted
+ * user anonymised by the RGPD purge has one (migration 0041, issue
+ * #628), and such a row is not a member. Every query below also
+ * filters on `deleted_at IS NULL` and `email IS NOT NULL`, so this is
+ * the type-level guard for the same rule.
  */
-function toMemberProfile(row: typeof users.$inferSelect): MemberProfile {
+function toMemberProfile(row: typeof users.$inferSelect): MemberProfile | null {
+  if (row.email === null) return null;
   return {
     id: row.id,
     studioId: row.studioId,
@@ -153,7 +160,7 @@ export function createDrizzleMemberRepoHttp(db: AthlyaDbHttp, claims: TenantClai
           db
             .select()
             .from(users)
-            .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+            .where(and(eq(users.id, userId), isNull(users.deletedAt), isNotNull(users.email)))
             .limit(1),
         ),
       );
@@ -170,15 +177,16 @@ export function createDrizzleMemberRepoHttp(db: AthlyaDbHttp, claims: TenantClai
           db
             .update(users)
             .set(patchColumns)
-            .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+            .where(and(eq(users.id, userId), isNull(users.deletedAt), isNotNull(users.email)))
             .returning(),
         ),
       );
       const row = rows[0];
-      if (row === undefined) {
+      const profile = row === undefined ? null : toMemberProfile(row);
+      if (profile === null) {
         throw new Error(`updateProfile: user ${userId} not found or soft-deleted`);
       }
-      return toMemberProfile(row);
+      return profile;
     },
 
     async listByStudio(studioId, opts) {
@@ -186,6 +194,7 @@ export function createDrizzleMemberRepoHttp(db: AthlyaDbHttp, claims: TenantClai
       const conditions: Parameters<typeof and>[0][] = [
         eq(users.studioId, studioId),
         isNull(users.deletedAt),
+        isNotNull(users.email),
       ];
       if (cursor !== null) {
         conditions.push(
@@ -210,7 +219,10 @@ export function createDrizzleMemberRepoHttp(db: AthlyaDbHttp, claims: TenantClai
       );
 
       const hasMore = rows.length > opts.limit;
-      const items = rows.slice(0, opts.limit).map((r) => toMemberProfile(r));
+      const items = rows.slice(0, opts.limit).flatMap((r) => {
+        const profile = toMemberProfile(r);
+        return profile === null ? [] : [profile];
+      });
       const nextCursor = hasMore
         ? encodeCursor({
             createdAt: rows[opts.limit - 1]!.createdAt,
