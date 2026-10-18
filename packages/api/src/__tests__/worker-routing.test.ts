@@ -53,6 +53,11 @@ describe('auth worker', () => {
     expect(s).toBe(404);
   });
 
+  it('returns 404 for /v1/me/* (reservations worker route)', async () => {
+    const s = await status(authApp, '/v1/me/progression');
+    expect(s).toBe(404);
+  });
+
   it('serves /health', async () => {
     const s = await status(authApp, '/health');
     expect(s).toBe(200);
@@ -77,6 +82,11 @@ describe('reservations worker', () => {
 
   it('serves /v1/members/* (not 404)', async () => {
     const s = await status(reservationsApp, '/v1/members/me');
+    expect(s).not.toBe(404);
+  });
+
+  it('serves /v1/me/progression (not 404)', async () => {
+    const s = await status(reservationsApp, '/v1/me/progression');
     expect(s).not.toBe(404);
   });
 
@@ -119,6 +129,11 @@ describe('billing worker', () => {
 
   it('returns 404 for /v1/reservations/* (reservations worker route)', async () => {
     const s = await status(billingApp, '/v1/reservations');
+    expect(s).toBe(404);
+  });
+
+  it('returns 404 for /v1/me/* (reservations worker route)', async () => {
+    const s = await status(billingApp, '/v1/me/progression');
     expect(s).toBe(404);
   });
 

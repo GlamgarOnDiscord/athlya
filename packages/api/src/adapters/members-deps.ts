@@ -10,6 +10,8 @@
  *     (`findConsents`, `updateConsents`).
  *   - `createDrizzleAuditLogWriterHttp` — `AuditLogWriter.append`.
  *   - `createDrizzleExportJobStoreHttp` — `ExportJobStore.*` (tenant-scoped)
+ *   - `createDrizzleProgressionRepoHttp` — `ProgressionRepo.listInWindow`
+ *     (task 22.1, read-replica routed like every other read here).
  *
  * Plus the event publisher — events go through the Cloudflare Queues
  * `EVENTS_QUEUE` binding via `publish` from
@@ -35,6 +37,7 @@ import {
   updateProfile as svcUpdateProfile,
   enqueueExport as svcEnqueueExport,
   exportObjectKey,
+  getProgression as svcGetProgression,
   type EnqueueExportResult,
   type MemberProfile,
   type MembersPage,
@@ -55,6 +58,7 @@ import { createDrizzleAuditLogWriterHttp } from './members-audit-writer-drizzle.
 import { createDrizzleConsentsRepoHttp } from './members-consents-repo-drizzle.js';
 import { createDrizzleExportJobStoreHttp } from './members-export-job-store-drizzle.js';
 import { createDrizzleMemberRepoHttp } from './members-repo-drizzle.js';
+import { createDrizzleProgressionRepoHttp } from './progression-repo-drizzle.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
 import type { MembersDeps } from '../routes/members.js';
@@ -261,6 +265,12 @@ export function buildMembersDeps(
       if (opts.cursor !== undefined) repoOpts.cursor = opts.cursor;
       if (opts.limit !== undefined) repoOpts.limit = opts.limit;
       return svcListMembersByStudio(studioId, role, repoOpts, { repo });
+    },
+
+    async getProgression(userId, windowDays, claims) {
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
+      const repo = createDrizzleProgressionRepoHttp(db, claims);
+      return svcGetProgression(userId, windowDays, { repo, now });
     },
   };
 }

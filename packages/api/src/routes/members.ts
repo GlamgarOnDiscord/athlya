@@ -54,6 +54,7 @@ import {
   requireRole,
 } from './helpers.js';
 
+import type { MeDeps } from './me.js';
 import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
@@ -131,8 +132,11 @@ const ExportDownloadQuerySchema = z.object({
  * Dependencies injected into {@link buildMembersRouter}. Each method
  * mirrors a use case from `@athlya/members` but stays loosely typed
  * so this module never imports from the members package directly.
+ *
+ * It also carries {@link MeDeps} (`getProgression`): the `/v1/me/*`
+ * router is mounted from the same bundle wherever `/v1/members/*` is.
  */
-export interface MembersDeps {
+export interface MembersDeps extends MeDeps {
   getProfile(userId: string, claims: AuthClaims): Promise<MemberProfileView>;
   updateProfile(
     userId: string,

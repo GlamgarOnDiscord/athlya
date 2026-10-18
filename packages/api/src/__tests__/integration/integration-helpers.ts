@@ -466,6 +466,7 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
     getExportJob: vi.fn(async () => null),
     openExportDownload: vi.fn(async () => ({ kind: 'not_found' as const })),
     listMembersByStudio: vi.fn(async () => ({ items: [], nextCursor: null })),
+    getProgression: vi.fn(async () => ({})),
   };
 
   /* --------------------- studios --------------------- */

@@ -120,6 +120,13 @@ without `EXPORT_URL_SIGNING_KEY` in its `# Secrets` header. If
 `AVATARS_PUBLIC_URL` is ever set as a secret instead of a var, set it on both
 Workers.
 
+The reservations Worker also serves `/v1/me/*` (`GET /v1/me/progression`,
+issue #639) from the same members deps, through its own
+`staging.api.athlya.app/v1/me/*` and `api.athlya.app/v1/me/*` zone routes.
+The first `wrangler deploy --config wrangler.reservations.toml` after that
+change creates the routes; until then the gateway's catch-all `/*` route
+serves the path, so there is no gap.
+
 ## Local (ops)
 
 ```bash

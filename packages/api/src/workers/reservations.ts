@@ -5,6 +5,7 @@
  *   • /v1/classes/*      — list, search, create, update, delete, capacity WS
  *   • /v1/reservations/* — book, cancel, list
  *   • /v1/members/*      — profile, consents, export
+ *   • /v1/me/*           — progression (served from the members deps)
  *   • /v1/studios/*      — studio read/update
  *
  * /v1/checkins/* is not routed to this Worker: the check-in adapter is
@@ -34,6 +35,7 @@ import {
 import { installDomainScope } from '../domain-scope.js';
 import { buildCapacityRouter } from '../routes/capacity.js';
 import { buildClassesRouter } from '../routes/classes.js';
+import { buildMeRouter } from '../routes/me.js';
 import { buildMembersRouter } from '../routes/members.js';
 import { buildReservationsRouter } from '../routes/reservations.js';
 import { buildStudiosRouter } from '../routes/studios.js';
@@ -79,7 +81,9 @@ const app = buildBaseApp({
       '/v1/reservations',
       buildReservationsRouter(lazyReservationsDeps(() => resolve().reservations)),
     );
-    base.route('/v1/members', buildMembersRouter(lazyMembersDeps(() => resolve().members)));
+    const members = lazyMembersDeps(() => resolve().members);
+    base.route('/v1/members', buildMembersRouter(members));
+    base.route('/v1/me', buildMeRouter(members));
     base.route('/v1/studios', buildStudiosRouter(lazyStudiosDeps(() => resolve().studios)));
   },
 });

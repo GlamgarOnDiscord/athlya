@@ -716,6 +716,11 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   const searchReadLimiter = rateLimit(EXPENSIVE_READ_BUDGET);
   const membersListReadLimiter = rateLimit(MEMBERS_LIST_BUDGET);
   const auditReadLimiter = rateLimit(EXPENSIVE_READ_BUDGET);
+  const progressionReadLimiter = rateLimit({
+    ...EXPENSIVE_READ_BUDGET,
+    keyPrefix: 'rl:ip:progression',
+    userKeyPrefix: 'rl:user:progression',
+  });
   const adminStatsReadLimiter = rateLimit(ADMIN_STATS_BUDGET);
 
   // `guardLimiter` — mutations fail-closed, reads fail-open (issue #65).
@@ -804,6 +809,10 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   app.use(
     '/v1/audit',
     guardExpensiveReadLimiter(auditReadLimiter, 'prefix') as Parameters<typeof app.use>[1],
+  );
+  app.use(
+    '/v1/me/progression',
+    guardExpensiveReadLimiter(progressionReadLimiter, 'prefix') as Parameters<typeof app.use>[1],
   );
 
   // 6. Body-size limit — Sprint 1 / Slice 1.2. Cloudflare's free
