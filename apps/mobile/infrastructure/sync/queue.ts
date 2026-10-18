@@ -7,7 +7,10 @@
  *   change.
  * - Every enqueued mutation gets a fresh UUID v4 `idempotencyKey`, sent as
  *   the `Idempotency-Key` header on each delivery attempt so the API
- *   applies it at most once.
+ *   applies it at most once. A caller that already sent the mutation online
+ *   passes that key back so a retry cannot apply it twice.
+ * - Every mutation records the user who made it (`ownerId`); the drain only
+ *   sends a mutation under its owner's session.
  * - Permanently rejected mutations move to a dead-letter queue (DLQ) that
  *   the UI can show and the user can discard.
  */
@@ -25,6 +28,7 @@ export type JsonValue = z.infer<ReturnType<typeof z.json>>;
 const PendingMutationSchema = z.object({
   id: z.string().min(1),
   idempotencyKey: z.string().refine(isUuidV4, 'idempotencyKey must be a UUID v4'),
+  ownerId: z.string().min(1),
   kind: z.string().min(1),
   method: z.enum(MUTATION_METHODS),
   path: z.string().startsWith('/'),
@@ -42,6 +46,13 @@ export type PendingMutation = z.infer<typeof PendingMutationSchema>;
 export type DeadLetter = z.infer<typeof DeadLetterSchema>;
 
 export interface MutationInput {
+  /** Id of the signed-in user making the change. */
+  readonly ownerId: string;
+  /**
+   * Reuse the key of a request already sent online (e.g. it timed out),
+   * so the server deduplicates the retry. Defaults to a fresh UUID v4.
+   */
+  readonly idempotencyKey?: string;
   /** Domain intent, e.g. `logSession`, `bookClass`, `cancelReservation`. */
   readonly kind: string;
   readonly method?: MutationMethod;
@@ -83,6 +94,9 @@ export class MutationQueue {
     this.#uuid = options.uuid;
     this.#now = options.now ?? (() => new Date());
     this.#maxDeadLetters = options.maxDeadLetters ?? DEFAULT_MAX_DEAD_LETTERS;
+    if (!Number.isInteger(this.#maxDeadLetters) || this.#maxDeadLetters < 1) {
+      throw new Error('MutationQueue: maxDeadLetters must be a positive integer');
+    }
     const namespace = options.namespace ?? DEFAULT_NAMESPACE;
     this.#queueKey = `${namespace}.pending`;
     this.#deadLetterKey = `${namespace}.dead`;
@@ -90,15 +104,16 @@ export class MutationQueue {
     this.#deadLetters = this.#load(this.#deadLetterKey, DeadLetterSchema);
   }
 
-  /** Appends a mutation with a fresh id and UUID v4 idempotency key. */
+  /** Appends a mutation with a fresh id and a UUID v4 idempotency key. */
   public enqueue(input: MutationInput): PendingMutation {
-    const idempotencyKey = this.#uuid();
+    const idempotencyKey = input.idempotencyKey ?? this.#uuid();
     if (!isUuidV4(idempotencyKey)) {
-      throw new Error('MutationQueue: the uuid generator must return RFC 4122 v4 UUIDs');
+      throw new Error('MutationQueue: idempotency keys must be RFC 4122 v4 UUIDs');
     }
     const mutation: PendingMutation = {
       id: this.#uuid(),
       idempotencyKey,
+      ownerId: input.ownerId,
       kind: input.kind,
       method: input.method ?? 'POST',
       path: input.path,

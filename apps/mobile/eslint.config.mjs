@@ -15,6 +15,7 @@ export default [
       'android/**',
       'ios/**',
       'dist/**',
+      'app.config.js',
       'babel.config.js',
       'metro.config.js',
       'tailwind.config.ts',

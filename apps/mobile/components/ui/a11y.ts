@@ -59,8 +59,11 @@ export function syncBannerModel(state: SyncState): SyncBannerModel | null {
         progress: { min: 0, max: state.total, now: state.processed },
       };
     case 'offline':
-      return state.pending > 0
-        ? { message: { key: 'mobile.sync.offline', values: { count: state.pending } } }
+      if (state.pending > 0) {
+        return { message: { key: 'mobile.sync.offline', values: { count: state.pending } } };
+      }
+      return state.deadLetters > 0
+        ? { message: { key: 'mobile.sync.rejected', values: { count: state.deadLetters } } }
         : null;
     case 'auth-required':
       return { message: { key: 'mobile.sync.authRequired', values: { count: state.pending } } };

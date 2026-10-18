@@ -65,15 +65,40 @@ describe('createApiClient', () => {
     });
   });
 
-  it('omits the Authorization header without a token and on anonymous calls', async () => {
-    const { client, fetchImpl } = setup([jsonResponse(200, {}), jsonResponse(200, {})], {
-      token: null,
-    });
+  it('omits the Authorization header when there is no token', async () => {
+    const { client, fetchImpl } = setup([jsonResponse(200, {})], { token: null });
     await client.get('/v1/classes');
+    const [, init] = fetchImpl.mock.calls[0] as FetchArgs;
+    expect(headersOf(init).Authorization).toBeUndefined();
+  });
+
+  it('never sends the available access token on anonymous calls', async () => {
+    const { client, fetchImpl } = setup([jsonResponse(200, {})]);
     await client.post('/v1/auth/login', {}, { authenticated: false });
-    for (const [, init] of fetchImpl.mock.calls as FetchArgs[]) {
-      expect(headersOf(init).Authorization).toBeUndefined();
-    }
+    const [, init] = fetchImpl.mock.calls[0] as FetchArgs;
+    expect(headersOf(init).Authorization).toBeUndefined();
+  });
+
+  it('rethrows a caller abort instead of reporting a network failure', async () => {
+    const fetchImpl = vi.fn(
+      (_input: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        }),
+    );
+    const client = createApiClient({
+      baseUrl: 'https://api.athlya.test',
+      tokens: { getAccessToken: () => null },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const controller = new AbortController();
+    const pending = client.send('POST', '/v1/sessions', {}, { signal: controller.signal });
+    controller.abort();
+    const error = await pending.catch((e: unknown) => e);
+    expect(error).not.toBeInstanceOf(NetworkError);
+    expect((error as Error).name).toBe('AbortError');
   });
 
   it('refreshes once on 401 and retries once with the new token and the same key', async () => {

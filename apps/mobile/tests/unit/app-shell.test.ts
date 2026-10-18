@@ -2,7 +2,7 @@ import { colors, radii, spacing } from '@athlya/shared/tokens';
 import { describe, expect, it } from 'vitest';
 
 import { buttonA11yProps, syncBannerModel } from '../../components/ui/a11y';
-import { DEFAULT_API_URL, resolveApiBaseUrl, resolveLocale } from '../../infrastructure/config';
+import { resolveApiBaseUrl, resolveLocale } from '../../infrastructure/config';
 import {
   loadOrCreateStorageKey,
   STORAGE_KEY_ITEM,
@@ -73,6 +73,9 @@ describe('syncBannerModel', () => {
       'mobile.sync.authRequired',
     );
     expect(syncBannerModel({ ...IDLE, deadLetters: 2 })?.message.key).toBe('mobile.sync.rejected');
+    expect(syncBannerModel({ ...IDLE, status: 'offline', deadLetters: 2 })?.message.key).toBe(
+      'mobile.sync.rejected',
+    );
   });
 
   it('stays hidden when there is nothing to report', () => {
@@ -83,20 +86,26 @@ describe('syncBannerModel', () => {
 
 describe('config', () => {
   it('defaults to production and accepts https origins', () => {
-    expect(resolveApiBaseUrl(undefined)).toBe(DEFAULT_API_URL);
-    expect(resolveApiBaseUrl(' ')).toBe(DEFAULT_API_URL);
-    expect(resolveApiBaseUrl('https://api-staging.athlya.app/')).toBe(
-      'https://api-staging.athlya.app',
+    expect(resolveApiBaseUrl('https://staging.api.athlya.app/')).toBe(
+      'https://staging.api.athlya.app',
     );
+  });
+
+  it('refuses to fall back to production when the variable is missing', () => {
+    expect(() => resolveApiBaseUrl(undefined)).toThrow(/not set/u);
+    expect(() => resolveApiBaseUrl(' ')).toThrow(/not set/u);
   });
 
   it('allows plain http only for loopback development hosts', () => {
     expect(resolveApiBaseUrl('http://10.0.2.2:8787')).toBe('http://10.0.2.2:8787');
+    expect(resolveApiBaseUrl('http://[::1]:8787')).toBe('http://[::1]:8787');
     expect(() => resolveApiBaseUrl('http://api.athlya.app')).toThrow(/https/u);
   });
 
   it('picks English for en-* and French otherwise', () => {
     expect(resolveLocale('en-GB')).toBe('en');
+    expect(resolveLocale('en')).toBe('en');
+    expect(resolveLocale('enochian')).toBe('fr');
     expect(resolveLocale('fr-FR')).toBe('fr');
     expect(resolveLocale('de-DE')).toBe('fr');
     expect(resolveLocale(undefined)).toBe('fr');

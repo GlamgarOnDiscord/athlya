@@ -15,3 +15,9 @@ credentials.json
 *.p12
 *.key
 *.mobileprovision
+# Store submission keys: keep them outside the repository; these patterns
+# only catch the usual file names
+*service-account*.json
+google-play*.json
+play-store*.json
+pc-api-*.json

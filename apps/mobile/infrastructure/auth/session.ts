@@ -37,8 +37,9 @@ export function createSessionRefresher(
   let inflight: Promise<string | null> | null = null;
 
   async function refresh(): Promise<string | null> {
+    const epoch = options.tokenStore.epoch;
     const refreshToken = await options.tokenStore.readRefreshToken();
-    if (refreshToken === null) return null;
+    if (refreshToken === null || epoch !== options.tokenStore.epoch) return null;
 
     const response = await anonymous.send(
       'POST',
@@ -47,15 +48,18 @@ export function createSessionRefresher(
       { authenticated: false },
     );
     if (response.status === 401) {
-      await options.tokenStore.clear();
+      if (epoch === options.tokenStore.epoch) await options.tokenStore.clear();
       return null;
     }
     if (response.status < 200 || response.status >= 300) {
       throw new ApiError(response.status, parseProblem(response.body));
     }
     const session = SessionResponseSchema.parse(response.body);
-    await options.tokenStore.saveSession(session);
-    return session.accessToken;
+    const saved = await options.tokenStore.saveSession(
+      { ...session, userId: session.user.id },
+      epoch,
+    );
+    return saved ? session.accessToken : null;
   }
 
   return () => {

@@ -2,11 +2,11 @@ import NetInfo from '@react-native-community/netinfo';
 
 import { isOnlineState, type ConnectivitySource } from './sync-controller';
 
-/** `@react-native-community/netinfo` adapter. */
-export function createNetInfoConnectivity(): ConnectivitySource {
+/** `@react-native-community/netinfo` adapter; `dispose()` removes the native listener. */
+export function createNetInfoConnectivity(): ConnectivitySource & { dispose(): void } {
   let online = false;
   const listeners = new Set<(online: boolean) => void>();
-  NetInfo.addEventListener((state) => {
+  const unsubscribe = NetInfo.addEventListener((state) => {
     const next = isOnlineState(state);
     if (next === online) return;
     online = next;
@@ -19,6 +19,10 @@ export function createNetInfoConnectivity(): ConnectivitySource {
       return () => {
         listeners.delete(listener);
       };
+    },
+    dispose: () => {
+      unsubscribe();
+      listeners.clear();
     },
   };
 }

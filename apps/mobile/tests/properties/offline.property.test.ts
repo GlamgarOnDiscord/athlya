@@ -7,8 +7,14 @@
  *     `Idempotency-Key`), even when a response is lost after the write;
  *   - mutations are applied in FIFO enqueue order;
  *   - losing the network or killing the app between drains loses nothing:
- *     every mutation is either still queued, dead-lettered, or
- *     acknowledged by the server.
+ *     every mutation is either still queued, dead-lettered, or applied by
+ *     the server;
+ *   - once drained, every valid mutation was applied exactly once and every
+ *     invalid one sits in the dead-letter queue.
+ *
+ * A 409 is modelled the way the API's idempotency layer produces it: the
+ * write is (or already was) applied and the server answers with a
+ * conflict, so acknowledging it never hides a lost write.
  */
 import { randomUUID } from 'node:crypto';
 
@@ -19,6 +25,8 @@ import { NetworkError } from '../../infrastructure/api/errors';
 import { createMemoryKeyValueStore } from '../../infrastructure/storage/key-value-store';
 import { drainMutationQueue } from '../../infrastructure/sync/drain';
 import { MutationQueue } from '../../infrastructure/sync/queue';
+
+const OWNER = 'user-1';
 
 import type { ApiClient, ApiResponse } from '../../infrastructure/api/client';
 
@@ -58,8 +66,6 @@ const scenarioArb = fc.record({
 class FakeIdempotentServer {
   /** Idempotency keys in the order the server applied them. */
   public readonly applied: string[] = [];
-  /** Keys the server answered 409 for without applying. */
-  public readonly conflicted = new Set<string>();
   readonly #replays = new Map<string, ApiResponse>();
   readonly #outcomes: Outcome[];
   readonly #invalidPaths: Set<string>;
@@ -84,12 +90,10 @@ class FakeIdempotentServer {
           return Promise.reject(new NetworkError('reset before write'));
         case 'server-error-before-write':
           return Promise.resolve(this.#response(503));
-        case 'conflict':
-          if (!this.#replays.has(key)) {
-            this.conflicted.add(key);
-            return Promise.resolve(this.#response(409));
-          }
-          return Promise.resolve(this.#handle(key, path));
+        case 'conflict': {
+          const handled = this.#handle(key, path);
+          return Promise.resolve(handled.status === 422 ? handled : this.#response(409));
+        }
         case 'network-after-write':
           this.#handle(key, path);
           return Promise.reject(new NetworkError('response lost'));
@@ -135,6 +139,7 @@ describe('Property 5: FIFO + idempotent offline drain', () => {
 
         const drain = () =>
           drainMutationQueue(queue, server.api, {
+            ownerId: OWNER,
             isOnline: () => server.online,
             sleep: () => Promise.resolve(),
             random: () => 0,
@@ -145,8 +150,7 @@ describe('Property 5: FIFO + idempotent offline drain', () => {
           const dead = new Set(queue.deadLetters().map((m) => m.idempotencyKey));
           const applied = new Set(server.applied);
           for (const key of enqueueOrder) {
-            const accounted =
-              queued.has(key) || dead.has(key) || applied.has(key) || server.conflicted.has(key);
+            const accounted = queued.has(key) || dead.has(key) || applied.has(key);
             expect(accounted, `mutation ${key} vanished`).toBe(true);
           }
         };
@@ -155,7 +159,12 @@ describe('Property 5: FIFO + idempotent offline drain', () => {
         for (const batch of batches) {
           for (const _spec of batch) {
             const path = `/v1/m/${String(index)}`;
-            const mutation = queue.enqueue({ kind: 'logSession', path, payload: { index } });
+            const mutation = queue.enqueue({
+              ownerId: OWNER,
+              kind: 'logSession',
+              path,
+              payload: { index },
+            });
             enqueueOrder.push(mutation.idempotencyKey);
             pathOf.set(mutation.idempotencyKey, path);
             index += 1;
@@ -182,14 +191,13 @@ describe('Property 5: FIFO + idempotent offline drain', () => {
         const dead = new Set(queue.deadLetters().map((m) => m.idempotencyKey));
         for (const key of enqueueOrder) {
           const invalid = invalidPaths.has(pathOf.get(key) ?? '');
-          const outcomes = [
-            server.applied.includes(key),
-            dead.has(key),
-            server.conflicted.has(key),
-          ].filter(Boolean).length;
-          expect(outcomes, `mutation ${key} must settle exactly one way`).toBe(1);
-          if (dead.has(key)) expect(invalid).toBe(true);
-          if (server.applied.includes(key)) expect(invalid).toBe(false);
+          if (invalid) {
+            expect(dead.has(key), `invalid mutation ${key} must be dead-lettered`).toBe(true);
+            expect(server.applied.includes(key)).toBe(false);
+          } else {
+            expect(server.applied.includes(key), `mutation ${key} must be applied`).toBe(true);
+            expect(dead.has(key)).toBe(false);
+          }
         }
       }),
       { numRuns: 300 },

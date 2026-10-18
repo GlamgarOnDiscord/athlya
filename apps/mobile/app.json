@@ -10,10 +10,7 @@
     "backgroundColor": "#0A0A0A",
     "ios": {
       "bundleIdentifier": "app.athlya.mobile",
-      "supportsTablet": false,
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+      "supportsTablet": false
     },
     "android": {
       "package": "app.athlya.mobile",

@@ -19,11 +19,15 @@ import { ApiError, AuthRequiredError, NetworkError } from './errors';
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface RequestOptions {
+  /**
+   * Cancels the request; the original abort error is rethrown (not a
+   * `NetworkError`), so a cancelled write is never queued.
+   */
+  readonly signal?: AbortSignal;
   /** Sent as `Idempotency-Key`; reuse the same value for every retry of one mutation. */
   readonly idempotencyKey?: string;
   /** `false` for anonymous endpoints (login, register): no token, no refresh on 401. */
   readonly authenticated?: boolean;
-  readonly signal?: AbortSignal;
 }
 
 export interface ApiResponse {
@@ -128,10 +132,11 @@ export function createApiClient(options: CreateApiClientOptions): ApiClient {
       });
       return { status: response.status, headers: response.headers, body: await readBody(response) };
     } catch (error) {
+      // A caller cancellation is not a transport failure: surface it as is so
+      // it is never mistaken for "offline" and queued for a retry.
+      if (external?.aborted === true) throw error;
       const reason = controller.signal.aborted
-        ? external?.aborted === true
-          ? 'request aborted'
-          : `request timed out after ${String(timeoutMs)} ms`
+        ? `request timed out after ${String(timeoutMs)} ms`
         : 'network request failed';
       throw new NetworkError(`${method} ${url}: ${reason}`, { cause: error });
     } finally {

@@ -12,12 +12,9 @@ export default function HomeScreen() {
 
   const syncNow = () => {
     setSyncing(true);
-    runtime.sync
-      .syncNow()
-      .catch(() => undefined)
-      .finally(() => {
-        setSyncing(false);
-      });
+    void runtime.sync.syncNow().finally(() => {
+      setSyncing(false);
+    });
   };
 
   return (

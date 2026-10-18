@@ -25,6 +25,8 @@ export interface AppRuntime {
   readonly tokenStore: TokenStore;
   readonly queue: MutationQueue;
   readonly sync: SyncController;
+  /** Releases native listeners (NetInfo). */
+  readonly dispose: () => void;
 }
 
 export async function createAppRuntime(): Promise<AppRuntime> {
@@ -46,6 +48,12 @@ export async function createAppRuntime(): Promise<AppRuntime> {
     tokens: tokenStore,
     refreshAccessToken: createSessionRefresher({ baseUrl, tokenStore }),
   });
-  const sync = new SyncController({ queue, api, connectivity: createNetInfoConnectivity() });
-  return { locale, t, api, tokenStore, queue, sync };
+  const connectivity = createNetInfoConnectivity();
+  const sync = new SyncController({
+    queue,
+    api,
+    connectivity,
+    getOwnerId: () => tokenStore.getUserId(),
+  });
+  return { locale, t, api, tokenStore, queue, sync, dispose: () => connectivity.dispose() };
 }

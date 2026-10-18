@@ -6,7 +6,7 @@ import {
   type ConnectivitySource,
   type SyncState,
 } from '../../infrastructure/sync/sync-controller';
-import { createQueue } from '../helpers';
+import { createQueue, OWNER } from '../helpers';
 
 import type { ApiClient, ApiResponse } from '../../infrastructure/api/client';
 
@@ -48,6 +48,8 @@ function okApi(): { api: Pick<ApiClient, 'send'>; sent: string[] } {
   };
 }
 
+const owner = () => Promise.resolve(OWNER);
+
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe('isOnlineState', () => {
@@ -63,10 +65,10 @@ describe('isOnlineState', () => {
 describe('SyncController (task 11.7)', () => {
   it('drains automatically when connectivity comes back', async () => {
     const { queue } = createQueue();
-    queue.enqueue({ kind: 'logSession', path: '/v1/sessions' });
+    queue.enqueue({ ownerId: OWNER, kind: 'logSession', path: '/v1/sessions' });
     const connectivity = new FakeConnectivity(false);
     const { api, sent } = okApi();
-    const controller = new SyncController({ queue, api, connectivity });
+    const controller = new SyncController({ queue, api, getOwnerId: owner, connectivity });
     const stop = controller.start();
 
     expect(controller.getState().status).toBe('offline');
@@ -82,11 +84,12 @@ describe('SyncController (task 11.7)', () => {
 
   it('drains at start when already online', async () => {
     const { queue } = createQueue();
-    queue.enqueue({ kind: 'a', path: '/v1/a' });
+    queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
     const { api, sent } = okApi();
     const stop = new SyncController({
       queue,
       api,
+      getOwnerId: owner,
       connectivity: new FakeConnectivity(true),
     }).start();
     await flush();
@@ -96,10 +99,15 @@ describe('SyncController (task 11.7)', () => {
 
   it('publishes syncing progress while the drain runs', async () => {
     const { queue } = createQueue();
-    queue.enqueue({ kind: 'a', path: '/v1/a' });
-    queue.enqueue({ kind: 'b', path: '/v1/b' });
+    queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
+    queue.enqueue({ ownerId: OWNER, kind: 'b', path: '/v1/b' });
     const { api } = okApi();
-    const controller = new SyncController({ queue, api, connectivity: new FakeConnectivity(true) });
+    const controller = new SyncController({
+      queue,
+      api,
+      getOwnerId: owner,
+      connectivity: new FakeConnectivity(true),
+    });
     const states: SyncState[] = [];
     controller.subscribe(() => states.push(controller.getState()));
 
@@ -115,7 +123,7 @@ describe('SyncController (task 11.7)', () => {
 
   it('never runs two drains at once and coalesces calls into one follow-up drain', async () => {
     const { queue } = createQueue();
-    queue.enqueue({ kind: 'a', path: '/v1/a' });
+    queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
     let inFlight = 0;
     let maxInFlight = 0;
     const sent: string[] = [];
@@ -129,10 +137,15 @@ describe('SyncController (task 11.7)', () => {
         return { status: 201, headers: new Headers(), body: null };
       },
     };
-    const controller = new SyncController({ queue, api, connectivity: new FakeConnectivity(true) });
+    const controller = new SyncController({
+      queue,
+      api,
+      getOwnerId: owner,
+      connectivity: new FakeConnectivity(true),
+    });
 
     const first = controller.syncNow();
-    queue.enqueue({ kind: 'b', path: '/v1/b' });
+    queue.enqueue({ ownerId: OWNER, kind: 'b', path: '/v1/b' });
     const second = controller.syncNow();
     const third = controller.syncNow();
     await Promise.all([first, second, third]);
@@ -144,11 +157,12 @@ describe('SyncController (task 11.7)', () => {
 
   it('resolves null and stays offline when there is no network', async () => {
     const { queue } = createQueue();
-    queue.enqueue({ kind: 'a', path: '/v1/a' });
+    queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
     const { api, sent } = okApi();
     const controller = new SyncController({
       queue,
       api,
+      getOwnerId: owner,
       connectivity: new FakeConnectivity(false),
     });
     await expect(controller.syncNow()).resolves.toBeNull();
@@ -156,12 +170,68 @@ describe('SyncController (task 11.7)', () => {
     expect(controller.getState().status).toBe('offline');
   });
 
+  it('keeps a rerun requested during an offline stop', async () => {
+    const { queue } = createQueue();
+    queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
+    queue.enqueue({ ownerId: OWNER, kind: 'b', path: '/v1/b' });
+    let blip = false;
+    const connectivity: ConnectivitySource = {
+      isOnline: () => {
+        if (!blip) return true;
+        blip = false;
+        return false;
+      },
+      subscribe: () => () => undefined,
+    };
+    const sent: string[] = [];
+    let controller: SyncController | null = null;
+    const api: Pick<ApiClient, 'send'> = {
+      send: (_method, path) => {
+        sent.push(path);
+        if (sent.length === 1) {
+          blip = true;
+          void controller?.syncNow();
+        }
+        return Promise.resolve({ status: 201, headers: new Headers(), body: null });
+      },
+    };
+    controller = new SyncController({ queue, api, getOwnerId: owner, connectivity });
+
+    await controller.syncNow();
+
+    expect(sent).toEqual(['/v1/a', '/v1/b']);
+    expect(queue.size).toBe(0);
+  });
+
+  it('ends a failed run in a consistent state and reports the error', async () => {
+    const { queue } = createQueue();
+    queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
+    const errors: unknown[] = [];
+    const failure = new Error('storage failure');
+    const controller = new SyncController({
+      queue,
+      api: okApi().api,
+      getOwnerId: () => Promise.reject(failure),
+      connectivity: new FakeConnectivity(true),
+      onError: (error) => errors.push(error),
+    });
+
+    await expect(controller.syncNow()).resolves.toBeNull();
+    expect(errors).toEqual([failure]);
+    expect(controller.getState()).toMatchObject({ status: 'idle', total: 0, processed: 0 });
+  });
+
   it('surfaces auth-required when the session cannot be refreshed', async () => {
     const { queue } = createQueue();
-    queue.enqueue({ kind: 'a', path: '/v1/a' });
+    queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
     const { AuthRequiredError } = await import('../../infrastructure/api/errors');
     const api: Pick<ApiClient, 'send'> = { send: () => Promise.reject(new AuthRequiredError()) };
-    const controller = new SyncController({ queue, api, connectivity: new FakeConnectivity(true) });
+    const controller = new SyncController({
+      queue,
+      api,
+      getOwnerId: owner,
+      connectivity: new FakeConnectivity(true),
+    });
     await controller.syncNow();
     expect(controller.getState()).toMatchObject({ status: 'auth-required', pending: 1 });
   });

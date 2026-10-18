@@ -19,8 +19,14 @@
  *     dead-lettering it would lose a valid write;
  *   - a session that cannot be refreshed (`AuthRequiredError`) stops the
  *     drain without touching the queue, like a network loss;
+ *   - connectivity is also checked before every retry, so a network loss
+ *     during backoff stops the drain (`offline`) instead of burning the
+ *     remaining attempts;
  *   - no sleep follows the last failed attempt, since nothing is sent
- *     after it.
+ *     after it;
+ *   - only the signed-in user's mutations are sent (`ownerId`); another
+ *     account's entries stay queued, in order, until that user signs in
+ *     again, and nothing is sent without a session.
  */
 import { parseProblem } from '../api/client';
 import { AuthRequiredError } from '../api/errors';
@@ -48,8 +54,10 @@ export interface DrainResult {
 }
 
 export interface DrainOptions {
-  /** Connectivity probe, checked before each mutation. */
+  /** Connectivity probe, checked before each mutation and each retry. */
   readonly isOnline: () => boolean;
+  /** Signed-in user; only their mutations are sent. `null` sends nothing. */
+  readonly ownerId: string | null;
   readonly maxAttempts?: number;
   readonly baseDelayMs?: number;
   readonly maxDelayMs?: number;
@@ -99,7 +107,8 @@ export async function drainMutationQueue(
   const maxAttempts = options.maxAttempts ?? DRAIN_DEFAULTS.maxAttempts;
   const sleep = options.sleep ?? defaultSleep;
   const random = options.random ?? Math.random;
-  const total = queue.size;
+  const ownerId = options.ownerId;
+  const total = queue.peek().filter((m) => m.ownerId === ownerId).length;
   let processed = 0;
   let acknowledged = 0;
   let deadLettered = 0;
@@ -109,8 +118,12 @@ export async function drainMutationQueue(
     options.onProgress?.({ total, processed, current });
   };
   report(null);
+  if (ownerId === null) {
+    return { acknowledged, deadLettered, remaining: queue.size, stoppedBy: 'auth-required' };
+  }
 
   outer: for await (const mutation of queue.drain()) {
+    if (mutation.ownerId !== ownerId) continue;
     if (!options.isOnline()) {
       stoppedBy = 'offline';
       break;
@@ -151,7 +164,13 @@ export async function drainMutationQueue(
         settled = true;
       } else {
         attempt += 1;
-        if (attempt < maxAttempts) await sleep(backoffDelayMs(attempt, random, options));
+        if (attempt < maxAttempts) {
+          await sleep(backoffDelayMs(attempt, random, options));
+          if (!options.isOnline()) {
+            stoppedBy = 'offline';
+            break outer;
+          }
+        }
       }
     }
 

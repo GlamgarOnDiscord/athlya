@@ -5,16 +5,16 @@ separate PR. Post-1.0 roadmap item v1.1, see [`docs/roadmap/post-1.0.md`](../roa
 
 ## Stack
 
-| Concern       | Choice                                                                              |
-| ------------- | ----------------------------------------------------------------------------------- |
-| Runtime       | Expo SDK 58, React Native 0.88, Hermes (the SDK 58 default; no `jsEngine` switch)   |
-| Navigation    | expo-router (file routes under `apps/mobile/app/`)                                  |
-| Styling       | NativeWind 4 (Tailwind 3), theme generated from `@athlya/shared/tokens`             |
-| Secrets       | `expo-secure-store` (Keychain / Keystore, `WHEN_UNLOCKED_THIS_DEVICE_ONLY`)         |
-| Biometrics    | `expo-local-authentication`                                                         |
-| Offline queue | `react-native-mmkv` 4 (AES-256, per-install key in secure storage)                  |
-| Connectivity  | `@react-native-community/netinfo`                                                   |
-| Builds        | EAS Build / Submit — operator steps in [`mobile-eas.md`](../runbooks/mobile-eas.md) |
+| Concern       | Choice                                                                                |
+| ------------- | ------------------------------------------------------------------------------------- |
+| Runtime       | Expo SDK 58, React Native 0.88, Hermes (the SDK 58 default; no `jsEngine` switch)     |
+| Navigation    | expo-router (file routes under `apps/mobile/app/`)                                    |
+| Styling       | NativeWind 4 (Tailwind 3), theme generated from `@athlya/shared/tokens`               |
+| Secrets       | `expo-secure-store` (iOS Keychain `WHEN_UNLOCKED_THIS_DEVICE_ONLY`; Android Keystore) |
+| Biometrics    | `expo-local-authentication`                                                           |
+| Offline queue | `react-native-mmkv` 4 (AES-256, per-install key in secure storage)                    |
+| Connectivity  | `@react-native-community/netinfo`                                                     |
+| Builds        | EAS Build / Submit — operator steps in [`mobile-eas.md`](../runbooks/mobile-eas.md)   |
 
 ## Checklist (`tasks.md` § 11)
 
@@ -56,20 +56,26 @@ Node without a device or simulator.
 ## Contracts for the screens PR
 
 - **Runtime**: `useRuntime()` (`components/RuntimeProvider.tsx`) returns `{ locale, t, api,
-tokenStore, queue, sync }`.
+tokenStore, queue, sync, dispose }`.
 - **Online calls**: `runtime.api.post<T>(path, body, { idempotencyKey })` and friends throw
   `ApiError` (with the parsed `ProblemDetails`) on non-2xx, `AuthRequiredError` when the session
   cannot be refreshed, `NetworkError` when no response arrived.
-- **Offline writes**: `runtime.queue.enqueue({ kind, method?, path, payload? })` returns the
-  `PendingMutation` with a fresh UUID v4 `idempotencyKey`; then call `runtime.sync.syncNow()`.
-  When the user is online, call the API directly with a fresh key and fall back to the queue on
-  `NetworkError`, reusing that same key.
+- **Offline writes**: `runtime.queue.enqueue({ ownerId, kind, method?, path, payload?,
+idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncNow()` (it never
+  rejects). `ownerId` is the signed-in user's id (`await runtime.tokenStore.getUserId()`); the
+  drain only sends a user's own mutations, so another account's entries wait for that user. When
+  the user is online, call the API directly with a fresh UUID v4 key and, on `NetworkError`,
+  enqueue the mutation **with that same `idempotencyKey`** so a write that did reach the server
+  is not applied twice. A request cancelled through `signal` rethrows its abort error and must
+  not be queued.
 - **Sync status**: `runtime.sync.subscribe()` / `getState()` (`useSyncExternalStore`), rendered by
   `<SyncStatusBanner>`. `runtime.queue.deadLetters()` / `discardDeadLetter(id)` back the "rejected
   changes" view.
-- **Sign-in**: after `POST /v1/auth/login` (`{ authenticated: false }`), pass the
-  `SessionResponse` to `runtime.tokenStore.saveSession()`. `setBiometricUnlockEnabled(true)` turns on
-  the biometric gate; `clear()` signs out.
+- **Sign-in**: after `POST /v1/auth/login` (`{ authenticated: false }`), pass
+  `{ ...session, userId: session.user.id }` to `runtime.tokenStore.saveSession()`.
+  `await setBiometricUnlockEnabled(true)` resolves `true` only when the gate is on: it resolves
+  `false`, enabling nothing, when biometrics are unavailable or the prompt is declined, so show the
+  setting from that result. `clear()` signs out and invalidates any refresh in flight.
 - **Strings**: add keys under `mobile.*` in `packages/shared/src/i18n/{en,fr}.json`.
 
 ## Drain semantics (Algorithm 4)
@@ -77,8 +83,9 @@ tokenStore, queue, sync }`.
 FIFO; `2xx`/`409` remove; other `4xx` go to the DLQ with the problem `code`; `5xx`, network errors,
 `408` and `429` retry with `min(2^attempt × 1 s, 30 s) + jitter` up to 5 attempts, after which the
 mutation stays at the head of the queue and the drain stops so nothing overtakes it. The drain also
-stops when the device goes offline, and when the session cannot be refreshed (`auth-required`, the
-queue is left untouched until the user signs in again).
+stops when the device goes offline (checked before every mutation and every retry), and when no
+user is signed in or the session cannot be refreshed (`auth-required`, the queue is left untouched
+until the user signs in again).
 
 ## Brand
 
@@ -99,8 +106,9 @@ EXPO_PUBLIC_API_URL=http://10.0.2.2:8787 pnpm android   # or: pnpm ios (macOS)
 ```
 
 Native modules (MMKV, SecureStore, LocalAuthentication, NetInfo) need a development build
-(`expo run:*` or EAS); Expo Go is not supported. `EXPO_PUBLIC_API_URL` must be HTTPS except for
-loopback hosts.
+(`expo run:*` or EAS); Expo Go is not supported. `EXPO_PUBLIC_API_URL` is mandatory (no fallback:
+the app refuses to boot and EAS builds fail without it) and must be HTTPS except for loopback
+hosts. EAS profiles pin it in `eas.json` (`preview` → `https://staging.api.athlya.app`).
 
 ## CI
 

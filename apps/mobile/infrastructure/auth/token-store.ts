@@ -15,9 +15,12 @@ import type { AccessTokenSource } from '../api/client';
 
 export const REFRESH_TOKEN_KEY = 'athlya.refreshToken';
 export const BIOMETRIC_UNLOCK_KEY = 'athlya.biometricUnlock';
+export const USER_ID_KEY = 'athlya.userId';
 
 /** Tokens returned by `register`, `login`, `oauth/*` and `refresh`. */
 export interface SessionTokens {
+  /** Id of the signed-in user; owns the offline mutations made meanwhile. */
+  readonly userId: string;
   readonly accessToken: string;
   readonly refreshToken: string;
   /** Seconds until the access token expires. */
@@ -42,6 +45,9 @@ export class TokenStore implements AccessTokenSource {
   #accessToken: string | null = null;
   #accessTokenExpiresAt = 0;
   #unlocked = false;
+  #unlocking: Promise<boolean> | null = null;
+  #lockGeneration = 0;
+  #epoch = 0;
 
   public constructor(
     secure: SecureStorage,
@@ -63,14 +69,36 @@ export class TokenStore implements AccessTokenSource {
   }
 
   /**
+   * Session generation, bumped by `clear()`. A refresh captures it before
+   * its request and passes it to `saveSession`, so a response that lands
+   * after sign-out cannot restore the session.
+   */
+  public get epoch(): number {
+    return this.#epoch;
+  }
+
+  /**
    * Stores a freshly issued session: the rotated refresh token replaces the
    * previous one in secure storage, the access token stays in memory.
+   * Resolves `false`, storing nothing, when `expectedEpoch` is stale.
    */
-  public async saveSession(tokens: SessionTokens): Promise<void> {
+  public async saveSession(tokens: SessionTokens, expectedEpoch?: number): Promise<boolean> {
+    if (expectedEpoch !== undefined && expectedEpoch !== this.#epoch) return false;
     await this.#secure.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+    await this.#secure.setItem(USER_ID_KEY, tokens.userId);
+    if (expectedEpoch !== undefined && expectedEpoch !== this.#epoch) {
+      await this.#forget();
+      return false;
+    }
     this.#accessToken = tokens.accessToken;
     this.#accessTokenExpiresAt = this.#now() + tokens.accessTokenExpiresIn * 1000;
     this.#unlocked = true;
+    return true;
+  }
+
+  /** Id of the user whose session is stored, or `null` when signed out. */
+  public getUserId(): Promise<string | null> {
+    return this.#secure.getItem(USER_ID_KEY);
   }
 
   /** Whether a refresh token is stored, without prompting. */
@@ -84,17 +112,31 @@ export class TokenStore implements AccessTokenSource {
 
   /**
    * Prompts for biometrics when the unlock is enabled and the store is
-   * locked. Resolves `true` when the refresh token may be read.
+   * locked. Resolves `true` when the refresh token may be read. Concurrent
+   * callers share one prompt.
    */
-  public async unlock(): Promise<boolean> {
-    if (this.#unlocked) return true;
+  public unlock(): Promise<boolean> {
+    if (this.#unlocked) return Promise.resolve(true);
+    this.#unlocking ??= this.#runUnlock().finally(() => {
+      this.#unlocking = null;
+    });
+    return this.#unlocking;
+  }
+
+  async #runUnlock(): Promise<boolean> {
+    const generation = this.#lockGeneration;
+    let unlocked: boolean;
     if (!(await this.isBiometricUnlockEnabled())) {
-      this.#unlocked = true;
-      return true;
+      unlocked = true;
+    } else if (!(await this.#biometrics.isAvailable())) {
+      unlocked = false;
+    } else {
+      unlocked = await this.#biometrics.authenticate(this.#unlockPrompt);
     }
-    if (!(await this.#biometrics.isAvailable())) return false;
-    this.#unlocked = await this.#biometrics.authenticate(this.#unlockPrompt);
-    return this.#unlocked;
+    // A lock() issued while the prompt was open wins over its result.
+    if (generation !== this.#lockGeneration) return false;
+    this.#unlocked = unlocked;
+    return unlocked;
   }
 
   /**
@@ -108,6 +150,8 @@ export class TokenStore implements AccessTokenSource {
 
   /** Drops the in-memory access token and requires a new unlock. */
   public lock(): void {
+    this.#lockGeneration += 1;
+    this.#unlocking = null;
     this.#accessToken = null;
     this.#accessTokenExpiresAt = 0;
     this.#unlocked = false;
@@ -119,7 +163,9 @@ export class TokenStore implements AccessTokenSource {
 
   /**
    * Turning the unlock on requires available biometrics and a successful
-   * prompt, so a user cannot lock themselves out. Resolves the new state.
+   * prompt, so a user cannot lock themselves out. Resolves the new state:
+   * `setBiometricUnlockEnabled(true)` resolves `false`, enabling nothing,
+   * when biometrics are unavailable or the prompt is declined.
    */
   public async setBiometricUnlockEnabled(enabled: boolean): Promise<boolean> {
     if (!enabled) {
@@ -133,9 +179,18 @@ export class TokenStore implements AccessTokenSource {
     return true;
   }
 
-  /** Sign-out: forgets both tokens. The biometric preference is kept. */
+  /**
+   * Sign-out: forgets both tokens and the user id, and invalidates any
+   * refresh still in flight. The biometric preference is kept.
+   */
   public async clear(): Promise<void> {
+    this.#epoch += 1;
+    await this.#forget();
+  }
+
+  async #forget(): Promise<void> {
     this.lock();
     await this.#secure.deleteItem(REFRESH_TOKEN_KEY);
+    await this.#secure.deleteItem(USER_ID_KEY);
   }
 }

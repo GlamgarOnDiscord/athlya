@@ -47,8 +47,14 @@ export interface SyncControllerOptions {
   readonly queue: MutationQueue;
   readonly api: Pick<ApiClient, 'send'>;
   readonly connectivity: ConnectivitySource;
-  readonly drainOptions?: Omit<DrainOptions, 'isOnline' | 'onProgress'>;
-  /** Unexpected drain failures (storage errors); report them to Sentry. */
+  /** Signed-in user id; the drain only sends that user's mutations. */
+  readonly getOwnerId: () => Promise<string | null>;
+  readonly drainOptions?: Omit<DrainOptions, 'isOnline' | 'onProgress' | 'ownerId'>;
+  /**
+   * Unexpected drain failures (storage errors); report them to Sentry. The
+   * controller never rejects: a failed run ends in a consistent idle or
+   * offline state.
+   */
   readonly onError?: (error: unknown) => void;
 }
 
@@ -100,7 +106,8 @@ export class SyncController {
   /**
    * Drains now when online. A call made while a drain runs is coalesced
    * into one follow-up drain, so freshly enqueued mutations are not left
-   * behind. Resolves `null` when offline.
+   * behind. Resolves `null` when offline or when the run failed (the
+   * error goes to `onError`); never rejects.
    */
   public syncNow(): Promise<DrainResult | null> {
     if (this.#running !== null) {
@@ -126,19 +133,34 @@ export class SyncController {
 
   async #loop(): Promise<DrainResult | null> {
     let result: DrainResult | null = null;
-    do {
-      this.#rerunRequested = false;
-      if (!this.#options.connectivity.isOnline() || this.#options.queue.size === 0) break;
-      this.#update({ status: 'syncing', total: this.#options.queue.size, processed: 0 });
-      result = await drainMutationQueue(this.#options.queue, this.#options.api, {
-        ...this.#options.drainOptions,
-        isOnline: () => this.#options.connectivity.isOnline(),
-        onProgress: ({ total, processed }) => {
-          this.#update({ total, processed });
-        },
-      });
-      if (result.stoppedBy !== 'completed') break;
-    } while (this.#rerunRequested);
+    try {
+      do {
+        this.#rerunRequested = false;
+        if (!this.#options.connectivity.isOnline() || this.#options.queue.size === 0) break;
+        const ownerId = await this.#options.getOwnerId();
+        this.#update({
+          status: 'syncing',
+          total: this.#options.queue.peek().filter((m) => m.ownerId === ownerId).length,
+          processed: 0,
+        });
+        result = await drainMutationQueue(this.#options.queue, this.#options.api, {
+          ...this.#options.drainOptions,
+          ownerId,
+          isOnline: () => this.#options.connectivity.isOnline(),
+          onProgress: ({ total, processed }) => {
+            this.#update({ total, processed });
+          },
+        });
+        // A rerun requested meanwhile survives an offline stop: the next pass
+        // re-checks connectivity. Auth and exhausted retries end the run.
+        if (result.stoppedBy === 'auth-required' || result.stoppedBy === 'retries-exhausted') {
+          break;
+        }
+      } while (this.#rerunRequested);
+    } catch (error) {
+      result = null;
+      this.#options.onError?.(error);
+    }
 
     const status =
       result?.stoppedBy === 'auth-required'
@@ -158,10 +180,7 @@ export class SyncController {
   }
 
   #fireAndForget(): void {
-    this.syncNow().catch((error: unknown) => {
-      this.#update({ status: this.#options.connectivity.isOnline() ? 'idle' : 'offline' });
-      this.#options.onError?.(error);
-    });
+    void this.syncNow();
   }
 
   #update(patch: Partial<SyncState>): void {

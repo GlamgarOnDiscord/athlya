@@ -24,15 +24,22 @@ export default function RootLayout() {
     let cancelled = false;
     createAppRuntime()
       .then((runtime) => {
-        if (cancelled) return;
-        stop = runtime.sync.start();
+        if (cancelled) {
+          runtime.dispose();
+          return;
+        }
+        const stopSync = runtime.sync.start();
+        stop = () => {
+          stopSync();
+          runtime.dispose();
+        };
         setBoot(runtime);
       })
       .catch(() => {
         if (!cancelled) setBoot({ kind: 'failed' });
       })
       .finally(() => {
-        void SplashScreen.hideAsync();
+        if (!cancelled) void SplashScreen.hideAsync();
       });
     return () => {
       cancelled = true;

@@ -7,7 +7,7 @@ const config: Config = {
   content: { relative: true, files: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'] },
   presets: [nativewindPreset],
   darkMode: 'media',
-  theme: buildMobileTheme(),
+  theme: { extend: buildMobileTheme() },
 };
 
 export default config;

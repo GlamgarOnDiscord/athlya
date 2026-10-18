@@ -1,4 +1,5 @@
-import { ActivityIndicator, Pressable, Text } from 'react-native';
+import { colors } from '@athlya/shared/tokens';
+import { ActivityIndicator, Pressable, Text, useColorScheme } from 'react-native';
 
 import { buttonA11yProps } from './a11y';
 
@@ -18,6 +19,12 @@ const VARIANT_CLASSES = {
   secondary: 'bg-secondary dark:bg-dark-secondary',
 } as const;
 
+/** Spinner colour per variant: the label (foreground) token of the active theme. */
+const SPINNER_TOKEN = {
+  primary: 'primaryForeground',
+  secondary: 'foreground',
+} as const;
+
 const LABEL_CLASSES = {
   primary: 'text-primary-foreground dark:text-dark-primary-foreground',
   secondary: 'text-foreground dark:text-dark-foreground',
@@ -32,6 +39,7 @@ export function Button({
   busy,
   variant = 'primary',
 }: ButtonProps) {
+  const theme = useColorScheme() === 'dark' ? colors.dark : colors.light;
   const a11y = buttonA11yProps({
     label: accessibilityLabel ?? title,
     hint: accessibilityHint,
@@ -47,7 +55,7 @@ export function Button({
       className={`min-h-12 flex-row items-center justify-center rounded-lg px-lg ${VARIANT_CLASSES[variant]} ${a11y.accessibilityState.disabled ? 'opacity-50' : ''}`}
     >
       {busy === true ? (
-        <ActivityIndicator importantForAccessibility="no" />
+        <ActivityIndicator color={theme[SPINNER_TOKEN[variant]]} importantForAccessibility="no" />
       ) : (
         <Text className={`text-base font-semibold ${LABEL_CLASSES[variant]}`}>{title}</Text>
       )}

@@ -96,6 +96,42 @@ describe('createSessionRefresher', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it('drops a refresh that completes after sign-out', async () => {
+    const { store, secure } = createTokenStore();
+    secure.items.set(REFRESH_TOKEN_KEY, 'refresh-0');
+    let respond = (_response: Response): void => undefined;
+    const fetchImpl = (() =>
+      new Promise<Response>((resolve) => {
+        respond = resolve;
+      })) as unknown as typeof fetch;
+    const refresh = createSessionRefresher({
+      baseUrl: 'https://api.athlya.test',
+      tokenStore: store,
+      fetchImpl,
+    });
+
+    const pending = refresh();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await store.clear();
+    respond(jsonResponse(200, session(1)));
+
+    await expect(pending).resolves.toBeNull();
+    expect(store.getAccessToken()).toBeNull();
+    expect(secure.items.has(REFRESH_TOKEN_KEY)).toBe(false);
+  });
+
+  it('stores the user id of the refreshed session', async () => {
+    const { store, secure } = createTokenStore();
+    secure.items.set(REFRESH_TOKEN_KEY, 'refresh-0');
+    const refresh = createSessionRefresher({
+      baseUrl: 'https://api.athlya.test',
+      tokenStore: store,
+      fetchImpl: () => Promise.resolve(jsonResponse(200, session(1))),
+    });
+    await refresh();
+    await expect(store.getUserId()).resolves.toBe(USER.id);
+  });
+
   it('rejects on transient failures and keeps the stored token', async () => {
     const { store, secure } = createTokenStore();
     secure.items.set(REFRESH_TOKEN_KEY, 'refresh-0');

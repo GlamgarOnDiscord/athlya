@@ -10,7 +10,7 @@
 
 ## Overview
 
-This plan converts the Athlya design into a sequence of incremental coding tasks that a code-generation agent can execute. The project is a Turborepo monorepo in TypeScript 6.0, with three client apps (Next.js 16 web, Next.js 16 studio admin, Expo SDK 55 mobile), a Hono 4 edge API on Cloudflare Workers, Drizzle/Neon PostgreSQL 17 with Row-Level Security, Upstash Redis for counters and rate limits, and an event bus combining Cloudflare Queues and Upstash QStash.
+This plan converts the Athlya design into a sequence of incremental coding tasks that a code-generation agent can execute. The project is a Turborepo monorepo in TypeScript 6.0, with three client apps (Next.js 16 web, Next.js 16 studio admin, Expo SDK 58 mobile), a Hono 4 edge API on Cloudflare Workers, Drizzle/Neon PostgreSQL 17 with Row-Level Security, Upstash Redis for counters and rate limits, and an event bus combining Cloudflare Queues and Upstash QStash.
 
 The plan is sequenced to deliver the v0.1 MVP first (single-tenant pilot: auth, profile, class browsing, reservation with no-double-booking, cancellation with waitlist promotion, QR check-in, workout session log, admin dashboard), then v0.2 (multi-tenant with RLS-wide rollout, branding, Stripe subscriptions, waitlist auto-promotion notifications, Apple Health import, full i18n), then v0.3 (AI coach, progression graphs, Bluetooth FTMS, training programs).
 
@@ -439,9 +439,9 @@ Use official CLI to create, init the project .. and recent package version and s
 
 ### Epic 10 — Mobile app (v0.1)
 
-> ⏸️ **Renvoyé post-1.0** — voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-55`](../../../docs/roadmap/post-1.0.md). Effort ~3 sprints. Déclencheur : décision business "iOS/Android" + studio pilote.
+> ⏸️ **Renvoyé post-1.0** — voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-58`](../../../docs/roadmap/post-1.0.md). Effort ~3 sprints. Déclencheur : décision business "iOS/Android" + studio pilote.
 >
-> Foundation delivered in #638 (11.1–11.7, 11.12, 11.13) on Expo SDK 58 / React Native 0.88 — see [`docs/mobile/README.md`](../../../docs/mobile/README.md). Screens 11.8–11.11 follow in a separate PR. Brand icon and splash (BR.4) are wired from `assets/brand/png/`.
+> Foundation delivered in #638 (11.1–11.7, 11.12, 11.13) on Expo SDK 58 / React Native 0.88 — see [`docs/mobile/README.md`](../../../docs/mobile/README.md). Screens 11.8–11.11 follow in a separate PR. Brand (BR.4): the icon is `assets/brand/png/athlya-appicon-1024.png`; the splash image is `apps/mobile/assets/splash-mascot.png`, a crop of that icon (regenerate it from the icon when the brand changes).
 
 - [ ] 11. Build the Expo / React Native mobile app with offline-first queue
   - [x] 11.1 Scaffold the Expo SDK 58 app with NativeWind 4 and shared tokens
@@ -611,7 +611,7 @@ Use official CLI to create, init the project .. and recent package version and s
     - Send a push + email "You're in!" to the promoted user, respecting consents
     - _Requirements: 9.3, 17.1, 17.2_
 
-> ⏸️ **Renvoyé post-1.0** — Apple Health dépend d'Epic 10 (mobile). Voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-55`](../../../docs/roadmap/post-1.0.md).
+> ⏸️ **Renvoyé post-1.0** — Apple Health dépend d'Epic 10 (mobile). Voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-58`](../../../docs/roadmap/post-1.0.md).
 
 - [ ] 18. Apple Health import (mobile, iOS)
   - [ ] 18.1 Implement HealthKit read for workout samples
@@ -684,7 +684,7 @@ Use official CLI to create, init the project .. and recent package version and s
 - Every task references requirement clauses from `requirements.md` for traceability.
 - Property-based tests cover the eight correctness properties P1–P8 from the design and Requirement 21 round-trip. Unit tests and integration tests complement them for example-based and end-to-end validation.
 - Checkpoints at the end of each MVP phase (v0.1, v0.2, v0.3) let you validate incrementally before proceeding.
-- Language: the entire codebase is TypeScript 6.0. No additional language selection is needed because the design specifies concrete TypeScript libraries (Next.js 16, Hono 4, Expo SDK 55, Drizzle, Zod, fast-check).
+- Language: the entire codebase is TypeScript 6.0. No additional language selection is needed because the design specifies concrete TypeScript libraries (Next.js 16, Hono 4, Expo SDK 58, Drizzle, Zod, fast-check).
 
 ## Task Dependency Graph
 

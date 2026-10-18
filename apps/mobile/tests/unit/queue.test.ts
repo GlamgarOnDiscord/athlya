@@ -3,15 +3,25 @@ import { describe, expect, it } from 'vitest';
 import { isUuidV4 } from '../../infrastructure/ids';
 import { createMemoryKeyValueStore } from '../../infrastructure/storage/key-value-store';
 import { MutationQueue } from '../../infrastructure/sync/queue';
-import { createQueue } from '../helpers';
+import { createQueue, OWNER } from '../helpers';
 
 const PENDING_KEY = 'athlya.mutationQueue.v1.pending';
 
 describe('MutationQueue', () => {
   it('assigns a fresh UUID v4 idempotency key to every enqueued mutation', () => {
     const { queue } = createQueue();
-    const first = queue.enqueue({ kind: 'logSession', path: '/v1/sessions', payload: { a: 1 } });
-    const second = queue.enqueue({ kind: 'logSession', path: '/v1/sessions', payload: { a: 1 } });
+    const first = queue.enqueue({
+      ownerId: OWNER,
+      kind: 'logSession',
+      path: '/v1/sessions',
+      payload: { a: 1 },
+    });
+    const second = queue.enqueue({
+      ownerId: OWNER,
+      kind: 'logSession',
+      path: '/v1/sessions',
+      payload: { a: 1 },
+    });
 
     expect(isUuidV4(first.idempotencyKey)).toBe(true);
     expect(isUuidV4(second.idempotencyKey)).toBe(true);
@@ -22,14 +32,44 @@ describe('MutationQueue', () => {
 
   it('rejects a uuid generator that does not produce v4 UUIDs', () => {
     const queue = new MutationQueue(createMemoryKeyValueStore(), { uuid: () => 'not-a-uuid' });
-    expect(() => queue.enqueue({ kind: 'bookClass', path: '/v1/reservations' })).toThrow(/v4/u);
+    expect(() =>
+      queue.enqueue({ ownerId: OWNER, kind: 'bookClass', path: '/v1/reservations' }),
+    ).toThrow(/v4/u);
+  });
+
+  it('reuses a caller-supplied idempotency key and validates it', () => {
+    const { queue } = createQueue();
+    const key = crypto.randomUUID();
+    const mutation = queue.enqueue({
+      ownerId: OWNER,
+      idempotencyKey: key,
+      kind: 'a',
+      path: '/v1/a',
+    });
+    expect(mutation.idempotencyKey).toBe(key);
+    expect(mutation.ownerId).toBe(OWNER);
+    expect(() =>
+      queue.enqueue({ ownerId: OWNER, idempotencyKey: 'nope', kind: 'a', path: '/v1/a' }),
+    ).toThrow(/v4/u);
+  });
+
+  it('requires a positive dead-letter cap', () => {
+    for (const maxDeadLetters of [0, -1, 1.5]) {
+      expect(
+        () =>
+          new MutationQueue(createMemoryKeyValueStore(), {
+            uuid: () => crypto.randomUUID(),
+            maxDeadLetters,
+          }),
+      ).toThrow(/maxDeadLetters/u);
+    }
   });
 
   it('keeps FIFO order and supports peek / remove', () => {
     const { queue } = createQueue();
-    const a = queue.enqueue({ kind: 'a', path: '/v1/a' });
-    const b = queue.enqueue({ kind: 'b', path: '/v1/b' });
-    const c = queue.enqueue({ kind: 'c', path: '/v1/c' });
+    const a = queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
+    const b = queue.enqueue({ ownerId: OWNER, kind: 'b', path: '/v1/b' });
+    const c = queue.enqueue({ ownerId: OWNER, kind: 'c', path: '/v1/c' });
 
     expect(queue.peek().map((m) => m.id)).toEqual([a.id, b.id, c.id]);
     expect(queue.remove(b.id)).toBe(true);
@@ -40,16 +80,16 @@ describe('MutationQueue', () => {
 
   it('drain() yields the snapshot in FIFO order and skips entries removed meanwhile', async () => {
     const { queue } = createQueue();
-    const a = queue.enqueue({ kind: 'a', path: '/v1/a' });
-    const b = queue.enqueue({ kind: 'b', path: '/v1/b' });
-    const c = queue.enqueue({ kind: 'c', path: '/v1/c' });
+    const a = queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
+    const b = queue.enqueue({ ownerId: OWNER, kind: 'b', path: '/v1/b' });
+    const c = queue.enqueue({ ownerId: OWNER, kind: 'c', path: '/v1/c' });
 
     const seen: string[] = [];
     for await (const mutation of queue.drain()) {
       seen.push(mutation.id);
       if (mutation.id === a.id) {
         queue.remove(b.id);
-        queue.enqueue({ kind: 'd', path: '/v1/d' });
+        queue.enqueue({ ownerId: OWNER, kind: 'd', path: '/v1/d' });
       }
     }
     expect(seen).toEqual([a.id, c.id]);
@@ -58,6 +98,7 @@ describe('MutationQueue', () => {
   it('moves a mutation to the dead-letter queue with its failure status', () => {
     const { queue } = createQueue();
     const a = queue.enqueue({
+      ownerId: OWNER,
       kind: 'bookClass',
       path: '/v1/reservations',
       payload: { classId: 'x' },
@@ -77,7 +118,9 @@ describe('MutationQueue', () => {
       uuid: () => crypto.randomUUID(),
       maxDeadLetters: 2,
     });
-    const ids = [1, 2, 3].map((n) => capped.enqueue({ kind: `k${String(n)}`, path: '/v1/x' }).id);
+    const ids = [1, 2, 3].map(
+      (n) => capped.enqueue({ ownerId: OWNER, kind: `k${String(n)}`, path: '/v1/x' }).id,
+    );
     for (const id of ids) capped.moveToDeadLetter(id, { status: 400 });
     expect(capped.deadLetters().map((d) => d.id)).toEqual(ids.slice(1));
   });
@@ -88,10 +131,10 @@ describe('MutationQueue', () => {
     const unsubscribe = queue.subscribe(() => {
       calls += 1;
     });
-    const a = queue.enqueue({ kind: 'a', path: '/v1/a' });
+    const a = queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
     queue.moveToDeadLetter(a.id, { status: 400 });
     unsubscribe();
-    queue.enqueue({ kind: 'b', path: '/v1/b' });
+    queue.enqueue({ ownerId: OWNER, kind: 'b', path: '/v1/b' });
     expect(calls).toBe(2);
   });
 });
@@ -101,9 +144,24 @@ describe('MutationQueue persistence (task 11.13)', () => {
     const disk = new Map<string, string>();
     const before = createQueue(disk).queue;
     const enqueued = [
-      before.enqueue({ kind: 'logSession', path: '/v1/sessions', payload: { sets: [1, 2] } }),
-      before.enqueue({ kind: 'bookClass', path: '/v1/reservations', payload: { classId: 'c1' } }),
-      before.enqueue({ kind: 'cancelReservation', method: 'DELETE', path: '/v1/reservations/r1' }),
+      before.enqueue({
+        ownerId: OWNER,
+        kind: 'logSession',
+        path: '/v1/sessions',
+        payload: { sets: [1, 2] },
+      }),
+      before.enqueue({
+        ownerId: OWNER,
+        kind: 'bookClass',
+        path: '/v1/reservations',
+        payload: { classId: 'c1' },
+      }),
+      before.enqueue({
+        ownerId: OWNER,
+        kind: 'cancelReservation',
+        method: 'DELETE',
+        path: '/v1/reservations/r1',
+      }),
     ];
 
     const after = createQueue(disk).queue;
@@ -117,9 +175,9 @@ describe('MutationQueue persistence (task 11.13)', () => {
   it('persists removals and dead letters across restarts', () => {
     const disk = new Map<string, string>();
     const before = createQueue(disk).queue;
-    const a = before.enqueue({ kind: 'a', path: '/v1/a' });
-    const b = before.enqueue({ kind: 'b', path: '/v1/b' });
-    const c = before.enqueue({ kind: 'c', path: '/v1/c' });
+    const a = before.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
+    const b = before.enqueue({ ownerId: OWNER, kind: 'b', path: '/v1/b' });
+    const c = before.enqueue({ ownerId: OWNER, kind: 'c', path: '/v1/c' });
     before.remove(a.id);
     before.moveToDeadLetter(b.id, { status: 404 });
 
@@ -131,7 +189,7 @@ describe('MutationQueue persistence (task 11.13)', () => {
 
   it('keeps idempotency keys stable across restarts', () => {
     const disk = new Map<string, string>();
-    const original = createQueue(disk).queue.enqueue({ kind: 'a', path: '/v1/a' });
+    const original = createQueue(disk).queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
     const restored = createQueue(disk).queue.peek()[0];
     expect(restored?.idempotencyKey).toBe(original.idempotencyKey);
   });

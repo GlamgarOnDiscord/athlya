@@ -27,29 +27,34 @@ Build numbers are managed remotely by EAS (`appVersionSource: remote`, `autoIncr
 
 ## 2. Environment variables
 
-Configure them on expo.dev (Project → Environment variables), never in the repository:
+The API origin is public and pinned per profile in `apps/mobile/eas.json`:
 
-| Variable              | `preview`                        | `production`             | Visibility |
-| --------------------- | -------------------------------- | ------------------------ | ---------- |
-| `EXPO_PUBLIC_API_URL` | `https://api-staging.athlya.app` | `https://api.athlya.app` | plain text |
+| Variable              | `preview`                        | `production`             |
+| --------------------- | -------------------------------- | ------------------------ |
+| `EXPO_PUBLIC_API_URL` | `https://staging.api.athlya.app` | `https://api.athlya.app` |
 
-`EXPO_PUBLIC_*` values are inlined into the JavaScript bundle and are public by design. No
-server secret may ever use that prefix. Without the variable the app targets production.
+There is no fallback: `app.config.js` fails any EAS build whose profile does not set
+`EXPO_PUBLIC_API_URL`, and the app refuses to boot without it (local runs must export it).
+`EXPO_PUBLIC_*` values are inlined into the JavaScript bundle and are public by design: no server
+secret may ever use that prefix. Real secrets, if any are ever needed, go to expo.dev (Project →
+Environment variables, "secret" visibility), never into the repository.
 
 ## 3. Credentials
 
 Let EAS manage signing credentials (stored encrypted on Expo's servers):
 
-- **iOS**: `pnpm dlx eas-cli@latest credentials -p ios`, sign in with an Apple Developer account
-  that has the App Manager role. EAS creates the distribution certificate and the provisioning
+- **iOS**: `pnpm dlx eas-cli@latest credentials -p ios`, sign in with the Account Holder, an Admin,
+  or an App Manager who was granted "Access to Certificates, Identifiers & Profiles" (the plain
+  App Manager role cannot create certificates). EAS creates the distribution certificate and the provisioning
   profiles. Create the App Store Connect app record for `app.athlya.mobile` first.
 - **Android**: `pnpm dlx eas-cli@latest credentials -p android` and let EAS generate the upload
   keystore. Download a backup of the keystore to the team password manager immediately: losing it
   blocks every future Play update.
 - **Submit keys**: an App Store Connect API key (`.p8`, Admin or App Manager) and a Google Play
-  service-account JSON with release permissions. Upload both through
-  `eas credentials` / expo.dev; never commit them (`apps/mobile/.gitignore` blocks the usual
-  file names, gitleaks runs in CI).
+  service-account JSON with release permissions. Keep both files **outside the repository** (for
+  example in the password manager) and upload them through `eas credentials` / expo.dev. The
+  patterns in `apps/mobile/.gitignore` and gitleaks in CI are only a safety net for the usual file
+  names, not a reason to keep the files in the working tree.
 
 ## 4. Build
 
@@ -79,8 +84,11 @@ Store listing checklist before the first public release:
 - Privacy policy URL (the web app's `/privacy` page) and the data-safety / privacy-nutrition forms,
   consistent with [`docs/compliance/expo-push-transfers.md`](../compliance/expo-push-transfers.md).
 - Face ID usage string (set in `app.json` through the `expo-local-authentication` plugin).
-- Export compliance: the app only uses standard HTTPS and OS-provided encryption
-  (`ITSAppUsesNonExemptEncryption: false`).
+- Export compliance: besides HTTPS, the app encrypts its offline queue on device with AES-256
+  (MMKV). `app.json` deliberately does not declare `ITSAppUsesNonExemptEncryption`: answer the
+  encryption questions in App Store Connect on the first submission (data-at-rest encryption with
+  standard algorithms is usually exempt, but the answer belongs to whoever signs the submission),
+  then pin the result in `app.json` through a PR.
 - Store artwork: start from `assets/brand/` (A-mi mascot, see `docs/brand/README.md`); the app icon
   and splash already use it.
 

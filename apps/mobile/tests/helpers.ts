@@ -6,6 +6,8 @@ import { MutationQueue } from '../infrastructure/sync/queue';
 
 import type { BiometricAuthenticator, SecureStorage } from '../infrastructure/auth/ports';
 
+export const OWNER = 'user-1';
+
 export function createQueue(backing = new Map<string, string>()): {
   queue: MutationQueue;
   backing: Map<string, string>;
@@ -38,14 +40,17 @@ export class FakeBiometrics implements BiometricAuthenticator {
   public available = true;
   public accept = true;
   public prompts = 0;
+  /** When set, prompts stay open until this promise settles. */
+  public hold: Promise<void> | null = null;
 
   public isAvailable(): Promise<boolean> {
     return Promise.resolve(this.available);
   }
 
-  public authenticate(): Promise<boolean> {
+  public async authenticate(): Promise<boolean> {
     this.prompts += 1;
-    return Promise.resolve(this.accept);
+    await this.hold;
+    return this.accept;
   }
 }
 
