@@ -6,19 +6,19 @@
  *
  * Why a dedicated executor?
  * ------------------------
- * The cron handler runs maintenance SQL (purge outbox 7d, purge
- * export_jobs 90d, anonymise users J+30, scan eligible audit rows)
- * that needs more privileges than the application role
- * `athlya_app`. Specifically, the audit-anonymise step performs an
- * `UPDATE` on `users.audit_anonymized_at` AND on `audit_log.metadata`
- * — `athlya_app` is restricted to `SELECT/INSERT/UPDATE/DELETE` on
- * tenant-scoped tables, but the audit_log row updates demand
- * `BYPASSRLS` since they cross tenant boundaries.
+ * The cron handler runs cross-tenant maintenance SQL (purge outbox 7d,
+ * purge export_jobs 90d, anonymise users J+30, audit anonymisation,
+ * capacity drift reconcile) that the tenant-scoped application role
+ * `athlya_app` cannot run.
  *
- * The wiring expects a separate connection string `CRON_DB_URL`
- * pointing at a role with `BYPASSRLS` (typically `athlya_cron`,
- * provisioned via migration `0009_audit_cron_grants.sql` or via
- * Neon's compute endpoint admin).
+ * The wiring expects a separate connection string `CRON_DB_URL` for
+ * `athlya_cron`, which is NOBYPASSRLS (migration 0019). Every statement
+ * sent through this executor is admitted by an explicit grant and
+ * `*_cron_*` policy (users, outbox, export_jobs) or goes through a
+ * cron-only SECURITY DEFINER function (`anonymize_user_audit`,
+ * `capacity_reconcile_snapshot`); none depends on BYPASSRLS. The
+ * statements are replayed as the real role by
+ * `scripts/verify-role-contract.mjs`.
  *
  * If `CRON_DB_URL` is missing the executor returns `null` so the
  * scheduled runner can skip the cycle gracefully — the maintenance

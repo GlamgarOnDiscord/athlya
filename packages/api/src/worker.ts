@@ -124,9 +124,9 @@ const worker = {
     // anonymisation. Dev may omit `CRON_DB_URL`; staging/production
     // log `configuration_error` when the binding is absent.
     //
-    // The audit-anonymise pass is gated on `CRON_DB_URL`
-    // pointing at `athlya_cron` (BYPASSRLS + grants in migration
-    // `0009_audit_cron_grants.sql`). Dev may use `neondb_owner`.
+    // The audit-anonymise pass is gated on `CRON_DB_URL` pointing at
+    // `athlya_cron` (NOBYPASSRLS, migration 0019): it calls the
+    // cron-only `anonymize_user_audit()` SECURITY DEFINER function.
     const athlyaEnv = env as AthlyaBindings & ScheduledEnv;
     const cronExecutor = buildCronSqlExecutor(athlyaEnv.CRON_DB_URL);
 
@@ -148,14 +148,9 @@ const worker = {
     if (cronExecutor !== null) {
       const rgpdTask = runScheduledRgpdMaintenance({
         executeSql: cronExecutor,
-        // Sprint 13 / Slice 13.3 (Epic B10.2) — anonymise
-        // chaque utilisateur via du SQL pur (pas de
-        // SECURITY DEFINER). Le `cronExecutor` doit être
-        // connecté avec un role disposant des grants UPDATE
-        // sur `audit_log`. Pattern : `athlya_cron` ou — en
-        // attendant que migration `0009_audit_cron_grants`
-        // soit en place — `neondb_owner` qui bypasse RLS
-        // par défaut sur Neon.
+        // Sprint 13 / Slice 13.3 (Epic B10.2) — anonymise each user
+        // through `anonymize_user_audit()`, the SECURITY DEFINER
+        // function granted to `athlya_cron` (migration 0003).
         anonymizeOne: async (userId) => {
           const rows = await cronExecutor.selectRows<{ touched: number }>(
             'SELECT anonymize_user_audit($1::uuid)::int AS touched',
@@ -198,9 +193,10 @@ const worker = {
     // Issue #135 — capacity drift reconciliation. Compares the Redis
     // remaining-seats counter against the authoritative PG confirmed
     // count for every active class, emits `capacity_redis_pg_drift`
-    // (alert A17) and auto-heals Redis from PG. Needs the BYPASSRLS
-    // cron executor (cross-tenant COUNT) AND Redis credentials; skipped
-    // silently otherwise so dev without `CRON_DB_URL` stays quiet.
+    // (alert A17) and auto-heals Redis from PG. Needs the cron executor
+    // (cross-tenant counts through `capacity_reconcile_snapshot()`,
+    // migration 0040) AND Redis credentials; skipped silently otherwise
+    // so dev without `CRON_DB_URL` stays quiet.
     if (cronExecutor !== null && athlyaEnv.REDIS_URL && athlyaEnv.REDIS_TOKEN) {
       const counter = createRedisRemainingCounter(
         getOrCreateRedis(athlyaEnv.REDIS_URL, athlyaEnv.REDIS_TOKEN),

@@ -16,11 +16,12 @@
  *     existing active row via `findActiveByUser` and returns that id
  *     so the caller can short-circuit without publishing a duplicate
  *     event (issue #462).
- *   - `markRunning` / `markCompleted` / `markFailed` are idempotent
- *     by design — re-running a transition that already landed is a
- *     no-op because the WHERE clause filters on the source state;
- *     `markRunning` returns a claim token only to the caller that won
- *     the claim, and completion / failure require that token.
+ *   - `markRunning` / `markCompleted` / `markFailed` exist on the
+ *     worker store only (migration 0034 functions): `markRunning`
+ *     returns a claim token only to the caller that won the claim, and
+ *     completion / failure require that token. The member-facing HTTP
+ *     store enqueues and reads; it has no transition to no-op under
+ *     RLS.
  *
  * @see Requirements 4.1, 4.2, 4.3, 20.1.
  */
@@ -36,7 +37,7 @@ import { withConnectionRetry } from './db-retry.js';
 import { queryRows, toDateOrNull } from './service-functions.js';
 
 import type { AthlyaDbAny, AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
-import type { ExportJobRecord, ExportJobStore } from '@athlya/members';
+import type { ExportJobRecord, ExportJobRequestStore, ExportJobStore } from '@athlya/members';
 
 /**
  * Worker-side `ExportJobStore` for the `members.export.requested` queue
@@ -100,12 +101,16 @@ export function createExportJobWorkerStore(db: AthlyaDbAny): ExportJobStore {
  * HTTP-driver variant — each query runs inside a `withTenantHttp`
  * batch so `SET LOCAL app.*` activates RLS policies before the
  * business statement executes.
+ *
+ * Member-facing: enqueue, dedup and read only. Job transitions run in
+ * the export worker ({@link createExportJobWorkerStore}); under member
+ * claims an `export_jobs` UPDATE would silently match no row.
  */
 export function createDrizzleExportJobStoreHttp(
   db: AthlyaDbHttp,
   claims: TenantClaims,
-): ExportJobStore {
-  const store: ExportJobStore = {
+): ExportJobRequestStore {
+  const store: ExportJobRequestStore = {
     async create(jobId, userId, requestedAt, requestedEvent) {
       try {
         if (requestedEvent === undefined) {
@@ -153,67 +158,6 @@ export function createDrizzleExportJobStoreHttp(
         }
         throw err;
       }
-    },
-
-    async markRunning(jobId, startedAt) {
-      const claimToken = crypto.randomUUID();
-      const rows = await withConnectionRetry(() =>
-        withTenantHttp(
-          db,
-          claims,
-          db
-            .update(exportJobs)
-            .set({ status: 'running', startedAt, claimToken })
-            .where(and(eq(exportJobs.id, jobId), eq(exportJobs.status, 'pending')))
-            .returning({ id: exportJobs.id }),
-        ),
-      );
-      return rows.length > 0 ? claimToken : null;
-    },
-
-    async markCompleted(jobId, claimToken, completedAt, downloadUrl, downloadExpiresAt) {
-      const rows = await withConnectionRetry(() =>
-        withTenantHttp(
-          db,
-          claims,
-          db
-            .update(exportJobs)
-            .set({
-              status: 'completed',
-              completedAt,
-              downloadUrl,
-              downloadExpiresAt,
-            })
-            .where(
-              and(
-                eq(exportJobs.id, jobId),
-                eq(exportJobs.status, 'running'),
-                eq(exportJobs.claimToken, claimToken),
-              ),
-            )
-            .returning({ id: exportJobs.id }),
-        ),
-      );
-      return rows.length > 0;
-    },
-
-    async markFailed(jobId, claimToken, error) {
-      await withConnectionRetry(() =>
-        withTenantHttp(
-          db,
-          claims,
-          db
-            .update(exportJobs)
-            .set({ status: 'failed', error })
-            .where(
-              and(
-                eq(exportJobs.id, jobId),
-                eq(exportJobs.status, 'running'),
-                eq(exportJobs.claimToken, claimToken),
-              ),
-            ),
-        ),
-      );
     },
 
     async get(jobId) {

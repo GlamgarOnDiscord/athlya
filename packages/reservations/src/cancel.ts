@@ -121,6 +121,35 @@ export interface CancelOutboxEvent {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Waitlist promotion outcome                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Identifiers of a waitlisted reservation promoted to `confirmed` — the
+ * only fields the `reservation.promoted` event needs. The promoted row
+ * belongs to another member, so the repo does not hand back more.
+ */
+export interface PromotedReservation {
+  readonly id: string;
+  readonly classId: string;
+  readonly userId: string;
+}
+
+/**
+ * Result of {@link CancelRepo.promoteOldestWaitlist}:
+ *
+ *   - `promoted`    — the oldest waiter now holds the freed seat.
+ *   - `no_waiter`   — the waitlist is empty (or every waiter is locked
+ *                     by a concurrent cancellation).
+ *   - `no_capacity` — PostgreSQL still counts the class as full, so
+ *                     nobody was promoted.
+ */
+export type WaitlistPromotion =
+  | { readonly outcome: 'promoted'; readonly reservation: PromotedReservation }
+  | { readonly outcome: 'no_waiter' }
+  | { readonly outcome: 'no_capacity' };
+
+/* ------------------------------------------------------------------ */
 /*  Repository port                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -163,13 +192,16 @@ export interface CancelOutboxEvent {
  *     `status` and the appropriate timestamp column (`cancelled_at`
  *     for `'cancelled'`, nothing else for `'confirmed'`) and return
  *     the updated row.
- *   - `findOldestWaitlistForClass` MUST issue
- *     `SELECT * FROM reservations WHERE class_id = $1 AND status =
- *     'waitlist' ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP
- *     LOCKED`. The `SKIP LOCKED` hint is critical: two concurrent
+ *   - `promoteOldestWaitlist` MUST, inside the caller's transaction,
+ *     pick the oldest `waitlist` row of the class (FIFO by
+ *     `created_at`) with `FOR UPDATE SKIP LOCKED`, check that the
+ *     class still has a free confirmed seat, and stamp the row
+ *     `confirmed`. The `SKIP LOCKED` hint is critical: two concurrent
  *     cancellations racing to promote the same waiter must each see
- *     a different row (one promotes, the other finds `null` and
- *     increments the counter instead).
+ *     a different row (one promotes, the other reports `no_waiter`
+ *     and increments the counter instead). The waiter belongs to
+ *     another member, so the repo cannot rely on the caller's
+ *     owner-scoped RLS policies to read or update it.
  *   - `insertOutbox` MUST append the event to the `outbox` table
  *     within the caller's transaction; any failure MUST bubble up so
  *     the surrounding transaction rolls back (Req 16.3).
@@ -192,10 +224,7 @@ export interface CancelRepo {
     stampedAt: Date,
   ): Promise<ReservationRow>;
 
-  findOldestWaitlistForClass(tx: unknown, classId: string): Promise<ReservationRow | null>;
-
-  /** True when another `confirmed` row can be committed for `classId`. */
-  classHasCapacityForConfirmed(tx: unknown, classId: string): Promise<boolean>;
+  promoteOldestWaitlist(tx: unknown, classId: string): Promise<WaitlistPromotion>;
 
   insertOutbox(tx: unknown, event: CancelOutboxEvent): Promise<void>;
 }
@@ -285,7 +314,7 @@ export interface CancelReservationInput {
 export interface CancelReservationOk {
   readonly code: 'ok';
   readonly cancelled: ReservationRow;
-  readonly promoted: ReservationRow | null;
+  readonly promoted: PromotedReservation | null;
 }
 
 /**
@@ -325,7 +354,7 @@ type TxOutcome =
   | {
       readonly code: 'ok';
       readonly cancelled: ReservationRow;
-      readonly promoted: ReservationRow | null;
+      readonly promoted: PromotedReservation | null;
       readonly wasConfirmed: boolean;
       readonly classId: string;
       readonly promotionBlockedByCapacity: boolean;
@@ -391,9 +420,9 @@ function defaultNewEventId(): string {
  *      `'cancelled'` or `'no_show'` lands here.
  *   6. `UPDATE reservations SET status='cancelled', cancelled_at=now()`.
  *   7. If the *original* status was `'confirmed'`, attempt to promote
- *      the oldest waitlist row for the same class via
- *      `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1`. On promotion:
- *      `UPDATE status='confirmed'` and append
+ *      the oldest waitlist row for the same class
+ *      (`repo.promoteOldestWaitlist`, `FOR UPDATE SKIP LOCKED` plus a
+ *      capacity check). On promotion append
  *      `reservation.promoted` to the outbox **inside the same
  *      transaction** (Req 9.3). The Redis counter stays unchanged —
  *      the seat is simply re-consumed by the promoted waiter.
@@ -468,27 +497,24 @@ export async function cancelReservation(
     // waitlist-originated cancellation never triggers a promotion
     // (Req 9.3 speaks of "a confirmed reservation [that] is
     // successfully cancelled").
-    let promoted: ReservationRow | null = null;
+    let promoted: PromotedReservation | null = null;
     let promotionBlockedByCapacity = false;
     if (wasConfirmed) {
-      const nextWaiter = await repo.findOldestWaitlistForClass(tx, reservation.classId);
-      if (nextWaiter !== null) {
-        const hasCapacity = await repo.classHasCapacityForConfirmed(tx, reservation.classId);
-        if (hasCapacity) {
-          promoted = await repo.updateReservationStatus(tx, nextWaiter.id, 'confirmed', now);
-          await repo.insertOutbox(tx, {
-            eventId: newEventId(),
-            eventType: 'reservation.promoted',
-            payload: {
-              reservationId: promoted.id,
-              classId: promoted.classId,
-              userId: promoted.userId,
-            },
-            occurredAt: now,
-          });
-        } else {
-          promotionBlockedByCapacity = true;
-        }
+      const promotion = await repo.promoteOldestWaitlist(tx, reservation.classId);
+      if (promotion.outcome === 'promoted') {
+        promoted = promotion.reservation;
+        await repo.insertOutbox(tx, {
+          eventId: newEventId(),
+          eventType: 'reservation.promoted',
+          payload: {
+            reservationId: promoted.id,
+            classId: promoted.classId,
+            userId: promoted.userId,
+          },
+          occurredAt: now,
+        });
+      } else if (promotion.outcome === 'no_capacity') {
+        promotionBlockedByCapacity = true;
       }
     }
 

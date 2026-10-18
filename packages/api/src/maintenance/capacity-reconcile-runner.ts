@@ -7,8 +7,10 @@
  *
  *   • PostgreSQL read across tenants — supplied as the same
  *     `selectRows`-capable cron executor used by the RGPD maintenance
- *     runner. It must be backed by the `CRON_DB_URL` BYPASSRLS role so
- *     the `COUNT(confirmed)` per class is not clipped by RLS.
+ *     runner (`CRON_DB_URL`, role `athlya_cron`, NOBYPASSRLS). That
+ *     role has no grant on `classes` / `reservations`, so the read goes
+ *     through the cron-only SECURITY DEFINER function
+ *     `capacity_reconcile_snapshot()` (migration 0040, issue #117).
  *   • Redis counter (`class:{id}:remaining`) — the production
  *     `RemainingCounter` from `@athlya/reservations/counter`.
  *
@@ -40,25 +42,16 @@ export interface ScheduledCapacityReconcileDeps {
 }
 
 /**
- * Active classes = not soft-deleted and not yet started. Past classes
- * carry no meaningful Redis counter, so reconciling them would only
- * add noise.
- *
- * The `LEFT JOIN` + per-row `COUNT(... FILTER)` aggregates reservations
- * only for the active class set (the join predicate restricts the
- * reservation rows scanned), rather than aggregating the entire
- * `reservations` table up front. `GROUP BY c.id` keeps classes with
- * zero confirmed bookings (the `LEFT JOIN` yields `confirmed = 0`).
+ * One row per active class (not soft-deleted, not yet started) with its
+ * capacity and confirmed count. Past classes carry no meaningful Redis
+ * counter, so the function leaves them out; classes with no confirmed
+ * booking come back with `confirmed = 0`.
  */
 const ACTIVE_CLASS_CAPACITY_SQL = `
-  SELECT c.id::text AS "classId",
-         c.capacity::int AS "capacity",
-         COUNT(r.id) FILTER (WHERE r.status = 'confirmed')::int AS "confirmed"
-    FROM classes c
-    LEFT JOIN reservations r ON r.class_id = c.id
-   WHERE c.deleted_at IS NULL
-     AND c.starts_at > now()
-   GROUP BY c.id, c.capacity
+  SELECT class_id::text AS "classId",
+         capacity::int AS "capacity",
+         confirmed::int AS "confirmed"
+    FROM capacity_reconcile_snapshot()
 `;
 
 function buildRepo(executeSql: CapacityReconcileSqlExecutor): CapacityReconcileRepo {

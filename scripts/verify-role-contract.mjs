@@ -10,12 +10,15 @@
  *                              read + admin branding update and member export
  *                              enqueue (tenant GUCs) → worker claim + data +
  *                              complete → account deletion with its event →
- *                              RGPD cascade (incl. audit anonymisation)
- *   athlya_cron (CRON_DB_URL)  leased outbox claim privileges
+ *                              RGPD cascade (incl. audit anonymisation) →
+ *                              book, waitlist position, cancel with
+ *                              waitlist promotion (member claims)
+ *   athlya_cron (CRON_DB_URL)  leased outbox claim privileges, capacity
+ *                              reconcile snapshot
  *   athlya_billing             Stripe event application (the only role
  *     (BILLING_DB_URL)         allowed to; athlya_app is refused)
  *
- * Usage (staging, after migrations 0031–0039):
+ * Usage (staging, after migrations 0031–0040):
  *   APP_DATABASE_URL=postgresql://athlya_app:...@.../athlya \
  *   CRON_DATABASE_URL=postgresql://athlya_cron:...@.../athlya \
  *   BILLING_DATABASE_URL=postgresql://athlya_billing:...@.../athlya \
@@ -29,7 +32,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-/** Functions athlya_app needs from migrations 0032–0039. */
+/** Functions athlya_app needs from migrations 0032–0040. */
 export const REQUIRED_FUNCTIONS = [
   'auth_find_active_user_by_email',
   'auth_find_user_by_id',
@@ -55,6 +58,9 @@ export const REQUIRED_FUNCTIONS = [
   'auth_issue_password_reset',
   'auth_find_password_reset',
   'rgpd_anonymize_user_audit',
+  'reservation_lock_class_for_cancel',
+  'reservation_promote_oldest_waitlist',
+  'reservation_waitlist_ahead',
 ];
 
 /** Stripe event application: athlya_billing only (migration 0036). */
@@ -115,7 +121,7 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
   `;
   const present = new Set(fns.map((r) => r.name));
   const missing = REQUIRED_FUNCTIONS.filter((f) => !present.has(f));
-  check(missing.length === 0, `missing or not executable: ${missing.join(', ')} (apply 0032–0039)`);
+  check(missing.length === 0, `missing or not executable: ${missing.join(', ')} (apply 0032–0040)`);
   ok(`${REQUIRED_FUNCTIONS.length} service functions executable`);
 
   const [forge] = await app`SELECT has_function_privilege(${BILLING_APPLY}, 'EXECUTE') AS can`;
@@ -266,6 +272,11 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
   });
   ok('app workloads rolled back — nothing persisted');
 
+  await rolledBack(app, async (tx) => {
+    await runWaitlistContract(tx, studioSlug, ok);
+  });
+  ok('waitlist workloads rolled back — nothing persisted');
+
   await assertNoBypass(billing, 'athlya_billing', ok);
   await rolledBack(billing, async (tx) => {
     const eventId = `evt_role_contract_${randomUUID()}`;
@@ -299,6 +310,95 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     await tx`SELECT count(*)::int AS n FROM outbox WHERE published_at IS NULL`;
   });
   ok('drainer: leased claim, publish stamp and backlog count privileges');
+
+  await rolledBack(cron, async (tx) => {
+    await tx`SELECT class_id, capacity, confirmed FROM capacity_reconcile_snapshot()`;
+  });
+  ok('capacity reconcile: cross-tenant snapshot through capacity_reconcile_snapshot()');
+}
+
+/**
+ * Book → waitlist → cancel with promotion, as members of the smoke
+ * studio under `athlya_app` (migration 0040). Three throwaway members;
+ * a studio admin claim creates a one-seat class.
+ */
+async function runWaitlistContract(tx, studioSlug, ok) {
+  const [studio] = await tx`SELECT id FROM auth_find_studio_by_slug(${studioSlug})`;
+  check(studio !== undefined, `studio slug "${studioSlug}" not found (pre-auth lookup)`);
+
+  const claims = async (userId, role) => {
+    await tx`SELECT set_config('app.user_id', ${userId}, true)`;
+    await tx`SELECT set_config('app.studio_id', ${studio.id}, true)`;
+    await tx`SELECT set_config('app.role', ${role}, true)`;
+  };
+  const member = async () => {
+    const userId = randomUUID();
+    const event = {
+      id: randomUUID(),
+      type: 'auth.user.registered',
+      occurredAt: new Date().toISOString(),
+      studioId: studio.id,
+      payload: { userId },
+    };
+    await tx`
+      SELECT id FROM auth_create_member_with_event(
+        ${userId}::uuid, ${studio.id}::uuid, ${`role-contract+${userId}@athlya.invalid`},
+        'Role contract', NULL, '{}'::jsonb, ${JSON.stringify(event)}::text::jsonb)
+    `;
+    return userId;
+  };
+  const [first, second, third] = [await member(), await member(), await member()];
+
+  await claims(first, 'admin');
+  const [cls] = await tx`
+    INSERT INTO classes (studio_id, title, starts_at, duration_min, capacity)
+    VALUES (${studio.id}::uuid, 'Role contract', now() + interval '7 days', 60, 1)
+    RETURNING id
+  `;
+
+  await claims(first, 'member');
+  await tx`INSERT INTO reservations (class_id, user_id, status) VALUES (${cls.id}::uuid, ${first}::uuid, 'confirmed')`;
+  await claims(second, 'member');
+  await tx`
+    INSERT INTO reservations (class_id, user_id, status, created_at)
+    VALUES (${cls.id}::uuid, ${second}::uuid, 'waitlist', now() - interval '2 seconds')
+  `;
+  await claims(third, 'member');
+  const [last] = await tx`
+    INSERT INTO reservations (class_id, user_id, status, created_at)
+    VALUES (${cls.id}::uuid, ${third}::uuid, 'waitlist', now() - interval '1 second')
+    RETURNING created_at::text AS created_at
+  `;
+  const [ahead] = await tx`
+    SELECT reservation_waitlist_ahead(${cls.id}::uuid, ${last.created_at}::timestamptz) AS n
+  `;
+  check(ahead.n === 1, `waitlist position counted ${ahead.n} members ahead, expected 1`);
+  ok('waitlist position counts the other members under member claims');
+
+  await claims(first, 'member');
+  const [lock] = await tx`SELECT reservation_lock_class_for_cancel(${cls.id}::uuid) AS starts_at`;
+  check(lock.starts_at !== null, 'a member could not lock the class to cancel');
+  await tx`
+    UPDATE reservations SET status = 'cancelled', cancelled_at = now()
+     WHERE class_id = ${cls.id}::uuid AND user_id = ${first}::uuid
+  `;
+  const [promotion] = await tx`
+    SELECT outcome, user_id::text AS user_id
+      FROM reservation_promote_oldest_waitlist(${cls.id}::uuid)
+  `;
+  check(
+    promotion.outcome === 'promoted' && promotion.user_id === second,
+    `cancellation promoted ${promotion.outcome}/${promotion.user_id}, expected the oldest waiter`,
+  );
+  await tx`
+    INSERT INTO outbox (event_id, event_type, payload, occurred_at)
+    VALUES (${randomUUID()}, 'reservation.promoted', '{}'::jsonb, now())
+  `;
+  ok('member cancellation locks the class and promotes the oldest waiter with its event');
+
+  const [full] = await tx`SELECT outcome FROM reservation_promote_oldest_waitlist(${cls.id}::uuid)`;
+  check(full.outcome === 'no_capacity', `second promotion returned ${full.outcome}`);
+  ok('promotion respects capacity');
 }
 
 if (import.meta.main) {
