@@ -10,7 +10,7 @@ L'avancement détaillé, tâche par tâche et epic par epic, est tenu à jour da
 
 ## État des tests
 
-Les compteurs de tests par package évoluent à chaque PR : la référence à jour est dans [`PROGRESS.md`](../.kiro/specs/athlya-platform/PROGRESS.md). La CI exécute à chaque PR les tests unitaires et d'intégration (Vitest), les tests property-based (fast-check), la suite pgTAP RLS sur les migrations, et les parcours E2E + axe sur les apps.
+Les compteurs de tests par package évoluent à chaque PR : la référence à jour est dans [`PROGRESS.md`](../.kiro/specs/athlya-platform/PROGRESS.md). La CI exécute à chaque PR les tests unitaires et d'intégration Vitest (y compris les tests property-based fast-check) ; les suites Docker PBT, pgTAP RLS et E2E + axe se déclenchent selon les chemins modifiés (filtres `paths` de leurs workflows).
 
 ## Coûts opérationnels
 
