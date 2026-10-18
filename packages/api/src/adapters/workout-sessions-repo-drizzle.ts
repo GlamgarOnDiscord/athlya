@@ -11,31 +11,35 @@
  * from an admin. The explicit `user_id` filter of `listByUser` stays so
  * the planner uses `workout_sessions_user_started_at_desc_idx`.
  *
- * Rows are mapped to the `WorkoutSession` wire shape (ISO strings).
+ * The policies do not constrain `studio_id`, so `create` refuses a
+ * studio other than the caller's itself ({@link WorkoutSessionStudioMismatchError}).
+ *
+ * Idempotency (migration 0044): the request key is stored with the
+ * session. A second insert with the same `(user_id, idempotency_key)`
+ * hits the partial unique index and does nothing (`ON CONFLICT DO
+ * NOTHING`, which waits for a concurrent first insert to commit); the
+ * repo then returns the row the first request wrote, so two racing
+ * retries can never log the session twice.
  */
 
 import { withTenant } from '@athlya/db/client';
 import { workoutSessions } from '@athlya/db/schema';
-import { and, desc, eq, gte, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
+import { toWireWorkoutSession } from './workout-session-wire.js';
 
 import type { AthlyaDb, TenantClaims } from '@athlya/db/client';
-import type { WorkoutSessionRow } from '@athlya/db/schema';
 import type { WorkoutSessionRepo } from '@athlya/members';
-import type { WorkoutSession } from '@athlya/shared/schemas/domain';
 
-export function toWireWorkoutSession(row: WorkoutSessionRow): WorkoutSession {
-  return {
-    id: row.id as WorkoutSession['id'],
-    userId: row.userId as WorkoutSession['userId'],
-    studioId: row.studioId as WorkoutSession['studioId'],
-    startedAt: row.startedAt.toISOString(),
-    durationMin: row.durationMin,
-    exercises: row.exercises,
-    notes: row.notes,
-    createdAt: row.createdAt.toISOString(),
-  };
+/** `create` was asked to file a session under a studio other than the caller's. */
+export class WorkoutSessionStudioMismatchError extends Error {
+  public override readonly name = 'WorkoutSessionStudioMismatchError';
+  public readonly code = 'studio_mismatch' as const;
+
+  public constructor() {
+    super('workout session studioId does not match the caller studio');
+  }
 }
 
 export function createDrizzleWorkoutSessionRepo(
@@ -44,11 +48,15 @@ export function createDrizzleWorkoutSessionRepo(
 ): WorkoutSessionRepo {
   return {
     async create(input) {
-      // Not retried: a connection error after the INSERT reached the
-      // server would write the session twice. The client retries with
-      // the same Idempotency-Key instead.
-      const [row] = await withTenant(db, claims, (tx) =>
-        tx
+      if (input.studioId !== undefined && input.studioId !== claims.studioId) {
+        throw new WorkoutSessionStudioMismatchError();
+      }
+      const key = input.idempotencyKey ?? null;
+      // Not retried on a connection error: without a key, a retry after
+      // the INSERT reached the server would write the session twice.
+      // The client retries with the same Idempotency-Key instead.
+      return withTenant(db, claims, async (tx) => {
+        const [inserted] = await tx
           .insert(workoutSessions)
           .values({
             userId: input.userId,
@@ -57,13 +65,35 @@ export function createDrizzleWorkoutSessionRepo(
             durationMin: input.durationMin ?? null,
             exercises: [...input.exercises],
             notes: input.notes ?? null,
+            idempotencyKey: key,
           })
-          .returning(),
-      );
-      if (row === undefined) {
-        throw new Error('workout_sessions insert returned no row');
-      }
-      return toWireWorkoutSession(row);
+          .onConflictDoNothing({
+            target: [workoutSessions.userId, workoutSessions.idempotencyKey],
+            where: sql`${workoutSessions.idempotencyKey} IS NOT NULL`,
+          })
+          .returning();
+        if (inserted !== undefined) {
+          return toWireWorkoutSession(inserted);
+        }
+        if (key === null) {
+          throw new Error('workout_sessions insert returned no row');
+        }
+        const [existing] = await tx
+          .select()
+          .from(workoutSessions)
+          .where(
+            and(
+              eq(workoutSessions.userId, input.userId),
+              isNotNull(workoutSessions.idempotencyKey),
+              eq(workoutSessions.idempotencyKey, key),
+            ),
+          )
+          .limit(1);
+        if (existing === undefined) {
+          throw new Error('workout_sessions idempotency conflict without a visible row');
+        }
+        return toWireWorkoutSession(existing);
+      });
     },
 
     async listByUser(userId, { from, to, limit }) {

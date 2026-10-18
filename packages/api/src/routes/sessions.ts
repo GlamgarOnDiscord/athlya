@@ -3,10 +3,10 @@
  *
  * Endpoints and their middleware chains:
  *
- *   | Method | Path | Chain                                                                                    |
- *   |--------|------|------------------------------------------------------------------------------------------|
- *   | POST   | /    | jwtAuth → studioRateLimit → zValidator(LogSessionRequestSchema) → idempotency → handler  |
- *   | GET    | /me  | jwtAuth → studioRateLimit → zValidator(query: ListSessionsQuerySchema) → handler         |
+ *   | Method | Path | Chain                                                                                                   |
+ *   |--------|------|---------------------------------------------------------------------------------------------------------|
+ *   | POST   | /    | jwtAuth → studioRateLimit → projectUserId → zValidator(LogSessionRequestSchema) → idempotency → handler |
+ *   | GET    | /me  | jwtAuth → studioRateLimit → zValidator(query: ListSessionsQuerySchema) → handler                        |
  *
  * The per-user mutation bucket of `POST /` (`MUTATION_BUDGETS.session`)
  * is registered by the base app, ahead of this router (issue #613).
@@ -22,7 +22,10 @@
  *   • 14.1, 14.2, 20.1 — auth / validation / idempotency. The
  *                  idempotency store is bound per request to the
  *                  caller's claims, because `idempotency_keys` is
- *                  owner-scoped by RLS.
+ *                  owner-scoped by RLS. That cache is lookup-then-store,
+ *                  so the key is also handed to `logSession`, which
+ *                  stores it with the session: two racing retries with
+ *                  the same key return the same row (migration 0044).
  */
 
 import { ListSessionsQuerySchema, LogSessionRequestSchema } from '@athlya/shared/schemas/api';
@@ -52,7 +55,11 @@ export type LogSessionOutcome =
 
 /** Dependencies injected into {@link buildSessionsRouter}. */
 export interface SessionsDeps {
-  logSession(claims: AuthClaims, input: LogSessionRequest): Promise<LogSessionOutcome>;
+  logSession(
+    claims: AuthClaims,
+    input: LogSessionRequest,
+    idempotencyKey?: string,
+  ): Promise<LogSessionOutcome>;
   listSessions(
     claims: AuthClaims,
     range: ListSessionsQuery,
@@ -63,6 +70,17 @@ export interface SessionsDeps {
    * without replay protection).
    */
   idempotencyFor?(claims: AuthClaims): IdempotencyMiddlewareDeps | undefined;
+}
+
+/** Longest `Idempotency-Key` the idempotency middleware accepts. */
+const IDEMPOTENCY_KEY_MAX_LENGTH = 255;
+
+/** The request `Idempotency-Key`, normalised like the middleware does. */
+function idempotencyKeyOf(c: Context<HonoEnv>): string | undefined {
+  const key = c.req.header('Idempotency-Key')?.trim();
+  return key !== undefined && key.length > 0 && key.length <= IDEMPOTENCY_KEY_MAX_LENGTH
+    ? key
+    : undefined;
 }
 
 function claimsOf(c: Context<HonoEnv>): AuthClaims {
@@ -106,7 +124,7 @@ export function buildSessionsRouter(deps: SessionsDeps): Hono<HonoEnv> {
     async (c) => {
       traceOperation(c, 'sessions.log');
       const body = readValidated<LogSessionRequest>(c, 'json');
-      const outcome = await deps.logSession(claimsOf(c), body);
+      const outcome = await deps.logSession(claimsOf(c), body, idempotencyKeyOf(c));
       if (outcome.kind === 'studio_mismatch') {
         return c.body(
           JSON.stringify({

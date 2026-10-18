@@ -69,9 +69,11 @@ export const MUTATION_BUDGETS = {
   export: { userLimit: 1, windowSec: 86400 },
   coach: { userLimit: 5, windowSec: 60 },
   /**
-   * Issue #652 — workout session log. Above the booking budget so a
-   * mobile offline queue flushing a backlog is not throttled; the drain
-   * retries a 429 with backoff anyway.
+   * Issue #652 — workout session log, above the booking budget so a
+   * typical offline backlog drains in one pass. A backlog above 20
+   * sessions gets 429s: the drain's retries (about 30 s in total) end
+   * before the 60 s window frees up, so the rest stays queued, in order,
+   * until the next drain.
    */
   session: { userLimit: 20, windowSec: 60 },
 } as const satisfies Record<string, RateLimitBudget>;

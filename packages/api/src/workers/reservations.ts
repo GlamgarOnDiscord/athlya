@@ -9,7 +9,7 @@
  *   • /v1/coach, /v1/coach/* — AI coach (Epic 21, `ai-coach` flag)
  *   • /v1/studios/*      — studio read/update
  *   • /v1/programs/*     — training programs, subscriptions, daily workout
- *   • /v1/sessions/*     — workout session log and history (issue #652)
+ *   • /v1/sessions, /v1/sessions/* — workout session log and history (issue #652)
  *
  * /v1/checkins/* is not routed to this Worker: the check-in adapter is
  * not implemented yet (issue #302), so its wrangler route was removed.

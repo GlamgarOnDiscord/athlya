@@ -21,7 +21,10 @@ import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { drizzle } from 'drizzle-orm/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createDrizzleWorkoutSessionRepo } from '../../adapters/workout-sessions-repo-drizzle.js';
+import {
+  WorkoutSessionStudioMismatchError,
+  createDrizzleWorkoutSessionRepo,
+} from '../../adapters/workout-sessions-repo-drizzle.js';
 
 import type { AthlyaDb, TenantClaims } from '@athlya/db/client';
 
@@ -43,6 +46,24 @@ let pglite: PGlite;
 let db: AthlyaDb;
 
 const repo = (claims: TenantClaims) => createDrizzleWorkoutSessionRepo(db, claims);
+
+/** Run a raw query as the migration owner, then switch back to athlya_app. */
+async function asOwner<T>(query: string): Promise<T[]> {
+  await pglite.exec('RESET ROLE');
+  try {
+    return (await pglite.query<T>(query)).rows;
+  } finally {
+    await pglite.exec('SET ROLE athlya_app');
+  }
+}
+
+/** SQLSTATE of a driver error, possibly wrapped by Drizzle as `cause`. */
+function sqlState(err: unknown): string | undefined {
+  const own = (err as { code?: unknown } | null)?.code;
+  if (typeof own === 'string') return own;
+  const cause = (err as { cause?: { code?: unknown } } | null)?.cause?.code;
+  return typeof cause === 'string' ? cause : undefined;
+}
 
 beforeAll(async () => {
   pglite = new PGlite({ extensions: { btree_gin, citext, pgcrypto } });
@@ -99,11 +120,9 @@ describe('createDrizzleWorkoutSessionRepo under athlya_app', () => {
     });
     expect(created.createdAt).toMatch(/Z$/u);
 
-    await pglite.exec('RESET ROLE');
-    const { rows } = await pglite.query<{ kind: string }>(
+    const rows = await asOwner<{ kind: string }>(
       `SELECT jsonb_typeof(exercises) AS kind FROM workout_sessions WHERE id = '${created.id}'`,
     );
-    await pglite.exec('SET ROLE athlya_app');
     expect(rows[0]?.kind).toBe('array');
   });
 
@@ -118,14 +137,56 @@ describe('createDrizzleWorkoutSessionRepo under athlya_app', () => {
     expect(created.notes).toBeNull();
   });
 
-  it('refuses a row owned by another member (workout_sessions_insert_own)', async () => {
+  it('refuses a row owned by another member with 42501 (workout_sessions_insert_own)', async () => {
+    const err: unknown = await repo(memberA)
+      .create({ userId: MEMBER_A2, startedAt: '2026-10-12T08:00:00.000Z', exercises: [] })
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    expect(sqlState(err)).toBe('42501');
+  });
+
+  it('refuses a studio other than the caller studio before any write', async () => {
     await expect(
       repo(memberA).create({
-        userId: MEMBER_A2,
+        userId: MEMBER_A,
+        studioId: '99999999-9999-4999-8999-999999999999',
         startedAt: '2026-10-12T08:00:00.000Z',
         exercises: [],
       }),
-    ).rejects.toThrow();
+    ).rejects.toBeInstanceOf(WorkoutSessionStudioMismatchError);
+  });
+
+  it('writes one row per (user, idempotency key) and returns it on a retry', async () => {
+    const input = {
+      userId: MEMBER_A,
+      startedAt: '2026-09-01T08:00:00.000Z',
+      exercises: [],
+      idempotencyKey: 'drain-key-1',
+    };
+    const first = await repo(memberA).create(input);
+    const retry = await repo(memberA).create({ ...input, notes: 'retried payload' });
+    expect(retry).toEqual(first);
+
+    const count = await asOwner<{ n: number }>(
+      `SELECT count(*)::int AS n FROM workout_sessions WHERE idempotency_key = 'drain-key-1'`,
+    );
+    expect(count[0]?.n).toBe(1);
+
+    const otherUser = await repo(memberA2).create({ ...input, userId: MEMBER_A2 });
+    expect(otherUser.id).not.toBe(first.id);
+    expect(otherUser.userId).toBe(MEMBER_A2);
+  });
+
+  it('never returns the request key on the wire', async () => {
+    const created = await repo(memberA).create({
+      userId: MEMBER_A,
+      startedAt: '2026-09-02T08:00:00.000Z',
+      exercises: [],
+      idempotencyKey: 'drain-key-2',
+    });
+    expect(Object.keys(created)).not.toContain('idempotencyKey');
   });
 
   it('lists only the caller sessions in the window, newest first', async () => {

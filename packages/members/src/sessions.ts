@@ -58,6 +58,12 @@ export interface CreateWorkoutSessionInput {
   durationMin?: number | undefined;
   exercises: ReadonlyArray<Exercise>;
   notes?: string | undefined;
+  /**
+   * `Idempotency-Key` of the request. A repo that receives the same key
+   * twice for the same user returns the first session instead of
+   * inserting a second one.
+   */
+  idempotencyKey?: string | undefined;
 }
 
 /**
@@ -199,6 +205,7 @@ export async function logSession(
   userId: string,
   input: unknown,
   deps: SessionsServiceDeps,
+  options: { readonly idempotencyKey?: string | undefined } = {},
 ): Promise<WorkoutSession> {
   const parsed = LogSessionRequestSchema.safeParse(input);
   if (!parsed.success) {
@@ -218,6 +225,7 @@ export async function logSession(
     ...(durationMin === undefined ? {} : { durationMin }),
     ...(notes === undefined ? {} : { notes }),
     ...(studioId === undefined ? {} : { studioId }),
+    ...(options.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey }),
   };
   return deps.repo.create(createInput);
 }

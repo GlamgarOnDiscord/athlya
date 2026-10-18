@@ -186,7 +186,21 @@ describe('POST /v1/sessions', () => {
     expect(logSession).toHaveBeenCalledWith(
       expect.objectContaining({ userId: TEST_USER_ID, studioId: TEST_STUDIO_ID, role: 'member' }),
       expect.objectContaining({ startedAt: LOG_BODY.startedAt, durationMin: 45 }),
+      undefined,
     );
+  });
+
+  it('hands the trimmed Idempotency-Key to the deps so the write itself is idempotent', async () => {
+    const logSession = vi.fn().mockResolvedValue({ kind: 'created', session: SESSION });
+    const deps = buildStubDeps({ sessions: { logSession } });
+
+    const res = await call(deps, 'POST', '', {
+      body: LOG_BODY,
+      headers: { 'Idempotency-Key': ' drain-1 ' },
+    });
+
+    expect(res.status).toBe(201);
+    expect(logSession).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'drain-1');
   });
 
   it('rejects more than 50 exercises with 422 (Req 12.2)', async () => {

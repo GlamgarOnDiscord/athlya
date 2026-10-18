@@ -105,6 +105,15 @@ describe('logSession', () => {
     });
   });
 
+  it('hands the idempotency key to the repo when one is given', async () => {
+    const { deps, create } = buildDeps();
+    create.mockResolvedValueOnce(STORED_SESSION);
+
+    await logSession(USER_ID, VALID_INPUT, deps, { idempotencyKey: 'key-1' });
+
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: 'key-1' }));
+  });
+
   it('omits optional fields from the repo payload when absent', async () => {
     const { deps, create } = buildDeps();
     create.mockResolvedValueOnce(STORED_SESSION);

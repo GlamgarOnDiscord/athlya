@@ -24,6 +24,7 @@ vi.mock('../../adapters/deps-cache.js', () => ({
 }));
 
 vi.mock('../../adapters/workout-sessions-repo-drizzle.js', () => ({
+  WorkoutSessionStudioMismatchError: class WorkoutSessionStudioMismatchError extends Error {},
   createDrizzleWorkoutSessionRepo: (_db: unknown, claims: unknown) => {
     hoisted.repoClaims.push(claims);
     return { create: hoisted.create, listByUser: hoisted.listByUser };
@@ -74,6 +75,24 @@ describe('buildSessionsDeps', () => {
     });
     expect(outcome).toEqual({ kind: 'studio_mismatch' });
     expect(hoisted.create).not.toHaveBeenCalled();
+  });
+
+  it('forwards the idempotency key to the repo', async () => {
+    await deps.logSession(claims, { startedAt: '2026-10-12T08:00:00Z', exercises: [] }, 'key-9');
+    expect(hoisted.create).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'key-9' }),
+    );
+  });
+
+  it('maps a repo studio mismatch to studio_mismatch', async () => {
+    const { WorkoutSessionStudioMismatchError } =
+      await import('../../adapters/workout-sessions-repo-drizzle.js');
+    hoisted.create.mockRejectedValueOnce(new WorkoutSessionStudioMismatchError());
+    const outcome = await deps.logSession(claims, {
+      startedAt: '2026-10-12T08:00:00Z',
+      exercises: [],
+    });
+    expect(outcome).toEqual({ kind: 'studio_mismatch' });
   });
 
   it('lists the caller sessions with the parsed window', async () => {

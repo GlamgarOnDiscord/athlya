@@ -10,14 +10,19 @@
  *     studio: a body `studioId` naming another studio is refused before
  *     any write (`studio_mismatch`).
  *   - Idempotency uses the shared Neon HTTP handle, scoped to the
- *     caller's claims (see `tenant-idempotency.ts`).
+ *     caller's claims (see `tenant-idempotency.ts`). The request key is
+ *     also stored with the session, so racing retries that both miss
+ *     that cache still write one row (migration 0044).
  */
 
 import { listSessions, logSession, type SessionsServiceDeps } from '@athlya/members';
 
 import { getOrCreateDbHttp, getOrCreateWriteDb } from './deps-cache.js';
 import { createTenantIdempotencyDb } from './tenant-idempotency.js';
-import { createDrizzleWorkoutSessionRepo } from './workout-sessions-repo-drizzle.js';
+import {
+  WorkoutSessionStudioMismatchError,
+  createDrizzleWorkoutSessionRepo,
+} from './workout-sessions-repo-drizzle.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
 import type { SessionsDeps } from '../routes/sessions.js';
@@ -34,12 +39,21 @@ export function buildSessionsDeps(env: AthlyaBindings): SessionsDeps {
   });
 
   return {
-    async logSession(claims, input) {
+    async logSession(claims, input, idempotencyKey) {
       if (input.studioId !== undefined && input.studioId !== claims.studioId) {
         return { kind: 'studio_mismatch' };
       }
-      const session = await logSession(claims.userId, input, service(claims));
-      return { kind: 'created', session };
+      try {
+        const session = await logSession(claims.userId, input, service(claims), {
+          idempotencyKey,
+        });
+        return { kind: 'created', session };
+      } catch (err) {
+        if (err instanceof WorkoutSessionStudioMismatchError) {
+          return { kind: 'studio_mismatch' };
+        }
+        throw err;
+      }
     },
     listSessions(claims, range) {
       return listSessions(claims.userId, range, service(claims));

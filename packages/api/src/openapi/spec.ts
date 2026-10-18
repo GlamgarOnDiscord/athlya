@@ -693,6 +693,18 @@ const logSessionRoute = createRoute({
     'replays the stored response instead of logging the session twice.',
   security: [{ bearerAuth: [] }],
   request: {
+    headers: z.object({
+      'idempotency-key': z
+        .string()
+        .min(1)
+        .max(255)
+        .optional()
+        .openapi({
+          description:
+            'Client-generated key (a UUID v4 is recommended). A retry with the same key ' +
+            'returns the first response and never logs a second session.',
+        }),
+    }),
     body: {
       content: { 'application/json': { schema: LogSessionRequestSchema } },
       required: true,
@@ -703,6 +715,7 @@ const logSessionRoute = createRoute({
       description: 'Session logged',
       content: { 'application/json': { schema: WorkoutSessionSchema } },
     },
+    400: problemResponse('Empty `Idempotency-Key` or longer than 255 characters'),
     401: problemResponse('Not authenticated'),
     422: problemResponse(
       'Validation error (more than 50 exercises, more than 30 sets per exercise, …) or `studio_mismatch`',
