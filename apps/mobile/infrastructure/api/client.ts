@@ -35,9 +35,10 @@ export interface RequestOptions {
    */
   readonly refreshOnUnauthorized?: boolean;
   /**
-   * Extra request headers, e.g. `cf-turnstile-token` on sign-in. They cannot
-   * replace the headers the client manages (`Accept`, `Content-Type`,
-   * `Authorization`, `Idempotency-Key`).
+   * Extra request headers, e.g. `If-None-Match` or `cf-turnstile-token` on
+   * sign-in. `Accept`, `Content-Type`, `Authorization` and `Idempotency-Key`
+   * belong to the client: a copy of one of them here is ignored, whatever its
+   * case.
    */
   readonly headers?: Readonly<Record<string, string>>;
 }
@@ -84,13 +85,6 @@ export interface CreateApiClientOptions {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-const MANAGED_HEADERS: ReadonlySet<string> = new Set([
-  'accept',
-  'content-type',
-  'authorization',
-  'idempotency-key',
-]);
-
 export function buildUrl(baseUrl: string, path: string): string {
   const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
@@ -106,6 +100,18 @@ async function readBody(response: Response): Promise<unknown> {
   } catch {
     return text;
   }
+}
+
+/** Headers the client owns; a caller-supplied copy, in any case, is dropped. */
+const RESERVED_HEADERS = new Set(['accept', 'content-type', 'authorization', 'idempotency-key']);
+
+function extraHeaders(
+  headers: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  if (headers === undefined) return {};
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name]) => !RESERVED_HEADERS.has(name.toLowerCase())),
+  );
 }
 
 export function parseProblem(body: unknown): ProblemDetails | undefined {
@@ -124,10 +130,7 @@ export function createApiClient(options: CreateApiClientOptions): ApiClient {
     requestOptions: RequestOptions,
     accessToken: string | null,
   ): Promise<ApiResponse> {
-    const headers: Record<string, string> = {};
-    for (const [name, value] of Object.entries(requestOptions.headers ?? {})) {
-      if (!MANAGED_HEADERS.has(name.toLowerCase())) headers[name] = value;
-    }
+    const headers: Record<string, string> = { ...extraHeaders(requestOptions.headers) };
     headers.Accept = 'application/json';
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (accessToken !== null) headers.Authorization = `Bearer ${accessToken}`;
