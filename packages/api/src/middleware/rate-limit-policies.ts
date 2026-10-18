@@ -68,6 +68,14 @@ export const MUTATION_BUDGETS = {
   profile: { userLimit: 5, windowSec: 60 },
   export: { userLimit: 1, windowSec: 86400 },
   coach: { userLimit: 5, windowSec: 60 },
+  /**
+   * Issue #652 — workout session log, above the booking budget so a
+   * typical offline backlog drains in one pass. A backlog above 20
+   * sessions gets 429s: the drain's retries (about 30 s in total) end
+   * before the 60 s window frees up, so the rest stays queued, in order,
+   * until the next drain.
+   */
+  session: { userLimit: 20, windowSec: 60 },
 } as const satisfies Record<string, RateLimitBudget>;
 
 /** Issue #338 — a member cannot physically attend more than 5 classes per hour. */
@@ -206,6 +214,17 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
       'Epic 21 — burst limit on paid model calls, mounted in routes/coach.ts after jwtAuth and the ai-coach flag check (flag off → 404, no bucket touched); the daily quota (Redis counter, fail-closed) is enforced by the use case',
   },
   {
+    id: 'session-post',
+    route: '/v1/sessions',
+    methods: 'POST',
+    budget: MUTATION_BUDGETS.session,
+    failPolicy: 'fail-closed',
+    bucket: 'user',
+    wiredIn: 'worker.ts',
+    notes:
+      'Issue #652 — jwtAuth pre-pass; 401 before the mutation bucket is touched; the global /v1 IP bucket still applies',
+  },
+  {
     id: 'classes-search',
     route: '/v1/classes/search',
     methods: 'GET',
@@ -291,6 +310,7 @@ export const REQUIRED_FAIL_CLOSED_IDS = [
   'consents-patch',
   'export-post',
   'coach-ask',
+  'session-post',
   'classes-search',
   'members-list',
   'audit-list',

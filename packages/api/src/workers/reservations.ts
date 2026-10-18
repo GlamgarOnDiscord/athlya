@@ -9,6 +9,7 @@
  *   • /v1/coach, /v1/coach/* — AI coach (Epic 21, `ai-coach` flag)
  *   • /v1/studios/*      — studio read/update
  *   • /v1/programs/*     — training programs, subscriptions, daily workout
+ *   • /v1/sessions, /v1/sessions/* — workout session log and history (issue #652)
  *
  * /v1/checkins/* is not routed to this Worker: the check-in adapter is
  * not implemented yet (issue #302), so its wrangler route was removed.
@@ -30,12 +31,14 @@ import {
   defaultMembersDeps,
   defaultProgramsDeps,
   defaultReservationsDeps,
+  defaultSessionsDeps,
   defaultStudiosDeps,
   lazyClassesDeps,
   lazyCoachDeps,
   lazyMembersDeps,
   lazyProgramsDeps,
   lazyReservationsDeps,
+  lazySessionsDeps,
   lazyStudiosDeps,
 } from '../domain-deps.js';
 import { installDomainScope } from '../domain-scope.js';
@@ -46,6 +49,7 @@ import { buildMeRouter } from '../routes/me.js';
 import { buildMembersRouter } from '../routes/members.js';
 import { buildProgramsRouter } from '../routes/programs.js';
 import { buildReservationsRouter } from '../routes/reservations.js';
+import { buildSessionsRouter } from '../routes/sessions.js';
 import { buildStudiosRouter } from '../routes/studios.js';
 
 export { ClassCapacityDO } from '../durable-objects/class-capacity.js';
@@ -81,6 +85,7 @@ const app = buildBaseApp({
         studios: defaultStudiosDeps(env),
         coach: defaultCoachDeps(env, cf),
         programs: defaultProgramsDeps(env),
+        sessions: defaultSessionsDeps(env),
       };
     });
     // Capacity WebSocket mounts first: /v1/classes/:classId/capacity/ws
@@ -97,6 +102,7 @@ const app = buildBaseApp({
     base.route('/v1/studios', buildStudiosRouter(lazyStudiosDeps(() => resolve().studios)));
     base.route('/v1/coach', buildCoachRouter(lazyCoachDeps(() => resolve().coach)));
     base.route('/v1/programs', buildProgramsRouter(lazyProgramsDeps(() => resolve().programs)));
+    base.route('/v1/sessions', buildSessionsRouter(lazySessionsDeps(() => resolve().sessions)));
   },
 });
 

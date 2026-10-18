@@ -26,6 +26,7 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 | `consents-patch`       | `PATCH /v1/me/consents`                                 | PATCH   | 5 user                         | fail-closed      | user         |
 | `export-post`          | `POST /v1/members/me/export`                            | POST    | 1 / 24h user                   | fail-closed      | user         |
 | `coach-ask`            | `POST /v1/coach/ask`                                    | POST    | 5 user + 10 / UTC day quota    | fail-closed      | user         |
+| `session-post`         | `POST /v1/sessions`                                     | POST    | 20 user                        | fail-closed      | user         |
 | `classes-search`       | `GET /v1/classes/search`                                | GET     | 30 IP                          | **fail-closed**  | ip (pre-jwt) |
 | `members-list`         | `GET /v1/members` (exact)                               | GET     | 20 IP                          | **fail-closed**  | ip (pre-jwt) |
 | `audit-list`           | `GET /v1/audit`                                         | GET     | 30 IP                          | **fail-closed**  | ip (pre-jwt) |

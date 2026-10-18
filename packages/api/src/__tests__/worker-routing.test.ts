@@ -62,6 +62,11 @@ describe('auth worker', () => {
     expect(s).toBe(404);
   });
 
+  it('returns 404 for /v1/sessions and /v1/sessions/* (reservations worker routes)', async () => {
+    expect(await status(authApp, '/v1/sessions', 'POST')).toBe(404);
+    expect(await status(authApp, '/v1/sessions/me')).toBe(404);
+  });
+
   it('returns 404 for /v1/coach and /v1/coach/* (reservations worker routes)', async () => {
     expect(await status(authApp, '/v1/coach')).toBe(404);
     expect(await status(authApp, '/v1/coach/ask', 'POST')).toBe(404);
@@ -107,6 +112,11 @@ describe('reservations worker', () => {
   it('serves /v1/coach and /v1/coach/ask (not 404)', async () => {
     expect(await status(reservationsApp, '/v1/coach')).not.toBe(404);
     expect(await status(reservationsApp, '/v1/coach/ask', 'POST')).not.toBe(404);
+  });
+
+  it('serves POST /v1/sessions and GET /v1/sessions/me (not 404, issue #652)', async () => {
+    expect(await status(reservationsApp, '/v1/sessions', 'POST')).toBe(401);
+    expect(await status(reservationsApp, '/v1/sessions/me')).toBe(401);
   });
 
   it('returns 404 for /v1/auth/* (auth worker route)', async () => {
@@ -158,6 +168,11 @@ describe('billing worker', () => {
   it('returns 404 for /v1/me/* (reservations worker route)', async () => {
     const s = await status(billingApp, '/v1/me/progression');
     expect(s).toBe(404);
+  });
+
+  it('returns 404 for /v1/sessions and /v1/sessions/* (reservations worker routes)', async () => {
+    expect(await status(billingApp, '/v1/sessions', 'POST')).toBe(404);
+    expect(await status(billingApp, '/v1/sessions/me')).toBe(404);
   });
 
   it('returns 404 for /v1/coach and /v1/coach/* (reservations worker routes)', async () => {
@@ -489,6 +504,26 @@ describe('reservations Worker /v1/coach zone routes', () => {
   it.each(['staging.api.athlya.app', 'api.athlya.app'])('routes %s/v1/coach and /*', (host) => {
     expect(patterns).toContain(`${host}/v1/coach`);
     expect(patterns).toContain(`${host}/v1/coach/*`);
+  });
+});
+
+describe('/v1/sessions zone routes (issue #652)', () => {
+  const patterns = routePatterns('wrangler.reservations.toml');
+
+  it.each(['staging.api.athlya.app', 'api.athlya.app'])(
+    'routes %s/v1/sessions and /* to the reservations Worker',
+    (host) => {
+      expect(patterns).toContain(`${host}/v1/sessions`);
+      expect(patterns).toContain(`${host}/v1/sessions/*`);
+    },
+  );
+
+  it.each(['wrangler.auth.toml', 'wrangler.billing.toml'])('%s does not route it', (config) => {
+    expect(routePatterns(config).filter((p) => p.includes('/v1/sessions'))).toEqual([]);
+  });
+
+  it('is mounted on the gateway too', async () => {
+    expect(await status(buildApp(), '/v1/sessions', 'POST')).toBe(401);
   });
 });
 

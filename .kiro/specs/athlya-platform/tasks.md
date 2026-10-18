@@ -492,7 +492,8 @@ Use official CLI to create, init the project .. and recent package version and s
   - [x] 11.10 Implement the workout session logging screen
     - Form with exercises, sets, reps, weights, optional notes
     - Enqueue `logSession` mutation via `MutationQueue` when offline
-    - Done (#647): `features/workouts/workout-form.ts` validated with `LogSessionRequestSchema`, screen `app/workout.tsx`. The server side of `POST /v1/sessions` is not routed in production yet (#648)
+    - Done (#647): `features/workouts/workout-form.ts` validated with `LogSessionRequestSchema`, screen `app/workout.tsx`
+    - API side done (#652): `POST /v1/sessions` and `GET /v1/sessions/me` are served by the reservations bulkhead Worker (staging + production routes), RLS-scoped writes, claim-bound idempotency, 20/min/user mutation budget
     - _Requirements: 12.1, 12.2, 12.3, 19.1_
 
   - [x] 11.11 Implement the RGPD export and delete screens in the mobile app

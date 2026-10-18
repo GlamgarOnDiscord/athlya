@@ -8,6 +8,10 @@
 
 ---
 
+## Session 2026-10-18 — mobile app unblock (API side)
+
+- **#652** — `POST /v1/sessions` / `GET /v1/sessions/me` were routed nowhere in staging and production (no adapter, no bulkhead mount, no wrangler route), so the mobile `MutationQueue` dead-lettered every workout session. Now served by the reservations Worker (`/v1/sessions` + `/v1/sessions/*`), `withTenant` writes under the owner-only RLS policies, idempotency bound to the caller's claims, `session-post` mutation budget (20/min/user, fail-closed). Session writes store the request `Idempotency-Key` (migration `0044_workout_sessions_idempotency_key.sql`, expand only: nullable column + partial unique index on `(user_id, idempotency_key)`), so racing retries log one session. Operator steps: apply migration 0044 (staging, then production) **before** deploying the Worker, then from `packages/api` run `wrangler deploy --config wrangler.reservations.toml --env staging` and, once staging is verified, `wrangler deploy --config wrangler.reservations.toml --env production` so the new zone routes take effect.
+
 ## Session 2026-10-17/18 — clôture des issues
 
 Session de clôture du backlog P0/P1 ouvert par l'audit : RLS-safe sous les rôles runtime `NOBYPASSRLS`, outbox, export RGPD, billing Stripe, bulkhead Workers, canary, staging gate, Terraform, observabilité, déploiement frontend. Tout le code est sur `master` (tête `55f39f7`). Les issues fermées « code-complete » laissent des étapes opérateur, regroupées dans la [checklist opérateur](#checklist-opérateur-consolidée) ci-dessous.

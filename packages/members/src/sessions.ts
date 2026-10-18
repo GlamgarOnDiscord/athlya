@@ -58,6 +58,12 @@ export interface CreateWorkoutSessionInput {
   durationMin?: number | undefined;
   exercises: ReadonlyArray<Exercise>;
   notes?: string | undefined;
+  /**
+   * `Idempotency-Key` of the request. A repo that receives the same key
+   * twice for the same user returns the first session instead of
+   * inserting a second one.
+   */
+  idempotencyKey?: string | undefined;
 }
 
 /**
@@ -95,8 +101,13 @@ export interface WorkoutSessionRepo {
    * Persist a new workout session and return the stored row.
    *
    * The caller has already validated `input` through
-   * {@link LogSessionRequestSchema}; the repo must simply insert the
-   * supplied fields and return the resulting {@link WorkoutSession}.
+   * {@link LogSessionRequestSchema}; the repo inserts the supplied
+   * fields and returns the resulting {@link WorkoutSession}.
+   *
+   * Dedupe contract: when `input.idempotencyKey` is set and a session
+   * with the same `(userId, idempotencyKey)` already exists, the repo
+   * MUST NOT insert a second row and MUST return the existing session,
+   * also when two such calls race. Without a key every call inserts.
    */
   create(input: CreateWorkoutSessionInput): Promise<WorkoutSession>;
 
@@ -199,6 +210,7 @@ export async function logSession(
   userId: string,
   input: unknown,
   deps: SessionsServiceDeps,
+  options: { readonly idempotencyKey?: string | undefined } = {},
 ): Promise<WorkoutSession> {
   const parsed = LogSessionRequestSchema.safeParse(input);
   if (!parsed.success) {
@@ -218,6 +230,10 @@ export async function logSession(
     ...(durationMin === undefined ? {} : { durationMin }),
     ...(notes === undefined ? {} : { notes }),
     ...(studioId === undefined ? {} : { studioId }),
+    // An empty key would turn every later key-less retry into a replay.
+    ...(options.idempotencyKey === undefined || options.idempotencyKey.length === 0
+      ? {}
+      : { idempotencyKey: options.idempotencyKey }),
   };
   return deps.repo.create(createInput);
 }
