@@ -49,6 +49,12 @@ const HYPERDRIVE = {
   connectionString: 'postgresql://app@hyperdrive.example/athlya',
 } as unknown as NonNullable<AthlyaBindings['HYPERDRIVE']>;
 
+/** The avatar and export buckets (gateway and reservations Worker). */
+const R2_BUCKETS = {
+  AVATARS_BUCKET: {} as NonNullable<AthlyaBindings['AVATARS_BUCKET']>,
+  EXPORTS_BUCKET: {} as NonNullable<AthlyaBindings['EXPORTS_BUCKET']>,
+} satisfies Partial<AthlyaBindings>;
+
 /** Bindings each probe reads, removed one at a time below. */
 const PROBE_BINDING: Record<ReadinessProbe, readonly (keyof AthlyaBindings)[]> = {
   db: ['DB_URL'],
@@ -100,8 +106,7 @@ function gatewayEnv(): AthlyaBindings {
   return coreEnv({
     CRON_DB_URL: 'postgresql://athlya_cron@db.example/athlya',
     HYPERDRIVE,
-    AVATARS_BUCKET: {} as NonNullable<AthlyaBindings['AVATARS_BUCKET']>,
-    EXPORTS_BUCKET: {} as NonNullable<AthlyaBindings['EXPORTS_BUCKET']>,
+    ...R2_BUCKETS,
   });
 }
 
@@ -136,7 +141,7 @@ const SUB_WORKERS = [
     name: 'reservations',
     app: reservations.app,
     readiness: reservations.READINESS,
-    env: () => coreEnv({ HYPERDRIVE }),
+    env: () => coreEnv({ HYPERDRIVE, ...R2_BUCKETS }),
   },
   { name: 'billing', app: billing.app, readiness: billing.READINESS, env: () => coreEnv() },
 ];

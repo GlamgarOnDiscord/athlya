@@ -109,6 +109,13 @@ configs wrangler des sub-workers donnent la même liste ;
 `scripts/__tests__/verify-secrets.test.mjs` échoue si les deux divergent ou si
 un secret vérifié par `assertRequiredSecrets()` manque.
 
+Bindings (not secrets, declared in each wrangler config): the reservations
+Worker binds `HYPERDRIVE` (staging, production) and the `AVATARS_BUCKET` /
+`EXPORTS_BUCKET` R2 buckets in every env, with the gateway's bucket names,
+because it serves `/v1/members/*` (issue #625). Its `/health/ready` probes
+both buckets. `src/__tests__/worker-routing.test.ts` fails if a Worker mounts
+`/v1/members` without both R2 bindings in one of its envs.
+
 ## Local (ops)
 
 ```bash

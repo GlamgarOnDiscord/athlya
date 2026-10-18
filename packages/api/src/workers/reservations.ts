@@ -42,14 +42,16 @@ export { ClassCapacityDO } from '../durable-objects/class-capacity.js';
 
 /**
  * `/health/ready` probes backed by this Worker's bindings
- * (wrangler.reservations.toml): Hyperdrive serves the write path, and
- * consent updates on /v1/members/* append to `audit_log`. No cron or
- * R2 binding.
+ * (wrangler.reservations.toml): Hyperdrive serves the write path,
+ * /v1/members/* reads the avatar and export R2 buckets, and consent
+ * updates on /v1/members/* append to `audit_log`. No cron binding.
  */
 export const READINESS: readonly ReadinessProbe[] = [
   'db',
   'redis',
   'hyperdrive',
+  'avatarsBucket',
+  'exportsBucket',
   'auditLogPartitions',
   'sentryDsn',
 ];

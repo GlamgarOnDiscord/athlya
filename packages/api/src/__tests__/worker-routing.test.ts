@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 
 import type { Hono } from 'hono';
 
+import { buildApp } from '../app.js';
 import { READINESS_PROBES, type ReadinessProbe } from '../base-app.js';
 import { app as authApp, READINESS as AUTH_READINESS } from '../workers/auth.js';
 import {
@@ -265,6 +266,128 @@ describe.each(READINESS_WORKERS)('$config readiness contract', ({ config, readin
   it.each(BINDING_BACKED_PROBES)('requires %s when its bindings are declared', (probe) => {
     const bound = PROBE_BINDINGS[probe].every((name) => declared.has(name));
     expect(readiness.includes(probe)).toBe(bound);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Binding drift (issue #625): a Worker that mounts a router binds the
+// resources that router reads, in every environment of its wrangler config.
+// ---------------------------------------------------------------------------
+
+const TABLE_HEADER = /^\[\[?([^\]]+)\]\]?\s*(?:#.*)?$/;
+const KEY_VALUE = /^(binding|bucket_name)\s*=\s*"([^"]+)"/;
+
+/**
+ * R2 bindings of a wrangler config text, keyed by environment (`''` is the
+ * top level) and then by binding name, with the bucket each one targets.
+ * Every environment the config declares is present, bound or not.
+ */
+function r2BucketsByEnv(toml: string): Map<string, Map<string, string>> {
+  const byEnv = new Map<string, Map<string, string>>([['', new Map()]]);
+  let current: { env: string; binding?: string; bucket?: string } | null = null;
+  const flush = (): void => {
+    if (current?.binding !== undefined && current.bucket !== undefined) {
+      byEnv.get(current.env)?.set(current.binding, current.bucket);
+    }
+  };
+  for (const line of toml.split('\n')) {
+    const header = TABLE_HEADER.exec(line.trim());
+    if (header !== null) {
+      flush();
+      const table = (header[1] ?? '').trim();
+      const env = /^env\.([^.]+)/.exec(table)?.[1] ?? '';
+      if (!byEnv.has(env)) byEnv.set(env, new Map());
+      current = table === 'r2_buckets' || table === `env.${env}.r2_buckets` ? { env } : null;
+      continue;
+    }
+    const [, key, value] = KEY_VALUE.exec(line.trim()) ?? [];
+    if (current === null || value === undefined) continue;
+    if (key === 'binding') current.binding = value;
+    else current.bucket = value;
+  }
+  flush();
+  return byEnv;
+}
+
+/** True when `app` has a real handler under `prefix`. */
+function mounts(app: Hono<HonoEnv>, prefix: string): boolean {
+  return app.routes.some(
+    (route) =>
+      route.method !== 'ALL' && (route.path === prefix || route.path.startsWith(`${prefix}/`)),
+  );
+}
+
+/** R2 bindings each router reads (`members-deps.ts`, `export-deps.ts`). */
+const ROUTER_R2_BINDINGS: ReadonlyArray<{ prefix: string; bindings: readonly string[] }> = [
+  { prefix: '/v1/members', bindings: ['AVATARS_BUCKET', 'EXPORTS_BUCKET'] },
+];
+
+const GATEWAY_CONFIG = 'wrangler.toml';
+
+const BINDING_WORKERS: ReadonlyArray<{ config: string; app: Hono<HonoEnv> }> = [
+  { config: GATEWAY_CONFIG, app: buildApp() },
+  ...SUB_WORKERS.map(({ config, app }) => ({ config, app })),
+];
+
+describe.each(BINDING_WORKERS)('$config router bindings', ({ config, app }) => {
+  const byEnv = r2BucketsByEnv(readPackageFile(config));
+  const gateway = r2BucketsByEnv(readPackageFile(GATEWAY_CONFIG));
+
+  it('parses at least the top-level and staging environments', () => {
+    expect([...byEnv.keys()]).toEqual(expect.arrayContaining(['', 'staging']));
+  });
+
+  describe.each(ROUTER_R2_BINDINGS)('$prefix', ({ prefix, bindings }) => {
+    const mounted = mounts(app, prefix);
+
+    it.each([...byEnv.keys()])('binds its R2 buckets in env "%s" when mounted', (env) => {
+      const bound = byEnv.get(env) ?? new Map<string, string>();
+      const missing = mounted ? bindings.filter((name) => !bound.has(name)) : [];
+      expect(missing).toEqual([]);
+    });
+
+    it.each([...byEnv.keys()])('uses the gateway bucket names in env "%s"', (env) => {
+      const bound = byEnv.get(env) ?? new Map<string, string>();
+      const expected = gateway.get(env) ?? new Map<string, string>();
+      for (const name of bindings.filter((binding) => bound.has(binding))) {
+        expect(bound.get(name)).toBe(expected.get(name));
+      }
+    });
+  });
+});
+
+describe('router bindings check', () => {
+  it('applies to the reservations Worker, which serves /v1/members', () => {
+    expect(mounts(reservationsApp, '/v1/members')).toBe(true);
+  });
+
+  it('reports an environment that lacks a bucket', () => {
+    const byEnv = r2BucketsByEnv(
+      [
+        '[[r2_buckets]]',
+        'binding = "AVATARS_BUCKET"',
+        'bucket_name = "athlya-avatars-dev"',
+        '',
+        '[env.staging]',
+        'name = "worker-staging"',
+        '',
+        '[[env.staging.r2_buckets]]',
+        'binding = "EXPORTS_BUCKET"',
+        'bucket_name = "athlya-exports-staging"',
+        '',
+        '[[env.staging.durable_objects.bindings]]',
+        'name = "CLASS_CAPACITY_DO"',
+        '',
+        '[env.preview.vars]',
+        'ENVIRONMENT = "preview"',
+      ].join('\n'),
+    );
+
+    expect(Object.fromEntries([...byEnv].map(([env, buckets]) => [env, [...buckets]]))).toEqual({
+      '': [['AVATARS_BUCKET', 'athlya-avatars-dev']],
+      staging: [['EXPORTS_BUCKET', 'athlya-exports-staging']],
+      preview: [],
+    });
   });
 });
 
