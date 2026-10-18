@@ -9,20 +9,31 @@
  * All CONCURRENTLY index migrations must include IF NOT EXISTS so they
  * are safe to replay when the runner crashes after the DDL succeeds but
  * before the migration record is written.
+ *
+ * A no-transaction migration must also be sent one statement per query:
+ * a multi-statement simple query is an implicit transaction block, so
+ * CONCURRENTLY fails there too (issue #664).
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
+
+import {
+  planMigration,
+  requiresNoTransaction as requiresNoTx,
+  splitSqlStatements,
+} from '../scripts/migrate-lib.mjs';
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
 
-// Duplicate the detection predicate from migrate.mjs as a pure function
-// so we can test it without spinning up a database connection. Both copies
-// must stay in sync — if the predicate changes in migrate.mjs, update this
-// copy too and add a test case that exercises the change.
-const requiresNoTx = (body: string): boolean => /\bCONCURRENTLY\b/i.test(body);
+const forwardMigrations = readdirSync(MIGRATIONS_DIR)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort();
+
+const readMigration = (file: string): string => readFileSync(join(MIGRATIONS_DIR, file), 'utf-8');
 
 describe('migration runner: no-transaction detection', () => {
   it('detects CREATE INDEX CONCURRENTLY', () => {
@@ -92,12 +103,8 @@ describe('migration files: CONCURRENTLY safety', () => {
   const CREATE_CONCURRENTLY_RE = /^\s*CREATE\s+\S*\s*(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY/i;
   const IF_NOT_EXISTS_RE = /\bIF\s+NOT\s+EXISTS\b/i;
 
-  const forwardMigrations = readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
-    .sort();
-
   for (const file of forwardMigrations) {
-    const body = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8');
+    const body = readMigration(file);
     if (!requiresNoTx(body)) continue;
 
     it(`${file}: every CREATE INDEX CONCURRENTLY line has IF NOT EXISTS`, () => {
@@ -105,6 +112,114 @@ describe('migration files: CONCURRENTLY safety', () => {
         .split('\n')
         .filter((line) => CREATE_CONCURRENTLY_RE.test(line) && !IF_NOT_EXISTS_RE.test(line));
       expect(violations).toEqual([]);
+    });
+  }
+});
+
+describe('splitSqlStatements', () => {
+  it('splits on top-level semicolons and trims', () => {
+    expect(splitSqlStatements('SELECT 1;\n  SELECT 2 ;')).toEqual(['SELECT 1', 'SELECT 2']);
+  });
+
+  it('keeps a trailing statement without a semicolon', () => {
+    expect(splitSqlStatements('SELECT 1; SELECT 2')).toEqual(['SELECT 1', 'SELECT 2']);
+  });
+
+  it('drops line comments, block comments and drizzle breakpoints', () => {
+    const body = `
+      -- header; with a semicolon
+      /* block; /* nested; */ still comment */
+      DROP INDEX IF EXISTS "a";--> statement-breakpoint
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS "b" ON "t" ("c"); -- trailing; note
+    `;
+    const statements = splitSqlStatements(body);
+    expect(statements).toHaveLength(2);
+    expect(statements[0]).toBe('DROP INDEX IF EXISTS "a"');
+    expect(statements[1]).toMatch(/^CREATE INDEX CONCURRENTLY IF NOT EXISTS "b" ON "t" \("c"\)$/);
+  });
+
+  it('skips comment-only scripts', () => {
+    expect(splitSqlStatements('-- nothing to run;\n/* ; */\n;;')).toEqual([]);
+  });
+
+  it('ignores semicolons inside string literals and quoted identifiers', () => {
+    const body = `INSERT INTO "we;ird" VALUES ('a;b', 'it''s; fine', E'x\\';y'); SELECT 1;`;
+    expect(splitSqlStatements(body)).toEqual([
+      `INSERT INTO "we;ird" VALUES ('a;b', 'it''s; fine', E'x\\';y')`,
+      'SELECT 1',
+    ]);
+  });
+
+  it('keeps comment markers inside string literals', () => {
+    expect(splitSqlStatements(`SELECT '-- not a comment; really'`)).toEqual([
+      `SELECT '-- not a comment; really'`,
+    ]);
+  });
+
+  it('ignores semicolons inside dollar-quoted bodies', () => {
+    const body = `
+      DO $body$ BEGIN PERFORM 1; PERFORM $$x;y$$; END $body$;
+      CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1; $$;
+      SELECT $1::int;
+    `;
+    const statements = splitSqlStatements(body);
+    expect(statements).toHaveLength(3);
+    expect(statements[0]).toBe('DO $body$ BEGIN PERFORM 1; PERFORM $$x;y$$; END $body$');
+    expect(statements[1]).toBe('CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1; $$');
+    expect(statements[2]).toBe('SELECT $1::int');
+  });
+});
+
+describe('planMigration', () => {
+  it('runs ordinary migrations as one transactional query', () => {
+    const body = 'CREATE TABLE a (id int);\nCREATE INDEX ON a (id);';
+    expect(planMigration(body)).toEqual({ transactional: true, queries: [body] });
+  });
+
+  it('runs CONCURRENTLY migrations one statement per query, outside a transaction', () => {
+    const body = `DROP INDEX IF EXISTS "old";\nCREATE INDEX CONCURRENTLY IF NOT EXISTS "new" ON "t" ("c");`;
+    expect(planMigration(body)).toEqual({
+      transactional: false,
+      queries: [
+        'DROP INDEX IF EXISTS "old"',
+        'CREATE INDEX CONCURRENTLY IF NOT EXISTS "new" ON "t" ("c")',
+      ],
+    });
+  });
+
+  it('splits 0028 so CREATE UNIQUE INDEX CONCURRENTLY runs on its own', () => {
+    const plan = planMigration(readMigration('0028_reservations_class_user_partial_unique.sql'));
+    expect(plan.transactional).toBe(false);
+    expect(plan.queries).toHaveLength(2);
+    expect(plan.queries[0]).toMatch(/^DROP INDEX IF EXISTS "reservations_class_user_unique"$/);
+    expect(plan.queries[1]).toMatch(/^CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS/);
+  });
+});
+
+// PostgreSQL rejects CONCURRENTLY in a multi-statement simple query (it is an
+// implicit transaction block), so every no-transaction query must hold exactly
+// one statement. Each statement must also be replay-safe, because a crash
+// part-way through re-runs the whole file on the next deploy (issue #664).
+describe('migration files: no-transaction plan', () => {
+  const CREATE_OR_DROP_RE = /^(?:CREATE|DROP)\b/i;
+  const IF_EXISTS_RE = /\bIF\s+(?:NOT\s+)?EXISTS\b/i;
+
+  for (const file of forwardMigrations) {
+    const plan = planMigration(readMigration(file));
+    if (plan.transactional) continue;
+
+    it(`${file}: sends one statement per query`, () => {
+      expect(plan.queries.length).toBeGreaterThan(0);
+      for (const query of plan.queries) {
+        expect(splitSqlStatements(query)).toEqual([query]);
+      }
+    });
+
+    it(`${file}: every CREATE/DROP is guarded by IF [NOT] EXISTS`, () => {
+      const unguarded = plan.queries.filter(
+        (query) => CREATE_OR_DROP_RE.test(query) && !IF_EXISTS_RE.test(query),
+      );
+      expect(unguarded).toEqual([]);
     });
   }
 });

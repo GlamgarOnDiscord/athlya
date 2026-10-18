@@ -21,12 +21,18 @@ existing code:
 ALTER TABLE reservations ADD COLUMN cancelled_reason text;
 
 -- Good: new index, transparent to all Workers
-CREATE INDEX CONCURRENTLY reservations_user_id_created_at_idx
+CREATE INDEX CONCURRENTLY IF NOT EXISTS reservations_user_id_created_at_idx
   ON reservations (user_id, created_at DESC) WHERE deleted_at IS NULL;
 ```
 
 Deploy the migration. Deploy the new Worker (it can now read/write the new
 column). Let the canary complete.
+
+A migration file that contains `CONCURRENTLY` runs outside a transaction:
+`migrate.mjs` sends each statement as its own query. The statements are not
+atomic, and a crash part-way through replays the whole file on the next
+deploy. Write every `CREATE` as `IF NOT EXISTS` and every `DROP` as
+`IF EXISTS` (`tests/migrate-runner.test.ts` enforces both).
 
 ### Phase 2 — Contract (breaking, separate deploy)
 
