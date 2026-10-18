@@ -54,7 +54,9 @@ import {
   requestReset as svcRequestReset,
   confirmReset as svcConfirmReset,
   shouldAllowLogin,
+  createResetTokenDeriver,
   type AuthServiceDeps,
+  type DeliverResetDeps,
   type Jwks,
   type PasswordResetEmailTransport,
   type PasswordResetRepo,
@@ -78,8 +80,13 @@ import {
 } from './deps-cache.js';
 import { fetchWithRetry } from './fetch-retry.js';
 import { createRedisLoginAnomalyStore } from './login-anomaly-store-redis.js';
-import { createDrizzlePasswordResetRepo } from './password-reset-repo-drizzle.js';
+import {
+  createDrizzlePasswordResetRepo,
+  createPasswordResetRequestQueue,
+  createPasswordResetRequestTokenStore,
+} from './password-reset-repo-drizzle.js';
 import { queryRows, serviceFn } from './service-functions.js';
+import { createTenantIdempotencyDb } from './tenant-idempotency.js';
 
 import type { AuthDeps, AuthSession } from '../routes/auth.js';
 import type { AthlyaBindings } from '../types.js';
@@ -192,20 +199,6 @@ interface AuthServiceState {
    * always have the repo wired.
    */
   readonly passwordResetRepo: PasswordResetRepo | null;
-  /**
-   * Sprint-7 SP7.4. Email transport for the reset link. `null`
-   * until a Resend (or alternate) transport is wired via env
-   * binding. The current scaffold ships a console-log fallback
-   * so dev environments can exercise the full flow without
-   * actually sending email.
-   */
-  readonly emailTransport: PasswordResetEmailTransport | null;
-  /**
-   * Base URL of the web app — used by `requestReset` to
-   * construct the email link. Falls back to a placeholder when
-   * the binding is absent.
-   */
-  readonly resetLinkBaseUrl: string;
 }
 
 /**
@@ -239,15 +232,11 @@ async function getAuthState(env: AthlyaBindings): Promise<AuthServiceState> {
   // `auth.suspicious.login.anomaly`.
   const loginAnomalyStore = createRedisLoginAnomalyStore(redis);
 
-  // Sprint-7 SP7.4 (Vague 35) — wire the password-reset repo +
-  // email transport. The repo is always available when Drizzle is
-  // (same envelope as the user repo). The email transport is
-  // gated on a `RESEND_API_KEY` binding; until that ships, we
-  // fall back to a console-log transport that surfaces the link
-  // in dev/staging logs so the flow is exercisable end-to-end.
+  // Sprint-7 SP7.4 (Vague 35) — the password-reset repo backs the
+  // confirm flow. It is always available when Drizzle is (same
+  // envelope as the user repo). The reset email is sent by the
+  // outbox consumer (`buildPasswordResetDeliveryDeps`, issue #645).
   const passwordResetRepo = createDrizzlePasswordResetRepo(db);
-  const emailTransport = buildPasswordResetEmailTransport(env);
-  const resetLinkBaseUrl = env.WEB_APP_URL || 'https://app.athlya.test';
 
   const serviceDeps: AuthServiceDeps = {
     userRepo,
@@ -270,8 +259,6 @@ async function getAuthState(env: AthlyaBindings): Promise<AuthServiceState> {
     sessionStore,
     serviceDeps,
     passwordResetRepo,
-    emailTransport,
-    resetLinkBaseUrl,
   };
 }
 
@@ -468,29 +455,12 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
       await svcDeleteMe(userId, state.serviceDeps);
     },
     async requestPasswordReset(email) {
-      // Sprint-7 SP7.4 (Vague 35, finalises S2-006). Wire up
-      // the password-reset request flow. The PasswordResetRepo
-      // adapter and the email transport are produced lazily
-      // alongside the rest of the auth state — when either is
-      // unavailable (no Drizzle handle, missing email transport
-      // binding) we fall back to a no-op log so a misconfigured
-      // dev env doesn't crash the route. Production deploys
-      // configure both via the bindings doc.
-      const state = await getAuthState(env);
-      if (state.passwordResetRepo === null || state.emailTransport === null) {
-        console.warn(
-          'auth.requestPasswordReset: degraded mode — adapters not wired, no email dispatched',
-          {
-            code: 'feature_unavailable',
-          },
-        );
-        return;
-      }
+      // Issue #645 — record the request in the outbox. The token and
+      // the email are produced by the notifications consumer
+      // (`buildPasswordResetDeliveryDeps`), with the queue's retries
+      // and DLQ, so no account-dependent external call runs here.
       await svcRequestReset(email, {
-        userRepo: state.serviceDeps.userRepo,
-        passwordResetRepo: state.passwordResetRepo,
-        emailTransport: state.emailTransport,
-        resetLinkBaseUrl: state.resetLinkBaseUrl,
+        resetRequests: createPasswordResetRequestQueue(getOrCreateDbHttp(env.DB_URL)),
       });
     },
     async confirmPasswordReset(input) {
@@ -529,10 +499,75 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
       }
       return count <= 3;
     },
-    idempotency: {
-      db: getOrCreateDbHttp(env.DB_URL),
+    idempotencyFor(claims) {
+      // Issue #645 — `idempotency_keys` only shows and accepts the
+      // caller's own rows (`user_id = app_user_id()`), so every
+      // statement runs with the caller's claims.
+      return {
+        db: createTenantIdempotencyDb(getOrCreateDbHttp(env.DB_URL), {
+          userId: claims.userId,
+          studioId: claims.studioId,
+          role: claims.role,
+        }),
+      };
     },
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Password-reset delivery — outbox consumer (issue #645)             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Dependencies of `deliverResetEmail` for the notifications queue
+ * consumer: the user lookup and token issuance go through the
+ * SECURITY DEFINER service functions (no tenant claims in a consumer),
+ * and the email through the Resend transport below.
+ */
+export function buildPasswordResetDeliveryDeps(env: AthlyaBindings): DeliverResetDeps {
+  const db = getOrCreateDbHttp(env.DB_URL);
+  const resetLinkBaseUrl = resolveResetLinkBaseUrl(env);
+  const deriveToken = resolveResetTokenDeriver(env);
+  return {
+    userRepo: createDrizzleUserRepo(db),
+    tokens: createPasswordResetRequestTokenStore(db),
+    emailTransport: buildPasswordResetEmailTransport(env),
+    resetLinkBaseUrl,
+    ...(deriveToken !== undefined ? { deriveToken } : {}),
+  };
+}
+
+/**
+ * Per-request token deriver keyed by `PASSWORD_RESET_TOKEN_KEY`. Outside
+ * dev a missing key throws: without it a retry would mint a new token and
+ * could invalidate a link already delivered. Dev falls back to a random
+ * token per attempt.
+ */
+export function resolveResetTokenDeriver(
+  env: AthlyaBindings,
+): DeliverResetDeps['deriveToken'] | undefined {
+  const key = env.PASSWORD_RESET_TOKEN_KEY;
+  if (key !== undefined && key.length > 0) return createResetTokenDeriver(key);
+  if (env.ENVIRONMENT === 'dev') return undefined;
+  throw new Error(
+    `[auth-deps] PASSWORD_RESET_TOKEN_KEY is not configured in ${env.ENVIRONMENT}; ` +
+      'password reset emails cannot be delivered',
+  );
+}
+
+/**
+ * Base URL of the reset link. Outside dev a missing `WEB_APP_URL` throws
+ * rather than emailing a link to a placeholder host: the message is
+ * retried, then dead-lettered, and the error names the binding.
+ */
+export function resolveResetLinkBaseUrl(env: AthlyaBindings): string {
+  const configured = env.WEB_APP_URL;
+  if (configured !== undefined && configured.length > 0) return configured;
+  if (env.ENVIRONMENT === 'dev') return 'https://app.athlya.test';
+  throw new Error(
+    `[auth-deps] WEB_APP_URL is not configured in ${env.ENVIRONMENT}; ` +
+      'password reset links cannot be built',
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -551,14 +586,12 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
  *      The "from" address defaults to `noreply@athlya.app` and
  *      can be overridden via `RESEND_FROM`.
  *
- *   2. **Console-log fallback** — when `RESEND_API_KEY` is absent
- *      (e.g. dev without a Resend account, staging during the
- *      first deploy), surface the reset link via a structured
- *      log line so the flow stays exercisable end-to-end. The
- *      log line carries the recipient + link + expiry — fine in
- *      dev, MUST NOT be used in prod (operators would see reset
- *      links in Tail Workers). Production deploys are expected
- *      to set `RESEND_API_KEY` before the route is exposed.
+ *   2. **Dev no-op** — when `RESEND_API_KEY` is absent in `dev`,
+ *      the email is dropped with a structured warning that carries
+ *      the expiry only: never the link (a bearer credential) nor
+ *      the recipient. Use a Resend test key to receive the link
+ *      locally. Every other environment rejects, so the queue
+ *      retries and dead-letters the delivery instead of losing it.
  *
  * The function returns `null` only when an unrecoverable config
  * error is detected — currently the function ALWAYS returns a
@@ -586,11 +619,13 @@ export function buildPasswordResetEmailTransport(env: AthlyaBindings): PasswordR
     }
     return {
       sendResetEmail(input) {
+        // The link is a bearer credential and the recipient is PII:
+        // neither is logged, even in dev (a deploy without `--env`
+        // runs with ENVIRONMENT = "dev", issue #645).
         console.warn(
-          '[auth-deps] password-reset transport: RESEND_API_KEY missing, logging link to console (dev fallback)',
+          '[auth-deps] password-reset transport: RESEND_API_KEY missing, email not sent (dev fallback)',
           {
-            recipient: input.to,
-            link: input.link,
+            code: 'reset_email_not_sent',
             expiresAt: input.expiresAt.toISOString(),
           },
         );
@@ -608,11 +643,20 @@ export function buildPasswordResetEmailTransport(env: AthlyaBindings): PasswordR
       // timeout, full jitter. The forgot-password service
       // already swallows transport errors at boundary, so
       // throwing here is a true "Resend-down for >15s" signal.
+      //
+      // Issue #645 — the body depends on the request only (the link is
+      // derived from the request id and the copy carries no timestamp),
+      // so a retried send is byte-identical and Resend's
+      // `Idempotency-Key` returns the first result instead of emailing
+      // the link twice.
       const response = await fetchWithRetry('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           authorization: `Bearer ${apiKey}`,
           'content-type': 'application/json',
+          ...(input.idempotencyKey !== undefined
+            ? { 'idempotency-key': input.idempotencyKey }
+            : {}),
         },
         body: JSON.stringify({
           from: fromAddress,
@@ -622,7 +666,7 @@ export function buildPasswordResetEmailTransport(env: AthlyaBindings): PasswordR
             'Bonjour,',
             '',
             'Vous avez demandé la réinitialisation de votre mot de passe.',
-            `Cliquez sur le lien suivant (valide jusqu'au ${input.expiresAt.toISOString()}) :`,
+            'Cliquez sur le lien suivant (valide pendant une heure) :',
             '',
             input.link,
             '',

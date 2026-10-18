@@ -14,6 +14,10 @@ describe('resolveEventQueueLane', () => {
     expect(resolveEventQueueLane('billing.subscription.failed')).toBe('notifications');
   });
 
+  it('routes password-reset requests to notifications (issue #645)', () => {
+    expect(resolveEventQueueLane('auth.password_reset.requested')).toBe('notifications');
+  });
+
   it('routes RGPD cascade and export job requests to rgpd', () => {
     expect(resolveEventQueueLane('auth.user.deleted')).toBe('rgpd');
     expect(resolveEventQueueLane('members.export.requested')).toBe('rgpd');
@@ -33,6 +37,7 @@ describe('resolveEventQueueLane', () => {
         !type.startsWith('reservation.') &&
         type !== 'billing.subscription.failed' &&
         type !== 'auth.user.deleted' &&
+        type !== 'auth.password_reset.requested' &&
         !type.startsWith('members.export.'),
     );
     for (const type of legacy) {

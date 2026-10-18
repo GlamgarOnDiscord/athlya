@@ -7,6 +7,7 @@ describe('known-event-types', () => {
     expect(ALL_KNOWN_EVENT_TYPES).toContain('reservation.created');
     expect(ALL_KNOWN_EVENT_TYPES).toContain('auth.user.deleted');
     expect(ALL_KNOWN_EVENT_TYPES).toContain('members.export.requested');
+    expect(ALL_KNOWN_EVENT_TYPES).toContain('auth.password_reset.requested');
   });
 
   it('rejects unknown dotted types', () => {

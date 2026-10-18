@@ -306,6 +306,7 @@ tests ?
 | `members.export.completed`                     | `packages/members/src/__tests__/export.test.ts`                               | couvert par le path générique (drain est event-type-blind) | `dedup.test.ts` (générique)                             |
 | `reservation.created` (queue dispatch)         | `packages/api/src/__tests__/queue-cascade.test.ts` (route vers notifications) | n/a (dispatcher consumer side)                             | `packages/notifications/src/__tests__/consumer.test.ts` |
 | `billing.subscription.failed` (queue dispatch) | couvert par le même routeur consumer (`worker.ts`)                            | n/a (dispatcher consumer side)                             | `packages/notifications/src/__tests__/consumer.test.ts` |
+| `auth.password_reset.requested`                | `adapters/auth-runtime.pglite.test.ts` (athlya_app, migration 0043)           | not covered (no drain → queue test for this type)          | `password-reset-delivery.test.ts`                       |
 
 **Décision B6.4** : pas de test integration outbox→drain→consumer
 end-to-end ajouté. Justifications :
@@ -331,11 +332,11 @@ Si une régression survient sur une combinaison spécifique
 
 **État v0.1.1** : trois lanes provisionnées dans `wrangler.toml` :
 
-| Queue                         | Préfixe `event.type`                            | Consumer (`worker.ts`)     |
-| ----------------------------- | ----------------------------------------------- | -------------------------- |
-| `athlya-events-notifications` | `reservation.*`, `billing.subscription.failed`  | `handleNotificationsBatch` |
-| `athlya-events-rgpd`          | `auth.user.deleted`, `members.export.requested` | `handleRgpdBatch`          |
-| `athlya-events` (legacy)      | types non migrés                                | `handleEventsBatch`        |
+| Queue                         | Préfixe `event.type`                                                            | Consumer (`worker.ts`)     |
+| ----------------------------- | ------------------------------------------------------------------------------- | -------------------------- |
+| `athlya-events-notifications` | `reservation.*`, `billing.subscription.failed`, `auth.password_reset.requested` | `handleNotificationsBatch` |
+| `athlya-events-rgpd`          | `auth.user.deleted`, `members.export.requested`                                 | `handleRgpdBatch`          |
+| `athlya-events` (legacy)      | types non migrés                                                                | `handleEventsBatch`        |
 
 **Routage** : `src/events/route-queue.ts` — publish, outbox drain et DLQ replay utilisent la même table.
 
@@ -354,6 +355,58 @@ Les consumers (`handleEventsBatch`, `handleRgpdBatch`, `handleNotificationsBatch
 Alerte Axiom **A15** : voir `docs/operations/axiom-alerts.md`.
 
 **Billing analytics** (`athlya-events-billing`) : hors scope — webhooks Stripe restent HTTP.
+
+### Password-reset emails (issue #645)
+
+`POST /v1/auth/password-reset/request` answers 204 before any account
+lookup, then records the request with `auth_request_password_reset`
+(migration 0043). A live account gets one `auth.password_reset.requested`
+outbox row; an unknown or soft-deleted address gets nothing. The payload
+is `{ userId }` only: no email address, no token.
+
+The drain publishes it on `athlya-events-notifications`. The consumer
+(`events/password-reset-consumer.ts`) works like this:
+
+1. It marks the event in flight in Redis
+   (`auth:password-reset:delivery:<eventId>`, 120 s). A concurrent
+   delivery of the same event is retried after 120 s rather than acked.
+2. It derives the token from the event id with `PASSWORD_RESET_TOKEN_KEY`
+   (HMAC-SHA256) and stores its hash through
+   `auth_issue_password_reset_for_request`. Earlier requests' tokens are
+   invalidated; a retry of the same request finds its own token again.
+3. It sends the email through Resend with
+   `Idempotency-Key: password-reset/<eventId>`.
+
+On success the event is marked `completed` for 24 h. On failure the mark is
+cleared and the message retried; every retry sends the same link, so an
+ambiguous failure cannot invalidate a link that was already delivered. If an
+isolate dies mid-send, the in-flight mark expires and the next retry takes
+over. After `max_retries = 5` the message lands on
+`athlya-events-notifications-dlq`.
+
+Support and incidents:
+
+- **Nothing in the outbox, queue or DLQ is a credential.** Replaying a DLQ
+  message re-derives the same link and re-arms its TTL. That only happens if
+  it was not used and no later request replaced it; otherwise the outcome
+  is `skipped_superseded`. An account deleted in the meantime is skipped
+  (`outcome: skipped_inactive`).
+- **Gateway settings, both required outside dev:** `PASSWORD_RESET_TOKEN_KEY`
+  (at least 32 chars) and `WEB_APP_URL` (the base of the reset link). If
+  either is missing, every delivery fails and is dead-lettered;
+  `scripts/verify-secrets.mjs` checks both before a deploy. Rotating the key changes
+  the link of a request still being retried; the retry then replaces the
+  previous token, so rotate outside an incident.
+- **Do not confirm to a requester whether an email was sent or whether the
+  account exists.** Ask them to request a new reset. The per-address limit
+  is 3 per 24 h.
+- **Logs** (`auth.password-reset.delivery`) carry the event id and the
+  outcome only. Correlate a support case through the account id in the
+  outbox row, never through the address.
+- **Deploy order:** the gateway (consumer) must run the #645 code before
+  the auth Worker. Otherwise an older consumer quarantines the event on
+  `athlya-events-dlq` as an unknown type. Replay it once the gateway is
+  updated.
 
 ## 7. Liens
 

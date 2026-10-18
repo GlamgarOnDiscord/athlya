@@ -89,6 +89,11 @@ describe('verify-secrets lists', () => {
     );
   });
 
+  it('require the password-reset token key on the gateway (reset email consumer)', () => {
+    assert.ok(REQUIRED.main.includes('PASSWORD_RESET_TOKEN_KEY'));
+    assert.ok(REQUIRED.main.includes('WEB_APP_URL'));
+  });
+
   it('require Turnstile and Resend on the auth Worker', () => {
     assert.ok(REQUIRED.auth.includes('TURNSTILE_SECRET'));
     assert.ok(REQUIRED.auth.includes('RESEND_API_KEY'));
