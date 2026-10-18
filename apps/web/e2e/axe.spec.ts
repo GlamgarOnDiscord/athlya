@@ -3,15 +3,15 @@
  *
  * Runs axe over every member-facing page called out in Task 10.7:
  *  - Public: `/`, `/login`, `/register`
- *  - Authenticated: `/classes`, `/me`, `/me/export`, `/me/delete`
- *  - `/me/progression` in its own case: the boot refresh is stubbed so
- *    the charts render from the stubbed payload before axe runs
- *  - `/me/coach` in its own case: the coach status and answer are
- *    stubbed so axe runs over the form and a rendered answer
+ *  - Authenticated: `/classes`, `/me`, `/me/export`, `/me/delete`,
+ *    `/me/progression` (charts rendered) and `/me/coach` (answer
+ *    rendered)
  *
- * For authenticated pages we use the `loginWithStub` fixture so the
- * token store is populated without a real API round-trip — we care
- * about the rendered DOM, not the auth backend.
+ * Authenticated pages are opened through `openAuthenticatedPage`, which
+ * stubs the boot refresh and the member API reads, then waits for
+ * markup that only exists inside the page's `<RequireAuth>` subtree and
+ * checks the URL did not move. Without that guard a missing stub sends
+ * the page to `/login` and axe silently scans the login form instead.
  *
  * The tag set `wcag2a + wcag2aa + wcag22aa` matches the WCAG 2.2 AA
  * compliance target expressed in Req 27.1. We assert `violations`
@@ -21,63 +21,66 @@
  * @see Requirements 27.1, 27.2.
  */
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
-import { loginWithStub } from './fixtures/auth';
+import { openAuthenticatedPage } from './fixtures/auth';
 
 const publicPaths = ['/', '/login', '/register'] as const;
-const authPaths = ['/classes', '/me', '/me/export', '/me/delete'] as const;
 
-for (const path of publicPaths) {
-  test(`axe: ${path} (public)`, async ({ page }) => {
-    await page.goto(path);
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
-      .analyze();
-    expect(results.violations).toEqual([]);
-  });
-}
+const authPages: ReadonlyArray<{
+  readonly path: string;
+  readonly rendered: (page: Page) => Locator;
+}> = [
+  {
+    path: '/classes',
+    rendered: (page) => page.getByRole('button', { name: /^(réserver|book) — morning yoga$/i }),
+  },
+  {
+    path: '/me',
+    rendered: (page) =>
+      page.getByRole('navigation', { name: /actions du compte|account actions/i }),
+  },
+  {
+    path: '/me/export',
+    rendered: (page) => page.getByRole('region', { name: /exporter mes données|export my data/i }),
+  },
+  {
+    path: '/me/delete',
+    rendered: (page) =>
+      page.getByRole('region', { name: /supprimer mon compte|delete my account/i }),
+  },
+];
 
-for (const path of authPaths) {
-  test(`axe: ${path} (authenticated)`, async ({ page }) => {
-    await loginWithStub(page);
-    await page.goto(path);
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
-      .analyze();
-    expect(results.violations).toEqual([]);
-  });
-}
-
-test('axe: /me/progression (authenticated, charts rendered)', async ({ page }) => {
-  await loginWithStub(page);
-  // `page.goto` reloads the app and drops the in-memory token; the boot
-  // silent refresh must succeed for RequireAuth to render the charts.
-  await page.route('**/api/auth/refresh', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ accessToken: 'fake-access-token', accessTokenExpiresIn: 900 }),
-    });
-  });
-  await page.goto('/me/progression');
-  // Analyse the rendered charts (marks, data tables), not the loading state.
-  await expect(page.getByRole('figure')).toHaveCount(3);
+async function expectNoViolations(page: Page): Promise<void> {
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
     .analyze();
   expect(results.violations).toEqual([]);
+}
+
+for (const path of publicPaths) {
+  test(`axe: ${path} (public)`, async ({ page }) => {
+    await page.goto(path);
+    await expectNoViolations(page);
+  });
+}
+
+for (const { path, rendered } of authPages) {
+  test(`axe: ${path} (authenticated)`, async ({ page }) => {
+    await openAuthenticatedPage(page, path, rendered(page));
+    await expectNoViolations(page);
+  });
+}
+
+test('axe: /me/progression (authenticated, charts rendered)', async ({ page }) => {
+  const figures = page.getByRole('figure');
+  await openAuthenticatedPage(page, '/me/progression', figures.first());
+  // Analyse the rendered charts (marks, data tables), not the loading state.
+  await expect(figures).toHaveCount(3);
+  await expectNoViolations(page);
 });
 
 test('axe: /me/coach (authenticated, answer rendered)', async ({ page }) => {
-  await loginWithStub(page);
-  await page.route('**/api/auth/refresh', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ accessToken: 'fake-access-token', accessTokenExpiresIn: 900 }),
-    });
-  });
   await page.route('**/v1/coach/ask', async (route) => {
     await route.fulfill({
       status: 200,
@@ -95,15 +98,13 @@ test('axe: /me/coach (authenticated, answer rendered)', async ({ page }) => {
       }),
     });
   });
-  await page.goto('/me/coach');
+  const askButton = page.getByRole('button', { name: /interroger le coach|ask the coach/i });
+  await openAuthenticatedPage(page, '/me/coach', askButton);
   await page.getByRole('textbox').fill('How do I add weight to my squat?');
   // Submit with the keyboard: the fixed cookie banner covers the button
   // for pointer clicks, and keeping it on screen keeps it in the scan.
-  await page.getByRole('button', { name: /interroger le coach|ask the coach/i }).focus();
+  await askButton.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('article')).toBeVisible();
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
-    .analyze();
-  expect(results.violations).toEqual([]);
+  await expectNoViolations(page);
 });
