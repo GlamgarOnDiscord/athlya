@@ -5,7 +5,7 @@
  * `apps/web/src/lib/auth/token-store.ts`) and gates authenticated
  * pages behind `<RequireAuth>`. For an accessibility sweep we do
  * not care about the correctness of the login flow itself — we just
- * need `/classes`, `/me`, `/me/export`, `/me/delete` to render their
+ * need `/classes`, `/me`, `/me/export`, `/me/delete`, `/me/progression` to render their
  * authenticated state so axe can analyse the DOM.
  *
  * Strategy:
@@ -67,6 +67,41 @@ export async function loginWithStub(page: Page): Promise<void> {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ items: [] }),
+    });
+  });
+
+  // Stub the progression read so `/me/progression` renders its
+  // charts (focusable points, data tables) when axe runs.
+  await page.route('**/v1/me/progression*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        windowDays: 90,
+        from: '2026-07-18T00:00:00.000Z',
+        to: '2026-10-16T00:00:00.000Z',
+        totals: { sessions: 2, volumeKg: 1860 },
+        exercises: [
+          {
+            key: 'back squat',
+            name: 'Back squat',
+            sessionCount: 2,
+            totalVolumeKg: 1860,
+            bestEstimatedOneRepMaxKg: 130,
+            points: [
+              { date: '2026-10-01', volumeKg: 960, estimatedOneRepMaxKg: 130 },
+              { date: '2026-10-08', volumeKg: 900, estimatedOneRepMaxKg: 125 },
+            ],
+          },
+        ],
+        weeklyFrequency: [
+          { weekStart: '2026-09-28', sessions: 1 },
+          { weekStart: '2026-10-05', sessions: 1 },
+          { weekStart: '2026-10-12', sessions: 0 },
+        ],
+        truncated: false,
+        skippedSessions: 0,
+      }),
     });
   });
 

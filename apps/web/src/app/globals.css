@@ -132,6 +132,13 @@ body {
   --sidebar-accent-foreground: var(--color-light-foreground);
   --sidebar-border: var(--color-light-border);
   --sidebar-ring: var(--color-light-ring);
+  /* Charts (progression graphs): brand ink marks with volt accents.
+     Volt never carries data on a light surface (contrast), see
+     docs/brand/README.md. chart-1 = series, chart-2 = marker fill,
+     chart-3 = hover/focus band. */
+  --chart-1: #0a0a0a;
+  --chart-2: #d7ff3a;
+  --chart-3: #d7ff3a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -162,6 +169,9 @@ body {
     --sidebar-accent-foreground: var(--color-dark-foreground);
     --sidebar-border: var(--color-dark-border);
     --sidebar-ring: var(--color-dark-ring);
+    --chart-1: #d7ff3a;
+    --chart-2: var(--color-dark-background);
+    --chart-3: var(--color-dark-muted);
   }
 }
 

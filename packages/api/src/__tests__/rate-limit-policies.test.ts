@@ -26,7 +26,13 @@ describe('rate-limit-policies (#133)', () => {
   });
 
   it('expensive read rows are fail-closed', () => {
-    for (const id of ['classes-search', 'members-list', 'audit-list', 'admin-stats']) {
+    for (const id of [
+      'classes-search',
+      'members-list',
+      'audit-list',
+      'progression-read',
+      'admin-stats',
+    ]) {
       expect(RATE_LIMIT_COVERAGE.find((r) => r.id === id)?.failPolicy).toBe('fail-closed');
     }
   });

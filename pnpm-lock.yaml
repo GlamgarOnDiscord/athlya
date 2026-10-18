@@ -571,6 +571,9 @@ importers:
       eslint:
         specifier: ^9.39.5
         version: 9.39.5(jiti@2.7.0)(supports-color@10.2.2)
+      fast-check:
+        specifier: ^4.10.2
+        version: 4.10.2
       postgres:
         specifier: ^3.4.9
         version: 3.4.9

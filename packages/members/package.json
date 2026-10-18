@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Members domain use cases for Athlya — profile read/update, consent history, RGPD export + deletion cascade, workout session logging",
+  "description": "Members domain use cases for Athlya — profile read/update, consent history, RGPD export + deletion cascade, workout session logging and progression",
   "license": "AGPL-3.0-only",
   "engines": {
     "node": ">=24"
@@ -25,6 +25,10 @@
     "./sessions": {
       "types": "./src/sessions.ts",
       "default": "./src/sessions.ts"
+    },
+    "./progression": {
+      "types": "./src/progression.ts",
+      "default": "./src/progression.ts"
     },
     "./export": {
       "types": "./src/export.ts",
@@ -56,6 +60,7 @@
     "@testcontainers/postgresql": "^12.2.0",
     "@types/node": "^24.19.2",
     "eslint": "^9.39.5",
+    "fast-check": "^4.10.2",
     "postgres": "^3.4.9",
     "rimraf": "^6.1.3",
     "typescript": "^6.0.3",

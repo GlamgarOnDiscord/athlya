@@ -149,6 +149,7 @@ export function lazyMembersDeps(resolve: () => MembersDeps): MembersDeps {
     getExportJob: forward('getExportJob'),
     openExportDownload: forward('openExportDownload'),
     listMembersByStudio: forward('listMembersByStudio'),
+    getProgression: forward('getProgression'),
   };
 }
 
@@ -336,6 +337,7 @@ export function defaultMembersDeps(env: AthlyaBindings, cf?: RequestCf): Members
         getExportJob: () => notImplemented('members.getExportJob'),
         openExportDownload: () => notImplemented('members.openExportDownload'),
         listMembersByStudio: () => notImplemented('members.listMembersByStudio'),
+        getProgression: () => notImplemented('members.getProgression'),
       };
 }
 
