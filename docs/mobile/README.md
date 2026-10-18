@@ -126,8 +126,11 @@ signed-in area whatever happens locally.
   website"). Works against a local `wrangler dev` without a Turnstile secret. Tracked in #649.
 - `/v1/checkins` is not routed in production yet and has no token-issuance route (#648), so the
   QR check-in screen (11.9) is not built. `POST /v1/sessions` is routed on the reservations Worker
-  since #652 (once migration 0044 and the Worker deploy are applied), so workouts logged online or
-  drained from the queue are stored.
+  since #652, but only once the operator has applied migration 0044 and then, from `packages/api`,
+  run `wrangler deploy --config wrangler.reservations.toml --env staging` followed by
+  `wrangler deploy --config wrangler.reservations.toml --env production`. Until those named-env
+  deploys run, the route stays unrouted in that environment: workouts logged online fail and
+  queued ones end up in "rejected changes".
 
 ## Drain semantics (Algorithm 4)
 
