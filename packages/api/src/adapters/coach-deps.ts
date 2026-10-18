@@ -71,7 +71,36 @@ function flagProvider(json: string | undefined): FeatureFlagProvider {
   return provider;
 }
 
-function coachModel(env: AthlyaBindings): CoachModel {
+/**
+ * Validate `MISTRAL_BASE_URL`. The endpoint receives the API key and the
+ * member's training context, so only an `https:` URL on a `mistral.ai`
+ * host without credentials is accepted; anything else makes the coach
+ * `not_configured` (503) rather than sending data elsewhere. Unset or
+ * empty → `undefined` (provider default endpoint).
+ */
+export function resolveMistralBaseUrl(raw: string | undefined): string | undefined {
+  if (raw === undefined || raw.trim().length === 0) return undefined;
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    throw new CoachError('not_configured', 'MISTRAL_BASE_URL is not a valid URL');
+  }
+  const host = url.hostname.toLowerCase();
+  const mistralHost = host === 'mistral.ai' || host.endsWith('.mistral.ai');
+  if (url.protocol !== 'https:' || !mistralHost || url.username !== '' || url.password !== '') {
+    throw new CoachError('not_configured', 'MISTRAL_BASE_URL must be an https URL on mistral.ai');
+  }
+  return url.toString().replace(/\/+$/, '');
+}
+
+/** Test seam: drop the cached provider models. */
+export function __resetCoachModelCacheForTests(): void {
+  models.clear();
+}
+
+/** Mistral model for `env`, cached per key, model id and endpoint. */
+export function resolveCoachModel(env: AthlyaBindings): CoachModel {
   const apiKey = env.MISTRAL_API_KEY;
   if (apiKey === undefined || apiKey.length === 0) {
     throw new CoachError('not_configured', 'MISTRAL_API_KEY is not set');
@@ -80,10 +109,7 @@ function coachModel(env: AthlyaBindings): CoachModel {
     env.AI_COACH_MODEL !== undefined && env.AI_COACH_MODEL.length > 0
       ? env.AI_COACH_MODEL
       : DEFAULT_COACH_MODEL;
-  const baseURL =
-    env.MISTRAL_BASE_URL !== undefined && env.MISTRAL_BASE_URL.length > 0
-      ? env.MISTRAL_BASE_URL
-      : undefined;
+  const baseURL = resolveMistralBaseUrl(env.MISTRAL_BASE_URL);
   const cacheKey = `${apiKey}::${modelId}::${baseURL ?? ''}`;
   let model = models.get(cacheKey);
   if (model === undefined) {
@@ -167,7 +193,7 @@ export function buildCoachDeps(env: AthlyaBindings, cf?: RequestCf): CoachDeps {
     },
 
     async ask(claims, request) {
-      const model = coachModel(env);
+      const model = resolveCoachModel(env);
       const sessions = createDrizzleProgressionRepoHttp(
         getOrCreateDbHttpForRegion(env, cf?.continent),
         claims,

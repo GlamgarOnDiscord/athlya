@@ -110,6 +110,14 @@ export function buildStaticFeatureFlagProvider(
       const parsed: unknown = JSON.parse(catalogueJson);
       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
         catalogue = parsed as Record<string, unknown>;
+        const invalid = Object.keys(catalogue).filter(
+          (flag) => asFlagDefinition(catalogue[flag]) === undefined,
+        );
+        if (invalid.length > 0) {
+          console.warn(
+            `feature-flags: invalid FEATURE_FLAGS_JSON entr${invalid.length === 1 ? 'y' : 'ies'} treated as OFF: ${invalid.join(', ')}`,
+          );
+        }
       } else {
         console.warn('feature-flags: FEATURE_FLAGS_JSON is not an object, defaulting to {}');
       }

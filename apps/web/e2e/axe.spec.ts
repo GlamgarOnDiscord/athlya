@@ -97,7 +97,10 @@ test('axe: /me/coach (authenticated, answer rendered)', async ({ page }) => {
   });
   await page.goto('/me/coach');
   await page.getByRole('textbox').fill('How do I add weight to my squat?');
-  await page.getByRole('button', { name: /interroger le coach|ask the coach/i }).click();
+  // Submit with the keyboard: the fixed cookie banner covers the button
+  // for pointer clicks, and keeping it on screen keeps it in the scan.
+  await page.getByRole('button', { name: /interroger le coach|ask the coach/i }).focus();
+  await page.keyboard.press('Enter');
   await expect(page.getByRole('article')).toBeVisible();
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])

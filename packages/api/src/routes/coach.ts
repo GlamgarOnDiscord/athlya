@@ -125,6 +125,13 @@ const COACH_PROBLEMS: Record<CoachErrorCode, CoachProblem> = {
   },
 };
 
+const RATE_LIMITED: CoachProblem = {
+  status: 429,
+  title: 'Too Many Requests',
+  code: 'coach_rate_limited',
+  detail: 'Too many AI coach requests in a short time',
+};
+
 const DISABLED: CoachProblem = {
   status: 404,
   title: 'Not Found',
@@ -206,7 +213,13 @@ function coachBurstLimit(): MiddlewareHandler<HonoEnv> {
       ) => Promise<Response | undefined>
     )(c, next);
     if (result instanceof Response) {
-      return applySecurityHeaders(result, SECURITY_HEADERS);
+      if (result.status !== 429) return applySecurityHeaders(result, SECURITY_HEADERS);
+      // Give the generic limiter deny a coach code clients can branch on.
+      const retryAfter = Number.parseInt(result.headers.get('retry-after') ?? '', 10);
+      return applySecurityHeaders(
+        problem(c, RATE_LIMITED, Number.isFinite(retryAfter) ? retryAfter : 60),
+        SECURITY_HEADERS,
+      );
     }
     return;
   };

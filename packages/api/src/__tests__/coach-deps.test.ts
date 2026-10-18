@@ -4,24 +4,38 @@
  */
 
 import { CoachError } from '@athlya/ai-coach/errors';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  __resetCoachModelCacheForTests,
   AI_COACH_FLAG,
   buildCoachDeps,
   COACH_QUOTA_KEY_PREFIX,
   createRedisCoachQuotaStore,
   parseCoachDailyLimit,
+  resolveCoachModel,
+  resolveMistralBaseUrl,
 } from '../adapters/coach-deps.js';
 import { redisCache, resetAllDepsCachesForTests } from '../adapters/deps-cache.js';
 import { defaultCoachDeps } from '../domain-deps.js';
-import { __resetFeatureFlagCache } from '../feature-flags.js';
+import { __resetFeatureFlagCache, buildStaticFeatureFlagProvider } from '../feature-flags.js';
 
 import { buildMockEnv } from './helpers/test-app.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
 import type { AthlyaBindings } from '../types.js';
 import type { Redis } from '@upstash/redis';
+
+const mistralHoisted = vi.hoisted(() => ({
+  calls: [] as Array<{ apiKey?: string; baseURL?: string }>,
+}));
+
+vi.mock('@ai-sdk/mistral', () => ({
+  createMistral: (settings: { apiKey?: string; baseURL?: string }) => {
+    mistralHoisted.calls.push(settings);
+    return (modelId: string) => ({ modelId, settings });
+  },
+}));
 
 const CLAIMS: AuthClaims = {
   userId: '018f3c11-4e2d-7b53-9a0c-3f76a1d1c8ab',
@@ -77,6 +91,8 @@ function envWith(overrides: Partial<AthlyaBindings> = {}): {
 beforeEach(() => {
   resetAllDepsCachesForTests();
   __resetFeatureFlagCache();
+  __resetCoachModelCacheForTests();
+  mistralHoisted.calls.length = 0;
 });
 
 afterEach(() => {
@@ -168,6 +184,78 @@ describe('buildCoachDeps', () => {
     expect(error).toBeInstanceOf(CoachError);
     expect((error as CoachError).code).toBe('not_configured');
     expect(redis.values.size).toBe(0);
+  });
+});
+
+describe('resolveMistralBaseUrl', () => {
+  it.each([undefined, '', '   '])('falls back to the provider default for %j', (raw) => {
+    expect(resolveMistralBaseUrl(raw)).toBeUndefined();
+  });
+
+  it('accepts an https mistral.ai endpoint and trims the trailing slash', () => {
+    expect(resolveMistralBaseUrl('https://api.eu.mistral.ai/v1/')).toBe(
+      'https://api.eu.mistral.ai/v1',
+    );
+  });
+
+  it.each([
+    'http://api.mistral.ai/v1',
+    'https://evil.example/v1',
+    'https://mistral.ai.evil.example/v1',
+    'https://user:pass@api.mistral.ai/v1',
+    'not a url',
+  ])('rejects %s as not_configured', (raw) => {
+    const error = (() => {
+      try {
+        resolveMistralBaseUrl(raw);
+      } catch (err) {
+        return err;
+      }
+      return undefined;
+    })();
+    expect(error).toBeInstanceOf(CoachError);
+    expect((error as CoachError).code).toBe('not_configured');
+  });
+});
+
+describe('resolveCoachModel', () => {
+  it('passes MISTRAL_BASE_URL to createMistral and caches per endpoint', () => {
+    const base = buildMockEnv({ MISTRAL_API_KEY: 'test-key' });
+    resolveCoachModel(base);
+    resolveCoachModel({ ...base, MISTRAL_BASE_URL: '' });
+    expect(mistralHoisted.calls).toEqual([{ apiKey: 'test-key' }]);
+
+    resolveCoachModel({ ...base, MISTRAL_BASE_URL: 'https://api.eu.mistral.ai/v1' });
+    expect(mistralHoisted.calls).toEqual([
+      { apiKey: 'test-key' },
+      { apiKey: 'test-key', baseURL: 'https://api.eu.mistral.ai/v1' },
+    ]);
+    resolveCoachModel({ ...base, MISTRAL_BASE_URL: 'https://api.eu.mistral.ai/v1' });
+    expect(mistralHoisted.calls).toHaveLength(2);
+  });
+
+  it('never builds a provider for a rejected endpoint', () => {
+    const env = buildMockEnv({
+      MISTRAL_API_KEY: 'test-key',
+      MISTRAL_BASE_URL: 'https://evil.example/v1',
+    });
+    expect(() => resolveCoachModel(env)).toThrow(CoachError);
+    expect(mistralHoisted.calls).toEqual([]);
+  });
+});
+
+describe('static flag catalogue warnings', () => {
+  it('names invalid entries once, when the catalogue is built', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const provider = buildStaticFeatureFlagProvider(
+      JSON.stringify({ [AI_COACH_FLAG]: { rollout: '10' }, other: true, broken: null }),
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain(`${AI_COACH_FLAG}, broken`);
+    expect(await provider.getFlag(AI_COACH_FLAG, {})).toBe(false);
+    expect(await provider.getFlag('other', {})).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 });
 

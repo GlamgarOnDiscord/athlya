@@ -13,6 +13,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { __resetJwksCacheForTests } from '../middleware/auth.js';
 import { MUTATION_BUDGETS } from '../middleware/rate-limit-policies.js';
 import {
+  __primeStudioRateLimitRedisForTests,
+  __resetStudioRateLimitRedisCache,
+} from '../middleware/studio-rate-limit.js';
+import {
   __primeRateLimitRedisForTests,
   __resetRateLimitRedisCache,
   MUTATION_USER_BUCKET_PREFIX,
@@ -88,10 +92,12 @@ beforeEach(() => {
   }
   __resetJwksCacheForTests();
   __resetRateLimitRedisCache();
+  __resetStudioRateLimitRedisCache();
 });
 
 afterEach(() => {
   __resetRateLimitRedisCache();
+  __resetStudioRateLimitRedisCache();
   vi.restoreAllMocks();
 });
 
@@ -101,6 +107,7 @@ function stagingEnv(redis: FakeRedis) {
     CORS_ORIGIN: 'https://app.staging.athlya.app',
   });
   __primeRateLimitRedisForTests(env.REDIS_URL, redis as unknown as Redis);
+  __primeStudioRateLimitRedisForTests(env.REDIS_URL, env.REDIS_TOKEN, redis as unknown as Redis);
   return env;
 }
 
@@ -148,6 +155,8 @@ describe('POST /v1/coach/ask burst limiter', () => {
     const denied = await ask(app, env);
     expect(denied.status).toBe(429);
     expect(denied.headers.get('retry-after')).not.toBeNull();
+    expect(denied.headers.get('content-type')).toContain('application/problem+json');
+    expect((await readJson<{ code: string }>(denied)).code).toBe('coach_rate_limited');
     expect(denied.headers.get('x-content-type-options')).toBe('nosniff');
     expect(coachKeys(redis)).toEqual([`${MUTATION_USER_BUCKET_PREFIX}-coach:${USER}`]);
   });

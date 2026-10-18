@@ -832,7 +832,7 @@ const coachAskRoute = createRoute({
     404: problemResponse('Feature flag `ai-coach` off for the caller (code `coach_disabled`)'),
     422: problemResponse('Invalid body'),
     429: problemResponse(
-      'Burst limit (5/min) or daily quota reached (code `coach_quota_exceeded`); see `Retry-After`',
+      'Burst limit of 5/min (code `coach_rate_limited`) or daily quota reached (code `coach_quota_exceeded`); see `Retry-After`',
     ),
     502: problemResponse(
       'Model provider failed or answered with invalid output (codes `coach_upstream_failed`, `coach_invalid_output`)',
