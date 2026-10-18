@@ -8,7 +8,7 @@
  * Usage :
  *
  *     import { isEnabled } from '@athlya/api/feature-flags';
- *     if (await isEnabled('coach-ai-enabled', { userId, studioId })) {
+ *     if (await isEnabled('ai-coach', { userId, studioId })) {
  *         // …
  *     }
  *
@@ -19,7 +19,8 @@
  *
  * Catalogue des flags pilotes (Sprint 14, Epic CN.4.3) :
  *
- *   - `coach-ai-enabled` — gates Epic 14 (AI coach service).
+ *   - `ai-coach` — gates Epic 21 (AI coach, `/v1/coach`), wired in
+ *     `adapters/coach-deps.ts`.
  *     Default OFF, enable on staging d'abord.
  *   - `waitlist-auto-promotion-v2` — alternative algorithm to
  *     `cancelReservation` (FIFO + priority par badge). Default
@@ -93,7 +94,7 @@ export const FLAG_CACHE_TTL_MS = 60 * 1000;
  * Sample :
  *
  *     {
- *       "coach-ai-enabled": false,
+ *       "ai-coach": false,
  *       "waitlist-auto-promotion-v2": {
  *         "rollout": 10,
  *         "studioAllowList": ["studio-test-uuid"]
@@ -103,10 +104,23 @@ export const FLAG_CACHE_TTL_MS = 60 * 1000;
 export function buildStaticFeatureFlagProvider(
   catalogueJson: string | undefined,
 ): FeatureFlagProvider {
-  let catalogue: Record<string, FlagDefinition> = {};
+  let catalogue: Record<string, unknown> = {};
   if (typeof catalogueJson === 'string' && catalogueJson.length > 0) {
     try {
-      catalogue = JSON.parse(catalogueJson) as Record<string, FlagDefinition>;
+      const parsed: unknown = JSON.parse(catalogueJson);
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        catalogue = parsed as Record<string, unknown>;
+        const invalid = Object.keys(catalogue).filter(
+          (flag) => asFlagDefinition(catalogue[flag]) === undefined,
+        );
+        if (invalid.length > 0) {
+          console.warn(
+            `feature-flags: invalid FEATURE_FLAGS_JSON entr${invalid.length === 1 ? 'y' : 'ies'} treated as OFF: ${invalid.join(', ')}`,
+          );
+        }
+      } else {
+        console.warn('feature-flags: FEATURE_FLAGS_JSON is not an object, defaulting to {}');
+      }
     } catch {
       console.warn('feature-flags: FEATURE_FLAGS_JSON malformed, defaulting to {}');
     }
@@ -115,7 +129,10 @@ export function buildStaticFeatureFlagProvider(
   return {
     // eslint-disable-next-line @typescript-eslint/require-await
     async getFlag(name, ctx) {
-      const def = catalogue[name];
+      const def = asFlagDefinition(
+        Object.prototype.hasOwnProperty.call(catalogue, name) ? catalogue[name] : undefined,
+      );
+      // Unknown or malformed definitions fail closed (OFF).
       if (def === undefined) return false;
       if (typeof def === 'boolean') return def;
 
@@ -142,6 +159,28 @@ export function buildStaticFeatureFlagProvider(
       const bucket = ctx.bucket ?? hashToBucket(ctx.userId ?? `random-${Math.random()}`);
       return bucket < def.rollout;
     },
+  };
+}
+
+/**
+ * Narrow a catalogue entry to a {@link FlagDefinition}, or `undefined`
+ * when its shape is invalid (wrong types, rollout outside 0–100).
+ */
+function asFlagDefinition(value: unknown): FlagDefinition | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const def = value as { rollout?: unknown; allowList?: unknown; studioAllowList?: unknown };
+  if (typeof def.rollout !== 'number' || !(def.rollout >= 0 && def.rollout <= 100)) {
+    return undefined;
+  }
+  const isStringList = (list: unknown): list is string[] =>
+    Array.isArray(list) && list.every((item) => typeof item === 'string');
+  if (def.allowList !== undefined && !isStringList(def.allowList)) return undefined;
+  if (def.studioAllowList !== undefined && !isStringList(def.studioAllowList)) return undefined;
+  return {
+    rollout: def.rollout,
+    ...(def.allowList === undefined ? {} : { allowList: def.allowList }),
+    ...(def.studioAllowList === undefined ? {} : { studioAllowList: def.studioAllowList }),
   };
 }
 

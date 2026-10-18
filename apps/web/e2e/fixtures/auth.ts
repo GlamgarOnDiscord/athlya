@@ -5,7 +5,7 @@
  * `apps/web/src/lib/auth/token-store.ts`) and gates authenticated
  * pages behind `<RequireAuth>`. For an accessibility sweep we do
  * not care about the correctness of the login flow itself — we just
- * need `/classes`, `/me`, `/me/export`, `/me/delete`, `/me/progression` to render their
+ * need `/classes`, `/me`, `/me/export`, `/me/delete`, `/me/progression`, `/me/coach` to render their
  * authenticated state so axe can analyse the DOM.
  *
  * Strategy:
@@ -52,7 +52,8 @@ export async function loginWithStub(page: Page): Promise<void> {
         consents: {
           marketing: false,
           analytics: false,
-          thirdParty: false,
+          // Matches the coach status stub below (thirdPartyConsent: true).
+          thirdParty: true,
           version: '2026-01',
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
@@ -101,6 +102,20 @@ export async function loginWithStub(page: Page): Promise<void> {
         ],
         truncated: false,
         skippedSessions: 0,
+      }),
+    });
+  });
+
+  // Stub the AI coach status (`ai-coach` flag on, consent granted) so
+  // `/me` shows the coach link and `/me/coach` renders its form.
+  await page.route('**/v1/coach', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        enabled: true,
+        thirdPartyConsent: true,
+        quota: { limit: 10, remaining: 9, resetsAt: '2026-10-16T00:00:00.000Z' },
       }),
     });
   });

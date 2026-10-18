@@ -638,13 +638,17 @@ Use official CLI to create, init the project .. and recent package version and s
 > ⏸️ **Renvoyé post-1.0** — voir [`docs/roadmap/post-1.0.md#v12--ai-coach--progression--programmes`](../../../docs/roadmap/post-1.0.md). Effort ~2 sprints. Déclencheur : feature flag `ai-coach` ouvert + Mistral provisionné.
 
 - [ ] 21. AI coach service
-  - [ ] 21.1 Implement the AI coach service with Vercel AI SDK + Mistral
+  - [x] 21.1 Implement the AI coach service with Vercel AI SDK + Mistral
     - `packages/ai-coach/src/service.ts`: `askCoach(userId, prompt, context)` — context includes the last 30 days of sessions
     - Respect `consents.thirdParty`; reject when disabled
+    - Done (#644): `askCoach(userId, { question, locale }, deps)` with the model injected (AI SDK `LanguageModel`; Mistral in the API adapter, mock model in tests), 30-day context read once through the progression repo and minimised by `buildCoachContext` (no ids, no notes, cleaned exercise names, capped sizes), `CoachAdviceSchema` (`@athlya/shared`) validation of the structured output, `thirdParty` consent check before any read, daily quota per member (Redis, fail-closed); unit + fast-check tests
     - _Requirements: 3.3_
 
   - [ ] 21.2 Expose `/v1/coach/ask` route on the gateway
     - Streaming response via Hono's streaming helper
+    - Done (#644): `GET /v1/coach` (flag, consent, quota) and `POST /v1/coach/ask` behind the `ai-coach` flag (default OFF), per-user burst limit `coach-ask` + daily quota (both fail-closed), OpenAPI entries, reservations bulkhead Worker routes (`/v1/coach` + `/v1/coach/*`), web `/me/coach` (aria-live answer, FR/EN) with an axe sweep case added to `apps/web/e2e/axe.spec.ts`
+    - Pending: streaming. The answer is returned as one JSON payload because it is validated against `CoachAdviceSchema` as a whole before reaching the member
+    - Pending before the flag opens: the RGPD operator checklist in `docs/compliance/ai-coach.md` (DPA, Mistral region and retention settings)
     - _Requirements: 14.1, 14.2_
 
 - [ ] 22. Progression graphs
