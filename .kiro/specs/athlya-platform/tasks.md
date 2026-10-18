@@ -10,7 +10,7 @@
 
 ## Overview
 
-This plan converts the Athlya design into a sequence of incremental coding tasks that a code-generation agent can execute. The project is a Turborepo monorepo in TypeScript 6.0, with three client apps (Next.js 16 web, Next.js 16 studio admin, Expo SDK 55 mobile), a Hono 4 edge API on Cloudflare Workers, Drizzle/Neon PostgreSQL 17 with Row-Level Security, Upstash Redis for counters and rate limits, and an event bus combining Cloudflare Queues and Upstash QStash.
+This plan converts the Athlya design into a sequence of incremental coding tasks that a code-generation agent can execute. The project is a Turborepo monorepo in TypeScript 6.0, with three client apps (Next.js 16 web, Next.js 16 studio admin, Expo SDK 58 mobile), a Hono 4 edge API on Cloudflare Workers, Drizzle/Neon PostgreSQL 17 with Row-Level Security, Upstash Redis for counters and rate limits, and an event bus combining Cloudflare Queues and Upstash QStash.
 
 The plan is sequenced to deliver the v0.1 MVP first (single-tenant pilot: auth, profile, class browsing, reservation with no-double-booking, cancellation with waitlist promotion, QR check-in, workout session log, admin dashboard), then v0.2 (multi-tenant with RLS-wide rollout, branding, Stripe subscriptions, waitlist auto-promotion notifications, Apple Health import, full i18n), then v0.3 (AI coach, progression graphs, Bluetooth FTMS, training programs).
 
@@ -439,41 +439,43 @@ Use official CLI to create, init the project .. and recent package version and s
 
 ### Epic 10 — Mobile app (v0.1)
 
-> ⏸️ **Renvoyé post-1.0** — voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-55`](../../../docs/roadmap/post-1.0.md). Effort ~3 sprints. Déclencheur : décision business "iOS/Android" + studio pilote.
+> ⏸️ **Renvoyé post-1.0** — voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-58`](../../../docs/roadmap/post-1.0.md). Effort ~3 sprints. Déclencheur : décision business "iOS/Android" + studio pilote.
+>
+> Foundation delivered in #638 (11.1–11.7, 11.12, 11.13) on Expo SDK 58 / React Native 0.88 — see [`docs/mobile/README.md`](../../../docs/mobile/README.md). Screens 11.8–11.11 follow in a separate PR. Brand (BR.4): the icon is `assets/brand/png/athlya-appicon-1024.png`; the splash image is `apps/mobile/assets/splash-mascot.png`, a crop of that icon (regenerate it from the icon when the brand changes).
 
 - [ ] 11. Build the Expo / React Native mobile app with offline-first queue
-  - [ ] 11.1 Scaffold the Expo SDK 55 app with NativeWind 4 and shared tokens
-    - `apps/mobile` using expo-router 5, React Native 0.83, Hermes
-    - NativeWind preset from `packages/config/tailwind/mobile.ts`
+  - [x] 11.1 Scaffold the Expo SDK 58 app with NativeWind 4 and shared tokens
+    - `apps/mobile` using expo-router (SDK 58), React Native 0.88, Hermes
+    - NativeWind theme built from `@athlya/shared/tokens` in `apps/mobile/theme/preset.ts`
     - Configure accessible labels/roles/hints on every interactive primitive
     - _Requirements: 27.3_
 
-  - [ ] 11.2 Implement secure token storage
+  - [x] 11.2 Implement secure token storage
     - Use `expo-secure-store` for refresh token only (Secure Enclave / Keystore)
     - Access token kept in-memory; rotated on refresh
     - _Requirements: 1.5, 2.1, 2.2_
 
-  - [ ] 11.3 Implement biometric unlock of stored refresh token
+  - [x] 11.3 Implement biometric unlock of stored refresh token
     - Use `expo-local-authentication` to gate access to the stored refresh token
     - _Requirements: 1.7_
 
-  - [ ] 11.4 Implement the API client with `Idempotency-Key` header support
+  - [x] 11.4 Implement the API client with `Idempotency-Key` header support
     - `apps/mobile/infrastructure/api/client.ts`: `post(path, body, { idempotencyKey })`
     - Auto-attach access token, refresh on 401, retry once
     - _Requirements: 20.1, 20.3_
 
-  - [ ] 11.5 Implement the `MutationQueue` persisted in MMKV
+  - [x] 11.5 Implement the `MutationQueue` persisted in MMKV
     - `apps/mobile/infrastructure/sync/queue.ts`: `enqueue`, `drain`, `remove`, `peek`, plus a DLQ
     - Each enqueued mutation has a fresh UUID v4 `idempotencyKey`
     - FIFO ordering preserved across app restarts
     - _Requirements: 19.1, 19.2, 20.3_
 
-  - [ ] 11.6 Implement `drainMutationQueue` following Algorithm 4
+  - [x] 11.6 Implement `drainMutationQueue` following Algorithm 4
     - For each mutation in FIFO order, POST with `Idempotency-Key`; on 2xx or 409 remove; on 4xx ≠ 409 move to DLQ; on 5xx / network retry with exponential backoff up to 5 attempts with jitter
     - Break the outer loop on network loss
     - _Requirements: 19.3, 19.4, 19.5, 19.6, 19.7_
 
-  - [ ] 11.7 Implement network connectivity detection and auto-drain
+  - [x] 11.7 Implement network connectivity detection and auto-drain
     - Use `@react-native-community/netinfo`; on reconnection, run `drainMutationQueue` and show sync progress in UI
     - _Requirements: 19.3_
 
@@ -494,7 +496,7 @@ Use official CLI to create, init the project .. and recent package version and s
     - Trigger the same endpoints as the web app
     - _Requirements: 4.1, 5.1_
 
-  - [ ] 11.12 Write property test for FIFO + idempotent offline drain
+  - [x] 11.12 Write property test for FIFO + idempotent offline drain
     - **Property 5: FIFO + idempotent drain**
     - Use fast-check to generate a sequence of mutations; simulate random failure patterns (5xx, network, 200, 409, 4xx permanent)
     - Assert FIFO order of successful applications server-side (via a fake server)
@@ -502,7 +504,7 @@ Use official CLI to create, init the project .. and recent package version and s
     - Place in `apps/mobile/tests/properties/offline.property.test.ts`
     - \*\*Validates: Requirements 19.3, 19.4, 19.5, 19.6, 19.7, 20.1, 20.3\_
 
-  - [ ] 11.13 Write unit tests for `MutationQueue` persistence
+  - [x] 11.13 Write unit tests for `MutationQueue` persistence
     - Enqueue, kill app, restart, drain returns the same items in the same order
     - _Requirements: 19.1, 19.2_
 
@@ -609,7 +611,7 @@ Use official CLI to create, init the project .. and recent package version and s
     - Send a push + email "You're in!" to the promoted user, respecting consents
     - _Requirements: 9.3, 17.1, 17.2_
 
-> ⏸️ **Renvoyé post-1.0** — Apple Health dépend d'Epic 10 (mobile). Voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-55`](../../../docs/roadmap/post-1.0.md).
+> ⏸️ **Renvoyé post-1.0** — Apple Health dépend d'Epic 10 (mobile). Voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-58`](../../../docs/roadmap/post-1.0.md).
 
 - [ ] 18. Apple Health import (mobile, iOS)
   - [ ] 18.1 Implement HealthKit read for workout samples
@@ -685,7 +687,7 @@ Use official CLI to create, init the project .. and recent package version and s
 - Every task references requirement clauses from `requirements.md` for traceability.
 - Property-based tests cover the eight correctness properties P1–P8 from the design and Requirement 21 round-trip. Unit tests and integration tests complement them for example-based and end-to-end validation.
 - Checkpoints at the end of each MVP phase (v0.1, v0.2, v0.3) let you validate incrementally before proceeding.
-- Language: the entire codebase is TypeScript 6.0. No additional language selection is needed because the design specifies concrete TypeScript libraries (Next.js 16, Hono 4, Expo SDK 55, Drizzle, Zod, fast-check).
+- Language: the entire codebase is TypeScript 6.0. No additional language selection is needed because the design specifies concrete TypeScript libraries (Next.js 16, Hono 4, Expo SDK 58, Drizzle, Zod, fast-check).
 
 ## Task Dependency Graph
 
@@ -1195,4 +1197,4 @@ Les 10 sous-tâches **C1 + C2** (~10h effort) sont les **vrais bloquants prod** 
 - [x] BR.1 Nouvelle identité : mascotte A-mi (« A » italique qui court) + wordmark ATHLYA (Archivo Black italique), palette encre `#0A0A0A` / volt `#D7FF3A` / blanc. Sources SVG générées par `assets/brand/scripts/build-brand.mjs`, guide dans `docs/brand/README.md`.
 - [x] BR.2 Intégration web + studio : favicon, icônes d'app, image Open Graph, logo JSON-LD, composant `<AthlyaLogo />` (nav, accueil, login studio).
 - [x] BR.3 README refondu autour de la nouvelle identité ; détails opérationnels déplacés dans `docs/project-handbook.md`.
-- [ ] BR.4 Icône et splash de l'app mobile Expo à partir de `assets/brand/png/` (avec l'Epic 10 — app mobile, tâches 11.x).
+- [x] BR.4 Icône et splash de l'app mobile Expo à partir de `assets/brand/png/` (avec l'Epic 10 — app mobile, tâches 11.x).

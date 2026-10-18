@@ -272,7 +272,9 @@ Insérée entre Epic 8 et Epic 10. Règle les 4 vrais bloquants identifiés dans
 
 ## Non démarré (~46 tâches)
 
-### Epic 11 — Mobile Expo (13 tâches, dont **11.12 P5 FIFO drain**)
+### Epic 11 — Mobile Expo (4 tâches restantes : écrans 11.8–11.11)
+
+Foundation delivered in #642 (issue #638): 11.1–11.7, 11.12 (P5) and 11.13 on Expo SDK 58, plus the BR.4 icon and splash. See `docs/mobile/README.md`.
 ### Epic 12 — Admin studio app (4 tâches restantes — 12.2 et 12.3 livrées)
 ### Epic 20 — Checkpoint v0.2
 ### Epics v0.3 (Epic 21–25, 8 tâches — 22.1 livrée, 22.2 web livrée)
@@ -301,13 +303,13 @@ Suite complète au 2026-10-12 après la mise à jour de stack (Node 24, pnpm 11,
 ## PBT validées (10/10)
 
 P1 capacity, P2 idempotence, P3 state-machine, P4 RGPD cascade, P6 JWT non-forge/replay, P7 tenant isolation, P8 ratelimit (déplacée dans @athlya/ratelimit), Round-trip serialization, property test circuit breaker H3 "open state short-circuits fn", **property test brand-color 15.2** (every valid hex yields well-formed tokens), **P1 booking capacity** (`booking.property.test.ts` — confirmedCount ≤ capacity, no duplicates, waitlist ordering; unblocked by #481 fixing undici/Node-20 compat + Date ISO serialization in outbox).
-Reste : **P5 FIFO offline drain** (11.12 — bloquée par scaffolding mobile).
+**P5 FIFO + idempotent offline drain** (11.12) : `apps/mobile/tests/properties/offline.property.test.ts`, delivered in #642.
 
 ## Prochaine priorité
 
 Epic 14 fermé — Checkpoint v0.1 MVP livré. Reste deux gros chantiers front :
 
-- **Epic 11 — Mobile Expo** (13 tâches) — débloque la PBT P5 FIFO drain
+- **Epic 11 — Mobile Expo** (écrans 11.8–11.11 ; la fondation et la PBT P5 sont livrées, #642)
 - **Epic 12 — Admin studio app** (4 tâches restantes)
 
 ## Conventions maintenues

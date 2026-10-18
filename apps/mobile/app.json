@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Athlya",
+    "slug": "athlya",
+    "scheme": "athlya",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "../../assets/brand/png/athlya-appicon-1024.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#0A0A0A",
+    "ios": {
+      "bundleIdentifier": "app.athlya.mobile",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "app.athlya.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "../../assets/brand/png/athlya-appicon-1024.png",
+        "backgroundColor": "#0A0A0A"
+      },
+      "allowBackup": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Athlya uses Face ID to unlock your session."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-mascot.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#0A0A0A"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

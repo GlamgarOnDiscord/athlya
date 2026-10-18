@@ -18,7 +18,7 @@ These requirements are derived from the approved design document. They cover the
 - **Notifications_Service**: The reactive service consuming events to send emails (Resend) and push notifications (Expo Push).
 - **Analytics_Service**: The reactive service ingesting events into Tinybird / ClickHouse for time-series analytics.
 - **AI_Coach_Service**: The service providing LLM-based coaching features (Vercel AI SDK + Mistral).
-- **Mobile_App**: The Expo SDK 55 / React Native 0.83 client application.
+- **Mobile_App**: The Expo SDK 58 / React Native 0.88 client application.
 - **Web_App**: The Next.js 16 member-facing web client.
 - **Studio_Admin_App**: The Next.js 16 web client for studio administrators and coaches.
 - **Event_Bus**: The combination of Cloudflare Queues (real-time side-effects, retry + DLQ) and Upstash QStash (scheduled jobs, cron).

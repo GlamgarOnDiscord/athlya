@@ -443,6 +443,25 @@
       }
     }
   },
+  "mobile": {
+    "home": {
+      "title": "Athlya",
+      "tagline": "Votre studio dans la poche.",
+      "syncNow": "Synchroniser",
+      "syncNowHint": "Envoie les modifications enregistrées hors ligne."
+    },
+    "sync": {
+      "label": "État de la synchronisation",
+      "offline": "Hors ligne. {count} modification(s) en attente.",
+      "syncing": "Synchronisation {processed}/{total}…",
+      "authRequired": "Reconnectez-vous pour synchroniser {count} modification(s).",
+      "rejected": "{count} modification(s) refusée(s) par le serveur.",
+      "upToDate": "Toutes les modifications sont synchronisées."
+    },
+    "unlock": {
+      "prompt": "Déverrouiller Athlya"
+    }
+  },
   "notifications": {
     "reservationCreated": {
       "email": {

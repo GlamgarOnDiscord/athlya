@@ -1,0 +1,25 @@
+{
+  "extends": "@athlya/tsconfig/base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["DOM", "ES2024"],
+    "customConditions": ["react-native"],
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "types": ["node"]
+  },
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "infrastructure/**/*.ts",
+    "theme/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.mts",
+    "nativewind-env.d.ts"
+  ],
+  "exclude": ["node_modules", ".expo", "dist", ".turbo", "android", "ios"]
+}

@@ -65,8 +65,8 @@ jobs:
             echo "$bad"
             exit 1
           fi
-          # Fail if any tracked non-text file exceeds 500 KiB.
-          large=$(git ls-files | xargs -I{} sh -c \
+          # Fail if any tracked file (except the generated pnpm-lock.yaml) exceeds 500 KiB.
+          large=$(git ls-files | grep -vx 'pnpm-lock.yaml' | xargs -I{} sh -c \
             'size=$(git cat-file -s "HEAD:{}" 2>/dev/null || echo 0); [ "$size" -gt 512000 ] && echo "{} ($size bytes)"' \
             2>/dev/null || true)
           if [ -n "$large" ]; then

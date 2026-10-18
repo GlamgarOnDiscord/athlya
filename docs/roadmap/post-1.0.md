@@ -6,15 +6,17 @@ Mise à jour : sortie v1.0.0.
 
 ---
 
-## v1.1 — Mobile (Expo SDK 55)
+## v1.1 — Mobile (Expo SDK 58)
 
 **Effort estimé** : ~3 sprints (~3 semaines).
+
+**Status**: foundation (11.1–11.7, 11.12, 11.13) delivered on Expo SDK 58 / React Native 0.88 in #638 — see [`docs/mobile/README.md`](../mobile/README.md). Screens 11.8–11.11 remain.
 
 **Déclencheur** : décision business "rendre l'app dispo iOS/Android" + au moins un studio pilote prêt à tester l'app native.
 
 **Périmètre** (Epic 10 dans `tasks.md`, 13 tâches) :
 
-- **11.1** Scaffold Expo SDK 55 + NativeWind 4 + tokens partagés (`apps/mobile`).
+- **11.1** Scaffold Expo SDK 58 + NativeWind 4 + tokens partagés (`apps/mobile`).
 - **11.2** `expo-secure-store` pour le refresh token (Secure Enclave / Keystore).
 - **11.3** Biometric unlock via `expo-local-authentication`.
 - **11.4** API client avec `Idempotency-Key` automatique + refresh-on-401.
