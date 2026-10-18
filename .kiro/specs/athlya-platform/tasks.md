@@ -441,9 +441,9 @@ Use official CLI to create, init the project .. and recent package version and s
 
 > ⏸️ **Renvoyé post-1.0** — voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-58`](../../../docs/roadmap/post-1.0.md). Effort ~3 sprints. Déclencheur : décision business "iOS/Android" + studio pilote.
 >
-> Foundation delivered in #638 (11.1–11.7, 11.12, 11.13) on Expo SDK 58 / React Native 0.88 — see [`docs/mobile/README.md`](../../../docs/mobile/README.md). Member screens delivered for #647 (11.8, 11.10, 11.11, plus 24.4); 11.9 is blocked on the API (#648). Brand (BR.4): the icon is `assets/brand/png/athlya-appicon-1024.png`; the splash image is `apps/mobile/assets/splash-mascot.png`, a crop of that icon (regenerate it from the icon when the brand changes).
+> Foundation delivered in #638 (11.1–11.7, 11.12, 11.13) on Expo SDK 58 / React Native 0.88 — see [`docs/mobile/README.md`](../../../docs/mobile/README.md). Member screens delivered for #647 (11.8, 11.10, 11.11, plus 24.4); the QR check-in screen (11.9) for #648, on the API of #654. Brand (BR.4): the icon is `assets/brand/png/athlya-appicon-1024.png`; the splash image is `apps/mobile/assets/splash-mascot.png`, a crop of that icon (regenerate it from the icon when the brand changes).
 
-- [ ] 11. Build the Expo / React Native mobile app with offline-first queue
+- [x] 11. Build the Expo / React Native mobile app with offline-first queue
   - [x] 11.1 Scaffold the Expo SDK 58 app with NativeWind 4 and shared tokens
     - `apps/mobile` using expo-router (SDK 58), React Native 0.88, Hermes
     - NativeWind theme built from `@athlya/shared/tokens` in `apps/mobile/theme/preset.ts`
@@ -484,9 +484,10 @@ Use official CLI to create, init the project .. and recent package version and s
     - Done (#647): `features/classes/classes-controller.ts` (`ClassesController.book`), screen `app/classes.tsx`; online with a fresh `Idempotency-Key`, queued as `bookClass` with the same key on `NetworkError` or while offline. "My reservations" (`app/reservations.tsx`) cancels through the same path
     - _Requirements: 8.1, 8.5, 20.3_
 
-  - [ ] 11.9 Implement the QR check-in screen
+  - [x] 11.9 Implement the QR check-in screen
     - Generate `QR_Checkin_Token` client-side (actually fetched from `/v1/checkins/token` since signing needs private key); display as QR; rotate every 120 s
-    - API side done (#654): `POST /v1/checkins/token` returns `{ token, expiresAt }` (RS256, `kind = 'checkin'`, 120 s, single-use `jti`), served by the reservations bulkhead Worker; the screen itself is still open (#648)
+    - API side done (#654): `POST /v1/checkins/token` returns `{ token, expiresAt }` (RS256, `kind = 'checkin'`, 120 s, single-use `jti`), served by the reservations bulkhead Worker
+    - Done (#648): `app/checkin.tsx` + `features/checkin/checkin-token.ts`, QR via `react-native-qrcode-svg`, renewed 15 s before expiry, paused in the background, never queued offline
     - _Requirements: 11.1_
 
   - [x] 11.10 Implement the workout session logging screen
