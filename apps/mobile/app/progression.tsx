@@ -220,5 +220,7 @@ function Progression() {
 }
 
 export default function ProgressionScreen() {
-  return <SignedIn>{() => <Progression />}</SignedIn>;
+  // Keyed by user: another sign-in remounts the screen, so the controller's
+  // per-window body and ETag cache never outlive the account they belong to.
+  return <SignedIn>{(userId) => <Progression key={userId} />}</SignedIn>;
 }
