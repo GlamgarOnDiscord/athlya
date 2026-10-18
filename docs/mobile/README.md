@@ -82,8 +82,13 @@ queue is left untouched until the user signs in again).
 
 ## Brand
 
-`assets/brand/` (A-mi mascot, ink `#0A0A0A` / volt `#D7FF3A`) is not on `master` yet. The app ships a
-plain ink icon and an ink splash; BR.4 wires the mascot icon and splash.
+BR.4, A-mi mascot (ink `#0A0A0A` / volt `#D7FF3A`, see [`docs/brand/README.md`](../brand/README.md)):
+
+- App icon and Android adaptive-icon foreground: `assets/brand/png/athlya-appicon-1024.png`,
+  referenced from `app.json` (the mascot sits inside the adaptive-icon safe zone).
+- Splash: ink background with the volt mascot, `apps/mobile/assets/splash-mascot.png` (a crop of the
+  1024 px app icon, so its ink matches the splash background exactly). Regenerate it from the icon
+  whenever the brand PNGs change.
 
 ## Local development
 

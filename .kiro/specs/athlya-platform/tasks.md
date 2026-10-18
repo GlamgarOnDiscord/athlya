@@ -441,7 +441,7 @@ Use official CLI to create, init the project .. and recent package version and s
 
 > ⏸️ **Renvoyé post-1.0** — voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-55`](../../../docs/roadmap/post-1.0.md). Effort ~3 sprints. Déclencheur : décision business "iOS/Android" + studio pilote.
 >
-> Foundation delivered in #638 (11.1–11.7, 11.12, 11.13) on Expo SDK 58 / React Native 0.88 — see [`docs/mobile/README.md`](../../../docs/mobile/README.md). Screens 11.8–11.11 follow in a separate PR. Brand (A-mi icon + splash) is wired by BR.4; the app ships an ink `#0A0A0A` placeholder until then.
+> Foundation delivered in #638 (11.1–11.7, 11.12, 11.13) on Expo SDK 58 / React Native 0.88 — see [`docs/mobile/README.md`](../../../docs/mobile/README.md). Screens 11.8–11.11 follow in a separate PR. Brand icon and splash (BR.4) are wired from `assets/brand/png/`.
 
 - [ ] 11. Build the Expo / React Native mobile app with offline-first queue
   - [x] 11.1 Scaffold the Expo SDK 58 app with NativeWind 4 and shared tokens
@@ -1194,4 +1194,4 @@ Les 10 sous-tâches **C1 + C2** (~10h effort) sont les **vrais bloquants prod** 
 - [x] BR.1 Nouvelle identité : mascotte A-mi (« A » italique qui court) + wordmark ATHLYA (Archivo Black italique), palette encre `#0A0A0A` / volt `#D7FF3A` / blanc. Sources SVG générées par `assets/brand/scripts/build-brand.mjs`, guide dans `docs/brand/README.md`.
 - [x] BR.2 Intégration web + studio : favicon, icônes d'app, image Open Graph, logo JSON-LD, composant `<AthlyaLogo />` (nav, accueil, login studio).
 - [x] BR.3 README refondu autour de la nouvelle identité ; détails opérationnels déplacés dans `docs/project-handbook.md`.
-- [ ] BR.4 Icône et splash de l'app mobile Expo à partir de `assets/brand/png/` (avec l'Epic 10 — app mobile, tâches 11.x).
+- [x] BR.4 Icône et splash de l'app mobile Expo à partir de `assets/brand/png/` (avec l'Epic 10 — app mobile, tâches 11.x).

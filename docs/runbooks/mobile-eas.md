@@ -81,8 +81,8 @@ Store listing checklist before the first public release:
 - Face ID usage string (set in `app.json` through the `expo-local-authentication` plugin).
 - Export compliance: the app only uses standard HTTPS and OS-provided encryption
   (`ITSAppUsesNonExemptEncryption: false`).
-- Brand assets: the current icon and splash are an ink (`#0A0A0A`) placeholder until BR.4 wires the
-  A-mi mascot from `assets/brand/`.
+- Store artwork: start from `assets/brand/` (A-mi mascot, see `docs/brand/README.md`); the app icon
+  and splash already use it.
 
 ## 6. Rollback
 
