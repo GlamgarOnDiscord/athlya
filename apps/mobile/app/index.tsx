@@ -15,6 +15,7 @@ const NAVIGATION = [
   { href: '/reservations', key: 'mobile.home.nav.reservations' },
   { href: '/workout', key: 'mobile.home.nav.workout' },
   { href: '/progression', key: 'mobile.home.nav.progression' },
+  { href: '/checkin', key: 'mobile.home.nav.checkin' },
   { href: '/settings', key: 'mobile.home.nav.settings' },
 ] as const;
 

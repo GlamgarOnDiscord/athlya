@@ -539,6 +539,7 @@
         "reservations": "My reservations",
         "workout": "Log a workout",
         "progression": "My progression",
+        "checkin": "Check in at the desk",
         "settings": "Settings"
       }
     },
@@ -637,6 +638,17 @@
         "duration": "Enter a duration in whole minutes.",
         "notes": "Notes are limited to 2,000 characters."
       }
+    },
+    "checkin": {
+      "title": "Check in",
+      "intro": "Show this code at the front desk. It changes every 2 minutes and works once.",
+      "qrLabel": "Check-in QR code, valid for {seconds} more seconds",
+      "expiresIn": "New code in {seconds} s",
+      "loading": "Getting your code…",
+      "offline": "You are offline. A new check-in code needs a connection.",
+      "loadError": "Could not get a check-in code.",
+      "newCode": "Get a new code",
+      "limitReached": "You have already checked in 5 times in the last hour."
     },
     "settings": {
       "title": "Settings",
