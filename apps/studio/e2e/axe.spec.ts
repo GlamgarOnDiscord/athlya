@@ -8,6 +8,7 @@ const publicPaths = ['/login'] as const;
 const adminPaths = [
   '/dashboard',
   '/dashboard/classes',
+  '/dashboard/programs',
   '/dashboard/members',
   '/dashboard/branding',
   '/dashboard/billing',

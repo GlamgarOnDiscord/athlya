@@ -34,6 +34,10 @@ const config: KnipConfig = {
       project: ['src/**/*.{ts,tsx}'],
       ignore: ['src/**/*.test.{ts,tsx}'],
     },
+    'apps/mobile': {
+      entry: ['app/**/*.tsx', 'tests/**/*.test.ts'],
+      project: ['{app,components,infrastructure,theme,tests}/**/*.{ts,tsx}'],
+    },
     'packages/api': {
       entry: ['src/worker.ts', 'src/index.ts'],
       project: ['src/**/*.ts'],
@@ -113,6 +117,11 @@ const config: KnipConfig = {
     '@athlya/shared',
     '@athlya/db',
     'zod',
+    // Mobile: NativeWind's Babel preset loads this plugin by name, which pnpm's
+    // isolated layout only resolves from the app; knip's Expo plugin assumes
+    // expo-updates for every app.json although OTA updates are not used.
+    '@babel/plugin-transform-react-jsx',
+    'expo-updates',
     // Testing infrastructure consumed by runners, not source imports
     '@testing-library/react',
     '@testing-library/jest-dom',

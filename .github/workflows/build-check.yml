@@ -18,6 +18,7 @@ on:
       - 'packages/auth/**'
       - 'packages/billing/**'
       - 'packages/reservations/**'
+      - 'packages/programs/**'
       - 'packages/notifications/**'
       - 'packages/members/**'
       - 'packages/db/**'

@@ -29,6 +29,7 @@ const migration = [
   '0037_auth_outbox_review_fixes.sql',
   '0038_studios_runtime.sql',
   '0039_runtime_rls_gaps.sql',
+  '0042_training_programs.sql',
 ]
   .map((file) => readFileSync(resolve(here, '../../../../db/migrations', file), 'utf8'))
   .join('\n');
@@ -72,8 +73,8 @@ describe('service function contract with migration 0032', () => {
     (m) => m[1],
   );
 
-  it('references the 20 service functions', () => {
-    expect(new Set(used).size).toBe(20);
+  it('references the 21 service functions', () => {
+    expect(new Set(used).size).toBe(21);
   });
 
   const granted = grantedToApp(migration);
@@ -392,6 +393,10 @@ describe('RLS inventory — claim-less adapters never touch tenant tables direct
     'reservations',
     'workoutSessions',
     'idempotencyKeys',
+    'programs',
+    'programWeeks',
+    'programWorkouts',
+    'programSubscriptions',
   ];
   it.each([
     'adapters/auth-user-repo-drizzle.ts',
@@ -809,6 +814,7 @@ describe('createDrizzleDeletionRepo', () => {
       rgpd_delete_workout_sessions: 1,
       rgpd_delete_push_tokens: 3,
       rgpd_delete_idempotency_keys: 0,
+      rgpd_delete_program_subscriptions: 5,
     };
     const { db } = fakeDb((call) => {
       const fn = Object.keys(counts).find((name) => call.sql.includes(`${name}(`));
@@ -819,6 +825,7 @@ describe('createDrizzleDeletionRepo', () => {
     await expect(repo.deleteWorkoutSessionsForUser(userRow.id)).resolves.toBe(1);
     await expect(repo.deletePushTokensForUser(userRow.id)).resolves.toBe(3);
     await expect(repo.deleteIdempotencyKeysForUser(userRow.id)).resolves.toBe(0);
+    await expect(repo.deleteProgramSubscriptionsForUser(userRow.id)).resolves.toBe(5);
   });
 
   it('confirms the tombstone through rgpd_confirm_user_deleted without re-stamping it', async () => {

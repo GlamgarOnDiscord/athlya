@@ -74,10 +74,12 @@ export function buildStubDeps(
     billing?: Partial<DomainDeps['billing']>;
     audit?: Partial<DomainDeps['audit']>;
     coach?: Partial<DomainDeps['coach']>;
+    programs?: Partial<Required<DomainDeps>['programs']>;
   } = {},
 ): DomainDeps & {
   readonly sessions: Required<DomainDeps>['sessions'];
   readonly checkins: Required<DomainDeps>['checkins'];
+  readonly programs: Required<DomainDeps>['programs'];
 } {
   return {
     auth: {
@@ -147,6 +149,18 @@ export function buildStubDeps(
       getStatus: vi.fn(),
       ask: vi.fn(),
       ...overrides.coach,
+    },
+    programs: {
+      listPrograms: vi.fn(),
+      getProgram: vi.fn(),
+      createProgram: vi.fn(),
+      updateProgram: vi.fn(),
+      archiveProgram: vi.fn(),
+      subscribe: vi.fn(),
+      unsubscribe: vi.fn(),
+      listMySubscriptions: vi.fn(),
+      getToday: vi.fn(),
+      ...overrides.programs,
     },
   };
 }

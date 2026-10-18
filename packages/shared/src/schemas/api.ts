@@ -843,3 +843,294 @@ export const AuditListResponseSchema = z
   .strict();
 
 export type AuditListResponse = z.infer<typeof AuditListResponseSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  programs — /v1/programs                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Training programs (Epic 24). A program is a list of weeks; each week
+ * prescribes at most one workout per day (`dayNumber` 1..7, day 1 being
+ * the first day of the week counted from the member's start date).
+ * Days without a workout are rest days.
+ *
+ * The bounds keep the largest program well under the gateway's 256 KiB
+ * body limit; the database enforces looser ceilings (52 weeks,
+ * 30 exercises) as defence in depth.
+ */
+export const MAX_PROGRAM_WEEKS = 16;
+export const MAX_PROGRAM_EXERCISES = 15;
+
+/**
+ * The per-field bounds alone allow a schedule far larger than the
+ * gateway's 256 KiB `/v1` body cap (16 weeks × 7 days × 15 exercises).
+ * The whole schedule is therefore also capped by its serialised UTF-8
+ * size, with headroom for the other fields, so every program the schema
+ * accepts also fits through the gateway.
+ */
+export const MAX_PROGRAM_SCHEDULE_BYTES = 200 * 1024;
+
+const utf8Length = (value: unknown): number =>
+  new TextEncoder().encode(JSON.stringify(value)).length;
+
+/** Calendar date without a time zone, `YYYY-MM-DD`. */
+export const LocalDateSchema = z.iso.date();
+
+export const ProgramStatusSchema = z.enum(['draft', 'published', 'archived']);
+export type ProgramStatus = z.infer<typeof ProgramStatusSchema>;
+
+/** Status an admin may set directly; archiving has its own endpoint. */
+export const EditableProgramStatusSchema = z.enum(['draft', 'published']);
+
+export const ProgramExerciseSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    sets: z.number().int().min(1).max(20),
+    reps: z.number().int().min(1).max(200).optional(),
+    durationSec: z.number().int().min(1).max(3600).optional(),
+    weightKg: z.number().min(0).max(1000).optional(),
+    restSec: z.number().int().min(0).max(900).optional(),
+    notes: z.string().trim().max(280).optional(),
+  })
+  .strict();
+
+export type ProgramExercise = z.infer<typeof ProgramExerciseSchema>;
+
+export const ProgramWorkoutInputSchema = z
+  .object({
+    dayNumber: z.number().int().min(1).max(7),
+    title: z.string().trim().min(1).max(120),
+    notes: z.string().trim().max(2000).optional(),
+    exercises: z.array(ProgramExerciseSchema).max(MAX_PROGRAM_EXERCISES),
+  })
+  .strict();
+
+export type ProgramWorkoutInput = z.infer<typeof ProgramWorkoutInputSchema>;
+
+export const ProgramWeekInputSchema = z
+  .object({
+    weekNumber: z.number().int().min(1).max(MAX_PROGRAM_WEEKS),
+    title: z.string().trim().max(120).optional(),
+    workouts: z.array(ProgramWorkoutInputSchema).max(7),
+  })
+  .strict()
+  .refine((w) => new Set(w.workouts.map((d) => d.dayNumber)).size === w.workouts.length, {
+    message: 'each day of a week holds at most one workout',
+    path: ['workouts'],
+    params: { code: 'duplicate_day' },
+  });
+
+export type ProgramWeekInput = z.infer<typeof ProgramWeekInputSchema>;
+
+/**
+ * Weeks must be numbered 1..n without gaps or duplicates, so the
+ * program length is simply `weeks.length`.
+ */
+const ProgramWeeksSchema = z
+  .array(ProgramWeekInputSchema)
+  .min(1)
+  .max(MAX_PROGRAM_WEEKS)
+  .refine(
+    (weeks) =>
+      weeks
+        .map((w) => w.weekNumber)
+        .sort((a, b) => a - b)
+        .every((n, i) => n === i + 1),
+    { message: 'weeks must be numbered 1..n without gaps', params: { code: 'week_sequence' } },
+  )
+  .refine((weeks) => utf8Length(weeks) <= MAX_PROGRAM_SCHEDULE_BYTES, {
+    message: `the schedule must not exceed ${String(MAX_PROGRAM_SCHEDULE_BYTES / 1024)} KiB`,
+    params: { code: 'schedule_too_large' },
+  });
+
+/** `POST /v1/programs` (admin). New programs start as drafts by default. */
+export const CreateProgramRequestSchema = z
+  .object({
+    title: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(2000).optional(),
+    status: EditableProgramStatusSchema.optional(),
+    weeks: ProgramWeeksSchema,
+  })
+  .strict();
+
+export type CreateProgramRequest = z.infer<typeof CreateProgramRequestSchema>;
+
+/**
+ * `PATCH /v1/programs/{id}` (admin). `version` is the optimistic-lock
+ * guard; `weeks`, when present, replaces the whole schedule.
+ */
+export const UpdateProgramRequestSchema = z
+  .object({
+    version: z.number().int().nonnegative(),
+    title: z.string().trim().min(1).max(120).optional(),
+    description: z.string().trim().max(2000).nullable().optional(),
+    status: EditableProgramStatusSchema.optional(),
+    weeks: ProgramWeeksSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (v) =>
+      v.title !== undefined ||
+      v.description !== undefined ||
+      v.status !== undefined ||
+      v.weeks !== undefined,
+    { message: 'must patch at least one of { title, description, status, weeks }' },
+  );
+
+export type UpdateProgramRequest = z.infer<typeof UpdateProgramRequestSchema>;
+
+export const ListProgramsQuerySchema = z
+  .object({
+    status: ProgramStatusSchema.optional(),
+  })
+  .strict();
+
+export type ListProgramsQuery = z.infer<typeof ListProgramsQuerySchema>;
+
+export const ProgramWorkoutSchema = z
+  .object({
+    id: UuidSchema,
+    dayNumber: z.number().int().min(1).max(7),
+    title: z.string(),
+    notes: z.string().nullable(),
+    exercises: z.array(ProgramExerciseSchema),
+  })
+  .strict();
+
+export type ProgramWorkout = z.infer<typeof ProgramWorkoutSchema>;
+
+export const ProgramWeekSchema = z
+  .object({
+    weekNumber: z.number().int().min(1),
+    title: z.string().nullable(),
+    workouts: z.array(ProgramWorkoutSchema),
+  })
+  .strict();
+
+export type ProgramWeek = z.infer<typeof ProgramWeekSchema>;
+
+export const ProgramSummarySchema = z
+  .object({
+    id: UuidSchema,
+    studioId: UuidSchema,
+    title: z.string(),
+    description: z.string().nullable(),
+    status: ProgramStatusSchema,
+    version: z.number().int().nonnegative(),
+    weekCount: z.number().int().nonnegative(),
+    createdAt: IsoDateTimeSchema,
+    updatedAt: IsoDateTimeSchema,
+    archivedAt: IsoDateTimeSchema.nullable(),
+  })
+  .strict();
+
+export type ProgramSummary = z.infer<typeof ProgramSummarySchema>;
+
+/** `GET /v1/programs/{id}` and every program mutation response. */
+export const ProgramDetailSchema = ProgramSummarySchema.extend({
+  weeks: z.array(ProgramWeekSchema),
+}).strict();
+
+export type ProgramDetail = z.infer<typeof ProgramDetailSchema>;
+
+export const ProgramListResponseSchema = z
+  .object({
+    items: z.array(ProgramSummarySchema),
+  })
+  .strict();
+
+export type ProgramListResponse = z.infer<typeof ProgramListResponseSchema>;
+
+/**
+ * `POST /v1/programs/{id}/subscription`. `startsOn` is the member's
+ * local date of day 1; it defaults to the server's UTC date.
+ */
+export const SubscribeProgramRequestSchema = z
+  .object({
+    startsOn: LocalDateSchema.optional(),
+  })
+  .strict();
+
+export type SubscribeProgramRequest = z.infer<typeof SubscribeProgramRequestSchema>;
+
+export const ProgramSubscriptionSchema = z
+  .object({
+    id: UuidSchema,
+    programId: UuidSchema,
+    programTitle: z.string(),
+    programStatus: ProgramStatusSchema,
+    startsOn: LocalDateSchema,
+    createdAt: IsoDateTimeSchema,
+  })
+  .strict();
+
+export type ProgramSubscription = z.infer<typeof ProgramSubscriptionSchema>;
+
+export const ProgramSubscriptionListResponseSchema = z
+  .object({
+    items: z.array(ProgramSubscriptionSchema),
+  })
+  .strict();
+
+export type ProgramSubscriptionListResponse = z.infer<typeof ProgramSubscriptionListResponseSchema>;
+
+/**
+ * `DELETE /v1/programs/{id}/subscription` — a JSON body rather than 204
+ * so an idempotent retry replays the success.
+ */
+export const UnsubscribeProgramResponseSchema = z
+  .object({
+    programId: UuidSchema,
+    unsubscribed: z.literal(true),
+  })
+  .strict();
+
+export type UnsubscribeProgramResponse = z.infer<typeof UnsubscribeProgramResponseSchema>;
+
+/**
+ * `GET /v1/programs/today?date=YYYY-MM-DD` — the mobile home "today's
+ * prescribed workout" contract. `date` is the member's local date and
+ * defaults to the server's UTC date.
+ */
+export const TodayWorkoutQuerySchema = z
+  .object({
+    date: LocalDateSchema.optional(),
+  })
+  .strict();
+
+export type TodayWorkoutQuery = z.infer<typeof TodayWorkoutQuerySchema>;
+
+/**
+ * Where `date` falls in a subscription:
+ *   - `scheduled`   — a workout is prescribed (`workout` is set);
+ *   - `rest`        — inside the program, no workout that day;
+ *   - `not_started` — before `startsOn`;
+ *   - `completed`   — after the last week.
+ */
+export const TodayWorkoutStatusSchema = z.enum(['scheduled', 'rest', 'not_started', 'completed']);
+
+export type TodayWorkoutStatus = z.infer<typeof TodayWorkoutStatusSchema>;
+
+export const TodayWorkoutItemSchema = z
+  .object({
+    subscriptionId: UuidSchema,
+    program: z.object({ id: UuidSchema, title: z.string() }).strict(),
+    startsOn: LocalDateSchema,
+    totalWeeks: z.number().int().nonnegative(),
+    status: TodayWorkoutStatusSchema,
+    weekNumber: z.number().int().min(1).nullable(),
+    dayNumber: z.number().int().min(1).max(7).nullable(),
+    workout: ProgramWorkoutSchema.nullable(),
+  })
+  .strict();
+
+export type TodayWorkoutItem = z.infer<typeof TodayWorkoutItemSchema>;
+
+export const TodayWorkoutResponseSchema = z
+  .object({
+    date: LocalDateSchema,
+    items: z.array(TodayWorkoutItemSchema),
+  })
+  .strict();
+
+export type TodayWorkoutResponse = z.infer<typeof TodayWorkoutResponseSchema>;

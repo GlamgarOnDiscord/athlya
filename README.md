@@ -70,7 +70,7 @@ graph TD
     end
 
     subgraph Clients_v11["Roadmap v1.1"]
-        Mobile["Mobile<br/>Expo SDK 55<br/>(0/13)"]
+        Mobile["Mobile<br/>Expo SDK 58<br/>(9/13)"]
     end
 
     subgraph Edge["Edge Cloudflare"]
@@ -140,7 +140,7 @@ graph TD
 
 | Couche            | Choix                                                                                     |
 | ----------------- | ----------------------------------------------------------------------------------------- |
-| **Apps**          | Web membre et studio admin en Next.js 16 · mobile Expo en roadmap                         |
+| **Apps**          | Web membre et studio admin en Next.js 16 · mobile Expo (fondation, 9/13)                  |
 | **API**           | Hono 4 sur Cloudflare Workers, découpée en workers bulkhead (auth, réservations, billing) |
 | **Données**       | Neon PostgreSQL 17 + RLS forcée · Drizzle · Upstash Redis · Cloudflare R2                 |
 | **Événements**    | Outbox transactionnelle + Cloudflare Queues, drain déclenché à chaque écriture            |

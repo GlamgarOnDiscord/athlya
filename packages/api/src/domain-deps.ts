@@ -16,6 +16,7 @@ import { buildAuthDeps } from './adapters/auth-deps.js';
 import { buildBillingDeps } from './adapters/billing-deps.js';
 import { buildCoachDeps } from './adapters/coach-deps.js';
 import { buildMembersDeps } from './adapters/members-deps.js';
+import { buildProgramsDeps } from './adapters/programs-deps.js';
 import { buildClassesDeps, buildReservationsDeps } from './adapters/reservations-deps.js';
 import { buildStudiosDeps } from './adapters/studios-deps.js';
 
@@ -26,6 +27,7 @@ import type { CheckinsDeps } from './routes/checkins.js';
 import type { ClassesDeps } from './routes/classes.js';
 import type { CoachDeps } from './routes/coach.js';
 import type { MembersDeps } from './routes/members.js';
+import type { ProgramsDeps } from './routes/programs.js';
 import type { ReservationsDeps } from './routes/reservations.js';
 import type { SessionsDeps } from './routes/sessions.js';
 import type { StudiosDeps } from './routes/studios.js';
@@ -60,6 +62,11 @@ export interface DomainDeps {
   readonly billing: BillingDeps;
   /** AI coach (Epic 21), gated by the `ai-coach` feature flag. */
   readonly coach: CoachDeps;
+  /**
+   * Training programs (Epic 24). Optional so partial test bundles stay
+   * valid; production and the lazy facade always provide it.
+   */
+  readonly programs?: ProgramsDeps;
 }
 
 /* ------------------------------------------------------------------ */
@@ -204,6 +211,27 @@ export function lazyCoachDeps(resolve: () => CoachDeps): CoachDeps {
   };
 }
 
+/**
+ * Lazy programs facade. `idempotencyFor` resolves per request, so a
+ * bundle without an idempotency store (dev stub) degrades to no replay
+ * protection instead of failing the mutation.
+ */
+export function lazyProgramsDeps(resolve: () => ProgramsDeps): ProgramsDeps {
+  const forward = forwarder(resolve);
+  return {
+    listPrograms: forward('listPrograms'),
+    getProgram: forward('getProgram'),
+    createProgram: forward('createProgram'),
+    updateProgram: forward('updateProgram'),
+    archiveProgram: forward('archiveProgram'),
+    subscribe: forward('subscribe'),
+    unsubscribe: forward('unsubscribe'),
+    listMySubscriptions: forward('listMySubscriptions'),
+    getToday: forward('getToday'),
+    idempotencyFor: (claims) => resolve().idempotencyFor?.(claims),
+  };
+}
+
 /** Lazy facade over the full {@link DomainDeps} bundle (monolith gateway). */
 export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
   return {
@@ -215,6 +243,13 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
     studios: lazyStudiosDeps(() => resolve().studios),
     billing: lazyBillingDeps(() => resolve().billing),
     coach: lazyCoachDeps(() => resolve().coach),
+    programs: lazyProgramsDeps(() => {
+      const programs = resolve().programs;
+      if (programs === undefined) {
+        throw new Error('buildLazyDomainDeps: programs dependency is not wired');
+      }
+      return programs;
+    }),
   };
 }
 
@@ -401,6 +436,26 @@ export function defaultReservationsDeps(env: AthlyaBindings, cf?: RequestCf): Re
 }
 
 /**
+ * Programs need DB_URL (the write path falls back to it without
+ * Hyperdrive); without it they fall back to the stub bundle.
+ */
+export function defaultProgramsDeps(env: AthlyaBindings): ProgramsDeps {
+  return nonEmpty(env.DB_URL)
+    ? buildProgramsDeps(env)
+    : {
+        listPrograms: () => notImplemented('programs.listPrograms'),
+        getProgram: () => notImplemented('programs.getProgram'),
+        createProgram: () => notImplemented('programs.createProgram'),
+        updateProgram: () => notImplemented('programs.updateProgram'),
+        archiveProgram: () => notImplemented('programs.archiveProgram'),
+        subscribe: () => notImplemented('programs.subscribe'),
+        unsubscribe: () => notImplemented('programs.unsubscribe'),
+        listMySubscriptions: () => notImplemented('programs.listMySubscriptions'),
+        getToday: () => notImplemented('programs.getToday'),
+      };
+}
+
+/**
  * Billing is always built — the adapter itself returns degraded
  * (`not_configured`) responses when STRIPE secrets are absent.
  */
@@ -438,5 +493,6 @@ export function buildDefaultDeps(env: AthlyaBindings, cf?: RequestCf): DomainDep
     billing: defaultBillingDeps(env),
     audit: defaultAuditDeps(env),
     coach: defaultCoachDeps(env, cf),
+    programs: defaultProgramsDeps(env),
   };
 }

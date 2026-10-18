@@ -118,6 +118,12 @@ export interface DeletionRepo {
    */
   deleteIdempotencyKeysForUser(userId: string): Promise<number>;
   /**
+   * Hard-delete every `program_subscriptions` row owned by `userId`
+   * (training programs, migration 0042): which programs a member
+   * followed, and since when, is personal data.
+   */
+  deleteProgramSubscriptionsForUser(userId: string): Promise<number>;
+  /**
    * Confirm the users row carries a tombstone. Resolves `true` when the
    * user is soft-deleted, `false` for a live or unknown account. An
    * existing `deleted_at` MUST NOT be moved: retention and anonymisation
@@ -222,6 +228,7 @@ export interface CascadeCounts {
   sessions: number;
   pushTokens: number;
   idempotencyKeys: number;
+  programSubscriptions: number;
   auditAnonymized: number;
 }
 
@@ -271,6 +278,8 @@ export type AnonymizeAuditLogResult = {
  *   3. `deletePushTokensForUser` — device tokens, so the
  *      notifications consumer cannot push to a deleted user.
  *   4. `deleteIdempotencyKeysForUser` — cached response bodies.
+ *   4b. `deleteProgramSubscriptionsForUser` — training program
+ *      subscriptions.
  *   5. `avatars.deleteAvatar` — best-effort R2 purge. A failure here
  *      is logged at `warn` but does NOT abort the cascade — the
  *      SQL-side compliance invariant is already satisfied and R2
@@ -310,6 +319,7 @@ export async function handleUserDeleted(
   // (issue #52). Rows have a 24-hour TTL anyway, but they must not survive
   // an explicit erasure request.
   const idempotencyKeys = await deps.repo.deleteIdempotencyKeysForUser(userId);
+  const programSubscriptions = await deps.repo.deleteProgramSubscriptionsForUser(userId);
 
   // Step 5: best-effort R2 avatar purge. Transient blob-store
   // failures must NOT block the SQL-side cascade completing —
@@ -337,6 +347,7 @@ export async function handleUserDeleted(
       sessions,
       pushTokens,
       idempotencyKeys,
+      programSubscriptions,
       // The audit anonymisation runs 30 days from now; at
       // cascade time no rows have been touched yet, so the
       // field is stamped at 0. The eventual
