@@ -22,6 +22,8 @@
 - Docs: `docs/runbooks/automatic-rollback.md` (rewritten), `deploy-production.md`, `canary-deploy.md`, `expand-contract-migrations.md` (`-- athlya:contract` marker); `rollback.yml` header corrected (gateway-only manual rollback).
 - **Operator steps** (runbook § Operator setup): Axiom read-only query token; GitHub environment `production-rollback` (no reviewers, `master` only) with `AXIOM_QUERY_TOKEN`, `AXIOM_SPANS_DATASET`, then `AUTO_ROLLBACK_ENABLED=true`; optional `PAGERDUTY_ROUTING_KEY` / `SLACK_WEBHOOK_URL`; fine-grained PAT (this repository, Actions: write) as production secret `TF_VAR_slo_auto_rollback_github_token` + variable `SLO_AUTO_ROLLBACK_MONITOR_ENABLED=true`, then `terraform.yml` plan/apply on production.
 
+- **#649** — native sign-in and registration got `403 bot_challenge_failed` because the app had no Turnstile widget. The auth Worker now serves `GET /v1/auth/turnstile-challenge`, a minimal page (CSP `default-src 'none'`, nonce, `challenges.cloudflare.com` only, no secret) that renders the real widget with the public `TURNSTILE_SITE_KEY` and posts the token to `window.ReactNativeWebView`. The app (`react-native-webview` 14.0.1, the Expo SDK 58 pin) shows it on `/login` and `/register`, sends the token as `cf-turnstile-token` like the web, handles expiry, errors and retry (FR/EN strings, screen-reader notices), and asks for a fresh challenge after each attempt. Siteverify is unchanged and there is no mobile-only route. Operator steps: add `api.athlya.app` (and `staging.api.athlya.app` if staging uses a real widget) to the widget's allowed hostnames, then, from `packages/api`, `pnpm exec wrangler secret put TURNSTILE_SITE_KEY --config wrangler.auth.toml --env staging` and `pnpm exec wrangler secret put TURNSTILE_SITE_KEY --config wrangler.auth.toml --env production`, each with the web app's site key of that environment (now a required auth secret in `verify-secrets.mjs`, so set it before the next API deploy) (details in `docs/mobile/README.md` § Bot protection). App Attest / Play Integrity follow-up: #659.
+
 ## Session 2026-10-17/18 — clôture des issues
 
 Session de clôture du backlog P0/P1 ouvert par l'audit : RLS-safe sous les rôles runtime `NOBYPASSRLS`, outbox, export RGPD, billing Stripe, bulkhead Workers, canary, staging gate, Terraform, observabilité, déploiement frontend. Tout le code est sur `master` (tête `55f39f7`). Les issues fermées « code-complete » laissent des étapes opérateur, regroupées dans la [checklist opérateur](#checklist-opérateur-consolidée) ci-dessous.
@@ -290,16 +292,16 @@ Insérée entre Epic 8 et Epic 10. Règle les 4 vrais bloquants identifiés dans
 
 ## Non démarré (~46 tâches)
 
-### Epic 11 — Mobile Expo (1 tâche restante : 11.9, bloquée côté API)
+### Epic 11 — Mobile Expo ✅ (13/13, 11.9 livrée par #648)
 
 Foundation delivered in #642 (issue #638): 11.1–11.7, 11.12 (P5) and 11.13 on Expo SDK 58, plus the BR.4 icon and splash. See `docs/mobile/README.md`.
 
 Écrans membres livrés pour #647 : connexion / inscription, réservation de cours avec mise à jour optimiste (11.8) et « Mes réservations » (annulation), journal de séance (11.10), paramètres avec export / suppression RGPD (11.11), déverrouillage biométrique, déconnexion et vue « modifications refusées » (DLQ), plus la séance du jour du programme sur l'accueil (24.4). Les réservations, annulations et séances passent par `features/writes.ts` (l'authentification, l'export et la suppression RGPD appellent l'API directement, en ligne uniquement) : envoi direct avec une `Idempotency-Key` UUID v4, mise en file avec la même clé sur `NetworkError`, hors ligne, ou quand des écritures plus anciennes de l'utilisateur attendent encore (ordre FIFO). La logique des écrans est testée en Node (vitest).
 
-Restent ouverts :
+Restent des étapes opérateur :
 
-- 11.9 (QR check-in) : pas de route d'émission de token et `/v1/checkins` non monté en production (#648, suite de #302). `POST /v1/sessions` est en revanche routé depuis #652 (migration 0044 + déploiement du Worker reservations), donc le journal de séance mobile est servi de bout en bout.
-- Connexion depuis l'app en staging / production : `login` et `register` exigent un token Turnstile que l'app native ne sait pas produire (`403 bot_challenge_failed`), #649.
+- 11.9 (QR check-in) livrée par #648 sur l'API de #654 : appliquer la migration 0045 et redéployer le Worker reservations avec les secrets JWT. `POST /v1/sessions` est routé depuis #652 (migration 0044 + déploiement du Worker reservations), donc le journal de séance mobile est servi de bout en bout.
+- Connexion depuis l'app en staging / production : livrée par #649 (widget Turnstile dans une WebView, vérification serveur inchangée). Reste l'étape opérateur : hostname de l'API dans le widget Turnstile et `TURNSTILE_SITE_KEY` sur le Worker auth (staging et production).
 ### Epic 12 — Admin studio app (4 tâches restantes — 12.2 et 12.3 livrées)
 ### Epic 20 — Checkpoint v0.2
 ### Epics v0.3 (Epic 21–25 — 21.1 et Epic 22 livrées, 21.2 livrée partiellement, Epic 24 complet : 24.1–24.3 #640/#643, 24.4 mobile #647)
@@ -334,7 +336,7 @@ P1 capacity, P2 idempotence, P3 state-machine, P4 RGPD cascade, P6 JWT non-forge
 
 Epic 14 fermé — Checkpoint v0.1 MVP livré. Reste deux gros chantiers front :
 
-- **Epic 11 — Mobile Expo** (reste 11.9, bloquée par l'API #648 ; connexion mobile derrière Turnstile #649 ; fondation #642 et écrans #647 livrés)
+- **Epic 11 — Mobile Expo** ✅ (fondation #642, écrans #647, check-in QR #648 et connexion via Turnstile en WebView #649 livrés)
 - **Epic 12 — Admin studio app** (4 tâches restantes)
 
 ## Conventions maintenues

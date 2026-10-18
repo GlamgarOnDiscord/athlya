@@ -35,9 +35,10 @@ export interface RequestOptions {
    */
   readonly refreshOnUnauthorized?: boolean;
   /**
-   * Extra request headers, e.g. `If-None-Match`. `Accept`, `Content-Type`,
-   * `Authorization` and `Idempotency-Key` belong to the client: a copy of
-   * one of them here is ignored, whatever its case.
+   * Extra request headers, e.g. `If-None-Match` or `cf-turnstile-token` on
+   * sign-in. `Accept`, `Content-Type`, `Authorization` and `Idempotency-Key`
+   * belong to the client: a copy of one of them here is ignored, whatever its
+   * case.
    */
   readonly headers?: Readonly<Record<string, string>>;
 }

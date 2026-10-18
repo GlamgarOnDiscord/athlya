@@ -87,6 +87,32 @@ describe('per-route auth rate limits (#466)', () => {
     }
   });
 
+  it('GET /v1/auth/turnstile-challenge skips the fail-closed auth bucket (#649)', async () => {
+    const env = primeStagingDown();
+    const app = buildAppNoDomainRoutes();
+
+    const page = await app.request(
+      '/v1/auth/turnstile-challenge',
+      { method: 'GET', headers: stagingHeaders },
+      env,
+    );
+    expect(page.status).not.toBe(503);
+
+    const other = await app.request(
+      '/v1/auth/turnstile-challenge-other',
+      { method: 'GET', headers: stagingHeaders },
+      env,
+    );
+    expect(other.status).toBe(503);
+
+    const post = await app.request(
+      '/v1/auth/turnstile-challenge',
+      { method: 'POST', headers: stagingHeaders },
+      env,
+    );
+    expect(post.status).toBe(503);
+  });
+
   it('OPTIONS on /v1/auth/login is not blocked by per-endpoint limiter', async () => {
     const env = primeStagingDown();
     const app = buildAppNoDomainRoutes();

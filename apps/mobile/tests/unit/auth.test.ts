@@ -59,6 +59,30 @@ describe('signIn', () => {
     expect(sync.refreshOwner).toHaveBeenCalledTimes(1);
   });
 
+  it('sends the Turnstile token in the cf-turnstile-token header', async () => {
+    const { deps, api } = setup();
+    api.post.mockResolvedValue(session());
+
+    await signIn(deps, { email: 'ada@example.com', password: 'secret', turnstileToken: 'ts-1' });
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/v1/auth/login',
+      { email: 'ada@example.com', password: 'secret' },
+      { authenticated: false, headers: { 'cf-turnstile-token': 'ts-1' } },
+    );
+  });
+
+  it('sends no Turnstile header without a token', async () => {
+    const { deps, api } = setup();
+    api.post.mockResolvedValue(session());
+    await signIn(deps, { email: 'ada@example.com', password: 'secret', turnstileToken: null });
+    await signIn(deps, { email: 'ada@example.com', password: 'secret', turnstileToken: '' });
+    expect(api.post).toHaveBeenCalledTimes(2);
+    for (const call of api.post.mock.calls) {
+      expect(call[2]).toEqual({ authenticated: false });
+    }
+  });
+
   it('validates the form before calling the API', async () => {
     const { deps, api } = setup();
     const result = await signIn(deps, { email: 'not-an-email', password: '' });
@@ -153,6 +177,23 @@ describe('register', () => {
       { authenticated: false },
     );
     expect(sync.refreshOwner).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends the Turnstile token like the web client', async () => {
+    const { deps, api } = setup();
+    api.post.mockResolvedValue(session());
+    await register(deps, { ...input, turnstileToken: 'ts-2' });
+    expect(api.post).toHaveBeenCalledWith('/v1/auth/register', expect.anything(), {
+      authenticated: false,
+      headers: { 'cf-turnstile-token': 'ts-2' },
+    });
+  });
+
+  it('does not call the API, so keeps the token, when a field is invalid', async () => {
+    const { deps, api } = setup();
+    const result = await register(deps, { ...input, email: 'nope', turnstileToken: 'ts-3' });
+    expect(result).toMatchObject({ ok: false, error: null });
+    expect(api.post).not.toHaveBeenCalled();
   });
 
   it('flags invalid fields', async () => {

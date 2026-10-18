@@ -51,6 +51,10 @@ JWT_KID=dev-key-1
 # Secret key counterpart of NEXT_PUBLIC_TURNSTILE_SITE_KEY in apps/web.
 # Shortcut for local dev (always passes): 1x0000000000000000000000000000000AA
 TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+# Public site key rendered by GET /v1/auth/turnstile-challenge for the mobile
+# app (issue #649). Optional in dev: the always-pass test key below is used
+# when it is unset.
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
 
 # ---- CORS (Sprint-1 SP1.3 — Slice 1.2-A) -------------------------------------
 # Strict allow-list for cross-origin browser requests. REQUIRED in

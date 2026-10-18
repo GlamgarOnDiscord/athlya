@@ -118,7 +118,8 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     failPolicy: 'fail-closed',
     bucket: 'ip',
     wiredIn: 'worker.ts',
-    notes: 'Issue #65 — general auth surface; tighter per-endpoint limits overlay this',
+    notes:
+      'Issue #65 — general auth surface; tighter per-endpoint limits overlay this. GET /v1/auth/turnstile-challenge is exempt (static page, global-v1 only, issue #649)',
   },
   {
     id: 'auth-login',

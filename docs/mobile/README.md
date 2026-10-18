@@ -1,7 +1,8 @@
 # Mobile — Epic 10 (`apps/mobile`)
 
 **Status**: foundation (issue #638), member screens (issue #647) and the QR check-in screen (issue
-#648) delivered, 13/13 tasks; progression graphs (22.2, issue #660) too. Post-1.0 roadmap item v1.1, see
+#648) delivered, 13/13 tasks; progression graphs (22.2, issue #660) too. Sign-in and registration
+pass Cloudflare Turnstile through a WebView (issue #649). Post-1.0 roadmap item v1.1, see
 [`docs/roadmap/post-1.0.md`](../roadmap/post-1.0.md).
 
 ## Stack
@@ -17,6 +18,7 @@
 | Connectivity  | `@react-native-community/netinfo`                                                     |
 | Charts        | `react-native-svg` 15.16 (SDK 58 pin); maths in `@athlya/shared/charts`               |
 | QR code       | `react-native-qrcode-svg` 6 on `react-native-svg` 15.16 (the SDK 58 version)          |
+| Bot check     | `react-native-webview` 14.0.1 (the SDK 58 pin) hosting the API's Turnstile page       |
 | Builds        | EAS Build / Submit — operator steps in [`mobile-eas.md`](../runbooks/mobile-eas.md)   |
 
 ## Checklist (`tasks.md` § 11)
@@ -59,8 +61,8 @@ Node without a device or simulator.
 
 ## Runtime contracts
 
-- **Runtime**: `useRuntime()` (`components/RuntimeProvider.tsx`) returns `{ locale, t, api,
-tokenStore, queue, sync, dispose }`.
+- **Runtime**: `useRuntime()` (`components/RuntimeProvider.tsx`) returns `{ locale, apiBaseUrl, t,
+api, tokenStore, queue, sync, dispose }`.
 - **Online calls**: `runtime.api.post<T>(path, body, { idempotencyKey })` and friends throw
   `ApiError` (with the parsed `ProblemDetails`) on non-2xx, `AuthRequiredError` when the session
   cannot be refreshed, `NetworkError` when no response arrived.
@@ -76,7 +78,8 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
   `<SyncStatusBanner>`; its `pending` / `deadLetters` counts only cover the signed-in user.
   `runtime.queue.deadLetters(userId)` / `discardDeadLetter(id, userId)` back the "rejected changes"
   view and never return or delete another account's entries.
-- **Sign-in**: after `POST /v1/auth/login` (`{ authenticated: false }`), pass
+- **Sign-in**: `POST /v1/auth/login` goes out with `{ authenticated: false, headers: {
+'cf-turnstile-token': token } }` (see [Bot protection](#bot-protection-turnstile)); then pass
   `{ ...session, userId: session.user.id }` to `runtime.tokenStore.saveSession()`.
   `await setBiometricUnlockEnabled(true)` resolves `true` only when the gate is on: it resolves
   `false`, enabling nothing, when biometrics are unavailable or the prompt is declined, so show the
@@ -94,8 +97,8 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
 
 | Route           | What it does                                                                                 | API                                                                                             |
 | --------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `/login`        | Email + password sign-in                                                                     | `POST /v1/auth/login`                                                                           |
-| `/register`     | Account creation with studio slug and consents                                               | `POST /v1/auth/register`                                                                        |
+| `/login`        | Email + password sign-in, Turnstile check                                                    | `GET /v1/auth/turnstile-challenge` (WebView), `POST /v1/auth/login`                             |
+| `/register`     | Account creation with studio slug and consents, Turnstile check                              | `GET /v1/auth/turnstile-challenge` (WebView), `POST /v1/auth/register`                          |
 | `/`             | Sync banner, today's program workout (24.4), navigation                                      | `GET /v1/programs/today?date=<local date>`                                                      |
 | `/classes`      | Next 14 days of classes, booking with an optimistic seat count (11.8)                        | `GET /v1/classes?from=<ISO>&to=<ISO>` (both required, 90 days at most), `POST /v1/reservations` |
 | `/reservations` | Upcoming reservations, cancellation until 2 h before the class                               | `GET /v1/reservations/me`, `DELETE /v1/reservations/{id}`                                       |
@@ -151,9 +154,6 @@ signed-in area whatever happens locally.
 
 **Known gaps**:
 
-- Sign-in from a release build: `login` and `register` are behind Turnstile, which a native app
-  cannot solve, so staging and production answer `403 bot_challenge_failed` (shown as "use the
-  website"). Works against a local `wrangler dev` without a Turnstile secret. Tracked in #649.
 - QR check-in needs its API: `POST /v1/checkins/token` (and the kiosk's `POST /v1/checkins`) is
   routed on the reservations Worker since #654, once migration 0045 is applied and that Worker is
   redeployed with the JWT signing secrets. Until then the screen shows the load error.
@@ -163,6 +163,84 @@ signed-in area whatever happens locally.
   `wrangler deploy --config wrangler.reservations.toml --env production`. Until those named-env
   deploys run, the route stays unrouted in that environment: workouts logged online fail and
   queued ones end up in "rejected changes".
+
+## Bot protection (Turnstile)
+
+`POST /v1/auth/login` and `POST /v1/auth/register` sit behind the API's `turnstile()` middleware
+(Requirement 26): a request without a valid `cf-turnstile-token` header gets
+`403 bot_challenge_failed`. The app solves the **real** Turnstile widget in a WebView, as
+Cloudflare documents for mobile apps
+([mobile implementation](https://developers.cloudflare.com/turnstile/get-started/mobile-implementation)).
+Server-side verification is the same siteverify call as for the web: there is no mobile-only route
+and no relaxed check.
+
+Flow:
+
+1. `<TurnstileChallenge>` (`components/TurnstileChallenge.tsx`) loads
+   `GET {EXPO_PUBLIC_API_URL}/v1/auth/turnstile-challenge?lang=<fr|en>&theme=<light|dark>`.
+2. The auth Worker answers a small HTML page (`packages/api/src/routes/turnstile-challenge.ts`)
+   that renders the widget with the public site key `TURNSTILE_SITE_KEY`. Its CSP is
+   `default-src 'none'` plus a per-response nonce for its own inline script and style; scripts,
+   frames and connections are allowed to `https://challenges.cloudflare.com` only. The page holds no
+   secret.
+3. The page posts the widget events to the app through `window.ReactNativeWebView.postMessage`:
+   `ready`, `token`, `expired`, `timeout`, `error`. The app accepts them only from the API's
+   challenge page and validates their shape (`features/auth/turnstile.ts`).
+4. The submit button stays disabled until a token is held. `signIn` / `register` send it as
+   `cf-turnstile-token`, exactly like the web client.
+5. Tokens are single-use: after every attempt the API saw (success or error), the screen remounts
+   the WebView for a fresh challenge. A form rejected locally (invalid field) keeps its token.
+
+States shown under the widget (strings `mobile.auth.turnstile.*`, FR/EN, announced to screen
+readers through `<Notice>`): in progress, passed, expired (Turnstile renews the token by itself,
+`refresh-expired: auto`), failed (widget error, timeout, page not loaded, offline) with a "Retry
+the security check" button that reloads the challenge. The widget does not retry on its own
+(`retry: never`), so a failure is always visible. While no token is held, the submit button's
+accessibility hint says the check must be completed first. A `403 bot_challenge_failed` from the
+API maps to `mobile.auth.errors.botCheck` ("complete the check again, then retry").
+
+The WebView only navigates to the challenge page, `challenges.cloudflare.com` frames and
+`about:blank`; other links (Turnstile's privacy and help links) open in the system browser when they
+are `https` and are dropped otherwise. File access, multiple windows and mixed content are off.
+
+In `ENVIRONMENT=dev`, a missing `TURNSTILE_SITE_KEY` falls back to Cloudflare's always-pass test key
+`1x00000000000000000000AA`, and a missing `TURNSTILE_SECRET` makes the middleware skip siteverify,
+so a local `wrangler dev` works out of the box. In every other environment a missing or malformed
+site key makes the page answer `500 configuration_error` and the app shows the failed state.
+
+### Operator steps
+
+1. **Allowed hostnames** — in the Cloudflare dashboard (Turnstile → the widget whose site key the
+   production web app uses → Settings → Hostname management), add `api.athlya.app`. The widget
+   checks the hostname of the page that renders it, which is the API host, not `app.athlya.app`;
+   without it the widget fails with error `110200`. If staging uses a real (non-test) widget, add
+   `staging.api.athlya.app` to that widget too.
+2. **Site key on the auth Worker** — the page reads the binding `TURNSTILE_SITE_KEY`. The value is
+   public but is stored as a Wrangler secret so that `wrangler deploy` (which replaces dashboard
+   variables with the `[vars]` of the config) and canary uploads keep it:
+
+   ```bash
+   cd packages/api
+   pnpm exec wrangler secret put TURNSTILE_SITE_KEY --config wrangler.auth.toml --env staging
+   pnpm exec wrangler secret put TURNSTILE_SITE_KEY --config wrangler.auth.toml --env production
+   ```
+
+   Use the same site key as the web app of that environment (GitHub environment variable
+   `TURNSTILE_SITE_KEY`): it must pair with the `TURNSTILE_SECRET` already set on the auth Worker.
+   Staging pairs Cloudflare's test keys (site key `1x00000000000000000000AA`, secret
+   `1x0000000000000000000000000000000AA`); check that both halves on staging are test keys, or
+   both real ones. A secret takes effect without a redeploy.
+
+3. **Check** — `node scripts/verify-secrets.mjs --env staging` (then `--env production`) fails
+   while `TURNSTILE_SITE_KEY` is missing on the auth Worker: it is a required secret there, and the
+   deploy workflows run this check first, so set the key **before** the next API deploy. Then open
+   `https://staging.api.athlya.app/v1/auth/turnstile-challenge` in a browser: the widget must
+   render and pass, and the response must carry the `Content-Security-Policy` header.
+4. **Release build** — sign in and register from a `preview` build against staging, then from a
+   `production` build.
+
+Hardware attestation (App Attest on iOS, Play Integrity on Android) as an additional signal is a
+separate follow-up (#659), not part of this flow.
 
 ## Drain semantics (Algorithm 4)
 

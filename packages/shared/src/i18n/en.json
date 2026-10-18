@@ -573,7 +573,18 @@
         "studioSlug": "Enter your studio's short name (lowercase letters, digits and hyphens).",
         "emailTaken": "An account already exists with this email address.",
         "studioNotFound": "No studio matches this short name.",
-        "botCheck": "This action is not available from the app yet. Please use the website."
+        "botCheck": "The security check failed or expired. Complete it again, then retry."
+      },
+      "turnstile": {
+        "label": "Security check",
+        "frameLabel": "Cloudflare security check",
+        "pending": "Security check in progress…",
+        "verified": "Security check passed.",
+        "expired": "The security check expired and is being renewed…",
+        "failed": "The security check could not be completed. Check your connection and try again.",
+        "retry": "Retry the security check",
+        "retryHint": "Reloads the Cloudflare security check.",
+        "required": "Complete the security check before continuing."
       }
     },
     "errors": {

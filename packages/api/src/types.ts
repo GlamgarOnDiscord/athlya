@@ -325,6 +325,17 @@ export interface AthlyaBindings {
   readonly TURNSTILE_SECRET?: string;
 
   /**
+   * Public Cloudflare Turnstile site key rendered by
+   * `GET /v1/auth/turnstile-challenge`, the page the mobile app loads
+   * in a WebView to obtain a token (issue #649). Not a secret; it is
+   * stored with `wrangler secret put` only so that `wrangler deploy`
+   * does not drop it. When unset, `dev` falls back to Cloudflare's
+   * always-pass test key and other environments answer 500
+   * `configuration_error`.
+   */
+  readonly TURNSTILE_SITE_KEY?: string;
+
+  /**
    * Cloudflare R2 bucket binding holding member avatar binaries
    * (Slice 1.3 — Sprint 1, finding S5-002). Consumed by
    * {@link import('@athlya/members').AvatarStore} via

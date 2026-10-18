@@ -18,7 +18,8 @@
  *   - assertRequiredSecrets() (domain-deps.ts) — DB_URL, REDIS_URL,
  *     REDIS_TOKEN, JWT_JWKS_URL, JWT_KID on every Worker;
  *   - CORS_ORIGIN — base-app.ts refuses cross-origin requests without it;
- *   - auth: signing keys, TURNSTILE_SECRET (/login, /register), RESEND_API_KEY;
+ *   - auth: signing keys, TURNSTILE_SECRET (/login, /register),
+ *     TURNSTILE_SITE_KEY (/turnstile-challenge, the mobile app's widget page), RESEND_API_KEY;
  *   - reservations: EXPORT_URL_SIGNING_KEY (/v1/members/me/export download);
  *   - billing: Stripe checkout + webhook (STRIPE_*, BILLING_REDIRECT_URL,
  *     BILLING_DB_URL) and /admin/* (JWT rotation keys, CF Access);
@@ -91,6 +92,7 @@ export const REQUIRED = {
     ...CORE_JWT,
     'CORS_ORIGIN',
     'TURNSTILE_SECRET',
+    'TURNSTILE_SITE_KEY',
     'RESEND_API_KEY',
   ],
   reservations: [...CORE_DB, ...CORE_REDIS, ...CORE_JWT, 'CORS_ORIGIN', 'EXPORT_URL_SIGNING_KEY'],

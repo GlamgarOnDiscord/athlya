@@ -12,7 +12,9 @@
 # Secrets (set once per env via `wrangler secret put --config wrangler.auth.toml`):
 #   DB_URL, REDIS_URL, REDIS_TOKEN, JWT_JWKS_URL, CORS_ORIGIN, JWT_KID,
 #   JWT_PRIVATE_KEY_PEM, JWT_PUBLIC_KEY_PEM, JWKS_JSON, TURNSTILE_SECRET,
-#   RESEND_API_KEY
+#   TURNSTILE_SITE_KEY, RESEND_API_KEY
+# TURNSTILE_SITE_KEY is the public site key served by GET /v1/auth/turnstile-challenge
+# (mobile sign-in, issue #649); it is a secret only so `wrangler deploy` keeps it.
 # Production also: SENTRY_DSN, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS.
 # scripts/verify-secrets.mjs checks this list (keep both in sync).
 # Queue bindings: OUTBOX_KICK_QUEUE (producer only, issue #311).

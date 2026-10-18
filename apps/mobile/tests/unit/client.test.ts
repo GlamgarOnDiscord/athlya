@@ -97,6 +97,28 @@ describe('createApiClient', () => {
     expect(headersOf(init).Authorization).toBeUndefined();
   });
 
+  it('sends extra headers without letting them replace the managed ones', async () => {
+    const { client, fetchImpl } = setup([jsonResponse(200, {})]);
+    await client.post(
+      '/v1/auth/login',
+      {},
+      {
+        authenticated: false,
+        headers: {
+          'cf-turnstile-token': 'turnstile-1',
+          authorization: 'Bearer forged',
+          'Content-Type': 'text/plain',
+        },
+      },
+    );
+    const [, init] = fetchImpl.mock.calls[0] as FetchArgs;
+    expect(headersOf(init)).toEqual({
+      'cf-turnstile-token': 'turnstile-1',
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    });
+  });
+
   it('rethrows a caller abort instead of reporting a network failure', async () => {
     const fetchImpl = vi.fn(
       (_input: string, init: RequestInit) =>

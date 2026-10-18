@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useSessionStore } from '../components/AppSession';
 import { useRuntime } from '../components/RuntimeProvider';
+import { TurnstileChallenge, useTurnstileChallenge } from '../components/TurnstileChallenge';
 import { AppText } from '../components/ui/AppText';
 import { Button } from '../components/ui/Button';
 import { Notice } from '../components/ui/Notice';
@@ -20,6 +21,7 @@ export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Extract<AuthResult, { ok: false }> | null>(null);
   const inflight = useRef<AbortController | null>(null);
+  const challenge = useTurnstileChallenge();
 
   useEffect(
     () => () => {
@@ -29,14 +31,18 @@ export default function LoginScreen() {
   );
 
   const submit = () => {
+    const turnstileToken = challenge.token;
+    if (turnstileToken === null) return;
     const controller = new AbortController();
     inflight.current = controller;
     setBusy(true);
     setFailure(null);
-    signIn(runtime, { email, password }, controller.signal)
+    signIn(runtime, { email, password, turnstileToken }, controller.signal)
       .then(async (result) => {
         if (!result.ok) {
           setFailure(result);
+          // The API saw the token, which is single-use: ask for a new one.
+          if (result.error !== null) challenge.reset();
           return;
         }
         await session.refresh();
@@ -77,7 +83,16 @@ export default function LoginScreen() {
         error={fieldError('password')}
       />
       {failure?.error ? <Notice tone="error" message={t(failure.error.key)} /> : null}
-      <Button title={t('mobile.auth.login.submit')} busy={busy} onPress={submit} />
+      <TurnstileChallenge controller={challenge} />
+      <Button
+        title={t('mobile.auth.login.submit')}
+        busy={busy}
+        disabled={challenge.token === null}
+        {...(challenge.token === null
+          ? { accessibilityHint: t('mobile.auth.turnstile.required') }
+          : {})}
+        onPress={submit}
+      />
       <Button
         title={t('mobile.auth.login.toRegister')}
         variant="secondary"

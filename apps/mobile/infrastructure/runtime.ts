@@ -20,6 +20,8 @@ import { SyncController } from './sync/sync-controller';
 
 export interface AppRuntime {
   readonly locale: Locale;
+  /** API origin (`EXPO_PUBLIC_API_URL`), also loaded by the Turnstile WebView. */
+  readonly apiBaseUrl: string;
   readonly t: (key: TranslationKeys, values?: Record<string, string | number>) => string;
   readonly api: ApiClient;
   readonly tokenStore: TokenStore;
@@ -55,5 +57,14 @@ export async function createAppRuntime(): Promise<AppRuntime> {
     connectivity,
     getOwnerId: () => tokenStore.getUserId(),
   });
-  return { locale, t, api, tokenStore, queue, sync, dispose: () => connectivity.dispose() };
+  return {
+    locale,
+    apiBaseUrl: baseUrl,
+    t,
+    api,
+    tokenStore,
+    queue,
+    sync,
+    dispose: () => connectivity.dispose(),
+  };
 }

@@ -39,6 +39,11 @@ There is no fallback: `app.config.js` fails any EAS build whose profile does not
 secret may ever use that prefix. Real secrets, if any are ever needed, go to expo.dev (Project →
 Environment variables, "secret" visibility), never into the repository.
 
+Sign-in and registration also need the API side of the Turnstile WebView (#649): the API host in
+the widget's allowed hostnames and `TURNSTILE_SITE_KEY` on the auth Worker of each environment. Steps
+in [`docs/mobile/README.md`](../mobile/README.md#operator-steps). Do it before handing a `preview`
+build to testers, or every sign-in fails on the security check.
+
 ## 3. Credentials
 
 Let EAS manage signing credentials (stored encrypted on Expo's servers):

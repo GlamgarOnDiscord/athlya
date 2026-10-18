@@ -10,7 +10,7 @@ Mise à jour : sortie v1.0.0.
 
 **Effort estimé** : ~3 sprints (~3 semaines).
 
-**Status**: foundation (11.1–11.7, 11.12, 11.13) delivered on Expo SDK 58 / React Native 0.88 in #638 — see [`docs/mobile/README.md`](../mobile/README.md). Member screens (11.8, 11.10, 11.11) and the program card on the home screen (24.4) delivered for #647; the QR check-in screen (11.9) for #648 (API in #654). Mobile sign-in still waits for a bot-check flow (#649).
+**Status**: foundation (11.1–11.7, 11.12, 11.13) delivered on Expo SDK 58 / React Native 0.88 in #638 — see [`docs/mobile/README.md`](../mobile/README.md). Member screens (11.8, 11.10, 11.11) and the program card on the home screen (24.4) delivered for #647; the QR check-in screen (11.9) for #648 (API in #654). Sign-in and registration solve Cloudflare Turnstile in a WebView since #649.
 
 **Déclencheur** : décision business "rendre l'app dispo iOS/Android" + au moins un studio pilote prêt à tester l'app native.
 

@@ -114,6 +114,33 @@ const invalidIdempotencyKeyResponse = {
  * auth — /v1/auth/*
  */
 
+const turnstileChallengeRoute = createRoute({
+  method: 'get',
+  path: '/v1/auth/turnstile-challenge',
+  tags: ['auth'],
+  summary: 'Turnstile challenge page for the mobile app WebView',
+  description:
+    'HTML page that renders the Cloudflare Turnstile widget and posts the token to ' +
+    '`window.ReactNativeWebView`. The token is then sent as `cf-turnstile-token` to ' +
+    '`/v1/auth/login` or `/v1/auth/register`.',
+  request: {
+    query: z.object({
+      lang: z.enum(['fr', 'en']).optional(),
+      theme: z.enum(['auto', 'light', 'dark']).optional(),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Challenge page',
+      content: { 'text/html': { schema: z.string() } },
+    },
+    500: {
+      description: 'Turnstile site key not configured',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+  },
+});
+
 const registerRoute = createRoute({
   method: 'post',
   path: '/v1/auth/register',
@@ -1248,6 +1275,7 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   };
 
   // auth
+  app.openapi(turnstileChallengeRoute, stub);
   app.openapi(registerRoute, stub);
   app.openapi(loginRoute, stub);
   app.openapi(refreshRoute, stub);

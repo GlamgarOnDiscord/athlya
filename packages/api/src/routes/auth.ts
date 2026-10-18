@@ -6,6 +6,7 @@
  *
  *   | Method | Path                    | Chain                                                              |
  *   |--------|-------------------------|--------------------------------------------------------------------|
+ *   | GET    | /turnstile-challenge    | handler (HTML page hosting the Turnstile widget for the mobile app) |
  *   | POST   | /register               | turnstile → zValidator(RegisterRequestSchema) → handler            |
  *   | POST   | /login                  | turnstile → zValidator(LoginRequestSchema) → handler               |
  *   | POST   | /refresh                | zValidator(RefreshRequestSchema) → handler (NOT idempotent — rotation is single-use) |
@@ -23,7 +24,9 @@
  *            the cached response.
  *   • 5.1  — `DELETE /me` soft-deletes the authenticated user and
  *            fans out the RGPD deletion cascade.
- *   • 26.1 — `/register` and `/login` sit behind Turnstile.
+ *   • 26.1 — `/register` and `/login` sit behind Turnstile. The mobile
+ *            app solves the challenge in a WebView that loads
+ *            `/turnstile-challenge` (issue #649).
  *
  * Slice B8.4 — the `/login-with-apple` and `/login-with-google`
  * routes were removed. They previously threw "provider credentials
@@ -51,6 +54,8 @@ import { runWithOutboxKickScope } from '../events/outbox-kick.js';
 import { jwtAuth } from '../middleware/auth.js';
 import { turnstile } from '../middleware/turnstile.js';
 import { zValidator } from '../middleware/validator.js';
+
+import { turnstileChallengeHandler } from './turnstile-challenge.js';
 
 import {
   idempotency,
@@ -209,6 +214,9 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
     }
     return idempotency(store)(c, next);
   };
+
+  /* ------------------------------ turnstile-challenge ------------ */
+  router.get('/turnstile-challenge', (c) => turnstileChallengeHandler(c));
 
   /* ------------------------------ register ----------------------- */
   router.post('/register', turnstile(), zValidator('json', RegisterRequestSchema), async (c) => {
