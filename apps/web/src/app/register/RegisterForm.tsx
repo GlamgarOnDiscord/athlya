@@ -206,6 +206,7 @@ export function RegisterForm({ nonce }: RegisterFormProps): ReactElement {
         <div className="flex items-center gap-2">
           <Checkbox
             id="reg-consent-marketing"
+            aria-labelledby="reg-consent-marketing-label"
             checked={state.consents.marketing}
             onCheckedChange={(checked) =>
               setState((s) => ({
@@ -214,13 +215,18 @@ export function RegisterForm({ nonce }: RegisterFormProps): ReactElement {
               }))
             }
           />
-          <Label htmlFor="reg-consent-marketing" className="text-sm font-normal">
+          <Label
+            id="reg-consent-marketing-label"
+            htmlFor="reg-consent-marketing"
+            className="text-sm font-normal"
+          >
             {t('auth.register.consents.marketing')}
           </Label>
         </div>
         <div className="flex items-center gap-2">
           <Checkbox
             id="reg-consent-analytics"
+            aria-labelledby="reg-consent-analytics-label"
             checked={state.consents.analytics}
             onCheckedChange={(checked) =>
               setState((s) => ({
@@ -229,13 +235,18 @@ export function RegisterForm({ nonce }: RegisterFormProps): ReactElement {
               }))
             }
           />
-          <Label htmlFor="reg-consent-analytics" className="text-sm font-normal">
+          <Label
+            id="reg-consent-analytics-label"
+            htmlFor="reg-consent-analytics"
+            className="text-sm font-normal"
+          >
             {t('auth.register.consents.analytics')}
           </Label>
         </div>
         <div className="flex items-center gap-2">
           <Checkbox
             id="reg-consent-thirdParty"
+            aria-labelledby="reg-consent-thirdParty-label"
             checked={state.consents.thirdParty}
             onCheckedChange={(checked) =>
               setState((s) => ({
@@ -244,7 +255,11 @@ export function RegisterForm({ nonce }: RegisterFormProps): ReactElement {
               }))
             }
           />
-          <Label htmlFor="reg-consent-thirdParty" className="text-sm font-normal">
+          <Label
+            id="reg-consent-thirdParty-label"
+            htmlFor="reg-consent-thirdParty"
+            className="text-sm font-normal"
+          >
             {t('auth.register.consents.thirdParty')}
           </Label>
         </div>

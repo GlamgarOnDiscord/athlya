@@ -32,7 +32,7 @@ export const colors = {
     muted: '#F1F5F9',
     mutedForeground: '#475569',
     accent: '#E0F2FE',
-    destructive: '#DC2626',
+    destructive: '#B91C1C',
     success: '#16A34A',
     warning: '#D97706',
     border: '#E2E8F0',
