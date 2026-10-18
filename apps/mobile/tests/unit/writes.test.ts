@@ -200,6 +200,28 @@ describe('submitWrite', () => {
     ]);
   });
 
+  it('neither sends nor queues a write cancelled while the owner is re-read', async () => {
+    const { deps, api, queue } = createWriteDeps({ status: 'offline' });
+    const controller = new AbortController();
+    let reads = 0;
+    const cancelling = {
+      ...deps,
+      getOwnerId: () => {
+        reads += 1;
+        // The second read is the one inside the serialized task.
+        if (reads === 2) controller.abort();
+        return Promise.resolve(OWNER);
+      },
+    };
+    const error: unknown = await submitWrite(cancelling, {
+      ...INPUT,
+      signal: controller.signal,
+    }).catch((caught: unknown) => caught);
+    expect(isAbortError(error)).toBe(true);
+    expect(api.post).not.toHaveBeenCalled();
+    expect(queue.size).toBe(0);
+  });
+
   it('does not make different users wait for each other', async () => {
     const shared = createWriteDeps();
     const other = { ...shared.deps, getOwnerId: () => Promise.resolve('user-2') };

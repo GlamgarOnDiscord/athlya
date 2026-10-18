@@ -147,6 +147,8 @@ async function submitInOrder<T>(
   } catch {
     currentOwner = null;
   }
+  // Cancelled while the owner was being read: neither send nor queue it.
+  if (isAborted(input.signal)) throw createAbortError();
   const offline = deps.sync.getState().status === 'offline';
   if (currentOwner !== ownerId || offline || deps.queue.pendingFor(ownerId).length > 0) {
     return enqueue(deps, ownerId, input, idempotencyKey);
