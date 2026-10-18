@@ -191,7 +191,6 @@ describe('per-user mutation limiters (#613)', () => {
     ['POST', '/v1/reservations'],
     ['DELETE', '/v1/reservations/r-1'],
     ['POST', '/v1/members/me/export'],
-    ['POST', '/v1/coach/ask'],
   ] as const)(
     'unauthenticated %s %s → 401 without touching a mutation bucket',
     async (method, path) => {
@@ -251,38 +250,6 @@ describe('per-user mutation limiters (#613)', () => {
     expect(booking.status).not.toBe(429);
   });
 
-  it('limits POST /v1/coach/ask per user (Epic 21)', async () => {
-    const env = stagingEnv();
-    const redis = new FakeRedis();
-    primeRedis(env, redis);
-    const app = buildAppNoDomainRoutes();
-    const tokenA = await tokenFor(USER_A);
-
-    for (let i = 0; i < MUTATION_BUDGETS.coach.userLimit; i++) {
-      const res = await app.request(
-        '/v1/coach/ask',
-        { method: 'POST', headers: headersFor('7.7.7.7', tokenA) },
-        env,
-      );
-      expect(res.status).not.toBe(429);
-    }
-    const denied = await app.request(
-      '/v1/coach/ask',
-      { method: 'POST', headers: headersFor('7.7.7.7', tokenA) },
-      env,
-    );
-    expect(denied.status).toBe(429);
-    expect(denied.headers.get('retry-after')).not.toBeNull();
-    expect(mutationKeys(redis)).toEqual([`${MUTATION_USER_BUCKET_PREFIX}-coach:${USER_A}`]);
-
-    const status = await app.request(
-      '/v1/coach',
-      { method: 'GET', headers: headersFor('7.7.7.7', tokenA) },
-      env,
-    );
-    expect(status.status).not.toBe(429);
-  });
-
   it('does not authenticate or throttle non-mutation methods', async () => {
     const env = stagingEnv();
     const redis = new FakeRedis();
@@ -321,21 +288,5 @@ describe('per-user mutation limiters (#613)', () => {
       env,
     );
     expect(anonymous.status).toBe(401);
-  });
-
-  it('stays fail-closed (503) on POST /v1/coach/ask when Redis is down', async () => {
-    const env = stagingEnv();
-    primeRedis(env, new RedisPipelineDownFake());
-    const app = buildAppNoDomainRoutes();
-
-    const res = await app.request(
-      '/v1/coach/ask',
-      { method: 'POST', headers: headersFor('6.6.6.7', await tokenFor(USER_A)) },
-      env,
-    );
-    expect(res.status).toBe(503);
-    expect(res.headers.get('retry-after')).toBe('30');
-    const body = await readJson<{ code?: string }>(res);
-    expect(body.code).toBe('dependency_unavailable');
   });
 });

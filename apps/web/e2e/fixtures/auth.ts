@@ -52,7 +52,8 @@ export async function loginWithStub(page: Page): Promise<void> {
         consents: {
           marketing: false,
           analytics: false,
-          thirdParty: false,
+          // Matches the coach status stub below (thirdPartyConsent: true).
+          thirdParty: true,
           version: '2026-01',
           updatedAt: '2026-01-01T00:00:00.000Z',
         },

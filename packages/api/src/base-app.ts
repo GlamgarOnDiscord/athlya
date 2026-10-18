@@ -698,8 +698,6 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   //        - PATCH  /v1/me                    — 5/min/user
   //        - PATCH  /v1/me/consents           — 5/min/user
   //        - POST   /v1/members/me/export     — 1/24h/user
-  //        - POST   /v1/coach/ask             — 5/min/user (the daily
-  //                                             quota lives in the use case)
   //
   //      Method-scoped registration: Hono's `app.use('/path', mw)`
   //      runs on every method by default; we wrap each limiter in
@@ -714,7 +712,6 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   const reservationLimiter = mutationLimiter('reservation');
   const profileLimiter = mutationLimiter('profile');
   const exportLimiter = mutationLimiter('export');
-  const coachLimiter = mutationLimiter('coach');
 
   const searchReadLimiter = rateLimit(EXPENSIVE_READ_BUDGET);
   const membersListReadLimiter = rateLimit(MEMBERS_LIST_BUDGET);
@@ -797,10 +794,6 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   app.use(
     '/v1/members/me/export',
     guardMutationLimiter('POST', exportLimiter) as Parameters<typeof app.use>[1],
-  );
-  app.use(
-    '/v1/coach/ask',
-    guardMutationLimiter('POST', coachLimiter) as Parameters<typeof app.use>[1],
   );
 
   app.use(

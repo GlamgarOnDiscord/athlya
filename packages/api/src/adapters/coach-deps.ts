@@ -6,8 +6,11 @@
  *     malformed catalogue → OFF.
  *   - Model: Mistral through `@ai-sdk/mistral`, keyed by
  *     `MISTRAL_API_KEY` (model id `AI_COACH_MODEL`, default
- *     {@link DEFAULT_COACH_MODEL}). Without a key, `ask` throws
- *     `CoachError('not_configured')` → 503.
+ *     {@link DEFAULT_COACH_MODEL}; endpoint `MISTRAL_BASE_URL`, default
+ *     the provider's `https://api.mistral.ai/v1`). Without a key, `ask`
+ *     throws `CoachError('not_configured')` → 503.
+ *   - A flag that cannot be evaluated (malformed catalogue, provider
+ *     error) is OFF.
  *   - Sessions: the progression repo (`withTenantHttp`, RLS
  *     `workout_sessions_read_own`) on the region-routed read handle.
  *   - Consent: `users.consents.thirdParty`, read on the primary so a
@@ -77,10 +80,14 @@ function coachModel(env: AthlyaBindings): CoachModel {
     env.AI_COACH_MODEL !== undefined && env.AI_COACH_MODEL.length > 0
       ? env.AI_COACH_MODEL
       : DEFAULT_COACH_MODEL;
-  const cacheKey = `${apiKey}::${modelId}`;
+  const baseURL =
+    env.MISTRAL_BASE_URL !== undefined && env.MISTRAL_BASE_URL.length > 0
+      ? env.MISTRAL_BASE_URL
+      : undefined;
+  const cacheKey = `${apiKey}::${modelId}::${baseURL ?? ''}`;
   let model = models.get(cacheKey);
   if (model === undefined) {
-    model = createMistral({ apiKey })(modelId);
+    model = createMistral(baseURL === undefined ? { apiKey } : { apiKey, baseURL })(modelId);
     models.set(cacheKey, model);
   }
   return model;
@@ -138,12 +145,17 @@ export function buildCoachDeps(env: AthlyaBindings, cf?: RequestCf): CoachDeps {
   const limitDeps = dailyLimit === undefined ? {} : { dailyLimit };
 
   return {
-    isEnabled(claims) {
-      return isEnabled(
-        AI_COACH_FLAG,
-        { userId: claims.userId, studioId: claims.studioId, role: claims.role },
-        flagProvider(env.FEATURE_FLAGS_JSON),
-      );
+    async isEnabled(claims) {
+      try {
+        return await isEnabled(
+          AI_COACH_FLAG,
+          { userId: claims.userId, studioId: claims.studioId, role: claims.role },
+          flagProvider(env.FEATURE_FLAGS_JSON),
+        );
+      } catch {
+        // A flag that cannot be evaluated is OFF.
+        return false;
+      }
     },
 
     async getStatus(claims) {

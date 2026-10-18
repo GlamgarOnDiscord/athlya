@@ -39,12 +39,17 @@ opened to members, add the processing to the register and the DPIA
 
 ## Provider and transfer
 
-- Mistral AI (France, EU), through `@ai-sdk/mistral`. Processing stays in the EU.
+- Mistral AI (a French company), through `@ai-sdk/mistral`. The adapter calls the provider's
+  default endpoint (`https://api.mistral.ai/v1`) unless `MISTRAL_BASE_URL` is set. Athlya does
+  not claim EU-only processing until the operator has confirmed where the Mistral account
+  processes and stores requests. If Mistral offers a regional (EU) endpoint for the account, set
+  `MISTRAL_BASE_URL` to it on both Workers before enabling the flag in production.
 - Sign the Mistral DPA and archive it with the other processor agreements before enabling the
-  flag in production. Check the account's data-retention and training settings in the Mistral
-  console: the API terms in force at signature govern how long Mistral keeps inputs and outputs
-  (abuse monitoring) and whether they may be used for training; opt out of training where the
-  plan allows it.
+  flag in production.
+- The operator must check the account's data-retention settings in the Mistral console before
+  enabling the flag: zero data retention (ZDR) where the plan offers it, otherwise the retention
+  period for abuse monitoring, and the training opt-out. The API terms in force at signature
+  govern how long Mistral keeps inputs and outputs and whether they may be used for training.
 
 ## Retention at Athlya
 
@@ -62,7 +67,8 @@ opened to members, add the processing to the register and the DPIA
 ## Operator checklist
 
 - [ ] DPA signed with Mistral AI and archived; register entry added.
-- [ ] Mistral console: retention and training settings checked.
+- [ ] Mistral console: processing region, retention (ZDR where available) and training opt-out
+      checked; `MISTRAL_BASE_URL` set to the regional endpoint if one applies.
 - [ ] `MISTRAL_API_KEY` set on the gateway and reservations Workers
       ([`rotate-secrets.md`](../runbooks/rotate-secrets.md#mistral_api_key)).
 - [ ] `ai-coach` flag opened by phase, staff allow-list first.

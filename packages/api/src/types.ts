@@ -394,6 +394,13 @@ export interface AthlyaBindings {
    */
   readonly MISTRAL_API_KEY?: string;
 
+  /**
+   * Mistral API base URL of the AI coach. Defaults to the provider's
+   * `https://api.mistral.ai/v1`. Set it to the regional endpoint the
+   * Mistral account is provisioned on (see `docs/compliance/ai-coach.md`).
+   */
+  readonly MISTRAL_BASE_URL?: string;
+
   /** Mistral model id of the AI coach. Defaults to `mistral-small-latest`. */
   readonly AI_COACH_MODEL?: string;
 

@@ -169,10 +169,11 @@ export async function askCoach(
   const bounds = progressionWindowBounds(COACH_CONTEXT_DAYS, now);
   const rows = await deps.sessions.listInWindow(userId, {
     ...bounds,
-    limit: COACH_SESSION_READ_LIMIT,
+    limit: COACH_SESSION_READ_LIMIT + 1,
   });
+  const truncated = rows.length > COACH_SESSION_READ_LIMIT;
   const { system, prompt } = buildCoachPrompt(
-    buildCoachContext(rows, now),
+    buildCoachContext(truncated ? rows.slice(0, COACH_SESSION_READ_LIMIT) : rows, now, truncated),
     request.question,
     request.locale,
   );

@@ -4,7 +4,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, ApiServerError } from '../../../lib/api/client';
+import { ApiError, ApiServerError, createApiClient } from '../../../lib/api/client';
 import { LocaleProvider } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
 
@@ -88,7 +88,7 @@ describe('<CoachPanel />', () => {
     await flush();
 
     expect(screen.getByText(t('coach.privacy'))).toBeDefined();
-    expect(screen.getByText(t('coach.quota', { remaining: 4, limit: 10 }))).toBeDefined();
+    expect(screen.getByText(t('coach.quotaOther', { remaining: 4, limit: 10 }))).toBeDefined();
     const field = screen.getByLabelText(t('coach.question.label'));
     expect(field.getAttribute('aria-describedby')).toBe(
       'coach-question-hint coach-question-counter',
@@ -134,24 +134,43 @@ describe('<CoachPanel />', () => {
     expect(screen.getByText(ANSWER.advice.summary)).toBeDefined();
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
     expect(screen.getByRole('note').textContent).toContain(ANSWER.advice.caution);
-    expect(screen.getByText(t('coach.quota', { remaining: 3, limit: 10 }))).toBeDefined();
+    expect(screen.getByText(t('coach.quotaOther', { remaining: 3, limit: 10 }))).toBeDefined();
   });
 
-  it('disables the form once the daily quota is used up', async () => {
-    const get = vi.fn().mockResolvedValue(ENABLED);
-    const post = vi.fn().mockRejectedValue(
-      new ApiError('quota', 429, {
-        type: 'about:blank',
-        title: 'Too Many Requests',
-        status: 429,
-        code: 'coach_quota_exceeded',
-      }),
+  it('disables the form once the daily quota is used up (real client 429)', async () => {
+    const fetchImpl = vi.fn((input: RequestInfo | URL) =>
+      Promise.resolve(
+        String(input).endsWith('/v1/coach/ask')
+          ? new Response(
+              JSON.stringify({
+                type: 'about:blank',
+                title: 'Too Many Requests',
+                status: 429,
+                code: 'coach_quota_exceeded',
+              }),
+              {
+                status: 429,
+                headers: { 'content-type': 'application/problem+json', 'retry-after': '3600' },
+              },
+            )
+          : new Response(JSON.stringify(ENABLED), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+      ),
     );
-    render(wrap(<CoachPanel client={fakeClient(get, post)} t={t} />));
+    const client = createApiClient({
+      baseUrl: 'https://api.test',
+      getToken: () => 'token',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    render(wrap(<CoachPanel client={client} t={t} />));
+    await flush();
     await flush();
 
     typeQuestion('Again?');
     submit();
+    await flush();
     await flush();
 
     expect(screen.getByRole('alert').textContent).toBe(t('coach.quotaExhausted'));
@@ -177,6 +196,16 @@ describe('<CoachPanel />', () => {
     submit();
     await flush();
     expect(screen.getByRole('alert').textContent).toBe(t('coach.errors.unavailable'));
+  });
+
+  it('uses the singular quota and counter strings for one', async () => {
+    const get = vi.fn().mockResolvedValue({ ...ENABLED, quota: { ...QUOTA, remaining: 1 } });
+    render(wrap(<CoachPanel client={fakeClient(get)} t={t} />));
+    await flush();
+
+    expect(screen.getByText(t('coach.quotaOne', { limit: 10 }))).toBeDefined();
+    typeQuestion('?');
+    expect(screen.getByText(t('coach.question.counterOne', { max: 500 }))).toBeDefined();
   });
 
   it('shows an alert with a retry button when the status cannot be loaded', async () => {

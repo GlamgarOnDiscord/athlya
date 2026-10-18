@@ -122,7 +122,7 @@ describe('askCoach', () => {
     expect(deps.sessions.listInWindow).toHaveBeenCalledWith(USER_ID, {
       from: new Date('2026-09-16T00:00:00.000Z'),
       to: new Date('2026-10-16T00:00:00.000Z'),
-      limit: COACH_SESSION_READ_LIMIT,
+      limit: COACH_SESSION_READ_LIMIT + 1,
     });
   });
 

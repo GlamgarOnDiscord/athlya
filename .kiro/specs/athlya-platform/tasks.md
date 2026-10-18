@@ -646,8 +646,9 @@ Use official CLI to create, init the project .. and recent package version and s
 
   - [ ] 21.2 Expose `/v1/coach/ask` route on the gateway
     - Streaming response via Hono's streaming helper
-    - Done (#644): `GET /v1/coach` (flag, consent, quota) and `POST /v1/coach/ask` behind the `ai-coach` flag (default OFF), per-user burst limit `coach-ask` + daily quota (both fail-closed), OpenAPI entries, reservations bulkhead Worker routes (`/v1/coach` + `/v1/coach/*`), web `/me/coach` (aria-live answer, FR/EN, axe sweep)
+    - Done (#644): `GET /v1/coach` (flag, consent, quota) and `POST /v1/coach/ask` behind the `ai-coach` flag (default OFF), per-user burst limit `coach-ask` + daily quota (both fail-closed), OpenAPI entries, reservations bulkhead Worker routes (`/v1/coach` + `/v1/coach/*`), web `/me/coach` (aria-live answer, FR/EN) with an axe sweep case added to `apps/web/e2e/axe.spec.ts`
     - Pending: streaming. The answer is returned as one JSON payload because it is validated against `CoachAdviceSchema` as a whole before reaching the member
+    - Pending before the flag opens: the RGPD operator checklist in `docs/compliance/ai-coach.md` (DPA, Mistral region and retention settings)
     - _Requirements: 14.1, 14.2_
 
 - [ ] 22. Progression graphs

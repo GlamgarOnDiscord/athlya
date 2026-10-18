@@ -37,7 +37,7 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 
 Mutation limiters (issue #613) run an inline `jwtAuth()` pre-pass before the limiter: unauthenticated requests get a 401 without touching a mutation bucket (the global `/v1/*` IP bucket still applies), and authenticated ones are keyed on `rl:user:mutation-<scope>:<userId>`, so the budget follows the user across IPs and users behind one IP get independent budgets.
 
-`coach-ask` (Epic 21) adds a daily quota per member (`AI_COACH_DAILY_LIMIT`, default 10, UTC day) kept in the Redis counter `coach:quota:<day>:<userId>` by the use case. It fails closed too: a Redis error answers 503 `dependency_unavailable` before any model call, and an exhausted quota answers 429 `coach_quota_exceeded` with `Retry-After` set to the next UTC midnight.
+`coach-ask` (Epic 21) is mounted in the coach router (`routes/coach.ts`), after `jwtAuth` and the `ai-coach` flag check: with the flag off the route answers 404 and no bucket is touched. It adds a daily quota per member (`AI_COACH_DAILY_LIMIT`, default 10, UTC day) kept in the Redis counter `coach:quota:<day>:<userId>` by the use case. It fails closed too: a Redis error answers 503 `dependency_unavailable` before any model call, and an exhausted quota answers 429 `coach_quota_exceeded` with `Retry-After` set to the next UTC midnight.
 
 Les limiters reads coûteux sont montés **avant** `jwtAuth` → bucket **IP** sur le limiter dédié ; le global `/v1/*` applique quand même le bucket user si le JWT est présent.
 

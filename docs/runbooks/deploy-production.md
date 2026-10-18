@@ -123,7 +123,8 @@ Workers.
 Optional secrets (`OPTIONAL` in `verify-secrets.mjs`, `# Optional` header line of the wrangler
 configs) are only warned about when missing: `MISTRAL_API_KEY` on the gateway and the
 reservations Worker, for the AI coach behind the `ai-coach` flag (OFF by default). Without it the
-coach answers 503 `coach_not_configured` once the flag is on. The flag catalogue itself is the
+coach answers 503 `coach_not_configured` once the flag is on. `MISTRAL_BASE_URL` (optional var)
+points the coach at a regional Mistral endpoint ([`ai-coach.md`](../compliance/ai-coach.md)). The flag catalogue itself is the
 optional `FEATURE_FLAGS_JSON` var or secret ([`feature-flags.md`](../operations/feature-flags.md)).
 
 The reservations Worker also serves `/v1/me/*` (`GET /v1/me/progression`,

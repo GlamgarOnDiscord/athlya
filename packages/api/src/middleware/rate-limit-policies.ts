@@ -201,9 +201,9 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     budget: MUTATION_BUDGETS.coach,
     failPolicy: 'fail-closed',
     bucket: 'user',
-    wiredIn: 'worker.ts',
+    wiredIn: 'domain-router',
     notes:
-      'Epic 21 — burst limit on paid model calls; jwtAuth pre-pass, user bucket; the daily quota (Redis counter, fail-closed) is enforced by the use case',
+      'Epic 21 — burst limit on paid model calls, mounted in routes/coach.ts after jwtAuth and the ai-coach flag check (flag off → 404, no bucket touched); the daily quota (Redis counter, fail-closed) is enforced by the use case',
   },
   {
     id: 'classes-search',

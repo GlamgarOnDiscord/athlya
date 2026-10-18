@@ -204,12 +204,15 @@ is reachable with it.
 
 ```bash
 # 1. Mistral console → API keys → create a new key (workspace "athlya-<env>").
-# 2. Set it on both Workers (prompted value, never on the command line):
-for cfg in "" "-c wrangler.reservations.toml"; do
-  pnpm --filter @athlya/api exec wrangler secret put MISTRAL_API_KEY --env production $cfg
+# 2. Set it on both Workers of each env that runs the coach (prompted value, never on
+#    the command line). Use the key of the matching workspace for each env:
+for env in staging production; do
+  for cfg in "" "-c wrangler.reservations.toml"; do
+    pnpm --filter @athlya/api exec wrangler secret put MISTRAL_API_KEY --env $env $cfg
+  done
 done
-# 3. Ask the coach once from a staff account in the flag allow-list.
-# 4. Revoke the old key in the Mistral console.
+# 3. Ask the coach once per env from a staff account in the flag allow-list.
+# 4. Revoke the old keys in the Mistral console.
 ```
 
 To switch the coach off without touching the key, set the flag to `false` in

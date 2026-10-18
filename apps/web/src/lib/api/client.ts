@@ -223,9 +223,11 @@ export function createApiClient(opts: CreateApiClientOptions): ApiClient {
       const err = new Error('Rate limited') as Error & {
         status: number;
         retryAfterSec: number;
+        problem: ProblemDetails | undefined;
       };
       err.status = 429;
       err.retryAfterSec = retryAfterSec;
+      err.problem = problem;
       throw err;
     }
     if (response.status >= 400 && response.status < 500) {

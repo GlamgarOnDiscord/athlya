@@ -71,25 +71,37 @@ export interface CoachContext {
   readonly topExercises: readonly CoachRankedExercise[];
   /** Newest first, at most {@link COACH_MAX_SESSIONS}. */
   readonly recentSessions: readonly CoachSessionSummary[];
+  /**
+   * True when more sessions exist in the window than were read: the
+   * totals and weekly counts then cover the most recent rows only.
+   */
+  readonly truncated: boolean;
 }
 
-const LONG_DIGITS = /\d{6,}/g;
+/**
+ * Six digits or more, each optionally preceded by one space, dot or dash
+ * (`0612345678`, `06 12 34 56 78`, `06-12-34-56-78`). The separator and
+ * the digit classes are disjoint, so matching is linear.
+ */
+const DIGIT_RUN = /\d(?:[ .-]?\d){5,}/g;
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g;
 
 /**
  * Clean a free-text exercise name before it reaches the model: drop
- * control characters, mask every word containing `@` (e-mail addresses)
- * and runs of six digits or more (phone numbers, ids), collapse
- * whitespace and cut the result to {@link COACH_EXERCISE_NAME_MAX}
- * characters. Every step is linear in the input length.
+ * control characters, mask runs of six digits or more, including runs
+ * split by single spaces, dots or dashes (phone numbers, ids), mask
+ * every word containing `@` (e-mail addresses), collapse whitespace and
+ * cut the result to {@link COACH_EXERCISE_NAME_MAX} characters. Every
+ * step is linear in the input length.
  */
 export function sanitizeExerciseName(name: string): string {
   const cleaned = name
     .replace(CONTROL, ' ')
+    .replace(DIGIT_RUN, COACH_MASK)
     .split(/\s/)
     .filter((word) => word.length > 0)
-    .map((word) => (word.includes('@') ? COACH_MASK : word.replace(LONG_DIGITS, COACH_MASK)))
+    .map((word) => (word.includes('@') ? COACH_MASK : word))
     .join(' ');
   const cut = [...cleaned].slice(0, COACH_EXERCISE_NAME_MAX).join('').trim();
   return cut.length > 0 ? cut : COACH_MASK;
@@ -99,9 +111,9 @@ function round1(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-function summariseSession(session: WorkoutSession): CoachSessionSummary {
+function summariseSession(at: number, session: WorkoutSession): CoachSessionSummary {
   return {
-    date: session.startedAt.slice(0, 10),
+    date: new Date(at).toISOString().slice(0, 10),
     durationMin: session.durationMin,
     exercises: session.exercises.slice(0, COACH_MAX_EXERCISES_PER_SESSION).map((exercise) => {
       let reps = 0;
@@ -126,8 +138,13 @@ function summariseSession(session: WorkoutSession): CoachSessionSummary {
  * Build the {@link CoachContext} from the member's stored session rows.
  * Pure: same rows and clock, same context. Rows that fail
  * `WorkoutSessionSchema` or fall outside the window are ignored.
+ * `truncated` tells that the caller read fewer rows than the window has.
  */
-export function buildCoachContext(rows: readonly unknown[], now: number): CoachContext {
+export function buildCoachContext(
+  rows: readonly unknown[],
+  now: number,
+  truncated = false,
+): CoachContext {
   const progression = computeProgression(rows, { windowDays: COACH_CONTEXT_DAYS, now });
   const { from, to } = progressionWindowBounds(COACH_CONTEXT_DAYS, now);
   const fromMs = from.getTime();
@@ -154,6 +171,7 @@ export function buildCoachContext(rows: readonly unknown[], now: number): CoachC
     })),
     recentSessions: sessions
       .slice(0, COACH_MAX_SESSIONS)
-      .map(({ session }) => summariseSession(session)),
+      .map(({ at, session }) => summariseSession(at, session)),
+    truncated,
   };
 }

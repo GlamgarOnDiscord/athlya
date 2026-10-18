@@ -642,7 +642,11 @@ export const CoachQuotaSchema = z
     /** Next UTC midnight, when the counter resets. */
     resetsAt: IsoDateTimeSchema,
   })
-  .strict();
+  .strict()
+  .refine((quota) => quota.remaining <= quota.limit, {
+    message: 'remaining must not exceed limit',
+    path: ['remaining'],
+  });
 
 export type CoachQuota = z.infer<typeof CoachQuotaSchema>;
 

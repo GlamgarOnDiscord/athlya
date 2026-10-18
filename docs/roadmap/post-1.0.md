@@ -48,7 +48,7 @@ Mise à jour : sortie v1.0.0.
 
 **Périmètre** (Epics 21-25, ~22 tâches) :
 
-- **21** AI coach : `packages/ai-coach/src/service.ts` + `/v1/coach/ask` streaming. ✅ Service, `GET /v1/coach`, `POST /v1/coach/ask` (réponse JSON validée, sans streaming) et UI web `/me/coach` livrés derrière le flag `ai-coach` (#644) ; note RGPD `docs/compliance/ai-coach.md`.
+- **21** AI coach : `packages/ai-coach/src/service.ts` + `/v1/coach/ask`. 🟡 Service, `GET /v1/coach`, `POST /v1/coach/ask` (réponse JSON validée) et UI web `/me/coach` livrés derrière le flag `ai-coach` (#644). Restent : le streaming de la réponse, et la checklist opérateur RGPD de `docs/compliance/ai-coach.md` (DPA Mistral, région et rétention) avant l'ouverture du flag.
 - **22** Progression graphs : `packages/members/src/progression.ts` (volume + 1RM trends, 30/90/365j) + UI web/mobile. ✅ Agrégateur, `GET /v1/me/progression` et UI web livrés (#639) ; UI mobile restante.
 - **23** BLE FTMS (mobile, dépend v1.1).
 - **24** Programs : schéma `programs` / `program_weeks`, service + assignment + UI studio admin. Shipped in #640 (migration 0042, `@athlya/programs`, `/v1/programs/*`, `/dashboard/programs`); the mobile home rendering of `GET /v1/programs/today` is still pending.

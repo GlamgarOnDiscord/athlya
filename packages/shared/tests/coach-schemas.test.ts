@@ -9,6 +9,7 @@ import {
   CoachAdviceSchema,
   CoachAskRequestSchema,
   CoachAskResponseSchema,
+  CoachQuotaSchema,
   CoachStatusResponseSchema,
 } from '../src/schemas/api.js';
 
@@ -67,6 +68,14 @@ describe('CoachStatusResponseSchema', () => {
     expect(
       CoachStatusResponseSchema.safeParse({ enabled: false, thirdPartyConsent: true }).success,
     ).toBe(false);
+  });
+});
+
+describe('CoachQuotaSchema', () => {
+  it('rejects a remaining count above the limit', () => {
+    expect(CoachQuotaSchema.safeParse({ ...QUOTA, remaining: 11 }).success).toBe(false);
+    expect(CoachQuotaSchema.safeParse({ ...QUOTA, remaining: -1 }).success).toBe(false);
+    expect(CoachQuotaSchema.safeParse({ ...QUOTA, remaining: 10 }).success).toBe(true);
   });
 });
 

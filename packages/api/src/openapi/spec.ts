@@ -816,10 +816,11 @@ const coachAskRoute = createRoute({
     'identifiers, no notes) and the question to the model provider (Mistral), and returns ' +
     'structured advice validated against `CoachAdviceSchema`. Requires the `thirdParty` ' +
     'consent. Limited to 5 requests per minute and a daily quota per member (default 10). ' +
+    'With the `ai-coach` flag off it answers 404 before any limiter or body validation. ' +
     'Nothing but the quota counter is stored. Sends `Cache-Control: no-store`.',
   security: [{ bearerAuth: [] }],
   request: {
-    body: { content: { 'application/json': { schema: CoachAskRequestSchema } } },
+    body: { required: true, content: { 'application/json': { schema: CoachAskRequestSchema } } },
   },
   responses: {
     200: {

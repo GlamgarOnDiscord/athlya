@@ -128,8 +128,19 @@ describe('buildCoachDeps', () => {
     expect(await buildCoachDeps(env).isEnabled(CLAIMS)).toBe(false);
   });
 
-  it('keeps the flag OFF on a malformed catalogue', async () => {
-    const { env } = envWith({ FEATURE_FLAGS_JSON: '{not json' });
+  it.each([
+    '{not json',
+    'null',
+    '[]',
+    '"ai-coach"',
+    JSON.stringify({ [AI_COACH_FLAG]: 'yes' }),
+    JSON.stringify({ [AI_COACH_FLAG]: null }),
+    JSON.stringify({ [AI_COACH_FLAG]: { rollout: '100' } }),
+    JSON.stringify({ [AI_COACH_FLAG]: { rollout: 100, allowList: 'everyone' } }),
+    JSON.stringify({ [AI_COACH_FLAG]: { rollout: 0, studioAllowList: [1, 2] } }),
+  ])('keeps the flag OFF on a malformed catalogue %s', async (json) => {
+    __resetFeatureFlagCache();
+    const { env } = envWith({ FEATURE_FLAGS_JSON: json });
     expect(await buildCoachDeps(env).isEnabled(CLAIMS)).toBe(false);
   });
 

@@ -166,6 +166,13 @@ describe('POST /v1/coach/ask', () => {
     expect(deps.coach.ask).not.toHaveBeenCalled();
   });
 
+  it('checks the flag before validating the body', async () => {
+    const deps = buildStubDeps();
+    const res = await postAsk(deps, { question: '' });
+    expect(res.status).toBe(404);
+    expect((await readJson<{ code: string }>(res)).code).toBe('coach_disabled');
+  });
+
   it.each([
     [{}],
     [{ question: '   ' }],

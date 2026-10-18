@@ -54,6 +54,24 @@ type AskState =
   | { readonly kind: 'done'; readonly answer: CoachAskResponse }
   | { readonly kind: 'error'; readonly message: string };
 
+/** HTTP status carried by an API client error, if any. */
+function statusOf(err: unknown): number | undefined {
+  const status =
+    typeof err === 'object' && err !== null ? (err as { status?: unknown }).status : undefined;
+  return typeof status === 'number' ? status : undefined;
+}
+
+/** Problem Details `code` carried by an API client error, if any. */
+function problemCodeOf(err: unknown): string | undefined {
+  const problem =
+    typeof err === 'object' && err !== null ? (err as { problem?: unknown }).problem : undefined;
+  const code =
+    typeof problem === 'object' && problem !== null
+      ? (problem as { code?: unknown }).code
+      : undefined;
+  return typeof code === 'string' ? code : undefined;
+}
+
 const QUESTION_ID = 'coach-question';
 const HINT_ID = 'coach-question-hint';
 const COUNTER_ID = 'coach-question-counter';
@@ -114,8 +132,10 @@ export function CoachPanel({ t: tProp, client: clientProp }: CoachPanelProps): R
       setStatus({ ...status, quota: parsed.data.quota });
       setAsk({ kind: 'done', answer: parsed.data });
     } catch (err) {
-      if (err instanceof ApiError && err.status === 429) {
-        if (err.problem?.code === 'coach_quota_exceeded') {
+      // The client throws a plain Error carrying `status` (and the parsed
+      // problem) for 429, not an ApiError.
+      if (statusOf(err) === 429) {
+        if (problemCodeOf(err) === 'coach_quota_exceeded') {
           setStatus({ ...status, quota: { ...status.quota, remaining: 0 } });
           setAsk({ kind: 'error', message: t('coach.quotaExhausted') });
         } else {
@@ -202,10 +222,12 @@ export function CoachPanel({ t: tProp, client: clientProp }: CoachPanelProps): R
             {t('coach.question.hint', { max: COACH_QUESTION_MAX_LENGTH })}
           </p>
           <p id={COUNTER_ID} className="text-xs text-muted-foreground">
-            {t('coach.question.counter', {
-              count: question.length,
-              max: COACH_QUESTION_MAX_LENGTH,
-            })}
+            {question.length === 1
+              ? t('coach.question.counterOne', { max: COACH_QUESTION_MAX_LENGTH })
+              : t('coach.question.counterOther', {
+                  count: question.length,
+                  max: COACH_QUESTION_MAX_LENGTH,
+                })}
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" disabled={pending || exhausted || trimmed.length === 0}>
@@ -214,7 +236,9 @@ export function CoachPanel({ t: tProp, client: clientProp }: CoachPanelProps): R
             <p className="text-sm text-muted-foreground">
               {exhausted
                 ? t('coach.quotaExhausted')
-                : t('coach.quota', { remaining: quota.remaining, limit: quota.limit })}
+                : quota.remaining === 1
+                  ? t('coach.quotaOne', { limit: quota.limit })
+                  : t('coach.quotaOther', { remaining: quota.remaining, limit: quota.limit })}
             </p>
           </div>
         </form>
