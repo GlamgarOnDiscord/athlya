@@ -1,6 +1,6 @@
 # Athlya Platform — Progress & Remaining Work
 
-**Dernière mise à jour :** Session 2026-10-17/18 — clôture des issues : 44 PRs mergées sur `master`, 30 issues fermées (dont les P0 #117, #122, #224, #405, #404, #497, #498), migrations 0031 → 0040 livrées, #628 (purge RGPD, migration 0041) en cours. Le code est complet côté repo ; il reste des étapes opérateur, consolidées dans la section [Session 2026-10-17/18 — clôture des issues](#session-2026-101718--clôture-des-issues).
+**Dernière mise à jour :** Session 2026-10-17/18 — clôture des issues : 45 PRs mergées sur `master`, 31 issues fermées (dont les P0 #117, #122, #224, #405, #404, #497, #498), migrations 0031 → 0041 livrées (#628, purge RGPD, fermée par #630). Le code est complet côté repo ; il reste des étapes opérateur, consolidées dans la section [Session 2026-10-17/18 — clôture des issues](#session-2026-101718--clôture-des-issues).
 **Mise à jour précédente :** Session 2026-06-16 — Ops sprint: migrations Neon 0000-0017 appliquées sur staging+production, RLS cutover `athlya_app` (NOBYPASSRLS — piège Console Neon documenté → role recréé via SQL), Stripe secrets + webhooks (staging PR #269 + prod PR #292), R2 buckets + Queues Cloudflare provisionnés, JWT keypairs générés, Upstash Redis configuré. Issues closes : #268 (PR #291), #270 (PR #292), #279 (direct). + esbuild/postcss overrides (#290), Sentry CRON alert (#286). Tasks.md CN.6.4 cochée (PR #293 — code existait déjà). Compteur vérifié : **283 / 313 tâches**.
 **Tâches complétées :** Epic 14 (1/1), Epic 15 (3/3), Epic 16 (3/3), Epic 17 (1/1), CN.6.4 (cochée PR #293), CN.8.1, CN.8.2, CN.9.2, CN.9.3 — cases parents cochées
 **Hardening tasks livrées :** 8 / 8 (H1 à H8) + 6 issues GitHub (#47–#53 #56) + 8 Dependabot alerts (PR #58)
@@ -10,7 +10,7 @@
 
 ## Session 2026-10-17/18 — clôture des issues
 
-Session de clôture du backlog P0/P1 ouvert par l'audit : RLS-safe sous les rôles runtime `NOBYPASSRLS`, outbox, export RGPD, billing Stripe, bulkhead Workers, canary, staging gate, Terraform, observabilité, déploiement frontend. Tout le code est sur `master` (tête `356019b`). Les issues fermées « code-complete » laissent des étapes opérateur, regroupées dans la [checklist opérateur](#checklist-opérateur-consolidée) ci-dessous.
+Session de clôture du backlog P0/P1 ouvert par l'audit : RLS-safe sous les rôles runtime `NOBYPASSRLS`, outbox, export RGPD, billing Stripe, bulkhead Workers, canary, staging gate, Terraform, observabilité, déploiement frontend. Tout le code est sur `master` (tête `55f39f7`). Les issues fermées « code-complete » laissent des étapes opérateur, regroupées dans la [checklist opérateur](#checklist-opérateur-consolidée) ci-dessous.
 
 Aucune case de `tasks.md` ne bouge : ces issues sortent de l'audit et ne correspondent à aucune tâche du plan. CN.7.3 (rollback auto sur SLO breach via Slack/PagerDuty) reste ouverte ; le gate error budget du canary (#579) n'en couvre qu'une partie.
 
@@ -62,8 +62,9 @@ Aucune case de `tasks.md` ne bouge : ces issues sortent de l'audit et ne corresp
 | #624 | feat(api): scope /health/ready probes to each Worker's bindings                             | `3aec21d` | Closes #614         |
 | #626 | fix(db,api): waitlist promotion and capacity reconcile under the runtime roles              | `589c588` | Refs #117           |
 | #627 | fix(api): bind avatar and export R2 buckets on the reservations Worker                      | `356019b` | Closes #625         |
+| #630 | fix(db,api): make users.email nullable so the RGPD purge can anonymise users                | `55f39f7` | Closes #628         |
 
-Migrations livrées : 0031 (#586), 0032 (#587), 0033 (#588), 0034 (#589), 0035 (#590), 0036 (#593), 0037 (#610), 0038 (#618), 0039 (#621), 0040 (#626).
+Migrations livrées : 0031 (#586), 0032 (#587), 0033 (#588), 0034 (#589), 0035 (#590), 0036 (#593), 0037 (#610), 0038 (#618), 0039 (#621), 0040 (#626), 0041 (#630).
 
 ### Issues fermées et pourquoi
 
@@ -89,7 +90,7 @@ Migrations livrées : 0031 (#586), 0032 (#587), 0033 (#588), 0034 (#589), 0035 (
 
 **Fermées « code-complete » à la main** (critères repo atteints, étapes opérateur listées dans le dernier commentaire de l'issue) :
 
-- #117 cutover rôles runtime RLS-safe → #592, #610, #618, #621, #626. Défaut restant extrait dans #628.
+- #117 cutover rôles runtime RLS-safe → #592, #610, #618, #621, #626. Défaut restant extrait dans #628, corrigé depuis par #630.
 - #122 Stripe checkout/factures/webhooks → #593 (Stripe Connect pour les paiements membres hors scope)
 - #230 trafic prod via les bulkhead Workers → #584
 - #339 ruleset WAF rate limit → #577
@@ -103,9 +104,11 @@ Migrations livrées : 0031 (#586), 0032 (#587), 0033 (#588), 0034 (#589), 0035 (
 - #471 infra prod avant v1.0.0 → #583, #593 (le reste = launch checklist)
 - #497 pipeline outbox RLS-safe → #586, #590, #591, #610
 
-### En cours
+### Purge RGPD — #628 fermée par #630 (`55f39f7`)
 
-- 🔄 **#628 [P1][rgpd][db] — la purge RGPD échoue en `23502`** : `users.email` est encore `NOT NULL` (aucune migration ne l'a relâché, contrairement au commentaire de `rgpd-purge.ts`). Chaque tick de `anonymizeExpiredUsers` échoue, les comptes soft-deleted ne sont jamais anonymisés : écart RGPD Art. 17. Correctif : migration expand-safe **0041** (`ALTER COLUMN email DROP NOT NULL` + `.down.sql`), lecteurs de `users.email` tolérants au `NULL`, pgTAP en `athlya_cron` + test API. **PR en attente.**
+- ✅ **#628 [P1][rgpd][db] — la purge RGPD échouait en `23502`** : `users.email` était resté `NOT NULL` depuis `0000_init.sql`, donc chaque tick de `anonymizeExpiredUsers` échouait et les comptes soft-deleted n'étaient jamais anonymisés (écart RGPD Art. 17). Correctif : migration expand-safe **0041** (`DROP NOT NULL` + check `users_email_live_check` : seul un compte soft-deleted peut avoir un email `NULL` ; `.down.sql` qui remet un placeholder unique avant `SET NOT NULL`), lecteurs de `users.email` tolérants au `NULL`, pgTAP en `athlya_cron` + tests API.
+- Changement de comportement : supprimer le compte d'un utilisateur déjà anonymisé renvoie désormais `not_found`.
+- Étapes opérateur : appliquer 0041 avant ou avec le déploiement, puis `pnpm verify:role-contract` (section 1). Le backlog de comptes à anonymiser se résorbe à 100 utilisateurs par tick du cron.
 
 ### Checklist opérateur consolidée
 
@@ -113,7 +116,7 @@ Dédupliquée depuis les derniers commentaires des issues fermées. Noms seuleme
 
 #### 1. Base de données (Neon)
 
-- [ ] Appliquer les migrations **dans l'ordre**, avant le déploiement des Workers (expand/contract) : 0031 → 0032 → 0033 → 0034 → 0035 → 0036 → 0037 → 0038 → 0039 → 0040, puis **0041** une fois #628 mergée. Staging, puis production. → [`expand-contract-migrations.md`](../../../docs/runbooks/expand-contract-migrations.md), [`db-role-switch.md`](../../../docs/runbooks/db-role-switch.md)
+- [ ] Appliquer les migrations **dans l'ordre**, avant le déploiement des Workers (expand/contract) : 0031 → 0032 → 0033 → 0034 → 0035 → 0036 → 0037 → 0038 → 0039 → 0040 → **0041** (#630 ; avant ou avec le déploiement, expand-safe). Staging, puis production. → [`expand-contract-migrations.md`](../../../docs/runbooks/expand-contract-migrations.md), [`db-role-switch.md`](../../../docs/runbooks/db-role-switch.md)
 - [ ] Vérifier les fonctions `SECURITY DEFINER` : `SELECT count(*) FROM pg_proc WHERE proowner = 'athlya_owner'::regrole AND proname ~ '^(auth|rgpd|notification|studio|reservation|capacity)_'` doit renvoyer 26.
 - [ ] Mots de passe des rôles : `athlya_app` (y compris sur la branche Neon parente des previews), `athlya_cron`, et `ALTER ROLE athlya_billing LOGIN PASSWORD …`. → [`db-role-switch.md`](../../../docs/runbooks/db-role-switch.md), [`stripe-production.md`](../../../docs/runbooks/stripe-production.md)
 - [ ] `pnpm verify:role-contract` contre staging puis production, avec les vraies URLs `athlya_app` / `athlya_cron`.
