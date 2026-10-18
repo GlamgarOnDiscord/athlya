@@ -28,9 +28,11 @@ import {
   CHART_WIDTH,
   PLOT_HEIGHT,
   PLOT_WIDTH,
+  barPath,
+  linePath as toLinePath,
   nextIndex,
-  niceMax,
   ticks,
+  yAxisMax,
 } from './chart-utils';
 
 export interface SeriesDatum {
@@ -67,22 +69,6 @@ export interface SeriesChartProps {
 const MARKER_LIMIT = 60;
 const BASELINE = CHART_MARGIN.top + PLOT_HEIGHT;
 
-/** Bar path with 4px rounded data-end and a square base on the baseline. */
-function barPath(x: number, y: number, width: number): string {
-  const height = BASELINE - y;
-  if (height <= 0) return '';
-  const r = Math.min(4, width / 2, height);
-  return [
-    `M${x},${BASELINE}`,
-    `V${y + r}`,
-    `Q${x},${y} ${x + r},${y}`,
-    `H${x + width - r}`,
-    `Q${x + width},${y} ${x + width},${y + r}`,
-    `V${BASELINE}`,
-    'Z',
-  ].join(' ');
-}
-
 export function SeriesChart({
   kind,
   title,
@@ -109,7 +95,7 @@ export function SeriesChart({
   const active = focused ?? hovered;
 
   const dataMax = Math.max(0, ...data.map((d) => d.value));
-  const yMax = integerScale ? Math.max(4, Math.ceil(dataMax / 4) * 4) : niceMax(dataMax);
+  const yMax = yAxisMax(dataMax, integerScale);
   const yOf = (value: number): number => BASELINE - (value / yMax) * PLOT_HEIGHT;
 
   const [x0, x1] = xDomain ?? [0, 1];
@@ -132,10 +118,7 @@ export function SeriesChart({
     [data.length, focused, rovingIndex],
   );
 
-  const linePath =
-    kind === 'line' && points.length > 1
-      ? points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
-      : null;
+  const linePath = kind === 'line' ? toLinePath(points) : null;
 
   const barWidth = Math.max(Math.min(band - 2, band * 0.7), 1);
   const activePoint = active === null ? undefined : points[active];
@@ -225,7 +208,7 @@ export function SeriesChart({
             ? points.map((p) => (
                 <path
                   key={p.d.key}
-                  d={barPath(p.x - barWidth / 2, p.y, barWidth)}
+                  d={barPath(p.x - barWidth / 2, p.y, barWidth, BASELINE)}
                   className="fill-chart-1"
                 />
               ))

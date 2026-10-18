@@ -94,6 +94,11 @@
       "types": "./src/theming/index.ts",
       "import": "./dist/theming/index.js",
       "default": "./src/theming/index.ts"
+    },
+    "./charts": {
+      "types": "./src/charts.ts",
+      "import": "./dist/charts.js",
+      "default": "./src/charts.ts"
     }
   },
   "files": [

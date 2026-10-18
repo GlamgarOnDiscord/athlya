@@ -139,3 +139,37 @@ export function switchA11yProps(input: SwitchA11yInput): SwitchA11yProps {
     },
   };
 }
+
+export interface RadioA11yInput extends ButtonA11yInput {
+  readonly selected: boolean;
+}
+
+export interface RadioA11yProps {
+  readonly accessible: true;
+  readonly accessibilityRole: 'radio';
+  readonly accessibilityLabel: string;
+  readonly accessibilityHint?: string;
+  readonly accessibilityState: {
+    readonly checked: boolean;
+    readonly selected: boolean;
+    readonly disabled: boolean;
+    readonly busy: boolean;
+  };
+}
+
+/** One option of a `radiogroup`; the current one is announced as checked. */
+export function radioA11yProps(input: RadioA11yInput): RadioA11yProps {
+  requireLabel(input.label);
+  return {
+    accessible: true,
+    accessibilityRole: 'radio',
+    accessibilityLabel: input.label,
+    ...(input.hint === undefined ? {} : { accessibilityHint: input.hint }),
+    accessibilityState: {
+      checked: input.selected,
+      selected: input.selected,
+      disabled: input.disabled === true || input.busy === true,
+      busy: input.busy === true,
+    },
+  };
+}

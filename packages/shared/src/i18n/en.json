@@ -538,6 +538,7 @@
         "classes": "Book a class",
         "reservations": "My reservations",
         "workout": "Log a workout",
+        "progression": "My progression",
         "checkin": "Check in at the desk",
         "settings": "Settings"
       }
@@ -698,6 +699,20 @@
       "restBetweenSets": "rest {seconds} s",
       "loadError": "Today's workout could not be loaded.",
       "duration": "{seconds} s"
+    },
+    "progression": {
+      "title": "My progression",
+      "windowLabel": "Period",
+      "windowHint": "Loads the progression over this period.",
+      "exerciseLabel": "Exercise",
+      "exerciseHint": "Shows the charts of this exercise.",
+      "kg": "{value} kg",
+      "bestOneRepMax": "Best estimated 1RM — {exercise}",
+      "chart": {
+        "lineSummary": "Days trained: {count}, from {from} to {to}. Latest: {latest} kg, highest: {max} kg, lowest: {min} kg.",
+        "barSummary": "Weeks: {weeks}, from {from} to {to}. Sessions: {total} in total, {max} in the busiest week, {latest} in the latest week.",
+        "noSessions": "No session logged in this period, so there is no weekly frequency to show."
+      }
     }
   },
   "notifications": {
