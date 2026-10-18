@@ -593,7 +593,7 @@
       "alreadyBooked": "Vous avez déjà réservé ce cours.",
       "starts": "{date} · {duration} min",
       "refresh": "Actualiser",
-      "waitlistHint": "Vous inscrit sur la liste d'attente de ce cours complet."
+      "waitlistHint": "Cette action vous inscrit sur la liste d'attente de ce cours complet."
     },
     "reservations": {
       "title": "Mes réservations",

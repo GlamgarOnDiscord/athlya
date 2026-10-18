@@ -137,8 +137,18 @@ async function submitInOrder<T>(
   if (isAborted(input.signal)) throw createAbortError();
   const idempotencyKey = deps.uuid();
 
+  // The write may have waited behind older ones: if the signed-in user changed
+  // meanwhile, the API client now holds another account's session. Never send
+  // it directly then; queue it for the user who made it, whose session the
+  // drain will use once they sign in again.
+  let currentOwner: string | null;
+  try {
+    currentOwner = await deps.getOwnerId();
+  } catch {
+    currentOwner = null;
+  }
   const offline = deps.sync.getState().status === 'offline';
-  if (offline || deps.queue.pendingFor(ownerId).length > 0) {
+  if (currentOwner !== ownerId || offline || deps.queue.pendingFor(ownerId).length > 0) {
     return enqueue(deps, ownerId, input, idempotencyKey);
   }
 

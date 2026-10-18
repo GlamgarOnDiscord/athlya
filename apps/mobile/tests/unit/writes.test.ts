@@ -173,6 +173,33 @@ describe('submitWrite', () => {
     expect(await second).toEqual({ kind: 'sent', body: { ok: true } });
   });
 
+  it('never sends a waiting write under another account: it is queued for its own user', async () => {
+    const { deps, api, queue } = createWriteDeps();
+    let owner: string | null = OWNER;
+    const switching = { ...deps, getOwnerId: () => Promise.resolve(owner) };
+    let finishFirst: (value: unknown) => void = () => undefined;
+    api.post.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishFirst = resolve;
+      }),
+    );
+    api.post.mockResolvedValue({ ok: true });
+
+    const first = submitWrite(switching, { ...INPUT, payload: { classId: 'first' } });
+    const second = submitWrite(switching, { ...INPUT, payload: { classId: 'second' } });
+    await flush();
+    // User A signs out and user B signs in while A's second write waits.
+    owner = 'user-b';
+    finishFirst({ ok: true });
+
+    expect((await first).kind).toBe('sent');
+    expect((await second).kind).toBe('queued');
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(queue.peek()).toEqual([
+      expect.objectContaining({ ownerId: OWNER, payload: { classId: 'second' } }),
+    ]);
+  });
+
   it('does not make different users wait for each other', async () => {
     const shared = createWriteDeps();
     const other = { ...shared.deps, getOwnerId: () => Promise.resolve('user-2') };

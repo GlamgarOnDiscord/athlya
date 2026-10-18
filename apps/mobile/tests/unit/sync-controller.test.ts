@@ -267,4 +267,32 @@ describe('SyncController (task 11.7)', () => {
     expect(sent).toEqual(['/v1/a']);
     expect(queue.size).toBe(1);
   });
+
+  it('runs again for the new user when an account switch stops the drain', async () => {
+    const { queue } = createQueue();
+    queue.enqueue({ ownerId: OWNER, kind: 'a', path: '/v1/a' });
+    queue.enqueue({ ownerId: OWNER, kind: 'b', path: '/v1/b' });
+    queue.enqueue({ ownerId: 'user-b', kind: 'c', path: '/v1/c' });
+    let current: string | null = OWNER;
+    const sent: string[] = [];
+    const api: Pick<ApiClient, 'send'> = {
+      send: (_method, path) => {
+        sent.push(path);
+        // User B signs in while A's first mutation is in flight.
+        current = 'user-b';
+        return Promise.resolve<ApiResponse>({ status: 201, headers: new Headers(), body: null });
+      },
+    };
+    const controller = new SyncController({
+      queue,
+      api,
+      getOwnerId: () => Promise.resolve(current),
+      connectivity: new FakeConnectivity(true),
+    });
+    await controller.syncNow();
+    // A's second mutation waits for A; B's own queue is drained in the same call.
+    expect(sent).toEqual(['/v1/a', '/v1/c']);
+    expect(queue.pendingFor(OWNER).map((item) => item.path)).toEqual(['/v1/b']);
+    expect(controller.getState().status).toBe('idle');
+  });
 });
