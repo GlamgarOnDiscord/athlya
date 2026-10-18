@@ -441,7 +441,7 @@ Use official CLI to create, init the project .. and recent package version and s
 
 > ⏸️ **Renvoyé post-1.0** — voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-58`](../../../docs/roadmap/post-1.0.md). Effort ~3 sprints. Déclencheur : décision business "iOS/Android" + studio pilote.
 >
-> Foundation delivered in #638 (11.1–11.7, 11.12, 11.13) on Expo SDK 58 / React Native 0.88 — see [`docs/mobile/README.md`](../../../docs/mobile/README.md). Screens 11.8–11.11 follow in a separate PR. Brand (BR.4): the icon is `assets/brand/png/athlya-appicon-1024.png`; the splash image is `apps/mobile/assets/splash-mascot.png`, a crop of that icon (regenerate it from the icon when the brand changes).
+> Foundation delivered in #638 (11.1–11.7, 11.12, 11.13) on Expo SDK 58 / React Native 0.88 — see [`docs/mobile/README.md`](../../../docs/mobile/README.md). Member screens delivered for #647 (11.8, 11.10, 11.11, plus 24.4); 11.9 is blocked on the API (#648). Brand (BR.4): the icon is `assets/brand/png/athlya-appicon-1024.png`; the splash image is `apps/mobile/assets/splash-mascot.png`, a crop of that icon (regenerate it from the icon when the brand changes).
 
 - [ ] 11. Build the Expo / React Native mobile app with offline-first queue
   - [x] 11.1 Scaffold the Expo SDK 58 app with NativeWind 4 and shared tokens
@@ -479,22 +479,26 @@ Use official CLI to create, init the project .. and recent package version and s
     - Use `@react-native-community/netinfo`; on reconnection, run `drainMutationQueue` and show sync progress in UI
     - _Requirements: 19.3_
 
-  - [ ] 11.8 Implement the booking screen with optimistic update
+  - [x] 11.8 Implement the booking screen with optimistic update
     - `useBookClass` mutation with `onMutate` decrementing local counter, `onError` rollback, `onSettled` invalidate query
+    - Done (#647): `features/classes/classes-controller.ts` (`ClassesController.book`), screen `app/classes.tsx`; online with a fresh `Idempotency-Key`, queued as `bookClass` with the same key on `NetworkError` or while offline. "My reservations" (`app/reservations.tsx`) cancels through the same path
     - _Requirements: 8.1, 8.5, 20.3_
 
   - [ ] 11.9 Implement the QR check-in screen
     - Generate `QR_Checkin_Token` client-side (actually fetched from `/v1/checkins/token` since signing needs private key); display as QR; rotate every 120 s
+    - Blocked (#648): the API has no token-issuance route and `/v1/checkins` is not mounted in production (#302)
     - _Requirements: 11.1_
 
-  - [ ] 11.10 Implement the workout session logging screen
+  - [x] 11.10 Implement the workout session logging screen
     - Form with exercises, sets, reps, weights, optional notes
     - Enqueue `logSession` mutation via `MutationQueue` when offline
+    - Done (#647): `features/workouts/workout-form.ts` validated with `LogSessionRequestSchema`, screen `app/workout.tsx`
     - API side done (#652): `POST /v1/sessions` and `GET /v1/sessions/me` are served by the reservations bulkhead Worker (staging + production routes), RLS-scoped writes, claim-bound idempotency, 20/min/user mutation budget
     - _Requirements: 12.1, 12.2, 12.3, 19.1_
 
-  - [ ] 11.11 Implement the RGPD export and delete screens in the mobile app
+  - [x] 11.11 Implement the RGPD export and delete screens in the mobile app
     - Trigger the same endpoints as the web app
+    - Done (#647): `app/settings.tsx` — `POST /v1/members/me/export`, `DELETE /v1/auth/me` (typed confirmation word), plus biometric unlock, sign-out and the "rejected changes" (DLQ) view
     - _Requirements: 4.1, 5.1_
 
   - [x] 11.12 Write property test for FIFO + idempotent offline drain
@@ -671,7 +675,7 @@ Use official CLI to create, init the project .. and recent package version and s
     - Requires EAS Build (native module)
     - _Requirements: 12.1_
 
-- [ ] 24. Training programs
+- [x] 24. Training programs
   - [x] 24.1 Define the `programs` and `program_weeks` schema
     - Drizzle schema, migration, RLS policies scoped by studio
     - Done (#640): migration `0042_training_programs` — `programs`, `program_weeks`, `program_workouts`, `program_subscriptions`, ENABLE + FORCE RLS, `athlya_app` grants, `rgpd_delete_program_subscriptions` for the Article 17 cascade; pgTAP `tests/rls/training_programs.sql`
@@ -686,8 +690,8 @@ Use official CLI to create, init the project .. and recent package version and s
     - Done (#640): `/dashboard/programs` — list, status filter, week/day/exercise editor, archive
     - _Requirements: 3.5_
 
-  - [ ] 24.4 Show the daily prescribed workout on the mobile home
-    - Pending (later mobile PR): render `GET /v1/programs/today` (member local date) on the mobile home
+  - [x] 24.4 Show the daily prescribed workout on the mobile home
+    - Done (#647): `components/TodayProgramCard.tsx` renders `GET /v1/programs/today?date=<device local date>` (validated with `TodayWorkoutResponseSchema`), one card per subscription: scheduled workout, rest day, not started, completed
     - _Requirements: 3.5_
 
 - [ ] 25. Final checkpoint — v0.3 complete

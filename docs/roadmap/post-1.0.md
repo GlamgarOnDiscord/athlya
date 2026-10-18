@@ -10,7 +10,7 @@ Mise à jour : sortie v1.0.0.
 
 **Effort estimé** : ~3 sprints (~3 semaines).
 
-**Status**: foundation (11.1–11.7, 11.12, 11.13) delivered on Expo SDK 58 / React Native 0.88 in #638 — see [`docs/mobile/README.md`](../mobile/README.md). Screens 11.8–11.11 remain.
+**Status**: foundation (11.1–11.7, 11.12, 11.13) delivered on Expo SDK 58 / React Native 0.88 in #638 — see [`docs/mobile/README.md`](../mobile/README.md). Member screens (11.8, 11.10, 11.11) and the program card on the home screen (24.4) delivered for #647; the QR check-in screen (11.9) waits for an API token route (#648) and mobile sign-in for a bot-check flow (#649).
 
 **Déclencheur** : décision business "rendre l'app dispo iOS/Android" + au moins un studio pilote prêt à tester l'app native.
 
@@ -51,7 +51,7 @@ Mise à jour : sortie v1.0.0.
 - **21** AI coach : `packages/ai-coach/src/service.ts` + `/v1/coach/ask`. 🟡 Service, `GET /v1/coach`, `POST /v1/coach/ask` (réponse JSON validée) et UI web `/me/coach` livrés derrière le flag `ai-coach` (#644). Restent : le streaming de la réponse, et la checklist opérateur RGPD de `docs/compliance/ai-coach.md` (DPA Mistral, région et rétention) avant l'ouverture du flag.
 - **22** Progression graphs : `packages/members/src/progression.ts` (volume + 1RM trends, 30/90/365j) + UI web/mobile. ✅ Agrégateur, `GET /v1/me/progression` et UI web livrés (#639) ; UI mobile restante.
 - **23** BLE FTMS (mobile, dépend v1.1).
-- **24** Programs : schéma `programs` / `program_weeks`, service + assignment + UI studio admin. Shipped in #640 (migration 0042, `@athlya/programs`, `/v1/programs/*`, `/dashboard/programs`); the mobile home rendering of `GET /v1/programs/today` is still pending.
+- **24** Programs : schéma `programs` / `program_weeks`, service + assignment + UI studio admin. Shipped in #640 (migration 0042, `@athlya/programs`, `/v1/programs/*`, `/dashboard/programs`); the mobile home renders `GET /v1/programs/today` since #647 (24.4).
 - **25** Final checkpoint v0.3.
 
 **Pré-requis** : Mistral API key, consents `thirdParty` validés par les utilisateurs.

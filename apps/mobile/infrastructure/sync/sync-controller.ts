@@ -161,6 +161,7 @@ export class SyncController {
         result = await drainMutationQueue(this.#options.queue, this.#options.api, {
           ...this.#options.drainOptions,
           ownerId,
+          isOwnerSignedIn: async () => (await this.#options.getOwnerId()) === ownerId,
           isOnline: () => this.#options.connectivity.isOnline(),
           onProgress: ({ total, processed }) => {
             this.#update({ total, processed });
@@ -168,9 +169,18 @@ export class SyncController {
         });
         // A rerun requested meanwhile survives an offline stop: the next pass
         // re-checks connectivity. Auth and exhausted retries end the run.
-        if (result.stoppedBy === 'auth-required' || result.stoppedBy === 'retries-exhausted') {
+        if (result.stoppedBy === 'auth-required') {
+          // Stopped because another user signed in meanwhile: their sign-in
+          // asked for a drain that was coalesced into this run, so run again
+          // for them instead of dropping it.
+          const current = await this.#options.getOwnerId();
+          if (current !== null && current !== ownerId) {
+            this.#rerunRequested = true;
+            continue;
+          }
           break;
         }
+        if (result.stoppedBy === 'retries-exhausted') break;
       } while (this.#rerunRequested);
     } catch (error) {
       result = null;
