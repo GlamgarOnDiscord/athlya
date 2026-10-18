@@ -34,6 +34,21 @@ describe('sanitizeExerciseName', () => {
     expect(sanitizeExerciseName('a'.repeat(200))).toHaveLength(COACH_EXERCISE_NAME_MAX);
   });
 
+  it('stays linear on long adversarial input (no ReDoS)', () => {
+    const inputs = [
+      '!'.repeat(200_000),
+      `${'a'.repeat(100_000)}@`,
+      '@'.repeat(100_000),
+      `${'1'.repeat(100_000)}x`,
+      ' \u0001'.repeat(100_000),
+    ];
+    const started = performance.now();
+    for (const input of inputs) {
+      expect([...sanitizeExerciseName(input)].length).toBeLessThanOrEqual(COACH_EXERCISE_NAME_MAX);
+    }
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
   it('never returns an empty string', () => {
     expect(sanitizeExerciseName('\u0001')).toBe(COACH_MASK);
   });

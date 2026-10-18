@@ -73,24 +73,24 @@ export interface CoachContext {
   readonly recentSessions: readonly CoachSessionSummary[];
 }
 
-const EMAIL = /[^\s@]+@[^\s@]+/g;
 const LONG_DIGITS = /\d{6,}/g;
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g;
 
 /**
  * Clean a free-text exercise name before it reaches the model: drop
- * control characters, mask e-mail addresses and runs of six digits or
- * more (phone numbers, ids), collapse whitespace and cut the result to
- * {@link COACH_EXERCISE_NAME_MAX} characters.
+ * control characters, mask every word containing `@` (e-mail addresses)
+ * and runs of six digits or more (phone numbers, ids), collapse
+ * whitespace and cut the result to {@link COACH_EXERCISE_NAME_MAX}
+ * characters. Every step is linear in the input length.
  */
 export function sanitizeExerciseName(name: string): string {
   const cleaned = name
     .replace(CONTROL, ' ')
-    .replace(EMAIL, COACH_MASK)
-    .replace(LONG_DIGITS, COACH_MASK)
-    .replace(/\s+/g, ' ')
-    .trim();
+    .split(/\s/)
+    .filter((word) => word.length > 0)
+    .map((word) => (word.includes('@') ? COACH_MASK : word.replace(LONG_DIGITS, COACH_MASK)))
+    .join(' ');
   const cut = [...cleaned].slice(0, COACH_EXERCISE_NAME_MAX).join('').trim();
   return cut.length > 0 ? cut : COACH_MASK;
 }
