@@ -271,6 +271,24 @@ export const AuthSuspiciousLoginAnomalyEventSchema = envelopeShape(
 );
 export type AuthSuspiciousLoginAnomalyEvent = z.infer<typeof AuthSuspiciousLoginAnomalyEventSchema>;
 
+/**
+ * `auth.password_reset.requested` — recorded in the outbox when a
+ * password reset is requested for a live account (issue #645). Only
+ * the account id travels: the consumer mints the reset token and reads
+ * the current email address at delivery time, so neither the bearer
+ * token nor the address is ever stored in the outbox, the queue or the
+ * DLQ. Unknown and soft-deleted addresses record nothing.
+ */
+export const AuthPasswordResetRequestedEventSchema = envelopeShape(
+  'auth.password_reset.requested',
+  z
+    .object({
+      userId: UserIdSchema,
+    })
+    .strict(),
+);
+export type AuthPasswordResetRequestedEvent = z.infer<typeof AuthPasswordResetRequestedEventSchema>;
+
 /* ------------------------------------------------------------------ */
 /*  Billing events                                                     */
 /* ------------------------------------------------------------------ */
@@ -386,6 +404,7 @@ export const EVENT_TYPES = [
   'billing.subscription.failed',
   'members.export.completed',
   'members.export.requested',
+  'auth.password_reset.requested',
 ] as const;
 
 /** Union of the literal `type` values above. */
@@ -411,6 +430,7 @@ export const AthlyaEventSchema = z.discriminatedUnion('type', [
   BillingSubscriptionFailedEventSchema,
   MembersExportCompletedEventSchema,
   MembersExportRequestedEventSchema,
+  AuthPasswordResetRequestedEventSchema,
 ]);
 
 /** Inferred discriminated union type covering every Athlya event. */

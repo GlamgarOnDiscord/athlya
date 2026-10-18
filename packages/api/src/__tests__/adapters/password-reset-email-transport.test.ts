@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { buildPasswordResetEmailTransport } from '../../adapters/auth-deps.js';
+import {
+  buildPasswordResetEmailTransport,
+  resolveResetLinkBaseUrl,
+} from '../../adapters/auth-deps.js';
 
 import type { AthlyaBindings } from '../../types.js';
 
@@ -28,13 +31,15 @@ describe('buildPasswordResetEmailTransport', () => {
       warnSpy.mockRestore();
     });
 
-    it('logs the reset link to console (not an error)', async () => {
+    it('warns without logging the reset link or the recipient (issue #645)', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       const transport = buildPasswordResetEmailTransport(makeEnv({ ENVIRONMENT: 'dev' }));
       await transport.sendResetEmail(BASE_INPUT);
       expect(warnSpy).toHaveBeenCalledOnce();
-      const [, meta] = warnSpy.mock.calls[0] as [unknown, { link: string }];
-      expect(meta.link).toBe(BASE_INPUT.link);
+      const logged = JSON.stringify(warnSpy.mock.calls[0]);
+      expect(logged).not.toContain('reset-password');
+      expect(logged).not.toContain(BASE_INPUT.link);
+      expect(logged).not.toContain(BASE_INPUT.to);
       warnSpy.mockRestore();
     });
   });
@@ -64,4 +69,26 @@ describe('buildPasswordResetEmailTransport', () => {
       );
     });
   });
+});
+
+describe('resolveResetLinkBaseUrl (issue #645)', () => {
+  it('uses WEB_APP_URL when it is set', () => {
+    const env = makeEnv({ ENVIRONMENT: 'production', WEB_APP_URL: 'https://app.athlya.app' });
+    expect(resolveResetLinkBaseUrl(env)).toBe('https://app.athlya.app');
+  });
+
+  it('falls back to a placeholder host in dev only', () => {
+    expect(resolveResetLinkBaseUrl(makeEnv({ ENVIRONMENT: 'dev' }))).toBe(
+      'https://app.athlya.test',
+    );
+  });
+
+  it.each(['staging', 'production'] as const)(
+    'throws in %s rather than emailing a placeholder link',
+    (environment) => {
+      expect(() => resolveResetLinkBaseUrl(makeEnv({ ENVIRONMENT: environment }))).toThrow(
+        /WEB_APP_URL is not configured/u,
+      );
+    },
+  );
 });

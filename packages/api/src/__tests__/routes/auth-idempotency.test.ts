@@ -1,11 +1,11 @@
 /**
- * `/v1/auth/*` with the idempotency middleware wired (issue #230).
+ * `/v1/auth/*` with the idempotency middleware wired (issues #230, #645).
  *
- * The lazy auth facade always carries an `idempotency` dependency, so
- * the middleware runs on every auth mutation route. Public routes
- * (login, register) have no authenticated user: an `Idempotency-Key`
- * header there must pass through instead of failing with 500, while an
- * authenticated route (DELETE /me) still replays the cached response.
+ * Public routes (login, register) have no authenticated user: an
+ * `Idempotency-Key` header there passes through and no store is built.
+ * The authenticated route (DELETE /me) builds its store per request from
+ * the caller's claims, so the owner-only RLS policies of
+ * `idempotency_keys` see the caller, and replays the cached response.
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,6 +15,8 @@ import { buildApp } from '../../worker.js';
 import { readJson } from '../helpers/read-json.js';
 
 import {
+  TEST_STUDIO_ID,
+  TEST_USER_ID,
   buildLocalResolver,
   buildStubDeps,
   env,
@@ -23,8 +25,8 @@ import {
   type TestKeypair,
 } from './route-test-helpers.js';
 
-import type { AthlyaDb } from '@athlya/db/client';
 import type { JwksKeyResolver } from '../../middleware/auth.js';
+import type { AthlyaDb } from '@athlya/db/client';
 
 const hoisted = vi.hoisted(() => ({
   localResolver: null as JwksKeyResolver | null,
@@ -80,16 +82,19 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const SCOPED_DB = { scoped: true } as unknown as AthlyaDb;
+
 function buildAppWithIdempotency() {
+  const idempotencyFor = vi.fn(() => ({ db: SCOPED_DB }));
   const deps = buildStubDeps({
     auth: {
       register: vi.fn().mockResolvedValue(SESSION),
       login: vi.fn().mockResolvedValue(SESSION),
       deleteMe: vi.fn().mockResolvedValue(undefined),
-      idempotency: { db: {} as AthlyaDb },
+      idempotencyFor,
     },
   });
-  return { deps, app: buildApp({ deps }) };
+  return { deps, idempotencyFor, app: buildApp({ deps }) };
 }
 
 const publicHeaders = {
@@ -100,7 +105,7 @@ const publicHeaders = {
 
 describe('public auth routes with an Idempotency-Key header', () => {
   it('POST /v1/auth/login returns its normal status', async () => {
-    const { app, deps } = buildAppWithIdempotency();
+    const { app, deps, idempotencyFor } = buildAppWithIdempotency();
 
     const res = await app.request(
       '/v1/auth/login',
@@ -114,12 +119,13 @@ describe('public auth routes with an Idempotency-Key header', () => {
 
     expect(res.status).toBe(200);
     expect(deps.auth.login).toHaveBeenCalledTimes(1);
+    expect(idempotencyFor).not.toHaveBeenCalled();
     expect(hoisted.lookup).not.toHaveBeenCalled();
     expect(hoisted.store).not.toHaveBeenCalled();
   });
 
   it('POST /v1/auth/register returns its normal status', async () => {
-    const { app, deps } = buildAppWithIdempotency();
+    const { app, deps, idempotencyFor } = buildAppWithIdempotency();
 
     const res = await app.request(
       '/v1/auth/register',
@@ -139,6 +145,7 @@ describe('public auth routes with an Idempotency-Key header', () => {
 
     expect(res.status).toBe(201);
     expect(deps.auth.register).toHaveBeenCalledTimes(1);
+    expect(idempotencyFor).not.toHaveBeenCalled();
     expect(hoisted.lookup).not.toHaveBeenCalled();
     expect(hoisted.store).not.toHaveBeenCalled();
   });
@@ -163,5 +170,54 @@ describe('authenticated auth route with an Idempotency-Key header', () => {
     expect(await readJson<{ deleted: boolean }>(res)).toEqual({ deleted: true });
     expect(hoisted.lookup).toHaveBeenCalledTimes(1);
     expect(deps.auth.deleteMe).not.toHaveBeenCalled();
+  });
+
+  it('DELETE /v1/auth/me runs lookup and store on a store bound to the caller claims (issue #645)', async () => {
+    const { app, deps, idempotencyFor } = buildAppWithIdempotency();
+    const token = await mintAuthJwt(kp);
+
+    const res = await app.request(
+      '/v1/auth/me',
+      {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}`, 'Idempotency-Key': 'delete-key-2' },
+      },
+      env(),
+    );
+
+    expect(res.status).toBe(200);
+    expect(deps.auth.deleteMe).toHaveBeenCalledWith(TEST_USER_ID);
+    expect(idempotencyFor).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: TEST_USER_ID, studioId: TEST_STUDIO_ID, role: 'member' }),
+    );
+    expect(hoisted.lookup).toHaveBeenCalledWith(SCOPED_DB, 'delete-key-2', TEST_USER_ID);
+    expect(hoisted.store).toHaveBeenCalledWith(
+      SCOPED_DB,
+      'delete-key-2',
+      TEST_USER_ID,
+      { body: { deleted: true }, statusCode: 200 },
+      86_400,
+    );
+  });
+
+  it('DELETE /v1/auth/me runs without replay protection when no store is wired', async () => {
+    const deleteMe = vi.fn().mockResolvedValue(undefined);
+    const deps = buildStubDeps({ auth: { deleteMe, idempotencyFor: () => undefined } });
+    const app = buildApp({ deps });
+    const token = await mintAuthJwt(kp);
+
+    const res = await app.request(
+      '/v1/auth/me',
+      {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}`, 'Idempotency-Key': 'delete-key-3' },
+      },
+      env(),
+    );
+
+    expect(res.status).toBe(200);
+    expect(deleteMe).toHaveBeenCalledTimes(1);
+    expect(hoisted.lookup).not.toHaveBeenCalled();
+    expect(hoisted.store).not.toHaveBeenCalled();
   });
 });

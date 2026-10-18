@@ -12,6 +12,8 @@ const { defaultAuthDeps, lazyAuthDeps } = await import('../domain-deps.js');
 
 import { buildMockEnv } from './helpers/test-app.js';
 
+import type { AuthClaims } from '../middleware/auth.js';
+import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { AuthDeps } from '../routes/auth.js';
 import type { AthlyaBindings, HonoEnv } from '../types.js';
 
@@ -86,7 +88,13 @@ describe('lazyAuthDeps', () => {
     confirmPasswordReset: vi.fn(),
     checkRefreshRateLimit: vi.fn(() => Promise.resolve({ allow: true })),
     checkPasswordResetRateLimit: vi.fn(() => Promise.resolve(true)),
-    idempotency: { db: {} as Required<AuthDeps>['idempotency']['db'] },
+    idempotencyFor: vi.fn(() => ({ db: {} as IdempotencyMiddlewareDeps['db'] })),
+  };
+
+  const claims: AuthClaims = {
+    userId: '11111111-1111-4111-8111-111111111111',
+    studioId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    role: 'member',
   };
 
   it.each(Object.keys(full))('forwards %s', (key) => {
@@ -94,23 +102,32 @@ describe('lazyAuthDeps', () => {
     expect(deps[key as keyof AuthDeps]).toBeDefined();
   });
 
-  it('forwards the optional rate limits and the idempotency db handle', async () => {
+  it('forwards the optional rate limits and the claims-bound idempotency store', async () => {
     const deps = lazyAuthDeps(() => full);
 
     await deps.checkPasswordResetRateLimit?.('a@example.com');
     await deps.checkRefreshRateLimit?.('token');
+    const store = deps.idempotencyFor?.(claims);
 
     expect(full.checkPasswordResetRateLimit).toHaveBeenCalledWith('a@example.com');
     expect(full.checkRefreshRateLimit).toHaveBeenCalledWith('token');
-    expect(deps.idempotency?.db).toBe(full.idempotency.db);
+    expect(full.idempotencyFor).toHaveBeenCalledWith(claims);
+    expect(store).toBeDefined();
   });
 
   it('exposes the idempotency facade before any env is resolved', () => {
     const resolve = vi.fn((): AuthDeps => full);
     const deps = lazyAuthDeps(resolve);
 
-    expect(deps.idempotency).toBeDefined();
+    expect(deps.idempotencyFor).toBeDefined();
     expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it('reports no idempotency store when the bundle has none', () => {
+    const { idempotencyFor: _omit, ...partial } = full;
+    const deps = lazyAuthDeps(() => partial);
+
+    expect(deps.idempotencyFor?.(claims)).toBeUndefined();
   });
 
   it('reports an absent optional rate limit as undefined', () => {

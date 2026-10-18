@@ -7,6 +7,8 @@
 
 import { HANDLED_EVENT_TYPES } from '@athlya/notifications';
 
+import { AUTH_EMAIL_EVENT_TYPES } from './known-event-types.js';
+
 /** Named queue lanes provisioned in `wrangler.toml`. */
 export type EventQueueLane = 'notifications' | 'rgpd' | 'legacy';
 
@@ -22,7 +24,10 @@ export interface EventQueueBindings {
   readonly EVENTS_RGPD_QUEUE: EventQueueProducer;
 }
 
-const NOTIFICATION_ROUTED_TYPES = new Set<string>(HANDLED_EVENT_TYPES);
+const NOTIFICATION_ROUTED_TYPES = new Set<string>([
+  ...HANDLED_EVENT_TYPES,
+  ...AUTH_EMAIL_EVENT_TYPES,
+]);
 
 /**
  * Resolve the queue lane for a dotted event type. Unknown types stay on

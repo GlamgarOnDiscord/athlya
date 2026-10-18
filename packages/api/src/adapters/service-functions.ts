@@ -5,7 +5,8 @@
  * `0037_auth_outbox_review_fixes.sql` (issue #609),
  * `0038_studios_runtime.sql` (issue #224, tenant slug resolution) and
  * `0039_runtime_rls_gaps.sql` (issue #117, password reset issuance and
- * RGPD audit anonymisation).
+ * RGPD audit anonymisation) and `0042_auth_password_reset_outbox.sql`
+ * (issue #645, durable password-reset requests).
  *
  * Pre-authentication auth flows, the tenant slug guard and the
  * notifications / RGPD cascade queue consumers run as `athlya_app`
@@ -130,6 +131,8 @@ export const serviceFn = {
   recordAuthEvent: (event: unknown) =>
     sql`SELECT auth_record_event(${JSON.stringify(event)}::jsonb)`,
   bumpCredentialsVersion: (id: string) => sql`SELECT auth_bump_credentials_version(${id}::uuid)`,
+  requestPasswordReset: (email: string, eventId: string) =>
+    sql`SELECT auth_request_password_reset(${email}, ${eventId}::uuid) AS enqueued`,
   issuePasswordReset: (userId: string, tokenHash: string, expiresAt: Date) =>
     sql`SELECT auth_issue_password_reset(${userId}::uuid, ${tokenHash}, ${expiresAt.toISOString()}::timestamptz) AS issued`,
   findPasswordReset: (tokenHash: string) =>

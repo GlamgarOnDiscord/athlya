@@ -6,7 +6,10 @@
  *
  *   athlya_app  (DB_URL)       tenant slug resolution → register → login
  *                              lookup → notification recipient → password
- *                              reset issue + lookup + consume → own studio
+ *                              reset issue + lookup + consume → reset
+ *                              request outbox event → idempotency keys
+ *                              (refused without claims, replayed with
+ *                              them) → own studio
  *                              read + admin branding update and member export
  *                              enqueue (tenant GUCs) → worker claim + data +
  *                              complete → account deletion with its event →
@@ -57,6 +60,7 @@ export const REQUIRED_FUNCTIONS = [
   'studio_id_by_slug',
   'auth_issue_password_reset',
   'auth_find_password_reset',
+  'auth_request_password_reset',
   'rgpd_anonymize_user_audit',
   'reservation_lock_class_for_cancel',
   'reservation_promote_oldest_waitlist',
@@ -177,6 +181,34 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     check(consumed.length === 1, 'password reset token could not be consumed');
     ok('password reset: issue, lookup and consume work without claims');
 
+    const [resetRequest] = await tx`
+      SELECT auth_request_password_reset(${email.toUpperCase()}, ${randomUUID()}::uuid) AS enqueued
+    `;
+    check(
+      resetRequest.enqueued === true,
+      'password reset request was not recorded for a live account',
+    );
+    const [unknownReset] = await tx`
+      SELECT auth_request_password_reset(${`unknown+${userId}@athlya.invalid`}, ${randomUUID()}::uuid) AS enqueued
+    `;
+    check(unknownReset.enqueued === false, 'password reset request recorded for an unknown address');
+    ok('password reset request: outbox event recorded without claims, none for an unknown address');
+
+    const idemKey = `role-contract-${randomUUID()}`;
+    const claimless = await tx
+      .savepoint(
+        (sp) => sp`
+          INSERT INTO idempotency_keys (key, user_id, response, status_code, expires_at)
+          VALUES (${idemKey}, ${userId}::uuid, '{}'::jsonb, 200, now() + interval '1 minute')
+        `,
+      )
+      .then(
+        () => 'stored',
+        (err) => err.code,
+      );
+    check(claimless === '42501', `claim-less idempotency store was not refused (${claimless})`);
+    ok('idempotency keys: a store without the caller claims is refused');
+
     await tx`
       INSERT INTO audit_log (actor_id, action, metadata)
       VALUES (${userId}::uuid, 'role.contract', ${JSON.stringify({ email })}::text::jsonb)
@@ -189,6 +221,15 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     await tx`SELECT set_config('app.role', 'member', true)`;
     const [own] = await tx`SELECT count(*)::int AS n FROM users`;
     check(own.n === 1, `member sees ${own.n} user rows, expected exactly their own`);
+    await tx`
+      INSERT INTO idempotency_keys (key, user_id, response, status_code, expires_at)
+      VALUES (${idemKey}, ${userId}::uuid, '{"deleted":true}'::jsonb, 200, now() + interval '1 minute')
+    `;
+    const [replay] = await tx`
+      SELECT count(*)::int AS n FROM idempotency_keys WHERE key = ${idemKey} AND user_id = ${userId}::uuid
+    `;
+    check(replay.n === 1, 'idempotency key not replayable under the caller claims');
+    ok('idempotency keys: stored and replayed under the caller claims');
     const [ownStudio] = await tx`SELECT count(*)::int AS n FROM studios`;
     check(ownStudio.n === 1, `member sees ${ownStudio.n} studios rows, expected exactly their own`);
     const memberEdit =

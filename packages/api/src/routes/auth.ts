@@ -6,8 +6,8 @@
  *
  *   | Method | Path                    | Chain                                                              |
  *   |--------|-------------------------|--------------------------------------------------------------------|
- *   | POST   | /register               | turnstile → zValidator(RegisterRequestSchema) → idempotency → handler |
- *   | POST   | /login                  | turnstile → zValidator(LoginRequestSchema) → idempotency → handler |
+ *   | POST   | /register               | turnstile → zValidator(RegisterRequestSchema) → handler            |
+ *   | POST   | /login                  | turnstile → zValidator(LoginRequestSchema) → handler               |
  *   | POST   | /refresh                | zValidator(RefreshRequestSchema) → handler (NOT idempotent — rotation is single-use) |
  *   | POST   | /logout                 | jwtAuth → handler                                                  |
  *   | DELETE | /me                     | jwtAuth → projectUserIdFromClaims → idempotency → handler          |
@@ -17,8 +17,9 @@
  *            except `register`, `login`, `refresh`).
  *   • 14.2 — Every route validates its payload via the shared Zod
  *            schemas from `@athlya/shared/schemas/api`.
- *   • 20.1 — Mutation routes mount the idempotency middleware so a
- *            retry with the same `Idempotency-Key` header replays
+ *   • 20.1 — The authenticated mutation (`DELETE /me`) mounts the
+ *            idempotency middleware, bound to the caller's claims, so
+ *            a retry with the same `Idempotency-Key` header replays
  *            the cached response.
  *   • 5.1  — `DELETE /me` soft-deletes the authenticated user and
  *            fans out the RGPD deletion cascade.
@@ -46,6 +47,7 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 
+import { runWithOutboxKickScope } from '../events/outbox-kick.js';
 import { jwtAuth } from '../middleware/auth.js';
 import { turnstile } from '../middleware/turnstile.js';
 import { zValidator } from '../middleware/validator.js';
@@ -58,9 +60,11 @@ import {
   traceOperation,
 } from './helpers.js';
 
+import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
 import type { LoginRequest, RefreshRequest, RegisterRequest } from '@athlya/shared/schemas/api';
+import type { MiddlewareHandler } from 'hono';
 
 /* ------------------------------------------------------------------ */
 /*  Lazy import of the shared schemas                                  */
@@ -133,8 +137,10 @@ export interface AuthDeps {
    * Sprint-7 SP7.4 (Vague 35, finalises S2-006) — start the
    * password-reset flow. ALWAYS resolves to `{ kind: 'sent' }`
    * irrespective of email match (email-enumeration defence
-   * documented in `@athlya/auth/forgot-password.ts`). The repo
-   * + email transport side-effect only fires for active users.
+   * documented in `@athlya/auth/forgot-password.ts`). Records the
+   * request in the outbox for an active user only (issue #645); the
+   * route runs it after the 204, so its latency and failures are
+   * never visible to the requester.
    */
   requestPasswordReset(email: string): Promise<void>;
   /**
@@ -165,8 +171,15 @@ export interface AuthDeps {
    */
   checkPasswordResetRateLimit?(email: string): Promise<boolean>;
 
-  /** Dependency bundle forwarded to the idempotency middleware. */
-  readonly idempotency?: IdempotencyMiddlewareDeps;
+  /**
+   * Idempotency store bound to the caller's tenant claims (issue #645),
+   * or `undefined` when the environment has none (the mutation then
+   * runs without replay protection). `idempotency_keys` is FORCE RLS
+   * with owner-only policies, so a store without the caller's
+   * `app.user_id` misses every lookup and has its writes refused under
+   * `athlya_app`.
+   */
+  idempotencyFor?(claims: AuthClaims): IdempotencyMiddlewareDeps | undefined;
 }
 
 /* ------------------------------------------------------------------ */
@@ -176,53 +189,51 @@ export interface AuthDeps {
 /**
  * Build the `/v1/auth/*` sub-router.
  *
- * The idempotency middleware requires a non-empty
- * {@link AuthDeps.idempotency.db} handle; callers that do not yet
- * have a Drizzle adapter wired should pass `undefined`, in which case
- * the middleware is skipped entirely (request passes straight through
- * to the handler — safe for tests that do not exercise idempotent
- * replays).
+ * Idempotency runs on the authenticated mutation (`DELETE /me`) only,
+ * with a store bound per request to the caller's claims
+ * ({@link AuthDeps.idempotencyFor}). The public routes do not mount it:
+ * they have no owner to scope a cached response to, and a replayed
+ * `register` / `login` response would persist session tokens in
+ * `idempotency_keys`. A duplicate `register` hits the unique email
+ * (`email_taken`); a duplicate `login` issues a second session.
  */
 export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  const idem = deps.idempotency;
+
+  const idem: MiddlewareHandler<HonoEnv> = async (c, next) => {
+    const claims = c.get('authClaims');
+    const store = claims === undefined ? undefined : deps.idempotencyFor?.(claims);
+    if (store === undefined) {
+      await next();
+      return;
+    }
+    return idempotency(store)(c, next);
+  };
 
   /* ------------------------------ register ----------------------- */
-  router.post(
-    '/register',
-    turnstile(),
-    zValidator('json', RegisterRequestSchema),
-    ...(idem ? [idempotency(idem)] : []),
-    async (c) => {
-      traceOperation(c, 'auth.register');
-      const body = readValidated<RegisterRequest>(c, 'json');
-      const session = await deps.register(body);
-      return c.json(session, 201);
-    },
-  );
+  router.post('/register', turnstile(), zValidator('json', RegisterRequestSchema), async (c) => {
+    traceOperation(c, 'auth.register');
+    const body = readValidated<RegisterRequest>(c, 'json');
+    const session = await deps.register(body);
+    return c.json(session, 201);
+  });
 
   /* ------------------------------ login -------------------------- */
-  router.post(
-    '/login',
-    turnstile(),
-    zValidator('json', LoginRequestSchema),
-    ...(idem ? [idempotency(idem)] : []),
-    async (c) => {
-      traceOperation(c, 'auth.login');
-      const body = readValidated<LoginRequest>(c, 'json');
-      const ip = deriveClientIp(c.req.header('cf-connecting-ip'), c.req.header('x-forwarded-for'));
-      // Sprint 12 / Slice 12.15 (Epic B3.4) — feed
-      // CF-IPCountry + User-Agent to the anomaly detector.
-      const country = c.req.header('cf-ipcountry');
-      const userAgent = c.req.header('user-agent');
-      const session = await deps.login(body, {
-        ip,
-        ...(country !== undefined ? { country } : {}),
-        ...(userAgent !== undefined ? { userAgent } : {}),
-      });
-      return c.json(session, 200);
-    },
-  );
+  router.post('/login', turnstile(), zValidator('json', LoginRequestSchema), async (c) => {
+    traceOperation(c, 'auth.login');
+    const body = readValidated<LoginRequest>(c, 'json');
+    const ip = deriveClientIp(c.req.header('cf-connecting-ip'), c.req.header('x-forwarded-for'));
+    // Sprint 12 / Slice 12.15 (Epic B3.4) — feed
+    // CF-IPCountry + User-Agent to the anomaly detector.
+    const country = c.req.header('cf-ipcountry');
+    const userAgent = c.req.header('user-agent');
+    const session = await deps.login(body, {
+      ip,
+      ...(country !== undefined ? { country } : {}),
+      ...(userAgent !== undefined ? { userAgent } : {}),
+    });
+    return c.json(session, 200);
+  });
 
   /* ------------------------------ refresh ------------------------ */
   // NOT idempotent — the refresh-token rotation is intentionally
@@ -300,9 +311,9 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
   //
   // `request` ALWAYS returns 204 — see the email-enumeration
   // defence rationale in `@athlya/auth/forgot-password.ts`. The
-  // service-layer side-effect (insert token + send email) only
-  // fires for active users, but the wire response is uniform so
-  // an attacker probing email validity gets no signal.
+  // side-effect (an outbox row, then token + email from the
+  // consumer) only happens for active users, but the wire response
+  // is uniform so an attacker probing email validity gets no signal.
   //
   // `confirm` returns 204 on success. AuthError flow handles the
   // four reject paths (`token_invalid` / `token_expired` /
@@ -351,20 +362,23 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
           );
         }
       }
-      // Detach account-dependent work (DB write + email transport) from the
-      // HTTP response to eliminate the timing and error-status enumeration
-      // oracles described in issue #521. The 204 is returned before any
-      // account lookup; the caller cannot distinguish a registered address
-      // from an unregistered one through response time or failure status.
+      // Detach the account-dependent work from the HTTP response to
+      // eliminate the timing and error-status enumeration oracles
+      // described in issue #521. The 204 is returned before any account
+      // lookup; the caller cannot distinguish a registered address from
+      // an unregistered one through response time or failure status.
       //
-      // waitUntil guarantees the async work runs to completion in the CF
-      // isolate after the response is sent. Errors are caught and logged
-      // with a non-PII code; they never surface to the requester.
-      //
-      // TODO(#521): upgrade to a durable outbox (QStash) for retry/DLQ
-      // observability on production delivery failures.
-      const work = Promise.resolve(deps.requestPasswordReset(body.email)).catch((err: unknown) => {
-        console.error('auth.password-reset.request: async dispatch failed', {
+      // The deferred work only records the request in the outbox
+      // (issue #645): token issuance and the email are delivered from
+      // there by the notifications consumer, with the queue's retries
+      // and DLQ. Its own kick scope lets the drain pick the row up as
+      // soon as it is committed, after the request scope has closed.
+      // Errors are caught and logged with a non-PII code; they never
+      // surface to the requester.
+      const work = runWithOutboxKickScope(c, async () => {
+        await deps.requestPasswordReset(body.email);
+      }).catch((err: unknown) => {
+        console.error('auth.password-reset.request: enqueue failed', {
           code: 'reset_dispatch_error',
           error: err instanceof Error ? err.message : 'unknown',
         });
@@ -398,21 +412,15 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
   );
 
   /* ------------------------------ delete me ---------------------- */
-  router.delete(
-    '/me',
-    jwtAuth(),
-    projectUserIdFromClaims(),
-    ...(idem ? [idempotency(idem)] : []),
-    async (c) => {
-      traceOperation(c, 'auth.delete-me');
-      const claims = c.get('authClaims');
-      if (claims === undefined) {
-        throw new Error('authClaims unexpectedly missing after jwtAuth');
-      }
-      await deps.deleteMe(claims.userId);
-      return c.json({ deleted: true }, 200);
-    },
-  );
+  router.delete('/me', jwtAuth(), projectUserIdFromClaims(), idem, async (c) => {
+    traceOperation(c, 'auth.delete-me');
+    const claims = c.get('authClaims');
+    if (claims === undefined) {
+      throw new Error('authClaims unexpectedly missing after jwtAuth');
+    }
+    await deps.deleteMe(claims.userId);
+    return c.json({ deleted: true }, 200);
+  });
 
   return router;
 }

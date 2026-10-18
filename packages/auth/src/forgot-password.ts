@@ -17,11 +17,12 @@
  *
  * Security envelope
  * -----------------
- *   1. **Constant-time email enumeration defence**: `requestReset()`
- *      ALWAYS returns success to the caller, regardless of whether
- *      the email matches an active user. The email transport is
- *      the only side-effect that branches on existence — which
- *      isn't observable from the HTTP response.
+ *   1. **Email enumeration defence**: `requestReset()` ALWAYS returns
+ *      success to the caller, regardless of whether the email matches
+ *      an active user. It only records the request (issue #645); the
+ *      token and the email are produced later by `deliverResetEmail()`
+ *      from the outbox, so neither their latency nor their failures
+ *      reach the HTTP response.
  *   2. **Token entropy**: 256-bit random token via Web Crypto, base64url-
  *      encoded. Stored as SHA-256 hash so a DB leak does not
  *      enable replay (mirror of session sid storage policy).
@@ -61,8 +62,8 @@
  * @see docs/security/audit-S2-auth.md S2-006
  */
 
-import { hash as hashPassword } from './password.js';
 import { isBreached as defaultIsBreached, HibpUnavailableError } from './hibp.js';
+import { hash as hashPassword } from './password.js';
 import { AuthError } from './service.js';
 
 import type { AuthServiceDeps } from './service.js';
@@ -200,32 +201,38 @@ async function sha256Hex(input: string): Promise<string> {
 /*  requestReset                                                       */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Durable hand-off of a reset request (issue #645). The production
+ * adapter calls `auth_request_password_reset`, which looks up the live
+ * account and records an `auth.password_reset.requested` outbox row in
+ * one statement; an unknown or soft-deleted address records nothing.
+ * The outbox drain then delivers the event to
+ * {@link deliverResetEmail}, with the queue's retry budget and DLQ.
+ */
+export interface PasswordResetRequestQueue {
+  /** Record a reset request for `normalizedEmail`. Resolves whether or not the account exists. */
+  enqueue(normalizedEmail: string): Promise<void>;
+}
+
 export interface RequestResetDeps {
-  readonly userRepo: AuthServiceDeps['userRepo'];
-  readonly passwordResetRepo: PasswordResetRepo;
-  readonly emailTransport: PasswordResetEmailTransport;
-  /** Base URL of the web app. Token is appended to build `link`. */
-  readonly resetLinkBaseUrl: string;
-  /** Optional clock injection for tests. */
-  readonly now?: () => number;
-  /** Optional TTL override (default 1 hour). */
-  readonly tokenTtlSec?: number;
+  readonly resetRequests: PasswordResetRequestQueue;
 }
 
 export interface RequestResetResult {
   /**
    * Always `'sent'` from the caller's perspective — see the
    * email-enumeration defence rationale in the module doc.
-   * The actual side-effect (email dispatched) only fires when
-   * a matching active user was found.
+   * The email itself only goes out when a matching active user
+   * was found.
    */
   readonly kind: 'sent';
 }
 
 /**
- * Begin a password reset flow. Mints a token, persists its hash,
- * dispatches the email — all conditional on the email matching an
- * active (non-soft-deleted) user. Returns `'sent'` regardless to
+ * Begin a password reset flow: normalise the address and record the
+ * request. Token issuance and the email happen later, in
+ * {@link deliverResetEmail}, so no account-dependent external call runs
+ * on the request path (issue #521). Returns `'sent'` regardless to
  * defeat email-enumeration probes.
  */
 export async function requestReset(
@@ -239,33 +246,72 @@ export async function requestReset(
     throw new AuthError('token_invalid');
   }
 
-  const normalized = email.trim().toLowerCase();
-  const user = await deps.userRepo.findUserByEmail(normalized);
+  await deps.resetRequests.enqueue(email.trim().toLowerCase());
+  return { kind: 'sent' };
+}
 
-  // Branch ONLY on whether the side-effect (email) fires. The
-  // returned shape is identical so the response time is also
-  // similar.
-  if (user !== null && user.deletedAt === null) {
-    const ttlSec = deps.tokenTtlSec ?? DEFAULT_RESET_TOKEN_TTL_SEC;
-    const nowMs = deps.now !== undefined ? deps.now() * 1000 : Date.now();
-    const expiresAt = new Date(nowMs + ttlSec * 1000);
-    const plainToken = generateRandomToken();
-    const tokenHash = await sha256Hex(plainToken);
+/* ------------------------------------------------------------------ */
+/*  deliverResetEmail                                                  */
+/* ------------------------------------------------------------------ */
 
-    await deps.passwordResetRepo.insertToken({
-      userId: user.id,
-      tokenHash,
-      expiresAt,
-    });
+export interface DeliverResetDeps {
+  readonly userRepo: Pick<AuthServiceDeps['userRepo'], 'findUserById'>;
+  readonly passwordResetRepo: PasswordResetRepo;
+  readonly emailTransport: PasswordResetEmailTransport;
+  /** Base URL of the web app. Token is appended to build `link`. */
+  readonly resetLinkBaseUrl: string;
+  /** Optional clock injection for tests. */
+  readonly now?: () => number;
+  /** Optional TTL override (default 1 hour). */
+  readonly tokenTtlSec?: number;
+}
 
-    const link = `${stripTrailingSlashes(deps.resetLinkBaseUrl)}/reset-password/${plainToken}`;
-    await deps.emailTransport.sendResetEmail({
-      to: user.email,
-      link,
-      expiresAt,
-    });
+export type DeliverResetResult =
+  | { readonly kind: 'sent' }
+  /** The account was deleted (or anonymised) after the request: nothing to send. */
+  | { readonly kind: 'skipped_inactive' };
+
+/**
+ * Deliver the reset email for a recorded request (issue #645).
+ *
+ * Mints the token, persists its hash (invalidating the user's previous
+ * tokens, issue #522) and sends the link. The token is minted here, at
+ * delivery, rather than when the request is recorded: the outbox, the
+ * queue message and the DLQ then never hold a bearer credential, and
+ * every retry sends a fresh link with its full TTL. A retry after a
+ * failed send invalidates the undelivered token of the previous attempt.
+ *
+ * Throws when the token cannot be stored or the email cannot be sent,
+ * so the queue retries the message and dead-letters it once the retry
+ * budget is spent.
+ */
+export async function deliverResetEmail(
+  userId: string,
+  deps: DeliverResetDeps,
+): Promise<DeliverResetResult> {
+  const user = await deps.userRepo.findUserById(userId);
+  if (user === null || user.deletedAt !== null || !user.email) {
+    return { kind: 'skipped_inactive' };
   }
 
+  const ttlSec = deps.tokenTtlSec ?? DEFAULT_RESET_TOKEN_TTL_SEC;
+  const nowMs = deps.now !== undefined ? deps.now() * 1000 : Date.now();
+  const expiresAt = new Date(nowMs + ttlSec * 1000);
+  const plainToken = generateRandomToken();
+  const tokenHash = await sha256Hex(plainToken);
+
+  await deps.passwordResetRepo.insertToken({
+    userId: user.id,
+    tokenHash,
+    expiresAt,
+  });
+
+  const link = `${stripTrailingSlashes(deps.resetLinkBaseUrl)}/reset-password/${plainToken}`;
+  await deps.emailTransport.sendResetEmail({
+    to: user.email,
+    link,
+    expiresAt,
+  });
   return { kind: 'sent' };
 }
 

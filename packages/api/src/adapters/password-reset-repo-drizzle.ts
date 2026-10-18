@@ -34,9 +34,11 @@
 
 import { PasswordResetTokenUnavailableError } from '@athlya/auth';
 
-import { queryRows, serviceFn, toDateOrNull, writeRows } from './service-functions.js';
+import { noteOutboxWrite } from '../events/outbox-kick.js';
 
-import type { PasswordResetRepo } from '@athlya/auth';
+import { queryRows, serviceFn, toDateOrNull, uuidV7, writeRows } from './service-functions.js';
+
+import type { PasswordResetRepo, PasswordResetRequestQueue } from '@athlya/auth';
 import type { AthlyaDbAny } from '@athlya/db/client';
 
 /**
@@ -92,6 +94,31 @@ export function createDrizzlePasswordResetRepo(db: AthlyaDbAny): PasswordResetRe
       );
       if (rows.length === 0) {
         throw new PasswordResetTokenUnavailableError();
+      }
+    },
+  };
+}
+
+/** Outbox event type recorded by {@link createPasswordResetRequestQueue}. */
+export const PASSWORD_RESET_REQUESTED = 'auth.password_reset.requested';
+
+/**
+ * `PasswordResetRequestQueue` adapter (issue #645). One call to
+ * `auth_request_password_reset` (migration 0042) looks up the live
+ * account and records the outbox row in the same statement; nothing is
+ * recorded for an unknown or soft-deleted address. The event id is
+ * chosen once per request, so the connection retry of `queryRows` is
+ * safe: a replay hits `ON CONFLICT (event_id) DO NOTHING`.
+ */
+export function createPasswordResetRequestQueue(db: AthlyaDbAny): PasswordResetRequestQueue {
+  return {
+    async enqueue(normalizedEmail) {
+      const rows = await queryRows<{ enqueued: boolean }>(
+        db,
+        serviceFn.requestPasswordReset(normalizedEmail, uuidV7()),
+      );
+      if (rows[0]?.enqueued === true) {
+        noteOutboxWrite(PASSWORD_RESET_REQUESTED);
       }
     },
   };
