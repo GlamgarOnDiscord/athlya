@@ -1,0 +1,45 @@
+{
+  "name": "@athlya/programs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Training programs domain for Athlya — program authoring, member subscriptions and the daily prescribed workout",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=24"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./schedule": {
+      "types": "./src/schedule.ts",
+      "default": "./src/schedule.ts"
+    }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "clean": "rimraf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@athlya/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@athlya/eslint-config": "workspace:*",
+    "@athlya/tsconfig": "workspace:*",
+    "@types/node": "^24.19.2",
+    "eslint": "^9.39.5",
+    "rimraf": "^6.1.3",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  }
+}
