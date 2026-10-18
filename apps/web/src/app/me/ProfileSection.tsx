@@ -140,6 +140,12 @@ export function ProfileSection({
       <ConsentsForm consents={status.consents} client={client} t={t} />
       <Separator />
       <nav className="flex flex-col gap-2" aria-label={t('profile.accountActions')}>
+        <Link
+          href="/me/progression"
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          {t('workouts.progression.link')}
+        </Link>
         <Link href="/me/export" className="text-sm text-muted-foreground hover:text-foreground">
           {t('profile.dataExport')}
         </Link>

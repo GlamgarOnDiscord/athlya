@@ -3,7 +3,8 @@
  *
  * Runs axe over every member-facing page called out in Task 10.7:
  *  - Public: `/`, `/login`, `/register`
- *  - Authenticated: `/classes`, `/me`, `/me/export`, `/me/delete`
+ *  - Authenticated: `/classes`, `/me`, `/me/export`, `/me/delete`,
+ *    `/me/progression` (charts rendered from a stubbed payload)
  *
  * For authenticated pages we use the `loginWithStub` fixture so the
  * token store is populated without a real API round-trip — we care
@@ -22,7 +23,7 @@ import { expect, test } from '@playwright/test';
 import { loginWithStub } from './fixtures/auth';
 
 const publicPaths = ['/', '/login', '/register'] as const;
-const authPaths = ['/classes', '/me', '/me/export', '/me/delete'] as const;
+const authPaths = ['/classes', '/me', '/me/export', '/me/delete', '/me/progression'] as const;
 
 for (const path of publicPaths) {
   test(`axe: ${path} (public)`, async ({ page }) => {
