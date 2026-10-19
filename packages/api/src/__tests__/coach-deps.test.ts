@@ -185,6 +185,16 @@ describe('buildCoachDeps', () => {
     expect((error as CoachError).code).toBe('not_configured');
     expect(redis.values.size).toBe(0);
   });
+
+  it('refuses the stream the same way, before it opens', async () => {
+    const { env, redis } = envWith({ MISTRAL_API_KEY: '' });
+    const error = await buildCoachDeps(env)
+      .askStream(CLAIMS, { question: 'How?', locale: 'en' }, new AbortController().signal)
+      .catch((err: unknown) => err);
+    expect(error).toBeInstanceOf(CoachError);
+    expect((error as CoachError).code).toBe('not_configured');
+    expect(redis.values.size).toBe(0);
+  });
 });
 
 describe('resolveMistralBaseUrl', () => {

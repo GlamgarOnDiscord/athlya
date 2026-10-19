@@ -17,7 +17,7 @@ pass Cloudflare Turnstile through a WebView (issue #649). Post-1.0 roadmap item 
 | Offline queue | `react-native-mmkv` 4 (AES-256, per-install key in secure storage)                    |
 | Connectivity  | `@react-native-community/netinfo`                                                     |
 | Charts        | `react-native-svg` 15.16 (SDK 58 pin); maths in `@athlya/shared/charts`               |
-| QR code       | `react-native-qrcode-svg` 6 on `react-native-svg` 15.16 (the SDK 58 version)          |
+| QR code       | `qrcode-generator` 2 (pure-JS encoder) drawn with `react-native-svg` 15.16            |
 | Bot check     | `react-native-webview` 14.0.1 (the SDK 58 pin) hosting the API's Turnstile page       |
 | Builds        | EAS Build / Submit — operator steps in [`mobile-eas.md`](../runbooks/mobile-eas.md)   |
 

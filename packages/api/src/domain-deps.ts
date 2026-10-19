@@ -200,6 +200,7 @@ export function lazyCoachDeps(resolve: () => CoachDeps): CoachDeps {
     isEnabled: forward('isEnabled'),
     getStatus: forward('getStatus'),
     ask: forward('ask'),
+    askStream: forward('askStream'),
   };
 }
 
@@ -539,6 +540,7 @@ export function defaultCoachDeps(env: AthlyaBindings, cf?: RequestCf): CoachDeps
         isEnabled: () => Promise.resolve(false),
         getStatus: () => notImplemented('coach.getStatus'),
         ask: () => notImplemented('coach.ask'),
+        askStream: () => notImplemented('coach.askStream'),
       };
 }
 

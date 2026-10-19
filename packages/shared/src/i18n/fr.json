@@ -775,7 +775,8 @@
           "bpm": "{value} bpm",
           "spm": "{value} /min",
           "percent": "{value} %"
-        }
+        },
+        "heartRateStrap": "Fréquence cardiaque (ceinture)"
       },
       "types": {
         "indoorBike": "Vélo d’intérieur",
@@ -791,6 +792,28 @@
         "strokes": "{count} coups",
         "energy": "{kcal} kcal",
         "avgHeartRate": "FC moy. {bpm} bpm"
+      },
+      "strap": {
+        "title": "Ceinture cardio",
+        "intro": "Associez une ceinture ou une montre qui diffuse votre fréquence cardiaque en Bluetooth. Sa mesure remplace celle de la machine.",
+        "scan": "Rechercher une ceinture cardio",
+        "scanning": "Recherche des ceintures cardio à proximité…",
+        "devices": "Ceintures à proximité",
+        "unnamed": "Ceinture sans nom",
+        "reconnect": "Reconnecter {name}",
+        "forget": "Oublier cette ceinture",
+        "connecting": "Connexion à {name}…",
+        "connected": "Connecté à {name}",
+        "waiting": "En attente de la première mesure…",
+        "noContact": "La ceinture ne détecte pas votre peau. Humidifiez ses électrodes et resserrez-la.",
+        "disconnect": "Déconnecter la ceinture",
+        "nothingFound": "Aucune ceinture trouvée. Mettez la ceinture (elle se réveille au contact de la peau) puis réessayez.",
+        "errors": {
+          "scanFailed": "La recherche des ceintures a échoué. Réessayez.",
+          "connectFailed": "Connexion à la ceinture impossible. Rapprochez-vous et réessayez.",
+          "notHeartRate": "Cet appareil ne partage pas de fréquence cardiaque en Bluetooth.",
+          "linkLost": "Connexion à la ceinture perdue. La séance sur la machine continue."
+        }
       }
     }
   },

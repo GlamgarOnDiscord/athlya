@@ -20,6 +20,12 @@ const STATE_TIMEOUT_MS = 5_000;
 const CONNECT_TIMEOUT_MS = 10_000;
 
 let manager: BleManager | null = null;
+/**
+ * The manager runs one scan at a time and a new `startDeviceScan` takes
+ * over the previous one (machine and heart-rate strap scans share it), so
+ * only the latest scan may stop the radio or receive devices.
+ */
+let activeScan: object | null = null;
 
 function getManager(): BleManager {
   manager ??= new BleManager();
@@ -129,20 +135,26 @@ export function createBlePlxTransport(): BleTransport {
     },
     startScan: (serviceUuids, onDevice, onError) => {
       const ble = getManager();
+      const scan = {};
+      activeScan = scan;
       let stopped = false;
       ble
         .startDeviceScan([...serviceUuids], { allowDuplicates: false }, (error, device) => {
-          if (stopped) return;
+          if (stopped || activeScan !== scan) return;
           if (error !== null) {
             onError(error);
             return;
           }
           if (device !== null) onDevice({ id: device.id, name: device.name ?? device.localName });
         })
-        .catch(onError);
+        .catch((error: unknown) => {
+          if (!stopped && activeScan === scan) onError(error);
+        });
       return () => {
         if (stopped) return;
         stopped = true;
+        if (activeScan !== scan) return;
+        activeScan = null;
         ble.stopDeviceScan().catch(() => {
           // Scan already stopped by the system.
         });

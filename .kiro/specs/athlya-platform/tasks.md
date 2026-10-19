@@ -644,18 +644,19 @@ Use official CLI to create, init the project .. and recent package version and s
 
 > ⏸️ **Renvoyé post-1.0** — voir [`docs/roadmap/post-1.0.md#v12--ai-coach--progression--programmes`](../../../docs/roadmap/post-1.0.md). Effort ~2 sprints. Déclencheur : feature flag `ai-coach` ouvert + Mistral provisionné.
 
-- [ ] 21. AI coach service
+- [x] 21. AI coach service
   - [x] 21.1 Implement the AI coach service with Vercel AI SDK + Mistral
     - `packages/ai-coach/src/service.ts`: `askCoach(userId, prompt, context)` — context includes the last 30 days of sessions
     - Respect `consents.thirdParty`; reject when disabled
     - Done (#644): `askCoach(userId, { question, locale }, deps)` with the model injected (AI SDK `LanguageModel`; Mistral in the API adapter, mock model in tests), 30-day context read once through the progression repo and minimised by `buildCoachContext` (no ids, no notes, cleaned exercise names, capped sizes), `CoachAdviceSchema` (`@athlya/shared`) validation of the structured output, `thirdParty` consent check before any read, daily quota per member (Redis, fail-closed); unit + fast-check tests
     - _Requirements: 3.3_
 
-  - [ ] 21.2 Expose `/v1/coach/ask` route on the gateway
+  - [x] 21.2 Expose `/v1/coach/ask` route on the gateway
     - Streaming response via Hono's streaming helper
     - Done (#644): `GET /v1/coach` (flag, consent, quota) and `POST /v1/coach/ask` behind the `ai-coach` flag (default OFF), per-user burst limit `coach-ask` + daily quota (both fail-closed), OpenAPI entries, reservations bulkhead Worker routes (`/v1/coach` + `/v1/coach/*`), web `/me/coach` (aria-live answer, FR/EN) with an axe sweep case added to `apps/web/e2e/axe.spec.ts`
-    - Pending: streaming. The answer is returned as one JSON payload because it is validated against `CoachAdviceSchema` as a whole before reaching the member
-    - Pending before the flag opens: the RGPD operator checklist in `docs/compliance/ai-coach.md` (DPA, Mistral region and retention settings)
+    - Streaming done (#675): `Accept: text/event-stream` answers through Hono's `streamSSE` once consent, quota and context checks passed (refusals keep their problem status). `partial` events carry `CoachAdvicePartial` snapshots (`streamCoach`, AI SDK `streamText` + `partialOutputStream`, fields clipped to the advice bounds), then one terminal `done` event with the answer validated against `CoachAdviceSchema` as a whole, or a terminal `error` problem event. A client disconnect aborts the provider call. The JSON response is unchanged without that `Accept` value
+    - Follow-up: web and mobile clients consuming the stream (#676)
+    - Operator, before the flag opens: the RGPD checklist in `docs/compliance/ai-coach.md` (DPA, Mistral region and retention settings) and the steps in `docs/runbooks/deploy-production.md` § Enabling the AI coach
     - _Requirements: 14.1, 14.2_
 
 - [x] 22. Progression graphs
@@ -677,6 +678,7 @@ Use official CLI to create, init the project .. and recent package version and s
     - Requires EAS Build (native module)
     - Done (#666): `features/ftms/` decodes Indoor Bike, Treadmill, Rower and Cross Trainer Data (both published layouts: FTMS 1.0 and GATT Supplement widths), folds the samples into a live session (time-weighted averages, machine totals first), and logs it through `POST /v1/sessions` / the offline queue (one exercise named after the machine, `durationSec`, summary in `notes`). `BleTransport` port with a `react-native-ble-plx` 3.5.1 adapter; `/machine` screen from home; FR/EN keys
     - Follow-ups: structured cardio metrics (#667), FTMS Control Point (#668), heart-rate strap (#669)
+    - Heart-rate strap (#669): `features/ftms/heart-rate.ts` decodes Heart Rate Measurement 0x2A37 (uint8/uint16, sensor contact, energy expended, RR-intervals); `HeartRateController` pairs a 0x180D strap on its own connection through the same `BleTransport` (losing it never stops the machine session) and remembers the last strap on the device; the strap's heart rate wins over the machine's while it reports with skin contact
     - #667: the session also carries a structured `cardio` summary (`CardioMetricsSchema`; migration 0046 `workout_sessions.cardio` jsonb, expand only), returned by `GET /v1/sessions/me` and included in the RGPD export; cardio progression charts follow in #683
     - _Requirements: 12.1_
 

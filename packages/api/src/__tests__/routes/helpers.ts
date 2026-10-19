@@ -144,6 +144,7 @@ export function buildStubDeps(
       isEnabled: vi.fn(() => Promise.resolve(false)),
       getStatus: vi.fn(),
       ask: vi.fn(),
+      askStream: vi.fn(),
       ...overrides.coach,
     },
   };
