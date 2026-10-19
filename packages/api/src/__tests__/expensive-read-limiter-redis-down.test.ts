@@ -79,6 +79,25 @@ describe('expensive read limiter Redis down (#133)', () => {
     expect(body.code).toBe('dependency_unavailable');
   });
 
+  it('staging GET /v1/me/progression/cardio → 503 fail-closed (issue #683)', async () => {
+    const env = buildMockEnv({
+      ENVIRONMENT: 'staging',
+      CORS_ORIGIN: 'https://app.staging.athlya.app',
+    });
+    primeDown(env);
+
+    const app = buildAppNoDomainRoutes();
+    const res = await app.request(
+      '/v1/me/progression/cardio?window=90&bucket=week',
+      { method: 'GET', headers: stagingHeaders },
+      env,
+    );
+
+    expect(res.status).toBe(503);
+    const body = await readJson<{ code?: string }>(res);
+    expect(body.code).toBe('dependency_unavailable');
+  });
+
   it('staging GET /v1/members/me is not blocked by members-list limiter when Redis is up', async () => {
     const env = buildMockEnv({
       ENVIRONMENT: 'staging',

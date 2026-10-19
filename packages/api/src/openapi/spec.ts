@@ -21,6 +21,8 @@ import {
   BookingRequestSchema,
   BookingResponseSchema,
   CancelReservationParamsSchema,
+  CardioProgressionQuerySchema,
+  CardioProgressionResponseSchema,
   CheckInRequestSchema,
   CheckInResponseSchema,
   CheckInTokenResponseSchema,
@@ -845,6 +847,45 @@ const progressionRoute = createRoute({
   },
 });
 
+const cardioProgressionRoute = createRoute({
+  method: 'get',
+  path: '/v1/me/progression/cardio',
+  tags: ['members'],
+  summary: 'Per-machine cardio series (moving time, distance, energy, power, heart rate)',
+  description:
+    'Aggregates the structured `cardio` summary of the caller workout sessions over the ' +
+    'last 30, 90 or 365 UTC days, per machine, in zero-filled UTC-day or ISO-week ' +
+    '(Monday, UTC) buckets, plus one point per session. Bucket power and heart rate ' +
+    'averages are weighted by moving time. Sessions without a `cardio` summary are ' +
+    'ignored. Separate from `/v1/me/progression`, whose body is unchanged. Sends ' +
+    '`Cache-Control: private, max-age=60` and an ETag; a matching `If-None-Match` returns 304.',
+  security: [{ bearerAuth: [] }],
+  request: { query: CardioProgressionQuerySchema },
+  responses: {
+    200: {
+      description: 'Cardio progression for the requested window and bucket',
+      content: { 'application/json': { schema: CardioProgressionResponseSchema } },
+    },
+    304: { description: 'Not modified (ETag matched)' },
+    401: {
+      description: 'Not authenticated',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    422: {
+      description: 'Invalid window or bucket',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    429: {
+      description: 'Rate limited',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    503: {
+      description: 'Rate limiter unavailable (fail-closed, code `dependency_unavailable`)',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+  },
+});
+
 /*
  * coach — /v1/coach (Epic 21, behind the `ai-coach` feature flag)
  */
@@ -1346,6 +1387,7 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
 
   // me
   app.openapi(progressionRoute, stub);
+  app.openapi(cardioProgressionRoute, stub);
 
   // coach
   app.openapi(coachStatusRoute, stub);

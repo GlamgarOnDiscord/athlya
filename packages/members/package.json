@@ -30,6 +30,10 @@
       "types": "./src/progression.ts",
       "default": "./src/progression.ts"
     },
+    "./cardio-progression": {
+      "types": "./src/cardio-progression.ts",
+      "default": "./src/cardio-progression.ts"
+    },
     "./export": {
       "types": "./src/export.ts",
       "default": "./src/export.ts"
