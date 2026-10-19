@@ -744,7 +744,9 @@ const logSessionRoute = createRoute({
   description:
     'The owner is the JWT subject. `studioId` is optional (solo workouts) and must be the ' +
     "caller's studio when present. Send an `Idempotency-Key` header: a retry with the same key " +
-    'replays the stored response instead of logging the session twice.',
+    'replays the stored response instead of logging the session twice. A session recorded on a ' +
+    'cardio machine may carry `cardio`, its structured summary (every metric optional); the ' +
+    'response and `GET /v1/sessions/me` return it, and omit the key on sessions without one.',
   security: [{ bearerAuth: [] }],
   request: {
     headers: z.object({

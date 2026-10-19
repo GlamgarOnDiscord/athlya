@@ -2,7 +2,7 @@
  * `workout_sessions` row → `WorkoutSession` wire shape (ISO strings),
  * shared by the sessions and progression repos so the shape is defined
  * once. The request idempotency key is internal and never leaves the
- * database.
+ * database. `cardio` is omitted, not `null`, on sessions without one.
  */
 
 import type { WorkoutSessionRow } from '@athlya/db/schema';
@@ -17,6 +17,7 @@ export function toWireWorkoutSession(row: WorkoutSessionRow): WorkoutSession {
     durationMin: row.durationMin,
     exercises: row.exercises,
     notes: row.notes,
+    ...(row.cardio === null ? {} : { cardio: row.cardio }),
     createdAt: row.createdAt.toISOString(),
   };
 }

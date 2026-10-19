@@ -170,9 +170,40 @@ export const ExerciseSchema = z
 
 export type Exercise = z.infer<typeof ExerciseSchema>;
 
+/** Cardio machine families a session can be recorded on (FTMS, Epic 23). */
+export const CARDIO_MACHINES = ['indoorBike', 'treadmill', 'rower', 'crossTrainer'] as const;
+
+export type CardioMachine = (typeof CARDIO_MACHINES)[number];
+
+/**
+ * Structured cardio summary of a session recorded on a machine (issue
+ * #667). Every metric is optional: a machine reports only some of them.
+ * `durationSec` is the moving time, more precise than the session's
+ * rounded `durationMin`. Bounds are generous physical ceilings that
+ * reject corrupted sensor values.
+ */
+export const CardioMetricsSchema = z
+  .object({
+    machine: z.enum(CARDIO_MACHINES).optional(),
+    durationSec: z.number().int().nonnegative().max(86_400).optional(),
+    distanceM: z.number().int().nonnegative().max(1_000_000).optional(),
+    energyKcal: z.number().int().nonnegative().max(20_000).optional(),
+    avgPowerW: z.number().int().nonnegative().max(4_000).optional(),
+    maxPowerW: z.number().int().nonnegative().max(4_000).optional(),
+    avgCadenceRpm: z.number().int().nonnegative().max(300).optional(),
+    avgSpeedKmh: z.number().nonnegative().max(150).optional(),
+    avgHeartRateBpm: z.number().int().min(20).max(250).optional(),
+    maxHeartRateBpm: z.number().int().min(20).max(250).optional(),
+    strokeCount: z.number().int().nonnegative().max(100_000).optional(),
+  })
+  .strict();
+
+export type CardioMetrics = z.infer<typeof CardioMetricsSchema>;
+
 /**
  * Workout session. `studioId` is nullable so members can log activity done
- * outside a partner studio (home gym, outdoor run).
+ * outside a partner studio (home gym, outdoor run). `cardio` is present
+ * only on sessions logged with a structured cardio summary.
  *
  * Requirement 12.1 (persistence), 12.2 (≤ 50 exercises), 12.4 (history).
  */
@@ -188,6 +219,7 @@ export const WorkoutSessionSchema = z
     durationMin: z.number().int().positive().nullable(),
     exercises: z.array(ExerciseSchema).max(50),
     notes: z.string().max(2000).nullable(),
+    cardio: CardioMetricsSchema.optional(),
     createdAt: IsoDateTimeSchema,
   })
   .strict();

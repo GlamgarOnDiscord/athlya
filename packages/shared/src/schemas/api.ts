@@ -24,7 +24,13 @@
 
 import { z } from 'zod';
 
-import { ClassSchema, ExerciseSchema, ReservationSchema, UserSchema } from './domain.js';
+import {
+  CardioMetricsSchema,
+  ClassSchema,
+  ExerciseSchema,
+  ReservationSchema,
+  UserSchema,
+} from './domain.js';
 import {
   ClassIdSchema,
   HexColorSchema,
@@ -492,7 +498,9 @@ export type CheckInTokenResponse = z.infer<typeof CheckInTokenResponseSchema>;
 
 /**
  * `POST /v1/sessions`. `studioId` is optional for solo workouts done
- * outside a partner studio (Requirement 12.1).
+ * outside a partner studio (Requirement 12.1). `cardio` carries the
+ * structured summary of a machine session (issue #667); clients that
+ * predate it simply omit it.
  */
 export const LogSessionRequestSchema = z
   .object({
@@ -500,6 +508,7 @@ export const LogSessionRequestSchema = z
     durationMin: z.number().int().positive().optional(),
     exercises: z.array(ExerciseSchema).max(50),
     notes: z.string().max(2000).optional(),
+    cardio: CardioMetricsSchema.optional(),
     studioId: StudioIdSchema.optional(),
   })
   .strict();

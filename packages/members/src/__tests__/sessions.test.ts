@@ -148,6 +148,41 @@ describe('logSession', () => {
     expect(Object.prototype.hasOwnProperty.call(call, 'durationMin')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(call, 'notes')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(call, 'studioId')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(call, 'cardio')).toBe(false);
+  });
+
+  it('hands a structured cardio summary to the repo (issue #667)', async () => {
+    const { deps, create } = buildDeps();
+    create.mockResolvedValueOnce(STORED_SESSION);
+    const cardio = { machine: 'indoorBike', durationSec: 1_800, avgPowerW: 190, maxPowerW: 410 };
+
+    await logSession(
+      USER_ID,
+      {
+        startedAt: '2026-01-10T08:00:00.000Z',
+        exercises: [{ name: 'Indoor bike', sets: [{ reps: 0, durationSec: 1_800 }] }],
+        cardio,
+      },
+      deps,
+    );
+
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ cardio }));
+  });
+
+  it('rejects an out-of-bounds cardio metric at path [cardio.avgHeartRateBpm]', async () => {
+    const { deps, create } = buildDeps();
+
+    const error = await logSession(
+      USER_ID,
+      { ...VALID_INPUT, cardio: { avgHeartRateBpm: 400 } },
+      deps,
+    ).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(MembersError);
+    expect((error as MembersError).issues?.some((i) => i.path === 'cardio.avgHeartRateBpm')).toBe(
+      true,
+    );
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('rejects payloads with more than 50 exercises (Req 12.2) at path [exercises]', async () => {

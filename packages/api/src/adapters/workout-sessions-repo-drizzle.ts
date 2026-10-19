@@ -65,6 +65,7 @@ export function createDrizzleWorkoutSessionRepo(
             durationMin: input.durationMin ?? null,
             exercises: [...input.exercises],
             notes: input.notes ?? null,
+            cardio: input.cardio ?? null,
             idempotencyKey: key,
           })
           .onConflictDoNothing({

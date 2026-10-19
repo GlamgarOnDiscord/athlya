@@ -533,6 +533,7 @@ export async function* buildArchiveEntries(data: MemberExportData): AsyncGenerat
       ['durationMin', (s) => s.durationMin],
       ['exercisesJson', (s) => JSON.stringify(s.exercises)],
       ['notes', (s) => s.notes],
+      ['cardioJson', (s) => s.cardio],
       ['createdAt', (s) => s.createdAt],
     ]),
   };

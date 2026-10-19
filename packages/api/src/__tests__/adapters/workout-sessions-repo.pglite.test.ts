@@ -126,6 +126,44 @@ describe('createDrizzleWorkoutSessionRepo under athlya_app', () => {
     expect(rows[0]?.kind).toBe('array');
   });
 
+  it('stores the cardio summary as a jsonb object and returns it (migration 0046)', async () => {
+    const cardio = {
+      machine: 'rower',
+      durationSec: 1_260,
+      distanceM: 5_000,
+      avgPowerW: 182,
+      strokeCount: 540,
+    } as const;
+    const created = await logSession(
+      MEMBER_A,
+      { startedAt: '2026-08-15T07:00:00Z', exercises: [], cardio },
+      { repo: repo(memberA) },
+    );
+    expect(created.cardio).toEqual(cardio);
+
+    const rows = await asOwner<{ kind: string; distance: number }>(
+      `SELECT jsonb_typeof(cardio) AS kind, (cardio->>'distanceM')::int AS distance
+         FROM workout_sessions WHERE id = '${created.id}'`,
+    );
+    expect(rows[0]).toEqual({ kind: 'object', distance: 5_000 });
+
+    const listed = await repo(memberA).listByUser(MEMBER_A, {
+      from: new Date('2026-08-01T00:00:00Z'),
+      to: new Date('2026-09-01T00:00:00Z'),
+      limit: 10,
+    });
+    expect(listed).toEqual([created]);
+  });
+
+  it('omits cardio on the wire for a session without one', async () => {
+    const created = await repo(memberA).create({
+      userId: MEMBER_A,
+      startedAt: '2026-09-03T08:00:00.000Z',
+      exercises: [],
+    });
+    expect(created).not.toHaveProperty('cardio');
+  });
+
   it('stores a solo session without a studio through the members use case', async () => {
     const created = await logSession(
       MEMBER_A,
