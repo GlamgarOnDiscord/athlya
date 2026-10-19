@@ -227,6 +227,40 @@ describe('createDrizzleWorkoutSessionRepo under athlya_app', () => {
     expect(Object.keys(created)).not.toContain('idempotencyKey');
   });
 
+  it('writes one row per imported workout, whatever the request key', async () => {
+    const source = { provider: 'appleHealth', externalId: 'HK-WORKOUT-1' } as const;
+    const input = {
+      userId: MEMBER_A,
+      startedAt: '2026-08-01T07:00:00.000Z',
+      durationMin: 30,
+      exercises: [{ name: 'Running', sets: [{ reps: 0, durationSec: 1800 }] }],
+      source,
+    };
+    const first = await repo(memberA).create({ ...input, idempotencyKey: 'import-key-1' });
+    const reimport = await repo(memberA).create({ ...input, idempotencyKey: 'import-key-2' });
+    const withoutKey = await repo(memberA).create({ ...input, notes: 'another locale' });
+    expect(reimport).toEqual(first);
+    expect(withoutKey).toEqual(first);
+    expect(Object.keys(first)).not.toContain('source');
+    expect(Object.keys(first)).not.toContain('externalId');
+
+    const rows = await asOwner<{ n: number; source: string; external_id: string }>(
+      `SELECT count(*) OVER ()::int AS n, source, external_id
+         FROM workout_sessions WHERE external_id = 'HK-WORKOUT-1'`,
+    );
+    expect(rows).toEqual([{ n: 1, source: 'appleHealth', external_id: 'HK-WORKOUT-1' }]);
+
+    const otherWorkout = await repo(memberA).create({
+      ...input,
+      source: { provider: 'appleHealth', externalId: 'HK-WORKOUT-2' },
+    });
+    expect(otherWorkout.id).not.toBe(first.id);
+
+    const otherUser = await repo(memberA2).create({ ...input, userId: MEMBER_A2 });
+    expect(otherUser.id).not.toBe(first.id);
+    expect(otherUser.userId).toBe(MEMBER_A2);
+  });
+
   it('lists only the caller sessions in the window, newest first', async () => {
     await repo(memberA2).create({
       userId: MEMBER_A2,

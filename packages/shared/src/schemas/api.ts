@@ -497,11 +497,31 @@ export type CheckInTokenResponse = z.infer<typeof CheckInTokenResponseSchema>;
 /*  sessions — /v1/sessions                                            */
 /* ------------------------------------------------------------------ */
 
+/** Apps a workout session can be imported from (task 18.1). */
+export const SESSION_SOURCE_PROVIDERS = ['appleHealth'] as const;
+
+export type SessionSourceProvider = (typeof SESSION_SOURCE_PROVIDERS)[number];
+
+/**
+ * Where an imported session comes from: the provider and the identifier
+ * of the workout there (the HealthKit workout UUID for Apple Health).
+ * The API keeps one session per `(user, provider, externalId)`.
+ */
+export const SessionSourceSchema = z
+  .object({
+    provider: z.enum(SESSION_SOURCE_PROVIDERS),
+    externalId: z.string().trim().min(1).max(128),
+  })
+  .strict();
+
+export type SessionSource = z.infer<typeof SessionSourceSchema>;
+
 /**
  * `POST /v1/sessions`. `studioId` is optional for solo workouts done
  * outside a partner studio (Requirement 12.1). `cardio` carries the
  * structured summary of a machine session (issue #667); clients that
- * predate it simply omit it.
+ * predate it simply omit it. `source` is set on sessions imported from
+ * another app.
  */
 export const LogSessionRequestSchema = z
   .object({
@@ -511,6 +531,7 @@ export const LogSessionRequestSchema = z
     notes: z.string().max(2000).optional(),
     cardio: CardioMetricsSchema.optional(),
     studioId: StudioIdSchema.optional(),
+    source: SessionSourceSchema.optional(),
   })
   .strict();
 

@@ -35,6 +35,7 @@ import { LogSessionRequestSchema, ListSessionsQuerySchema } from '@athlya/shared
 
 import { MembersError, type MembersValidationIssue } from './service.js';
 
+import type { SessionSource } from '@athlya/shared/schemas/api';
 import type { CardioMetrics, Exercise, WorkoutSession } from '@athlya/shared/schemas/domain';
 
 /* ------------------------------------------------------------------ */
@@ -66,6 +67,8 @@ export interface CreateWorkoutSessionInput {
    * inserting a second one.
    */
   idempotencyKey?: string | undefined;
+  /** App and workout id of an imported session (task 18.1). */
+  source?: SessionSource | undefined;
 }
 
 /**
@@ -110,6 +113,9 @@ export interface WorkoutSessionRepo {
    * with the same `(userId, idempotencyKey)` already exists, the repo
    * MUST NOT insert a second row and MUST return the existing session,
    * also when two such calls race. Without a key every call inserts.
+   * The same holds for `input.source`: a second session with the same
+   * `(userId, source.provider, source.externalId)` is not inserted and
+   * the existing one is returned.
    */
   create(input: CreateWorkoutSessionInput): Promise<WorkoutSession>;
 
@@ -224,7 +230,7 @@ export async function logSession(
     );
   }
 
-  const { startedAt, durationMin, exercises, notes, cardio, studioId } = parsed.data;
+  const { startedAt, durationMin, exercises, notes, cardio, studioId, source } = parsed.data;
   const createInput: CreateWorkoutSessionInput = {
     userId,
     startedAt,
@@ -233,6 +239,7 @@ export async function logSession(
     ...(notes === undefined ? {} : { notes }),
     ...(cardio === undefined ? {} : { cardio }),
     ...(studioId === undefined ? {} : { studioId }),
+    ...(source === undefined ? {} : { source }),
     // An empty key would turn every later key-less retry into a replay.
     ...(options.idempotencyKey === undefined || options.idempotencyKey.length === 0
       ? {}

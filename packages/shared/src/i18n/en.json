@@ -683,6 +683,7 @@
           "bookClass": "Class booking",
           "cancelReservation": "Reservation cancellation",
           "logSession": "Workout log",
+          "importHealthWorkout": "Apple Health import",
           "other": "Change"
         }
       },
@@ -847,6 +848,51 @@
           "timeout": "The machine did not answer. Try again.",
           "controlLost": "The machine took control back (a button on its console, or another app). Take control again to continue."
         }
+      }
+    },
+    "health": {
+      "title": "Apple Health",
+      "description": "Import your Apple Health workouts as sessions. Athlya only reads your workouts and their heart rate, energy and distance; it never writes to Apple Health.",
+      "connect": "Connect Apple Health",
+      "connectHint": "Asks for read access to your Apple Health workouts.",
+      "connectedSince": "Connected. Workouts from {date} onwards are imported.",
+      "importNow": "Import now",
+      "importNowHint": "Imports the workouts added to Apple Health since the last import.",
+      "disconnect": "Disconnect Apple Health",
+      "disconnectHint": "Stops importing on this device. Sessions already imported stay.",
+      "disconnected": "Disconnected. To remove Athlya's access, open the Health app, then Sharing, Apps, Athlya.",
+      "unavailable": "Apple Health is not available on this device.",
+      "consentRequired": "Importing from Apple Health needs your consent to share data with third parties. You can grant it in the consents section of your profile.",
+      "result": {
+        "done": "Import finished: {imported} imported, {queued} waiting to sync, {skipped} skipped.",
+        "none": "No new workout to import.",
+        "stopped": "Import stopped: {imported} imported, {queued} waiting to sync. Try again later."
+      },
+      "summary": {
+        "source": "Imported from Apple Health",
+        "distance": "Distance {km} km",
+        "energy": "Energy {kcal} kcal",
+        "avgHeartRate": "Avg heart rate {bpm} bpm",
+        "maxHeartRate": "Max heart rate {bpm} bpm"
+      },
+      "activities": {
+        "core": "Core training",
+        "crossTraining": "Cross training",
+        "cycling": "Cycling",
+        "dance": "Dance",
+        "elliptical": "Elliptical",
+        "hiit": "HIIT",
+        "hiking": "Hiking",
+        "mixedCardio": "Mixed cardio",
+        "pilates": "Pilates",
+        "rowing": "Rowing",
+        "running": "Running",
+        "stairs": "Stair climbing",
+        "strength": "Strength training",
+        "swimming": "Swimming",
+        "walking": "Walking",
+        "yoga": "Yoga",
+        "other": "Workout"
       }
     }
   },
