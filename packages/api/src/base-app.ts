@@ -993,7 +993,7 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   // Public CSP violation sink (issue #136). Unauthenticated — browsers
   // POST report-uri / Reporting API payloads with no credentials. Skips
   // the `/v1/*` jwtAuth gate (see the skip clause above) but still runs
-  // behind the global fail-closed-soft IP limiter.
+  // behind the global fail-open IP limiter (#366).
   app.post('/v1/csp-report', (c) => handleCspReport(c));
 
   /**

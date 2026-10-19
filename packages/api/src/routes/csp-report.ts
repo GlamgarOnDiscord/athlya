@@ -23,7 +23,7 @@
  *            "blockedURL": … }, "url": …, "user_agent": … } ]`
  *
  * Abuse note: the endpoint is public, so it runs behind the gateway's
- * global fail-closed-soft IP limiter (issue #128) — a flood degrades to
+ * global fail-open IP limiter (issue #366) — a flood degrades to
  * 429 rather than unbounded log ingest. We additionally cap the number
  * of reports processed per request.
  *
