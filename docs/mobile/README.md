@@ -46,23 +46,26 @@ apps/mobile/
 ├── features/                screen logic: controllers, view models, the write path (Node-tested)
 ├── infrastructure/
 │   ├── api/client.ts        createApiClient(): send/get/post/put/patch/del
+│   ├── attestation/         DeviceAttestationProvider port, Play Integrity / DeviceCheck adapters
 │   ├── auth/                TokenStore, createSessionRefresher, Expo adapters
 │   ├── storage/             KeyValueStore port, MMKV adapter, storage key
 │   ├── sync/                MutationQueue, drainMutationQueue, SyncController, NetInfo adapter
 │   └── runtime.ts           composition root (the only place wiring native modules)
+├── modules/device-check/    local Expo module: DeviceCheck token (iOS)
 ├── theme/preset.ts          Tailwind theme from @athlya/shared/tokens
 └── tests/                   vitest (Node): unit/ and properties/
 ```
 
-Everything under `infrastructure/` except the `expo-*`, `mmkv-store` and `netinfo-connectivity`
-adapters and `runtime.ts` is plain TypeScript behind small ports (`KeyValueStore`, `SecureStorage`,
-`BiometricAuthenticator`, `ConnectivitySource`), so `pnpm --filter @athlya/mobile test` runs in
-Node without a device or simulator.
+Everything under `infrastructure/` except the `expo-*`, `mmkv-store`, `netinfo-connectivity` and
+`native-attestation` adapters and `runtime.ts` is plain TypeScript behind small ports
+(`KeyValueStore`, `SecureStorage`, `BiometricAuthenticator`, `ConnectivitySource`,
+`DeviceAttestationProvider`), so `pnpm --filter @athlya/mobile test` runs in Node without a device or
+simulator.
 
 ## Runtime contracts
 
 - **Runtime**: `useRuntime()` (`components/RuntimeProvider.tsx`) returns `{ locale, apiBaseUrl, t,
-api, tokenStore, queue, sync, dispose }`.
+api, tokenStore, queue, preferences, sync, attestation, dispose }`.
 - **Online calls**: `runtime.api.post<T>(path, body, { idempotencyKey })` and friends throw
   `ApiError` (with the parsed `ProblemDetails`) on non-2xx, `AuthRequiredError` when the session
   cannot be refreshed, `NetworkError` when no response arrived.
@@ -79,7 +82,8 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
   `runtime.queue.deadLetters(userId)` / `discardDeadLetter(id, userId)` back the "rejected changes"
   view and never return or delete another account's entries.
 - **Sign-in**: `POST /v1/auth/login` goes out with `{ authenticated: false, headers: {
-'cf-turnstile-token': token } }` (see [Bot protection](#bot-protection-turnstile)); then pass
+'cf-turnstile-token': token } }` (see [Bot protection](#bot-protection-turnstile)), plus the
+  device attestation headers when available (see [Device attestation](#device-attestation)); then pass
   `{ ...session, userId: session.user.id }` to `runtime.tokenStore.saveSession()`.
   `await setBiometricUnlockEnabled(true)` resolves `true` only when the gate is on: it resolves
   `false`, enabling nothing, when biometrics are unavailable or the prompt is declined, so show the
@@ -256,14 +260,33 @@ site key makes the page answer `500 configuration_error` and the app shows the f
 4. **Release build** — sign in and register from a `preview` build against staging, then from a
    `production` build.
 
-### Device attestation (server side only for now)
+### Device attestation
 
 The API can verify Play Integrity (Android) and DeviceCheck (iOS) tokens as an **extra** signal
-after Turnstile, sent as `x-device-attestation-platform` / `x-device-attestation-token` (#659). It is
-off by default (`DEVICE_ATTESTATION_MODE` unset), and a request without these headers is never
-affected, so the current app keeps working unchanged. The app does not send them yet: obtaining the
-tokens needs a native module and is tracked in #686. Contract, modes and operator steps:
-[`docs/runbooks/device-attestation.md`](../runbooks/device-attestation.md).
+after Turnstile (#659). The app sends them on sign-in and registration (#686), next to
+`cf-turnstile-token`:
+
+- `x-device-attestation-platform`: `android` or `ios`
+- `x-device-attestation-token`: at most 16 384 characters
+
+Once the Turnstile token is received, `features/auth/attestation.ts` computes the Android
+`requestHash` = base64url (no padding) of SHA-256(`athlya-auth-v1:<login|register>:<turnstile
+token>`), the same value as the API's `computeAttestationRequestHash`, and asks the device for a
+token through the `DeviceAttestationProvider` port (`infrastructure/attestation/`):
+
+- **Android**: `@expo/app-integrity` (Play Integrity standard request). The token provider is
+  prepared once, with `EXPO_PUBLIC_PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER`, when the sign-in or
+  registration screen opens, then `requestIntegrityCheckAsync(requestHash)` runs per request.
+- **iOS**: DeviceCheck (`DCDevice.generateToken`) through the local Expo module
+  `modules/device-check` (`AthlyaDeviceCheck`). `@expo/app-integrity` only offers App Attest on
+  iOS, which the API does not verify yet.
+
+Best effort: no provider (missing project number, simulator, unsupported device, a build without
+the native modules), a native error, a token that is too long or not header-safe, or no answer
+within 2 s sends the request without these headers. Attestation never blocks a sign-in, and the
+server ignores requests without the headers whatever its `DEVICE_ATTESTATION_MODE`. The web client
+sends none. Both native modules need a new development or EAS build. Contract, modes and operator
+steps: [`docs/runbooks/device-attestation.md`](../runbooks/device-attestation.md).
 
 ## Drain semantics (Algorithm 4)
 
@@ -294,7 +317,8 @@ cd apps/mobile
 EXPO_PUBLIC_API_URL=http://10.0.2.2:8787 pnpm android   # or: pnpm ios (macOS)
 ```
 
-Native modules (MMKV, SecureStore, LocalAuthentication, NetInfo) need a development build
+Native modules (MMKV, SecureStore, LocalAuthentication, NetInfo, app integrity, DeviceCheck) need a
+development build
 (`expo run:*` or EAS); Expo Go is not supported. `EXPO_PUBLIC_API_URL` is mandatory (no fallback:
 the app refuses to boot and EAS builds fail without it) and must be HTTPS except for loopback
 hosts. EAS profiles pin it in `eas.json` (`preview` → `https://staging.api.athlya.app`).
