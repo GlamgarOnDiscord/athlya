@@ -96,6 +96,34 @@ Store listing checklist before the first public release:
   rate (health data) stay on the device until the member logs the session; RR-intervals are never
   stored, and only the last strap's id and name are remembered on the device. The usage string
   is native configuration: a change to it ships with the next EAS build.
+- Apple Health (task 18.1, iOS only, `@kingstinct/react-native-healthkit` plugin in `app.json`):
+  - The plugin adds the `com.apple.developer.healthkit` entitlement and
+    `NSHealthShareUsageDescription` ("Athlya reads your workouts, with their heart rate, energy and
+    distance, to log them as sessions."). It is configured **read-only**:
+    `NSHealthUpdateUsageDescription: false` (no write purpose string, the app never asks to share
+    data to Health) and `background: false` (no background-delivery entitlement). Keep both: App
+    Review rejects purpose strings and entitlements the app does not use.
+  - Enable the HealthKit capability on the `app.athlya.mobile` App ID. EAS syncs capabilities from
+    the entitlements on the next iOS build when it manages the credentials; with manual
+    credentials, enable it in the Apple Developer portal and regenerate the provisioning profile.
+  - App Store Connect App Privacy: declare **Health & Fitness → Health** (workouts, heart rate,
+    active energy, distance), used for **App Functionality**, **linked to the user** (stored as
+    workout sessions on their account), **not used for tracking**. Health data is never used for
+    advertising or marketing, and never sold or shared with data brokers (App Store Review
+    Guideline 5.1.3). An imported session is a session like any other: when the member uses the
+    AI coach (`ai-coach` flag, `thirdParty` consent), its exercise name, duration and sets are part
+    of the 30-day context sent to the model provider (`notes` never are, see
+    `docs/compliance/ai-coach.md`). Review that disclosure with whoever signs the submission
+    before opening the flag on iOS.
+  - The privacy policy (web `/privacy`) must mention the Apple Health import: what is read, that it
+    is only read when the member taps Import now, that it needs the `thirdParty` consent, and that
+    imported sessions are deleted with the account (Article 17).
+  - The Health app keeps the read permission after Disconnect: members revoke it in Health →
+    Sharing → Apps → Athlya (the settings screen says so).
+  - Adding the module requires a **new EAS build** (native code, not OTA-deliverable). Ship it only
+    after migration 0047 and the reservations Worker that accepts `source` are live: an older
+    Worker refuses the field with 422: the import stops without moving its anchor, and imports
+    queued offline end up in "Rejected changes".
 - Export compliance: besides HTTPS, the app encrypts its offline queue on device with AES-256
   (MMKV). `app.json` deliberately does not declare `ITSAppUsesNonExemptEncryption`: answer the
   encryption questions in App Store Connect on the first submission (data-at-rest encryption with

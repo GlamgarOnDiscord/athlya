@@ -2,7 +2,8 @@
 
 **Status**: foundation (issue #638), member screens (issue #647) and the QR check-in screen (issue
 #648) delivered, 13/13 tasks; progression graphs (22.2, issue #660) too. Sign-in and registration
-pass Cloudflare Turnstile through a WebView (issue #649). Post-1.0 roadmap item v1.1, see
+pass Cloudflare Turnstile through a WebView (issue #649). Apple Health workout import on iOS
+(18.1, issue #688). Post-1.0 roadmap item v1.1, see
 [`docs/roadmap/post-1.0.md`](../roadmap/post-1.0.md).
 
 ## Stack
@@ -19,6 +20,7 @@ pass Cloudflare Turnstile through a WebView (issue #649). Post-1.0 roadmap item 
 | Charts        | `react-native-svg` 15.16 (SDK 58 pin); maths in `@athlya/shared/charts`               |
 | QR code       | `qrcode-generator` 2 (pure-JS encoder) drawn with `react-native-svg` 15.16            |
 | Bot check     | `react-native-webview` 14.0.1 (the SDK 58 pin) hosting the API's Turnstile page       |
+| Apple Health  | `@kingstinct/react-native-healthkit` 16 (Nitro, iOS only, read-only)                  |
 | Builds        | EAS Build / Submit — operator steps in [`mobile-eas.md`](../runbooks/mobile-eas.md)   |
 
 ## Checklist (`tasks.md` § 11)
@@ -47,6 +49,8 @@ apps/mobile/
 ├── infrastructure/
 │   ├── api/client.ts        createApiClient(): send/get/post/put/patch/del
 │   ├── auth/                TokenStore, createSessionRefresher, Expo adapters
+│   ├── ble/                 BleTransport port + react-native-ble-plx adapter
+│   ├── health/              HealthStore port, HealthKit adapter, per-user import links
 │   ├── storage/             KeyValueStore port, MMKV adapter, storage key
 │   ├── sync/                MutationQueue, drainMutationQueue, SyncController, NetInfo adapter
 │   └── runtime.ts           composition root (the only place wiring native modules)
@@ -105,7 +109,7 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
 | `/workout`      | Workout log: exercises, sets, reps, weight, duration, notes (11.10)                          | `POST /v1/sessions`                                                                             |
 | `/progression`  | Progression graphs over 30/90/365 days: volume, estimated 1RM, weekly frequency (22.2)       | `GET /v1/me/progression?window=30\|90\|365` (ETag / `If-None-Match`)                            |
 | `/checkin`      | Rotating single-use QR code staff scan at the front desk (11.9)                              | `POST /v1/checkins/token` (body `{}`)                                                           |
-| `/settings`     | Biometric unlock, rejected changes (DLQ), RGPD export and account deletion (11.11), sign-out | `POST /v1/members/me/export`, `DELETE /v1/auth/me`, `POST /v1/auth/logout`                      |
+| `/settings`     | Biometric unlock, Apple Health (iOS, 18.1), rejected changes (DLQ), RGPD export and deletion | `GET /v1/members/me`, `POST /v1/sessions`, `POST /v1/members/me/export`, `DELETE /v1/auth/me`   |
 
 Screens behind the sign-in gate (`<SignedIn>`, `components/AppSession.tsx`) redirect to `/login` when
 no session is stored. Every response body the app reads (sessions, class and reservation lists,
@@ -117,7 +121,9 @@ v4 `Idempotency-Key`; on `NetworkError` it is queued with that same key and a dr
 queued straight away while the device is offline, or while older writes of the same user are still
 queued, so a direct call never overtakes them (the drain is FIFO). Writes of one user are also
 serialized: a newer write only goes out once every older one was acknowledged or queued. A
-cancelled request is never queued. Queue kinds: `bookClass`, `cancelReservation`, `logSession`; the
+cancelled request is never queued. A caller may pass its own UUID v4-shaped key for a write a later
+run may repeat (the Apple Health import). Queue kinds: `bookClass`, `cancelReservation`,
+`logSession`, `importHealthWorkout`; the
 Settings screen labels rejected ones by kind. Sign-in, sign-out, export and account deletion call the
 API directly and are online only. Signing in starts a drain for changes queued earlier.
 
@@ -148,8 +154,22 @@ the refresh. The QR is dark on a light quiet zone in both themes and has an acce
 the seconds left. Screen brightness is not raised (it needs `expo-brightness`, a native module not in
 the app yet). `react-native-svg` is a native module, so a new development or EAS build is needed.
 
+**Apple Health import** (`features/health/`, task 18.1, iOS only): the Settings screen connects,
+imports now and disconnects. Connecting needs the `thirdParty` consent (read from
+`GET /v1/members/me`, checked again on every import) and shows the HealthKit read sheet (workouts,
+heart rate, active energy, distances; never write). The link (start date 30 days back, HealthKit
+anchor) lives per user in the encrypted MMKV preferences file (`athlya.preferences`). "Import now" reads the workouts
+added since the anchor, 50 per page, and logs each one through `submitWrite` as one timed exercise
+named after the activity, with distance, energy and heart rate in `notes`, `source: { provider:
+'appleHealth', externalId: <workout UUID> }` and an `Idempotency-Key` derived from that UUID
+(SHA-256 laid out as a UUID v4). The API keeps one session per `(user, source, external_id)`
+(migration 0047), so a re-import, a reinstall or a second device never duplicates a session. The
+anchor only moves once a whole page went through; any API error stops the run. Workouts deleted in
+Apple Health stay in Athlya. Disconnecting forgets the link; the read permission is revoked in the
+Health app. `@kingstinct/react-native-healthkit` is a native module: a new EAS build is needed.
+
 **Account deletion**: once the API accepted it, the device removes the user's queued and rejected
-changes, then clears the session (or locks it in memory if the secure storage fails) and leaves the
+changes and its Apple Health link, then clears the session (or locks it in memory if the secure storage fails) and leaves the
 signed-in area whatever happens locally.
 
 **Known gaps**:

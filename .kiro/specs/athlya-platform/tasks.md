@@ -618,10 +618,10 @@ Use official CLI to create, init the project .. and recent package version and s
     - Send a push + email "You're in!" to the promoted user, respecting consents
     - _Requirements: 9.3, 17.1, 17.2_
 
-> ⏸️ **Renvoyé post-1.0** — Apple Health dépend d'Epic 10 (mobile). Voir [`docs/roadmap/post-1.0.md#v11--mobile-expo-sdk-58`](../../../docs/roadmap/post-1.0.md).
+> ✅ Livré par #688 (`@kingstinct/react-native-healthkit`, dédup `(user_id, source, external_id)`, migration 0047).
 
-- [ ] 18. Apple Health import (mobile, iOS)
-  - [ ] 18.1 Implement HealthKit read for workout samples
+- [x] 18. Apple Health import (mobile, iOS)
+  - [x] 18.1 Implement HealthKit read for workout samples
     - Use `react-native-health` or Expo module; import workouts as `workout_sessions`, dedup by `external_id`
     - Respect `consents.thirdParty` before enabling the sync
     - _Requirements: 3.3, 12.1_
