@@ -104,6 +104,7 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
 | `/reservations` | Upcoming reservations, cancellation until 2 h before the class                               | `GET /v1/reservations/me`, `DELETE /v1/reservations/{id}`                                       |
 | `/workout`      | Workout log: exercises, sets, reps, weight, duration, notes (11.10)                          | `POST /v1/sessions`                                                                             |
 | `/progression`  | Progression graphs over 30/90/365 days: volume, estimated 1RM, weekly frequency (22.2)       | `GET /v1/me/progression?window=30\|90\|365` (ETag / `If-None-Match`)                            |
+| `/coach`        | AI coach behind the `ai-coach` flag: consent notice, question, streamed answer (21.2)        | `GET /v1/coach`, `POST /v1/coach/ask` (`Accept: text/event-stream`)                             |
 | `/checkin`      | Rotating single-use QR code staff scan at the front desk (11.9)                              | `POST /v1/checkins/token` (body `{}`)                                                           |
 | `/settings`     | Biometric unlock, rejected changes (DLQ), RGPD export and account deletion (11.11), sign-out | `POST /v1/members/me/export`, `DELETE /v1/auth/me`, `POST /v1/auth/logout`                      |
 
@@ -135,6 +136,22 @@ path maths as the web ones (`@athlya/shared/charts`). Screen readers cannot expl
 chart is one `image` element whose label holds its key numbers: days trained, date range, latest,
 highest and lowest value, or weeks and sessions for the frequency chart. A chart with nothing to draw
 shows a text empty state instead.
+
+**AI coach** (`features/coach/`, task 21.2, issue #676): the home screen shows the coach entry only
+when `GET /v1/coach` answers `enabled: true`. Without the `thirdParty` consent the screen says where
+to grant it (the consents form on the web profile; the app has no consents form yet) and asks
+nothing. The answer is streamed: since SDK 52 Expo installs `expo/fetch` as the global `fetch`
+(`expo/src/winter/runtime.native.ts`, unless `EXPO_PUBLIC_USE_RN_FETCH` is set), and its response
+exposes `body` as a `ReadableStream` fed by the native module, so `runtime.api.postStream()` sends
+`Accept: text/event-stream` and hands the body to the shared SSE parser (`@athlya/shared/sse`,
+`@athlya/shared/coach-stream`), the one the web uses. The 15 s client timeout only covers the wait
+for the response headers. `partial` snapshots render as a provisional card, replaced by the `done`
+answer and dropped on an `error` event; refusals before the stream opens (403 consent, 404 flag
+off, 429 quota or burst, 503) keep their problem statuses, and a JSON answer is still accepted.
+Asking again or leaving the screen aborts the request, which aborts the provider call. Screen
+readers only hear the final answer, once: the provisional card is not a live region, the answer is
+(Android), and iOS announces it. `expo/fetch` ships with `expo`, so no new native module is
+involved.
 
 **QR check-in** (`features/checkin/checkin-token.ts`, `CheckinTokenController`): the screen fetches a
 token when it gains focus with the app in the foreground and stops (timers cleared, request in

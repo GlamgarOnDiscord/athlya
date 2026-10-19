@@ -18,6 +18,7 @@ export interface TextFieldProps {
   readonly textContentType?: TextInputProps['textContentType'];
   readonly multiline?: boolean;
   readonly editable?: boolean;
+  readonly maxLength?: number;
 }
 
 export function TextField({
@@ -33,6 +34,7 @@ export function TextField({
   textContentType,
   multiline,
   editable = true,
+  maxLength,
 }: TextFieldProps) {
   const theme = useColorScheme() === 'dark' ? colors.dark : colors.light;
   const a11y = textFieldA11yProps({ label, hint, error });
@@ -57,6 +59,7 @@ export function TextField({
         {...(keyboardType === undefined ? {} : { keyboardType })}
         {...(autoComplete === undefined ? {} : { autoComplete })}
         {...(textContentType === undefined ? {} : { textContentType })}
+        {...(maxLength === undefined ? {} : { maxLength })}
         {...(multiline === true ? { multiline: true, textAlignVertical: 'top' as const } : {})}
         className={`min-h-12 rounded-md border px-md text-base text-foreground dark:text-dark-foreground ${invalid ? 'border-destructive dark:border-dark-destructive' : 'border-border dark:border-dark-border'} ${multiline === true ? 'min-h-24 py-sm' : ''}`}
       />
