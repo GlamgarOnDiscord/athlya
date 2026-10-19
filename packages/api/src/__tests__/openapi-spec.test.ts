@@ -116,6 +116,30 @@ describe('GET /openapi.json', () => {
     }
   });
 
+  it('documents the optional import source of POST /v1/sessions', async () => {
+    const app = buildApp();
+    const res = await app.request('/openapi.json', { method: 'GET' }, mockEnv());
+    const body = await res.json<{
+      paths: Record<string, Record<string, unknown>>;
+      components?: { schemas?: Record<string, unknown> };
+    }>();
+    const post = body.paths['/v1/sessions']?.['post'] as {
+      requestBody: { content: Record<string, { schema: Record<string, unknown> }> };
+    };
+    let schema = post.requestBody.content['application/json']?.schema ?? {};
+    const ref = schema['$ref'];
+    if (typeof ref === 'string') {
+      schema = (body.components?.schemas?.[ref.split('/').pop() ?? ''] ?? {}) as Record<
+        string,
+        unknown
+      >;
+    }
+    const properties = schema['properties'] as Record<string, Record<string, unknown>>;
+    expect(properties['source']).toBeDefined();
+    expect(schema['required']).not.toContain('source');
+    expect(JSON.stringify(properties['source'])).toContain('appleHealth');
+  });
+
   it('declares bearerAuth security scheme', async () => {
     const app = buildApp();
     const res = await app.request('/openapi.json', { method: 'GET' }, mockEnv());

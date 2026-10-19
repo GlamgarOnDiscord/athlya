@@ -27,6 +27,7 @@
 \i tests/rls/capacity_guard.sql
 \i tests/rls/workout_sessions.sql
 \i tests/rls/workout_sessions_idempotency.sql
+\i tests/rls/workout_sessions_external_source.sql
 \i tests/rls/audit_log.sql
 \i tests/rls/audit_anonymization.sql
 \i tests/rls/audit_anonymization_scalar_guard.sql

@@ -26,6 +26,9 @@
  *                  so the key is also handed to `logSession`, which
  *                  stores it with the session: two racing retries with
  *                  the same key return the same row (migration 0044).
+ *   • 18.1 (tasks) — an imported session carries `source` (provider +
+ *                  workout id there); a second import of the same
+ *                  workout returns the stored row (migration 0047).
  */
 
 import { ListSessionsQuerySchema, LogSessionRequestSchema } from '@athlya/shared/schemas/api';

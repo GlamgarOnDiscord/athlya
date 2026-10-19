@@ -575,6 +575,44 @@ describe('LogSessionRequestSchema', () => {
     const issues = expectFailure(LogSessionRequestSchema, payload);
     expectPath(issues, ['exercises']);
   });
+
+  it('accepts an imported session source and trims its id', () => {
+    const parsed = LogSessionRequestSchema.parse({
+      startedAt: NOW,
+      exercises: [],
+      source: { provider: 'appleHealth', externalId: ' 5B2D7C1E-3F4A-4B6C-8D9E-0F1A2B3C4D5E ' },
+    });
+    expect(parsed.source).toEqual({
+      provider: 'appleHealth',
+      externalId: '5B2D7C1E-3F4A-4B6C-8D9E-0F1A2B3C4D5E',
+    });
+  });
+
+  it.each([
+    ['an unknown provider', { provider: 'garmin', externalId: 'abc' }, 'provider'],
+    ['an empty id', { provider: 'appleHealth', externalId: '  ' }, 'externalId'],
+    [
+      'an id over 128 characters',
+      { provider: 'appleHealth', externalId: 'x'.repeat(129) },
+      'externalId',
+    ],
+  ])('rejects a source with %s', (_label, source, field) => {
+    const issues = expectFailure(LogSessionRequestSchema, {
+      startedAt: NOW,
+      exercises: [],
+      source,
+    });
+    expectPath(issues, ['source', field]);
+  });
+
+  it('rejects unknown keys in the source', () => {
+    const issues = expectFailure(LogSessionRequestSchema, {
+      startedAt: NOW,
+      exercises: [],
+      source: { provider: 'appleHealth', externalId: 'abc', extra: true },
+    });
+    expectPath(issues, ['source']);
+  });
 });
 
 /* ================================================================== */
