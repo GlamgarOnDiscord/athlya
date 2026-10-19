@@ -501,6 +501,7 @@ describe('RLS inventory — cron executor statements need no BYPASSRLS', () => {
   it('reads the cron-granted functions from the migrations', () => {
     expect(cronFunctions).toContain('anonymize_user_audit');
     expect(cronFunctions).toContain('capacity_reconcile_snapshot');
+    expect(cronFunctions).toContain('idempotency_purge_expired');
     expect(cronFunctions).not.toContain('reservation_promote_oldest_waitlist');
   });
 
@@ -538,6 +539,7 @@ describe('RLS inventory — cron executor statements need no BYPASSRLS', () => {
     ).join('\n');
     expect(all).toContain('capacity_reconcile_snapshot()');
     expect(all).toContain('anonymize_user_audit(');
+    expect(all).toContain('idempotency_purge_expired(');
     expect(all).toMatch(/DELETE FROM outbox/u);
   });
 });
