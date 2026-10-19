@@ -6,11 +6,18 @@
  * question form once the `thirdParty` consent is granted (otherwise it
  * links to the consents form on `/me`).
  *
- * `POST /v1/coach/ask` answers in one validated JSON payload. The
- * "preparing" message and the answer are rendered inside one polite
- * `aria-live` region (`aria-busy` while the request runs), so screen
- * readers announce the advice once it is complete. Errors use
- * `role="alert"`.
+ * `POST /v1/coach/ask` is sent with `Accept: text/event-stream` and read
+ * with `fetch` (`EventSource` can neither POST nor send the bearer
+ * token). `partial` snapshots render as a provisional answer, replaced by
+ * the validated `done` answer and dropped on an `error` event. Refusals
+ * before the stream opens keep their problem statuses, and a JSON answer
+ * is still accepted.
+ *
+ * The provisional answer sits outside the polite `aria-live` region; the
+ * "preparing" message and the final answer are inside it (`aria-busy`
+ * while the request runs), so screen readers announce the advice once,
+ * when it is complete. Errors use `role="alert"`. Leaving the page or
+ * asking again aborts the request in flight.
  *
  * Optional `client` and `t` props are test seams, as in
  * `<ProgressionPanel />`.
@@ -18,14 +25,21 @@
 'use client';
 
 import {
+  COACH_STREAM_ACCEPT,
+  isEventStream,
+  readCoachStream,
+  type CoachStreamResult,
+} from '@athlya/shared/coach-stream';
+import {
   COACH_QUESTION_MAX_LENGTH,
   CoachAskResponseSchema,
   CoachStatusResponseSchema,
+  type CoachAdvicePartial,
   type CoachAskResponse,
   type CoachQuota,
 } from '@athlya/shared/schemas/api';
 import Link from 'next/link';
-import { useEffect, useMemo, useState, type FormEvent, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -50,7 +64,7 @@ type Status =
 
 type AskState =
   | { readonly kind: 'idle' }
-  | { readonly kind: 'pending' }
+  | { readonly kind: 'pending'; readonly partial: CoachAdvicePartial | null }
   | { readonly kind: 'done'; readonly answer: CoachAskResponse }
   | { readonly kind: 'error'; readonly message: string };
 
@@ -72,6 +86,20 @@ function problemCodeOf(err: unknown): string | undefined {
   return typeof code === 'string' ? code : undefined;
 }
 
+/** Reads the streamed answer, or the JSON one from a server that did not stream. */
+async function readAnswer(
+  response: Response,
+  onPartial: (partial: CoachAdvicePartial) => void,
+): Promise<CoachStreamResult> {
+  if (isEventStream(response.headers.get('content-type')) && response.body !== null) {
+    return readCoachStream(response.body, onPartial);
+  }
+  const parsed = CoachAskResponseSchema.safeParse(await response.json());
+  return parsed.success
+    ? { kind: 'done', answer: parsed.data }
+    : { kind: 'error', problem: undefined };
+}
+
 const QUESTION_ID = 'coach-question';
 const HINT_ID = 'coach-question-hint';
 const COUNTER_ID = 'coach-question-counter';
@@ -85,6 +113,15 @@ export function CoachPanel({ t: tProp, client: clientProp }: CoachPanelProps): R
   const [reloadNonce, setReloadNonce] = useState(0);
   const [question, setQuestion] = useState('');
   const [ask, setAsk] = useState<AskState>({ kind: 'idle' });
+  const inflight = useRef<AbortController | null>(null);
+
+  useEffect(
+    () => () => {
+      inflight.current?.abort();
+      inflight.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -118,20 +155,30 @@ export function CoachPanel({ t: tProp, client: clientProp }: CoachPanelProps): R
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (status.kind !== 'ready' || trimmed.length === 0) return;
-    setAsk({ kind: 'pending' });
+    inflight.current?.abort();
+    const request = new AbortController();
+    inflight.current = request;
+    const current = (): boolean => inflight.current === request && !request.signal.aborted;
+    setAsk({ kind: 'pending', partial: null });
     try {
-      const raw = await client.post<unknown>('/v1/coach/ask', {
-        question: trimmed,
-        locale: locale === 'en' ? 'en' : 'fr',
+      const response = await client.postStream(
+        '/v1/coach/ask',
+        { question: trimmed, locale: locale === 'en' ? 'en' : 'fr' },
+        { headers: { Accept: COACH_STREAM_ACCEPT }, signal: request.signal },
+      );
+      if (!current()) return;
+      const result = await readAnswer(response, (partial) => {
+        if (current()) setAsk({ kind: 'pending', partial });
       });
-      const parsed = CoachAskResponseSchema.safeParse(raw);
-      if (!parsed.success) {
+      if (!current()) return;
+      if (result.kind === 'error') {
         setAsk({ kind: 'error', message: t('coach.errors.unavailable') });
         return;
       }
-      setStatus({ ...status, quota: parsed.data.quota });
-      setAsk({ kind: 'done', answer: parsed.data });
+      setStatus({ ...status, quota: result.answer.quota });
+      setAsk({ kind: 'done', answer: result.answer });
     } catch (err) {
+      if (!current()) return;
       // The client throws a plain Error carrying `status` (and the parsed
       // problem) for 429, not an ApiError.
       if (statusOf(err) === 429) {
@@ -153,6 +200,8 @@ export function CoachPanel({ t: tProp, client: clientProp }: CoachPanelProps): R
         return;
       }
       setAsk({ kind: 'error', message: t('coach.errors.unavailable') });
+    } finally {
+      if (inflight.current === request) inflight.current = null;
     }
   }
 
@@ -191,6 +240,8 @@ export function CoachPanel({ t: tProp, client: clientProp }: CoachPanelProps): R
   const exhausted = quota.remaining === 0;
   const pending = ask.kind === 'pending';
   const answer = ask.kind === 'done' ? ask.answer.advice : null;
+  const provisional = ask.kind === 'pending' ? ask.partial : null;
+  const provisionalRecommendations = provisional?.recommendations ?? [];
 
   return (
     <section aria-labelledby="coach-heading" className="flex flex-col gap-6">
@@ -260,8 +311,32 @@ export function CoachPanel({ t: tProp, client: clientProp }: CoachPanelProps): R
         </p>
       ) : null}
 
+      {provisional !== null ? (
+        <div aria-busy="true" className="flex flex-col gap-3 text-muted-foreground">
+          <p className="text-sm font-medium">{t('coach.answer.provisional')}</p>
+          {provisional.summary !== undefined && provisional.summary !== '' ? (
+            <p>{provisional.summary}</p>
+          ) : null}
+          {provisionalRecommendations.length > 0 ? (
+            <ol className="flex list-decimal flex-col gap-2 pl-5">
+              {provisionalRecommendations.map((rec, index) => (
+                <li key={index}>
+                  {rec.title !== undefined ? <p className="font-medium">{rec.title}</p> : null}
+                  {rec.detail !== undefined ? <p className="text-sm">{rec.detail}</p> : null}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+          {typeof provisional.caution === 'string' && provisional.caution !== '' ? (
+            <p className="text-sm">{provisional.caution}</p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div aria-live="polite" aria-busy={pending} className="flex flex-col gap-4">
-        {pending ? <p className="text-sm text-muted-foreground">{t('coach.thinking')}</p> : null}
+        {pending && provisional === null ? (
+          <p className="text-sm text-muted-foreground">{t('coach.thinking')}</p>
+        ) : null}
         {answer !== null ? (
           <article aria-labelledby="coach-answer-heading" className="flex flex-col gap-4">
             <h2 id="coach-answer-heading" className="text-xl font-semibold">

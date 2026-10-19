@@ -86,6 +86,13 @@ export interface ApiClient {
    * as the other methods.
    */
   put<T>(path: string, body: BodyInit | null, init?: RequestInit): Promise<T>;
+  /**
+   * POST with a JSON body that resolves to the raw `Response` of a 2xx
+   * answer, body unread, so the caller can stream it (server-sent
+   * events). Auth, the 401-refresh-retry and the error mapping are the
+   * same as `post`.
+   */
+  postStream(path: string, body: unknown, init?: RequestInit): Promise<Response>;
 }
 
 export interface CreateApiClientOptions {
@@ -170,12 +177,12 @@ export function createApiClient(opts: CreateApiClientOptions): ApiClient {
     return fetchImpl(url, { ...init, headers });
   }
 
-  async function request<T>(
+  async function send(
     method: Method,
     path: string,
     body: unknown,
     init: RequestInit | undefined,
-  ): Promise<T> {
+  ): Promise<Response> {
     const url = buildUrl(opts.baseUrl, path);
     const headers = new Headers(init?.headers);
     if (body !== undefined && !headers.has('Content-Type')) {
@@ -200,15 +207,7 @@ export function createApiClient(opts: CreateApiClientOptions): ApiClient {
       response = await executeRaw(url, baseInit);
     }
 
-    if (response.ok) {
-      // 204 No Content — no body to parse.
-      if (response.status === 204) return undefined as T;
-      const contentType = response.headers.get('content-type') ?? '';
-      if (contentType.includes('json')) {
-        return (await response.json()) as T;
-      }
-      return (await response.text()) as unknown as T;
-    }
+    if (response.ok) return response;
 
     const problem = await tryParseProblem(response);
     const title = problem?.title ?? response.statusText;
@@ -234,6 +233,22 @@ export function createApiClient(opts: CreateApiClientOptions): ApiClient {
       throw new ApiError(title, response.status, problem);
     }
     throw new ApiServerError(title, response.status, problem);
+  }
+
+  async function request<T>(
+    method: Method,
+    path: string,
+    body: unknown,
+    init: RequestInit | undefined,
+  ): Promise<T> {
+    const response = await send(method, path, body, init);
+    // 204 No Content — no body to parse.
+    if (response.status === 204) return undefined as T;
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.includes('json')) {
+      return (await response.json()) as T;
+    }
+    return (await response.text()) as unknown as T;
   }
 
   async function putRaw<T>(path: string, body: BodyInit | null, init?: RequestInit): Promise<T> {
@@ -285,5 +300,6 @@ export function createApiClient(opts: CreateApiClientOptions): ApiClient {
     del: <T>(path: string, init?: RequestInit) => request<T>('DELETE', path, undefined, init),
     put: <T>(path: string, body: BodyInit | null, init?: RequestInit) =>
       putRaw<T>(path, body, init),
+    postStream: (path: string, body: unknown, init?: RequestInit) => send('POST', path, body, init),
   };
 }
