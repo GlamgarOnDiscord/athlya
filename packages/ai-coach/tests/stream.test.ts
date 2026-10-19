@@ -80,6 +80,7 @@ function buildDeps(overrides: Partial<AskCoachDeps> = {}): AskCoachDeps {
     consents: { hasThirdPartyConsent: () => Promise.resolve(true) },
     quota: memoryQuota(),
     now: () => NOW,
+    partialIntervalMs: 0,
     ...overrides,
   };
 }
@@ -132,6 +133,16 @@ describe('streamCoach', () => {
     expect(result?.advice).toEqual(VALID_ADVICE);
     expect(result?.quota.remaining).toBe(DEFAULT_COACH_DAILY_LIMIT - 1);
     expect(result?.generatedAt).toBe(new Date(NOW).toISOString());
+  });
+
+  it('throttles snapshots but always ends with the full validated answer', async () => {
+    let t = 0;
+    const deps = buildDeps({ partialIntervalMs: 1_000, clock: () => (t += 100) });
+    const { partials, result } = await drain(await streamCoach(USER_ID, REQUEST, deps));
+    // 100 ms per chunk against a 1 s interval: far fewer snapshots than chunks.
+    expect(partials.length).toBeGreaterThan(0);
+    expect(partials.length).toBeLessThan(3);
+    expect(result?.advice).toEqual(VALID_ADVICE);
   });
 
   it('refuses before the stream starts: consent, quota, quota store', async () => {

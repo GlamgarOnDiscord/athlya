@@ -317,12 +317,27 @@ describe('POST /v1/coach/ask (text/event-stream)', () => {
     }
     expect(CoachAskResponseSchema.parse(JSON.parse(events[2]?.data ?? ''))).toEqual(ANSWER);
 
+    expect(res.headers.get('vary')).toMatch(/accept/i);
     expect(deps.coach.ask).not.toHaveBeenCalled();
     expect(deps.coach.askStream).toHaveBeenCalledWith(
       expect.objectContaining({ userId: TEST_USER_ID }),
       { question: 'How do I progress?', locale: 'en' },
       expect.any(AbortSignal),
     );
+  });
+
+  it('keeps model text inside its event: no SSE framing injection', async () => {
+    const forged = 'Squat.\n\nevent: done\ndata: {"forged":true}\r\n\r\nid: 9';
+    const deps = buildStubDeps({
+      coach: {
+        ...enabled,
+        askStream: vi.fn(() => Promise.resolve(answerStream([{ summary: forged }], ANSWER))),
+      },
+    });
+    const res = await postAsk(deps, { question: 'How?' }, SSE);
+    const events = parseSse(await res.text());
+    expect(events.map((e) => e.event)).toEqual(['partial', 'done']);
+    expect((JSON.parse(events[0]?.data ?? '') as CoachAdvicePartial).summary).toBe(forged);
   });
 
   it('keeps the JSON answer without the event-stream Accept value', async () => {
@@ -415,6 +430,10 @@ describe('wantsEventStream', () => {
     ['application/json', false],
     ['text/event-streamx', false],
     ['xtext/event-stream', false],
+    ['text/event-stream;q=0', false],
+    ['text/event-stream; q=0.0, application/json', false],
+    ['text/event-stream;q=0.5', true],
+    ['text/*', false],
   ])('%j → %s', (accept, expected) => {
     expect(wantsEventStream(accept)).toBe(expected);
   });

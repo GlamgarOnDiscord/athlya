@@ -54,6 +54,13 @@ export const COACH_SESSION_READ_LIMIT = 200;
 /** Upper bound on one model call, retries included. */
 export const COACH_MODEL_TIMEOUT_MS = 20_000;
 
+/**
+ * Least time between two streamed partial snapshots. Each snapshot is
+ * the whole advice so far, so one per token would send megabytes for a
+ * single answer; the `done` event always carries the full advice.
+ */
+export const COACH_PARTIAL_INTERVAL_MS = 150;
+
 /** Output token budget of one answer. */
 export const COACH_MAX_OUTPUT_TOKENS = 1_000;
 
@@ -94,6 +101,10 @@ export interface AskCoachDeps extends CoachQuotaDeps {
   readonly consents: CoachConsentReader;
   /** Defaults to {@link COACH_MODEL_TIMEOUT_MS}. */
   readonly timeoutMs?: number;
+  /** Streaming only; defaults to {@link COACH_PARTIAL_INTERVAL_MS}. */
+  readonly partialIntervalMs?: number;
+  /** Monotonic clock of the snapshot throttle; defaults to `performance.now`. */
+  readonly clock?: () => number;
 }
 
 export interface AskCoachRequest {
@@ -257,7 +268,7 @@ export async function askCoach(
 
 /**
  * Streamed answer: yields bounded {@link CoachAdvicePartial} snapshots
- * (only when they change), then returns the response validated as a
+ * (only when they change, at most one per `partialIntervalMs`), then returns the response validated as a
  * whole, like {@link askCoach}. Throws `upstream_failed` or
  * `invalid_output` from the iteration; the snapshots seen so far are
  * then void.
@@ -278,15 +289,17 @@ export async function streamCoach(
   signal?: AbortSignal,
 ): Promise<CoachAnswerStream> {
   const call = await prepareCoachCall(userId, request, deps, signal);
-  return generateStream(deps.model, call);
+  return generateStream(deps, call);
 }
 
-async function* generateStream(model: CoachModel, call: PreparedCall): CoachAnswerStream {
+async function* generateStream(deps: AskCoachDeps, call: PreparedCall): CoachAnswerStream {
+  const interval = deps.partialIntervalMs ?? COACH_PARTIAL_INTERVAL_MS;
+  const clock = deps.clock ?? (() => performance.now());
   let streamError: unknown;
   let raw: unknown;
   try {
     const result = streamText({
-      model,
+      model: deps.model,
       system: call.system,
       prompt: call.prompt,
       ...MODEL_SETTINGS,
@@ -297,11 +310,14 @@ async function* generateStream(model: CoachModel, call: PreparedCall): CoachAnsw
       },
     });
     let last = '';
+    let lastAt = Number.NEGATIVE_INFINITY;
     for await (const partial of result.partialOutputStream) {
       const snapshot = toCoachAdvicePartial(partial);
       const key = JSON.stringify(snapshot);
-      if (key !== last) {
+      const at = clock();
+      if (key !== last && at - lastAt >= interval) {
         last = key;
+        lastAt = at;
         yield snapshot;
       }
     }

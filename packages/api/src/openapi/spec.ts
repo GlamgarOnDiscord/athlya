@@ -867,7 +867,8 @@ const coachAskRoute = createRoute({
     'Nothing but the quota counter is stored. Sends `Cache-Control: no-store`. ' +
     'With `Accept: text/event-stream` the answer is streamed as server-sent events once every ' +
     'check above passed (refusals keep their status): `partial` events carry a ' +
-    '`CoachAdvicePartial` snapshot (provisional, clipped to the advice bounds), then one ' +
+    '`CoachAdvicePartial` snapshot (provisional, clipped to the advice bounds, at most one per ' +
+    '150 ms), then one ' +
     'terminal `done` event carries the `CoachAskResponse` validated as a whole, or one terminal ' +
     '`error` event carries a problem body (`coach_upstream_failed`, `coach_invalid_output`, ' +
     '`internal_error`) after which the partials are void.',

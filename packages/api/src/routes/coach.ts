@@ -36,7 +36,8 @@
  * done, so every refusal above keeps its status and problem body.
  * Events, each `data` one JSON document:
  *
- *   - `partial` — `CoachAdvicePartial` snapshot, zero or more.
+ *   - `partial` — `CoachAdvicePartial` snapshot, zero or more, at most
+ *                 one per 150 ms (`COACH_PARTIAL_INTERVAL_MS`).
  *   - `done`    — `CoachAskResponse`, validated as before. Terminal.
  *   - `error`   — problem body (`coach_upstream_failed`,
  *                 `coach_invalid_output`, `internal_error`). Terminal.
@@ -220,9 +221,18 @@ function coachProblem(
   return problem(c, p, retryAfter);
 }
 
-/** True when the client asks for the server-sent event stream. */
+/**
+ * True when `Accept` lists `text/event-stream` explicitly with a non-zero
+ * quality. Wildcard ranges (any type, `text` subtypes) keep the JSON answer.
+ */
 export function wantsEventStream(accept: string | undefined): boolean {
-  return accept !== undefined && /(^|[\s,])text\/event-stream(\s*(;|,|$))/i.test(accept);
+  if (accept === undefined) return false;
+  return accept.split(',').some((range) => {
+    const [type, ...params] = range.split(';').map((part) => part.trim().toLowerCase());
+    if (type !== 'text/event-stream') return false;
+    const q = params.find((param) => param.startsWith('q='));
+    return q === undefined || Number.parseFloat(q.slice(2)) > 0;
+  });
 }
 
 /** Problem of an error raised once the stream is open; 5xx are logged like {@link coachProblem}. */
@@ -380,6 +390,8 @@ export function buildCoachRouter(deps: CoachDeps): Hono<HonoEnv> {
       traceOperation(c, 'coach.ask');
       const claims = claimsOf(c);
       const request = readValidated<CoachAskRequest>(c, 'json');
+      // The body depends on `Accept` (JSON or event stream).
+      c.header('vary', 'Accept', { append: true });
       if (wantsEventStream(c.req.header('accept'))) {
         return streamAnswer(c, deps, claims, request);
       }
