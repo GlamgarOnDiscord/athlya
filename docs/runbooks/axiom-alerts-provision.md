@@ -101,8 +101,11 @@ redeploy it.
 2. Make the `AXIOM_LOGS_DATASET` var of `[env.<env>.vars]` in
    `wrangler.axiom-tail.toml` equal to the `AXIOM_LOGS_DATASET` variable of
    the GitHub environment (the Terraform monitors read that one).
-   `deploy-production.yml` refuses to deploy when they differ
-   (`scripts/axiom-tail-dataset.mjs`).
+   `deploy-production.yml` (every deploy phase) and `canary.yml` refuse to
+   deploy when they differ (`scripts/axiom-tail-dataset.mjs`), before any
+   secret check, migration or deploy. `canary.yml` runs without a GitHub
+   environment: set `AXIOM_LOGS_DATASET` as a repository variable too (the
+   production dataset), or the canary stops as not provisioned.
 3. Set the secret on each environment, before any deploy (verify-secrets
    checks it):
    `pnpm --filter @athlya/api exec wrangler secret put AXIOM_INGEST_TOKEN -c wrangler.axiom-tail.toml --env <staging|production>`.

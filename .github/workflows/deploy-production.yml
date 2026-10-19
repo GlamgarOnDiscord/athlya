@@ -140,6 +140,18 @@ jobs:
               ;;
           esac
 
+      # Issue #697 — the Tail Worker ships log lines to the dataset its
+      # wrangler config names; the Terraform monitors read vars.AXIOM_LOGS_DATASET.
+      # A mismatch would leave the log-based monitors on no data. Checked
+      # before secrets and migrations: it must stop the run while nothing has
+      # shipped (a later failure would trigger the production rollback).
+      - name: Check the Axiom logs dataset of the tail Worker
+        if: inputs.phase == 'staging-deploy' || inputs.phase == 'production-deploy' || inputs.phase == 'production-canary'
+        env:
+          AXIOM_LOGS_DATASET: ${{ vars.AXIOM_LOGS_DATASET }}
+          TARGET_ENV: ${{ inputs.phase == 'staging-deploy' && 'staging' || 'production' }}
+        run: node scripts/axiom-tail-dataset.mjs --env "${TARGET_ENV}" --expected "${AXIOM_LOGS_DATASET}"
+
       # Issue #415 — production-deploy uploads source maps only after the
       # Workers are live, so check the Sentry release config BEFORE any
       # migration or deploy: a missing value must stop the run while
@@ -212,16 +224,6 @@ jobs:
           fi
           node packages/db/scripts/migrate.mjs
           echo "::notice::Production migrations applied successfully"
-
-      # Issue #697 — the Tail Worker ships log lines to the dataset its
-      # wrangler config names; the Terraform monitors read vars.AXIOM_LOGS_DATASET.
-      # A mismatch would leave the log-based monitors on no data.
-      - name: Check the Axiom logs dataset of the tail Worker
-        if: inputs.phase == 'staging-deploy' || inputs.phase == 'production-deploy'
-        env:
-          AXIOM_LOGS_DATASET: ${{ vars.AXIOM_LOGS_DATASET }}
-          TARGET_ENV: ${{ inputs.phase == 'staging-deploy' && 'staging' || 'production' }}
-        run: node scripts/axiom-tail-dataset.mjs --env "${TARGET_ENV}" --expected "${AXIOM_LOGS_DATASET}"
 
       - name: Deploy staging (wrangler + ready gate)
         if: inputs.phase == 'staging-deploy'
@@ -359,6 +361,12 @@ jobs:
       # gets the same release + source maps as production-deploy. The
       # version is uploaded first (no traffic shift), its maps reach Sentry,
       # and only then does canary-deploy.mjs promote it.
+      # Issue #697 — the gateway version names the tail Worker in
+      # `tail_consumers`: deploy it before the upload.
+      - name: Deploy Axiom log tail Worker (production canary)
+        if: inputs.phase == 'production-canary'
+        run: pnpm --filter @athlya/api exec wrangler deploy -c wrangler.axiom-tail.toml --env production --outdir dist/axiom-tail
+
       - name: Upload gateway version (production canary)
         id: upload_canary
         if: inputs.phase == 'production-canary'

@@ -64,7 +64,7 @@ describe('Axiom log Tail Worker wiring (issue #697)', () => {
         .filter(([, , target]) => target === env)
         .map(([, config]) => config ?? 'wrangler.toml');
       assert.equal(deploys[0], 'wrangler.axiom-tail.toml', `deploy-production.yml ${env}`);
-      assert.equal(deploys.filter((c) => c === 'wrangler.axiom-tail.toml').length, 1);
+      assert.ok(deploys.includes('wrangler.toml') || deploys.includes('wrangler.auth.toml'));
     }
 
     const canary = read(ROOT, '.github', 'workflows', 'canary.yml');
@@ -74,12 +74,32 @@ describe('Axiom log Tail Worker wiring (issue #697)', () => {
     assert.ok(tail < canary.indexOf('echo "${worker}=true"'), 'before the sub-workers');
   });
 
-  it('checks the tail dataset against the monitors before deploying', () => {
+  it('checks the tail dataset before secrets, migrations and any deploy', () => {
     const direct = read(ROOT, '.github', 'workflows', 'deploy-production.yml');
+    const check = direct.indexOf('scripts/axiom-tail-dataset.mjs');
+    assert.ok(check !== -1);
+    for (const later of [
+      'verify-secrets.mjs --env staging',
+      'packages/db/scripts/migrate.mjs',
+      'wrangler deploy -c wrangler.axiom-tail.toml --env staging',
+    ]) {
+      assert.ok(check < direct.indexOf(later), `before ${later}`);
+    }
+    assert.match(direct, /if: [^\n]*'production-canary'[^\n]*\n[^]*?axiom-tail-dataset\.mjs/u);
+
+    const canary = read(ROOT, '.github', 'workflows', 'canary.yml');
     assert.ok(
-      direct.indexOf('scripts/axiom-tail-dataset.mjs') <
-        direct.indexOf('wrangler deploy -c wrangler.axiom-tail.toml --env staging'),
+      canary.indexOf('scripts/axiom-tail-dataset.mjs --env production') <
+        canary.indexOf('wrangler deploy -c wrangler.axiom-tail.toml --env production'),
     );
+    assert.match(canary, /missing\+=\("vars\.AXIOM_LOGS_DATASET"\)/u);
+  });
+
+  it('deploys the tail Worker before the production-canary gateway upload', () => {
+    const direct = read(ROOT, '.github', 'workflows', 'deploy-production.yml');
+    const tail = direct.indexOf('- name: Deploy Axiom log tail Worker (production canary)');
+    assert.ok(tail !== -1);
+    assert.ok(tail < direct.indexOf('- name: Upload gateway version (production canary)'));
   });
 
   it('documents the tail Worker secret it requires', () => {

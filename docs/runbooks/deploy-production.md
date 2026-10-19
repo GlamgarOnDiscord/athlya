@@ -114,7 +114,9 @@ Axiom log Tail Worker (`wrangler.axiom-tail.toml`, issue #697) : secret
 `verify-secrets.mjs`). Les quatre Workers API le nomment dans
 `tail_consumers` : `deploy-production.yml` et `canary.yml` le déploient
 **avant** eux, et `scripts/axiom-tail-dataset.mjs` refuse le déploiement si
-son dataset diffère de `vars.AXIOM_LOGS_DATASET`. Procédure :
+son dataset diffère de `vars.AXIOM_LOGS_DATASET`, avant les secrets et les
+migrations (la variable doit aussi exister au niveau du dépôt pour `canary.yml`,
+qui tourne sans environnement GitHub). Procédure :
 [`axiom-alerts-provision.md`](./axiom-alerts-provision.md#setup-and-deploy-order).
 
 Bindings (not secrets, declared in each wrangler config): the reservations
