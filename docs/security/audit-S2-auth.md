@@ -206,6 +206,7 @@ Méthode : revue statique du code, lecture des tests d'intégration, traçage du
 - **Impact** : potentiel acceptance de token forgé si un futur attaquant trouve une faiblesse dans l'un des deux algos.
 - **Mitigation recommandée** : pinner un algo par provider (`apple → RS256`, `google → RS256`) lors de la réintroduction OAuth.
 - **Effort** : trivial.
+- **Status (2026-10-19, issue #689)**: resolved. The default verifier accepts RS256 only and requires `appleAudience` / `googleAudience`: a provider without a configured audience fails closed before any JWKS fetch (`packages/auth/src/service.ts`).
 
 ---
 
@@ -224,6 +225,7 @@ Méthode : revue statique du code, lecture des tests d'intégration, traçage du
   - Ajouter un Sentry beforeSend qui scrubt les champs `refreshToken` / `accessToken` des breadcrumbs.
   - Documenter clairement que les clients NON-web doivent stocker le refresh dans le keychain OS et jamais en JS-accessible.
 - **Effort** : medium.
+- **Status (2026-10-19, issue #689)**: partially mitigated. The body field stays: the mobile app reads it and keeps it in the OS keychain (`expo-secure-store`), and the web and studio proxies move it into the HttpOnly cookie. The structured logger now redacts `refreshToken`, `accessToken`, `idToken` and `cookie` keys by default (`token` only matched a key named exactly `token`). The hand-rolled Sentry client sends no breadcrumbs or response bodies.
 
 ---
 

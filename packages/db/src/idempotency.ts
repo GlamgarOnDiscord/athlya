@@ -28,9 +28,10 @@
  *
  * Expiry is enforced in SQL (`WHERE expires_at > now()`) rather than in
  * the caller so clock skew between the middleware host and the DB
- * cannot serve stale entries. A nightly sweeper (task 10.x) removes the
- * rows to keep the table small; the partial index
- * `idempotency_keys_expires_at_idx` makes that sweep cheap.
+ * cannot serve stale entries. The scheduled maintenance tick deletes
+ * expired rows through `idempotency_purge_expired` (migration 0047,
+ * issue #689); the index `idempotency_keys_expires_at_idx` makes that
+ * sweep cheap.
  *
  * Related requirements: 20.1, 20.2.
  */

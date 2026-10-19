@@ -15,6 +15,8 @@
  *   • `runAuditAnonymisationCycle` — fan-out anonymisation for
  *     every user whose 30-day grace window elapsed (Sprint 6 SP6.2,
  *     audit S5-003).
+ *   • `purgeExpiredIdempotencyKeys` — delete expired
+ *     `idempotency_keys` rows (audit S4-011, migration 0047).
  *
  * The runner accepts a `SqlExecutor`-shaped surface, mirroring the
  * primitives. Production wiring inverts control: `worker.ts`
@@ -33,6 +35,7 @@
  */
 
 import { type AnonymizeOneFn, runAuditAnonymisationCycle } from './audit-anonymize.js';
+import { purgeExpiredIdempotencyKeys } from './idempotency-purge.js';
 import { type SqlExecutor, runRgpdMaintenanceCycle } from './rgpd-purge.js';
 
 /* ------------------------------------------------------------------ */
@@ -80,6 +83,11 @@ export interface ScheduledRgpdResult {
     readonly anonymizedUsersHasMore: boolean;
     readonly purgedOutbox: number;
     readonly purgedExportJobs: number;
+    readonly error?: string;
+  };
+  readonly idempotencyPurge: {
+    readonly deletedCount: number;
+    readonly hasMore: boolean;
     readonly error?: string;
   };
   readonly auditAnonymise:
@@ -138,9 +146,25 @@ export async function runScheduledRgpdMaintenance(
     logger.error('rgpd maintenance: purge cycle failed', { error: message });
   }
 
+  let idempotencyPurge: ScheduledRgpdResult['idempotencyPurge'] = {
+    deletedCount: 0,
+    hasMore: false,
+  };
+  try {
+    idempotencyPurge = await purgeExpiredIdempotencyKeys(deps.executeSql);
+    if (idempotencyPurge.deletedCount > 0) {
+      logger.info('maintenance: idempotency purge complete', { ...idempotencyPurge });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    idempotencyPurge = { ...idempotencyPurge, error: message };
+    logger.error('maintenance: idempotency purge failed', { error: message });
+  }
+
   if (deps.anonymizeOne === undefined) {
     return {
       purge,
+      idempotencyPurge,
       auditAnonymise: {
         skipped: true,
         reason: 'anonymizeOne not wired — production needs the @athlya/members adapter',
@@ -162,6 +186,7 @@ export async function runScheduledRgpdMaintenance(
     logger.info('rgpd maintenance: audit anonymise cycle complete', summary);
     return {
       purge,
+      idempotencyPurge,
       auditAnonymise: {
         skipped: false,
         ...summary,
@@ -174,6 +199,7 @@ export async function runScheduledRgpdMaintenance(
     });
     return {
       purge,
+      idempotencyPurge,
       auditAnonymise: {
         skipped: true,
         reason: `audit cycle threw: ${message}`,
