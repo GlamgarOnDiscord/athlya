@@ -1,6 +1,7 @@
 # AI coach — RGPD note (Epic 21)
 
-Issue **#644**. The AI coach (`GET /v1/coach`, `POST /v1/coach/ask`, web `/me/coach`) sends a
+Issue **#644**. The AI coach (`GET /v1/coach`, `POST /v1/coach/ask`, web `/me/coach`, mobile
+`/coach` since #676) sends a
 summary of a member's training data to Mistral AI to generate advice. This note records what is
 sent, what is kept, and how the member opts in.
 
@@ -13,7 +14,7 @@ sent, what is kept, and how the member opts in.
   (Requirement 3.3). Without it, `POST /v1/coach/ask` answers 403
   `third_party_consent_required` **before** any training data is read. The member grants or
   withdraws it at any time in the consents form on `/me`.
-- The web page states what is sent before the member asks a question.
+- The web page and the mobile screen state what is sent before the member asks a question.
 
 ## What is sent to the provider
 

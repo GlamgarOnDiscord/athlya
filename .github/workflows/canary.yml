@@ -60,6 +60,7 @@ on:
       - 'scripts/canary-deploy.mjs'
       - 'scripts/canary-error-budget.mjs'
       - 'scripts/canary-latency.mjs'
+      - 'scripts/axiom-tail-dataset.mjs'
       - 'scripts/sentry-release.sh'
       - 'scripts/smoke-routes.mjs'
       - 'scripts/verify-secrets.mjs'
@@ -111,6 +112,7 @@ jobs:
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          AXIOM_LOGS_DATASET: ${{ vars.AXIOM_LOGS_DATASET }}
         run: |
           set -euo pipefail
           missing=()
@@ -121,6 +123,9 @@ jobs:
           [ -n "${SENTRY_ORG}" ] || missing+=("vars.SENTRY_ORG")
           [ -n "${SENTRY_PROJECT}" ] || missing+=("vars.SENTRY_PROJECT")
           [ -n "${SENTRY_DSN}" ] || missing+=("secrets.SENTRY_DSN")
+          # Issue #697 — this job has no GitHub environment: the logs dataset
+          # the monitors read must also be a repository variable.
+          [ -n "${AXIOM_LOGS_DATASET}" ] || missing+=("vars.AXIOM_LOGS_DATASET")
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "### Canary: FAILED — not provisioned: ${missing[*]}" >> "$GITHUB_STEP_SUMMARY"
             echo "::error title=Canary not provisioned::missing ${missing[*]}"
@@ -155,11 +160,26 @@ jobs:
             pnpm --filter @athlya/api exec wrangler deploy -c "wrangler.${worker}.toml" --env production --var "VERSION:${VERSION}" --outdir "dist/${worker}" --dry-run
           done
 
+      # Issue #697 — the Axiom log Tail Worker before any API Worker: they
+      # name it in `tail_consumers`. It only forwards log lines, so it is not
+      # part of the rollback below (an older API version tails to it too).
+      - name: Check the Axiom logs dataset of the tail Worker
+        id: check_tail_dataset
+        if: steps.config.outputs.ready == 'true'
+        env:
+          AXIOM_LOGS_DATASET: ${{ vars.AXIOM_LOGS_DATASET }}
+        run: node scripts/axiom-tail-dataset.mjs --env production --expected "${AXIOM_LOGS_DATASET}"
+
+      - name: Deploy Axiom log tail Worker
+        id: deploy_tail
+        if: steps.config.outputs.ready == 'true' && steps.bundle_subworkers.outcome == 'success' && steps.check_tail_dataset.outcome == 'success'
+        run: pnpm --filter @athlya/api exec wrangler deploy -c wrangler.axiom-tail.toml --env production --outdir dist/axiom-tail
+
       # Uploading a version shifts no traffic: the gateway keeps serving the
       # previous deployment until canary-deploy.mjs promotes this version.
       - name: Upload gateway version
         id: upload_gateway
-        if: steps.config.outputs.ready == 'true' && steps.bundle_subworkers.outcome == 'success'
+        if: steps.config.outputs.ready == 'true' && steps.deploy_tail.outcome == 'success'
         env:
           VERSION: ${{ steps.config.outputs.release }}
         run: |

@@ -9,6 +9,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../worker.js';
 
+import { readJson } from './helpers/read-json.js';
+
 import type { AthlyaBindings } from '../types.js';
 
 /* ------------------------------------------------------------------ */
@@ -95,6 +97,7 @@ describe('GET /openapi.json', () => {
       '/v1/sessions',
       '/v1/sessions/me',
       '/v1/me/progression',
+      '/v1/me/progression/cardio',
       '/v1/coach',
       '/v1/coach/ask',
       '/v1/audit',
@@ -161,5 +164,38 @@ describe('GET /openapi.json', () => {
     const app = buildApp();
     const res = await app.request('/openapi.json', { method: 'GET' }, mockEnv());
     expect(res.status).toBe(200);
+  });
+
+  it('documents the optional cardio summary of a workout session (issue #667)', async () => {
+    const res = await buildApp().request('/openapi.json', { method: 'GET' }, mockEnv());
+    interface JsonSchema {
+      readonly properties?: Record<string, JsonSchema>;
+      readonly required?: readonly string[];
+      readonly enum?: readonly string[];
+    }
+    const body = await readJson<{
+      paths: Record<
+        string,
+        {
+          post?: {
+            requestBody: { content: Record<string, { schema: JsonSchema }> };
+            responses: Record<string, { content: Record<string, { schema: JsonSchema }> }>;
+          };
+        }
+      >;
+    }>(res);
+    const post = body.paths['/v1/sessions']?.post;
+    const request = post?.requestBody.content['application/json']?.schema;
+    const response = post?.responses['201']?.content['application/json']?.schema;
+
+    for (const schema of [request, response]) {
+      expect(schema?.properties?.cardio?.properties?.machine?.enum).toEqual([
+        'indoorBike',
+        'treadmill',
+        'rower',
+        'crossTrainer',
+      ]);
+      expect(schema?.required ?? []).not.toContain('cardio');
+    }
   });
 });

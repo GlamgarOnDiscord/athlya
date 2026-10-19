@@ -10,11 +10,19 @@
  *   mutation is applied at most once by the API.
  * - `send` reports every HTTP status to the caller (the offline drain
  *   needs the raw status); the typed helpers throw `ApiError` on non-2xx.
+ * - `postStream` asks for `text/event-stream` and hands back the unread
+ *   body of a 2xx event stream. Expo's `fetch` (`expo/fetch`, installed as
+ *   the global `fetch` since SDK 52) exposes the response body as a
+ *   `ReadableStream`. The timeout only covers the wait for the response
+ *   headers; the caller's `signal` keeps cancelling the body read.
  * - Failures before an HTTP response exists raise `NetworkError`.
  */
+import { COACH_STREAM_ACCEPT, isEventStream } from '@athlya/shared/coach-stream';
 import { ProblemDetailsSchema, type ProblemDetails } from '@athlya/shared/schemas/problem';
 
 import { ApiError, AuthRequiredError, NetworkError } from './errors';
+
+import type { ByteStream } from '@athlya/shared/sse';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -50,6 +58,14 @@ export interface ApiResponse {
   readonly body: unknown;
 }
 
+export interface StreamResponse extends ApiResponse {
+  /**
+   * The unread body of a 2xx `text/event-stream` answer, else `null` (and
+   * `body` holds the parsed answer, e.g. a problem or a JSON payload).
+   */
+  readonly stream: ByteStream | null;
+}
+
 export interface AccessTokenSource {
   getAccessToken(): string | null;
 }
@@ -66,6 +82,8 @@ export interface ApiClient {
   put<T>(path: string, body: unknown, options?: RequestOptions): Promise<T>;
   patch<T>(path: string, body: unknown, options?: RequestOptions): Promise<T>;
   del<T>(path: string, options?: RequestOptions): Promise<T>;
+  /** POST asking for a server-sent event stream; same auth and refresh as `send`. */
+  postStream(path: string, body: unknown, options?: RequestOptions): Promise<StreamResponse>;
 }
 
 export interface CreateApiClientOptions {
@@ -129,9 +147,10 @@ export function createApiClient(options: CreateApiClientOptions): ApiClient {
     body: unknown,
     requestOptions: RequestOptions,
     accessToken: string | null,
-  ): Promise<ApiResponse> {
+    streaming = false,
+  ): Promise<StreamResponse> {
     const headers: Record<string, string> = { ...extraHeaders(requestOptions.headers) };
-    headers.Accept = 'application/json';
+    headers.Accept = streaming ? COACH_STREAM_ACCEPT : 'application/json';
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (accessToken !== null) headers.Authorization = `Bearer ${accessToken}`;
     if (requestOptions.idempotencyKey !== undefined) {
@@ -148,6 +167,7 @@ export function createApiClient(options: CreateApiClientOptions): ApiClient {
     };
     if (external?.aborted === true) controller.abort();
     external?.addEventListener('abort', forwardAbort);
+    let streamOpen = false;
 
     try {
       const response = await fetchImpl(url, {
@@ -156,7 +176,26 @@ export function createApiClient(options: CreateApiClientOptions): ApiClient {
         signal: controller.signal,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      return { status: response.status, headers: response.headers, body: await readBody(response) };
+      if (
+        streaming &&
+        response.ok &&
+        response.body !== null &&
+        isEventStream(response.headers.get('content-type'))
+      ) {
+        streamOpen = true;
+        return {
+          status: response.status,
+          headers: response.headers,
+          body: null,
+          stream: response.body,
+        };
+      }
+      return {
+        status: response.status,
+        headers: response.headers,
+        body: await readBody(response),
+        stream: null,
+      };
     } catch (error) {
       // A caller cancellation is not a transport failure: surface it as is so
       // it is never mistaken for "offline" and queued for a retry.
@@ -167,8 +206,31 @@ export function createApiClient(options: CreateApiClientOptions): ApiClient {
       throw new NetworkError(`${method} ${url}: ${reason}`, { cause: error });
     } finally {
       clearTimeout(timer);
-      external?.removeEventListener('abort', forwardAbort);
+      // An open stream still needs the caller's abort to cancel its body.
+      if (!streamOpen) external?.removeEventListener('abort', forwardAbort);
     }
+  }
+
+  async function exchange(
+    method: HttpMethod,
+    path: string,
+    body: unknown,
+    requestOptions: RequestOptions,
+    streaming: boolean,
+  ): Promise<StreamResponse> {
+    const url = buildUrl(options.baseUrl, path);
+    const authenticated = requestOptions.authenticated ?? true;
+    const token = authenticated ? options.tokens.getAccessToken() : null;
+    const first = await attempt(method, url, body, requestOptions, token, streaming);
+    if (first.status !== 401 || !authenticated || requestOptions.refreshOnUnauthorized === false) {
+      return first;
+    }
+
+    const refreshed = options.refreshAccessToken ? await options.refreshAccessToken() : null;
+    if (refreshed === null) throw new AuthRequiredError();
+    const retried = await attempt(method, url, body, requestOptions, refreshed, streaming);
+    if (retried.status === 401) throw new AuthRequiredError();
+    return retried;
   }
 
   async function send(
@@ -177,19 +239,12 @@ export function createApiClient(options: CreateApiClientOptions): ApiClient {
     body?: unknown,
     requestOptions: RequestOptions = {},
   ): Promise<ApiResponse> {
-    const url = buildUrl(options.baseUrl, path);
-    const authenticated = requestOptions.authenticated ?? true;
-    const token = authenticated ? options.tokens.getAccessToken() : null;
-    const first = await attempt(method, url, body, requestOptions, token);
-    if (first.status !== 401 || !authenticated || requestOptions.refreshOnUnauthorized === false) {
-      return first;
-    }
-
-    const refreshed = options.refreshAccessToken ? await options.refreshAccessToken() : null;
-    if (refreshed === null) throw new AuthRequiredError();
-    const retried = await attempt(method, url, body, requestOptions, refreshed);
-    if (retried.status === 401) throw new AuthRequiredError();
-    return retried;
+    const {
+      status,
+      headers,
+      body: payload,
+    } = await exchange(method, path, body, requestOptions, false);
+    return { status, headers, body: payload };
   }
 
   async function expectOk<T>(response: Promise<ApiResponse>): Promise<T> {
@@ -205,5 +260,7 @@ export function createApiClient(options: CreateApiClientOptions): ApiClient {
     put: (path, body, requestOptions) => expectOk(send('PUT', path, body, requestOptions)),
     patch: (path, body, requestOptions) => expectOk(send('PATCH', path, body, requestOptions)),
     del: (path, requestOptions) => expectOk(send('DELETE', path, undefined, requestOptions)),
+    postStream: (path, body, requestOptions = {}) =>
+      exchange('POST', path, body, requestOptions, true),
   };
 }

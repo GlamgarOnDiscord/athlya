@@ -1,5 +1,8 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it, vi } from 'vitest';
 
+import { ATTESTATION_TIMEOUT_MS, type AttestationDeps } from '../../features/auth/attestation';
 import {
   LOGOUT_TIMEOUT_MS,
   REFRESH_TOKEN_READ_TIMEOUT_MS,
@@ -37,6 +40,25 @@ function session() {
     accessTokenExpiresIn: 900,
     refreshTokenExpiresIn: 2_592_000,
   };
+}
+
+const INTEGRITY_TOKEN = ['header', 'key', 'iv', 'payload', 'tag'].join('.');
+
+function attestation(requestToken: (requestHash: string) => Promise<string>): AttestationDeps & {
+  readonly requestToken: ReturnType<typeof vi.fn<(requestHash: string) => Promise<string>>>;
+} {
+  const spy = vi.fn(requestToken);
+  return {
+    provider: { platform: 'android', warmUp: vi.fn(), requestToken: spy },
+    sha256: (data) => Promise.resolve(new Uint8Array(createHash('sha256').update(data).digest())),
+    requestToken: spy,
+  };
+}
+
+function requestHash(action: 'login' | 'register', turnstileToken: string): string {
+  return createHash('sha256')
+    .update(`athlya-auth-v1:${action}:${turnstileToken}`)
+    .digest('base64url');
 }
 
 function setup() {
@@ -87,6 +109,82 @@ describe('signIn', () => {
     for (const call of api.post.mock.calls) {
       expect(call[2]).toEqual({ authenticated: false });
     }
+  });
+
+  it('adds the device attestation headers next to the Turnstile token', async () => {
+    const { deps, api } = setup();
+    const device = attestation(() => Promise.resolve(INTEGRITY_TOKEN));
+    api.post.mockResolvedValue(session());
+
+    const result = await signIn(
+      { ...deps, attestation: device },
+      { email: 'ada@example.com', password: 'secret', turnstileToken: 'ts-1' },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(device.requestToken).toHaveBeenCalledWith(requestHash('login', 'ts-1'));
+    expect(api.post).toHaveBeenCalledWith('/v1/auth/login', expect.anything(), {
+      authenticated: false,
+      headers: {
+        'cf-turnstile-token': 'ts-1',
+        'x-device-attestation-platform': 'android',
+        'x-device-attestation-token': INTEGRITY_TOKEN,
+      },
+    });
+  });
+
+  it('signs in without attestation headers when the device cannot attest', async () => {
+    const { deps, api } = setup();
+    const device = attestation(() => Promise.reject(new Error('play services missing')));
+    api.post.mockResolvedValue(session());
+
+    const result = await signIn(
+      { ...deps, attestation: device },
+      { email: 'ada@example.com', password: 'secret', turnstileToken: 'ts-1' },
+    );
+
+    expect(result).toEqual({ ok: true, userId: USER_ID });
+    expect(api.post).toHaveBeenCalledWith('/v1/auth/login', expect.anything(), {
+      authenticated: false,
+      headers: { 'cf-turnstile-token': 'ts-1' },
+    });
+  });
+
+  it('does not wait for attestation longer than the timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const { deps, api } = setup();
+      const device = attestation(() => new Promise<string>(() => undefined));
+      api.post.mockResolvedValue(session());
+
+      const pending = signIn(
+        { ...deps, attestation: device },
+        { email: 'ada@example.com', password: 'secret', turnstileToken: 'ts-1' },
+      );
+      await vi.advanceTimersByTimeAsync(ATTESTATION_TIMEOUT_MS);
+
+      await expect(pending).resolves.toEqual({ ok: true, userId: USER_ID });
+      expect(api.post).toHaveBeenCalledWith('/v1/auth/login', expect.anything(), {
+        authenticated: false,
+        headers: { 'cf-turnstile-token': 'ts-1' },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('asks for no attestation without a Turnstile token', async () => {
+    const { deps, api } = setup();
+    const device = attestation(() => Promise.resolve(INTEGRITY_TOKEN));
+    api.post.mockResolvedValue(session());
+    await signIn(
+      { ...deps, attestation: device },
+      { email: 'ada@example.com', password: 'secret' },
+    );
+    expect(device.requestToken).not.toHaveBeenCalled();
+    expect(api.post).toHaveBeenCalledWith('/v1/auth/login', expect.anything(), {
+      authenticated: false,
+    });
   });
 
   it('validates the form before calling the API', async () => {
@@ -189,6 +287,43 @@ describe('register', () => {
     const { deps, api } = setup();
     api.post.mockResolvedValue(session());
     await register(deps, { ...input, turnstileToken: 'ts-2' });
+    expect(api.post).toHaveBeenCalledWith('/v1/auth/register', expect.anything(), {
+      authenticated: false,
+      headers: { 'cf-turnstile-token': 'ts-2' },
+    });
+  });
+
+  it('binds the attestation to the register action', async () => {
+    const { deps, api } = setup();
+    const device = attestation(() => Promise.resolve(INTEGRITY_TOKEN));
+    api.post.mockResolvedValue(session());
+    const result = await register(
+      { ...deps, attestation: device },
+      { ...input, turnstileToken: 'ts-2' },
+    );
+    expect(result.ok).toBe(true);
+    expect(device.requestToken).toHaveBeenCalledWith(requestHash('register', 'ts-2'));
+    expect(api.post).toHaveBeenCalledWith('/v1/auth/register', expect.anything(), {
+      authenticated: false,
+      headers: {
+        'cf-turnstile-token': 'ts-2',
+        'x-device-attestation-platform': 'android',
+        'x-device-attestation-token': INTEGRITY_TOKEN,
+      },
+    });
+  });
+
+  it('registers without attestation headers when the device has no provider', async () => {
+    const { deps, api } = setup();
+    api.post.mockResolvedValue(session());
+    const result = await register(
+      {
+        ...deps,
+        attestation: { provider: null, sha256: () => Promise.reject(new Error('unused')) },
+      },
+      { ...input, turnstileToken: 'ts-2' },
+    );
+    expect(result.ok).toBe(true);
     expect(api.post).toHaveBeenCalledWith('/v1/auth/register', expect.anything(), {
       authenticated: false,
       headers: { 'cf-turnstile-token': 'ts-2' },

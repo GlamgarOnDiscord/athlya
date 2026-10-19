@@ -140,6 +140,18 @@ jobs:
               ;;
           esac
 
+      # Issue #697 — the Tail Worker ships log lines to the dataset its
+      # wrangler config names; the Terraform monitors read vars.AXIOM_LOGS_DATASET.
+      # A mismatch would leave the log-based monitors on no data. Checked
+      # before secrets and migrations: it must stop the run while nothing has
+      # shipped (a later failure would trigger the production rollback).
+      - name: Check the Axiom logs dataset of the tail Worker
+        if: inputs.phase == 'staging-deploy' || inputs.phase == 'production-deploy' || inputs.phase == 'production-canary'
+        env:
+          AXIOM_LOGS_DATASET: ${{ vars.AXIOM_LOGS_DATASET }}
+          TARGET_ENV: ${{ inputs.phase == 'staging-deploy' && 'staging' || 'production' }}
+        run: node scripts/axiom-tail-dataset.mjs --env "${TARGET_ENV}" --expected "${AXIOM_LOGS_DATASET}"
+
       # Issue #415 — production-deploy uploads source maps only after the
       # Workers are live, so check the Sentry release config BEFORE any
       # migration or deploy: a missing value must stop the run while
@@ -237,6 +249,10 @@ jobs:
           #   5. Main gateway — promoted last; by this point all sub-workers
           #      already expose the new contract so 0% of requests see a
           #      version-skew window.
+          # Issue #697 — the Axiom log Tail Worker first: every API Worker names
+          # it in `tail_consumers`, and Cloudflare refuses to deploy a producer
+          # whose tail consumer does not exist yet.
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.axiom-tail.toml --env staging --outdir dist/axiom-tail
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env staging --var "VERSION:${VERSION}" --outdir dist/auth
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env staging --var "VERSION:${VERSION}" --outdir dist/reservations
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env staging --var "VERSION:${VERSION}" --outdir dist/billing
@@ -269,6 +285,10 @@ jobs:
           # staging above). Sub-workers are backwards-compatible per the
           # expand/contract pattern (CLAUDE.md); the old gateway routes to
           # them safely until it is replaced.
+          # Issue #697 — the Axiom log Tail Worker first: every API Worker names
+          # it in `tail_consumers`, and Cloudflare refuses to deploy a producer
+          # whose tail consumer does not exist yet.
+          pnpm --filter @athlya/api exec wrangler deploy -c wrangler.axiom-tail.toml --env production --outdir dist/axiom-tail
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.auth.toml --env production --var "VERSION:${VERSION}" --outdir dist/auth
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.reservations.toml --env production --var "VERSION:${VERSION}" --outdir dist/reservations
           pnpm --filter @athlya/api exec wrangler deploy -c wrangler.billing.toml --env production --var "VERSION:${VERSION}" --outdir dist/billing
@@ -341,6 +361,12 @@ jobs:
       # gets the same release + source maps as production-deploy. The
       # version is uploaded first (no traffic shift), its maps reach Sentry,
       # and only then does canary-deploy.mjs promote it.
+      # Issue #697 — the gateway version names the tail Worker in
+      # `tail_consumers`: deploy it before the upload.
+      - name: Deploy Axiom log tail Worker (production canary)
+        if: inputs.phase == 'production-canary'
+        run: pnpm --filter @athlya/api exec wrangler deploy -c wrangler.axiom-tail.toml --env production --outdir dist/axiom-tail
+
       - name: Upload gateway version (production canary)
         id: upload_canary
         if: inputs.phase == 'production-canary'

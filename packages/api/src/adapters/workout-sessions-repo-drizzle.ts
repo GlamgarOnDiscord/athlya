@@ -21,7 +21,7 @@
  * repo then returns the row the first request wrote, so two racing
  * retries can never log the session twice.
  *
- * Imported sessions (migration 0047) follow the same pattern on
+ * Imported sessions (migration 0048) follow the same pattern on
  * `(user_id, source, external_id)`: importing a workout that already has
  * a session, under any request key, inserts nothing and returns that
  * session. The insert therefore uses a target-less `ON CONFLICT DO
@@ -93,6 +93,7 @@ export function createDrizzleWorkoutSessionRepo(
             durationMin: input.durationMin ?? null,
             exercises: [...input.exercises],
             notes: input.notes ?? null,
+            cardio: input.cardio ?? null,
             idempotencyKey: key,
             source: source?.provider ?? null,
             externalId: source?.externalId ?? null,

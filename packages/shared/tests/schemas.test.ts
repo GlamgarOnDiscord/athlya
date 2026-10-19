@@ -25,6 +25,7 @@ import {
 import { ConsentsSchema } from '../src/schemas/consents.js';
 import {
   AuditLogSchema,
+  CardioMetricsSchema,
   ClassSchema,
   ReservationSchema,
   StudioSchema,
@@ -367,6 +368,51 @@ describe('WorkoutSessionSchema', () => {
     const issues = expectFailure(WorkoutSessionSchema, session);
     expectPath(issues, ['notes']);
   });
+
+  it('accepts a session with a structured cardio summary (issue #667)', () => {
+    const session = {
+      ...valid,
+      cardio: { machine: 'rower', durationSec: 1_200, distanceM: 5_000, avgPowerW: 180 },
+    };
+    expect(WorkoutSessionSchema.safeParse(session).success).toBe(true);
+  });
+
+  it('rejects an explicit null cardio: the key is omitted when absent', () => {
+    const issues = expectFailure(WorkoutSessionSchema, { ...valid, cardio: null });
+    expectPath(issues, ['cardio']);
+  });
+});
+
+describe('CardioMetricsSchema', () => {
+  it('accepts an empty summary and every metric on its own', () => {
+    expect(CardioMetricsSchema.safeParse({}).success).toBe(true);
+    expect(CardioMetricsSchema.safeParse({ avgSpeedKmh: 12.5 }).success).toBe(true);
+    expect(CardioMetricsSchema.safeParse({ strokeCount: 900 }).success).toBe(true);
+  });
+
+  it('rejects an unknown machine with path=["machine"]', () => {
+    expectPath(expectFailure(CardioMetricsSchema, { machine: 'stairs' }), ['machine']);
+  });
+
+  it('rejects unknown keys (strict)', () => {
+    expect(CardioMetricsSchema.safeParse({ watts: 100 }).success).toBe(false);
+  });
+
+  it.each([
+    ['durationSec', 86_401],
+    ['distanceM', 1_000_001],
+    ['distanceM', 12.5],
+    ['energyKcal', -1],
+    ['avgPowerW', 4_001],
+    ['maxPowerW', 4_001],
+    ['avgCadenceRpm', 301],
+    ['avgSpeedKmh', 150.1],
+    ['avgHeartRateBpm', 19],
+    ['maxHeartRateBpm', 251],
+    ['strokeCount', 100_001],
+  ] as const)('rejects %s = %s', (key, value) => {
+    expectPath(expectFailure(CardioMetricsSchema, { [key]: value }), [key]);
+  });
 });
 
 /* ================================================================== */
@@ -564,6 +610,24 @@ describe('ListClassesQuerySchema', () => {
 /* ================================================================== */
 
 describe('LogSessionRequestSchema', () => {
+  it('accepts an optional cardio summary and stays valid without one', () => {
+    const base = { startedAt: NOW, exercises: [{ name: 'Rower', sets: [{ reps: 0 }] }] };
+    expect(LogSessionRequestSchema.safeParse(base).success).toBe(true);
+    expect(
+      LogSessionRequestSchema.safeParse({ ...base, cardio: { machine: 'rower', distanceM: 2_000 } })
+        .success,
+    ).toBe(true);
+  });
+
+  it('rejects an out-of-bounds cardio metric with path=["cardio","avgPowerW"]', () => {
+    const issues = expectFailure(LogSessionRequestSchema, {
+      startedAt: NOW,
+      exercises: [],
+      cardio: { avgPowerW: 10_000 },
+    });
+    expectPath(issues, ['cardio', 'avgPowerW']);
+  });
+
   it('rejects > 50 exercises at the API boundary (Req 12.2)', () => {
     const payload = {
       startedAt: NOW,

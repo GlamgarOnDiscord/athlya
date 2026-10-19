@@ -158,6 +158,8 @@ Structured log `queue.unknown_event_type` emitted by `reject-unknown-queue-event
 
 `drain-scheduled.ts` émet `outbox.backlog` à chaque cron tick et `outbox.drain_overlap_risk` quand un cycle dépasse 45s.
 
+Each line is one flat event `{ message, ...fields }` (`logEvent()`, `packages/api/src/logging.ts`): the label is in `message` and the metric fields are top level. Field contract and pipeline requirements: [`axiom-alerts-provision.md` § Log field contract](../runbooks/axiom-alerts-provision.md#log-field-contract-693).
+
 ```apl
 ['athlya-logs']
 | where _time > now(-6h)

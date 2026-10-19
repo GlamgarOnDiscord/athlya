@@ -107,6 +107,65 @@ describe('POST /v1/auth/login', () => {
   });
 });
 
+describe('POST /v1/auth/login — device attestation (issue #659)', () => {
+  const loginBody = JSON.stringify({ email: 'ada@example.com', password: 'hunter2' });
+  const attestationHeaders = {
+    'content-type': 'application/json',
+    'cf-turnstile-token': 'dev-token',
+    'x-device-attestation-platform': 'windows',
+    'x-device-attestation-token': 'token',
+  };
+
+  it('ignores attestation headers when DEVICE_ATTESTATION_MODE is unset', async () => {
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
+
+    const res = await app.request(
+      '/v1/auth/login',
+      { method: 'POST', headers: attestationHeaders, body: loginBody },
+      env(),
+    );
+
+    expect(res.status).toBe(200);
+    expect(deps.auth.login).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a failing attestation with 403 in enforce mode before the handler', async () => {
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
+
+    const res = await app.request(
+      '/v1/auth/login',
+      { method: 'POST', headers: attestationHeaders, body: loginBody },
+      env({ DEVICE_ATTESTATION_MODE: 'enforce' }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(await readJson<{ code: string }>(res)).toMatchObject({
+      code: 'device_attestation_failed',
+    });
+    expect(deps.auth.login).not.toHaveBeenCalled();
+  });
+
+  it('lets a request without attestation through in enforce mode (web flow unchanged)', async () => {
+    const deps = buildStubDeps();
+    const app = buildTestApp(deps);
+
+    const res = await app.request(
+      '/v1/auth/login',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'cf-turnstile-token': 'dev-token' },
+        body: loginBody,
+      },
+      env({ DEVICE_ATTESTATION_MODE: 'enforce' }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(deps.auth.login).toHaveBeenCalledOnce();
+  });
+});
+
 describe('POST /v1/auth/refresh', () => {
   it('returns 422 when the body lacks a refreshToken', async () => {
     const deps = buildStubDeps();

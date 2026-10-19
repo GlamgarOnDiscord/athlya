@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { SignedIn } from '../components/AppSession';
@@ -9,6 +9,7 @@ import { TodayProgramCard } from '../components/TodayProgramCard';
 import { AppText } from '../components/ui/AppText';
 import { Button } from '../components/ui/Button';
 import { ScrollScreen } from '../components/ui/ScrollScreen';
+import { isCoachEnabled } from '../features/coach/coach-controller';
 
 const NAVIGATION = [
   { href: '/classes', key: 'mobile.home.nav.classes' },
@@ -24,6 +25,18 @@ function Home() {
   const runtime = useRuntime();
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
+  const [coachEnabled, setCoachEnabled] = useState(false);
+
+  // The coach entry only shows when the `ai-coach` flag is on for the member.
+  useEffect(() => {
+    const request = new AbortController();
+    void isCoachEnabled(runtime.api, request.signal).then((enabled) => {
+      if (!request.signal.aborted) setCoachEnabled(enabled);
+    });
+    return () => {
+      request.abort();
+    };
+  }, [runtime]);
 
   const syncNow = () => {
     setSyncing(true);
@@ -49,6 +62,15 @@ function Home() {
             }}
           />
         ))}
+        {coachEnabled ? (
+          <Button
+            title={runtime.t('coach.link')}
+            variant="secondary"
+            onPress={() => {
+              router.push('/coach');
+            }}
+          />
+        ) : null}
       </View>
       <Button
         title={runtime.t('mobile.home.syncNow')}

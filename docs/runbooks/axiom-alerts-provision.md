@@ -31,9 +31,119 @@ The queries read the signals the runtime actually emits:
   every DLQ batch.
 
 After the first apply, open each monitor in Axiom and run its query once to
-confirm it returns rows on the dataset (field names depend on the ingest
-path), then run the test fires below. The remaining entries of the table
-stay manual.
+confirm it returns rows on the dataset (see the field contract below), then
+run the test fires below. The remaining entries of the table stay manual.
+
+### Log field contract (#693)
+
+The three log-based monitors (A4, A5, A16) read these paths on the
+`AXIOM_LOGS_DATASET` events:
+
+| Monitor              | Filter                                        | Field (top level)           | Emitter                                          |
+| -------------------- | --------------------------------------------- | --------------------------- | ------------------------------------------------ |
+| A4 `queue_lag`       | `['message'] == "outbox.backlog"`             | `['ageMs']` (number)        | `emitOutboxBacklogMetric` (`drain-scheduled.ts`) |
+| A16 `outbox_backlog` | `['message'] == "outbox.backlog"`             | `['pending']` (number)      | `emitOutboxBacklogMetric` (`drain-scheduled.ts`) |
+| A5 `dlq_depth`       | `['message'] == "[dlq] drain cycle complete"` | `['totalPending']` (number) | `handleDlqBatch` (`drain-dlq.ts`)                |
+
+What the runtime guarantees:
+
+- Each of these lines is **one** `console` call with **one** argument, a
+  flat object `{ message: "<label>", ...fields }`, emitted through
+  `logEvent()` (`packages/api/src/logging.ts`). The other `outbox.*`
+  metric lines (`outbox.lane_backlog`, `outbox.drain_cycle`,
+  `outbox.drain_overlap_risk`, `athlya.outbox.drain_errors`) use the same
+  shape. Never log a monitored line as `console.log(label, meta)`: that
+  reaches the pipeline as an argument array (`["label", { … }]`), with no
+  `message` and no top-level field.
+- `packages/api/src/__tests__/axiom-log-monitors.contract.test.ts` parses
+  the queries in `axiom-monitors.tf`, runs the real emitters and fails if
+  a referenced field is missing, nested or not numeric.
+
+The log pipeline is declared in this repository (issue #697): the Tail
+Worker `athlya-axiom-tail-<env>` (`packages/api/src/workers/axiom-tail.ts`,
+`packages/api/wrangler.axiom-tail.toml`), named in `tail_consumers` by the
+staging and production envs of the four API Worker configs.
+
+- It turns each log entry whose console message is one plain object into
+  one Axiom event: the object's keys at the top level, plus `_time` and
+  `level` of the entry and `scriptName`, `outcome`, `eventTimestamp`,
+  `eventType` (`scheduled` / `queue` / `fetch`) and `cron` or `queue` from
+  the trace. A key the object sets itself (for example `outcome` on
+  `device attestation verdict`) wins. Everything else is dropped: request
+  URL and headers, exceptions, string lines and `console.log(label, meta)`
+  argument lists.
+- It posts batches of 500 events to
+  `<AXIOM_URL>/v1/datasets/<AXIOM_LOGS_DATASET>/ingest` with the
+  `AXIOM_INGEST_TOKEN` secret, 5 s per request. It never throws: a failed
+  batch is logged on the tail Worker (`wrangler tail -c
+wrangler.axiom-tail.toml --env <env>`) and lost, the producer is never
+  affected.
+- `packages/api/src/__tests__/axiom-tail.test.ts` runs the real emitters
+  through the tail Worker and checks the shipped events against the same
+  monitor contract as the runtime suite (`helpers/axiom-log-contract.ts`).
+
+Sampling: `head_sampling_rate` (0.5 on staging, 0.1 in production) is the
+Workers Logs setting of the `[observability]` block. Cloudflare documents
+it for Workers Logs only; it does not document it as applying to
+`tail_consumers`, so this pipeline is expected to receive every invocation,
+the per-minute drain cron and the queue batches included. This is checked
+on the environment, not assumed: the post-apply check below counts the
+`outbox.backlog` events of the last 15 minutes. If production returns about
+1 or 2 instead of about 15, sampling does apply to the tail: set
+`head_sampling_rate = 1.0` in `[env.production.observability]` of
+`wrangler.toml` (the Worker that runs the cron and the queue consumers) and
+redeploy it.
+
+### Setup and deploy order
+
+1. Create an Axiom API token with **ingest** permission on the logs dataset
+   only.
+2. Make the `AXIOM_LOGS_DATASET` var of `[env.<env>.vars]` in
+   `wrangler.axiom-tail.toml` equal to the `AXIOM_LOGS_DATASET` variable of
+   the GitHub environment (the Terraform monitors read that one).
+   `deploy-production.yml` (every deploy phase) and `canary.yml` refuse to
+   deploy when they differ (`scripts/axiom-tail-dataset.mjs`), before any
+   secret check, migration or deploy. `canary.yml` runs without a GitHub
+   environment: set `AXIOM_LOGS_DATASET` as a repository variable too (the
+   production dataset), or the canary stops as not provisioned.
+3. Set the secret on each environment, before any deploy (verify-secrets
+   checks it):
+   `pnpm --filter @athlya/api exec wrangler secret put AXIOM_INGEST_TOKEN -c wrangler.axiom-tail.toml --env <staging|production>`.
+4. Deploy the tail Worker **first**, then the API Workers. Cloudflare
+   refuses to deploy a Worker whose `tail_consumers` names a Worker that
+   does not exist. `deploy-production.yml` (staging and production) and
+   `canary.yml` do it in that order; by hand:
+   `pnpm --filter @athlya/api exec wrangler deploy -c wrangler.axiom-tail.toml --env <env>`.
+5. Remove any log shipping set up by hand for these Workers (a Logpush job
+   or another tail consumer to the same dataset), or every line arrives
+   twice.
+
+Post-apply check, on each environment, once the drain cron has run for a
+few minutes (each query must return rows with a non-null value):
+
+```apl
+['<AXIOM_LOGS_DATASET>']
+| where _time > now(-15m)
+| where ['message'] == "outbox.backlog"
+| project _time, ['pending'], ['ageMs'], ['scriptName'], ['eventType']
+| take 5
+```
+
+Then check that no cron tick is sampled out (one `outbox.backlog` line per
+minute, so about 15):
+
+```apl
+['<AXIOM_LOGS_DATASET>']
+| where _time > now(-15m)
+| where ['message'] == "outbox.backlog"
+| summarize count()
+```
+
+A5 only gets data after a DLQ batch: run the T3 test fire below, then
+query `['message'] == "[dlq] drain cycle complete"` and project
+`['totalPending']`. If a query returns nothing, look at the raw events
+(`| take 5` without the `where`): when `message` or the fields sit under
+a wrapper, fix the pipeline mapping, not the monitor queries.
 
 ## Prérequis
 

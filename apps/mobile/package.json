@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@athlya/shared": "workspace:*",
+    "@expo/app-integrity": "~58.0.2",
     "@expo/metro-runtime": "~58.0.14",
     "@kingstinct/react-native-healthkit": "16.2.0",
     "@react-native-community/netinfo": "12.0.1",

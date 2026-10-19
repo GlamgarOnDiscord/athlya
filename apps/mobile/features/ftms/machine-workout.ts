@@ -1,12 +1,13 @@
 /**
  * Logs a finished machine session as a workout — task 23.1, Requirement 12.1.
  *
- * The session goes through the existing `POST /v1/sessions` contract (and
- * the offline queue) without an API change: one exercise named after the
- * machine type, one set carrying the duration, and the cardio summary as
- * a readable line in `notes`. Structured cardio fields are a follow-up.
+ * The session goes through `POST /v1/sessions` (and the offline queue):
+ * one exercise named after the machine type, one set carrying the
+ * duration, the structured `cardio` summary (issue #667) and the same
+ * summary as a readable line in `notes`.
  */
 import { LogSessionRequestSchema, type LogSessionRequest } from '@athlya/shared/schemas/api';
+import { CardioMetricsSchema, type CardioMetrics } from '@athlya/shared/schemas/domain';
 
 import { toErrorModel, type ErrorModel } from '../errors';
 import { formatNumber } from '../format';
@@ -60,6 +61,37 @@ export function describeSummary(summary: SessionSummary, t: Translate, locale: L
   return parts.join(' · ');
 }
 
+/**
+ * The structured summary sent as `cardio`. A metric outside the schema
+ * bounds (a sensor glitch) is dropped on its own, so it never costs the
+ * whole session.
+ */
+export function cardioMetricsOf(summary: SessionSummary, durationSec: number): CardioMetrics {
+  const avgSpeedKmh =
+    summary.distanceM !== null && durationSec > 0
+      ? Math.round((summary.distanceM / durationSec) * 36) / 10
+      : null;
+  const candidates: { readonly [K in keyof CardioMetrics]-?: CardioMetrics[K] | null } = {
+    machine: summary.machine,
+    durationSec,
+    distanceM: summary.distanceM,
+    energyKcal: summary.energyKcal,
+    avgPowerW: summary.avgPowerW,
+    maxPowerW: summary.maxPowerW,
+    avgCadenceRpm: summary.avgCadenceRpm,
+    avgSpeedKmh,
+    avgHeartRateBpm: summary.avgHeartRateBpm,
+    maxHeartRateBpm: summary.maxHeartRateBpm,
+    strokeCount: summary.strokeCount,
+  };
+  const metrics: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(candidates)) {
+    const field = CardioMetricsSchema.shape[key as keyof CardioMetrics];
+    if (value !== null && field.safeParse(value).success) metrics[key] = value;
+  }
+  return CardioMetricsSchema.parse(metrics);
+}
+
 /** The workout request for a summary, or null when nothing was recorded. */
 export function buildMachineSessionRequest(
   summary: SessionSummary,
@@ -73,6 +105,7 @@ export function buildMachineSessionRequest(
     startedAt: new Date(summary.startedAtMs).toISOString(),
     durationMin: Math.max(1, Math.round(durationSec / 60)),
     exercises: [{ name: t(MACHINE_NAME_KEYS[summary.machine]), sets: [{ reps: 0, durationSec }] }],
+    cardio: cardioMetricsOf(summary, durationSec),
     ...(notes === '' ? {} : { notes }),
   });
   return parsed.success ? parsed.data : null;

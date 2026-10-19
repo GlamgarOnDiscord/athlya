@@ -48,25 +48,28 @@ apps/mobile/
 ├── features/                screen logic: controllers, view models, the write path (Node-tested)
 ├── infrastructure/
 │   ├── api/client.ts        createApiClient(): send/get/post/put/patch/del
+│   ├── attestation/         DeviceAttestationProvider port, Play Integrity / DeviceCheck adapters
 │   ├── auth/                TokenStore, createSessionRefresher, Expo adapters
 │   ├── ble/                 BleTransport port + react-native-ble-plx adapter
 │   ├── health/              HealthStore port, HealthKit adapter, per-user import links
 │   ├── storage/             KeyValueStore port, MMKV adapter, storage key
 │   ├── sync/                MutationQueue, drainMutationQueue, SyncController, NetInfo adapter
 │   └── runtime.ts           composition root (the only place wiring native modules)
+├── modules/device-check/    local Expo module: DeviceCheck token (iOS)
 ├── theme/preset.ts          Tailwind theme from @athlya/shared/tokens
 └── tests/                   vitest (Node): unit/ and properties/
 ```
 
-Everything under `infrastructure/` except the `expo-*`, `mmkv-store` and `netinfo-connectivity`
-adapters and `runtime.ts` is plain TypeScript behind small ports (`KeyValueStore`, `SecureStorage`,
-`BiometricAuthenticator`, `ConnectivitySource`), so `pnpm --filter @athlya/mobile test` runs in
-Node without a device or simulator.
+Everything under `infrastructure/` except the `expo-*`, `mmkv-store`, `netinfo-connectivity` and
+`native-attestation` adapters and `runtime.ts` is plain TypeScript behind small ports
+(`KeyValueStore`, `SecureStorage`, `BiometricAuthenticator`, `ConnectivitySource`,
+`DeviceAttestationProvider`), so `pnpm --filter @athlya/mobile test` runs in Node without a device or
+simulator.
 
 ## Runtime contracts
 
 - **Runtime**: `useRuntime()` (`components/RuntimeProvider.tsx`) returns `{ locale, apiBaseUrl, t,
-api, tokenStore, queue, sync, dispose }`.
+api, tokenStore, queue, preferences, sync, attestation, dispose }`.
 - **Online calls**: `runtime.api.post<T>(path, body, { idempotencyKey })` and friends throw
   `ApiError` (with the parsed `ProblemDetails`) on non-2xx, `AuthRequiredError` when the session
   cannot be refreshed, `NetworkError` when no response arrived.
@@ -83,7 +86,8 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
   `runtime.queue.deadLetters(userId)` / `discardDeadLetter(id, userId)` back the "rejected changes"
   view and never return or delete another account's entries.
 - **Sign-in**: `POST /v1/auth/login` goes out with `{ authenticated: false, headers: {
-'cf-turnstile-token': token } }` (see [Bot protection](#bot-protection-turnstile)); then pass
+'cf-turnstile-token': token } }` (see [Bot protection](#bot-protection-turnstile)), plus the
+  device attestation headers when available (see [Device attestation](#device-attestation)); then pass
   `{ ...session, userId: session.user.id }` to `runtime.tokenStore.saveSession()`.
   `await setBiometricUnlockEnabled(true)` resolves `true` only when the gate is on: it resolves
   `false`, enabling nothing, when biometrics are unavailable or the prompt is declined, so show the
@@ -108,6 +112,7 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
 | `/reservations` | Upcoming reservations, cancellation until 2 h before the class                               | `GET /v1/reservations/me`, `DELETE /v1/reservations/{id}`                                       |
 | `/workout`      | Workout log: exercises, sets, reps, weight, duration, notes (11.10)                          | `POST /v1/sessions`                                                                             |
 | `/progression`  | Progression graphs over 30/90/365 days: volume, estimated 1RM, weekly frequency (22.2)       | `GET /v1/me/progression?window=30\|90\|365` (ETag / `If-None-Match`)                            |
+| `/coach`        | AI coach behind the `ai-coach` flag: consent notice, question, streamed answer (21.2)        | `GET /v1/coach`, `POST /v1/coach/ask` (`Accept: text/event-stream`)                             |
 | `/checkin`      | Rotating single-use QR code staff scan at the front desk (11.9)                              | `POST /v1/checkins/token` (body `{}`)                                                           |
 | `/settings`     | Biometric unlock, Apple Health (iOS, 18.1), rejected changes (DLQ), RGPD export and deletion | `GET /v1/members/me`, `POST /v1/sessions`, `POST /v1/members/me/export`, `DELETE /v1/auth/me`   |
 
@@ -142,6 +147,22 @@ chart is one `image` element whose label holds its key numbers: days trained, da
 highest and lowest value, or weeks and sessions for the frequency chart. A chart with nothing to draw
 shows a text empty state instead.
 
+**AI coach** (`features/coach/`, task 21.2, issue #676): the home screen shows the coach entry only
+when `GET /v1/coach` answers `enabled: true`. Without the `thirdParty` consent the screen says where
+to grant it (the consents form on the web profile; the app has no consents form yet) and asks
+nothing. The answer is streamed: since SDK 52 Expo installs `expo/fetch` as the global `fetch`
+(`expo/src/winter/runtime.native.ts`, unless `EXPO_PUBLIC_USE_RN_FETCH` is set), and its response
+exposes `body` as a `ReadableStream` fed by the native module, so `runtime.api.postStream()` sends
+`Accept: text/event-stream` and hands the body to the shared SSE parser (`@athlya/shared/sse`,
+`@athlya/shared/coach-stream`), the one the web uses. The 15 s client timeout only covers the wait
+for the response headers. `partial` snapshots render as a provisional card, replaced by the `done`
+answer and dropped on an `error` event; refusals before the stream opens (403 consent, 404 flag
+off, 429 quota or burst, 503) keep their problem statuses, and a JSON answer is still accepted.
+Asking again or leaving the screen aborts the request, which aborts the provider call. Screen
+readers only hear the final answer, once: the provisional card is not a live region, the answer is
+(Android), and iOS announces it. `expo/fetch` ships with `expo`, so no new native module is
+involved.
+
 **QR check-in** (`features/checkin/checkin-token.ts`, `CheckinTokenController`): the screen fetches a
 token when it gains focus with the app in the foreground and stops (timers cleared, request in
 flight aborted) when it loses focus or the app leaves the foreground (`AppState`). The next token is
@@ -163,7 +184,7 @@ added since the anchor, 50 per page, and logs each one through `submitWrite` as 
 named after the activity, with distance, energy and heart rate in `notes`, `source: { provider:
 'appleHealth', externalId: <workout UUID> }` and an `Idempotency-Key` derived from that UUID
 (SHA-256 laid out as a UUID v4). The API keeps one session per `(user, source, external_id)`
-(migration 0047), so a re-import, a reinstall or a second device never duplicates a session. The
+(migration 0048), so a re-import, a reinstall or a second device never duplicates a session. The
 anchor only moves once a whole page went through; any API error stops the run. Workouts deleted in
 Apple Health stay in Athlya. Disconnecting forgets the link; the read permission is revoked in the
 Health app. `@kingstinct/react-native-healthkit` is a native module: a new EAS build is needed.
@@ -259,8 +280,33 @@ site key makes the page answer `500 configuration_error` and the app shows the f
 4. **Release build** — sign in and register from a `preview` build against staging, then from a
    `production` build.
 
-Hardware attestation (App Attest on iOS, Play Integrity on Android) as an additional signal is a
-separate follow-up (#659), not part of this flow.
+### Device attestation
+
+The API can verify Play Integrity (Android) and DeviceCheck (iOS) tokens as an **extra** signal
+after Turnstile (#659). The app sends them on sign-in and registration (#686), next to
+`cf-turnstile-token`:
+
+- `x-device-attestation-platform`: `android` or `ios`
+- `x-device-attestation-token`: at most 16 384 characters
+
+Once the Turnstile token is received, `features/auth/attestation.ts` computes the Android
+`requestHash` = base64url (no padding) of SHA-256(`athlya-auth-v1:<login|register>:<turnstile
+token>`), the same value as the API's `computeAttestationRequestHash`, and asks the device for a
+token through the `DeviceAttestationProvider` port (`infrastructure/attestation/`):
+
+- **Android**: `@expo/app-integrity` (Play Integrity standard request). The token provider is
+  prepared once, with `EXPO_PUBLIC_PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER`, when the sign-in or
+  registration screen opens, then `requestIntegrityCheckAsync(requestHash)` runs per request.
+- **iOS**: DeviceCheck (`DCDevice.generateToken`) through the local Expo module
+  `modules/device-check` (`AthlyaDeviceCheck`). `@expo/app-integrity` only offers App Attest on
+  iOS, which the API does not verify yet.
+
+Best effort: no provider (missing project number, simulator, unsupported device, a build without
+the native modules), a native error, a token that is too long or not header-safe, or no answer
+within 2 s sends the request without these headers. Attestation never blocks a sign-in, and the
+server ignores requests without the headers whatever its `DEVICE_ATTESTATION_MODE`. The web client
+sends none. Both native modules need a new development or EAS build. Contract, modes and operator
+steps: [`docs/runbooks/device-attestation.md`](../runbooks/device-attestation.md).
 
 ## Drain semantics (Algorithm 4)
 
@@ -291,7 +337,8 @@ cd apps/mobile
 EXPO_PUBLIC_API_URL=http://10.0.2.2:8787 pnpm android   # or: pnpm ios (macOS)
 ```
 
-Native modules (MMKV, SecureStore, LocalAuthentication, NetInfo) need a development build
+Native modules (MMKV, SecureStore, LocalAuthentication, NetInfo, app integrity, DeviceCheck) need a
+development build
 (`expo run:*` or EAS); Expo Go is not supported. `EXPO_PUBLIC_API_URL` is mandatory (no fallback:
 the app refuses to boot and EAS builds fail without it) and must be HTTPS except for loopback
 hosts. EAS profiles pin it in `eas.json` (`preview` → `https://staging.api.athlya.app`).

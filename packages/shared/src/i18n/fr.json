@@ -727,6 +727,9 @@
         "noSessions": "Aucune séance enregistrée sur cette période : pas de fréquence hebdomadaire à afficher."
       }
     },
+    "coach": {
+      "consentRequired": "Le coach IA a besoin de votre consentement au partage de données avec des tiers. Vous pouvez le donner dans la section consentements de votre profil sur le site Athlya."
+    },
     "machine": {
       "title": "Machine connectée",
       "intro": "Connectez un vélo, un tapis, un rameur ou un elliptique compatible Bluetooth FTMS. Gardez l’app ouverte pendant la séance.",
@@ -814,6 +817,36 @@
           "connectFailed": "Connexion à la ceinture impossible. Rapprochez-vous et réessayez.",
           "notHeartRate": "Cet appareil ne partage pas de fréquence cardiaque en Bluetooth.",
           "linkLost": "Connexion à la ceinture perdue. La séance sur la machine continue."
+        }
+      },
+      "control": {
+        "title": "Pilotage de la machine",
+        "intro": "Laissez Athlya régler la résistance ou la puissance cible de la machine (mode ERG).",
+        "request": "Prendre le contrôle",
+        "locked": "Prenez le contrôle de la machine pour modifier ses réglages.",
+        "granted": "Athlya pilote la machine.",
+        "release": "Rendre le contrôle",
+        "power": "Puissance cible",
+        "resistance": "Résistance cible",
+        "notSet": "Non définie",
+        "level": "Niveau {value}",
+        "increase": "Augmenter : {name}",
+        "decrease": "Diminuer : {name}",
+        "start": "Démarrer",
+        "pause": "Pause",
+        "stop": "Arrêter",
+        "run": {
+          "started": "La machine est en marche.",
+          "paused": "La machine est en pause.",
+          "stopped": "La machine est arrêtée."
+        },
+        "errors": {
+          "notPermitted": "La machine n’a pas donné le contrôle à Athlya. Fermez toute autre app qui l’utilise, puis réessayez.",
+          "notSupported": "La machine ne prend pas en charge cette commande.",
+          "invalidParameter": "La machine a refusé cette valeur.",
+          "failed": "La machine n’a pas pu appliquer la commande. Réessayez.",
+          "timeout": "La machine n’a pas répondu. Réessayez.",
+          "controlLost": "La machine a repris le contrôle (bouton de sa console ou autre app). Reprenez le contrôle pour continuer."
         }
       }
     },
@@ -928,6 +961,7 @@
     "quotaExhausted": "Vous avez utilisé toutes vos questions pour aujourd'hui. Revenez demain.",
     "answer": {
       "title": "Réponse du coach",
+      "provisional": "Réponse en cours de rédaction…",
       "recommendations": "Recommandations",
       "caution": "Attention",
       "disclaimer": "Conseils générés par IA. Ils ne remplacent ni un coach ni un professionnel de santé."

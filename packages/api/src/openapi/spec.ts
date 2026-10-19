@@ -21,6 +21,8 @@ import {
   BookingRequestSchema,
   BookingResponseSchema,
   CancelReservationParamsSchema,
+  CardioProgressionQuerySchema,
+  CardioProgressionResponseSchema,
   CheckInRequestSchema,
   CheckInResponseSchema,
   CheckInTokenResponseSchema,
@@ -142,11 +144,20 @@ const turnstileChallengeRoute = createRoute({
   },
 });
 
+const deviceAttestationDescription =
+  'Requires a `cf-turnstile-token` header. Mobile clients may also send ' +
+  '`x-device-attestation-platform` (`android` | `ios`) and `x-device-attestation-token` ' +
+  '(Play Integrity token whose `requestHash` is base64url(SHA-256(' +
+  '`athlya-auth-v1:<login|register>:<cf-turnstile-token>`)), or Apple DeviceCheck token). ' +
+  'The signal is off by default; with `DEVICE_ATTESTATION_MODE=enforce` a presented attestation ' +
+  'that fails answers 403 `device_attestation_failed`.';
+
 const registerRoute = createRoute({
   method: 'post',
   path: '/v1/auth/register',
   tags: ['auth'],
   summary: 'Register a new member',
+  description: deviceAttestationDescription,
   request: {
     body: {
       content: { 'application/json': { schema: RegisterRequestSchema } },
@@ -174,6 +185,7 @@ const loginRoute = createRoute({
   path: '/v1/auth/login',
   tags: ['auth'],
   summary: 'Authenticate with email + password',
+  description: deviceAttestationDescription,
   request: {
     body: {
       content: { 'application/json': { schema: LoginRequestSchema } },
@@ -746,7 +758,9 @@ const logSessionRoute = createRoute({
     "caller's studio when present. Send an `Idempotency-Key` header: a retry with the same key " +
     'replays the stored response instead of logging the session twice. A session imported from ' +
     'another app carries `source` (provider and workout id there): importing the same workout ' +
-    'again logs nothing and answers 201 with the session already stored.',
+    'again logs nothing and answers 201 with the session already stored. A session recorded on a ' +
+    'cardio machine may carry `cardio`, its structured summary (every metric optional); the ' +
+    'response and `GET /v1/sessions/me` return it, and omit the key on sessions without one.',
   security: [{ bearerAuth: [] }],
   request: {
     headers: z.object({
@@ -832,6 +846,45 @@ const progressionRoute = createRoute({
     },
     422: {
       description: 'Invalid window',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    429: {
+      description: 'Rate limited',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    503: {
+      description: 'Rate limiter unavailable (fail-closed, code `dependency_unavailable`)',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+  },
+});
+
+const cardioProgressionRoute = createRoute({
+  method: 'get',
+  path: '/v1/me/progression/cardio',
+  tags: ['members'],
+  summary: 'Per-machine cardio series (moving time, distance, energy, power, heart rate)',
+  description:
+    'Aggregates the structured `cardio` summary of the caller workout sessions over the ' +
+    'last 30, 90 or 365 UTC days, per machine, in zero-filled UTC-day or ISO-week ' +
+    '(Monday, UTC) buckets, plus one point per session. Bucket power and heart rate ' +
+    'averages are weighted by moving time. Sessions without a `cardio` summary are ' +
+    'ignored. Separate from `/v1/me/progression`, whose body is unchanged. Sends ' +
+    '`Cache-Control: private, max-age=60` and an ETag; a matching `If-None-Match` returns 304.',
+  security: [{ bearerAuth: [] }],
+  request: { query: CardioProgressionQuerySchema },
+  responses: {
+    200: {
+      description: 'Cardio progression for the requested window and bucket',
+      content: { 'application/json': { schema: CardioProgressionResponseSchema } },
+    },
+    304: { description: 'Not modified (ETag matched)' },
+    401: {
+      description: 'Not authenticated',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    422: {
+      description: 'Invalid window or bucket',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     429: {
@@ -1346,6 +1399,7 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
 
   // me
   app.openapi(progressionRoute, stub);
+  app.openapi(cardioProgressionRoute, stub);
 
   // coach
   app.openapi(coachStatusRoute, stub);

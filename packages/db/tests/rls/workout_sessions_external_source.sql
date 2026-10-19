@@ -1,5 +1,5 @@
 -- =====================================================================
--- workout_sessions_external_source.sql — migration 0047 (issue #688)
+-- workout_sessions_external_source.sql — migration 0048 (issue #688)
 --
 -- Imported sessions carry their source app and the workout id there.
 -- Both columns are nullable with no default (expand only); the partial

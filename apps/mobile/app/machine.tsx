@@ -4,6 +4,7 @@ import { Text, View } from 'react-native';
 
 import { SignedIn, useWriteDeps } from '../components/AppSession';
 import { ErrorNotice } from '../components/ErrorNotice';
+import { MachineControlCard } from '../components/MachineControlCard';
 import { useRuntime } from '../components/RuntimeProvider';
 import { AppText } from '../components/ui/AppText';
 import { Button } from '../components/ui/Button';
@@ -360,6 +361,13 @@ function Machine() {
           ))}
         </Card>
       )}
+
+      {state.status === 'streaming' ? (
+        <MachineControlCard
+          control={controller.control}
+          measuredPowerW={state.session?.latest.powerW ?? null}
+        />
+      ) : null}
 
       <StrapCard
         strap={strap}

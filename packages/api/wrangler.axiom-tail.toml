@@ -1,0 +1,54 @@
+# ----------------------------------------------------------------------------
+# athlya-axiom-tail — Axiom log pipeline Tail Worker (issue #697)
+#
+# The API Workers name this Worker in `tail_consumers` (staging and
+# production envs of wrangler.toml, wrangler.auth.toml,
+# wrangler.reservations.toml, wrangler.billing.toml). It flattens each
+# single-object console line (`logEvent()`) into one Axiom event and posts
+# it to the logs dataset the SLO monitors read (infra/terraform/
+# axiom-monitors.tf, docs/runbooks/axiom-alerts-provision.md).
+#
+# Deploy order: this Worker FIRST, then the API Workers. Cloudflare
+# refuses to deploy a producer whose tail consumer does not exist
+# (deploy-production.yml and canary.yml deploy it first).
+#
+# Secrets (set once per env via `wrangler secret put --config wrangler.axiom-tail.toml`):
+#   AXIOM_INGEST_TOKEN
+# AXIOM_INGEST_TOKEN is an Axiom API token with ingest permission on the
+# logs dataset only. scripts/verify-secrets.mjs checks it.
+# Vars: AXIOM_LOGS_DATASET (same value as the Terraform AXIOM_LOGS_DATASET
+# variable of the env), optional AXIOM_URL (default https://api.axiom.co).
+#
+# No `[observability]` and no `tail_consumers` here: the tail Worker's own
+# errors go to its `wrangler tail`, never back into the pipeline.
+# ----------------------------------------------------------------------------
+
+name = "athlya-axiom-tail"
+main = "src/workers/axiom-tail.ts"
+compatibility_date = "2026-03-01"
+workers_dev = false
+
+[vars]
+AXIOM_LOGS_DATASET = "athlya-logs-dev"
+
+# ============================================================================
+# Staging
+# ============================================================================
+
+[env.staging]
+name = "athlya-axiom-tail-staging"
+workers_dev = false
+
+[env.staging.vars]
+AXIOM_LOGS_DATASET = "athlya-logs"
+
+# ============================================================================
+# Production
+# ============================================================================
+
+[env.production]
+name = "athlya-axiom-tail-production"
+workers_dev = false
+
+[env.production.vars]
+AXIOM_LOGS_DATASET = "athlya-logs"

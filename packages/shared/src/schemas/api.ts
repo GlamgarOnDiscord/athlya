@@ -24,7 +24,14 @@
 
 import { z } from 'zod';
 
-import { ClassSchema, ExerciseSchema, ReservationSchema, UserSchema } from './domain.js';
+import {
+  CARDIO_MACHINES,
+  CardioMetricsSchema,
+  ClassSchema,
+  ExerciseSchema,
+  ReservationSchema,
+  UserSchema,
+} from './domain.js';
 import {
   ClassIdSchema,
   HexColorSchema,
@@ -511,8 +518,10 @@ export type SessionSource = z.infer<typeof SessionSourceSchema>;
 
 /**
  * `POST /v1/sessions`. `studioId` is optional for solo workouts done
- * outside a partner studio (Requirement 12.1); `source` is set on
- * sessions imported from another app.
+ * outside a partner studio (Requirement 12.1). `cardio` carries the
+ * structured summary of a machine session (issue #667); clients that
+ * predate it simply omit it. `source` is set on sessions imported from
+ * another app.
  */
 export const LogSessionRequestSchema = z
   .object({
@@ -520,6 +529,7 @@ export const LogSessionRequestSchema = z
     durationMin: z.number().int().positive().optional(),
     exercises: z.array(ExerciseSchema).max(50),
     notes: z.string().max(2000).optional(),
+    cardio: CardioMetricsSchema.optional(),
     studioId: StudioIdSchema.optional(),
     source: SessionSourceSchema.optional(),
   })
@@ -635,6 +645,126 @@ export const ProgressionResponseSchema = z
   .strict();
 
 export type ProgressionResponse = z.infer<typeof ProgressionResponseSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  cardio progression — /v1/me/progression/cardio                     */
+/* ------------------------------------------------------------------ */
+
+/** Bucket sizes of the cardio series: one UTC day or one ISO week. */
+export const CARDIO_PROGRESSION_BUCKETS = ['day', 'week'] as const;
+
+export type CardioProgressionBucket = (typeof CARDIO_PROGRESSION_BUCKETS)[number];
+
+/**
+ * Machine key of a cardio series: one of {@link CARDIO_MACHINES}, or
+ * `unspecified` for sessions whose summary does not name the machine.
+ */
+export const CARDIO_PROGRESSION_MACHINES = [...CARDIO_MACHINES, 'unspecified'] as const;
+
+export type CardioProgressionMachine = (typeof CARDIO_PROGRESSION_MACHINES)[number];
+
+/**
+ * `GET /v1/me/progression/cardio?window=30|90|365&bucket=day|week`
+ * query. `window` defaults to 90 days and `bucket` to `week`.
+ */
+export const CardioProgressionQuerySchema = z
+  .object({
+    window: z.enum(['30', '90', '365']).default('90'),
+    bucket: z.enum(CARDIO_PROGRESSION_BUCKETS).default('week'),
+  })
+  .strict();
+
+export type CardioProgressionQuery = z.infer<typeof CardioProgressionQuerySchema>;
+
+/** Summed cardio quantities. A metric a session did not report adds 0. */
+export const CardioTotalsSchema = z
+  .object({
+    durationSec: z.number().int().nonnegative(),
+    distanceM: z.number().int().nonnegative(),
+    energyKcal: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export type CardioTotals = z.infer<typeof CardioTotalsSchema>;
+
+/**
+ * One bucket (UTC day or ISO week starting Monday) of one machine.
+ * `avgPowerW` and `avgHeartRateBpm` are the moving-time weighted means
+ * of the sessions that reported them (plain mean when none of those
+ * sessions reported a duration), rounded to 0.1, or `null` when no
+ * session of the bucket reported the metric.
+ */
+export const CardioSeriesBucketSchema = z
+  .object({
+    periodStart: UtcDaySchema,
+    sessions: z.number().int().nonnegative(),
+    durationSec: z.number().int().nonnegative(),
+    distanceM: z.number().int().nonnegative(),
+    energyKcal: z.number().int().nonnegative(),
+    avgPowerW: z.number().nonnegative().nullable(),
+    avgHeartRateBpm: z.number().nonnegative().nullable(),
+  })
+  .strict();
+
+export type CardioSeriesBucket = z.infer<typeof CardioSeriesBucketSchema>;
+
+/** One session of one machine, for per-session trend lines. */
+export const CardioSessionPointSchema = z
+  .object({
+    startedAt: IsoDateTimeSchema,
+    durationSec: z.number().int().nonnegative().nullable(),
+    distanceM: z.number().int().nonnegative().nullable(),
+    avgPowerW: z.number().int().nonnegative().nullable(),
+    avgSpeedKmh: z.number().nonnegative().nullable(),
+    avgHeartRateBpm: z.number().int().nonnegative().nullable(),
+  })
+  .strict();
+
+export type CardioSessionPoint = z.infer<typeof CardioSessionPointSchema>;
+
+/** Cardio progression of one machine over the window. */
+export const CardioMachineProgressionSchema = z
+  .object({
+    machine: z.enum(CARDIO_PROGRESSION_MACHINES),
+    sessionCount: z.number().int().positive(),
+    totals: CardioTotalsSchema,
+    /** Zero-filled, ascending, one entry per bucket of the window. */
+    series: z.array(CardioSeriesBucketSchema),
+    /** One point per session, ascending by `startedAt`. */
+    points: z.array(CardioSessionPointSchema),
+  })
+  .strict();
+
+export type CardioMachineProgression = z.infer<typeof CardioMachineProgressionSchema>;
+
+/**
+ * `GET /v1/me/progression/cardio` response, computed from the
+ * structured `cardio` summary of the caller's sessions (issue #683).
+ *
+ * Same window as {@link ProgressionResponseSchema}: `windowDays` whole
+ * UTC days ending with today, `[from, to)`. `machines` lists only the
+ * machines with at least one session, in {@link CARDIO_PROGRESSION_MACHINES}
+ * order. Sessions without a `cardio` summary are not counted; rows whose
+ * summary fails validation are counted in `skippedSessions`. This is a
+ * separate contract so `GET /v1/me/progression` stays unchanged for
+ * installed clients that parse it strictly.
+ */
+export const CardioProgressionResponseSchema = z
+  .object({
+    windowDays: z.union([z.literal(30), z.literal(90), z.literal(365)]),
+    from: IsoDateTimeSchema,
+    to: IsoDateTimeSchema,
+    bucket: z.enum(CARDIO_PROGRESSION_BUCKETS),
+    totals: CardioTotalsSchema.extend({
+      sessions: z.number().int().nonnegative(),
+    }).strict(),
+    machines: z.array(CardioMachineProgressionSchema).max(CARDIO_PROGRESSION_MACHINES.length),
+    truncated: z.boolean(),
+    skippedSessions: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export type CardioProgressionResponse = z.infer<typeof CardioProgressionResponseSchema>;
 
 /* ------------------------------------------------------------------ */
 /*  coach — /v1/coach                                                  */

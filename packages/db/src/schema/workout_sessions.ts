@@ -38,7 +38,7 @@ import { studios } from './studios.js';
 import { users } from './users.js';
 
 import type { SessionSourceProvider } from '@athlya/shared/schemas/api';
-import type { Exercise } from '@athlya/shared/schemas/domain';
+import type { CardioMetrics, Exercise } from '@athlya/shared/schemas/domain';
 
 export const workoutSessions = pgTable(
   'workout_sessions',
@@ -67,11 +67,18 @@ export const workoutSessions = pgTable(
     idempotencyKey: text('idempotency_key'),
     /**
      * App an imported session comes from, and the workout id there
-     * (migration 0047, task 18.1). Both NULL on sessions logged in
+     * (migration 0048, task 18.1). Both NULL on sessions logged in
      * Athlya; set together on imported ones.
      */
     source: text('source').$type<SessionSourceProvider>(),
     externalId: text('external_id'),
+    /**
+     * Structured cardio summary of a machine session (migration 0046,
+     * issue #667), validated by `CardioMetricsSchema` at the API edge.
+     * Nullable: sessions without one, and rows written by older Workers.
+     * A CHECK keeps it a JSON object (never a double-encoded string).
+     */
+    cardio: jsonb('cardio').$type<CardioMetrics>(),
   },
   (table) => [
     /**
@@ -99,6 +106,10 @@ export const workoutSessions = pgTable(
     check(
       'workout_sessions_external_id_length',
       sql`char_length(${table.externalId}) BETWEEN 1 AND 128`,
+    ),
+    check(
+      'workout_sessions_cardio_object',
+      sql`${table.cardio} IS NULL OR jsonb_typeof(${table.cardio}) = 'object'`,
     ),
   ],
 );

@@ -81,21 +81,27 @@ test('axe: /me/progression (authenticated, charts rendered)', async ({ page }) =
 });
 
 test('axe: /me/coach (authenticated, answer rendered)', async ({ page }) => {
+  // The streamed answer (`Accept: text/event-stream`): one partial
+  // snapshot, then the validated answer.
   await page.route('**/v1/coach/ask', async (route) => {
+    const partial = { summary: 'Your squat volume is steady' };
+    const answer = {
+      advice: {
+        summary: 'Your squat volume is steady over the last four weeks.',
+        recommendations: [
+          { title: 'Add a back-off set', detail: 'One set at 80 % after your top set.' },
+        ],
+        caution: null,
+      },
+      quota: { limit: 10, remaining: 8, resetsAt: '2026-10-16T00:00:00.000Z' },
+      generatedAt: '2026-10-15T14:30:00.000Z',
+    };
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        advice: {
-          summary: 'Your squat volume is steady over the last four weeks.',
-          recommendations: [
-            { title: 'Add a back-off set', detail: 'One set at 80 % after your top set.' },
-          ],
-          caution: null,
-        },
-        quota: { limit: 10, remaining: 8, resetsAt: '2026-10-16T00:00:00.000Z' },
-        generatedAt: '2026-10-15T14:30:00.000Z',
-      }),
+      contentType: 'text/event-stream',
+      body:
+        `event: partial\ndata: ${JSON.stringify(partial)}\n\n` +
+        `event: done\ndata: ${JSON.stringify(answer)}\n\n`,
     });
   });
   const askButton = page.getByRole('button', { name: /interroger le coach|ask the coach/i });

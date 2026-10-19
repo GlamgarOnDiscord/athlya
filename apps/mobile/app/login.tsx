@@ -9,6 +9,7 @@ import { Button } from '../components/ui/Button';
 import { Notice } from '../components/ui/Notice';
 import { ScrollScreen } from '../components/ui/ScrollScreen';
 import { TextField } from '../components/ui/TextField';
+import { warmUpAttestation } from '../features/auth/attestation';
 import { signIn, type AuthResult } from '../features/auth/auth';
 
 export default function LoginScreen() {
@@ -29,6 +30,10 @@ export default function LoginScreen() {
     },
     [],
   );
+
+  useEffect(() => {
+    warmUpAttestation(runtime.attestation);
+  }, [runtime]);
 
   const submit = () => {
     const turnstileToken = challenge.token;

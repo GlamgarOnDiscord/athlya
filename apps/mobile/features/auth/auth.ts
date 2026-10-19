@@ -4,7 +4,9 @@
  * After `login` / `register` the session is stored through
  * `tokenStore.saveSession({ ...session, userId: session.user.id })` and
  * `sync.refreshOwner()` points the offline drain at the new user; sign-out
- * clears the store and refreshes the owner the same way.
+ * clears the store and refreshes the owner the same way. Device attestation
+ * headers (`./attestation`) ride along with the Turnstile token when the
+ * device can produce them.
  */
 import {
   LoginRequestSchema,
@@ -16,6 +18,7 @@ import {
 
 import { toErrorModel, type ErrorModel } from '../errors';
 
+import { attestationHeaders, type AttestationAction, type AttestationDeps } from './attestation';
 import { TURNSTILE_TOKEN_HEADER } from './turnstile';
 
 import type { ApiClient } from '../../infrastructure/api/client';
@@ -31,6 +34,8 @@ export interface AuthDeps {
     'saveSession' | 'clear' | 'getAccessToken' | 'lock' | 'isUnlocked' | 'readRefreshToken'
   >;
   readonly sync: Pick<SyncController, 'refreshOwner' | 'syncNow'>;
+  /** Without it, requests carry no device attestation headers. */
+  readonly attestation?: AttestationDeps;
 }
 
 export type FieldErrors = Readonly<Partial<Record<string, TranslationKeys>>>;
@@ -75,20 +80,36 @@ function fieldErrors(error: z.ZodError): FieldErrors {
   return result;
 }
 
+const AUTH_PATHS: Readonly<Record<AttestationAction, string>> = {
+  login: '/v1/auth/login',
+  register: '/v1/auth/register',
+};
+
+async function requestHeaders(
+  deps: AuthDeps,
+  action: AttestationAction,
+  turnstileToken: string | null | undefined,
+): Promise<Readonly<Record<string, string>> | null> {
+  if (turnstileToken === undefined || turnstileToken === null || turnstileToken === '') return null;
+  return {
+    [TURNSTILE_TOKEN_HEADER]: turnstileToken,
+    ...(await attestationHeaders(deps.attestation, action, turnstileToken)),
+  };
+}
+
 async function startSession(
   deps: AuthDeps,
-  path: '/v1/auth/login' | '/v1/auth/register',
+  action: AttestationAction,
   body: LoginRequest | RegisterRequest,
   turnstileToken: string | null | undefined,
   signal: AbortSignal | undefined,
 ): Promise<AuthResult> {
   try {
-    const raw = await deps.api.post<unknown>(path, body, {
+    const headers = await requestHeaders(deps, action, turnstileToken);
+    const raw = await deps.api.post<unknown>(AUTH_PATHS[action], body, {
       authenticated: false,
       ...(signal === undefined ? {} : { signal }),
-      ...(turnstileToken === undefined || turnstileToken === null || turnstileToken === ''
-        ? {}
-        : { headers: { [TURNSTILE_TOKEN_HEADER]: turnstileToken } }),
+      ...(headers === null ? {} : { headers }),
     });
     const session = SessionResponseSchema.parse(raw);
     await deps.tokenStore.saveSession({ ...session, userId: session.user.id });
@@ -118,7 +139,7 @@ export function signIn(
   if (!parsed.success) {
     return Promise.resolve({ ok: false, error: null, fieldErrors: fieldErrors(parsed.error) });
   }
-  return startSession(deps, '/v1/auth/login', parsed.data, input.turnstileToken, signal);
+  return startSession(deps, 'login', parsed.data, input.turnstileToken, signal);
 }
 
 export function register(
@@ -136,7 +157,7 @@ export function register(
   if (!parsed.success) {
     return Promise.resolve({ ok: false, error: null, fieldErrors: fieldErrors(parsed.error) });
   }
-  return startSession(deps, '/v1/auth/register', parsed.data, input.turnstileToken, signal);
+  return startSession(deps, 'register', parsed.data, input.turnstileToken, signal);
 }
 
 /** How long sign-out waits for the server-side revocation before going on. */

@@ -1,5 +1,5 @@
 -- =====================================================================
--- 0047 — imported workout sessions (task 18.1, issue #688)
+-- 0048 — imported workout sessions (task 18.1, issue #688)
 --
 -- The mobile app imports Apple Health workouts as sessions. Each one
 -- carries the app it comes from (`source`) and the workout id there
@@ -15,9 +15,9 @@
 -- passes them. The owner-only RLS policies of 0001 cover the new
 -- columns unchanged.
 --
--- Numbered 0047 because 0046 is claimed by the cardio metrics change
--- (#684); the migrator tracks applied files by name, so the two apply
--- in either order.
+-- Numbered 0048 because 0046 and 0047 are claimed by the cardio
+-- metrics change (#684) and the idempotency key purge (#689); the
+-- migrator tracks applied files by name, so they apply in any order.
 -- =====================================================================
 
 ALTER TABLE "workout_sessions" ADD COLUMN IF NOT EXISTS "source" text;--> statement-breakpoint

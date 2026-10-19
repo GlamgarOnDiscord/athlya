@@ -1,12 +1,15 @@
 /**
  * Composition root: wires the device adapters (MMKV, SecureStore,
- * LocalAuthentication, NetInfo, expo-crypto) into the platform-free
- * infrastructure modules. Everything below this file is testable in Node.
+ * LocalAuthentication, NetInfo, expo-crypto, Play Integrity, DeviceCheck)
+ * into the platform-free infrastructure modules. Everything below this
+ * file is testable in Node.
  */
 import { createTranslator, type Locale, type TranslationKeys } from '@athlya/shared/i18n';
 import * as Crypto from 'expo-crypto';
+import { Platform } from 'react-native';
 
 import { createApiClient, type ApiClient } from './api/client';
+import { createNativeAttestationProvider } from './attestation/native-attestation';
 import { createExpoBiometricAuthenticator } from './auth/expo-biometrics';
 import { createExpoSecureStorage } from './auth/expo-secure-storage';
 import { createSessionRefresher } from './auth/session';
@@ -22,6 +25,7 @@ import { SyncController } from './sync/sync-controller';
 
 import type { HealthStore } from './health/ports';
 import type { KeyValueStore } from './storage/key-value-store';
+import type { AttestationDeps } from '../features/auth/attestation';
 
 export interface AppRuntime {
   readonly locale: Locale;
@@ -37,6 +41,8 @@ export interface AppRuntime {
   /** Apple Health (HealthKit, iOS only) and the per-user import links. */
   readonly health: HealthStore;
   readonly healthLinks: AppleHealthLinkStore;
+  /** Device attestation on sign-in and registration; `provider` is null when unavailable. */
+  readonly attestation: AttestationDeps;
   /** Releases native listeners (NetInfo). */
   readonly dispose: () => void;
 }
@@ -69,6 +75,14 @@ export async function createAppRuntime(): Promise<AppRuntime> {
     connectivity,
     getOwnerId: () => tokenStore.getUserId(),
   });
+  const attestation: AttestationDeps = {
+    provider: createNativeAttestationProvider({
+      os: Platform.OS,
+      cloudProjectNumber: process.env.EXPO_PUBLIC_PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER,
+    }),
+    sha256: async (data) =>
+      new Uint8Array(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, data)),
+  };
   return {
     locale,
     apiBaseUrl: baseUrl,
@@ -80,6 +94,7 @@ export async function createAppRuntime(): Promise<AppRuntime> {
     sync,
     health: createHealthKitStore(),
     healthLinks,
+    attestation,
     dispose: () => connectivity.dispose(),
   };
 }

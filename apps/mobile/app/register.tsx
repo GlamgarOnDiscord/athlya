@@ -10,6 +10,7 @@ import { Notice } from '../components/ui/Notice';
 import { ScrollScreen } from '../components/ui/ScrollScreen';
 import { TextField } from '../components/ui/TextField';
 import { ToggleRow } from '../components/ui/ToggleRow';
+import { warmUpAttestation } from '../features/auth/attestation';
 import { register, type AuthResult, type RegisterInput } from '../features/auth/auth';
 
 type Consents = RegisterInput['consents'];
@@ -37,6 +38,10 @@ export default function RegisterScreen() {
     },
     [],
   );
+
+  useEffect(() => {
+    warmUpAttestation(runtime.attestation);
+  }, [runtime]);
 
   const submit = () => {
     const turnstileToken = challenge.token;

@@ -153,6 +153,7 @@ export function lazyMembersDeps(resolve: () => MembersDeps): MembersDeps {
     openExportDownload: forward('openExportDownload'),
     listMembersByStudio: forward('listMembersByStudio'),
     getProgression: forward('getProgression'),
+    getCardioProgression: forward('getCardioProgression'),
   };
 }
 
@@ -420,6 +421,7 @@ export function defaultMembersDeps(env: AthlyaBindings, cf?: RequestCf): Members
         openExportDownload: () => notImplemented('members.openExportDownload'),
         listMembersByStudio: () => notImplemented('members.listMembersByStudio'),
         getProgression: () => notImplemented('members.getProgression'),
+        getCardioProgression: () => notImplemented('members.getCardioProgression'),
       };
 }
 

@@ -99,6 +99,16 @@
       "types": "./src/charts.ts",
       "import": "./dist/charts.js",
       "default": "./src/charts.ts"
+    },
+    "./sse": {
+      "types": "./src/sse.ts",
+      "import": "./dist/sse.js",
+      "default": "./src/sse.ts"
+    },
+    "./coach-stream": {
+      "types": "./src/coach-stream.ts",
+      "import": "./dist/coach-stream.js",
+      "default": "./src/coach-stream.ts"
     }
   },
   "files": [

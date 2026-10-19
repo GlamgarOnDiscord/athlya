@@ -203,6 +203,37 @@ describe('POST /v1/sessions', () => {
     expect(logSession).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'drain-1');
   });
 
+  it('accepts a structured cardio summary and returns it (issue #667)', async () => {
+    const cardio = {
+      machine: 'treadmill',
+      durationSec: 1_500,
+      distanceM: 4_200,
+      avgSpeedKmh: 10.1,
+    };
+    const stored = { ...SESSION, cardio } as WorkoutSession;
+    const logSession = vi.fn().mockResolvedValue({ kind: 'created', session: stored });
+    const deps = buildStubDeps({ sessions: { logSession } });
+
+    const res = await call(deps, 'POST', '', { body: { ...LOG_BODY, cardio } });
+
+    expect(res.status).toBe(201);
+    expect((await readJson<WorkoutSession>(res)).cardio).toEqual(cardio);
+    expect(logSession).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ cardio }),
+      undefined,
+    );
+  });
+
+  it('rejects an unknown cardio metric with 422', async () => {
+    const deps = buildStubDeps();
+    const res = await call(deps, 'POST', '', {
+      body: { ...LOG_BODY, cardio: { distanceM: 1_000, watts: 200 } },
+    });
+    expect(res.status).toBe(422);
+    expect(deps.sessions.logSession).not.toHaveBeenCalled();
+  });
+
   it('rejects more than 50 exercises with 422 (Req 12.2)', async () => {
     const deps = buildStubDeps();
     const exercises = Array.from({ length: 51 }, (_, i) => ({ name: `e${i}`, sets: [] }));

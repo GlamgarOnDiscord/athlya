@@ -93,6 +93,20 @@ export type ExerciseWire = Readonly<{
   sets: ReadonlyArray<SetWire>;
 }>;
 
+export type CardioMetricsWire = Readonly<{
+  machine?: 'indoorBike' | 'treadmill' | 'rower' | 'crossTrainer' | undefined;
+  durationSec?: number | undefined;
+  distanceM?: number | undefined;
+  energyKcal?: number | undefined;
+  avgPowerW?: number | undefined;
+  maxPowerW?: number | undefined;
+  avgCadenceRpm?: number | undefined;
+  avgSpeedKmh?: number | undefined;
+  avgHeartRateBpm?: number | undefined;
+  maxHeartRateBpm?: number | undefined;
+  strokeCount?: number | undefined;
+}>;
+
 export type WorkoutSessionWire = Readonly<{
   id: string;
   userId: string;
@@ -101,6 +115,7 @@ export type WorkoutSessionWire = Readonly<{
   durationMin: number | null;
   exercises: ReadonlyArray<ExerciseWire>;
   notes: string | null;
+  cardio?: CardioMetricsWire | undefined;
   createdAt: string;
 }>;
 

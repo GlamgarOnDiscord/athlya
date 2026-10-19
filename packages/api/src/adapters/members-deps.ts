@@ -12,6 +12,8 @@
  *   - `createDrizzleExportJobStoreHttp` — `ExportJobStore.*` (tenant-scoped)
  *   - `createDrizzleProgressionRepoHttp` — `ProgressionRepo.listInWindow`
  *     (task 22.1, read-replica routed like every other read here).
+ *   - `createDrizzleCardioProgressionRepoHttp` —
+ *     `CardioProgressionRepo.listCardioInWindow` (issue #683, same routing).
  *
  * Plus the event publisher — events go through the Cloudflare Queues
  * `EVENTS_QUEUE` binding via `publish` from
@@ -38,6 +40,7 @@ import {
   enqueueExport as svcEnqueueExport,
   exportObjectKey,
   getProgression as svcGetProgression,
+  getCardioProgression as svcGetCardioProgression,
   type EnqueueExportResult,
   type MemberProfile,
   type MembersPage,
@@ -58,6 +61,7 @@ import { createDrizzleAuditLogWriterHttp } from './members-audit-writer-drizzle.
 import { createDrizzleConsentsRepoHttp } from './members-consents-repo-drizzle.js';
 import { createDrizzleExportJobStoreHttp } from './members-export-job-store-drizzle.js';
 import { createDrizzleMemberRepoHttp } from './members-repo-drizzle.js';
+import { createDrizzleCardioProgressionRepoHttp } from './cardio-progression-repo-drizzle.js';
 import { createDrizzleProgressionRepoHttp } from './progression-repo-drizzle.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
@@ -271,6 +275,12 @@ export function buildMembersDeps(
       const db = getOrCreateDbHttpForRegion(env, cf?.continent);
       const repo = createDrizzleProgressionRepoHttp(db, claims);
       return svcGetProgression(userId, windowDays, { repo, now });
+    },
+
+    async getCardioProgression(userId, windowDays, bucket, claims) {
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
+      const repo = createDrizzleCardioProgressionRepoHttp(db, claims);
+      return svcGetCardioProgression(userId, windowDays, bucket, { repo, now });
     },
   };
 }

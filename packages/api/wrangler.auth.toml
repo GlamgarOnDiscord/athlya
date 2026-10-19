@@ -16,6 +16,12 @@
 # TURNSTILE_SITE_KEY is the public site key served by GET /v1/auth/turnstile-challenge
 # (mobile sign-in, issue #649); it is a secret only so `wrangler deploy` keeps it.
 # Production also: SENTRY_DSN, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS.
+# Optional, device attestation on mobile sign-in (issue #659, off by default;
+# docs/runbooks/device-attestation.md): DEVICE_ATTESTATION_MODE,
+# PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON, PLAY_INTEGRITY_PACKAGE_NAME,
+# APPLE_DEVICECHECK_TEAM_ID, APPLE_DEVICECHECK_KEY_ID,
+# APPLE_DEVICECHECK_PRIVATE_KEY, APPLE_DEVICECHECK_ENVIRONMENT. Not checked by
+# verify-secrets.mjs: unset means the feature stays off.
 # scripts/verify-secrets.mjs checks this list (keep both in sync).
 # Queue bindings: OUTBOX_KICK_QUEUE (producer only, issue #311).
 #   scripts/verify-secrets.mjs checks that every bound queue exists.
@@ -55,6 +61,8 @@ head_sampling_rate = 0.5
 
 [env.staging]
 name = "athlya-api-auth-staging"
+# Axiom log pipeline (issue #697): athlya-axiom-tail-staging must be deployed first.
+tail_consumers = [{ service = "athlya-axiom-tail-staging" }]
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
@@ -82,6 +90,8 @@ head_sampling_rate = 0.1
 
 [env.production]
 name = "athlya-api-auth-production"
+# Axiom log pipeline (issue #697): athlya-axiom-tail-production must be deployed first.
+tail_consumers = [{ service = "athlya-axiom-tail-production" }]
 
 [env.production.vars]
 ENVIRONMENT = "production"

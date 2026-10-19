@@ -39,6 +39,15 @@ There is no fallback: `app.config.js` fails any EAS build whose profile does not
 secret may ever use that prefix. Real secrets, if any are ever needed, go to expo.dev (Project →
 Environment variables, "secret" visibility), never into the repository.
 
+`EXPO_PUBLIC_PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER` is the **number** (not the id) of the Google Cloud
+project linked to the app in Play Console (App integrity → Play Integrity API). Android builds pass
+it to Play Integrity to attest sign-in and registration (#686). It is public like any
+`EXPO_PUBLIC_*` value but is not pinned in `eas.json`: set it per environment on expo.dev (Project →
+Environment variables, `preview` and `production`, "plain text" visibility), or export it for a
+local build. Without it, Android signs in without attestation; a non-numeric value fails the EAS
+build (`app.config.js`). iOS needs no variable (DeviceCheck). Server side and rollout:
+[`device-attestation.md`](device-attestation.md).
+
 Sign-in and registration also need the API side of the Turnstile WebView (#649): the API host in
 the widget's allowed hostnames and `TURNSTILE_SITE_KEY` on the auth Worker of each environment. Steps
 in [`docs/mobile/README.md`](../mobile/README.md#operator-steps). Do it before handing a `preview`
@@ -121,7 +130,7 @@ Store listing checklist before the first public release:
   - The Health app keeps the read permission after Disconnect: members revoke it in Health →
     Sharing → Apps → Athlya (the settings screen says so).
   - Adding the module requires a **new EAS build** (native code, not OTA-deliverable). Ship it only
-    after migration 0047 and the reservations Worker that accepts `source` are live: an older
+    after migration 0048 and the reservations Worker that accepts `source` are live: an older
     Worker refuses the field with 422: the import stops without moving its anchor, and imports
     queued offline end up in "Rejected changes".
 - Export compliance: besides HTTPS, the app encrypts its offline queue on device with AES-256

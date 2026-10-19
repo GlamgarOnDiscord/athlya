@@ -96,6 +96,7 @@ function toJSON(value: WorkoutSession): WorkoutSessionWire {
     durationMin: value.durationMin,
     exercises: value.exercises.map(exerciseToJSON),
     notes: value.notes,
+    ...(value.cardio === undefined ? {} : { cardio: { ...value.cardio } }),
     createdAt: value.createdAt,
   };
 }
