@@ -31,6 +31,21 @@
  *   | upstream_failed     | 502  | coach_upstream_failed           |
  *   | invalid_output      | 502  | coach_invalid_output            |
  *
+ * Streaming (task 21.2). With `Accept: text/event-stream`, `POST /ask`
+ * answers through Hono's `streamSSE` once consent, quota and context are
+ * done, so every refusal above keeps its status and problem body.
+ * Events, each `data` one JSON document:
+ *
+ *   - `partial` — `CoachAdvicePartial` snapshot, zero or more.
+ *   - `done`    — `CoachAskResponse`, validated as before. Terminal.
+ *   - `error`   — problem body (`coach_upstream_failed`,
+ *                 `coach_invalid_output`, `internal_error`). Terminal.
+ *
+ * A partial is provisional (clipped to the schema bounds, not validated
+ * as a whole); after an `error` event the client discards it. A client
+ * disconnect aborts the provider call. Without that `Accept` value the
+ * JSON response is unchanged.
+ *
  * Responses carry `Cache-Control: no-store`: the advice is personal
  * and is not stored anywhere, the browser included.
  */
@@ -38,6 +53,7 @@
 import { isCoachError } from '@athlya/ai-coach/errors';
 import { CoachAskRequestSchema } from '@athlya/shared/schemas/api';
 import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 
 import { jwtAuth } from '../middleware/auth.js';
 import { guardRateLimiter } from '../middleware/limiter-guard.js';
@@ -57,9 +73,11 @@ import type { AuthClaims } from '../middleware/auth.js';
 import type { HonoEnv } from '../types.js';
 import type { CoachErrorCode } from '@athlya/ai-coach/errors';
 import type {
+  CoachAdvicePartial,
   CoachAskRequest,
   CoachAskResponse,
   CoachStatusResponse,
+  CoachStreamEvent,
 } from '@athlya/shared/schemas/api';
 import type { Context, MiddlewareHandler } from 'hono';
 
@@ -71,6 +89,17 @@ export interface CoachDeps {
   getStatus(claims: AuthClaims): Promise<CoachStatusResponse>;
   /** Ask the coach; only called when the flag is on. Throws `CoachError`. */
   ask(claims: AuthClaims, request: CoachAskRequest): Promise<CoachAskResponse>;
+  /**
+   * Streaming `ask`: settles once every pre-model check passed (or throws
+   * `CoachError`), then yields partial snapshots and returns the validated
+   * answer; the iteration throws `CoachError` on a provider failure.
+   * `signal` aborts the provider call.
+   */
+  askStream(
+    claims: AuthClaims,
+    request: CoachAskRequest,
+    signal: AbortSignal,
+  ): Promise<AsyncGenerator<CoachAdvicePartial, CoachAskResponse, undefined>>;
 }
 
 const PROBLEM_JSON = 'application/problem+json';
@@ -80,7 +109,7 @@ const NO_STORE = 'no-store';
 const DEPENDENCY_RETRY_AFTER_SEC = 30;
 
 interface CoachProblem {
-  readonly status: 403 | 404 | 429 | 502 | 503;
+  readonly status: 403 | 404 | 429 | 500 | 502 | 503;
   readonly title: string;
   readonly code: string;
   readonly detail: string;
@@ -139,6 +168,24 @@ const DISABLED: CoachProblem = {
   detail: 'The AI coach is not available',
 };
 
+const STREAM_FAILED: CoachProblem = {
+  status: 500,
+  title: 'Internal Server Error',
+  code: 'internal_error',
+  detail: 'The AI coach answer failed',
+};
+
+function problemBody(c: Context<HonoEnv>, p: CoachProblem): string {
+  return JSON.stringify({
+    type: 'about:blank',
+    title: p.title,
+    status: p.status,
+    detail: p.detail,
+    code: p.code,
+    traceId: c.get('traceId'),
+  });
+}
+
 function problem(c: Context<HonoEnv>, p: CoachProblem, retryAfterSec?: number): Response {
   const headers: Record<string, string> = {
     'content-type': PROBLEM_JSON,
@@ -147,18 +194,7 @@ function problem(c: Context<HonoEnv>, p: CoachProblem, retryAfterSec?: number): 
   if (retryAfterSec !== undefined) {
     headers['retry-after'] = String(Math.max(1, Math.ceil(retryAfterSec)));
   }
-  return c.body(
-    JSON.stringify({
-      type: 'about:blank',
-      title: p.title,
-      status: p.status,
-      detail: p.detail,
-      code: p.code,
-      traceId: c.get('traceId'),
-    }),
-    p.status,
-    headers,
-  );
+  return c.body(problemBody(c, p), p.status, headers);
 }
 
 /** Map a `CoachError` to its problem response; 5xx are logged (code and cause class only). */
@@ -182,6 +218,78 @@ function coachProblem(
         ? DEPENDENCY_RETRY_AFTER_SEC
         : undefined;
   return problem(c, p, retryAfter);
+}
+
+/** True when the client asks for the server-sent event stream. */
+export function wantsEventStream(accept: string | undefined): boolean {
+  return accept !== undefined && /(^|[\s,])text\/event-stream(\s*(;|,|$))/i.test(accept);
+}
+
+/** Problem of an error raised once the stream is open; 5xx are logged like {@link coachProblem}. */
+function streamProblem(c: Context<HonoEnv>, err: unknown): CoachProblem {
+  if (isCoachError(err)) {
+    const p = COACH_PROBLEMS[err.code];
+    c.get('logger').warn('coach stream failed', {
+      code: err.code,
+      cause: err.cause instanceof Error ? err.cause.name : undefined,
+    });
+    return p;
+  }
+  c.get('logger').error('coach stream failed', {
+    cause: err instanceof Error ? err.name : typeof err,
+  });
+  return STREAM_FAILED;
+}
+
+/**
+ * Stream the answer as server-sent events. Every error is written as an
+ * `error` event here: `streamSSE`'s own handler would send the raw
+ * error message.
+ */
+async function streamAnswer(
+  c: Context<HonoEnv>,
+  deps: CoachDeps,
+  claims: AuthClaims,
+  request: CoachAskRequest,
+): Promise<Response> {
+  const controller = new AbortController();
+  let events: AsyncGenerator<CoachAdvicePartial, CoachAskResponse, undefined>;
+  try {
+    events = await deps.askStream(claims, request, controller.signal);
+  } catch (err) {
+    if (!isCoachError(err)) throw err;
+    return coachProblem(c, err.code, err.retryAfterSec, err.cause);
+  }
+
+  const response = streamSSE(c, async (stream) => {
+    stream.onAbort(() => {
+      controller.abort();
+    });
+    const write = (event: CoachStreamEvent, data: string): Promise<void> =>
+      stream.writeSSE({ event, data });
+    try {
+      for (;;) {
+        const step = await events.next();
+        if (step.done === true) {
+          await write('done', JSON.stringify(step.value));
+          return;
+        }
+        await write('partial', JSON.stringify(step.value));
+      }
+    } catch (err) {
+      controller.abort();
+      if (stream.aborted) return;
+      try {
+        await write('error', problemBody(c, streamProblem(c, err)));
+      } catch {
+        // The client is gone; nothing left to tell it.
+      }
+    }
+  });
+  // `streamSSE` sets `no-cache` on the context, whose headers Hono copies
+  // onto the response; the advice must not be stored at all.
+  c.header('cache-control', NO_STORE);
+  return response;
 }
 
 const SECURITY_HEADERS: Readonly<Record<string, string>> = buildSecurityHeaders();
@@ -272,6 +380,9 @@ export function buildCoachRouter(deps: CoachDeps): Hono<HonoEnv> {
       traceOperation(c, 'coach.ask');
       const claims = claimsOf(c);
       const request = readValidated<CoachAskRequest>(c, 'json');
+      if (wantsEventStream(c.req.header('accept'))) {
+        return streamAnswer(c, deps, claims, request);
+      }
       try {
         const answer = await deps.ask(claims, request);
         c.header('cache-control', NO_STORE);

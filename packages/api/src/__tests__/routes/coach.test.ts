@@ -1,9 +1,11 @@
 /**
- * `/v1/coach` and `/v1/coach/ask` (Epic 21, task 21.2).
+ * `/v1/coach` and `/v1/coach/ask` (Epic 21, task 21.2), JSON and
+ * server-sent event stream.
  */
 
 import { CoachError } from '@athlya/ai-coach/errors';
 import {
+  CoachAdvicePartialSchema,
   CoachAskResponseSchema,
   CoachStatusResponseSchema,
   COACH_QUESTION_MAX_LENGTH,
@@ -11,6 +13,7 @@ import {
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { __resetJwksCacheForTests } from '../../middleware/auth.js';
+import { wantsEventStream } from '../../routes/coach.js';
 import { buildApp } from '../../worker.js';
 import { readJson } from '../helpers/read-json.js';
 
@@ -27,7 +30,11 @@ import {
 
 import type { JwksKeyResolver } from '../../middleware/auth.js';
 import type { CoachErrorCode } from '@athlya/ai-coach/errors';
-import type { CoachAskResponse, CoachStatusResponse } from '@athlya/shared/schemas/api';
+import type {
+  CoachAdvicePartial,
+  CoachAskResponse,
+  CoachStatusResponse,
+} from '@athlya/shared/schemas/api';
 
 const joseHoisted = vi.hoisted(() => ({
   localResolver: null as JwksKeyResolver | null,
@@ -74,16 +81,59 @@ async function auth(): Promise<Record<string, string>> {
   return { authorization: `Bearer ${token}` };
 }
 
-async function postAsk(deps: ReturnType<typeof buildStubDeps>, body: unknown): Promise<Response> {
+async function postAsk(
+  deps: ReturnType<typeof buildStubDeps>,
+  body: unknown,
+  accept?: string,
+): Promise<Response> {
   return buildApp({ deps }).request(
     '/v1/coach/ask',
     {
       method: 'POST',
-      headers: { ...(await auth()), 'content-type': 'application/json' },
+      headers: {
+        ...(await auth()),
+        'content-type': 'application/json',
+        ...(accept === undefined ? {} : { accept }),
+      },
       body: JSON.stringify(body),
     },
     env(),
   );
+}
+
+interface SseEvent {
+  readonly event: string;
+  readonly data: string;
+}
+
+/** Parse a server-sent event stream body into its events. */
+function parseSse(text: string): SseEvent[] {
+  return text
+    .split('\n\n')
+    .filter((block) => block.trim().length > 0)
+    .map((block) => {
+      let event = 'message';
+      const data: string[] = [];
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event: ')) event = line.slice('event: '.length);
+        if (line.startsWith('data: ')) data.push(line.slice('data: '.length));
+      }
+      return { event, data: data.join('\n') };
+    });
+}
+
+type AnswerStream = AsyncGenerator<CoachAdvicePartial, CoachAskResponse, undefined>;
+
+async function* answerStream(
+  partials: CoachAdvicePartial[],
+  outcome: CoachAskResponse | Error,
+): AnswerStream {
+  for (const partial of partials) {
+    yield partial;
+  }
+  await Promise.resolve();
+  if (outcome instanceof Error) throw outcome;
+  return outcome;
 }
 
 const QUOTA = { limit: 10, remaining: 9, resetsAt: '2026-10-16T00:00:00.000Z' };
@@ -238,5 +288,134 @@ describe('POST /v1/coach/ask', () => {
     });
     const res = await postAsk(deps, { question: 'How?' });
     expect(res.status).toBe(500);
+  });
+});
+
+describe('POST /v1/coach/ask (text/event-stream)', () => {
+  const SSE = 'text/event-stream';
+  const PARTIALS: CoachAdvicePartial[] = [
+    { summary: 'Steady' },
+    { summary: 'Steady progress on the squat.', recommendations: [{ title: 'Add' }] },
+  ];
+
+  it('streams partial snapshots, then the validated answer', async () => {
+    const deps = buildStubDeps({
+      coach: {
+        ...enabled,
+        askStream: vi.fn(() => Promise.resolve(answerStream(PARTIALS, ANSWER))),
+      },
+    });
+    const res = await postAsk(deps, { question: 'How do I progress?', locale: 'en' }, SSE);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+    expect(res.headers.get('cache-control')).toBe('no-store');
+
+    const events = parseSse(await res.text());
+    expect(events.map((e) => e.event)).toEqual(['partial', 'partial', 'done']);
+    for (const [i, partial] of PARTIALS.entries()) {
+      expect(CoachAdvicePartialSchema.parse(JSON.parse(events[i]?.data ?? ''))).toEqual(partial);
+    }
+    expect(CoachAskResponseSchema.parse(JSON.parse(events[2]?.data ?? ''))).toEqual(ANSWER);
+
+    expect(deps.coach.ask).not.toHaveBeenCalled();
+    expect(deps.coach.askStream).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: TEST_USER_ID }),
+      { question: 'How do I progress?', locale: 'en' },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('keeps the JSON answer without the event-stream Accept value', async () => {
+    const deps = buildStubDeps({
+      coach: { ...enabled, ask: vi.fn(() => Promise.resolve(ANSWER)) },
+    });
+    const res = await postAsk(deps, { question: 'How?' }, 'application/json');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(await readJson<CoachAskResponse>(res)).toEqual(ANSWER);
+    expect(deps.coach.askStream).not.toHaveBeenCalled();
+  });
+
+  it('answers 404 before streaming when the flag is off', async () => {
+    const deps = buildStubDeps();
+    const res = await postAsk(deps, { question: 'How?' }, SSE);
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type')).toContain('application/problem+json');
+    expect(deps.coach.askStream).not.toHaveBeenCalled();
+  });
+
+  it.each<[CoachErrorCode, number, string, string | null]>([
+    ['consent_required', 403, 'third_party_consent_required', null],
+    ['quota_exceeded', 429, 'coach_quota_exceeded', '3600'],
+    ['quota_unavailable', 503, 'dependency_unavailable', '30'],
+    ['not_configured', 503, 'coach_not_configured', '30'],
+  ])(
+    'keeps the %s refusal as %i %s before the stream opens',
+    async (code, status, problemCode, retryAfter) => {
+      const deps = buildStubDeps({
+        coach: {
+          ...enabled,
+          askStream: vi.fn(() =>
+            Promise.reject(new CoachError(code, 'internal detail', { retryAfterSec: 3600 })),
+          ),
+        },
+      });
+      const res = await postAsk(deps, { question: 'How?' }, SSE);
+      expect(res.status).toBe(status);
+      expect(res.headers.get('content-type')).toContain('application/problem+json');
+      expect(res.headers.get('retry-after')).toBe(retryAfter);
+      expect((await readJson<{ code: string }>(res)).code).toBe(problemCode);
+    },
+  );
+
+  it.each<[Error, string, number]>([
+    [
+      new CoachError('upstream_failed', 'internal detail', { cause: new Error('sk-secret') }),
+      'coach_upstream_failed',
+      502,
+    ],
+    [new CoachError('invalid_output', 'internal detail'), 'coach_invalid_output', 502],
+    [new Error('boom sk-secret'), 'internal_error', 500],
+  ])(
+    'ends with an error event when the answer fails mid-stream (%s)',
+    async (err, code, status) => {
+      let signal: AbortSignal | undefined;
+      const deps = buildStubDeps({
+        coach: {
+          ...enabled,
+          askStream: vi.fn((_claims, _request, s: AbortSignal) => {
+            signal = s;
+            return Promise.resolve(answerStream(PARTIALS.slice(0, 1), err));
+          }),
+        },
+      });
+      const res = await postAsk(deps, { question: 'How?' }, SSE);
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).not.toContain('internal detail');
+      expect(text).not.toContain('sk-secret');
+      const events = parseSse(text);
+      expect(events.map((e) => e.event)).toEqual(['partial', 'error']);
+      const problem = JSON.parse(events[1]?.data ?? '') as { code: string; status: number };
+      expect(problem).toMatchObject({ code, status, type: 'about:blank' });
+      expect(signal?.aborted).toBe(true);
+    },
+  );
+});
+
+describe('wantsEventStream', () => {
+  it.each<[string | undefined, boolean]>([
+    ['text/event-stream', true],
+    ['TEXT/EVENT-STREAM', true],
+    ['application/json, text/event-stream;q=0.9', true],
+    ['text/event-stream; charset=utf-8', true],
+    [undefined, false],
+    ['', false],
+    ['*/*', false],
+    ['application/json', false],
+    ['text/event-streamx', false],
+    ['xtext/event-stream', false],
+  ])('%j → %s', (accept, expected) => {
+    expect(wantsEventStream(accept)).toBe(expected);
   });
 });
