@@ -726,6 +726,9 @@
         "noSessions": "No session logged in this period, so there is no weekly frequency to show."
       }
     },
+    "coach": {
+      "consentRequired": "The AI coach needs your consent to share data with third parties. You can grant it in the consents section of your profile on the Athlya website."
+    },
     "machine": {
       "title": "Connected machine",
       "intro": "Connect a bike, treadmill, rower or cross trainer that supports Bluetooth FTMS. Keep the app open during your workout.",
@@ -912,6 +915,7 @@
     "quotaExhausted": "You have used all your questions for today. Come back tomorrow.",
     "answer": {
       "title": "Coach's answer",
+      "provisional": "Answer being written…",
       "recommendations": "Recommendations",
       "caution": "Caution",
       "disclaimer": "AI-generated advice. It does not replace a coach or a health professional."
