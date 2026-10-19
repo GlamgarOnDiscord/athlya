@@ -13,6 +13,21 @@ const manager = vi.hoisted(() => ({
       ) => Promise<void>
     >(),
   stopDeviceScan: vi.fn<() => Promise<void>>(),
+  readCharacteristicForDevice:
+    vi.fn<(id: string, service: string, uuid: string) => Promise<{ value: string | null }>>(),
+  writeCharacteristicWithResponseForDevice:
+    vi.fn<(id: string, service: string, uuid: string, value: string) => Promise<unknown>>(),
+  monitorCharacteristicForDevice:
+    vi.fn<
+      (
+        id: string,
+        service: string,
+        uuid: string,
+        listener: (error: unknown, characteristic: { value: string | null } | null) => void,
+        transactionId: string | undefined,
+        subscriptionType: string | undefined,
+      ) => { remove: () => void }
+    >(),
 }));
 
 vi.mock('react-native', () => ({
@@ -86,5 +101,54 @@ describe('react-native-ble-plx transport', () => {
     stopStrap();
     stopStrap();
     expect(manager.stopDeviceScan).toHaveBeenCalledOnce();
+  });
+
+  it('reads, writes with response and subscribes to indications', async () => {
+    manager.discoverAllServicesAndCharacteristicsForDevice.mockResolvedValue({});
+    manager.readCharacteristicForDevice.mockResolvedValue({ value: 'AAAAAAwAAAA=' });
+    manager.writeCharacteristicWithResponseForDevice.mockResolvedValue({});
+    const remove = vi.fn();
+    manager.monitorCharacteristicForDevice.mockReturnValue({ remove });
+    const connection = await createBlePlxTransport().connect('bike-1');
+
+    await expect(connection.read('1826', '2acc')).resolves.toEqual(
+      Uint8Array.of(0, 0, 0, 0, 0x0c, 0, 0, 0),
+    );
+    await connection.writeWithResponse('1826', '2ad9', Uint8Array.of(0x05, 0xfa, 0x00));
+    expect(manager.writeCharacteristicWithResponseForDevice).toHaveBeenCalledWith(
+      'bike-1',
+      '1826',
+      '2ad9',
+      'BfoA',
+    );
+
+    const values: number[][] = [];
+    const unsubscribe = connection.indicate(
+      '1826',
+      '2ad9',
+      (bytes) => values.push(Array.from(bytes)),
+      () => undefined,
+    );
+    const call = manager.monitorCharacteristicForDevice.mock.calls[0];
+    expect(call?.[5]).toBe('indication');
+    call?.[3](null, { value: 'gAUB' });
+    expect(values).toEqual([[0x80, 0x05, 0x01]]);
+    unsubscribe();
+    expect(remove).toHaveBeenCalledOnce();
+
+    connection.monitor(
+      '1826',
+      '2ada',
+      () => undefined,
+      () => undefined,
+    );
+    expect(manager.monitorCharacteristicForDevice.mock.calls[1]?.[5]).toBe('notification');
+  });
+
+  it('rejects a read without a value', async () => {
+    manager.discoverAllServicesAndCharacteristicsForDevice.mockResolvedValue({});
+    manager.readCharacteristicForDevice.mockResolvedValue({ value: null });
+    const connection = await createBlePlxTransport().connect('bike-1');
+    await expect(connection.read('1826', '2acc')).rejects.toThrow();
   });
 });

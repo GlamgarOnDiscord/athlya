@@ -21,6 +21,7 @@ import {
   type LiveSession,
   type SessionSummary,
 } from './live-session';
+import { MachineControl } from './machine-control';
 import { decodeMachineData, FTMS_SERVICE, fullUuid, pickMachineCharacteristic } from './protocol';
 
 import type {
@@ -79,6 +80,8 @@ export class FtmsController {
   readonly #now: () => number;
   readonly #store = new Store<MachineState>(INITIAL_MACHINE_STATE);
   readonly #scan: BleScan;
+  /** Control Point of the connected machine (issue #668). */
+  public readonly control = new MachineControl();
   #generation = 0;
   #connection: BleConnection | null = null;
   #unsubscribers: (() => void)[] = [];
@@ -170,12 +173,13 @@ export class FtmsController {
     }
     this.#connection = connection;
 
-    let picked: ReturnType<typeof pickMachineCharacteristic>;
+    let uuids: readonly string[];
     try {
-      picked = pickMachineCharacteristic(await connection.characteristics(SERVICE_UUID));
+      uuids = await connection.characteristics(SERVICE_UUID);
     } catch {
-      picked = null;
+      uuids = [];
     }
+    const picked = pickMachineCharacteristic(uuids);
     if (generation !== this.#generation) return;
     if (picked === null) {
       this.#teardown();
@@ -204,6 +208,7 @@ export class FtmsController {
         },
       ),
     );
+    void this.control.attach(connection, uuids);
   }
 
   /**
@@ -282,7 +287,7 @@ export class FtmsController {
 
   #linkLost(): void {
     this.#generation += 1;
-    this.#teardown();
+    this.#teardown(false);
     const at = this.#now();
     this.#store.set((state) => ({
       ...state,
@@ -296,11 +301,22 @@ export class FtmsController {
     this.#store.set((state) => ({ ...state, status: 'idle', device: null, error }));
   }
 
-  #teardown(): void {
+  /**
+   * Stops listening and closes the link. With `release`, a granted machine
+   * control is handed back (its targets reset) before disconnecting, so an
+   * ERG target never outlives the session; a dropped link skips it.
+   */
+  #teardown(release = true): void {
     for (const unsubscribe of this.#unsubscribers) unsubscribe();
     this.#unsubscribers = [];
+    const released = this.control.detach(release);
     const connection = this.#connection;
     this.#connection = null;
-    if (connection !== null) void connection.disconnect();
+    if (connection === null) return;
+    if (released === null) {
+      void connection.disconnect();
+      return;
+    }
+    void released.then(() => connection.disconnect());
   }
 }
