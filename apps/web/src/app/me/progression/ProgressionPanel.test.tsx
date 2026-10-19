@@ -2,7 +2,7 @@
  * Component tests for `<ProgressionPanel />` (task 22.2, web).
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LocaleProvider } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
@@ -10,7 +10,7 @@ import { createTranslator } from '../../../lib/i18n/t';
 import { ProgressionPanel } from './ProgressionPanel';
 
 import type { ApiClient } from '../../../lib/api/client';
-import type { ProgressionResponse } from '@athlya/shared/schemas/api';
+import type { CardioProgressionResponse, ProgressionResponse } from '@athlya/shared/schemas/api';
 import type { ReactElement, ReactNode } from 'react';
 
 const t = createTranslator('en');
@@ -50,8 +50,27 @@ const PROGRESSION: ProgressionResponse = {
   skippedSessions: 0,
 };
 
-function fakeClient(get: ApiClient['get']): ApiClient {
-  return { get, post: vi.fn(), patch: vi.fn(), del: vi.fn() } as unknown as ApiClient;
+const NO_CARDIO: CardioProgressionResponse = {
+  windowDays: 90,
+  from: PROGRESSION.from,
+  to: PROGRESSION.to,
+  bucket: 'week',
+  totals: { sessions: 0, durationSec: 0, distanceM: 0, energyKcal: 0 },
+  machines: [],
+  truncated: false,
+  skippedSessions: 0,
+};
+
+const cardioGet = vi.fn<(path: string) => Promise<unknown>>();
+
+/**
+ * Routes the cardio section's request to `cardioGet` so `get` only sees
+ * the strength endpoint.
+ */
+function fakeClient(get: (path: string) => Promise<unknown>): ApiClient {
+  const route = (path: string): Promise<unknown> =>
+    path.startsWith('/v1/me/progression/cardio') ? cardioGet(path) : get(path);
+  return { get: route, post: vi.fn(), patch: vi.fn(), del: vi.fn() } as unknown as ApiClient;
 }
 
 function wrap(children: ReactNode): ReactElement {
@@ -63,6 +82,10 @@ async function flush(): Promise<void> {
     await Promise.resolve();
   });
 }
+
+beforeEach(() => {
+  cardioGet.mockReset().mockResolvedValue(NO_CARDIO);
+});
 
 afterEach(() => {
   cleanup();
@@ -103,6 +126,19 @@ describe('<ProgressionPanel />', () => {
     await flush();
 
     expect(get).toHaveBeenLastCalledWith('/v1/me/progression?window=365');
+    expect(cardioGet).toHaveBeenLastCalledWith('/v1/me/progression/cardio?window=365&bucket=week');
+  });
+
+  it('renders the cardio section under the strength charts', async () => {
+    const get = vi.fn().mockResolvedValue(PROGRESSION);
+    render(wrap(<ProgressionPanel client={fakeClient(get)} t={t} />));
+    await flush();
+
+    expect(cardioGet).toHaveBeenCalledWith('/v1/me/progression/cardio?window=90&bucket=week');
+    expect(
+      screen.getByRole('heading', { name: t('workouts.progression.cardio.title') }),
+    ).toBeDefined();
+    expect(screen.getByText(t('workouts.progression.cardio.empty'))).toBeDefined();
   });
 
   it('switches exercise and explains when it has no weighted sets', async () => {

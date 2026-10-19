@@ -168,7 +168,63 @@
       "empty": "Aucune séance enregistrée sur cette période.",
       "noWeight": "Aucune série chargée pour cet exercice sur cette période.",
       "truncated": "Seules les 1 000 séances les plus récentes de cette période sont prises en compte.",
-      "link": "Ma progression"
+      "link": "Ma progression",
+      "cardio": {
+        "title": "Cardio",
+        "description": "Distance, puissance moyenne et vitesse moyenne des séances enregistrées sur une machine connectée.",
+        "machine": "Machine",
+        "machines": {
+          "indoorBike": "Vélo d'intérieur",
+          "treadmill": "Tapis de course",
+          "rower": "Rameur",
+          "crossTrainer": "Vélo elliptique",
+          "unspecified": "Autre machine"
+        },
+        "bucket": {
+          "legend": "Regrouper la distance par",
+          "day": "Jour",
+          "week": "Semaine"
+        },
+        "summary": {
+          "sessions": "Séances",
+          "distance": "Distance",
+          "duration": "Temps en mouvement",
+          "energy": "Énergie"
+        },
+        "distance": {
+          "titleWeek": "Distance par semaine : {machine}",
+          "titleDay": "Distance par jour : {machine}",
+          "description": "Distance parcourue sur cette machine à chaque période, en km.",
+          "pointWeek": "Semaine du {date} : {value} km",
+          "pointDay": "{date} : {value} km",
+          "empty": "Aucune distance enregistrée sur cette machine pendant cette période."
+        },
+        "power": {
+          "title": "Puissance moyenne : {machine}",
+          "description": "Puissance moyenne de chaque séance, en watts.",
+          "point": "{date} : {value} W",
+          "empty": "Aucune puissance enregistrée sur cette machine pendant cette période."
+        },
+        "speed": {
+          "title": "Vitesse moyenne : {machine}",
+          "description": "Vitesse moyenne de chaque séance, en km/h.",
+          "point": "{date} : {value} km/h",
+          "empty": "Aucune vitesse enregistrée sur cette machine pendant cette période."
+        },
+        "table": {
+          "km": "km",
+          "watts": "W",
+          "kmh": "km/h"
+        },
+        "units": {
+          "km": "{value} km",
+          "kcal": "{value} kcal",
+          "hoursMinutes": "{hours} h {minutes} min",
+          "minutes": "{minutes} min"
+        },
+        "empty": "Aucune séance de cardio enregistrée sur une machine connectée pendant cette période.",
+        "unavailable": "La progression cardio n'est pas encore disponible. Revenez plus tard."
+      }
     }
   },
   "consents": {
@@ -724,6 +780,15 @@
         "lineSummary": "Jours d’entraînement : {count}, du {from} au {to}. Dernière valeur : {latest} kg, maximum : {max} kg, minimum : {min} kg.",
         "barSummary": "Semaines : {weeks}, du {from} au {to}. Séances : {total} au total, {max} pour la semaine la plus chargée, {latest} pour la dernière semaine.",
         "noSessions": "Aucune séance enregistrée sur cette période : pas de fréquence hebdomadaire à afficher."
+      },
+      "cardio": {
+        "machineLabel": "Machine",
+        "machineHint": "Affiche les graphiques cardio de cette machine.",
+        "bucketLabel": "Regrouper la distance par",
+        "bucketHint": "Regroupe le graphique de distance par jour ou par semaine.",
+        "distanceSummary": "Périodes : {count}, du {from} au {to}. Distance : {total} km au total, {max} km au plus sur une période, {latest} km sur la dernière période.",
+        "powerSummary": "Séances avec puissance : {count}, du {from} au {to}. Dernière : {latest} W, maximum : {max} W, minimum : {min} W.",
+        "speedSummary": "Séances avec vitesse : {count}, du {from} au {to}. Dernière : {latest} km/h, maximum : {max} km/h, minimum : {min} km/h."
       }
     },
     "coach": {
