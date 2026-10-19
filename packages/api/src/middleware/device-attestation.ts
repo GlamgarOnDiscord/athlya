@@ -270,20 +270,54 @@ class ProviderError extends Error {
   }
 }
 
+/** Status and fully read body of a provider call. */
+interface ProviderResponse {
+  readonly status: number;
+  readonly ok: boolean;
+  readonly text: string;
+}
+
+/**
+ * One provider call, bounded end to end: the timeout covers the
+ * response headers AND the body read, so a provider that stalls while
+ * streaming the body cannot hold the sign-in past `timeoutMs`.
+ */
 async function fetchWithTimeout(
   runtime: VerifierRuntime,
   url: string,
   init: RequestInit,
-): Promise<Response> {
+): Promise<ProviderResponse> {
   const controller = new AbortController();
-  const handle = setTimeout(() => controller.abort(), runtime.timeoutMs);
+  let handle: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    handle = setTimeout(() => {
+      controller.abort();
+      reject(new ProviderError('provider_timeout'));
+    }, runtime.timeoutMs);
+  });
+  const call = (async (): Promise<ProviderResponse> => {
+    const res = await runtime.fetch(url, { ...init, signal: controller.signal });
+    const text = await res.text();
+    return { status: res.status, ok: res.ok, text };
+  })();
+  // The losing branch of the race still settles; keep its rejection handled.
+  call.catch(() => undefined);
   try {
-    return await runtime.fetch(url, { ...init, signal: controller.signal });
+    return await Promise.race([call, deadline]);
   } catch (err) {
+    if (err instanceof ProviderError) throw err;
     const name = err instanceof Error ? err.name : '';
     throw new ProviderError(name === 'AbortError' ? 'provider_timeout' : 'provider_network_error');
   } finally {
     clearTimeout(handle);
+  }
+}
+
+function parseProviderJson<T>(text: string, malformedReason: string): T {
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ProviderError(malformedReason);
   }
 }
 
@@ -379,13 +413,15 @@ async function googleAccessToken(
   if (!res.ok) {
     throw new ProviderError('google_oauth_rejected', res.status);
   }
-  let payload: { access_token?: unknown; expires_in?: unknown };
-  try {
-    payload = await res.json<{ access_token?: unknown; expires_in?: unknown }>();
-  } catch {
-    throw new ProviderError('google_oauth_malformed');
-  }
-  if (typeof payload.access_token !== 'string' || payload.access_token.length === 0) {
+  const payload = parseProviderJson<{ access_token?: unknown; expires_in?: unknown } | null>(
+    res.text,
+    'google_oauth_malformed',
+  );
+  if (
+    payload === null ||
+    typeof payload.access_token !== 'string' ||
+    payload.access_token.length === 0
+  ) {
     throw new ProviderError('google_oauth_malformed');
   }
   const expiresInSec = typeof payload.expires_in === 'number' ? payload.expires_in : 3_600;
@@ -505,8 +541,11 @@ export async function verifyPlayIntegrity(
       return unavailable('play_integrity_error', { upstreamStatus: res.status });
     }
 
-    const body = await res.json<{ tokenPayloadExternal?: PlayIntegrityPayload }>();
-    if (body.tokenPayloadExternal === undefined) {
+    const body = parseProviderJson<{ tokenPayloadExternal?: PlayIntegrityPayload } | null>(
+      res.text,
+      'play_integrity_malformed',
+    );
+    if (body?.tokenPayloadExternal === undefined) {
       return unavailable('play_integrity_malformed');
     }
     return evaluatePlayIntegrityPayload(body.tokenPayloadExternal, {

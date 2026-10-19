@@ -124,6 +124,16 @@ async function validPayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** 200 response whose body sends one chunk and then never ends. */
+function stalledBodyResponse(): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"tokenPayloadExternal":'));
+    },
+  });
+  return new Response(body, { status: 200, headers: { 'content-type': 'application/json' } });
+}
+
 function googleFetch(decode: () => Response | Promise<Response>) {
   return vi.fn<typeof fetch>((input) => {
     const url = String(input);
@@ -139,12 +149,13 @@ async function run(
   env: DeviceAttestationEnv,
   headers: Record<string, string>,
   fetchImpl: typeof fetch,
-  extra: { action?: 'login' | 'register'; cache?: CredentialCache } = {},
+  extra: { action?: 'login' | 'register'; cache?: CredentialCache; timeoutMs?: number } = {},
 ) {
   const mw = deviceAttestation(extra.action ?? 'login', {
     fetch: fetchImpl,
     now: () => NOW,
     credentialCache: extra.cache ?? new Map(),
+    ...(extra.timeoutMs !== undefined ? { timeoutMs: extra.timeoutMs } : {}),
   });
   const { c, logger } = fakeContext(env, headers);
   const next = vi.fn(() => Promise.resolve());
@@ -385,6 +396,47 @@ describe('deviceAttestation middleware — Android (Play Integrity)', () => {
     });
   });
 
+  it('report: the timeout also bounds a response body that stalls', async () => {
+    const fetchImpl = googleFetch(() => stalledBodyResponse());
+    const started = Date.now();
+    const { res, next, logger } = await run(
+      androidEnv(),
+      attestationHeaders('android'),
+      fetchImpl,
+      {
+        timeoutMs: 50,
+      },
+    );
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(res).toBeUndefined();
+    expect(next).toHaveBeenCalledOnce();
+    expect(verdictLog(logger)).toMatchObject({
+      outcome: 'unavailable',
+      reasons: ['provider_timeout'],
+    });
+  });
+
+  it('enforce: a stalled response body answers 503', async () => {
+    const fetchImpl = googleFetch(() => stalledBodyResponse());
+    const { res } = await run(
+      androidEnv({ DEVICE_ATTESTATION_MODE: 'enforce' }),
+      attestationHeaders('android'),
+      fetchImpl,
+      { timeoutMs: 50 },
+    );
+    expect(res?.status).toBe(503);
+  });
+
+  it('report: a malformed decode response is unavailable, not a crash', async () => {
+    const fetchImpl = googleFetch(() => new Response('not json', { status: 200 }));
+    const { res, logger } = await run(androidEnv(), attestationHeaders('android'), fetchImpl);
+    expect(res).toBeUndefined();
+    expect(verdictLog(logger)).toMatchObject({
+      outcome: 'unavailable',
+      reasons: ['play_integrity_malformed'],
+    });
+  });
+
   it('enforce: answers 503 when Google is down', async () => {
     const fetchImpl = googleFetch(() => new Response('', { status: 500 }));
     const { res, next } = await run(
@@ -513,6 +565,19 @@ describe('deviceAttestation middleware — iOS (DeviceCheck)', () => {
     expect(res).toBeUndefined();
     expect(next).toHaveBeenCalledOnce();
     expect(verdictLog(logger)).toMatchObject({ outcome: 'unavailable', upstreamStatus: 500 });
+  });
+
+  it('report: the timeout also bounds a stalled DeviceCheck body', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(() => Promise.resolve(stalledBodyResponse()));
+    const { res, next, logger } = await run(iosEnv(), attestationHeaders('ios'), fetchImpl, {
+      timeoutMs: 50,
+    });
+    expect(res).toBeUndefined();
+    expect(next).toHaveBeenCalledOnce();
+    expect(verdictLog(logger)).toMatchObject({
+      outcome: 'unavailable',
+      reasons: ['provider_timeout'],
+    });
   });
 
   it('enforce: an invalid private key answers 500 configuration_error', async () => {

@@ -102,9 +102,15 @@ devices.
 
 ## Cost and latency
 
-- Each attested request makes one provider call (plus one Google OAuth call per isolate and hour),
-  each capped at 3 s. Turnstile runs first, so a client must solve a fresh challenge for every
-  call it triggers; that bounds how fast a bot can burn the Play Integrity daily quota (10 000
-  calls by default, raised from Play Console).
-- When Google or Apple is slow, `report` mode adds up to the timeout to the sign-in, then lets the
-  request through.
+- Each attested request makes one verify call (Play Integrity `decodeIntegrityToken` or Apple
+  `validate_device_token`). On Android, a separate Google OAuth token call precedes it when the
+  isolate has no cached access token (about once per isolate and hour).
+- Each of these fetches has its own 3 s bound, and the bound covers the whole call: connection,
+  response headers and reading the response body. A provider that stalls mid-body is cut off like
+  one that never answers (`outcome: unavailable`, reason `provider_timeout`). Worst case on
+  Android, with a cold cache: two bounded fetches, so about 6 s.
+- Turnstile runs first, so a client must solve a fresh challenge for every call it triggers; that
+  bounds how fast a bot can burn the Play Integrity daily quota (10 000 calls by default, raised
+  from Play Console).
+- When Google or Apple is slow, `report` mode adds up to those bounds to the sign-in, then lets the
+  request through; `enforce` answers `503 device_attestation_unavailable`.
