@@ -131,6 +131,8 @@ afterEach(() => {
 });
 
 describe('<CardioProgressionSection />', () => {
+  // The first render of the three charts pays the module warm-up, and accessible
+  // name queries over SVG marks are slow on a loaded CI runner (5.2 s seen).
   it('renders the distance bars and the power and speed trends of the first machine', async () => {
     const get = vi.fn().mockResolvedValue(CARDIO);
     render(wrap(<CardioProgressionSection windowDays="90" client={fakeClient(get)} t={t} />));
@@ -138,23 +140,21 @@ describe('<CardioProgressionSection />', () => {
     await flush();
 
     expect(get).toHaveBeenCalledWith('/v1/me/progression/cardio?window=90&bucket=week');
-    expect(
-      screen.getByRole('figure', {
-        name: t('workouts.progression.cardio.distance.titleWeek', { machine: 'Rower' }),
-      }),
-    ).toBeDefined();
-    expect(
-      screen.getByRole('figure', {
-        name: t('workouts.progression.cardio.power.title', { machine: 'Rower' }),
-      }),
-    ).toBeDefined();
+    // Marks are looked up inside their own figure: a name query over the whole
+    // document computes the accessible name of every node and is slow under load.
+    const distance = screen.getByRole('figure', {
+      name: t('workouts.progression.cardio.distance.titleWeek', { machine: 'Rower' }),
+    });
+    const power = screen.getByRole('figure', {
+      name: t('workouts.progression.cardio.power.title', { machine: 'Rower' }),
+    });
     const speed = screen.getByRole('figure', {
       name: t('workouts.progression.cardio.speed.title', { machine: 'Rower' }),
     });
     // Each value is a focusable mark with a text label, plus a table row.
-    expect(screen.getByRole('img', { name: 'Week of Sep 28, 2026: 6 km' })).toBeDefined();
-    expect(screen.getByRole('img', { name: 'Week of Oct 12, 2026: 0 km' })).toBeDefined();
-    expect(screen.getByRole('img', { name: 'Oct 8, 2026: 190 W' })).toBeDefined();
+    expect(within(distance).getByRole('img', { name: 'Week of Sep 28, 2026: 6 km' })).toBeDefined();
+    expect(within(distance).getByRole('img', { name: 'Week of Oct 12, 2026: 0 km' })).toBeDefined();
+    expect(within(power).getByRole('img', { name: 'Oct 8, 2026: 190 W' })).toBeDefined();
     // The session without a speed is left out of the speed trend.
     expect(within(speed).getAllByRole('img')).toHaveLength(1);
     expect(within(speed).getByRole('img', { name: 'Oct 1, 2026: 9 km/h' })).toBeDefined();
@@ -162,7 +162,7 @@ describe('<CardioProgressionSection />', () => {
     expect(screen.getByText('12.5 km')).toBeDefined();
     expect(screen.getByText('1 h 15 min')).toBeDefined();
     expect(screen.getByText('500 kcal')).toBeDefined();
-  });
+  }, 15_000);
 
   it('moves the keyboard focus between the marks of a chart', async () => {
     const get = vi.fn().mockResolvedValue(CARDIO);
