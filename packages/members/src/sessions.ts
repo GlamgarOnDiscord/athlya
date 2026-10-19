@@ -35,7 +35,7 @@ import { LogSessionRequestSchema, ListSessionsQuerySchema } from '@athlya/shared
 
 import { MembersError, type MembersValidationIssue } from './service.js';
 
-import type { Exercise, WorkoutSession } from '@athlya/shared/schemas/domain';
+import type { CardioMetrics, Exercise, WorkoutSession } from '@athlya/shared/schemas/domain';
 
 /* ------------------------------------------------------------------ */
 /*  Repository port                                                    */
@@ -58,6 +58,8 @@ export interface CreateWorkoutSessionInput {
   durationMin?: number | undefined;
   exercises: ReadonlyArray<Exercise>;
   notes?: string | undefined;
+  /** Structured cardio summary of a machine session (issue #667). */
+  cardio?: CardioMetrics | undefined;
   /**
    * `Idempotency-Key` of the request. A repo that receives the same key
    * twice for the same user returns the first session instead of
@@ -222,13 +224,14 @@ export async function logSession(
     );
   }
 
-  const { startedAt, durationMin, exercises, notes, studioId } = parsed.data;
+  const { startedAt, durationMin, exercises, notes, cardio, studioId } = parsed.data;
   const createInput: CreateWorkoutSessionInput = {
     userId,
     startedAt,
     exercises,
     ...(durationMin === undefined ? {} : { durationMin }),
     ...(notes === undefined ? {} : { notes }),
+    ...(cardio === undefined ? {} : { cardio }),
     ...(studioId === undefined ? {} : { studioId }),
     // An empty key would turn every later key-less retry into a replay.
     ...(options.idempotencyKey === undefined || options.idempotencyKey.length === 0

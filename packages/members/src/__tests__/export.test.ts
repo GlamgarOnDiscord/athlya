@@ -790,6 +790,33 @@ describe('neutralizeCsvFormula', () => {
     const invoicesJson = JSON.parse(text('invoices.json')) as InvoiceRecord[];
     expect(invoicesJson[0]?.description).toBe(payload);
   });
+
+  it('exports the cardio summary of a session, and an empty cell without one (issue #667)', async () => {
+    const cardio = { machine: 'rower', distanceM: 5_000, avgPowerW: 180 } as const;
+    const entries: ArchiveEntry[] = [];
+    for await (const entry of buildArchiveEntries({
+      profile: PROFILE,
+      consents: [CONSENTS_ROW],
+      reservations: asyncPage<Reservation>([]),
+      sessions: asyncPage<WorkoutSession>([{ ...SESSION_ROW, cardio }, SESSION_ROW]),
+      checkins: asyncPage<CheckinRecord>([]),
+      invoices: asyncPage<InvoiceRecord>([]),
+    })) {
+      entries.push(entry);
+    }
+    const text = (name: string) =>
+      new TextDecoder().decode(entries.find((e) => e.name === name)!.bytes);
+
+    const [header, withCardio, without] = text('workout_sessions.csv').split('\r\n');
+    expect(header?.endsWith('"notes","cardioJson","createdAt"')).toBe(true);
+    expect(withCardio).toContain(
+      '"{""machine"":""rower"",""distanceM"":5000,""avgPowerW"":180}","2026-01-10T08:45:00.000Z"',
+    );
+    expect(without?.endsWith(',,,"2026-01-10T08:45:00.000Z"')).toBe(true);
+    const sessionsJson = JSON.parse(text('workout_sessions.json')) as WorkoutSession[];
+    expect(sessionsJson[0]?.cardio).toEqual(cardio);
+    expect(sessionsJson[1]).not.toHaveProperty('cardio');
+  });
 });
 
 /* ------------------------------------------------------------------ */

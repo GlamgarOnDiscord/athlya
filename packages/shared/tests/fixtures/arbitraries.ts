@@ -31,6 +31,7 @@ import type { ClassId, ReservationId, StudioId, UserId } from '../../src/ids.js'
 import type { Consents } from '../../src/schemas/consents.js';
 import type {
   AuditLog,
+  CardioMetrics,
   Class,
   Exercise,
   Reservation,
@@ -269,16 +270,39 @@ export const exerciseArb: fc.Arbitrary<Exercise> = fc.record({
   sets: fc.array(setArb, { maxLength: 30 }),
 });
 
-export const workoutSessionArb: fc.Arbitrary<WorkoutSession> = fc.record({
-  id: workoutSessionIdArb,
-  userId: userIdArb,
-  studioId: fc.option(studioIdArb, { nil: null }),
-  startedAt: isoDateTimeArb,
-  durationMin: fc.option(fc.integer({ min: 1, max: 86_400 }), { nil: null }),
-  exercises: fc.array(exerciseArb, { maxLength: 50 }),
-  notes: fc.option(fc.string({ maxLength: 2000 }), { nil: null }),
-  createdAt: isoDateTimeArb,
-});
+/** Every metric is optional: `requiredKeys: []` drops keys, never sets `undefined`. */
+export const cardioMetricsArb: fc.Arbitrary<CardioMetrics> = fc.record(
+  {
+    machine: fc.constantFrom('indoorBike', 'treadmill', 'rower', 'crossTrainer'),
+    durationSec: fc.integer({ min: 0, max: 86_400 }),
+    distanceM: fc.integer({ min: 0, max: 1_000_000 }),
+    energyKcal: fc.integer({ min: 0, max: 20_000 }),
+    avgPowerW: fc.integer({ min: 0, max: 4_000 }),
+    maxPowerW: fc.integer({ min: 0, max: 4_000 }),
+    avgCadenceRpm: fc.integer({ min: 0, max: 300 }),
+    avgSpeedKmh: fc.double({ min: 0, max: 150, noNaN: true, noDefaultInfinity: true }),
+    avgHeartRateBpm: fc.integer({ min: 20, max: 250 }),
+    maxHeartRateBpm: fc.integer({ min: 20, max: 250 }),
+    strokeCount: fc.integer({ min: 0, max: 100_000 }),
+  },
+  { requiredKeys: [] },
+);
+
+export const workoutSessionArb: fc.Arbitrary<WorkoutSession> = fc
+  .tuple(
+    fc.record({
+      id: workoutSessionIdArb,
+      userId: userIdArb,
+      studioId: fc.option(studioIdArb, { nil: null }),
+      startedAt: isoDateTimeArb,
+      durationMin: fc.option(fc.integer({ min: 1, max: 86_400 }), { nil: null }),
+      exercises: fc.array(exerciseArb, { maxLength: 50 }),
+      notes: fc.option(fc.string({ maxLength: 2000 }), { nil: null }),
+      createdAt: isoDateTimeArb,
+    }),
+    fc.option(cardioMetricsArb, { nil: null }),
+  )
+  .map(([session, cardio]) => (cardio === null ? session : { ...session, cardio }));
 
 /**
  * `AuditLog.id` is a `BIGSERIAL` rendered as a decimal string on the

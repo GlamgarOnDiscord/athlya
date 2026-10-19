@@ -22,6 +22,7 @@
 
 import { sql } from 'drizzle-orm';
 import {
+  check,
   index,
   integer,
   jsonb,
@@ -36,7 +37,7 @@ import { createdAt, uuidPrimaryKey } from './_shared.js';
 import { studios } from './studios.js';
 import { users } from './users.js';
 
-import type { Exercise } from '@athlya/shared/schemas/domain';
+import type { CardioMetrics, Exercise } from '@athlya/shared/schemas/domain';
 
 export const workoutSessions = pgTable(
   'workout_sessions',
@@ -63,6 +64,13 @@ export const workoutSessions = pgTable(
      * stay outside the partial unique index.
      */
     idempotencyKey: text('idempotency_key'),
+    /**
+     * Structured cardio summary of a machine session (migration 0046,
+     * issue #667), validated by `CardioMetricsSchema` at the API edge.
+     * Nullable: sessions without one, and rows written by older Workers.
+     * A CHECK keeps it a JSON object (never a double-encoded string).
+     */
+    cardio: jsonb('cardio').$type<CardioMetrics>(),
   },
   (table) => [
     /**
@@ -78,6 +86,10 @@ export const workoutSessions = pgTable(
     uniqueIndex('workout_sessions_user_idempotency_key_uniq')
       .on(table.userId, table.idempotencyKey)
       .where(sql`${table.idempotencyKey} IS NOT NULL`),
+    check(
+      'workout_sessions_cardio_object',
+      sql`${table.cardio} IS NULL OR jsonb_typeof(${table.cardio}) = 'object'`,
+    ),
   ],
 );
 

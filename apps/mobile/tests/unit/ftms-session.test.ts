@@ -13,6 +13,7 @@ import {
 } from '../../features/ftms/live-session';
 import {
   buildMachineSessionRequest,
+  cardioMetricsOf,
   describeSummary,
   saveMachineSession,
 } from '../../features/ftms/machine-workout';
@@ -139,6 +140,33 @@ describe('machine workout', () => {
       exercises: [{ name: 'Indoor bike', sets: [{ reps: 0, durationSec: 1_830 }] }],
     });
     expect(request?.notes).toContain('Avg power 180 W');
+  });
+
+  it('sends the structured cardio summary (issue #667)', () => {
+    const request = buildMachineSessionRequest(summary, en, 'en');
+    expect(request?.cardio).toEqual({
+      machine: 'indoorBike',
+      durationSec: 1_830,
+      distanceM: 5_230,
+      energyKcal: 250,
+      avgPowerW: 180,
+      maxPowerW: 180,
+      avgCadenceRpm: 88,
+      avgSpeedKmh: 10.3,
+      avgHeartRateBpm: 140,
+      maxHeartRateBpm: 140,
+    });
+  });
+
+  it('drops a cardio metric outside the schema bounds instead of the whole session', () => {
+    const glitch = { ...summary, maxPowerW: 30_000, avgHeartRateBpm: 0, distanceM: null };
+    const metrics = cardioMetricsOf(glitch, 600);
+    expect(metrics).not.toHaveProperty('maxPowerW');
+    expect(metrics).not.toHaveProperty('avgHeartRateBpm');
+    expect(metrics).not.toHaveProperty('distanceM');
+    expect(metrics).not.toHaveProperty('avgSpeedKmh');
+    expect(metrics).toMatchObject({ machine: 'indoorBike', durationSec: 600, avgPowerW: 180 });
+    expect(buildMachineSessionRequest(glitch, en, 'en')).not.toBeNull();
   });
 
   it('logs at least one minute, caps the set duration, and skips empty sessions', () => {
