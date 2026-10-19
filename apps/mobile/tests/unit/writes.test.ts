@@ -66,7 +66,7 @@ describe('submitWrite', () => {
   });
 
   it('sends and queues with the caller key when one is given', async () => {
-    const key = '0f8e2a4c-6b1d-4e3f-9a5b-7c8d9e0f1a2b';
+    const key = '00000000-0000-4000-8000-000000000001';
     const { deps, api, queue } = createWriteDeps();
     api.post.mockResolvedValueOnce({}).mockRejectedValueOnce(new NetworkError('offline'));
 
