@@ -2,7 +2,8 @@
  * The single write path of the screens (Requirements 19.1, 20.1, 20.3).
  *
  * - Online, with nothing of this user still queued: the request goes out
- *   directly with a fresh UUID v4 `Idempotency-Key`.
+ *   directly with a fresh UUID v4 `Idempotency-Key`, or with the key the
+ *   caller derived when the write must replay across runs (an import).
  * - On `NetworkError` the same request is queued **with the same key**, so
  *   a write that did reach the server is not applied twice when the drain
  *   replays it, and a drain starts.
@@ -43,6 +44,12 @@ export interface WriteInput {
   readonly path: string;
   readonly payload?: JsonValue;
   readonly signal?: AbortSignal;
+  /**
+   * UUID v4-shaped key to send instead of a fresh one, for a write that a
+   * later run may repeat (an imported workout): the server then replays
+   * the first response instead of applying it twice.
+   */
+  readonly idempotencyKey?: string;
 }
 
 export type WriteOutcome<T> =
@@ -135,7 +142,7 @@ async function submitInOrder<T>(
   input: WriteInput,
 ): Promise<WriteOutcome<T>> {
   if (isAborted(input.signal)) throw createAbortError();
-  const idempotencyKey = deps.uuid();
+  const idempotencyKey = input.idempotencyKey ?? deps.uuid();
 
   // The write may have waited behind older ones: if the signed-in user changed
   // meanwhile, the API client now holds another account's session. Never send

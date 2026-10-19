@@ -12,12 +12,15 @@ import { createExpoSecureStorage } from './auth/expo-secure-storage';
 import { createSessionRefresher } from './auth/session';
 import { TokenStore } from './auth/token-store';
 import { resolveApiBaseUrl, resolveLocale } from './config';
+import { createHealthKitStore } from './health/healthkit-store';
+import { AppleHealthLinkStore } from './health/link-store';
 import { createMmkvKeyValueStore } from './storage/mmkv-store';
 import { loadOrCreateStorageKey, toHex } from './storage/storage-key';
 import { createNetInfoConnectivity } from './sync/netinfo-connectivity';
 import { MutationQueue } from './sync/queue';
 import { SyncController } from './sync/sync-controller';
 
+import type { HealthStore } from './health/ports';
 import type { KeyValueStore } from './storage/key-value-store';
 
 export interface AppRuntime {
@@ -31,6 +34,9 @@ export interface AppRuntime {
   /** On-device preferences (e.g. the last paired heart-rate strap); never synced. */
   readonly preferences: KeyValueStore;
   readonly sync: SyncController;
+  /** Apple Health (HealthKit, iOS only) and the per-user import links. */
+  readonly health: HealthStore;
+  readonly healthLinks: AppleHealthLinkStore;
   /** Releases native listeners (NetInfo). */
   readonly dispose: () => void;
 }
@@ -46,6 +52,7 @@ export async function createAppRuntime(): Promise<AppRuntime> {
     uuid: Crypto.randomUUID,
   });
   const preferences = createMmkvKeyValueStore('athlya.preferences', encryptionKey);
+  const healthLinks = new AppleHealthLinkStore(preferences);
   const tokenStore = new TokenStore(secure, createExpoBiometricAuthenticator(), {
     unlockPrompt: t('mobile.unlock.prompt'),
   });
@@ -71,6 +78,8 @@ export async function createAppRuntime(): Promise<AppRuntime> {
     queue,
     preferences,
     sync,
+    health: createHealthKitStore(),
+    healthLinks,
     dispose: () => connectivity.dispose(),
   };
 }

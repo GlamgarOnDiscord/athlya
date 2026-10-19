@@ -65,6 +65,21 @@ describe('submitWrite', () => {
     expect(sync.syncNow).toHaveBeenCalledTimes(1);
   });
 
+  it('sends and queues with the caller key when one is given', async () => {
+    const key = '0f8e2a4c-6b1d-4e3f-9a5b-7c8d9e0f1a2b';
+    const { deps, api, queue } = createWriteDeps();
+    api.post.mockResolvedValueOnce({}).mockRejectedValueOnce(new NetworkError('offline'));
+
+    await submitWrite(deps, { ...INPUT, idempotencyKey: key });
+    const outcome = await submitWrite(deps, { ...INPUT, idempotencyKey: key });
+
+    expect(
+      api.post.mock.calls.map((call) => (call[2] as { idempotencyKey: string }).idempotencyKey),
+    ).toEqual([key, key]);
+    expect(outcome.kind).toBe('queued');
+    expect(queue.peek()[0]?.idempotencyKey).toBe(key);
+  });
+
   it('routes DELETE through del without a body', async () => {
     const { deps, api } = createWriteDeps();
     api.del.mockResolvedValue(null);
