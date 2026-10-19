@@ -184,4 +184,46 @@ describe('createApiClient', () => {
 
     await expect(client.get('/v1/thing')).rejects.toBe(netErr);
   });
+
+  it('postStream returns the 2xx response unread, with auth and the caller headers', async () => {
+    const streamed = new Response('event: done\ndata: {}\n\n', {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    });
+    fetchImpl.mockResolvedValueOnce(streamed);
+    const client = createApiClient({
+      baseUrl: 'https://api.test',
+      getToken: () => 'token-0000',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    const response = await client.postStream(
+      '/v1/coach/ask',
+      { question: 'q' },
+      { headers: { Accept: 'text/event-stream' } },
+    );
+
+    expect(response).toBe(streamed);
+    expect(response.bodyUsed).toBe(false);
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const headers = new Headers(init.headers);
+    expect(init.method).toBe('POST');
+    expect(init.body).toBe(JSON.stringify({ question: 'q' }));
+    expect(headers.get('accept')).toBe('text/event-stream');
+    expect(headers.get('authorization')).toBe('Bearer token-0000');
+  });
+
+  it('postStream maps error statuses like post', async () => {
+    fetchImpl
+      .mockResolvedValueOnce(problemResponse(403, { title: 'Forbidden', status: 403 }))
+      .mockResolvedValueOnce(problemResponse(502, { title: 'Bad Gateway', status: 502 }));
+    const client = createApiClient({
+      baseUrl: '',
+      getToken: () => null,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await expect(client.postStream('/v1/coach/ask', {})).rejects.toBeInstanceOf(ApiError);
+    await expect(client.postStream('/v1/coach/ask', {})).rejects.toBeInstanceOf(ApiServerError);
+  });
 });

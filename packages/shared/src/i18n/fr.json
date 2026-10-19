@@ -726,6 +726,9 @@
         "noSessions": "Aucune séance enregistrée sur cette période : pas de fréquence hebdomadaire à afficher."
       }
     },
+    "coach": {
+      "consentRequired": "Le coach IA a besoin de votre consentement au partage de données avec des tiers. Vous pouvez le donner dans la section consentements de votre profil sur le site Athlya."
+    },
     "machine": {
       "title": "Machine connectée",
       "intro": "Connectez un vélo, un tapis, un rameur ou un elliptique compatible Bluetooth FTMS. Gardez l’app ouverte pendant la séance.",
@@ -912,6 +915,7 @@
     "quotaExhausted": "Vous avez utilisé toutes vos questions pour aujourd'hui. Revenez demain.",
     "answer": {
       "title": "Réponse du coach",
+      "provisional": "Réponse en cours de rédaction…",
       "recommendations": "Recommandations",
       "caution": "Attention",
       "disclaimer": "Conseils générés par IA. Ils ne remplacent ni un coach ni un professionnel de santé."
