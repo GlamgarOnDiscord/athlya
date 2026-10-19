@@ -71,6 +71,8 @@ import {
   type EventQueueLane,
 } from './route-queue.js';
 
+import { logEvent } from '../logging.js';
+
 import type { AthlyaDb } from '@athlya/db/client';
 import type { OutboxPendingSnapshot } from '@athlya/db/outbox';
 
@@ -319,7 +321,7 @@ export async function resolveDrainBatchSize(db: AthlyaDb, env: ScheduledEnv): Pr
 /**
  * Emit the backlog metric on every cron tick (issue #134 / alert A16).
  *
- * Goes through `console.log` unconditionally so Axiom always gets a
+ * Goes through `logEvent` (console) unconditionally so Axiom always gets a
  * `outbox_pending_count` data point, regardless of whether a
  * {@link Logger} is wired — the production scheduled handler does not
  * pass one. When a logger *is* present (tests / future OTel bridge) we
@@ -342,7 +344,7 @@ export function emitOutboxBacklogMetric(
     backlogThreshold: OUTBOX_BACKLOG_BATCH_THRESHOLD,
     backlog: snapshot.pending > OUTBOX_BACKLOG_BATCH_THRESHOLD,
   };
-  console.log('outbox.backlog', meta);
+  logEvent('info', 'outbox.backlog', meta);
   logger?.info('outbox drain: pending snapshot', meta);
 }
 
@@ -510,7 +512,7 @@ export function emitOutboxLaneMetrics(
       pending: acc.pending,
       oldestAgeMs: acc.oldest === null ? 0 : now - acc.oldest.getTime(),
     };
-    console.log('outbox.lane_backlog', meta);
+    logEvent('info', 'outbox.lane_backlog', meta);
     logger?.info('outbox drain: lane backlog', meta);
   }
 }
@@ -543,14 +545,14 @@ export function emitOutboxDrainCycleMetric(
     concurrency: DRAIN_SEND_CONCURRENCY,
     deadlineMs,
   };
-  console.log('outbox.drain_cycle', meta);
+  logEvent('info', 'outbox.drain_cycle', meta);
   logger?.info('outbox drain: cycle', meta);
 }
 
 /**
  * Emit the drain-errors counter when any row failed to publish.
  *
- * Goes through `console.log` unconditionally so Axiom always records a
+ * Goes through `logEvent` (console) unconditionally so Axiom always records a
  * `outbox_drain_errors` data point — the production scheduled handler
  * does not wire a {@link Logger}. When a logger is present we also
  * forward through it for structured tracing.
@@ -566,7 +568,7 @@ export function emitOutboxDrainErrorsMetric(result: DrainResult, logger?: Logger
     processed: result.processed,
     succeeded: result.succeeded,
   };
-  console.log('athlya.outbox.drain_errors', meta);
+  logEvent('info', 'athlya.outbox.drain_errors', meta);
   logger?.error('outbox drain: failed items in batch', meta);
 }
 
@@ -593,7 +595,7 @@ export function warnOnDrainOverlapRisk(
     failed: result.failed,
     batchSize,
   };
-  console.warn('outbox.drain_overlap_risk', meta);
+  logEvent('warn', 'outbox.drain_overlap_risk', meta);
   logger?.warn('outbox drain: overlap risk (slow drain)', meta);
   return true;
 }

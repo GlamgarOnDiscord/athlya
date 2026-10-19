@@ -61,6 +61,7 @@
 
 import { Redis } from '@upstash/redis';
 
+import { logEvent } from '../logging.js';
 import { createSentryClient, type SentryClient } from '../sentry.js';
 
 import { resolveEventQueueProducer, type EventQueueBindings } from './route-queue.js';
@@ -544,7 +545,7 @@ export async function handleDlqBatch(
   // makes the structured log line downstream observable.
   const totalPending = await redis.zcard(PENDING_SET_KEY);
 
-  console.log('[dlq] drain cycle complete', {
+  logEvent('info', '[dlq] drain cycle complete', {
     observed: batch.messages.length,
     tracked,
     totalPending,

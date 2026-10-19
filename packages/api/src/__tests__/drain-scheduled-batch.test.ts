@@ -105,8 +105,8 @@ describe('emitOutboxBacklogMetric', () => {
     emitOutboxBacklogMetric({ pending: 7, oldestOccurredAt: oldest }, DEFAULT_BATCH_SIZE);
 
     expect(log).toHaveBeenCalledWith(
-      'outbox.backlog',
       expect.objectContaining({
+        message: 'outbox.backlog',
         metric: 'outbox_pending_count',
         pending: 7,
         batchSize: DEFAULT_BATCH_SIZE,
@@ -172,8 +172,11 @@ describe('runScheduledDrain', () => {
       COMPLIANCE_EVENT_TYPES,
     );
     expect(log).toHaveBeenCalledWith(
-      'outbox.backlog',
-      expect.objectContaining({ metric: 'outbox_pending_count', backlog: true }),
+      expect.objectContaining({
+        message: 'outbox.backlog',
+        metric: 'outbox_pending_count',
+        backlog: true,
+      }),
     );
     expect(result.processed).toBe(0);
   });
@@ -224,8 +227,11 @@ describe('runScheduledDrain', () => {
     });
 
     expect(log).toHaveBeenCalledWith(
-      'athlya.outbox.drain_errors',
-      expect.objectContaining({ metric: 'outbox_drain_errors', failed: 1 }),
+      expect.objectContaining({
+        message: 'athlya.outbox.drain_errors',
+        metric: 'outbox_drain_errors',
+        failed: 1,
+      }),
     );
   });
 });
@@ -274,8 +280,12 @@ describe('runScheduledDrain lease (issue #424)', () => {
       expect.arrayContaining(rows.map((r) => r.id)),
     );
     expect(log).toHaveBeenCalledWith(
-      'outbox.drain_cycle',
-      expect.objectContaining({ metric: 'outbox_drain_cycle', processed: 3, succeeded: 3 }),
+      expect.objectContaining({
+        message: 'outbox.drain_cycle',
+        metric: 'outbox_drain_cycle',
+        processed: 3,
+        succeeded: 3,
+      }),
     );
   });
 
@@ -307,10 +317,15 @@ describe('runScheduledDrain lease (issue #424)', () => {
 
     expect(result).toEqual({ processed: 2, succeeded: 1, failed: 0, released: 1 });
     expect(releaseLeasesMock).toHaveBeenCalledWith(expect.anything(), [rows[1]!.id], leaseToken);
-    expect(log).not.toHaveBeenCalledWith('athlya.outbox.drain_errors', expect.anything());
+    expect(log).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'athlya.outbox.drain_errors' }),
+    );
     expect(log).toHaveBeenCalledWith(
-      'outbox.drain_cycle',
-      expect.objectContaining({ failed: 0, released: 1 }),
+      expect.objectContaining({
+        message: 'outbox.drain_cycle',
+        failed: 0,
+        released: 1,
+      }),
     );
   });
 
@@ -336,8 +351,8 @@ describe('emitOutboxDrainErrorsMetric', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     emitOutboxDrainErrorsMetric({ processed: 10, succeeded: 7, failed: 3, released: 0 });
     expect(log).toHaveBeenCalledWith(
-      'athlya.outbox.drain_errors',
       expect.objectContaining({
+        message: 'athlya.outbox.drain_errors',
         metric: 'outbox_drain_errors',
         failed: 3,
         processed: 10,
@@ -386,8 +401,8 @@ describe('warnOnDrainOverlapRisk', () => {
     );
     expect(fired).toBe(true);
     expect(warn).toHaveBeenCalledWith(
-      'outbox.drain_overlap_risk',
       expect.objectContaining({
+        message: 'outbox.drain_overlap_risk',
         metric: 'outbox_drain_duration_ms',
         durationMs: OUTBOX_DRAIN_OVERLAP_WARN_MS + 1,
         processed: 200,
@@ -515,12 +530,15 @@ describe('outbox lane metrics (issue #311)', () => {
     ]);
 
     expect(log).toHaveBeenCalledWith(
-      'outbox.lane_backlog',
-      expect.objectContaining({ lane: 'notifications', pending: 15 }),
+      expect.objectContaining({
+        message: 'outbox.lane_backlog',
+        lane: 'notifications',
+        pending: 15,
+      }),
     );
     const rgpd = log.mock.calls.find(
-      (c) => (c[1] as { lane?: string } | undefined)?.lane === 'rgpd',
-    )?.[1] as { pending: number; oldestAgeMs: number };
+      (c) => (c[0] as { lane?: string } | undefined)?.lane === 'rgpd',
+    )?.[0] as { pending: number; oldestAgeMs: number };
     expect(rgpd.pending).toBe(1);
     expect(rgpd.oldestAgeMs).toBeGreaterThanOrEqual(600_000);
   });
@@ -530,8 +548,8 @@ describe('outbox lane metrics (issue #311)', () => {
     emitOutboxLaneMetrics([]);
 
     const lanes = log.mock.calls
-      .filter((c) => c[0] === 'outbox.lane_backlog')
-      .map((c) => c[1] as { lane: string; pending: number; oldestAgeMs: number });
+      .map((c) => c[0] as { message: string; lane: string; pending: number; oldestAgeMs: number })
+      .filter((event) => event.message === 'outbox.lane_backlog');
     expect(lanes).toEqual([
       expect.objectContaining({ lane: 'notifications', pending: 0, oldestAgeMs: 0 }),
       expect.objectContaining({ lane: 'rgpd', pending: 0, oldestAgeMs: 0 }),
@@ -713,14 +731,14 @@ describe('runKickDrain (issue #311)', () => {
       COMPLIANCE_EVENT_TYPES,
     );
     expect(log).toHaveBeenCalledWith(
-      'outbox.drain_cycle',
       expect.objectContaining({
+        message: 'outbox.drain_cycle',
         trigger: 'kick',
         succeeded: 1,
         deadlineMs: KICK_DRAIN_DEADLINE_MS,
       }),
     );
-    expect(log).not.toHaveBeenCalledWith('outbox.backlog', expect.anything());
+    expect(log).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'outbox.backlog' }));
   });
 
   it('is bounded to fewer rounds than the cron cycle', async () => {

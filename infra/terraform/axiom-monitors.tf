@@ -17,11 +17,14 @@
 #
 # Spans come from packages/api/src/middleware/otel.ts (OTLP/HTTP JSON);
 # log lines from packages/api/src/events/drain-scheduled.ts and
-# drain-dlq.ts. The log queries assume the documented ingest shape of
-# docs/operations/axiom-queries.md: one event per log line with the label
-# in `message` and the metadata fields at the top level. The log pipeline
-# into Axiom is not provisioned by this repository; check the shape on the
-# first apply (docs/runbooks/axiom-alerts-provision.md).
+# drain-dlq.ts, emitted through logEvent() (packages/api/src/logging.ts):
+# one console argument per line, a flat object `{ message, ...fields }`.
+# The log queries read that object as the Axiom event: the label in
+# `message`, the metric fields at the top level, never under a wrapper
+# (`fields`, `attributes`, `data`, `Logs[].Message`). The field contract
+# and the post-apply check are in docs/runbooks/axiom-alerts-provision.md.
+# packages/api/src/__tests__/axiom-log-monitors.contract.test.ts parses
+# these queries and checks every referenced field against the emitters;
 # scripts/__tests__/axiom-monitors.test.mjs keeps every SLO covered and
 # every variable fail-closed (no defaults).
 #
