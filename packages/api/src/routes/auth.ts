@@ -7,8 +7,8 @@
  *   | Method | Path                    | Chain                                                              |
  *   |--------|-------------------------|--------------------------------------------------------------------|
  *   | GET    | /turnstile-challenge    | handler (HTML page hosting the Turnstile widget for the mobile app) |
- *   | POST   | /register               | turnstile → zValidator(RegisterRequestSchema) → handler            |
- *   | POST   | /login                  | turnstile → zValidator(LoginRequestSchema) → handler               |
+ *   | POST   | /register               | turnstile → deviceAttestation → zValidator(RegisterRequestSchema) → handler |
+ *   | POST   | /login                  | turnstile → deviceAttestation → zValidator(LoginRequestSchema) → handler    |
  *   | POST   | /refresh                | zValidator(RefreshRequestSchema) → handler (NOT idempotent — rotation is single-use) |
  *   | POST   | /logout                 | jwtAuth → handler (optional `{ refreshToken }` body)               |
  *   | POST   | /logout-all             | jwtAuth → handler                                                  |
@@ -27,7 +27,9 @@
  *            fans out the RGPD deletion cascade.
  *   • 26.1 — `/register` and `/login` sit behind Turnstile. The mobile
  *            app solves the challenge in a WebView that loads
- *            `/turnstile-challenge` (issue #649).
+ *            `/turnstile-challenge` (issue #649). Device attestation
+ *            (Play Integrity / DeviceCheck, issue #659) is an extra,
+ *            flag-gated signal after Turnstile; off by default.
  *
  * Slice B8.4 — the `/login-with-apple` and `/login-with-google`
  * routes were removed. They previously threw "provider credentials
@@ -54,6 +56,7 @@ import { z } from 'zod';
 
 import { runWithOutboxKickScope } from '../events/outbox-kick.js';
 import { jwtAuth } from '../middleware/auth.js';
+import { deviceAttestation } from '../middleware/device-attestation.js';
 import { turnstile } from '../middleware/turnstile.js';
 import { ValidationError, zValidator } from '../middleware/validator.js';
 
@@ -227,29 +230,41 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
   router.get('/turnstile-challenge', (c) => turnstileChallengeHandler(c));
 
   /* ------------------------------ register ----------------------- */
-  router.post('/register', turnstile(), zValidator('json', RegisterRequestSchema), async (c) => {
-    traceOperation(c, 'auth.register');
-    const body = readValidated<RegisterRequest>(c, 'json');
-    const session = await deps.register(body);
-    return c.json(session, 201);
-  });
+  router.post(
+    '/register',
+    turnstile(),
+    deviceAttestation('register'),
+    zValidator('json', RegisterRequestSchema),
+    async (c) => {
+      traceOperation(c, 'auth.register');
+      const body = readValidated<RegisterRequest>(c, 'json');
+      const session = await deps.register(body);
+      return c.json(session, 201);
+    },
+  );
 
   /* ------------------------------ login -------------------------- */
-  router.post('/login', turnstile(), zValidator('json', LoginRequestSchema), async (c) => {
-    traceOperation(c, 'auth.login');
-    const body = readValidated<LoginRequest>(c, 'json');
-    const ip = deriveClientIp(c.req.header('cf-connecting-ip'), c.req.header('x-forwarded-for'));
-    // Sprint 12 / Slice 12.15 (Epic B3.4) — feed
-    // CF-IPCountry + User-Agent to the anomaly detector.
-    const country = c.req.header('cf-ipcountry');
-    const userAgent = c.req.header('user-agent');
-    const session = await deps.login(body, {
-      ip,
-      ...(country !== undefined ? { country } : {}),
-      ...(userAgent !== undefined ? { userAgent } : {}),
-    });
-    return c.json(session, 200);
-  });
+  router.post(
+    '/login',
+    turnstile(),
+    deviceAttestation('login'),
+    zValidator('json', LoginRequestSchema),
+    async (c) => {
+      traceOperation(c, 'auth.login');
+      const body = readValidated<LoginRequest>(c, 'json');
+      const ip = deriveClientIp(c.req.header('cf-connecting-ip'), c.req.header('x-forwarded-for'));
+      // Sprint 12 / Slice 12.15 (Epic B3.4) — feed
+      // CF-IPCountry + User-Agent to the anomaly detector.
+      const country = c.req.header('cf-ipcountry');
+      const userAgent = c.req.header('user-agent');
+      const session = await deps.login(body, {
+        ip,
+        ...(country !== undefined ? { country } : {}),
+        ...(userAgent !== undefined ? { userAgent } : {}),
+      });
+      return c.json(session, 200);
+    },
+  );
 
   /* ------------------------------ refresh ------------------------ */
   // NOT idempotent — the refresh-token rotation is intentionally

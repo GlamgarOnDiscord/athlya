@@ -142,11 +142,20 @@ const turnstileChallengeRoute = createRoute({
   },
 });
 
+const deviceAttestationDescription =
+  'Requires a `cf-turnstile-token` header. Mobile clients may also send ' +
+  '`x-device-attestation-platform` (`android` | `ios`) and `x-device-attestation-token` ' +
+  '(Play Integrity token whose `requestHash` is base64url(SHA-256(' +
+  '`athlya-auth-v1:<login|register>:<cf-turnstile-token>`)), or Apple DeviceCheck token). ' +
+  'The signal is off by default; with `DEVICE_ATTESTATION_MODE=enforce` a presented attestation ' +
+  'that fails answers 403 `device_attestation_failed`.';
+
 const registerRoute = createRoute({
   method: 'post',
   path: '/v1/auth/register',
   tags: ['auth'],
   summary: 'Register a new member',
+  description: deviceAttestationDescription,
   request: {
     body: {
       content: { 'application/json': { schema: RegisterRequestSchema } },
@@ -174,6 +183,7 @@ const loginRoute = createRoute({
   path: '/v1/auth/login',
   tags: ['auth'],
   summary: 'Authenticate with email + password',
+  description: deviceAttestationDescription,
   request: {
     body: {
       content: { 'application/json': { schema: LoginRequestSchema } },

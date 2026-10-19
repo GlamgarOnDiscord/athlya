@@ -239,8 +239,14 @@ site key makes the page answer `500 configuration_error` and the app shows the f
 4. **Release build** — sign in and register from a `preview` build against staging, then from a
    `production` build.
 
-Hardware attestation (App Attest on iOS, Play Integrity on Android) as an additional signal is a
-separate follow-up (#659), not part of this flow.
+### Device attestation (server side only for now)
+
+The API can verify Play Integrity (Android) and DeviceCheck (iOS) tokens as an **extra** signal
+after Turnstile, sent as `x-device-attestation-platform` / `x-device-attestation-token` (#659). It is
+off by default (`DEVICE_ATTESTATION_MODE` unset), and a request without these headers is never
+affected, so the current app keeps working unchanged. The app does not send them yet: obtaining the
+tokens needs a native module and is tracked in #686. Contract, modes and operator steps:
+[`docs/runbooks/device-attestation.md`](../runbooks/device-attestation.md).
 
 ## Drain semantics (Algorithm 4)
 
