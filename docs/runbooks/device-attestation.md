@@ -26,6 +26,11 @@ Headers sent by the app next to `cf-turnstile-token`:
 - `x-device-attestation-platform`: `android` or `ios`
 - `x-device-attestation-token`: at most 16 384 characters
 
+The app implements it in `apps/mobile/features/auth/attestation.ts` (#686): Android through
+`@expo/app-integrity`, iOS through the local `modules/device-check` module. It is best effort: on
+any device error, or after 2 s, the request goes out without these headers. Details in
+[`docs/mobile/README.md`](../mobile/README.md#device-attestation).
+
 **Android (Play Integrity, standard request).** The app passes as `requestHash`:
 
 ```
@@ -64,7 +69,9 @@ Nothing is needed while the mode is unset. To start collecting verdicts on stagi
 1. **Google Cloud (Android).** In the Google Cloud project linked to the app in Play Console (Play
    Console → App integrity → Play Integrity API → link a Cloud project), enable the Play Integrity
    API, create a service account with no project role, and download a JSON key. The project
-   **number** is also needed by the app (`prepareIntegrityTokenProvider`).
+   **number** is also needed by the app (`prepareIntegrityTokenProvider`): set it as
+   `EXPO_PUBLIC_PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER` in each EAS environment
+   ([`mobile-eas.md`](mobile-eas.md#2-environment-variables)) and ship a new build.
 2. **Apple (iOS).** In Apple Developer → Keys, create a key with the DeviceCheck capability. Note the
    key id and the team id, download the `.p8` file.
 3. **Secrets on the auth Worker** (from `packages/api`; paste the value at the prompt, never on the
