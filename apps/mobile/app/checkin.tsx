@@ -2,10 +2,10 @@ import { colors } from '@athlya/shared/tokens';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { AppState, View } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
 
 import { SignedIn } from '../components/AppSession';
 import { ErrorNotice } from '../components/ErrorNotice';
+import { QrCode } from '../components/QrCode';
 import { useRuntime } from '../components/RuntimeProvider';
 import { AppText } from '../components/ui/AppText';
 import { Button } from '../components/ui/Button';
@@ -75,7 +75,7 @@ function Checkin() {
             className="rounded-md p-md"
             style={{ backgroundColor: colors.light.background }}
           >
-            <QRCode
+            <QrCode
               value={state.token}
               size={QR_SIZE}
               color={colors.light.foreground}
