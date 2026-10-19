@@ -17,11 +17,12 @@ import type { AthlyaDbAny } from '@athlya/db/client';
 import type {
   CheckinRecord,
   ExportProfile,
+  ExportWorkoutSession,
   InvoiceRecord,
   MemberDataSource,
 } from '@athlya/members';
 import type { Consents } from '@athlya/shared/schemas';
-import type { AuditLog, Reservation, WorkoutSession } from '@athlya/shared/schemas/domain';
+import type { AuditLog, Reservation } from '@athlya/shared/schemas/domain';
 
 /** Raised when the job is not claimed (or belongs to another user). */
 export const EXPORT_JOB_NOT_CLAIMED_REASON = 'export_job_not_claimed';
@@ -87,7 +88,7 @@ export function createExportDataSource(db: AthlyaDbAny, requestedPageSize = 200)
       return [(await profileOf(userId, jobId)).consents];
     },
     listReservations: (_userId, jobId) => pages<Reservation>(jobId, 'reservations'),
-    listSessions: (_userId, jobId) => pages<WorkoutSession>(jobId, 'workout_sessions'),
+    listSessions: (_userId, jobId) => pages<ExportWorkoutSession>(jobId, 'workout_sessions'),
     listCheckins: (_userId, jobId) => pages<CheckinRecord>(jobId, 'checkins'),
     listInvoices: memberInvoicesV1,
     listAuditTrail: (_userId, jobId) => pages<AuditLog>(jobId, 'audit_trail'),
