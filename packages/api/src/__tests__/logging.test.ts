@@ -196,6 +196,22 @@ describe('redactKeys', () => {
     expect(out.userId).toBe('user-1');
   });
 
+  it('redacts session tokens and cookies, which a bare `token` key does not cover', () => {
+    const out = redactKeys()({
+      refreshToken: 'rt.abc',
+      AccessToken: 'at.abc',
+      idToken: 'id.abc',
+      Cookie: 'athlya.refresh=rt.abc',
+      tokenType: 'Bearer',
+    });
+
+    expect(out.refreshToken).toBe('[REDACTED]');
+    expect(out.AccessToken).toBe('[REDACTED]');
+    expect(out.idToken).toBe('[REDACTED]');
+    expect(out.Cookie).toBe('[REDACTED]');
+    expect(out.tokenType).toBe('Bearer');
+  });
+
   it('is case-insensitive on key names', () => {
     const redact = redactKeys(['Authorization']);
     const out = redact({ authorization: 'Bearer xyz', method: 'GET' });

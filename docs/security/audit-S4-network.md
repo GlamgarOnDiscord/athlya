@@ -281,6 +281,7 @@ Détail :
   - Cap soft : compteur Redis `idem:count:<userId>` avec TTL 24h, max 10 000 entries/user/24h.
   - Sweeper nightly (déjà mentionné dans le module : "task 10.x") qui purge les expired (`expires_at < now()`).
 - **Effort** : 1h (cap) + ack du sweeper task 10.x.
+- **Status (2026-10-19, issue #689)**: sweeper wired. Migration `0047_idempotency_keys_purge.sql` adds `idempotency_purge_expired(integer)` (SECURITY DEFINER, `athlya_cron` only), and the scheduled maintenance tick deletes up to 1 000 expired rows per minute (`packages/api/src/maintenance/idempotency-purge.ts`), so rows no longer outlive their 24 h window. The per-user write rate is bounded by the per-user mutation budgets (#613). No separate per-user row cap.
 
 ---
 

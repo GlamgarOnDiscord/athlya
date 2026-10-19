@@ -32,6 +32,7 @@
 \i tests/rls/audit_anonymization_scalar_guard.sql
 \i tests/rls/push_tokens.sql
 \i tests/rls/idempotency_keys.sql
+\i tests/rls/idempotency_purge.sql
 \i tests/rls/outbox.sql
 \i tests/rls/export_jobs.sql
 \i tests/rls/email_partial_unique.sql

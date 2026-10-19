@@ -422,8 +422,10 @@ export interface AuthServiceOptions {
   readonly accessTtlSec?: number;
   readonly refreshTtlSec?: number;
   readonly appleJwksUrl?: string;
+  /** Apple Services ID expected in `aud`. OAuth sign-in with Apple fails without it. */
   readonly appleAudience?: string;
   readonly googleJwksUrl?: string;
+  /** Google OAuth client ID expected in `aud`. OAuth sign-in with Google fails without it. */
   readonly googleAudience?: string;
   /** Issuer to stamp on every minted access / refresh JWT. */
   readonly jwtIssuer?: string;
@@ -935,6 +937,12 @@ export async function login(
  * Lazily build the default OAuth verifier from `jose.createRemoteJWKSet`.
  * Computed once per `deps` instance via the closure below; tests
  * override `deps.oauthVerifier` to avoid any network I/O.
+ *
+ * Audit S2-011: Apple and Google both sign ID tokens with RS256, so the
+ * verifier accepts RS256 only instead of RS256 or ES256. The audience
+ * is required too: without it, an ID token the provider issued to any
+ * other app would sign the user in here. A provider whose audience is
+ * not configured fails closed before any JWKS fetch.
  */
 function resolveOAuthVerifier(deps: AuthServiceDeps): OAuthVerifier {
   if (deps.oauthVerifier !== undefined) {
@@ -947,15 +955,15 @@ function resolveOAuthVerifier(deps: AuthServiceDeps): OAuthVerifier {
 
   return {
     async verify(idToken, provider) {
+      const audience =
+        provider === 'apple' ? deps.options?.appleAudience : deps.options?.googleAudience;
+      if (audience === undefined || audience.length === 0) {
+        throw new Error(`oauth: ${provider} audience is not configured`);
+      }
       const { payload } = await jwtVerify(idToken, provider === 'apple' ? appleJwks : googleJwks, {
-        algorithms: ['RS256', 'ES256'],
+        algorithms: ['RS256'],
         issuer: provider === 'apple' ? APPLE_ISSUER : [...GOOGLE_ISSUERS],
-        ...(provider === 'apple' && deps.options?.appleAudience !== undefined
-          ? { audience: deps.options.appleAudience }
-          : {}),
-        ...(provider === 'google' && deps.options?.googleAudience !== undefined
-          ? { audience: deps.options.googleAudience }
-          : {}),
+        audience,
       });
       const sub = typeof payload.sub === 'string' ? payload.sub : '';
       const email = typeof payload['email'] === 'string' ? payload['email'] : '';

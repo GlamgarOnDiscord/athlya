@@ -20,8 +20,17 @@
  * paths.
  */
 
-import { SignJWT, generateKeyPair } from 'jose';
-import { beforeAll, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
+import { SignJWT, exportJWK, generateKeyPair } from 'jose';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockedFunction,
+} from 'vitest';
 
 /**
  * Decode a compact JWS header segment without verifying the
@@ -50,6 +59,7 @@ function decodeJwtHeader(token: string): Record<string, unknown> {
 import { currentJwks, publicJwkOf } from '../jwt.js';
 import { hash as hashPassword } from '../password.js';
 import {
+  APPLE_ISSUER,
   AuthError,
   CURRENT_CGU_VERSION,
   EmailTakenError,
@@ -978,6 +988,115 @@ describe('loginWithApple / loginWithGoogle', () => {
 
     expect(callLog).toEqual(['verify', 'findOrCreateOAuthUser']);
     expect(verifier.verify).toHaveBeenCalledWith('eyJ.good.token', 'apple');
+  });
+
+  describe('default JWKS verifier (audit S2-011)', () => {
+    const APPLE_JWKS_URL = 'https://apple.jwks.test/auth/keys';
+    const AUDIENCE = 'app.athlya.signin';
+
+    async function providerKeys() {
+      const rsa = await generateKeyPair('RS256', { extractable: true });
+      const ec = await generateKeyPair('ES256', { extractable: true });
+      const rsaJwk = { ...(await exportJWK(rsa.publicKey)), kid: 'rsa-1', alg: 'RS256' };
+      const ecJwk = { ...(await exportJWK(ec.publicKey)), kid: 'ec-1', alg: 'ES256' };
+      return { rsa, ec, jwks: { keys: [rsaJwk, ecJwk] } };
+    }
+
+    function idToken(
+      alg: 'RS256' | 'ES256',
+      kid: string,
+      key: Parameters<SignJWT['sign']>[0],
+      audience = AUDIENCE,
+    ) {
+      return new SignJWT({ email: 'alice@example.com' })
+        .setProtectedHeader({ alg, kid })
+        .setIssuer(APPLE_ISSUER)
+        .setAudience(audience)
+        .setSubject('apple|sub123')
+        .setIssuedAt(FIXED_NOW_SEC)
+        .setExpirationTime(FIXED_NOW_SEC + 600)
+        .sign(key);
+    }
+
+    function depsWith(options: NonNullable<AuthServiceDeps['options']>, jwks: unknown) {
+      const fetchJwks = vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(jwks), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        ),
+      );
+      vi.stubGlobal('fetch', fetchJwks);
+      const { deps, repo } = makeDeps();
+      repo.findOrCreateOAuthUser.mockResolvedValue(makeUserRow());
+      return { deps: { ...deps, options }, repo, fetchJwks };
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(FIXED_NOW_SEC * 1000);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    it('accepts an RS256 ID token issued for the configured audience', async () => {
+      const { rsa, jwks } = await providerKeys();
+      const { deps, repo } = depsWith(
+        { appleJwksUrl: APPLE_JWKS_URL, appleAudience: AUDIENCE },
+        jwks,
+      );
+
+      const session = await loginWithApple(await idToken('RS256', 'rsa-1', rsa.privateKey), deps);
+
+      expect(session.user.id).toBe(USER_ID);
+      expect(repo.findOrCreateOAuthUser).toHaveBeenCalledWith(
+        'apple',
+        'apple|sub123',
+        'alice@example.com',
+        undefined,
+      );
+    });
+
+    it('rejects an ES256 ID token even when its key is in the provider JWKS', async () => {
+      const { ec, jwks } = await providerKeys();
+      const { deps, repo } = depsWith(
+        { appleJwksUrl: APPLE_JWKS_URL, appleAudience: AUDIENCE },
+        jwks,
+      );
+
+      await expect(
+        loginWithApple(await idToken('ES256', 'ec-1', ec.privateKey), deps),
+      ).rejects.toMatchObject({ code: 'oauth_verification_failed' });
+      expect(repo.findOrCreateOAuthUser).not.toHaveBeenCalled();
+    });
+
+    it('rejects an ID token issued for another audience', async () => {
+      const { rsa, jwks } = await providerKeys();
+      const { deps, repo } = depsWith(
+        { appleJwksUrl: APPLE_JWKS_URL, appleAudience: AUDIENCE },
+        jwks,
+      );
+
+      await expect(
+        loginWithApple(await idToken('RS256', 'rsa-1', rsa.privateKey, 'other.app'), deps),
+      ).rejects.toMatchObject({ code: 'oauth_verification_failed' });
+      expect(repo.findOrCreateOAuthUser).not.toHaveBeenCalled();
+    });
+
+    it('fails closed without fetching the JWKS when no audience is configured', async () => {
+      const { rsa, jwks } = await providerKeys();
+      const { deps, repo, fetchJwks } = depsWith({ appleJwksUrl: APPLE_JWKS_URL }, jwks);
+
+      await expect(
+        loginWithApple(await idToken('RS256', 'rsa-1', rsa.privateKey), deps),
+      ).rejects.toMatchObject({ code: 'oauth_verification_failed' });
+      expect(fetchJwks).not.toHaveBeenCalled();
+      expect(repo.findOrCreateOAuthUser).not.toHaveBeenCalled();
+    });
   });
 
   it('does NOT link the account when the provider ID token signature is invalid (Req 1.4)', async () => {
