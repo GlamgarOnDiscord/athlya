@@ -200,6 +200,40 @@ export function createLogger(
   };
 }
 
+/** Fields of a {@link logEvent} line; `message` is reserved for the label. */
+export type LogEventFields = Readonly<Record<string, unknown>> & { readonly message?: never };
+
+/**
+ * Emit one flat log event: a single `console` argument shaped
+ * `{ message, ...fields }`.
+ *
+ * Use it for every line an Axiom monitor or dashboard queries
+ * (`['message'] == "<label>"` plus top-level metric fields; contract in
+ * docs/runbooks/axiom-alerts-provision.md). A two-argument call such as
+ * `console.log(label, meta)` reaches the log pipeline as an argument
+ * array (`["label", { ... }]`), so neither `message` nor the metric
+ * fields would exist at the top level of the event.
+ *
+ * Fields go through the default redaction like {@link createLogger}.
+ */
+export function logEvent(level: LogLevel, message: string, fields: LogEventFields = {}): void {
+  const event = { message, ...redactKeys(DEFAULT_REDACTED_KEYS)(fields) };
+  switch (level) {
+    case 'debug':
+      console.debug(event);
+      return;
+    case 'info':
+      console.log(event);
+      return;
+    case 'warn':
+      console.warn(event);
+      return;
+    case 'error':
+      console.error(event);
+      return;
+  }
+}
+
 /**
  * `JSON.stringify` that never throws.
  *

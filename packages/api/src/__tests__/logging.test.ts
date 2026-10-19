@@ -21,7 +21,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DEFAULT_REDACTED_KEYS, createLogger, redactKeys } from '../logging.js';
+import { DEFAULT_REDACTED_KEYS, createLogger, logEvent, redactKeys } from '../logging.js';
 
 import type { MockInstance } from 'vitest';
 
@@ -224,5 +224,35 @@ describe('redactKeys', () => {
     expect(DEFAULT_REDACTED_KEYS).toContain('token');
     expect(DEFAULT_REDACTED_KEYS).toContain('authorization');
     expect(DEFAULT_REDACTED_KEYS).toContain('stripeSignature');
+  });
+});
+
+describe('logEvent', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('emits one flat object per line with the label in `message`', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    logEvent('info', 'outbox.backlog', { pending: 3, ageMs: 10 });
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls[0]).toEqual([{ message: 'outbox.backlog', pending: 3, ageMs: 10 }]);
+  });
+
+  it('routes each level to the matching console method', () => {
+    const spies = {
+      debug: vi.spyOn(console, 'debug').mockImplementation(() => {}),
+      info: vi.spyOn(console, 'log').mockImplementation(() => {}),
+      warn: vi.spyOn(console, 'warn').mockImplementation(() => {}),
+      error: vi.spyOn(console, 'error').mockImplementation(() => {}),
+    };
+    for (const level of ['debug', 'info', 'warn', 'error'] as const) {
+      logEvent(level, `event.${level}`);
+      expect(spies[level]).toHaveBeenCalledWith({ message: `event.${level}` });
+    }
+  });
+
+  it('redacts sensitive fields like createLogger', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    logEvent('info', 'event', { token: 'abc', count: 1 });
+    expect(log).toHaveBeenCalledWith({ message: 'event', token: '[REDACTED]', count: 1 });
   });
 });

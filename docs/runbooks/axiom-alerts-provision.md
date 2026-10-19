@@ -31,9 +31,63 @@ The queries read the signals the runtime actually emits:
   every DLQ batch.
 
 After the first apply, open each monitor in Axiom and run its query once to
-confirm it returns rows on the dataset (field names depend on the ingest
-path), then run the test fires below. The remaining entries of the table
-stay manual.
+confirm it returns rows on the dataset (see the field contract below), then
+run the test fires below. The remaining entries of the table stay manual.
+
+### Log field contract (#693)
+
+The three log-based monitors (A4, A5, A16) read these paths on the
+`AXIOM_LOGS_DATASET` events:
+
+| Monitor              | Filter                                        | Field (top level)           | Emitter                                          |
+| -------------------- | --------------------------------------------- | --------------------------- | ------------------------------------------------ |
+| A4 `queue_lag`       | `['message'] == "outbox.backlog"`             | `['ageMs']` (number)        | `emitOutboxBacklogMetric` (`drain-scheduled.ts`) |
+| A16 `outbox_backlog` | `['message'] == "outbox.backlog"`             | `['pending']` (number)      | `emitOutboxBacklogMetric` (`drain-scheduled.ts`) |
+| A5 `dlq_depth`       | `['message'] == "[dlq] drain cycle complete"` | `['totalPending']` (number) | `handleDlqBatch` (`drain-dlq.ts`)                |
+
+What the runtime guarantees:
+
+- Each of these lines is **one** `console` call with **one** argument, a
+  flat object `{ message: "<label>", ...fields }`, emitted through
+  `logEvent()` (`packages/api/src/logging.ts`). The other `outbox.*`
+  metric lines (`outbox.lane_backlog`, `outbox.drain_cycle`,
+  `outbox.drain_overlap_risk`, `athlya.outbox.drain_errors`) use the same
+  shape. Never log a monitored line as `console.log(label, meta)`: that
+  reaches the pipeline as an argument array (`["label", { … }]`), with no
+  `message` and no top-level field.
+- `packages/api/src/__tests__/axiom-log-monitors.contract.test.ts` parses
+  the queries in `axiom-monitors.tf`, runs the real emitters and fails if
+  a referenced field is missing, nested or not numeric.
+
+What the log pipeline must do (it is set up outside this repository):
+
+- Deliver that single argument **as the Axiom event**: its keys become
+  the event's top-level fields. A pipeline that ships the raw Workers
+  trace event (Logpush `workers_trace_events`, a Tail Worker forwarding
+  `TraceItem` as is) nests it under `Logs[].Message[0]`; a pipeline that
+  wraps it (OTLP log `attributes`, a shipper's `fields` / `data` key)
+  nests it too. Flatten it before ingest, or the monitors see no data.
+- Not sample the scheduled and queue invocations. A4 and A16 alert on
+  **no data**, so dropping cron ticks (for example a Workers Logs export
+  subject to `head_sampling_rate = 0.1` in production, `wrangler.toml`)
+  pages on silence.
+
+Post-apply check, on each environment, once the drain cron has run for a
+few minutes (each query must return rows with a non-null value):
+
+```apl
+['<AXIOM_LOGS_DATASET>']
+| where _time > now(-15m)
+| where ['message'] == "outbox.backlog"
+| project _time, ['pending'], ['ageMs']
+| take 5
+```
+
+A5 only gets data after a DLQ batch: run the T3 test fire below, then
+query `['message'] == "[dlq] drain cycle complete"` and project
+`['totalPending']`. If a query returns nothing, look at the raw events
+(`| take 5` without the `where`): when `message` or the fields sit under
+a wrapper, fix the pipeline mapping, not the monitor queries.
 
 ## Prérequis
 
