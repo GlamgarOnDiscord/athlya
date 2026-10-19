@@ -114,6 +114,16 @@ describe('logSession', () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: 'key-1' }));
   });
 
+  it('hands the import source to the repo when one is given', async () => {
+    const { deps, create } = buildDeps();
+    create.mockResolvedValueOnce(STORED_SESSION);
+    const source = { provider: 'appleHealth', externalId: 'HK-WORKOUT-1' } as const;
+
+    await logSession(USER_ID, { ...VALID_INPUT, source }, deps);
+
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ source }));
+  });
+
   it('never hands an empty idempotency key to the repo', async () => {
     const { deps, create } = buildDeps();
     create.mockResolvedValueOnce(STORED_SESSION);

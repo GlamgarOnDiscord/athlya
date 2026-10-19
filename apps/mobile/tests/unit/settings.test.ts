@@ -11,6 +11,7 @@ import {
 } from '../../features/settings/settings';
 import { ApiError, NetworkError } from '../../infrastructure/api/errors';
 import { REFRESH_TOKEN_KEY, USER_ID_KEY } from '../../infrastructure/auth/token-store';
+import { AppleHealthLinkStore } from '../../infrastructure/health/link-store';
 import { createMemoryKeyValueStore } from '../../infrastructure/storage/key-value-store';
 import { MutationQueue } from '../../infrastructure/sync/queue';
 import { createFakeApi, createFakeSync, USER_ID } from '../features-helpers';
@@ -72,6 +73,20 @@ describe('rejectedChanges', () => {
       },
     ]);
   });
+
+  it('labels a rejected Apple Health import', () => {
+    const local = new MutationQueue(createMemoryKeyValueStore(), { uuid: randomUUID });
+    const imported = local.enqueue({
+      ownerId: USER_ID,
+      kind: 'importHealthWorkout',
+      path: '/v1/sessions',
+    });
+    local.moveToDeadLetter(imported.id, { status: 422 });
+
+    expect(rejectedChanges(local.deadLetters(USER_ID))[0]?.kindKey).toBe(
+      'mobile.settings.rejected.kinds.importHealthWorkout',
+    );
+  });
 });
 
 describe('requestDataExport', () => {
@@ -126,9 +141,13 @@ describe('account deletion', () => {
     });
     queue.moveToDeadLetter(rejected.id, { status: 422 });
     const theirs = queue.enqueue({ ownerId: 'other', kind: 'logSession', path: '/v1/sessions' });
+    const healthLinks = new AppleHealthLinkStore(createMemoryKeyValueStore());
+    healthLinks.connect(USER_ID, 0);
+    healthLinks.connect('other', 0);
     return {
-      deps: { api, sync, queue, tokenStore: store, uuid: randomUUID },
+      deps: { api, sync, queue, tokenStore: store, healthLinks, uuid: randomUUID },
       api,
+      healthLinks,
       sync,
       queue,
       secure,
@@ -138,11 +157,13 @@ describe('account deletion', () => {
   }
 
   it('calls DELETE /v1/auth/me, then forgets the account on this device', async () => {
-    const { deps, api, sync, queue, secure, mine, theirs } = await setup();
+    const { deps, api, sync, queue, secure, mine, theirs, healthLinks } = await setup();
     api.del.mockResolvedValue({ deleted: true });
 
     expect(await deleteAccount(deps, USER_ID)).toEqual({ ok: true, cleanupFailed: false });
 
+    expect(healthLinks.get(USER_ID)).toBeNull();
+    expect(healthLinks.get('other')).not.toBeNull();
     expect(api.del).toHaveBeenCalledWith('/v1/auth/me', {
       idempotencyKey: expect.any(String) as string,
     });

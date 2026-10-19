@@ -739,6 +739,7 @@
           "bookClass": "Réservation de cours",
           "cancelReservation": "Annulation de réservation",
           "logSession": "Séance enregistrée",
+          "importHealthWorkout": "Import Apple Santé",
           "other": "Modification"
         }
       },
@@ -912,6 +913,51 @@
           "timeout": "La machine n’a pas répondu. Réessayez.",
           "controlLost": "La machine a repris le contrôle (bouton de sa console ou autre app). Reprenez le contrôle pour continuer."
         }
+      }
+    },
+    "health": {
+      "title": "Apple Santé",
+      "description": "Importez vos entraînements Apple Santé comme séances. Athlya lit uniquement vos entraînements et leurs fréquence cardiaque, énergie et distance ; il n'écrit jamais dans Apple Santé.",
+      "connect": "Connecter Apple Santé",
+      "connectHint": "Demande l'accès en lecture à vos entraînements Apple Santé.",
+      "connectedSince": "Connecté. Les entraînements à partir du {date} sont importés.",
+      "importNow": "Importer maintenant",
+      "importNowHint": "Importe les entraînements ajoutés à Apple Santé depuis le dernier import.",
+      "disconnect": "Déconnecter Apple Santé",
+      "disconnectHint": "Arrête l'import sur cet appareil. Les séances déjà importées sont conservées.",
+      "disconnected": "Déconnecté. Pour retirer l'accès d'Athlya, ouvrez l'app Santé, puis Partage, Apps, Athlya.",
+      "unavailable": "Apple Santé n'est pas disponible sur cet appareil.",
+      "consentRequired": "L'import depuis Apple Santé nécessite votre consentement au partage de données avec des tiers. Vous pouvez l'accorder dans la section consentements de votre profil.",
+      "result": {
+        "done": "Import terminé : {imported} importé(s), {queued} en attente de synchronisation, {skipped} ignoré(s).",
+        "none": "Aucun nouvel entraînement à importer.",
+        "stopped": "Import interrompu : {imported} importé(s), {queued} en attente de synchronisation. Réessayez plus tard."
+      },
+      "summary": {
+        "source": "Importé d'Apple Santé",
+        "distance": "Distance {km} km",
+        "energy": "Énergie {kcal} kcal",
+        "avgHeartRate": "FC moyenne {bpm} bpm",
+        "maxHeartRate": "FC max {bpm} bpm"
+      },
+      "activities": {
+        "core": "Gainage",
+        "crossTraining": "Cross-training",
+        "cycling": "Vélo",
+        "dance": "Danse",
+        "elliptical": "Elliptique",
+        "hiit": "HIIT",
+        "hiking": "Randonnée",
+        "mixedCardio": "Cardio mixte",
+        "pilates": "Pilates",
+        "rowing": "Rameur",
+        "running": "Course à pied",
+        "stairs": "Escaliers",
+        "strength": "Renforcement musculaire",
+        "swimming": "Natation",
+        "walking": "Marche",
+        "yoga": "Yoga",
+        "other": "Entraînement"
       }
     }
   },
