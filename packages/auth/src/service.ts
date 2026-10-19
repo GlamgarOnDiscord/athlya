@@ -422,7 +422,7 @@ export interface AuthServiceOptions {
   readonly accessTtlSec?: number;
   readonly refreshTtlSec?: number;
   readonly appleJwksUrl?: string;
-  /** Apple Services ID expected in `aud`. OAuth sign-in with Apple fails without it. */
+  /** Apple client ID expected in `aud`: the bundle/App ID for native sign-in, or the Services ID for web sign-in. OAuth sign-in with Apple fails without it. */
   readonly appleAudience?: string;
   readonly googleJwksUrl?: string;
   /** Google OAuth client ID expected in `aud`. OAuth sign-in with Google fails without it. */
