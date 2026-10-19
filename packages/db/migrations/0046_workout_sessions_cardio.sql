@@ -19,13 +19,20 @@
 -- The export (`export_job_rows`, 0034) adds a `cardio` key to a session
 -- that has one; sessions without one keep the 0034 shape.
 --
--- `ADD COLUMN` with a CHECK takes an ACCESS EXCLUSIVE lock and scans the
--- table once to validate it (all NULL); the table is small.
+-- Lock footprint: `ADD COLUMN` without a default is a catalog-only change.
+-- The CHECK is added separately as NOT VALID, so it is enforced on every
+-- new INSERT and UPDATE but adding it skips the full-table validation
+-- scan under the ACCESS EXCLUSIVE lock (the migration runs in one
+-- transaction, so the scan would hold that lock until commit). Nothing
+-- is lost by skipping it: every existing row has a NULL `cardio`, which
+-- the CHECK accepts. No VALIDATE CONSTRAINT migration is needed.
 -- =====================================================================
 
-ALTER TABLE "workout_sessions" ADD COLUMN IF NOT EXISTS "cardio" jsonb
-    CONSTRAINT "workout_sessions_cardio_object"
-    CHECK ("cardio" IS NULL OR jsonb_typeof("cardio") = 'object');--> statement-breakpoint
+ALTER TABLE "workout_sessions" ADD COLUMN IF NOT EXISTS "cardio" jsonb;--> statement-breakpoint
+
+ALTER TABLE "workout_sessions" DROP CONSTRAINT IF EXISTS "workout_sessions_cardio_object";--> statement-breakpoint
+ALTER TABLE "workout_sessions" ADD CONSTRAINT "workout_sessions_cardio_object"
+    CHECK ("cardio" IS NULL OR jsonb_typeof("cardio") = 'object') NOT VALID;--> statement-breakpoint
 
 CREATE OR REPLACE FUNCTION export_job_rows(
     p_job_id uuid,

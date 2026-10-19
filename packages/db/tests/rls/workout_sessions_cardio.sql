@@ -8,7 +8,7 @@
 -- =====================================================================
 
 BEGIN;
-SELECT plan(16);
+SELECT plan(17);
 
 -- ---------- structure ----------
 
@@ -16,6 +16,12 @@ SELECT has_column('public', 'workout_sessions', 'cardio', 'workout_sessions.card
 SELECT col_type_is('public', 'workout_sessions', 'cardio', 'jsonb', 'workout_sessions.cardio is jsonb');
 SELECT col_is_null('public', 'workout_sessions', 'cardio', 'workout_sessions.cardio is nullable (expand only)');
 SELECT col_hasnt_default('public', 'workout_sessions', 'cardio', 'workout_sessions.cardio has no default');
+SELECT is(
+    (SELECT convalidated FROM pg_constraint
+      WHERE conname = 'workout_sessions_cardio_object' AND conrelid = 'workout_sessions'::regclass),
+    false,
+    'workout_sessions_cardio_object is added NOT VALID (no validation scan under the lock)'
+);
 
 -- ---------- writes under RLS ----------
 
