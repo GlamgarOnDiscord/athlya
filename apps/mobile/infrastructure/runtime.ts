@@ -18,6 +18,8 @@ import { createNetInfoConnectivity } from './sync/netinfo-connectivity';
 import { MutationQueue } from './sync/queue';
 import { SyncController } from './sync/sync-controller';
 
+import type { KeyValueStore } from './storage/key-value-store';
+
 export interface AppRuntime {
   readonly locale: Locale;
   /** API origin (`EXPO_PUBLIC_API_URL`), also loaded by the Turnstile WebView. */
@@ -26,6 +28,8 @@ export interface AppRuntime {
   readonly api: ApiClient;
   readonly tokenStore: TokenStore;
   readonly queue: MutationQueue;
+  /** On-device preferences (e.g. the last paired heart-rate strap); never synced. */
+  readonly preferences: KeyValueStore;
   readonly sync: SyncController;
   /** Releases native listeners (NetInfo). */
   readonly dispose: () => void;
@@ -41,6 +45,7 @@ export async function createAppRuntime(): Promise<AppRuntime> {
   const queue = new MutationQueue(createMmkvKeyValueStore('athlya.offline', encryptionKey), {
     uuid: Crypto.randomUUID,
   });
+  const preferences = createMmkvKeyValueStore('athlya.preferences', encryptionKey);
   const tokenStore = new TokenStore(secure, createExpoBiometricAuthenticator(), {
     unlockPrompt: t('mobile.unlock.prompt'),
   });
@@ -64,6 +69,7 @@ export async function createAppRuntime(): Promise<AppRuntime> {
     api,
     tokenStore,
     queue,
+    preferences,
     sync,
     dispose: () => connectivity.dispose(),
   };
