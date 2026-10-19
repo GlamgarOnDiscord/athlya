@@ -97,6 +97,7 @@ describe('GET /openapi.json', () => {
       '/v1/sessions',
       '/v1/sessions/me',
       '/v1/me/progression',
+      '/v1/me/progression/cardio',
       '/v1/coach',
       '/v1/coach/ask',
       '/v1/audit',

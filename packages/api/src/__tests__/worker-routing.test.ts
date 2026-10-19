@@ -114,6 +114,11 @@ describe('reservations worker', () => {
     expect(s).not.toBe(404);
   });
 
+  it('serves /v1/me/progression/cardio (not 404)', async () => {
+    const s = await status(reservationsApp, '/v1/me/progression/cardio');
+    expect(s).not.toBe(404);
+  });
+
   it('serves /v1/coach and /v1/coach/ask (not 404)', async () => {
     expect(await status(reservationsApp, '/v1/coach')).not.toBe(404);
     expect(await status(reservationsApp, '/v1/coach/ask', 'POST')).not.toBe(404);

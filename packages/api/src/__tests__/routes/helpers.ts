@@ -98,6 +98,7 @@ export function buildStubDeps(
       openExportDownload: vi.fn(),
       listMembersByStudio: vi.fn(),
       getProgression: vi.fn(),
+      getCardioProgression: vi.fn(),
       ...overrides.members,
     },
     classes: {

@@ -489,6 +489,18 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
       truncated: false,
       skippedSessions: 0,
     })),
+    getCardioProgression: vi.fn(
+      async (_userId: string, windowDays: 30 | 90 | 365, bucket: 'day' | 'week') => ({
+        windowDays,
+        from: '2026-01-01T00:00:00.000Z',
+        to: '2026-01-31T00:00:00.000Z',
+        bucket,
+        totals: { sessions: 0, durationSec: 0, distanceM: 0, energyKcal: 0 },
+        machines: [],
+        truncated: false,
+        skippedSessions: 0,
+      }),
+    ),
   };
 
   /* --------------------- studios --------------------- */
