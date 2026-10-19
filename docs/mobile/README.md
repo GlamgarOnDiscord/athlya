@@ -103,18 +103,18 @@ idempotencyKey? })` returns the `PendingMutation`; then call `runtime.sync.syncN
 
 ## Screens
 
-| Route           | What it does                                                                                 | API                                                                                             |
-| --------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `/login`        | Email + password sign-in, Turnstile check                                                    | `GET /v1/auth/turnstile-challenge` (WebView), `POST /v1/auth/login`                             |
-| `/register`     | Account creation with studio slug and consents, Turnstile check                              | `GET /v1/auth/turnstile-challenge` (WebView), `POST /v1/auth/register`                          |
-| `/`             | Sync banner, today's program workout (24.4), navigation                                      | `GET /v1/programs/today?date=<local date>`                                                      |
-| `/classes`      | Next 14 days of classes, booking with an optimistic seat count (11.8)                        | `GET /v1/classes?from=<ISO>&to=<ISO>` (both required, 90 days at most), `POST /v1/reservations` |
-| `/reservations` | Upcoming reservations, cancellation until 2 h before the class                               | `GET /v1/reservations/me`, `DELETE /v1/reservations/{id}`                                       |
-| `/workout`      | Workout log: exercises, sets, reps, weight, duration, notes (11.10)                          | `POST /v1/sessions`                                                                             |
-| `/progression`  | Progression graphs over 30/90/365 days: volume, estimated 1RM, weekly frequency (22.2)       | `GET /v1/me/progression?window=30\|90\|365` (ETag / `If-None-Match`)                            |
-| `/coach`        | AI coach behind the `ai-coach` flag: consent notice, question, streamed answer (21.2)        | `GET /v1/coach`, `POST /v1/coach/ask` (`Accept: text/event-stream`)                             |
-| `/checkin`      | Rotating single-use QR code staff scan at the front desk (11.9)                              | `POST /v1/checkins/token` (body `{}`)                                                           |
-| `/settings`     | Biometric unlock, Apple Health (iOS, 18.1), rejected changes (DLQ), RGPD export and deletion | `GET /v1/members/me`, `POST /v1/sessions`, `POST /v1/members/me/export`, `DELETE /v1/auth/me`   |
+| Route           | What it does                                                                                                           | API                                                                                                                   |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `/login`        | Email + password sign-in, Turnstile check                                                                              | `GET /v1/auth/turnstile-challenge` (WebView), `POST /v1/auth/login`                                                   |
+| `/register`     | Account creation with studio slug and consents, Turnstile check                                                        | `GET /v1/auth/turnstile-challenge` (WebView), `POST /v1/auth/register`                                                |
+| `/`             | Sync banner, today's program workout (24.4), navigation                                                                | `GET /v1/programs/today?date=<local date>`                                                                            |
+| `/classes`      | Next 14 days of classes, booking with an optimistic seat count (11.8)                                                  | `GET /v1/classes?from=<ISO>&to=<ISO>` (both required, 90 days at most), `POST /v1/reservations`                       |
+| `/reservations` | Upcoming reservations, cancellation until 2 h before the class                                                         | `GET /v1/reservations/me`, `DELETE /v1/reservations/{id}`                                                             |
+| `/workout`      | Workout log: exercises, sets, reps, weight, duration, notes (11.10)                                                    | `POST /v1/sessions`                                                                                                   |
+| `/progression`  | Progression graphs over 30/90/365 days: volume, estimated 1RM, weekly frequency (22.2)                                 | `GET /v1/me/progression?window=30\|90\|365` (ETag / `If-None-Match`)                                                  |
+| `/coach`        | AI coach behind the `ai-coach` flag: consent notice, question, streamed answer (21.2)                                  | `GET /v1/coach`, `POST /v1/coach/ask` (`Accept: text/event-stream`)                                                   |
+| `/checkin`      | Rotating single-use QR code staff scan at the front desk (11.9)                                                        | `POST /v1/checkins/token` (body `{}`)                                                                                 |
+| `/settings`     | Biometric unlock, Apple Health (iOS, 18.1), rejected changes (DLQ), RGPD export and account deletion (11.11), sign-out | `GET /v1/members/me`, `POST /v1/sessions`, `POST /v1/members/me/export`, `DELETE /v1/auth/me`, `POST /v1/auth/logout` |
 
 Screens behind the sign-in gate (`<SignedIn>`, `components/AppSession.tsx`) redirect to `/login` when
 no session is stored. Every response body the app reads (sessions, class and reservation lists,
