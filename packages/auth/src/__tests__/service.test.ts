@@ -649,25 +649,35 @@ describe('logout', () => {
 });
 
 /**
- * Minimal live-session ledger: `sid → userId`, with the same revoke
- * semantics as the Redis store (rotation consumes the old sid).
+ * Minimal session ledger with the Redis store's semantics: rotation
+ * consumes the old sid and keeps the family root, and `revoke` ends
+ * every live sid of the presented sid's family.
  */
 function makeMemoryStore(): SessionStore {
   const live = new Map<string, string>();
+  const rootOf = new Map<string, string>();
   return {
     create: (userId, sid) => {
       live.set(sid, userId);
+      rootOf.set(sid, sid);
       return Promise.resolve();
     },
     rotate: (oldSid, newSid) => {
       const userId = live.get(oldSid);
-      if (userId === undefined) return Promise.resolve({ kind: 'unknown' } as const);
+      const rootSid = rootOf.get(oldSid);
+      if (userId === undefined || rootSid === undefined) {
+        return Promise.resolve({ kind: 'unknown' } as const);
+      }
       live.delete(oldSid);
       live.set(newSid, userId);
-      return Promise.resolve({ kind: 'ok', userId, rootSid: oldSid } as const);
+      rootOf.set(newSid, rootSid);
+      return Promise.resolve({ kind: 'ok', userId, rootSid } as const);
     },
     revoke: (sid) => {
-      live.delete(sid);
+      const rootSid = rootOf.get(sid) ?? sid;
+      for (const liveSid of [...live.keys()]) {
+        if ((rootOf.get(liveSid) ?? liveSid) === rootSid) live.delete(liveSid);
+      }
       return Promise.resolve();
     },
     revokeAllForUser: (userId) => {
@@ -705,6 +715,19 @@ describe('logout vs logoutAll across sessions (S2-010)', () => {
     });
     const rotated = await refresh(laptop.refreshToken, deps);
     expect(rotated.user.id).toBe(USER_ID);
+  });
+
+  it('logout with a token rotated just before it also ends the rotated session', async () => {
+    const { deps, phone, laptop } = await twoSessions();
+    // A refresh on the phone wins the race against its logout.
+    const rotated = await refresh(phone.refreshToken, deps);
+
+    await logout(phone.refreshToken, deps, { userId: USER_ID });
+
+    await expect(refresh(rotated.refreshToken, deps)).rejects.toMatchObject({
+      code: 'token_invalid',
+    });
+    expect((await refresh(laptop.refreshToken, deps)).user.id).toBe(USER_ID);
   });
 
   it('logoutAll ends every session of the user', async () => {

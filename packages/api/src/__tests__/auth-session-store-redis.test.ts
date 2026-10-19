@@ -524,6 +524,28 @@ describe('createRedisSessionStore — per-session logout (S2-010)', () => {
     expect(rotated).toEqual({ kind: 'ok', userId: USER_A, rootSid: 'sid-laptop' });
   });
 
+  it('revoke() of a token rotated just before logout also ends its live successor', async () => {
+    const fake = new FakeUpstashRedis();
+    const store = createRedisSessionStore(asRedis(fake));
+
+    await store.create(USER_A, 'sid-phone', inOneHour());
+    await store.create(USER_A, 'sid-laptop', inOneHour());
+    // A refresh on the phone wins the race against its logout.
+    await store.rotate('sid-phone', 'sid-phone-2', inOneHour());
+
+    await store.revoke('sid-phone');
+
+    expect(await store.exists('sid-phone-2')).toBe(false);
+    expect(await store.exists('sid-laptop')).toBe(true);
+    expect(await fake.smembers(`auth:user:${USER_A}:sids`)).toEqual(['sid-laptop']);
+    // Family history is kept: replaying either phone token is reuse.
+    expect(await fake.get('auth:sid_to_root:sid-phone-2')).toBe('sid-phone');
+    expect(await store.rotate('sid-phone-2', 'sid-phone-3', inOneHour())).toMatchObject({
+      kind: 'reuse_detected',
+      rootSid: 'sid-phone',
+    });
+  });
+
   it('revokeAllForUser() ends every session of the user and no other user', async () => {
     const fake = new FakeUpstashRedis();
     const store = createRedisSessionStore(asRedis(fake));

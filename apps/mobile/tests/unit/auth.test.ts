@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { LOGOUT_TIMEOUT_MS, register, signIn, signOut } from '../../features/auth/auth';
+import {
+  LOGOUT_TIMEOUT_MS,
+  REFRESH_TOKEN_READ_TIMEOUT_MS,
+  register,
+  signIn,
+  signOut,
+} from '../../features/auth/auth';
 import { SessionStore } from '../../features/auth/session-store';
 import { ApiError, NetworkError } from '../../infrastructure/api/errors';
 import { REFRESH_TOKEN_KEY, USER_ID_KEY } from '../../infrastructure/auth/token-store';
@@ -259,6 +265,28 @@ describe('signOut', () => {
       signal: expect.any(AbortSignal) as AbortSignal,
       refreshOnUnauthorized: false,
     });
+  });
+
+  it('stops waiting for a stalled refresh-token read and still revokes and clears', async () => {
+    vi.useFakeTimers();
+    try {
+      const { deps, api, store, secure } = setup();
+      await store.saveSession({ ...session(), userId: USER_ID });
+      api.post.mockResolvedValue(null);
+      secure.getItem = () => new Promise<string | null>(() => undefined);
+
+      const done = signOut(deps);
+      await vi.advanceTimersByTimeAsync(REFRESH_TOKEN_READ_TIMEOUT_MS);
+
+      expect(await done).toBe(true);
+      expect(api.post).toHaveBeenCalledWith('/v1/auth/logout', undefined, {
+        signal: expect.any(AbortSignal) as AbortSignal,
+        refreshOnUnauthorized: false,
+      });
+      expect(secure.items.has(REFRESH_TOKEN_KEY)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('signs out locally even when the revocation fails', async () => {

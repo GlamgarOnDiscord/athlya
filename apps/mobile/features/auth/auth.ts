@@ -139,21 +139,33 @@ export function register(
   return startSession(deps, '/v1/auth/register', parsed.data, input.turnstileToken, signal);
 }
 
+/** How long sign-out waits for the server-side revocation before going on. */
+export const LOGOUT_TIMEOUT_MS = 5_000;
+
+/** How long sign-out waits for the secure storage to return the refresh token. */
+export const REFRESH_TOKEN_READ_TIMEOUT_MS = 1_000;
+
 /**
  * The stored refresh token when the store is already unlocked, so sign-out
- * never raises a biometric prompt; `null` otherwise or when it cannot be read.
+ * never raises a biometric prompt; `null` otherwise, when it cannot be read,
+ * or when the read takes longer than {@link REFRESH_TOKEN_READ_TIMEOUT_MS}.
  */
 async function unlockedRefreshToken(store: AuthDeps['tokenStore']): Promise<string | null> {
   if (!store.isUnlocked()) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(null);
+    }, REFRESH_TOKEN_READ_TIMEOUT_MS);
+  });
   try {
-    return await store.readRefreshToken();
+    return await Promise.race([store.readRefreshToken(), timeout]);
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
-
-/** How long sign-out waits for the server-side revocation before going on. */
-export const LOGOUT_TIMEOUT_MS = 5_000;
 
 /**
  * Revokes this device's session server-side when an access token is at

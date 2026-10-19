@@ -341,8 +341,14 @@ export type RotateResult =
  *                       (single Lua script or equivalent
  *                       transaction) so two parallel rotations of
  *                       the same `oldSid` cannot both succeed.
- *   - {@link revoke}  — drop a specific `sid`; MUST NOT throw if the
- *                       sid was already absent (idempotent logout).
+ *   - {@link revoke}  — end the session `sid` belongs to: `sid`
+ *                       and every live sid of its rotation family
+ *                       (a refresh that rotated the token before
+ *                       logout must not leave the successor live).
+ *                       The family map and sid_to_root pointers
+ *                       are kept so a replayed token still trips
+ *                       reuse detection. MUST NOT throw if the sid
+ *                       was already absent (idempotent logout).
  *   - {@link revokeAllForUser} — drop every `sid` tied to `userId`.
  *                                Used by {@link deleteMe}.
  *   - {@link revokeFamilyByRootSid} — drop every sid in the rotation

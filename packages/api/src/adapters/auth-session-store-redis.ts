@@ -371,20 +371,24 @@ export function createRedisSessionStore(redis: Redis): SessionStore {
     },
 
     async revoke(sid) {
-      // Look up the userId BEFORE deleting the payload so we
-      // can remove the sid from the user's live-sid set too.
-      const existing = await redis.get<string>(sidKey(sid));
-      await redis.del(sidKey(sid));
-      // Note: we deliberately DO NOT delete the family or
-      // sid_to_root entries here. A user-initiated logout
-      // takes one sid offline but the family must keep
-      // memorising it so a stolen-then-replayed copy still
-      // triggers reuse_detected on the next rotation
-      // attempt. The sid_to_root TTL eventually reaps it.
-      if (existing === null) return;
-      const parsed = parsePayload(existing, sid);
-      if (parsed !== null) {
-        await redis.srem(userSidsKey(parsed.userId), sid);
+      // End the whole session `sid` belongs to, not only `sid`: a
+      // refresh that rotated the presented token just before logout
+      // left a live successor in the same family (audit S2-010).
+      // Every live sid of the family is dropped, but the family set
+      // and the sid_to_root pointers stay so a stolen-then-replayed
+      // copy still triggers reuse_detected on the next rotation
+      // attempt. The sid_to_root TTL eventually reaps them.
+      //
+      // A rotation committing between the family read and the
+      // deletes adds a sid the pass did not see, so the pass repeats
+      // until it finds no live sid (bounded: each rotation needs the
+      // token minted by the previous one).
+      const root = (await redis.get<string>(sidToRootKey(sid))) ?? '';
+      const family = root === '' ? null : familyKey(root);
+      for (let pass = 0; pass < MAX_REVOKE_PASSES; pass += 1) {
+        const members = family === null ? [sid] : await redis.smembers(family);
+        if (!members.includes(sid)) members.push(sid);
+        if ((await revokeLiveSids(redis, members)) === 0) return;
       }
     },
 
@@ -454,6 +458,28 @@ export function createRedisSessionStore(redis: Redis): SessionStore {
 function ttlFromExpiresAt(expiresAt: Date): number {
   const diff = Math.floor((expiresAt.getTime() - Date.now()) / 1000);
   return Math.max(1, diff);
+}
+
+/** Upper bound on {@link SessionStore.revoke} passes over a family. */
+const MAX_REVOKE_PASSES = 3;
+
+/**
+ * Delete the per-sid record of every live sid in `sids` and remove it
+ * from its user's live-sid index. Returns how many were live.
+ */
+async function revokeLiveSids(redis: Redis, sids: readonly string[]): Promise<number> {
+  let live = 0;
+  for (const sid of sids) {
+    const existing = await redis.get<string>(sidKey(sid));
+    if (existing === null) continue;
+    live += 1;
+    await redis.del(sidKey(sid));
+    const parsed = parsePayload(existing, sid);
+    if (parsed !== null) {
+      await redis.srem(userSidsKey(parsed.userId), sid);
+    }
+  }
+  return live;
 }
 
 /**
