@@ -1,9 +1,11 @@
 name: Dependabot auto-merge
 
 # Enable GitHub auto-merge (squash) on safe Dependabot PRs — minor/patch only.
-# Auto-merge waits for the required status checks + conversation resolution
-# before merging, so branch protection still gates the merge. Majors are NOT
-# auto-merged: they need manual local testing (see CONTRIBUTING / the /ship skill).
+# Auto-merge waits for the required status check (`Lint, typecheck, and
+# tests`), 1 code-owner approval and conversation resolution before merging,
+# so branch protection still gates the merge (docs/runbooks/branch-protection.md).
+# Majors are NOT auto-merged: they need manual local testing (see
+# CONTRIBUTING / the /ship skill).
 #
 # No checkout step → no untrusted code runs with the elevated token.
 
