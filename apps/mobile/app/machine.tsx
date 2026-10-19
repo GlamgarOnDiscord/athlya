@@ -4,6 +4,7 @@ import { Text, View } from 'react-native';
 
 import { SignedIn, useWriteDeps } from '../components/AppSession';
 import { ErrorNotice } from '../components/ErrorNotice';
+import { MachineControlCard } from '../components/MachineControlCard';
 import { useRuntime } from '../components/RuntimeProvider';
 import { AppText } from '../components/ui/AppText';
 import { Button } from '../components/ui/Button';
@@ -11,6 +12,12 @@ import { Card } from '../components/ui/Card';
 import { Notice } from '../components/ui/Notice';
 import { ScrollScreen } from '../components/ui/ScrollScreen';
 import { FtmsController, type MachineError } from '../features/ftms/ftms-controller';
+import { usableHeartRate } from '../features/ftms/heart-rate';
+import {
+  HeartRateController,
+  linkStrapToMachine,
+  type StrapError,
+} from '../features/ftms/heart-rate-controller';
 import { liveMetricRows } from '../features/ftms/live-metrics';
 import {
   buildMachineSessionRequest,
@@ -29,6 +36,152 @@ const ERROR_KEYS: Readonly<Record<MachineError, TranslationKeys>> = {
   linkLost: 'mobile.machine.errors.linkLost',
 };
 
+const STRAP_ERROR_KEYS: Readonly<Record<StrapError, TranslationKeys>> = {
+  scanFailed: 'mobile.machine.strap.errors.scanFailed',
+  connectFailed: 'mobile.machine.strap.errors.connectFailed',
+  notHeartRate: 'mobile.machine.strap.errors.notHeartRate',
+  linkLost: 'mobile.machine.strap.errors.linkLost',
+};
+
+/**
+ * Heart-rate strap pairing (issue #669), on its own Bluetooth connection:
+ * it works with or without a machine, and losing it never stops the
+ * machine session. A BLE radio runs one scan at a time, so starting this
+ * scan stops the machine's, and the other way round.
+ */
+function StrapCard({
+  strap,
+  onBeforeScan,
+}: {
+  readonly strap: HeartRateController;
+  readonly onBeforeScan: () => void;
+}) {
+  const { t } = useRuntime();
+  const state = useSyncExternalStore(strap.subscribe, strap.get);
+  const name = (device: { readonly name: string | null }) =>
+    device.name ?? t('mobile.machine.strap.unnamed');
+  const idle = state.status === 'idle' || state.status === 'unavailable';
+  const bpm = state.reading === null ? null : usableHeartRate(state.reading);
+
+  return (
+    <Card>
+      <Text
+        accessibilityRole="header"
+        className="text-base font-semibold text-foreground dark:text-dark-foreground"
+      >
+        {t('mobile.machine.strap.title')}
+      </Text>
+      <AppText variant="muted">{t('mobile.machine.strap.intro')}</AppText>
+
+      {state.status === 'unavailable' && state.readiness !== null ? (
+        <Notice tone="error" message={t(`mobile.machine.unavailable.${state.readiness}`)} />
+      ) : null}
+      {state.error === null ? null : (
+        <Notice
+          tone={state.error === 'linkLost' ? 'info' : 'error'}
+          message={t(STRAP_ERROR_KEYS[state.error])}
+        />
+      )}
+      {state.nothingFound ? <Notice message={t('mobile.machine.strap.nothingFound')} /> : null}
+
+      {idle || state.status === 'preparing' ? (
+        <View className="gap-sm">
+          <Button
+            title={t('mobile.machine.strap.scan')}
+            variant="secondary"
+            busy={state.status === 'preparing'}
+            onPress={() => {
+              onBeforeScan();
+              void strap.scan();
+            }}
+          />
+          {state.remembered !== null && idle ? (
+            <>
+              <Button
+                title={t('mobile.machine.strap.reconnect', { name: name(state.remembered) })}
+                variant="secondary"
+                onPress={() => {
+                  onBeforeScan();
+                  void strap.reconnect();
+                }}
+              />
+              <Button
+                title={t('mobile.machine.strap.forget')}
+                variant="secondary"
+                onPress={() => {
+                  strap.forget();
+                }}
+              />
+            </>
+          ) : null}
+        </View>
+      ) : null}
+
+      {state.status === 'scanning' ? (
+        <View className="gap-sm">
+          <Notice message={t('mobile.machine.strap.scanning')} />
+          <Button
+            title={t('mobile.machine.stopScan')}
+            variant="secondary"
+            onPress={() => {
+              strap.stopScan();
+            }}
+          />
+        </View>
+      ) : null}
+
+      {state.devices.length > 0 && (state.status === 'scanning' || state.status === 'idle') ? (
+        <View className="gap-sm">
+          <AppText variant="muted">{t('mobile.machine.strap.devices')}</AppText>
+          {state.devices.map((device) => (
+            <Button
+              key={device.id}
+              variant="secondary"
+              title={t('mobile.machine.connectTo', { name: name(device) })}
+              onPress={() => {
+                void strap.connect(device.id);
+              }}
+            />
+          ))}
+        </View>
+      ) : null}
+
+      {state.status === 'connecting' && state.device !== null ? (
+        <Notice message={t('mobile.machine.strap.connecting', { name: name(state.device) })} />
+      ) : null}
+
+      {state.status === 'connected' && state.device !== null ? (
+        <View className="gap-sm">
+          <Notice message={t('mobile.machine.strap.connected', { name: name(state.device) })} />
+          {state.reading === null ? (
+            <AppText variant="muted">{t('mobile.machine.strap.waiting')}</AppText>
+          ) : null}
+          {state.reading?.contact === 'notDetected' ? (
+            <Notice tone="error" message={t('mobile.machine.strap.noContact')} />
+          ) : null}
+          {bpm === null ? null : (
+            <View
+              accessible
+              accessibilityLabel={`${t('mobile.machine.metrics.heartRate')}, ${t('mobile.machine.metrics.unit.bpm', { value: bpm })}`}
+              className="flex-row justify-between"
+            >
+              <AppText variant="muted">{t('mobile.machine.metrics.heartRate')}</AppText>
+              <AppText>{t('mobile.machine.metrics.unit.bpm', { value: bpm })}</AppText>
+            </View>
+          )}
+          <Button
+            title={t('mobile.machine.strap.disconnect')}
+            variant="secondary"
+            onPress={() => {
+              strap.disconnect();
+            }}
+          />
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
 /**
  * Connected machine (task 23.1): finds Bluetooth FTMS machines, streams
  * their live data and logs the session as a workout. The BLE manager is
@@ -38,7 +191,12 @@ function Machine() {
   const runtime = useRuntime();
   const { t, locale } = runtime;
   const writes = useWriteDeps();
-  const controller = useMemo(() => new FtmsController({ transport: createBlePlxTransport() }), []);
+  const transport = useMemo(() => createBlePlxTransport(), []);
+  const controller = useMemo(() => new FtmsController({ transport }), [transport]);
+  const strap = useMemo(
+    () => new HeartRateController({ transport, preferences: runtime.preferences }),
+    [transport, runtime.preferences],
+  );
   const state = useSyncExternalStore(controller.subscribe, controller.get);
   const [now, setNow] = useState(() => Date.now());
   const [saving, setSaving] = useState(false);
@@ -52,6 +210,14 @@ function Machine() {
     },
     [controller],
   );
+
+  useEffect(() => {
+    const unlink = linkStrapToMachine(strap, controller);
+    return () => {
+      unlink();
+      strap.dispose();
+    };
+  }, [strap, controller]);
 
   // Ticks the clock for machines that do not report an elapsed time.
   useEffect(() => {
@@ -123,6 +289,7 @@ function Machine() {
           busy={state.status === 'preparing'}
           onPress={() => {
             setSaved(null);
+            strap.stopScan();
             void controller.scan();
           }}
         />
@@ -194,6 +361,20 @@ function Machine() {
           ))}
         </Card>
       )}
+
+      {state.status === 'streaming' ? (
+        <MachineControlCard
+          control={controller.control}
+          measuredPowerW={state.session?.latest.powerW ?? null}
+        />
+      ) : null}
+
+      <StrapCard
+        strap={strap}
+        onBeforeScan={() => {
+          controller.stopScan();
+        }}
+      />
 
       {state.status === 'streaming' ? (
         <Button

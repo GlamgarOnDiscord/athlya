@@ -142,6 +142,46 @@ The same holds for the AI coach (issue #644): `staging.api.athlya.app/v1/coach` 
 needed because `/v1/coach/*` does not match the bare `GET /v1/coach`;
 `worker-routing.test.ts` fails if an exact route lacks its `/*` sibling.
 
+### Enabling the AI coach (Epic 21)
+
+The coach ships dark: the `ai-coach` flag is OFF and `MISTRAL_API_KEY` is optional. Without the
+key, a flag-on member gets 503 `coach_not_configured`; nothing else is affected. To open it in an
+environment (staging first):
+
+1. Go through the RGPD operator checklist in [`ai-coach.md`](../compliance/ai-coach.md#operator-checklist)
+   (DPA, region, retention, training opt-out).
+2. Set the key on **both** Workers that serve `/v1/coach` (gateway and reservations). Wrangler
+   prompts for the value; never pass it on the command line:
+
+   ```bash
+   cd packages/api
+   wrangler secret put MISTRAL_API_KEY --env staging
+   wrangler secret put MISTRAL_API_KEY --config wrangler.reservations.toml --env staging
+   ```
+
+   Optional vars on both Workers: `AI_COACH_MODEL` (default `mistral-small-latest`),
+   `AI_COACH_DAILY_LIMIT` (default 10), `MISTRAL_BASE_URL` (regional `https://…mistral.ai`
+   endpoint only).
+
+3. Open the flag for a staff allow-list in `FEATURE_FLAGS_JSON` on both Workers
+   ([`feature-flags.md`](../operations/feature-flags.md)), e.g.
+   `{"ai-coach":{"rollout":0,"allowList":["<staff user id>"]}}`, through
+   `wrangler secret put FEATURE_FLAGS_JSON [--config wrangler.reservations.toml] --env staging`.
+4. Check from a staff account: `GET /v1/coach` answers `enabled: true`, then
+   `POST /v1/coach/ask` answers 200 both as JSON and with `Accept: text/event-stream`
+   (`partial` events, then one `done` event; issue #675).
+5. Repeat with `--env production`, then widen the rollout by phase.
+
+To switch the coach off, set `"ai-coach": false`; removing the key also stops every provider call
+(503 `coach_not_configured`).
+
+The streamed answer needs nothing extra at the edge: the zone routes pass `text/event-stream`
+through unbuffered, and the response carries `Cache-Control: no-store`. A client disconnect
+aborts the Mistral call; the daily quota is counted before the call either way. The gateway and
+reservations configs enable the `enable_request_signal` compatibility flag (#675), so a client
+that leaves while consent, quota and context are read never triggers a provider call. Like any
+compatibility flag, it only takes effect on the next `wrangler deploy` of each Worker.
+
 ## Local (ops)
 
 ```bash

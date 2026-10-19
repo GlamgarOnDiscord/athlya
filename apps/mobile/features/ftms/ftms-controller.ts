@@ -10,14 +10,18 @@
  */
 import { Store } from '../store';
 
+import { BleScan } from './ble-scan';
 import {
+  addHeartRate,
   addSample,
   createLiveSession,
   endSession,
+  releaseHeartRate,
   summarise,
   type LiveSession,
   type SessionSummary,
 } from './live-session';
+import { MachineControl } from './machine-control';
 import { decodeMachineData, FTMS_SERVICE, fullUuid, pickMachineCharacteristic } from './protocol';
 
 import type {
@@ -27,8 +31,7 @@ import type {
   ScannedDevice,
 } from '../../infrastructure/ble/ports';
 
-/** Scans stop on their own after this long (battery). */
-export const SCAN_TIMEOUT_MS = 15_000;
+export { SCAN_TIMEOUT_MS } from './ble-scan';
 
 export type MachineStatus =
   | 'idle'
@@ -76,15 +79,17 @@ export class FtmsController {
   readonly #transport: BleTransport;
   readonly #now: () => number;
   readonly #store = new Store<MachineState>(INITIAL_MACHINE_STATE);
+  readonly #scan: BleScan;
+  /** Control Point of the connected machine (issue #668). */
+  public readonly control = new MachineControl();
   #generation = 0;
-  #stopScan: (() => void) | null = null;
-  #scanTimer: ReturnType<typeof setTimeout> | null = null;
   #connection: BleConnection | null = null;
   #unsubscribers: (() => void)[] = [];
 
   public constructor(deps: FtmsControllerDeps) {
     this.#transport = deps.transport;
     this.#now = deps.now ?? Date.now;
+    this.#scan = new BleScan(deps.transport);
   }
 
   public readonly get = (): MachineState => this.#store.get();
@@ -122,33 +127,26 @@ export class FtmsController {
       devices: [],
       nothingFound: false,
     }));
-    try {
-      this.#stopScan = this.#transport.startScan(
-        [SERVICE_UUID],
-        (device) => {
-          this.#addDevice(device);
-        },
-        () => {
-          this.#endScan('scanFailed');
-        },
-      );
-    } catch {
-      this.#endScan('scanFailed');
-      return;
-    }
-    this.#scanTimer = setTimeout(() => {
-      this.#endScan(null);
-    }, SCAN_TIMEOUT_MS);
+    this.#scan.start(
+      [SERVICE_UUID],
+      (device) => {
+        this.#addDevice(device);
+      },
+      (failed) => {
+        this.#endScan(failed ? 'scanFailed' : null);
+      },
+    );
   }
 
   public stopScan(): void {
-    if (this.get().status === 'scanning') this.#endScan(null);
+    // A stopped scan did not conclude that nothing is nearby.
+    if (this.get().status === 'scanning') this.#endScan(null, true);
   }
 
   public async connect(deviceId: string): Promise<void> {
     const { status, devices } = this.get();
     if (status === 'connecting' || status === 'streaming') return;
-    this.#clearScan();
+    this.#scan.stop();
     const device = devices.find((candidate) => candidate.id === deviceId) ?? {
       id: deviceId,
       name: null,
@@ -175,12 +173,13 @@ export class FtmsController {
     }
     this.#connection = connection;
 
-    let picked: ReturnType<typeof pickMachineCharacteristic>;
+    let uuids: readonly string[];
     try {
-      picked = pickMachineCharacteristic(await connection.characteristics(SERVICE_UUID));
+      uuids = await connection.characteristics(SERVICE_UUID);
     } catch {
-      picked = null;
+      uuids = [];
     }
+    const picked = pickMachineCharacteristic(uuids);
     if (generation !== this.#generation) return;
     if (picked === null) {
       this.#teardown();
@@ -209,6 +208,22 @@ export class FtmsController {
         },
       ),
     );
+    void this.control.attach(connection, uuids);
+  }
+
+  /**
+   * Heart rate from a paired strap, or null when it lost skin contact or
+   * went away. While the strap reports, it wins over the machine's value.
+   */
+  public strapHeartRate(bpm: number | null): void {
+    if (this.get().status !== 'streaming') return;
+    const at = this.#now();
+    this.#store.set((state) => {
+      if (state.session === null) return state;
+      const session =
+        bpm === null ? releaseHeartRate(state.session, at) : addHeartRate(state.session, bpm, at);
+      return session === state.session ? state : { ...state, session };
+    });
   }
 
   /** Ends the session and releases the machine; the data stays for saving. */
@@ -228,7 +243,7 @@ export class FtmsController {
   /** Drops the session (after saving or discarding it). */
   public reset(): void {
     this.#generation += 1;
-    this.#clearScan();
+    this.#scan.stop();
     this.#teardown();
     this.#store.set(INITIAL_MACHINE_STATE);
   }
@@ -236,7 +251,7 @@ export class FtmsController {
   /** The screen went away: nothing keeps scanning or holds the machine. */
   public dispose(): void {
     this.#generation += 1;
-    this.#clearScan();
+    this.#scan.stop();
     this.#teardown();
   }
 
@@ -248,26 +263,18 @@ export class FtmsController {
     );
   }
 
-  #endScan(error: MachineError | null): void {
-    this.#clearScan();
+  #endScan(error: MachineError | null, stopped = false): void {
+    this.#scan.stop();
     this.#store.set((state) =>
       state.status === 'scanning'
         ? {
             ...state,
             status: 'idle',
-            nothingFound: error === null && state.devices.length === 0,
+            nothingFound: !stopped && error === null && state.devices.length === 0,
             error,
           }
         : state,
     );
-  }
-
-  #clearScan(): void {
-    if (this.#scanTimer !== null) clearTimeout(this.#scanTimer);
-    this.#scanTimer = null;
-    const stop = this.#stopScan;
-    this.#stopScan = null;
-    stop?.();
   }
 
   #onData(bytes: Uint8Array): void {
@@ -280,7 +287,7 @@ export class FtmsController {
 
   #linkLost(): void {
     this.#generation += 1;
-    this.#teardown();
+    this.#teardown(false);
     const at = this.#now();
     this.#store.set((state) => ({
       ...state,
@@ -294,11 +301,22 @@ export class FtmsController {
     this.#store.set((state) => ({ ...state, status: 'idle', device: null, error }));
   }
 
-  #teardown(): void {
+  /**
+   * Stops listening and closes the link. With `release`, a granted machine
+   * control is handed back (its targets reset) before disconnecting, so an
+   * ERG target never outlives the session; a dropped link skips it.
+   */
+  #teardown(release = true): void {
     for (const unsubscribe of this.#unsubscribers) unsubscribe();
     this.#unsubscribers = [];
+    const released = this.control.detach(release);
     const connection = this.#connection;
     this.#connection = null;
-    if (connection !== null) void connection.disconnect();
+    if (connection === null) return;
+    if (released === null) {
+      void connection.disconnect();
+      return;
+    }
+    void released.then(() => connection.disconnect());
   }
 }

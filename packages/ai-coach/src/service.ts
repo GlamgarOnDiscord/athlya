@@ -16,9 +16,11 @@
  *                  fails closed: no model call without a counted quota.
  *
  * Flow: consent → quota → read sessions → minimised context → model →
- * `CoachAdviceSchema` validation. The quota is consumed before the
- * model call, so a request that fails upstream still counts; this keeps
- * a member from bypassing the quota by forcing provider errors.
+ * `CoachAdviceSchema` validation. `streamCoach` (task 21.2) runs the
+ * same checks, then yields bounded partial snapshots before the
+ * validated answer. The quota is consumed before the model call, so a
+ * request that fails upstream still counts; this keeps a member from
+ * bypassing the quota by forcing provider errors.
  *
  * Nothing is persisted besides the quota counter: neither the question
  * nor the advice is stored.
@@ -26,15 +28,17 @@
 
 import { progressionWindowBounds } from '@athlya/members/progression';
 import { CoachAdviceSchema } from '@athlya/shared/schemas/api';
-import { generateText, Output } from 'ai';
+import { generateText, Output, streamText } from 'ai';
 
 import { buildCoachContext, COACH_CONTEXT_DAYS } from './context.js';
-import { CoachError } from './errors.js';
+import { CoachError, isCoachError } from './errors.js';
+import { toCoachAdvicePartial } from './partial.js';
 import { buildCoachPrompt } from './prompt.js';
 
 import type { ProgressionRepo } from '@athlya/members/progression';
 import type {
   CoachAdvice,
+  CoachAdvicePartial,
   CoachAskResponse,
   CoachLocale,
   CoachQuota,
@@ -49,6 +53,13 @@ export const COACH_SESSION_READ_LIMIT = 200;
 
 /** Upper bound on one model call, retries included. */
 export const COACH_MODEL_TIMEOUT_MS = 20_000;
+
+/**
+ * Least time between two streamed partial snapshots. Each snapshot is
+ * the whole advice so far, so one per token would send megabytes for a
+ * single answer; the `done` event always carries the full advice.
+ */
+export const COACH_PARTIAL_INTERVAL_MS = 150;
 
 /** Output token budget of one answer. */
 export const COACH_MAX_OUTPUT_TOKENS = 1_000;
@@ -90,6 +101,10 @@ export interface AskCoachDeps extends CoachQuotaDeps {
   readonly consents: CoachConsentReader;
   /** Defaults to {@link COACH_MODEL_TIMEOUT_MS}. */
   readonly timeoutMs?: number;
+  /** Streaming only; defaults to {@link COACH_PARTIAL_INTERVAL_MS}. */
+  readonly partialIntervalMs?: number;
+  /** Monotonic clock of the snapshot throttle; defaults to `performance.now`. */
+  readonly clock?: () => number;
 }
 
 export interface AskCoachRequest {
@@ -134,18 +149,25 @@ export async function getCoachQuota(userId: string, deps: CoachQuotaDeps): Promi
   return quotaView(limit, used, window);
 }
 
+interface PreparedCall {
+  readonly system: string;
+  readonly prompt: string;
+  readonly quota: CoachQuota;
+  readonly generatedAt: string;
+  readonly abortSignal: AbortSignal;
+}
+
 /**
- * Answer `request.question` for `userId`.
- *
- * Throws {@link CoachError}: `consent_required`, `quota_exceeded` (with
- * `retryAfterSec` until the next UTC midnight), `quota_unavailable`,
- * `upstream_failed` or `invalid_output`.
+ * Consent → quota → 30-day context → prompt, shared by {@link askCoach}
+ * and {@link streamCoach}. Everything that can refuse the request runs
+ * here, before any model call.
  */
-export async function askCoach(
+async function prepareCoachCall(
   userId: string,
   request: AskCoachRequest,
   deps: AskCoachDeps,
-): Promise<CoachAskResponse> {
+  signal: AbortSignal | undefined,
+): Promise<PreparedCall> {
   if (!(await deps.consents.hasThirdPartyConsent(userId))) {
     throw new CoachError('consent_required', 'third-party data sharing consent is required');
   }
@@ -178,39 +200,141 @@ export async function askCoach(
     request.locale,
   );
 
-  let raw: unknown;
-  try {
-    const result = await generateText({
-      model: deps.model,
-      system,
-      prompt,
-      output: Output.object({ schema: CoachAdviceSchema }),
-      temperature: 0.3,
-      maxOutputTokens: COACH_MAX_OUTPUT_TOKENS,
-      maxRetries: 1,
-      abortSignal: AbortSignal.timeout(deps.timeoutMs ?? COACH_MODEL_TIMEOUT_MS),
-    });
-    raw = result.output;
-  } catch (err) {
-    if (isOutputError(err)) {
-      throw new CoachError('invalid_output', 'model output does not match the advice schema', {
-        cause: err,
-      });
-    }
-    throw new CoachError('upstream_failed', 'model provider call failed', { cause: err });
-  }
+  const timeout = AbortSignal.timeout(deps.timeoutMs ?? COACH_MODEL_TIMEOUT_MS);
+  return {
+    system,
+    prompt,
+    quota: quotaView(limit, used, window),
+    generatedAt: new Date(now).toISOString(),
+    abortSignal: signal === undefined ? timeout : AbortSignal.any([timeout, signal]),
+  };
+}
 
+const MODEL_SETTINGS = {
+  output: Output.object({ schema: CoachAdviceSchema }),
+  temperature: 0.3,
+  maxOutputTokens: COACH_MAX_OUTPUT_TOKENS,
+  maxRetries: 1,
+} as const;
+
+function adviceOf(raw: unknown): CoachAdvice {
   const parsed = CoachAdviceSchema.safeParse(raw);
   if (!parsed.success) {
     throw new CoachError('invalid_output', 'model output does not match the advice schema');
   }
-  const advice: CoachAdvice = parsed.data;
+  return parsed.data;
+}
 
-  return {
-    advice,
-    quota: quotaView(limit, used, window),
-    generatedAt: new Date(now).toISOString(),
-  };
+function modelError(err: unknown): CoachError {
+  if (isCoachError(err)) return err;
+  if (isOutputError(err)) {
+    return new CoachError('invalid_output', 'model output does not match the advice schema', {
+      cause: err,
+    });
+  }
+  return new CoachError('upstream_failed', 'model provider call failed', { cause: err });
+}
+
+/**
+ * Answer `request.question` for `userId`.
+ *
+ * Throws {@link CoachError}: `consent_required`, `quota_exceeded` (with
+ * `retryAfterSec` until the next UTC midnight), `quota_unavailable`,
+ * `upstream_failed` or `invalid_output`.
+ */
+export async function askCoach(
+  userId: string,
+  request: AskCoachRequest,
+  deps: AskCoachDeps,
+): Promise<CoachAskResponse> {
+  const call = await prepareCoachCall(userId, request, deps, undefined);
+
+  let raw: unknown;
+  try {
+    const result = await generateText({
+      model: deps.model,
+      system: call.system,
+      prompt: call.prompt,
+      ...MODEL_SETTINGS,
+      abortSignal: call.abortSignal,
+    });
+    raw = result.output;
+  } catch (err) {
+    throw modelError(err);
+  }
+
+  return { advice: adviceOf(raw), quota: call.quota, generatedAt: call.generatedAt };
+}
+
+/**
+ * Streamed answer: yields bounded {@link CoachAdvicePartial} snapshots
+ * (only when they change, at most one per `partialIntervalMs`), then returns the response validated as a
+ * whole, like {@link askCoach}. Throws `upstream_failed` or
+ * `invalid_output` from the iteration; the snapshots seen so far are
+ * then void.
+ */
+export type CoachAnswerStream = AsyncGenerator<CoachAdvicePartial, CoachAskResponse, undefined>;
+
+/**
+ * Streaming variant of {@link askCoach}. The returned promise settles
+ * once consent, quota and context are done, so every refusal
+ * (`consent_required`, `quota_exceeded`, `quota_unavailable`) is thrown
+ * before the stream starts and keeps its HTTP status. `signal` aborts
+ * the provider call, e.g. when the client disconnects.
+ */
+export async function streamCoach(
+  userId: string,
+  request: AskCoachRequest,
+  deps: AskCoachDeps,
+  signal?: AbortSignal,
+): Promise<CoachAnswerStream> {
+  const call = await prepareCoachCall(userId, request, deps, signal);
+  return generateStream(deps, call);
+}
+
+async function* generateStream(deps: AskCoachDeps, call: PreparedCall): CoachAnswerStream {
+  const interval = deps.partialIntervalMs ?? COACH_PARTIAL_INTERVAL_MS;
+  const clock = deps.clock ?? (() => performance.now());
+  let streamError: unknown;
+  let raw: unknown;
+  // An aborted caller (client gone during preparation) never reaches the provider.
+  if (call.abortSignal.aborted) {
+    throw new CoachError('upstream_failed', 'aborted before the model call', {
+      cause: call.abortSignal.reason,
+    });
+  }
+  try {
+    const result = streamText({
+      model: deps.model,
+      system: call.system,
+      prompt: call.prompt,
+      ...MODEL_SETTINGS,
+      abortSignal: call.abortSignal,
+      // Keep the SDK from logging the provider error (it may echo the prompt).
+      onError: ({ error }) => {
+        streamError ??= error;
+      },
+    });
+    let last = '';
+    let lastAt = Number.NEGATIVE_INFINITY;
+    for await (const partial of result.partialOutputStream) {
+      const snapshot = toCoachAdvicePartial(partial);
+      const key = JSON.stringify(snapshot);
+      const at = clock();
+      if (key !== last && at - lastAt >= interval) {
+        last = key;
+        lastAt = at;
+        yield snapshot;
+      }
+    }
+    if (streamError !== undefined) throw modelError(streamError);
+    raw = await result.output;
+  } catch (err) {
+    // A provider error surfaces later as "no output"; report the cause.
+    throw modelError(streamError ?? err);
+  }
+
+  return { advice: adviceOf(raw), quota: call.quota, generatedAt: call.generatedAt };
 }
 
 /** AI SDK errors raised when the model answered but not with valid output. */

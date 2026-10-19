@@ -81,7 +81,10 @@ main = "src/worker.ts"
 # Compatibility date pinned recent-but-stable. Bump in lock-step with the
 # `@cloudflare/workers-types` version upgrade in package.json devDeps.
 compatibility_date = "2026-03-01"
-compatibility_flags = ["nodejs_compat"]
+# `enable_request_signal`: `request.signal` fires on a client disconnect, so
+# the streamed AI coach answer (/v1/coach/ask, #675) stops before the
+# provider call when the client leaves during preparation.
+compatibility_flags = ["nodejs_compat", "enable_request_signal"]
 
 # Source maps (issue #138). Emits a `.js.map` next to the bundle so:
 #   1. Cloudflare maps stack traces in the dashboard / Tail logs;

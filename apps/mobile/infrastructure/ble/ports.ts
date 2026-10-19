@@ -24,6 +24,24 @@ export interface BleConnection {
     onValue: (bytes: Uint8Array) => void,
     onError: (error: unknown) => void,
   ) => () => void;
+  /**
+   * Subscribes to indications (acknowledged notifications), as the FTMS
+   * Control Point answers; returns the unsubscribe function.
+   */
+  readonly indicate: (
+    serviceUuid: string,
+    characteristicUuid: string,
+    onValue: (bytes: Uint8Array) => void,
+    onError: (error: unknown) => void,
+  ) => () => void;
+  /** Reads a characteristic value once. */
+  readonly read: (serviceUuid: string, characteristicUuid: string) => Promise<Uint8Array>;
+  /** Writes with response: resolves once the peripheral acknowledged the write. */
+  readonly writeWithResponse: (
+    serviceUuid: string,
+    characteristicUuid: string,
+    bytes: Uint8Array,
+  ) => Promise<void>;
   /** Called once when the link drops for any reason other than `disconnect()`. */
   readonly onDisconnected: (listener: () => void) => () => void;
   readonly disconnect: () => Promise<void>;

@@ -560,6 +560,9 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
     ask: vi.fn(async () => {
       throw new Error('coach disabled in integration tests');
     }),
+    askStream: vi.fn(async () => {
+      throw new Error('coach disabled in integration tests');
+    }),
   };
 
   return {

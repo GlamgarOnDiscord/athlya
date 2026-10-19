@@ -709,6 +709,44 @@ export const CoachAskResponseSchema = z
 
 export type CoachAskResponse = z.infer<typeof CoachAskResponseSchema>;
 
+/**
+ * Advice built so far, sent as a `partial` event when `POST /v1/coach/ask`
+ * streams (`Accept: text/event-stream`). Each event is a full snapshot,
+ * not a delta. It is provisional: the fields are clipped to the bounds of
+ * {@link CoachAdviceSchema}, but only the `done` event carries advice
+ * validated as a whole.
+ */
+export const CoachAdvicePartialSchema = z
+  .object({
+    summary: z.string().max(600).optional(),
+    recommendations: z
+      .array(
+        z
+          .object({
+            title: z.string().max(80).optional(),
+            detail: z.string().max(400).optional(),
+          })
+          .strict(),
+      )
+      .max(5)
+      .optional(),
+    caution: z.string().max(300).nullable().optional(),
+  })
+  .strict();
+
+export type CoachAdvicePartial = z.infer<typeof CoachAdvicePartialSchema>;
+
+/**
+ * Server-sent event names of the streamed `POST /v1/coach/ask`:
+ *
+ *   - `partial` — {@link CoachAdvicePartialSchema} snapshot, zero or more.
+ *   - `done`    — {@link CoachAskResponseSchema}, terminal.
+ *   - `error`   — RFC 7807 problem body, terminal; partials are void.
+ */
+export const COACH_STREAM_EVENTS = ['partial', 'done', 'error'] as const;
+
+export type CoachStreamEvent = (typeof COACH_STREAM_EVENTS)[number];
+
 /* ------------------------------------------------------------------ */
 /*  studios — /v1/studios/*                                            */
 /* ------------------------------------------------------------------ */

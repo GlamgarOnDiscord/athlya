@@ -42,7 +42,10 @@
 name = "athlya-api-reservations"
 main = "src/workers/reservations.ts"
 compatibility_date = "2026-03-01"
-compatibility_flags = ["nodejs_compat"]
+# `enable_request_signal`: `request.signal` fires on a client disconnect, so
+# the streamed AI coach answer (/v1/coach/ask, #675) stops before the
+# provider call when the client leaves during preparation.
+compatibility_flags = ["nodejs_compat", "enable_request_signal"]
 upload_source_maps = true
 
 [observability]

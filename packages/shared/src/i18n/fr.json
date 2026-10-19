@@ -775,7 +775,8 @@
           "bpm": "{value} bpm",
           "spm": "{value} /min",
           "percent": "{value} %"
-        }
+        },
+        "heartRateStrap": "Fréquence cardiaque (ceinture)"
       },
       "types": {
         "indoorBike": "Vélo d’intérieur",
@@ -791,6 +792,58 @@
         "strokes": "{count} coups",
         "energy": "{kcal} kcal",
         "avgHeartRate": "FC moy. {bpm} bpm"
+      },
+      "strap": {
+        "title": "Ceinture cardio",
+        "intro": "Associez une ceinture ou une montre qui diffuse votre fréquence cardiaque en Bluetooth. Sa mesure remplace celle de la machine.",
+        "scan": "Rechercher une ceinture cardio",
+        "scanning": "Recherche des ceintures cardio à proximité…",
+        "devices": "Ceintures à proximité",
+        "unnamed": "Ceinture sans nom",
+        "reconnect": "Reconnecter {name}",
+        "forget": "Oublier cette ceinture",
+        "connecting": "Connexion à {name}…",
+        "connected": "Connecté à {name}",
+        "waiting": "En attente de la première mesure…",
+        "noContact": "La ceinture ne détecte pas votre peau. Humidifiez ses électrodes et resserrez-la.",
+        "disconnect": "Déconnecter la ceinture",
+        "nothingFound": "Aucune ceinture trouvée. Mettez la ceinture (elle se réveille au contact de la peau) puis réessayez.",
+        "errors": {
+          "scanFailed": "La recherche des ceintures a échoué. Réessayez.",
+          "connectFailed": "Connexion à la ceinture impossible. Rapprochez-vous et réessayez.",
+          "notHeartRate": "Cet appareil ne partage pas de fréquence cardiaque en Bluetooth.",
+          "linkLost": "Connexion à la ceinture perdue. La séance sur la machine continue."
+        }
+      },
+      "control": {
+        "title": "Pilotage de la machine",
+        "intro": "Laissez Athlya régler la résistance ou la puissance cible de la machine (mode ERG).",
+        "request": "Prendre le contrôle",
+        "locked": "Prenez le contrôle de la machine pour modifier ses réglages.",
+        "granted": "Athlya pilote la machine.",
+        "release": "Rendre le contrôle",
+        "power": "Puissance cible",
+        "resistance": "Résistance cible",
+        "notSet": "Non définie",
+        "level": "Niveau {value}",
+        "increase": "Augmenter : {name}",
+        "decrease": "Diminuer : {name}",
+        "start": "Démarrer",
+        "pause": "Pause",
+        "stop": "Arrêter",
+        "run": {
+          "started": "La machine est en marche.",
+          "paused": "La machine est en pause.",
+          "stopped": "La machine est arrêtée."
+        },
+        "errors": {
+          "notPermitted": "La machine n’a pas donné le contrôle à Athlya. Fermez toute autre app qui l’utilise, puis réessayez.",
+          "notSupported": "La machine ne prend pas en charge cette commande.",
+          "invalidParameter": "La machine a refusé cette valeur.",
+          "failed": "La machine n’a pas pu appliquer la commande. Réessayez.",
+          "timeout": "La machine n’a pas répondu. Réessayez.",
+          "controlLost": "La machine a repris le contrôle (bouton de sa console ou autre app). Reprenez le contrôle pour continuer."
+        }
       }
     }
   },

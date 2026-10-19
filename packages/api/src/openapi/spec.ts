@@ -889,15 +889,31 @@ const coachAskRoute = createRoute({
     'structured advice validated against `CoachAdviceSchema`. Requires the `thirdParty` ' +
     'consent. Limited to 5 requests per minute and a daily quota per member (default 10). ' +
     'With the `ai-coach` flag off it answers 404 before any limiter or body validation. ' +
-    'Nothing but the quota counter is stored. Sends `Cache-Control: no-store`.',
+    'Nothing but the quota counter is stored. Sends `Cache-Control: no-store`. ' +
+    'With `Accept: text/event-stream` the answer is streamed as server-sent events once every ' +
+    'check above passed (refusals keep their status): `partial` events carry a ' +
+    '`CoachAdvicePartial` snapshot (provisional, clipped to the advice bounds, at most one per ' +
+    '150 ms), then one ' +
+    'terminal `done` event carries the `CoachAskResponse` validated as a whole, or one terminal ' +
+    '`error` event carries a problem body (`coach_upstream_failed`, `coach_invalid_output`, ' +
+    '`internal_error`) after which the partials are void.',
   security: [{ bearerAuth: [] }],
   request: {
     body: { required: true, content: { 'application/json': { schema: CoachAskRequestSchema } } },
   },
   responses: {
     200: {
-      description: 'Advice and remaining quota',
-      content: { 'application/json': { schema: CoachAskResponseSchema } },
+      description: 'Advice and remaining quota (JSON), or the server-sent event stream',
+      content: {
+        'application/json': { schema: CoachAskResponseSchema },
+        'text/event-stream': {
+          schema: z.string().openapi({
+            description:
+              'Server-sent events: `partial` (`CoachAdvicePartial` JSON), then `done` ' +
+              '(`CoachAskResponse` JSON) or `error` (problem JSON)',
+          }),
+        },
+      },
     },
     401: problemResponse('Not authenticated'),
     403: problemResponse('Third-party consent missing (code `third_party_consent_required`)'),
