@@ -245,7 +245,7 @@ The API can verify Play Integrity (Android) and DeviceCheck (iOS) tokens as an *
 after Turnstile, sent as `x-device-attestation-platform` / `x-device-attestation-token` (#659). It is
 off by default (`DEVICE_ATTESTATION_MODE` unset), and a request without these headers is never
 affected, so the current app keeps working unchanged. The app does not send them yet: obtaining the
-tokens needs a native module and is tracked separately. Contract, modes and operator steps:
+tokens needs a native module and is tracked in #686. Contract, modes and operator steps:
 [`docs/runbooks/device-attestation.md`](../runbooks/device-attestation.md).
 
 ## Drain semantics (Algorithm 4)
