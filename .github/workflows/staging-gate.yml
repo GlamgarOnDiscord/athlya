@@ -39,9 +39,11 @@ name: Staging gate
 # SHA without a successful gate). Runs that skip (fork/Dependabot) never
 # deploy, so they use a per-ref group and don't queue behind deploys.
 #
-# The workflow has no `paths:` filter: it is a required check, and a
-# path-filtered required check never reports on PRs outside the paths,
-# leaving them blocked forever.
+# The workflow has no `paths:` filter, so it reports on every PR and on
+# every master SHA. It is NOT a required check for branch protection
+# (only `Lint, typecheck, and tests` is, see
+# docs/runbooks/branch-protection.md): production deploys enforce it
+# instead, on the SHA they promote.
 #
 # Pushes to master run the gate on the exact SHA that production deploy
 # phases later verify (scripts/require-check-success.mjs).

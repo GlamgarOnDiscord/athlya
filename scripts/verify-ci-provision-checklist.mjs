@@ -9,7 +9,7 @@ const STEPS = [
   'gh workflow run pgtap.yml --ref master succeeded',
   'gh workflow run integration-docker.yml --ref master succeeded',
   '3 consecutive green master runs (node scripts/verify-ci-health.mjs --strict)',
-  'Branch protection requires ci + pgtap + integration-docker',
+  'Branch protection matches docs/runbooks/branch-protection.md (required check: Lint, typecheck, and tests; 1 code-owner approval)',
   'Repository vars K6_STAGING_BASE_URL / ZAP_TARGET_URL set or weekly ci-required-vars acknowledged',
 ];
 
