@@ -14,9 +14,10 @@
  * operations (task 4.2):
  *   1. `SELECT … WHERE key = $1 AND user_id = $2` — served by the primary
  *      key index in a single row fetch.
- *   2. `DELETE … WHERE expires_at < now()` — served by the
- *      `idempotency_keys_expires_at_idx` index, executed by a nightly
- *      sweeper (or Neon's `pg_cron` equivalent).
+ *   2. `DELETE … WHERE expires_at <= now()` — served by the
+ *      `idempotency_keys_expires_at_idx` index, run by the scheduled
+ *      maintenance tick through `idempotency_purge_expired`
+ *      (migration 0047, issue #689).
  *
  * Related requirements: 20.1, 20.2.
  */

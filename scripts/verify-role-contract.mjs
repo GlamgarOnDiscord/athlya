@@ -19,11 +19,12 @@
  *                              book, waitlist position, cancel with
  *                              waitlist promotion (member claims)
  *   athlya_cron (CRON_DB_URL)  leased outbox claim privileges, capacity
- *                              reconcile snapshot, RGPD user anonymisation
+ *                              reconcile snapshot, expired idempotency
+ *                              key purge, RGPD user anonymisation
  *   athlya_billing             Stripe event application (the only role
  *     (BILLING_DB_URL)         allowed to; athlya_app is refused)
  *
- * Usage (staging, after migrations 0031–0045):
+ * Usage (staging, after migrations 0031–0047):
  *   APP_DATABASE_URL=postgresql://athlya_app:...@.../athlya \
  *   CRON_DATABASE_URL=postgresql://athlya_cron:...@.../athlya \
  *   BILLING_DATABASE_URL=postgresql://athlya_billing:...@.../athlya \
@@ -389,6 +390,15 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     await tx`SELECT class_id, capacity, confirmed FROM capacity_reconcile_snapshot()`;
   });
   ok('capacity reconcile: cross-tenant snapshot through capacity_reconcile_snapshot()');
+
+  await rolledBack(cron, async (tx) => {
+    const [row] = await tx`SELECT idempotency_purge_expired(1) AS n`;
+    check(
+      Number.isInteger(row?.n),
+      'idempotency_purge_expired returned no count (apply 0047, issue #689)',
+    );
+  });
+  ok('idempotency purge: expired keys through idempotency_purge_expired()');
 
   await rolledBack(cron, async (tx) => {
     const [column] = await tx`

@@ -29,8 +29,9 @@
  *
  * • `redactKeys` walks a `LogFields` record and replaces sensitive
  *   values with `'[REDACTED]'`. The default list covers the obvious
- *   suspects (`password`, `token`, `authorization`, `stripeSignature`)
- *   plus a common-case `secret`. Callers are expected to pre-redact
+ *   suspects (`password`, `token`, `refreshToken`, `accessToken`,
+ *   `idToken`, `authorization`, `cookie`, `stripeSignature`) plus a
+ *   common-case `secret`. Callers are expected to pre-redact
  *   untrusted payload shapes before passing them to a log call; this
  *   utility keeps the surface explicit rather than trying to walk
  *   arbitrary object graphs automatically.
@@ -79,7 +80,13 @@ export interface StructuredLogger {
 export const DEFAULT_REDACTED_KEYS: readonly string[] = Object.freeze([
   'password',
   'token',
+  // Matching is on the whole key, so `token` does not cover these
+  // (audit S2-012: refresh tokens travel in JSON bodies).
+  'refreshToken',
+  'accessToken',
+  'idToken',
   'authorization',
+  'cookie',
   'stripeSignature',
   'secret',
 ]);
