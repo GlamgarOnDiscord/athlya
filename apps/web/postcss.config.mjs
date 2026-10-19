@@ -10,7 +10,7 @@
  * preset. Tailwind 4 replaced the JS preset model with the `@theme` CSS
  * at-rule, so the shared preset is no longer necessary — the equivalent
  * design tokens are pulled from `@athlya/shared/tokens` into CSS custom
- * properties in `src/styles/tokens.css`.
+ * properties in the shared `@athlya/shared/theme.css`.
  */
 const config = {
   plugins: {
