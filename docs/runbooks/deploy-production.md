@@ -177,7 +177,10 @@ To switch the coach off, set `"ai-coach": false`; removing the key also stops ev
 
 The streamed answer needs nothing extra at the edge: the zone routes pass `text/event-stream`
 through unbuffered, and the response carries `Cache-Control: no-store`. A client disconnect
-aborts the Mistral call; the daily quota is counted before the call either way.
+aborts the Mistral call; the daily quota is counted before the call either way. The gateway and
+reservations configs enable the `enable_request_signal` compatibility flag (#675), so a client
+that leaves while consent, quota and context are read never triggers a provider call. Like any
+compatibility flag, it only takes effect on the next `wrangler deploy` of each Worker.
 
 ## Local (ops)
 

@@ -297,6 +297,12 @@ async function* generateStream(deps: AskCoachDeps, call: PreparedCall): CoachAns
   const clock = deps.clock ?? (() => performance.now());
   let streamError: unknown;
   let raw: unknown;
+  // An aborted caller (client gone during preparation) never reaches the provider.
+  if (call.abortSignal.aborted) {
+    throw new CoachError('upstream_failed', 'aborted before the model call', {
+      cause: call.abortSignal.reason,
+    });
+  }
   try {
     const result = streamText({
       model: deps.model,

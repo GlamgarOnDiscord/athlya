@@ -263,6 +263,12 @@ async function streamAnswer(
   request: CoachAskRequest,
 ): Promise<Response> {
   const controller = new AbortController();
+  // A client that leaves during consent, quota and context reads must not
+  // start a provider call (`enable_request_signal` in the wrangler configs).
+  // The quota stays consumed, as on any other failure after preparation.
+  const requestSignal = c.req.raw.signal;
+  if (requestSignal.aborted) controller.abort();
+  else requestSignal.addEventListener('abort', () => controller.abort(), { once: true });
   let events: AsyncGenerator<CoachAdvicePartial, CoachAskResponse, undefined>;
   try {
     events = await deps.askStream(claims, request, controller.signal);

@@ -205,6 +205,26 @@ describe('streamCoach', () => {
     }
   });
 
+  it('never calls the provider when the caller left during preparation', async () => {
+    const quota = memoryQuota();
+    const increment = vi.spyOn(quota, 'increment');
+    const model = streamingModel(textStream(JSON.stringify(VALID_ADVICE)));
+    const controller = new AbortController();
+    const stream = await streamCoach(
+      USER_ID,
+      REQUEST,
+      buildDeps({ quota, model }),
+      controller.signal,
+    );
+    controller.abort();
+    const { partials, error } = await drain(stream);
+    expect(partials).toHaveLength(0);
+    expect((error as CoachError).code).toBe('upstream_failed');
+    expect(model.doStreamCalls).toHaveLength(0);
+    // The quota stays consumed, like any failure after preparation.
+    expect(increment).toHaveBeenCalledTimes(1);
+  });
+
   it('aborts the provider call when the caller signal fires', async () => {
     const controller = new AbortController();
     let seen: AbortSignal | undefined;

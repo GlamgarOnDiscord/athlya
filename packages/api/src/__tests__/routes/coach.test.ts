@@ -340,6 +340,31 @@ describe('POST /v1/coach/ask (text/event-stream)', () => {
     expect((JSON.parse(events[0]?.data ?? '') as CoachAdvicePartial).summary).toBe(forged);
   });
 
+  it('forwards a client disconnect during preparation to the stream signal', async () => {
+    const client = new AbortController();
+    let signal: AbortSignal | undefined;
+    const deps = buildStubDeps({
+      coach: {
+        ...enabled,
+        askStream: vi.fn((_claims, _request, s: AbortSignal) => {
+          signal = s;
+          expect(s.aborted).toBe(false);
+          client.abort();
+          return Promise.resolve(answerStream([], ANSWER));
+        }),
+      },
+    });
+    const req = new Request('http://localhost/v1/coach/ask', {
+      method: 'POST',
+      headers: { ...(await auth()), 'content-type': 'application/json', accept: SSE },
+      body: JSON.stringify({ question: 'How?' }),
+      signal: client.signal,
+    });
+    await buildApp({ deps }).request(req, undefined, env());
+    expect(deps.coach.askStream).toHaveBeenCalledTimes(1);
+    expect(signal?.aborted).toBe(true);
+  });
+
   it('keeps the JSON answer without the event-stream Accept value', async () => {
     const deps = buildStubDeps({
       coach: { ...enabled, ask: vi.fn(() => Promise.resolve(ANSWER)) },
