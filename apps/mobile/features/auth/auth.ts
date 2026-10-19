@@ -26,7 +26,10 @@ import type { z } from 'zod';
 
 export interface AuthDeps {
   readonly api: Pick<ApiClient, 'post'>;
-  readonly tokenStore: Pick<TokenStore, 'saveSession' | 'clear' | 'getAccessToken' | 'lock'>;
+  readonly tokenStore: Pick<
+    TokenStore,
+    'saveSession' | 'clear' | 'getAccessToken' | 'lock' | 'isUnlocked' | 'readRefreshToken'
+  >;
   readonly sync: Pick<SyncController, 'refreshOwner' | 'syncNow'>;
 }
 
@@ -136,14 +139,29 @@ export function register(
   return startSession(deps, '/v1/auth/register', parsed.data, input.turnstileToken, signal);
 }
 
+/**
+ * The stored refresh token when the store is already unlocked, so sign-out
+ * never raises a biometric prompt; `null` otherwise or when it cannot be read.
+ */
+async function unlockedRefreshToken(store: AuthDeps['tokenStore']): Promise<string | null> {
+  if (!store.isUnlocked()) return null;
+  try {
+    return await store.readRefreshToken();
+  } catch {
+    return null;
+  }
+}
+
 /** How long sign-out waits for the server-side revocation before going on. */
 export const LOGOUT_TIMEOUT_MS = 5_000;
 
 /**
- * Revokes the refresh token server-side when an access token is at hand
- * (best effort: no refresh on 401, so no biometric prompt, and a bounded
- * wait), then forgets the local session. The user's queued mutations stay
- * queued and are sent when they sign in again.
+ * Revokes this device's session server-side when an access token is at
+ * hand (best effort: no refresh on 401, so no biometric prompt, and a
+ * bounded wait), then forgets the local session. The stored refresh token
+ * names the session to revoke, so the user's other devices stay signed
+ * in; it is read only when the store is already unlocked. The user's
+ * queued mutations stay queued and are sent when they sign in again.
  *
  * Resolves `false` when the secure storage could not be cleared: the
  * session is then at least locked in memory (no access token, a new unlock
@@ -156,7 +174,8 @@ export async function signOut(deps: AuthDeps): Promise<boolean> {
       controller.abort();
     }, LOGOUT_TIMEOUT_MS);
     try {
-      await deps.api.post('/v1/auth/logout', undefined, {
+      const refreshToken = await unlockedRefreshToken(deps.tokenStore);
+      await deps.api.post('/v1/auth/logout', refreshToken === null ? undefined : { refreshToken }, {
         signal: controller.signal,
         refreshOnUnauthorized: false,
       });

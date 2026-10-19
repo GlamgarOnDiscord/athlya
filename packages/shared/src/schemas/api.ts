@@ -178,6 +178,20 @@ export const RefreshRequestSchema = z
 export type RefreshRequest = z.infer<typeof RefreshRequestSchema>;
 
 /**
+ * Optional body of `POST /v1/auth/logout`. The refresh token names the
+ * one session to revoke; without it the gateway falls back to revoking
+ * every session of the caller (clients that predate audit finding
+ * S2-010).
+ */
+export const LogoutRequestSchema = z
+  .object({
+    refreshToken: z.string().min(1).optional(),
+  })
+  .strict();
+
+export type LogoutRequest = z.infer<typeof LogoutRequestSchema>;
+
+/**
  * Response body returned by `register`, `login`, `oauth/*` and `refresh`.
  * Expiry values are expressed in seconds so clients can schedule their
  * silent-refresh timer without re-parsing JWTs.

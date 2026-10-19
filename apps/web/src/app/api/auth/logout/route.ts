@@ -4,15 +4,16 @@
  *  1. Clear the `athlya.refresh` cookie — the most important step;
  *     works even if the upstream is unreachable.
  *  2. If the request carried an `Authorization` header, forward the
- *     logout to the upstream API so the server can invalidate the
- *     refresh token family. Best-effort — failures are swallowed.
+ *     logout to the upstream API with the refresh cookie's token so
+ *     the server revokes this session only. Best-effort — failures
+ *     are swallowed.
  *  3. Return 204 No Content.
  *
  * @see Requirements 1.5, 2.3.
  */
 import { NextResponse } from 'next/server';
 
-import { buildClearRefreshCookie } from '../../../../lib/auth/cookies';
+import { REFRESH_COOKIE_NAME, buildClearRefreshCookie } from '../../../../lib/auth/cookies';
 import { assertSameOrigin } from '../../../../lib/auth/same-origin';
 import { getPublicApiUrl, isSecureCookieEnv } from '../../../../lib/env';
 
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (authHeader !== null && authHeader !== '') {
     const apiUrl = getPublicApiUrl();
     const target = `${apiUrl}/v1/auth/logout`;
+    const refreshToken = request.cookies.get(REFRESH_COOKIE_NAME)?.value;
     try {
       await fetch(target, {
         method: 'POST',
@@ -35,6 +37,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           authorization: authHeader,
           'content-type': 'application/json',
         },
+        // The refresh token names the one session to revoke; the user's
+        // other devices stay signed in (audit finding S2-010).
+        ...(refreshToken !== undefined && refreshToken !== ''
+          ? { body: JSON.stringify({ refreshToken }) }
+          : {}),
         signal: AbortSignal.timeout(10_000),
         cache: 'no-store',
       });

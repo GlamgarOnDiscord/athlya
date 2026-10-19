@@ -502,3 +502,40 @@ describe('createRedisSessionStore — revoke preserves reuse signal', () => {
     expect(await fake.get('auth:sid_to_root:sid-1')).toBe('sid-1');
   });
 });
+
+/* ================================================================== */
+/*  Per-session logout vs logout-all (S2-010)                          */
+/* ================================================================== */
+
+describe('createRedisSessionStore — per-session logout (S2-010)', () => {
+  it('revoke() of one session leaves the other sessions of the user live and rotatable', async () => {
+    const fake = new FakeUpstashRedis();
+    const store = createRedisSessionStore(asRedis(fake));
+
+    await store.create(USER_A, 'sid-phone', inOneHour());
+    await store.create(USER_A, 'sid-laptop', inOneHour());
+
+    await store.revoke('sid-phone');
+
+    expect(await store.exists('sid-phone')).toBe(false);
+    expect(await store.exists('sid-laptop')).toBe(true);
+    expect(await fake.smembers(`auth:user:${USER_A}:sids`)).toEqual(['sid-laptop']);
+    const rotated = await store.rotate('sid-laptop', 'sid-laptop-2', inOneHour());
+    expect(rotated).toEqual({ kind: 'ok', userId: USER_A, rootSid: 'sid-laptop' });
+  });
+
+  it('revokeAllForUser() ends every session of the user and no other user', async () => {
+    const fake = new FakeUpstashRedis();
+    const store = createRedisSessionStore(asRedis(fake));
+
+    await store.create(USER_A, 'sid-phone', inOneHour());
+    await store.create(USER_A, 'sid-laptop', inOneHour());
+    await store.create(USER_B, 'sid-other', inOneHour());
+
+    await store.revokeAllForUser(USER_A);
+
+    expect(await store.exists('sid-phone')).toBe(false);
+    expect(await store.exists('sid-laptop')).toBe(false);
+    expect(await store.exists('sid-other')).toBe(true);
+  });
+});

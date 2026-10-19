@@ -50,6 +50,7 @@ import {
   register as svcRegister,
   login as svcLogin,
   refresh as svcRefresh,
+  logout as svcLogout,
   deleteMe as svcDeleteMe,
   requestReset as svcRequestReset,
   confirmReset as svcConfirmReset,
@@ -423,30 +424,23 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
       const session = await svcRefresh(input.refreshToken, state.serviceDeps);
       return toAuthSession(session, now);
     },
-    async logout(userId) {
-      // The router calls logout with the authenticated `userId`
-      // (resolved from the Bearer access token by `jwtAuth`),
-      // not with the refresh token. The auth service's
-      // `logout(refreshToken, deps)` expects a different shape,
-      // so we short-circuit to the session store to revoke
-      // every live `sid` tied to this user — semantically
-      // identical and strictly stronger than revoking the one
-      // sid behind the refresh token.
+    async logout(userId, refreshToken) {
       const state = await getAuthState(env);
-      await state.sessionStore.revokeAllForUser(userId);
+      if (refreshToken === undefined) {
+        // Clients that predate the per-session logout send no
+        // refresh token. Revoking every session keeps them from
+        // leaving a live refresh token behind after sign-out.
+        await state.sessionStore.revokeAllForUser(userId);
+        return;
+      }
+      // Audit finding S2-010 — revoke only the presented session;
+      // the user's other devices stay signed in.
+      await svcLogout(refreshToken, state.serviceDeps, { userId });
     },
     async logoutAll(userId) {
-      // Sprint-4 SP4.1 (S2-010) — explicit "kick out every
-      // device" endpoint. Today's `logout` already calls
-      // `revokeAllForUser` (see comment above), so the
-      // implementation is identical. The DISTINCTION is on the
-      // wire: `/v1/auth/logout-all` is a separate route the
-      // user-facing UI exposes via a dedicated CTA ("sign out
-      // everywhere"), so the audit log captures the user's
-      // explicit intent rather than a routine cookie clear.
-      // Should `logout` ever be re-narrowed to a single-sid
-      // revoke (per the audit's S2-010 mitigation suggestion),
-      // this method keeps the multi-device path live.
+      // Sprint-4 SP4.1 (S2-010) — explicit "sign out everywhere"
+      // endpoint: every live sid of the user is revoked, whereas
+      // `logout` revokes only the presented session.
       const state = await getAuthState(env);
       await state.sessionStore.revokeAllForUser(userId);
     },

@@ -8,7 +8,7 @@
  */
 import { NextResponse } from 'next/server';
 
-import { buildClearRefreshCookie } from '../../../../lib/auth/cookies';
+import { REFRESH_COOKIE_NAME, buildClearRefreshCookie } from '../../../../lib/auth/cookies';
 import { assertSameOrigin } from '../../../../lib/auth/same-origin';
 import { getPublicApiUrl, isSecureCookieEnv } from '../../../../lib/env';
 
@@ -23,6 +23,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (authHeader !== null && authHeader !== '') {
     const apiUrl = getPublicApiUrl();
     const target = `${apiUrl}/v1/auth/logout`;
+    const refreshToken = request.cookies.get(REFRESH_COOKIE_NAME)?.value;
     try {
       await fetch(target, {
         method: 'POST',
@@ -30,6 +31,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           authorization: authHeader,
           'content-type': 'application/json',
         },
+        // The refresh token names the one session to revoke; the user's
+        // other devices stay signed in (audit finding S2-010).
+        ...(refreshToken !== undefined && refreshToken !== ''
+          ? { body: JSON.stringify({ refreshToken }) }
+          : {}),
         signal: AbortSignal.timeout(10_000),
         cache: 'no-store',
       });

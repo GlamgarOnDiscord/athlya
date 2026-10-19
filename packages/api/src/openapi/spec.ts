@@ -41,6 +41,7 @@ import {
   ListSessionsQuerySchema,
   LogSessionRequestSchema,
   LoginRequestSchema,
+  LogoutRequestSchema,
   MembersPageResponseSchema,
   ProgramDetailSchema,
   ProgramListResponseSchema,
@@ -227,11 +228,25 @@ const logoutRoute = createRoute({
   path: '/v1/auth/logout',
   tags: ['auth'],
   summary: 'Revoke the current session',
+  description:
+    'Revokes the session of the refresh token in the body; the other sessions of the user stay live. ' +
+    'Without a refresh token every session of the user is revoked (clients that predate the per-session logout). ' +
+    'Use /v1/auth/logout-all to sign out everywhere.',
   security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: LogoutRequestSchema } },
+      required: false,
+    },
+  },
   responses: {
     204: { description: 'Session revoked' },
     401: {
-      description: 'Not authenticated',
+      description: 'Not authenticated, or the refresh token is invalid or belongs to another user',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    422: {
+      description: 'Validation error',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
   },
