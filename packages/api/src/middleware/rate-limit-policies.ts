@@ -280,6 +280,17 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
       'Issue #639 — aggregates up to a year of sessions; gateway mount pre-jwtAuth → IP bucket under its own rl:ip:progression namespace',
   },
   {
+    id: 'progression-cardio-read',
+    route: '/v1/me/progression/cardio',
+    methods: 'GET',
+    budget: EXPENSIVE_READ_BUDGET,
+    failPolicy: 'fail-closed',
+    bucket: 'ip',
+    wiredIn: 'worker.ts',
+    notes:
+      'Issue #683 — cardio series over up to a year of sessions; gateway mount pre-jwtAuth → IP bucket under its own rl:ip:progression-cardio namespace',
+  },
+  {
     id: 'admin-stats',
     route: '/admin/{dlq,outbox,jwt}/stats|state',
     methods: 'GET',
@@ -340,6 +351,7 @@ export const REQUIRED_FAIL_CLOSED_IDS = [
   'members-list',
   'audit-list',
   'progression-read',
+  'progression-cardio-read',
   'admin-stats',
   'checkin-post',
   'checkin-token',
