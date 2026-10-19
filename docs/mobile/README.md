@@ -181,13 +181,17 @@ imports now and disconnects. Connecting needs the `thirdParty` consent (read fro
 heart rate, active energy, distances; never write). The link (start date 30 days back, HealthKit
 anchor) lives per user in the encrypted MMKV preferences file (`athlya.preferences`). "Import now" reads the workouts
 added since the anchor, 50 per page, and logs each one through `submitWrite` as one timed exercise
-named after the activity, with distance, energy and heart rate in `notes`, `source: { provider:
-'appleHealth', externalId: <workout UUID> }` and an `Idempotency-Key` derived from that UUID
+named after the activity, with distance, energy and heart rate as a readable line in `notes` and
+as the structured `cardio` summary (`durationSec`, `distanceM`, `energyKcal`, `avgHeartRateBpm`,
+`maxHeartRateBpm`, no `machine`; issue #690), each metric dropped on its own when outside the
+`CardioMetricsSchema` bounds and `cardio` omitted when HealthKit reports none of them, `source: {
+provider: 'appleHealth', externalId: <workout UUID> }` and an `Idempotency-Key` derived from that UUID
 (SHA-256 laid out as a UUID v4). The API keeps one session per `(user, source, external_id)`
 (migration 0048), so a re-import, a reinstall or a second device never duplicates a session. The
 anchor only moves once a whole page went through; any API error stops the run. Workouts deleted in
 Apple Health stay in Athlya. Disconnecting forgets the link; the read permission is revoked in the
-Health app. `@kingstinct/react-native-healthkit` is a native module: a new EAS build is needed.
+Health app. The RGPD export carries the source of imported sessions (migration 0049).
+`@kingstinct/react-native-healthkit` is a native module: a new EAS build is needed.
 
 **Account deletion**: once the API accepted it, the device removes the user's queued and rejected
 changes and its Apple Health link, then clears the session (or locks it in memory if the secure storage fails) and leaves the
