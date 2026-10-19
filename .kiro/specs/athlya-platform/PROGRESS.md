@@ -8,6 +8,10 @@
 
 ---
 
+## Session 2026-10-19 — Epic 21 closed
+
+- **#675** — `POST /v1/coach/ask` streams its answer as server-sent events (Hono `streamSSE`) when the client sends `Accept: text/event-stream`: `partial` snapshots (bounded `CoachAdvicePartial`), then a terminal `done` (`CoachAskResponse` validated as a whole) or `error` (problem JSON). Refusals (flag, burst, body, consent, quota, `coach_not_configured`) keep their status because the stream only opens after them; the JSON response is unchanged. No migration. Operator steps, unchanged by the streaming and needed only to open the coach: the RGPD checklist in `docs/compliance/ai-coach.md`, then from `packages/api` `wrangler secret put MISTRAL_API_KEY --env <env>` and `wrangler secret put MISTRAL_API_KEY --config wrangler.reservations.toml --env <env>`, then `ai-coach` in `FEATURE_FLAGS_JSON` on both Workers (`deploy-production.md` § Enabling the AI coach). Without the key the coach answers 503 `coach_not_configured`. Web/mobile stream consumption: #676.
+
 ## Session 2026-10-18 — mobile app unblock (API side)
 
 - **#652** — `POST /v1/sessions` / `GET /v1/sessions/me` were routed nowhere in staging and production (no adapter, no bulkhead mount, no wrangler route), so the mobile `MutationQueue` dead-lettered every workout session. Now served by the reservations Worker (`/v1/sessions` + `/v1/sessions/*`), `withTenant` writes under the owner-only RLS policies, idempotency bound to the caller's claims, `session-post` mutation budget (20/min/user, fail-closed). Session writes store the request `Idempotency-Key` (migration `0044_workout_sessions_idempotency_key.sql`, expand only: nullable column + partial unique index on `(user_id, idempotency_key)`), so racing retries log one session. Operator steps: apply migration 0044 (staging, then production) **before** deploying the Worker, then from `packages/api` run `wrangler deploy --config wrangler.reservations.toml --env staging` and, once staging is verified, `wrangler deploy --config wrangler.reservations.toml --env production` so the new zone routes take effect.
@@ -280,9 +284,9 @@ Insérée entre Epic 8 et Epic 10. Règle les 4 vrais bloquants identifiés dans
 ### Epic 18 — Apple Health (0/1)
 - 18.1 HealthKit read — bloqué par Epic 11 (mobile Expo).
 
-### Epic 21 — AI coach (1/2, #644)
+### Epic 21 — AI coach ✅ (2/2, #644, #675)
 - 21.1 ✅ Package `@athlya/ai-coach` : `askCoach` (Vercel AI SDK, modèle injecté — Mistral via `@ai-sdk/mistral` en prod, mock en test), contexte 30 jours minimisé (`buildCoachContext` : ni identifiants ni notes, noms d'exercices nettoyés, tailles plafonnées), sortie structurée validée par `CoachAdviceSchema`, consentement `thirdParty` vérifié avant toute lecture, quota quotidien Redis fail-closed. Note RGPD : `docs/compliance/ai-coach.md`.
-- 21.2 🟡 `GET /v1/coach` + `POST /v1/coach/ask` derrière le flag `ai-coach` (OFF par défaut), limiter `coach-ask` fail-closed, routes `/v1/coach` + `/v1/coach/*` sur le Worker reservations, secret optionnel `MISTRAL_API_KEY`, UI web `/me/coach` (aria-live, FR/EN, cas ajouté au sweep axe). Restent : le streaming (réponse JSON validée d'un bloc) et la checklist opérateur RGPD avant l'ouverture du flag.
+- 21.2 ✅ `GET /v1/coach` + `POST /v1/coach/ask` derrière le flag `ai-coach` (OFF par défaut), limiter `coach-ask` fail-closed, routes `/v1/coach` + `/v1/coach/*` sur le Worker reservations, secret optionnel `MISTRAL_API_KEY`, UI web `/me/coach` (aria-live, FR/EN, cas ajouté au sweep axe). Streaming (#675) : avec `Accept: text/event-stream`, réponse SSE via `streamSSE` de Hono une fois consentement, quota et contexte vérifiés (les refus gardent leur statut) — événements `partial` (instantanés `CoachAdvicePartial` bornés, `streamCoach` sur `streamText`), puis `done` (réponse validée d'un bloc par `CoachAdviceSchema`) ou `error` (problem JSON) ; une déconnexion client annule l'appel Mistral ; réponse JSON inchangée sans cet `Accept`. Suite côté clients web et mobile : #676. Reste côté opérateur avant l'ouverture du flag : checklist RGPD (`docs/compliance/ai-coach.md`) puis `wrangler secret put MISTRAL_API_KEY --env <env>` et `--config wrangler.reservations.toml --env <env>`, `FEATURE_FLAGS_JSON` sur les deux Workers (`deploy-production.md` § Enabling the AI coach).
 
 ### Epic 22 — Progression graphs ✅ (2/2, #639, #660)
 - 22.1 ✅ Agrégateur `packages/members/src/progression.ts` : fonction pure `computeProgression` (volume = reps × charge, 1RM Epley `w × (1 + r/30)` sur les séries de 1 à 12 reps, fréquence par semaine ISO complétée par des zéros, lignes revalidées avec `WorkoutSessionSchema`), tests unitaires + propriétés fast-check. Lecture RLS (`withTenantHttp`, policy `workout_sessions_read_own`) sur le handle routé par région (réplica EU, CN.8.3). Route `GET /v1/me/progression?window=30|90|365` sur le Worker bulkhead reservations (+ gateway), ETag + `Cache-Control: private, max-age=60`, limiter `progression-read` fail-closed.
@@ -307,7 +311,7 @@ Restent des étapes opérateur :
 - Connexion depuis l'app en staging / production : livrée par #649 (widget Turnstile dans une WebView, vérification serveur inchangée). Reste l'étape opérateur : hostname de l'API dans le widget Turnstile et `TURNSTILE_SITE_KEY` sur le Worker auth (staging et production).
 ### Epic 12 — Admin studio app (4 tâches restantes — 12.2 et 12.3 livrées)
 ### Epic 20 — Checkpoint v0.2
-### Epics v0.3 (Epic 21–25 — 21.1 et Epic 22 livrées, 21.2 livrée partiellement, Epic 24 complet : 24.1–24.3 #640/#643, 24.4 mobile #647)
+### Epics v0.3 (Epic 21–25 — Epics 21 et 22 livrés, Epic 24 complet : 24.1–24.3 #640/#643, 24.4 mobile #647)
 
 ---
 

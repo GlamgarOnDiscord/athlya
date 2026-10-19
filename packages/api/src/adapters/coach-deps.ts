@@ -4,6 +4,7 @@
  *   - Feature flag: `ai-coach`, read from the static catalogue in
  *     `FEATURE_FLAGS_JSON` through `feature-flags.ts`. Absent or
  *     malformed catalogue → OFF.
+ *   - `ask` and `askStream` (SSE, task 21.2) share the same wiring.
  *   - Model: Mistral through `@ai-sdk/mistral`, keyed by
  *     `MISTRAL_API_KEY` (model id `AI_COACH_MODEL`, default
  *     {@link DEFAULT_COACH_MODEL}; endpoint `MISTRAL_BASE_URL`, default
@@ -26,6 +27,8 @@ import {
   askCoach,
   CoachError,
   getCoachQuota,
+  streamCoach,
+  type AskCoachDeps,
   type CoachModel,
   type CoachQuotaStore,
 } from '@athlya/ai-coach';
@@ -175,6 +178,22 @@ export function buildCoachDeps(env: AthlyaBindings, cf?: RequestCf): CoachDeps {
   const dailyLimit = parseCoachDailyLimit(env.AI_COACH_DAILY_LIMIT);
   const limitDeps = dailyLimit === undefined ? {} : { dailyLimit };
 
+  function askDeps(claims: AuthClaims): AskCoachDeps {
+    // Resolved first: without a key the request fails before any read.
+    const model = resolveCoachModel(env);
+    const sessions = createDrizzleProgressionRepoHttp(
+      getOrCreateDbHttpForRegion(env, cf?.continent),
+      claims,
+    );
+    return {
+      model,
+      sessions,
+      consents: { hasThirdPartyConsent: (userId) => hasThirdPartyConsent(env, claims, userId) },
+      quota,
+      ...limitDeps,
+    };
+  }
+
   return {
     async isEnabled(claims) {
       try {
@@ -198,18 +217,11 @@ export function buildCoachDeps(env: AthlyaBindings, cf?: RequestCf): CoachDeps {
     },
 
     async ask(claims, request) {
-      const model = resolveCoachModel(env);
-      const sessions = createDrizzleProgressionRepoHttp(
-        getOrCreateDbHttpForRegion(env, cf?.continent),
-        claims,
-      );
-      return askCoach(claims.userId, request, {
-        model,
-        sessions,
-        consents: { hasThirdPartyConsent: (userId) => hasThirdPartyConsent(env, claims, userId) },
-        quota,
-        ...limitDeps,
-      });
+      return askCoach(claims.userId, request, askDeps(claims));
+    },
+
+    async askStream(claims, request, signal) {
+      return streamCoach(claims.userId, request, askDeps(claims), signal);
     },
   };
 }

@@ -54,7 +54,8 @@ opened to members, add the processing to the register and the DPIA
 ## Retention at Athlya
 
 - Neither the question nor the advice is stored: no database row, no log line with the content,
-  `Cache-Control: no-store` on both responses.
+  `Cache-Control: no-store` on both responses, the streamed one included (issue #675). A client
+  that disconnects mid-stream aborts the provider call.
 - The only state kept is the daily quota counter in Redis, `coach:quota:<UTC day>:<userId>`,
   which expires at the next UTC midnight.
 - Error logs record the error code and class only, never the prompt or the provider message.
