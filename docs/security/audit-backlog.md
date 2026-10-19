@@ -4,20 +4,26 @@ Tracking issue **#79**. Tous les CRITICAL/HIGH sont fermés code-side (Sprints 1
 
 ## MEDIUM — code ou infra
 
-| ID     | Sujet                                 | Statut                | Issue / slice                                                           |
-| ------ | ------------------------------------- | --------------------- | ----------------------------------------------------------------------- |
-| S6-001 | CSP `style-src` vs React `style={{}}` | résolu (risk accepté) | #137 — ADR `csp-style-src-attr-adr.md` (Option C, risque LOW documenté) |
-| S2-010 | Logout per-device                     | résolu                | #674                                                                    |
-| S4-009 | Outbox quota per-user                 | partiel               | rate limit global OK                                                    |
-| S4-010 | Canary / graduel deploy               | doc                   | #80                                                                     |
-| S4-011 | Queue topology par domaine            | ADR                   | #81                                                                     |
-| —      | Admin `/admin/*` defense in depth     | doc                   | #74                                                                     |
-| —      | OTel sampling prod                    | fermé                 | #83                                                                     |
-| —      | bcrypt 72 bytes                       | fermé                 | #78                                                                     |
-| —      | Cost alerting                         | doc                   | #82                                                                     |
-| —      | JWT rotation automation               | backlog               | #77                                                                     |
-| —      | Sentry/OTel SDK officiels             | backlog               | #76                                                                     |
-| —      | Stripe prod checklist                 | fermé                 | #69                                                                     |
+Statuses checked against `master` on 2026-10-19. `Sx-0yy` IDs refer to the `audit-Sx-*.md` files; a row without an ID comes from a follow-up issue, not from an audit finding.
+
+| ID     | Subject                               | Status                   | Issue / slice                                                                                                                     |
+| ------ | ------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| S6-001 | CSP `style-src` vs React `style={{}}` | resolved (risk accepted) | #137 — ADR `csp-style-src-attr-adr.md` (Option C, risque LOW documenté)                                                           |
+| S2-010 | Logout per-device                     | resolved                 | #674                                                                                                                              |
+| S2-011 | OAuth verifier accepts RS256 + ES256  | in progress              | #689 (RS256 only, audience required; OAuth routes unmounted since B8.4)                                                           |
+| S2-012 | Refresh token in the JSON body        | partial                  | Body kept (mobile app, OS keychain); web/studio proxies move it to the HttpOnly cookie; logger redaction of `*Token` keys in #689 |
+| S4-004 | Outbox flooding per user              | partial                  | Per-user mutation budgets after `jwtAuth` (#613, #623); no dedicated outbox quota                                                 |
+| S4-010 | No SRI on the Turnstile script        | open (LOW risk)          | `v0/api.js` is mutable, so SRI cannot apply as is; the versioned-proxy alternative is in S6-007                                   |
+| S4-011 | Idempotency cache flooding            | in progress              | #689 (expired-key purge, migration 0047); write rate bounded by the mutation budgets (#623)                                       |
+| —      | Canary / gradual deploy               | closed                   | #80 (runbook), #129 (automation), #579/#607 (smoke + error-budget gates), #632 (SLO rollback)                                     |
+| —      | Queue topology per domain             | closed                   | #81, #125 — `athlya-events-notifications` / `athlya-events-rgpd`, `src/events/route-queue.ts`, `event-bus.md` §6                  |
+| —      | Admin `/admin/*` defense in depth     | closed                   | #74 (runbook `admin-access.md`), #121 (Cloudflare Access enforced)                                                                |
+| —      | OTel sampling prod                    | closed                   | #83                                                                                                                               |
+| —      | bcrypt 72 bytes                       | closed                   | #78                                                                                                                               |
+| —      | Cost alerting                         | doc                      | #82 — runbook `cost-monitoring.md`                                                                                                |
+| —      | JWT rotation automation               | closed                   | #77 — `scripts/rotate-jwt-prepare.mjs`, audit row on rotate (#127, `admin/jwt-rotate-routes.ts`), runbook `rotate-jwt.md`         |
+| —      | Sentry/OTel SDK officiels             | rejected (ADR)           | #76 — `docs/operations/observability-hand-rolled-adr.md` (Worker bundle size)                                                     |
+| —      | Stripe prod checklist                 | closed                   | #69                                                                                                                               |
 
 ## MEDIUM / LOW — ops uniquement
 
