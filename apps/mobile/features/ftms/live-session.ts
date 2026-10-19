@@ -8,11 +8,19 @@
  * integrated. Machine totals (elapsed time, distance, energy) win over
  * what the phone can derive, since the member may have started on the
  * console before connecting.
+ *
+ * Heart rate has two sources: the machine (grip sensors) and a paired
+ * strap (issue #669). The strap wins while it reports; the machine's
+ * value is used again once the strap releases it (lost contact,
+ * disconnect) or has been silent for longer than {@link MAX_GAP_MS}.
+ * Each heart-rate value is integrated on its own source's timeline.
  */
 import type { FtmsSample, MachineType } from './protocol';
 
 /** Gaps longer than this between two notifications are not integrated. */
 export const MAX_GAP_MS = 5_000;
+
+export type HeartRateSource = 'machine' | 'strap';
 
 export interface LiveSession {
   readonly machine: MachineType;
@@ -23,6 +31,10 @@ export interface LiveSession {
   /** Last known value of every metric. */
   readonly latest: FtmsSample;
   readonly samples: number;
+  /** Where `latest.heartRateBpm` comes from. */
+  readonly heartRateSource: HeartRateSource;
+  /** Last strap reading, while the strap is the source. */
+  readonly strapAtMs: number | null;
   /** Time covered by integrated intervals, in ms. */
   readonly integratedMs: number;
   /** Distance integrated from speed, in metres (used when the machine sends none). */
@@ -45,6 +57,8 @@ export function createLiveSession(machine: MachineType, startedAtMs: number): Li
     endedAtMs: null,
     latest: {},
     samples: 0,
+    heartRateSource: 'machine',
+    strapAtMs: null,
     integratedMs: 0,
     integratedDistanceM: 0,
     powerMs: 0,
@@ -63,14 +77,67 @@ function maxOf(current: number | null, value: number | undefined): number | null
   return current === null ? value : Math.max(current, value);
 }
 
-/** Adds one decoded notification received at `atMs`. */
-export function addSample(session: LiveSession, sample: FtmsSample, atMs: number): LiveSession {
+function integrable(fromMs: number | null, toMs: number): number {
+  const gap = fromMs === null ? 0 : toMs - fromMs;
+  return gap > 0 && gap <= MAX_GAP_MS ? gap : 0;
+}
+
+function withoutHeartRate(sample: FtmsSample): FtmsSample {
+  const { heartRateBpm: _heartRateBpm, ...rest } = sample;
+  return rest;
+}
+
+/** Folds the current heart rate's time up to `atMs` into the averages. */
+function integrateHeartRate(session: LiveSession, atMs: number): LiveSession {
+  const bpm = session.latest.heartRateBpm;
+  if (bpm === undefined) return session;
+  const since = session.heartRateSource === 'strap' ? session.strapAtMs : session.lastSampleAtMs;
+  const dt = integrable(since, atMs);
+  return {
+    ...session,
+    heartRateMs: session.heartRateMs + dt,
+    heartRateBpmMs: session.heartRateBpmMs + bpm * dt,
+  };
+}
+
+/** Adds one strap heart-rate reading received at `atMs`; the strap becomes the source. */
+export function addHeartRate(session: LiveSession, bpm: number, atMs: number): LiveSession {
+  const integrated = integrateHeartRate(session, atMs);
+  return {
+    ...integrated,
+    heartRateSource: 'strap',
+    strapAtMs: Math.max(atMs, session.strapAtMs ?? atMs),
+    latest: { ...session.latest, heartRateBpm: bpm },
+    samples: session.samples + 1,
+    maxHeartRateBpm: maxOf(session.maxHeartRateBpm, bpm),
+  };
+}
+
+/** The strap stopped reporting at `atMs`: the machine's heart rate is used again. */
+export function releaseHeartRate(session: LiveSession, atMs: number): LiveSession {
+  if (session.heartRateSource !== 'strap') return session;
+  const integrated = integrateHeartRate(session, atMs);
+  return {
+    ...integrated,
+    heartRateSource: 'machine',
+    strapAtMs: null,
+    latest: withoutHeartRate(session.latest),
+  };
+}
+
+/** Adds one decoded machine notification received at `atMs`. */
+export function addSample(current: LiveSession, received: FtmsSample, atMs: number): LiveSession {
+  const stale =
+    current.heartRateSource === 'strap' &&
+    (current.strapAtMs === null || atMs - current.strapAtMs > MAX_GAP_MS);
+  const session = stale ? releaseHeartRate(current, atMs) : current;
+  const fromMachine = session.heartRateSource === 'machine';
+  const sample = fromMachine ? received : withoutHeartRate(received);
   const previous = session.latest;
-  const gap = session.lastSampleAtMs === null ? 0 : atMs - session.lastSampleAtMs;
-  const dt = gap > 0 && gap <= MAX_GAP_MS ? gap : 0;
+  const dt = integrable(session.lastSampleAtMs, atMs);
 
   const power = previous.powerW;
-  const heartRate = previous.heartRateBpm;
+  const heartRate = fromMachine ? previous.heartRateBpm : undefined;
   const cadence = previous.cadenceRpm;
   const speed = previous.speedKmh;
 

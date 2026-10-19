@@ -10,10 +10,13 @@
  */
 import { Store } from '../store';
 
+import { BleScan } from './ble-scan';
 import {
+  addHeartRate,
   addSample,
   createLiveSession,
   endSession,
+  releaseHeartRate,
   summarise,
   type LiveSession,
   type SessionSummary,
@@ -27,8 +30,7 @@ import type {
   ScannedDevice,
 } from '../../infrastructure/ble/ports';
 
-/** Scans stop on their own after this long (battery). */
-export const SCAN_TIMEOUT_MS = 15_000;
+export { SCAN_TIMEOUT_MS } from './ble-scan';
 
 export type MachineStatus =
   | 'idle'
@@ -76,15 +78,15 @@ export class FtmsController {
   readonly #transport: BleTransport;
   readonly #now: () => number;
   readonly #store = new Store<MachineState>(INITIAL_MACHINE_STATE);
+  readonly #scan: BleScan;
   #generation = 0;
-  #stopScan: (() => void) | null = null;
-  #scanTimer: ReturnType<typeof setTimeout> | null = null;
   #connection: BleConnection | null = null;
   #unsubscribers: (() => void)[] = [];
 
   public constructor(deps: FtmsControllerDeps) {
     this.#transport = deps.transport;
     this.#now = deps.now ?? Date.now;
+    this.#scan = new BleScan(deps.transport);
   }
 
   public readonly get = (): MachineState => this.#store.get();
@@ -122,33 +124,26 @@ export class FtmsController {
       devices: [],
       nothingFound: false,
     }));
-    try {
-      this.#stopScan = this.#transport.startScan(
-        [SERVICE_UUID],
-        (device) => {
-          this.#addDevice(device);
-        },
-        () => {
-          this.#endScan('scanFailed');
-        },
-      );
-    } catch {
-      this.#endScan('scanFailed');
-      return;
-    }
-    this.#scanTimer = setTimeout(() => {
-      this.#endScan(null);
-    }, SCAN_TIMEOUT_MS);
+    this.#scan.start(
+      [SERVICE_UUID],
+      (device) => {
+        this.#addDevice(device);
+      },
+      (failed) => {
+        this.#endScan(failed ? 'scanFailed' : null);
+      },
+    );
   }
 
   public stopScan(): void {
-    if (this.get().status === 'scanning') this.#endScan(null);
+    // A stopped scan did not conclude that nothing is nearby.
+    if (this.get().status === 'scanning') this.#endScan(null, true);
   }
 
   public async connect(deviceId: string): Promise<void> {
     const { status, devices } = this.get();
     if (status === 'connecting' || status === 'streaming') return;
-    this.#clearScan();
+    this.#scan.stop();
     const device = devices.find((candidate) => candidate.id === deviceId) ?? {
       id: deviceId,
       name: null,
@@ -211,6 +206,21 @@ export class FtmsController {
     );
   }
 
+  /**
+   * Heart rate from a paired strap, or null when it lost skin contact or
+   * went away. While the strap reports, it wins over the machine's value.
+   */
+  public strapHeartRate(bpm: number | null): void {
+    if (this.get().status !== 'streaming') return;
+    const at = this.#now();
+    this.#store.set((state) => {
+      if (state.session === null) return state;
+      const session =
+        bpm === null ? releaseHeartRate(state.session, at) : addHeartRate(state.session, bpm, at);
+      return session === state.session ? state : { ...state, session };
+    });
+  }
+
   /** Ends the session and releases the machine; the data stays for saving. */
   public finish(): void {
     const { status } = this.get();
@@ -228,7 +238,7 @@ export class FtmsController {
   /** Drops the session (after saving or discarding it). */
   public reset(): void {
     this.#generation += 1;
-    this.#clearScan();
+    this.#scan.stop();
     this.#teardown();
     this.#store.set(INITIAL_MACHINE_STATE);
   }
@@ -236,7 +246,7 @@ export class FtmsController {
   /** The screen went away: nothing keeps scanning or holds the machine. */
   public dispose(): void {
     this.#generation += 1;
-    this.#clearScan();
+    this.#scan.stop();
     this.#teardown();
   }
 
@@ -248,26 +258,18 @@ export class FtmsController {
     );
   }
 
-  #endScan(error: MachineError | null): void {
-    this.#clearScan();
+  #endScan(error: MachineError | null, stopped = false): void {
+    this.#scan.stop();
     this.#store.set((state) =>
       state.status === 'scanning'
         ? {
             ...state,
             status: 'idle',
-            nothingFound: error === null && state.devices.length === 0,
+            nothingFound: !stopped && error === null && state.devices.length === 0,
             error,
           }
         : state,
     );
-  }
-
-  #clearScan(): void {
-    if (this.#scanTimer !== null) clearTimeout(this.#scanTimer);
-    this.#scanTimer = null;
-    const stop = this.#stopScan;
-    this.#stopScan = null;
-    stop?.();
   }
 
   #onData(bytes: Uint8Array): void {

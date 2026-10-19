@@ -100,7 +100,9 @@ export function liveMetricRows(
   if (latest.heartRateBpm !== undefined) {
     push(
       'heartRate',
-      'mobile.machine.metrics.heartRate',
+      session.heartRateSource === 'strap'
+        ? 'mobile.machine.metrics.heartRateStrap'
+        : 'mobile.machine.metrics.heartRate',
       t('mobile.machine.metrics.unit.bpm', { value: latest.heartRateBpm }),
     );
   }

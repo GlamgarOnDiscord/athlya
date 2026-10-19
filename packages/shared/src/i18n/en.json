@@ -775,7 +775,8 @@
           "bpm": "{value} bpm",
           "spm": "{value} /min",
           "percent": "{value} %"
-        }
+        },
+        "heartRateStrap": "Heart rate (strap)"
       },
       "types": {
         "indoorBike": "Indoor bike",
@@ -791,6 +792,28 @@
         "strokes": "{count} strokes",
         "energy": "{kcal} kcal",
         "avgHeartRate": "Avg heart rate {bpm} bpm"
+      },
+      "strap": {
+        "title": "Heart-rate strap",
+        "intro": "Pair a chest strap or watch that broadcasts your heart rate over Bluetooth. Its reading replaces the machine's.",
+        "scan": "Find a heart-rate strap",
+        "scanning": "Looking for heart-rate straps nearby…",
+        "devices": "Straps nearby",
+        "unnamed": "Unnamed strap",
+        "reconnect": "Reconnect {name}",
+        "forget": "Forget this strap",
+        "connecting": "Connecting to {name}…",
+        "connected": "Connected to {name}",
+        "waiting": "Waiting for the first reading…",
+        "noContact": "The strap does not detect your skin. Moisten its electrodes and tighten it.",
+        "disconnect": "Disconnect the strap",
+        "nothingFound": "No strap found. Put the strap on (it wakes up on skin contact) and try again.",
+        "errors": {
+          "scanFailed": "Searching for straps failed. Try again.",
+          "connectFailed": "Could not connect to the strap. Move closer and try again.",
+          "notHeartRate": "This device does not share heart rate over Bluetooth.",
+          "linkLost": "Connection to the strap lost. The machine session continues."
+        }
       }
     }
   },

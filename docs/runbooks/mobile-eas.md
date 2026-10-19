@@ -89,11 +89,13 @@ Store listing checklist before the first public release:
 - Privacy policy URL (the web app's `/privacy` page) and the data-safety / privacy-nutrition forms,
   consistent with [`docs/compliance/expo-push-transfers.md`](../compliance/expo-push-transfers.md).
 - Face ID usage string (set in `app.json` through the `expo-local-authentication` plugin).
-- Bluetooth (connected machines, `react-native-ble-plx` plugin in `app.json`): iOS
-  `NSBluetoothAlwaysUsageDescription`; Android `BLUETOOTH_SCAN` (`neverForLocation`) and
-  `BLUETOOTH_CONNECT`, plus location for Android 11 and lower only. No background mode. Declare
-  the Bluetooth use in the privacy forms: live machine data stays on the device until the member
-  logs the session.
+- Bluetooth (connected machines and heart-rate straps, `react-native-ble-plx` plugin in
+  `app.json`): iOS `NSBluetoothAlwaysUsageDescription`; Android `BLUETOOTH_SCAN`
+  (`neverForLocation`) and `BLUETOOTH_CONNECT`, plus location for Android 11 and lower only. No
+  background mode. Declare the Bluetooth use in the privacy forms: live machine data and heart
+  rate (health data) stay on the device until the member logs the session; RR-intervals are never
+  stored, and only the last strap's id and name are remembered on the device. The usage string
+  is native configuration: a change to it ships with the next EAS build.
 - Export compliance: besides HTTPS, the app encrypts its offline queue on device with AES-256
   (MMKV). `app.json` deliberately does not declare `ITSAppUsesNonExemptEncryption`: answer the
   encryption questions in App Store Connect on the first submission (data-at-rest encryption with
