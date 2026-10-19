@@ -336,6 +336,37 @@ export interface AthlyaBindings {
   readonly TURNSTILE_SITE_KEY?: string;
 
   /**
+   * Device attestation on mobile sign-in and registration (issue #659):
+   * `off` (default when unset or unknown), `report` (verify and log,
+   * never block) or `enforce` (reject presented attestations that
+   * fail). Read by `middleware/device-attestation.ts`.
+   */
+  readonly DEVICE_ATTESTATION_MODE?: string;
+
+  /**
+   * Google Cloud service account key (JSON) with access to the Play
+   * Integrity API, used to decode Android integrity tokens. Secret:
+   * `wrangler secret put PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON`.
+   * Android verdicts are `unconfigured` while it is unset.
+   */
+  readonly PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON?: string;
+
+  /** Android application id checked in Play Integrity verdicts. Defaults to `app.athlya.mobile`. */
+  readonly PLAY_INTEGRITY_PACKAGE_NAME?: string;
+
+  /** Apple Developer team id that issues DeviceCheck provider JWTs. */
+  readonly APPLE_DEVICECHECK_TEAM_ID?: string;
+
+  /** Key id of the Apple `.p8` key with the DeviceCheck capability. */
+  readonly APPLE_DEVICECHECK_KEY_ID?: string;
+
+  /** PKCS#8 PEM of the Apple DeviceCheck `.p8` key. Secret. */
+  readonly APPLE_DEVICECHECK_PRIVATE_KEY?: string;
+
+  /** `production` (default) or `development` DeviceCheck endpoint. */
+  readonly APPLE_DEVICECHECK_ENVIRONMENT?: string;
+
+  /**
    * Cloudflare R2 bucket binding holding member avatar binaries
    * (Slice 1.3 — Sprint 1, finding S5-002). Consumed by
    * {@link import('@athlya/members').AvatarStore} via

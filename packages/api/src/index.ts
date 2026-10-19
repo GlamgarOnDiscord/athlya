@@ -33,6 +33,7 @@ export * from './middleware/security-headers.js';
 export * from './middleware/tenant-resolver.js';
 export * from './middleware/tenant.js';
 export * from './middleware/turnstile.js';
+export * from './middleware/device-attestation.js';
 export * from './middleware/validator.js';
 export * from './events/publish.js';
 export * from './events/drain-dlq.js';
