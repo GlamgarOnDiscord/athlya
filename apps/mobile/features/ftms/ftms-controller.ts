@@ -213,17 +213,12 @@ export class FtmsController {
   public strapHeartRate(bpm: number | null): void {
     if (this.get().status !== 'streaming') return;
     const at = this.#now();
-    this.#store.set((state) =>
-      state.session === null
-        ? state
-        : {
-            ...state,
-            session:
-              bpm === null
-                ? releaseHeartRate(state.session, at)
-                : addHeartRate(state.session, bpm, at),
-          },
-    );
+    this.#store.set((state) => {
+      if (state.session === null) return state;
+      const session =
+        bpm === null ? releaseHeartRate(state.session, at) : addHeartRate(state.session, bpm, at);
+      return session === state.session ? state : { ...state, session };
+    });
   }
 
   /** Ends the session and releases the machine; the data stays for saving. */

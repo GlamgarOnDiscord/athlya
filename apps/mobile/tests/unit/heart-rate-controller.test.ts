@@ -201,6 +201,11 @@ describe('strap and machine together', () => {
     bike.notify(hex('4102 c800 64'));
     expect(machine.get().session?.latest.heartRateBpm).toBe(100);
 
+    // Repeated no-contact readings do not touch the machine state again.
+    const before = machine.get();
+    belt.notify(hex('14 8c'));
+    expect(machine.get()).toBe(before);
+
     unlink();
     belt.notify(hex('16 aa'));
     expect(machine.get().session?.heartRateSource).toBe('machine');
