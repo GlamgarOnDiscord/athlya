@@ -189,9 +189,19 @@ class FakeUpstashRedis {
       // sidToRootOldKey not consumed (the script never
       // touches it — only the new sid's pointer is written),
       sidToRootNewKey,
+      familyRevokedKey,
     ] = keys;
 
     const [newPayloadJson, ttlSecStr, oldSid, newSid, rootSid, sidToRootTtlStr] = args;
+
+    // Step 0 — a family revoked by a logout never rotates again.
+    if (
+      familyRevokedKey &&
+      familyRevokedKey !== '' &&
+      (await this.get(familyRevokedKey)) !== null
+    ) {
+      return [2, ''];
+    }
 
     // Step 1 — GETDEL old.
     const oldEntry = this.strings.get(oldSidKey ?? '');
@@ -500,5 +510,129 @@ describe('createRedisSessionStore — revoke preserves reuse signal', () => {
     // copy of sid-1 still triggers reuse_detected if rotated.
     expect(await fake.smembers('auth:family:sid-1')).toContain('sid-1');
     expect(await fake.get('auth:sid_to_root:sid-1')).toBe('sid-1');
+  });
+});
+
+/* ================================================================== */
+/*  Per-session logout vs logout-all (S2-010)                          */
+/* ================================================================== */
+
+describe('createRedisSessionStore — per-session logout (S2-010)', () => {
+  it('revoke() of one session leaves the other sessions of the user live and rotatable', async () => {
+    const fake = new FakeUpstashRedis();
+    const store = createRedisSessionStore(asRedis(fake));
+
+    await store.create(USER_A, 'sid-phone', inOneHour());
+    await store.create(USER_A, 'sid-laptop', inOneHour());
+
+    await store.revoke('sid-phone');
+
+    expect(await store.exists('sid-phone')).toBe(false);
+    expect(await store.exists('sid-laptop')).toBe(true);
+    expect(await fake.smembers(`auth:user:${USER_A}:sids`)).toEqual(['sid-laptop']);
+    const rotated = await store.rotate('sid-laptop', 'sid-laptop-2', inOneHour());
+    expect(rotated).toEqual({ kind: 'ok', userId: USER_A, rootSid: 'sid-laptop' });
+  });
+
+  it('revoke() of a token rotated just before logout also ends its live successor', async () => {
+    const fake = new FakeUpstashRedis();
+    const store = createRedisSessionStore(asRedis(fake));
+
+    await store.create(USER_A, 'sid-phone', inOneHour());
+    await store.create(USER_A, 'sid-laptop', inOneHour());
+    // A refresh on the phone wins the race against its logout.
+    await store.rotate('sid-phone', 'sid-phone-2', inOneHour());
+
+    await store.revoke('sid-phone');
+
+    expect(await store.exists('sid-phone-2')).toBe(false);
+    expect(await store.exists('sid-laptop')).toBe(true);
+    expect(await fake.smembers(`auth:user:${USER_A}:sids`)).toEqual(['sid-laptop']);
+    // Family history is kept: replaying either phone token is reuse.
+    expect(await fake.get('auth:sid_to_root:sid-phone-2')).toBe('sid-phone');
+    expect(await store.rotate('sid-phone-2', 'sid-phone-3', inOneHour())).toMatchObject({
+      kind: 'reuse_detected',
+      rootSid: 'sid-phone',
+    });
+  });
+
+  it('a rotation committed between the family revoke marker and the family read is seen and revoked', async () => {
+    const fake = new FakeUpstashRedis();
+    const store = createRedisSessionStore(asRedis(fake));
+    await store.create(USER_A, 'sid-phone', inOneHour());
+
+    // Commit a refresh right before `revoke` writes its marker.
+    const set = fake.set.bind(fake);
+    let rotated: unknown = null;
+    fake.set = async (key, value, options) => {
+      if (key === 'auth:family_revoked:sid-phone' && rotated === null) {
+        rotated = await store.rotate('sid-phone', 'sid-phone-2', inOneHour());
+      }
+      return set(key, value, options);
+    };
+
+    await store.revoke('sid-phone');
+
+    expect(rotated).toMatchObject({ kind: 'ok' });
+    expect(await store.exists('sid-phone-2')).toBe(false);
+    expect(await fake.smembers(`auth:user:${USER_A}:sids`)).toEqual([]);
+  });
+
+  it('a rotation attempted between the family read and the deletes mints no successor', async () => {
+    const fake = new FakeUpstashRedis();
+    const store = createRedisSessionStore(asRedis(fake));
+    await store.create(USER_A, 'sid-phone', inOneHour());
+
+    // Attempt a refresh after `revoke` read the family, before it deletes.
+    const smembers = fake.smembers.bind(fake);
+    let rotated: unknown = null;
+    fake.smembers = async (key) => {
+      const members = await smembers(key);
+      if (key === 'auth:family:sid-phone' && rotated === null) {
+        rotated = await store.rotate('sid-phone', 'sid-phone-2', inOneHour());
+      }
+      return members;
+    };
+
+    await store.revoke('sid-phone');
+
+    expect(rotated).toEqual({ kind: 'unknown' });
+    expect(await store.exists('sid-phone')).toBe(false);
+    expect(await store.exists('sid-phone-2')).toBe(false);
+    expect(await fake.smembers(`auth:user:${USER_A}:sids`)).toEqual([]);
+  });
+
+  it('a rotate after logout fails and leaves the other sessions of the user live', async () => {
+    const fake = new FakeUpstashRedis();
+    const store = createRedisSessionStore(asRedis(fake));
+    await store.create(USER_A, 'sid-phone', inOneHour());
+    await store.create(USER_A, 'sid-laptop', inOneHour());
+
+    await store.revoke('sid-phone');
+
+    // The logged-out token is gone; replaying it is the reuse signal.
+    expect(await store.rotate('sid-phone', 'sid-phone-2', inOneHour())).toMatchObject({
+      kind: 'reuse_detected',
+      rootSid: 'sid-phone',
+    });
+    expect(await store.exists('sid-phone-2')).toBe(false);
+    expect(await store.rotate('sid-laptop', 'sid-laptop-2', inOneHour())).toMatchObject({
+      kind: 'ok',
+    });
+  });
+
+  it('revokeAllForUser() ends every session of the user and no other user', async () => {
+    const fake = new FakeUpstashRedis();
+    const store = createRedisSessionStore(asRedis(fake));
+
+    await store.create(USER_A, 'sid-phone', inOneHour());
+    await store.create(USER_A, 'sid-laptop', inOneHour());
+    await store.create(USER_B, 'sid-other', inOneHour());
+
+    await store.revokeAllForUser(USER_A);
+
+    expect(await store.exists('sid-phone')).toBe(false);
+    expect(await store.exists('sid-laptop')).toBe(false);
+    expect(await store.exists('sid-other')).toBe(true);
   });
 });

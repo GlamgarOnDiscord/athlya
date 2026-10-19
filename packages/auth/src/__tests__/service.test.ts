@@ -58,6 +58,7 @@ import {
   loginWithApple,
   loginWithGoogle,
   logout,
+  logoutAll,
   refresh,
   register,
 } from '../service.js';
@@ -600,6 +601,147 @@ describe('logout', () => {
     await logout(session.refreshToken, deps);
     await logout(session.refreshToken, deps);
     expect(store.revoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('never revokes the other sessions of the user (S2-010)', async () => {
+    const storedHash = await hashPassword(LOGIN_INPUT.password);
+    const { deps, repo, store } = makeDeps();
+    repo.findUserByEmail.mockResolvedValue(makeUserRow({ passwordHash: storedHash }));
+    const session = await login(LOGIN_INPUT, deps);
+
+    await logout(session.refreshToken, deps, { userId: USER_ID });
+
+    expect(store.revoke).toHaveBeenCalledWith(SID_1);
+    expect(store.revokeAllForUser).not.toHaveBeenCalled();
+    expect(store.revokeFamilyByRootSid).not.toHaveBeenCalled();
+  });
+
+  it('rejects a refresh token of another user and revokes nothing', async () => {
+    const storedHash = await hashPassword(LOGIN_INPUT.password);
+    const { deps, repo, store } = makeDeps();
+    repo.findUserByEmail.mockResolvedValue(makeUserRow({ passwordHash: storedHash }));
+    const session = await login(LOGIN_INPUT, deps);
+
+    await expect(
+      logout(session.refreshToken, deps, { userId: '99999999-9999-4999-8999-999999999999' }),
+    ).rejects.toMatchObject({ code: 'token_invalid' });
+    expect(store.revoke).not.toHaveBeenCalled();
+  });
+
+  it('rejects an expired refresh token of another user and revokes nothing', async () => {
+    const pastNow = FIXED_NOW_SEC - (30 * 24 * 60 * 60 + 10);
+    const expiredToken = await new SignJWT({ sub: USER_ID, sid: SID_1 })
+      .setProtectedHeader({ alg: 'RS256', typ: 'JWT', kid: signingKey.kid })
+      .setIssuedAt(pastNow)
+      .setExpirationTime(pastNow + 60)
+      .setSubject(USER_ID)
+      .sign(signingKey.privateKey);
+    const { deps, store } = makeDeps();
+
+    await expect(
+      logout(expiredToken, deps, { userId: '99999999-9999-4999-8999-999999999999' }),
+    ).rejects.toMatchObject({ code: 'token_invalid' });
+    expect(store.revoke).not.toHaveBeenCalled();
+
+    await logout(expiredToken, deps, { userId: USER_ID });
+    expect(store.revoke).toHaveBeenCalledWith(SID_1);
+  });
+});
+
+/**
+ * Minimal session ledger with the Redis store's semantics: rotation
+ * consumes the old sid and keeps the family root, and `revoke` ends
+ * every live sid of the presented sid's family.
+ */
+function makeMemoryStore(): SessionStore {
+  const live = new Map<string, string>();
+  const rootOf = new Map<string, string>();
+  return {
+    create: (userId, sid) => {
+      live.set(sid, userId);
+      rootOf.set(sid, sid);
+      return Promise.resolve();
+    },
+    rotate: (oldSid, newSid) => {
+      const userId = live.get(oldSid);
+      const rootSid = rootOf.get(oldSid);
+      if (userId === undefined || rootSid === undefined) {
+        return Promise.resolve({ kind: 'unknown' } as const);
+      }
+      live.delete(oldSid);
+      live.set(newSid, userId);
+      rootOf.set(newSid, rootSid);
+      return Promise.resolve({ kind: 'ok', userId, rootSid } as const);
+    },
+    revoke: (sid) => {
+      const rootSid = rootOf.get(sid) ?? sid;
+      for (const liveSid of [...live.keys()]) {
+        if ((rootOf.get(liveSid) ?? liveSid) === rootSid) live.delete(liveSid);
+      }
+      return Promise.resolve();
+    },
+    revokeAllForUser: (userId) => {
+      for (const [sid, owner] of live) {
+        if (owner === userId) live.delete(sid);
+      }
+      return Promise.resolve();
+    },
+    revokeFamilyByRootSid: () => Promise.resolve(),
+    exists: (sid) => Promise.resolve(live.has(sid)),
+  };
+}
+
+describe('logout vs logoutAll across sessions (S2-010)', () => {
+  async function twoSessions() {
+    const storedHash = await hashPassword(LOGIN_INPUT.password);
+    const { deps, repo } = makeDeps({
+      store: makeMemoryStore() as MockedStore,
+      uuids: ['sid-a', 'sid-b', 'sid-a2', 'sid-b2', 'sid-b3'],
+    });
+    repo.findUserByEmail.mockResolvedValue(makeUserRow({ passwordHash: storedHash }));
+    repo.findUserById.mockResolvedValue(makeUserRow({ passwordHash: storedHash }));
+    const phone = await login(LOGIN_INPUT, deps);
+    const laptop = await login(LOGIN_INPUT, deps);
+    return { deps, phone, laptop };
+  }
+
+  it('logout ends the presented session and leaves the other one refreshable', async () => {
+    const { deps, phone, laptop } = await twoSessions();
+
+    await logout(phone.refreshToken, deps, { userId: USER_ID });
+
+    await expect(refresh(phone.refreshToken, deps)).rejects.toMatchObject({
+      code: 'token_invalid',
+    });
+    const rotated = await refresh(laptop.refreshToken, deps);
+    expect(rotated.user.id).toBe(USER_ID);
+  });
+
+  it('logout with a token rotated just before it also ends the rotated session', async () => {
+    const { deps, phone, laptop } = await twoSessions();
+    // A refresh on the phone wins the race against its logout.
+    const rotated = await refresh(phone.refreshToken, deps);
+
+    await logout(phone.refreshToken, deps, { userId: USER_ID });
+
+    await expect(refresh(rotated.refreshToken, deps)).rejects.toMatchObject({
+      code: 'token_invalid',
+    });
+    expect((await refresh(laptop.refreshToken, deps)).user.id).toBe(USER_ID);
+  });
+
+  it('logoutAll ends every session of the user', async () => {
+    const { deps, phone, laptop } = await twoSessions();
+
+    await logoutAll(USER_ID, deps);
+
+    await expect(refresh(phone.refreshToken, deps)).rejects.toMatchObject({
+      code: 'token_invalid',
+    });
+    await expect(refresh(laptop.refreshToken, deps)).rejects.toMatchObject({
+      code: 'token_invalid',
+    });
+    expect(deps.userRepo.bumpCredentialsVersion).toHaveBeenCalledWith(USER_ID);
   });
 });
 

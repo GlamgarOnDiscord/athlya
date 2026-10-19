@@ -10,7 +10,8 @@
  *   | POST   | /register               | turnstile → zValidator(RegisterRequestSchema) → handler            |
  *   | POST   | /login                  | turnstile → zValidator(LoginRequestSchema) → handler               |
  *   | POST   | /refresh                | zValidator(RefreshRequestSchema) → handler (NOT idempotent — rotation is single-use) |
- *   | POST   | /logout                 | jwtAuth → handler                                                  |
+ *   | POST   | /logout                 | jwtAuth → handler (optional `{ refreshToken }` body)               |
+ *   | POST   | /logout-all             | jwtAuth → handler                                                  |
  *   | DELETE | /me                     | jwtAuth → projectUserIdFromClaims → idempotency → handler          |
  *
  * Requirements:
@@ -44,6 +45,7 @@
 
 import {
   LoginRequestSchema,
+  LogoutRequestSchema,
   RefreshRequestSchema,
   RegisterRequestSchema,
 } from '@athlya/shared/schemas/api';
@@ -53,7 +55,7 @@ import { z } from 'zod';
 import { runWithOutboxKickScope } from '../events/outbox-kick.js';
 import { jwtAuth } from '../middleware/auth.js';
 import { turnstile } from '../middleware/turnstile.js';
-import { zValidator } from '../middleware/validator.js';
+import { ValidationError, zValidator } from '../middleware/validator.js';
 
 import { turnstileChallengeHandler } from './turnstile-challenge.js';
 
@@ -134,7 +136,13 @@ export interface AuthDeps {
   register(input: RegisterRequest): Promise<AuthSession>;
   login(input: LoginRequest, ctx: LoginContext): Promise<AuthSession>;
   refresh(input: RefreshRequest): Promise<AuthSession>;
-  logout(userId: string): Promise<void>;
+  /**
+   * Sign out of one session (audit finding S2-010). With a
+   * `refreshToken`, only that token's session is revoked and it must
+   * belong to `userId`. Without one (older clients that send no body),
+   * every session of `userId` is revoked, as before.
+   */
+  logout(userId: string, refreshToken?: string): Promise<void>;
   /** Sprint-4 SP4.1 (S2-010) — kick out every active session. */
   logoutAll(userId: string): Promise<void>;
   deleteMe(userId: string): Promise<void>;
@@ -286,7 +294,11 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
       // silently accepting the logout.
       throw new Error('authClaims unexpectedly missing after jwtAuth');
     }
-    await deps.logout(claims.userId);
+    const body = LogoutRequestSchema.safeParse(parseOptionalJson(await c.req.text()));
+    if (!body.success) {
+      throw new ValidationError('json', body.error.issues);
+    }
+    await deps.logout(claims.userId, body.data.refreshToken);
     return c.body(null, 204);
   });
 
@@ -431,4 +443,18 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
   });
 
   return router;
+}
+
+/**
+ * Parse an optional JSON request body: an empty body reads as `{}`, and
+ * malformed JSON as `undefined` so the caller's schema rejects it with
+ * a 422 instead of an unhandled `SyntaxError`.
+ */
+function parseOptionalJson(text: string): unknown {
+  if (text.trim() === '') return {};
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
 }

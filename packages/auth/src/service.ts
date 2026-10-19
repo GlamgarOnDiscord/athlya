@@ -341,8 +341,14 @@ export type RotateResult =
  *                       (single Lua script or equivalent
  *                       transaction) so two parallel rotations of
  *                       the same `oldSid` cannot both succeed.
- *   - {@link revoke}  — drop a specific `sid`; MUST NOT throw if the
- *                       sid was already absent (idempotent logout).
+ *   - {@link revoke}  — end the session `sid` belongs to: `sid`
+ *                       and every live sid of its rotation family
+ *                       (a refresh that rotated the token before
+ *                       logout must not leave the successor live).
+ *                       The family map and sid_to_root pointers
+ *                       are kept so a replayed token still trips
+ *                       reuse detection. MUST NOT throw if the sid
+ *                       was already absent (idempotent logout).
  *   - {@link revokeAllForUser} — drop every `sid` tied to `userId`.
  *                                Used by {@link deleteMe}.
  *   - {@link revokeFamilyByRootSid} — drop every sid in the rotation
@@ -1214,8 +1220,23 @@ export async function refresh(refreshToken: string, deps: AuthServiceDeps): Prom
  * forged token cannot be used to reconnaissance sid space. Expired
  * tokens however are treated as "already effectively revoked" — we
  * parse the sid and revoke anyway to keep the ledger tidy.
+ *
+ * Only that one sid is revoked: the user's other sessions (other
+ * devices) stay live — {@link logoutAll} is the "sign out everywhere"
+ * path (audit finding S2-010). The rotation family and its
+ * `sid_to_root` pointers are kept, so a replayed copy of the token
+ * still trips reuse detection.
+ *
+ * When `options.userId` is set (the gateway passes the user verified
+ * from the access token), a refresh token whose `sub` names another
+ * user is rejected with `token_invalid` and nothing is revoked.
  */
-export async function logout(refreshToken: string, deps: AuthServiceDeps): Promise<void> {
+export async function logout(
+  refreshToken: string,
+  deps: AuthServiceDeps,
+  options: { readonly userId?: string } = {},
+): Promise<void> {
+  const expectedUserId = options.userId;
   let claims: RefreshClaims;
   try {
     claims = await verifyJwt<RefreshClaims>(refreshToken, deps.jwks, {
@@ -1228,6 +1249,9 @@ export async function logout(refreshToken: string, deps: AuthServiceDeps): Promi
       // Tolerate expired tokens: the sid is still meaningful as
       // a lookup key for the ledger entry we want to drop.
       const unsafe = decodeUnsafeRefresh(refreshToken);
+      if (unsafe !== null && expectedUserId !== undefined && unsafe.sub !== expectedUserId) {
+        throw new AuthError('token_invalid');
+      }
       if (unsafe !== null && unsafe.sid.length > 0) {
         await deps.sessionStore.revoke(unsafe.sid);
       }
@@ -1238,6 +1262,9 @@ export async function logout(refreshToken: string, deps: AuthServiceDeps): Promi
 
   const sid = typeof claims.sid === 'string' ? claims.sid : '';
   if (sid.length === 0) {
+    throw new AuthError('token_invalid');
+  }
+  if (expectedUserId !== undefined && claims.sub !== expectedUserId) {
     throw new AuthError('token_invalid');
   }
   // SessionStore.revoke is documented as idempotent; no try/catch

@@ -54,6 +54,11 @@
  *                                 (so reuse on a freshly-expired
  *                                 token still triggers the family
  *                                 revoke).
+ *   `auth:family_revoked:<rootSid>` STRING marker written by
+ *                                 `revoke` (logout). ROTATE_LUA
+ *                                 refuses to rotate a sid of a
+ *                                 marked family. Same TTL as the
+ *                                 sid_to_root pointers.
  *
  * Backward compatibility
  * --------------------------------------------------------------------
@@ -92,6 +97,10 @@ function sidToRootKey(sid: string): string {
   return `auth:sid_to_root:${sid}`;
 }
 
+function familyRevokedKey(rootSid: string): string {
+  return `auth:family_revoked:${rootSid}`;
+}
+
 /**
  * TTL applied to `auth:sid_to_root:*` pointers — the longest possible
  * refresh-token lifetime (30 days) plus a 7-day forensic grace
@@ -117,6 +126,8 @@ const SID_TO_ROOT_TTL_SEC = 37 * 24 * 60 * 60;
  *   [4] auth:family:<rootSid>     (similarly conditional)
  *   [5] auth:sid_to_root:<oldSid>
  *   [6] auth:sid_to_root:<newSid>
+ *   [7] auth:family_revoked:<rootSid> (conditional, like [4]) — set by
+ *       `revoke` (logout); a family carrying it never rotates again.
  *
  * ARGV layout:
  *   [1] newPayloadJson
@@ -132,6 +143,10 @@ const SID_TO_ROOT_TTL_SEC = 37 * 24 * 60 * 60;
  *                             outside Lua to differentiate "unknown"
  *                             from "reuse_detected".
  *   {1, oldPayloadJson}     — happy path, swap committed.
+ *   {2, ''}                 — the family was revoked by a logout;
+ *                             nothing is written. The caller reports
+ *                             `unknown` (a refresh racing its own
+ *                             logout is not a theft signal).
  *
  * Returning a status flag in the first slot keeps the Upstash REST
  * driver happy (Lua arrays cross the wire as JS arrays of strings;
@@ -139,6 +154,10 @@ const SID_TO_ROOT_TTL_SEC = 37 * 24 * 60 * 60;
  * some clients have with `false` returns).
  */
 const ROTATE_LUA = `
+if KEYS[7] ~= '' and redis.call('EXISTS', KEYS[7]) == 1 then
+  return {2, ''}
+end
+
 local oldPayload = redis.call('GETDEL', KEYS[1])
 if not oldPayload then
   return {0, ''}
@@ -312,6 +331,7 @@ export function createRedisSessionStore(redis: Redis): SessionStore {
           rootSidForIndex !== '' ? familyKey(rootSidForIndex) : '',
           sidToRootKey(oldSid),
           sidToRootKey(newSid),
+          rootSidForIndex !== '' ? familyRevokedKey(rootSidForIndex) : '',
         ],
         [
           newPayloadJson,
@@ -328,6 +348,10 @@ export function createRedisSessionStore(redis: Redis): SessionStore {
       // not expect, treat as `unknown` and let the caller
       // fail closed.
       if (!Array.isArray(result) || result.length < 2 || typeof result[0] !== 'number') {
+        return { kind: 'unknown' };
+      }
+
+      if (result[0] === 2) {
         return { kind: 'unknown' };
       }
 
@@ -371,21 +395,25 @@ export function createRedisSessionStore(redis: Redis): SessionStore {
     },
 
     async revoke(sid) {
-      // Look up the userId BEFORE deleting the payload so we
-      // can remove the sid from the user's live-sid set too.
-      const existing = await redis.get<string>(sidKey(sid));
-      await redis.del(sidKey(sid));
-      // Note: we deliberately DO NOT delete the family or
-      // sid_to_root entries here. A user-initiated logout
-      // takes one sid offline but the family must keep
-      // memorising it so a stolen-then-replayed copy still
-      // triggers reuse_detected on the next rotation
-      // attempt. The sid_to_root TTL eventually reaps it.
-      if (existing === null) return;
-      const parsed = parsePayload(existing, sid);
-      if (parsed !== null) {
-        await redis.srem(userSidsKey(parsed.userId), sid);
-      }
+      // End the whole session `sid` belongs to, not only `sid`: a
+      // refresh that rotated the presented token just before logout
+      // left a live successor in the same family (audit S2-010).
+      //
+      // 1. Mark the family revoked. ROTATE_LUA checks the marker
+      //    atomically, so no rotation can mint a successor after it.
+      // 2. Read the family and drop every live sid. A rotation that
+      //    committed before step 1 has already added its successor
+      //    to the family set (same Lua call), so the read sees it.
+      //
+      // The family set and the sid_to_root pointers stay so a
+      // stolen-then-replayed copy still triggers reuse_detected; the
+      // marker shares their TTL (it outlives every refresh token).
+      const pointer = await redis.get<string>(sidToRootKey(sid));
+      const root = pointer !== null && pointer !== '' ? pointer : await rootFromPayload(redis, sid);
+      await redis.set(familyRevokedKey(root), '1', { ex: SID_TO_ROOT_TTL_SEC });
+      const members = await redis.smembers(familyKey(root));
+      if (!members.includes(sid)) members.push(sid);
+      await revokeLiveSids(redis, members);
     },
 
     async revokeAllForUser(userId) {
@@ -454,6 +482,32 @@ export function createRedisSessionStore(redis: Redis): SessionStore {
 function ttlFromExpiresAt(expiresAt: Date): number {
   const diff = Math.floor((expiresAt.getTime() - Date.now()) / 1000);
   return Math.max(1, diff);
+}
+
+/**
+ * Family root of `sid` read from its payload, for sids without a
+ * sid_to_root pointer (legacy payloads are self-rooted).
+ */
+async function rootFromPayload(redis: Redis, sid: string): Promise<string> {
+  const raw = await redis.get<string>(sidKey(sid));
+  const parsed = raw === null ? null : parsePayload(raw, sid);
+  return parsed?.rootSid ?? sid;
+}
+
+/**
+ * Delete the per-sid record of every live sid in `sids` and remove it
+ * from its user's live-sid index.
+ */
+async function revokeLiveSids(redis: Redis, sids: readonly string[]): Promise<void> {
+  for (const sid of sids) {
+    const existing = await redis.get<string>(sidKey(sid));
+    if (existing === null) continue;
+    await redis.del(sidKey(sid));
+    const parsed = parsePayload(existing, sid);
+    if (parsed !== null) {
+      await redis.srem(userSidsKey(parsed.userId), sid);
+    }
+  }
 }
 
 /**

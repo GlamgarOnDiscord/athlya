@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { LOGOUT_TIMEOUT_MS, register, signIn, signOut } from '../../features/auth/auth';
+import {
+  LOGOUT_TIMEOUT_MS,
+  REFRESH_TOKEN_READ_TIMEOUT_MS,
+  register,
+  signIn,
+  signOut,
+} from '../../features/auth/auth';
 import { SessionStore } from '../../features/auth/session-store';
 import { ApiError, NetworkError } from '../../infrastructure/api/errors';
 import { REFRESH_TOKEN_KEY, USER_ID_KEY } from '../../infrastructure/auth/token-store';
@@ -231,15 +237,56 @@ describe('signOut', () => {
 
     expect(await signOut(deps)).toBe(true);
 
+    // Only this device's session is revoked: the refresh token names it.
     // No refresh-and-retry on 401: no biometric prompt, and the timeout bounds the call.
-    expect(api.post).toHaveBeenCalledWith('/v1/auth/logout', undefined, {
-      signal: expect.any(AbortSignal) as AbortSignal,
-      refreshOnUnauthorized: false,
-    });
+    expect(api.post).toHaveBeenCalledWith(
+      '/v1/auth/logout',
+      { refreshToken: 'refresh-1' },
+      {
+        signal: expect.any(AbortSignal) as AbortSignal,
+        refreshOnUnauthorized: false,
+      },
+    );
     expect(secure.items.has(REFRESH_TOKEN_KEY)).toBe(false);
     expect(secure.items.has(USER_ID_KEY)).toBe(false);
     expect(store.getAccessToken()).toBeNull();
     expect(sync.refreshOwner).toHaveBeenCalledTimes(1);
+  });
+
+  it('still asks for the revocation when the refresh token cannot be read', async () => {
+    const { deps, api, store, secure } = setup();
+    await store.saveSession({ ...session(), userId: USER_ID });
+    api.post.mockResolvedValue(null);
+    secure.getItem = () => Promise.reject(new Error('keychain'));
+
+    await signOut(deps);
+
+    expect(api.post).toHaveBeenCalledWith('/v1/auth/logout', undefined, {
+      signal: expect.any(AbortSignal) as AbortSignal,
+      refreshOnUnauthorized: false,
+    });
+  });
+
+  it('stops waiting for a stalled refresh-token read and still revokes and clears', async () => {
+    vi.useFakeTimers();
+    try {
+      const { deps, api, store, secure } = setup();
+      await store.saveSession({ ...session(), userId: USER_ID });
+      api.post.mockResolvedValue(null);
+      secure.getItem = () => new Promise<string | null>(() => undefined);
+
+      const done = signOut(deps);
+      await vi.advanceTimersByTimeAsync(REFRESH_TOKEN_READ_TIMEOUT_MS);
+
+      expect(await done).toBe(true);
+      expect(api.post).toHaveBeenCalledWith('/v1/auth/logout', undefined, {
+        signal: expect.any(AbortSignal) as AbortSignal,
+        refreshOnUnauthorized: false,
+      });
+      expect(secure.items.has(REFRESH_TOKEN_KEY)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('signs out locally even when the revocation fails', async () => {
