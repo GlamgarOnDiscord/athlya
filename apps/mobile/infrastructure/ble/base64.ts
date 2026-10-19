@@ -1,6 +1,6 @@
 /**
- * Base64 to bytes for BLE characteristic values (`react-native-ble-plx`
- * reports them as base64). Dependency-free so it behaves the same in
+ * Base64 <-> bytes for BLE characteristic values (`react-native-ble-plx`
+ * exchanges them as base64). Dependency-free so it behaves the same in
  * Hermes and in Node tests; invalid input yields null.
  */
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -26,4 +26,19 @@ export function base64ToBytes(value: string): Uint8Array | null {
     }
   }
   return bytes;
+}
+
+/** Bytes to padded base64, for characteristic writes. */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let output = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b1 = bytes[i + 1];
+    const b2 = bytes[i + 2];
+    const triple = ((bytes[i] ?? 0) << 16) | ((b1 ?? 0) << 8) | (b2 ?? 0);
+    output += ALPHABET.charAt((triple >> 18) & 0x3f);
+    output += ALPHABET.charAt((triple >> 12) & 0x3f);
+    output += b1 === undefined ? '=' : ALPHABET.charAt((triple >> 6) & 0x3f);
+    output += b2 === undefined ? '=' : ALPHABET.charAt(triple & 0x3f);
+  }
+  return output;
 }

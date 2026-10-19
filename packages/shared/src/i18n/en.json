@@ -814,6 +814,36 @@
           "notHeartRate": "This device does not share heart rate over Bluetooth.",
           "linkLost": "Connection to the strap lost. The machine session continues."
         }
+      },
+      "control": {
+        "title": "Machine control",
+        "intro": "Let Athlya set the machine's resistance or target power (ERG mode).",
+        "request": "Take control",
+        "locked": "Take control of the machine to change its settings.",
+        "granted": "Athlya controls the machine.",
+        "release": "Release control",
+        "power": "Target power",
+        "resistance": "Target resistance",
+        "notSet": "Not set",
+        "level": "Level {value}",
+        "increase": "Increase {name}",
+        "decrease": "Decrease {name}",
+        "start": "Start",
+        "pause": "Pause",
+        "stop": "Stop",
+        "run": {
+          "started": "The machine is running.",
+          "paused": "The machine is paused.",
+          "stopped": "The machine is stopped."
+        },
+        "errors": {
+          "notPermitted": "The machine did not give control to Athlya. Stop any other app using it, then try again.",
+          "notSupported": "The machine does not support this command.",
+          "invalidParameter": "The machine rejected this value.",
+          "failed": "The machine could not apply the command. Try again.",
+          "timeout": "The machine did not answer. Try again.",
+          "controlLost": "The machine took control back (a button on its console, or another app). Take control again to continue."
+        }
       }
     }
   },

@@ -9,9 +9,9 @@
  * the location permission to scan.
  */
 import { PermissionsAndroid, Platform } from 'react-native';
-import { BleManager, State } from 'react-native-ble-plx';
+import { BleManager, State, type CharacteristicSubscriptionType } from 'react-native-ble-plx';
 
-import { base64ToBytes } from './base64';
+import { base64ToBytes, bytesToBase64 } from './base64';
 
 import type { BleConnection, BleReadiness, BleTransport } from './ports';
 
@@ -84,13 +84,9 @@ function settledState(ble: BleManager): Promise<BleReadiness> {
 
 function createConnection(ble: BleManager, deviceId: string): BleConnection {
   let closing = false;
-  return {
-    deviceId,
-    characteristics: async (serviceUuid) =>
-      (await ble.characteristicsForDevice(deviceId, serviceUuid)).map((characteristic) =>
-        characteristic.uuid.toLowerCase(),
-      ),
-    monitor: (serviceUuid, characteristicUuid, onValue, onError) => {
+  const subscribe =
+    (subscriptionType: CharacteristicSubscriptionType): BleConnection['monitor'] =>
+    (serviceUuid, characteristicUuid, onValue, onError) => {
       const subscription = ble.monitorCharacteristicForDevice(
         deviceId,
         serviceUuid,
@@ -103,10 +99,39 @@ function createConnection(ble: BleManager, deviceId: string): BleConnection {
           const bytes = characteristic?.value == null ? null : base64ToBytes(characteristic.value);
           if (bytes !== null) onValue(bytes);
         },
+        undefined,
+        subscriptionType,
       );
       return () => {
         subscription.remove();
       };
+    };
+  return {
+    deviceId,
+    characteristics: async (serviceUuid) =>
+      (await ble.characteristicsForDevice(deviceId, serviceUuid)).map((characteristic) =>
+        characteristic.uuid.toLowerCase(),
+      ),
+    // Android enables the requested kind in the CCCD; iOS picks it itself.
+    monitor: subscribe('notification'),
+    indicate: subscribe('indication'),
+    read: async (serviceUuid, characteristicUuid) => {
+      const characteristic = await ble.readCharacteristicForDevice(
+        deviceId,
+        serviceUuid,
+        characteristicUuid,
+      );
+      const bytes = characteristic.value == null ? null : base64ToBytes(characteristic.value);
+      if (bytes === null) throw new Error('Unreadable characteristic value');
+      return bytes;
+    },
+    writeWithResponse: async (serviceUuid, characteristicUuid, bytes) => {
+      await ble.writeCharacteristicWithResponseForDevice(
+        deviceId,
+        serviceUuid,
+        characteristicUuid,
+        bytesToBase64(bytes),
+      );
     },
     onDisconnected: (listener) => {
       const subscription = ble.onDeviceDisconnected(deviceId, () => {

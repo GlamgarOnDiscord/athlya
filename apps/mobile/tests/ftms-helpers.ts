@@ -60,6 +60,11 @@ export function hex(value: string): Uint8Array {
   return Uint8Array.from(bytes);
 }
 
+interface Listener {
+  readonly onValue: (bytes: Uint8Array) => void;
+  readonly onError: (error: unknown) => void;
+}
+
 /** In-memory BLE transport the tests drive by hand. */
 export class FakeTransport implements BleTransport {
   public readiness: BleReadiness = 'ready';
@@ -67,14 +72,40 @@ export class FakeTransport implements BleTransport {
   public connectError: Error | null = null;
   public scanning = false;
   public disconnects = 0;
-  public monitored: string | null = null;
+  /** Characteristic values returned by `read`; a missing one rejects. */
+  public readonly values = new Map<string, Uint8Array>();
+  /** Every write with response, in order. */
+  public readonly writes: { readonly uuid: string; readonly bytes: Uint8Array }[] = [];
+  /** Rejects every write when set. */
+  public writeError: Error | null = null;
+  /** Leaves writes unacknowledged until `ackWrites()`. */
+  public holdWrites = false;
+  /**
+   * Answers each acknowledged write: the returned bytes are indicated on
+   * the written characteristic; null sends nothing.
+   */
+  public respond: ((uuid: string, bytes: Uint8Array) => Uint8Array | null) | null = null;
+  readonly #monitors = new Map<string, Listener>();
+  readonly #indications = new Map<string, Listener>();
+  #heldWrites: (() => void)[] = [];
   #onDevice: ((device: ScannedDevice) => void) | null = null;
   #onScanError: ((error: unknown) => void) | null = null;
-  #onValue: ((bytes: Uint8Array) => void) | null = null;
-  #onMonitorError: ((error: unknown) => void) | null = null;
   #onDisconnected: (() => void) | null = null;
   #pendingConnect: ((connection: BleConnection) => void) | null = null;
   public holdConnect = false;
+
+  /** First characteristic still monitored (the machine or strap data), or null. */
+  public get monitored(): string | null {
+    return this.#monitors.keys().next().value ?? null;
+  }
+
+  public isMonitored(uuid: string): boolean {
+    return this.#monitors.has(uuid);
+  }
+
+  public isIndicated(uuid: string): boolean {
+    return this.#indications.has(uuid);
+  }
 
   public readonly prepare = vi.fn(() => Promise.resolve(this.readiness));
 
@@ -116,8 +147,19 @@ export class FakeTransport implements BleTransport {
     this.#onScanError?.(new Error('scan failed'));
   }
 
-  public notify(bytes: Uint8Array): void {
-    this.#onValue?.(bytes);
+  /** Notifies `uuid`, or the first monitored characteristic. */
+  public notify(bytes: Uint8Array, uuid: string | null = this.monitored): void {
+    if (uuid !== null) this.#monitors.get(uuid)?.onValue(bytes);
+  }
+
+  public indicate(uuid: string, bytes: Uint8Array): void {
+    this.#indications.get(uuid)?.onValue(bytes);
+  }
+
+  public ackWrites(): void {
+    const held = this.#heldWrites;
+    this.#heldWrites = [];
+    for (const ack of held) ack();
   }
 
   public dropLink(): void {
@@ -125,22 +167,52 @@ export class FakeTransport implements BleTransport {
   }
 
   public monitorFails(): void {
-    this.#onMonitorError?.(new Error('monitor failed'));
+    const uuid = this.monitored;
+    if (uuid !== null) this.#monitors.get(uuid)?.onError(new Error('monitor failed'));
+  }
+
+  #subscribe(listeners: Map<string, Listener>): BleConnection['monitor'] {
+    return (_service, characteristic, onValue, onError) => {
+      const listener = { onValue, onError };
+      listeners.set(characteristic, listener);
+      return () => {
+        if (listeners.get(characteristic) === listener) listeners.delete(characteristic);
+      };
+    };
+  }
+
+  #write(uuid: string, bytes: Uint8Array): Promise<void> {
+    this.writes.push({ uuid, bytes });
+    if (this.writeError !== null) return Promise.reject(this.writeError);
+    return new Promise((resolve) => {
+      const ack = (): void => {
+        resolve();
+        const answer = this.respond?.(uuid, bytes) ?? null;
+        if (answer !== null) {
+          // The indication follows the write acknowledgement.
+          queueMicrotask(() => {
+            this.indicate(uuid, answer);
+          });
+        }
+      };
+      if (this.holdWrites) this.#heldWrites.push(ack);
+      else ack();
+    });
   }
 
   #connection(deviceId: string): BleConnection {
     return {
       deviceId,
       characteristics: () => Promise.resolve(this.characteristicUuids),
-      monitor: (_service, characteristic, onValue, onError) => {
-        this.monitored = characteristic;
-        this.#onValue = onValue;
-        this.#onMonitorError = onError;
-        return () => {
-          this.#onValue = null;
-          this.#onMonitorError = null;
-        };
+      monitor: this.#subscribe(this.#monitors),
+      indicate: this.#subscribe(this.#indications),
+      read: (_service, characteristic) => {
+        const value = this.values.get(characteristic);
+        return value === undefined
+          ? Promise.reject(new Error('read failed'))
+          : Promise.resolve(value);
       },
+      writeWithResponse: (_service, characteristic, bytes) => this.#write(characteristic, bytes),
       onDisconnected: (listener) => {
         this.#onDisconnected = listener;
         return () => {
