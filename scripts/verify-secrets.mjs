@@ -29,6 +29,10 @@
  * scripts/__tests__/verify-secrets.test.mjs cross-checks these lists against
  * domain-deps.ts and the `# Secrets` header of each wrangler config.
  *
+ * The Axiom log Tail Worker (wrangler.axiom-tail.toml, issue #697) is
+ * listed apart in TAIL_REQUIRED: it serves no API route, so the API
+ * secret lists above do not apply to it.
+ *
  * Also checks that every queue the four Wrangler configs bind for the
  * target env exists (`wrangler queues list`), so a queue that was never
  * created — e.g. the outbox kick queue (issue #311) — fails here instead
@@ -116,6 +120,11 @@ export const OPTIONAL = {
   auth: [],
   reservations: ['MISTRAL_API_KEY'],
   billing: [],
+};
+
+/** Tail Workers: config file and required secrets (issue #697). */
+export const TAIL_REQUIRED = {
+  'axiom-tail': { configFile: 'wrangler.axiom-tail.toml', secrets: ['AXIOM_INGEST_TOKEN'] },
 };
 
 export const CONFIG_FILES = {
@@ -268,6 +277,19 @@ if (import.meta.main) {
     } else {
       console.log(
         `[verify-secrets] OK    ${worker} (${env}): all ${productionCount} observability/access secrets present`,
+      );
+    }
+  }
+
+  for (const [worker, { configFile, secrets }] of Object.entries(TAIL_REQUIRED)) {
+    const present = listSecrets(configFile, env);
+    const missing = secrets.filter((name) => !present.has(name));
+    if (missing.length > 0) {
+      console.error(`[verify-secrets] MISSING on ${worker} (${env}): ${missing.join(', ')}`);
+      anyMissing = true;
+    } else {
+      console.log(
+        `[verify-secrets] OK    ${worker} (${env}): all ${secrets.length} required secrets present`,
       );
     }
   }

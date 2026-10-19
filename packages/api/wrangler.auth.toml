@@ -61,6 +61,8 @@ head_sampling_rate = 0.5
 
 [env.staging]
 name = "athlya-api-auth-staging"
+# Axiom log pipeline (issue #697): athlya-axiom-tail-staging must be deployed first.
+tail_consumers = [{ service = "athlya-axiom-tail-staging" }]
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
@@ -88,6 +90,8 @@ head_sampling_rate = 0.1
 
 [env.production]
 name = "athlya-api-auth-production"
+# Axiom log pipeline (issue #697): athlya-axiom-tail-production must be deployed first.
+tail_consumers = [{ service = "athlya-axiom-tail-production" }]
 
 [env.production.vars]
 ENVIRONMENT = "production"

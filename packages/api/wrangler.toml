@@ -448,6 +448,8 @@ bucket_name = "athlya-exports-dev"
 # and NEVER land in this file.
 [env.staging]
 name = "athlya-api-staging"
+# Axiom log pipeline (issue #697): athlya-axiom-tail-staging must be deployed first.
+tail_consumers = [{ service = "athlya-axiom-tail-staging" }]
 route = { pattern = "staging.api.athlya.app/*", zone_name = "athlya.app" }
 # workers.dev fallback — until staging.api.athlya.app DNS is provisioned
 # (no custom domain owned yet), this is the only reachable URL:
@@ -563,6 +565,8 @@ id = "49e3db37042d4f2999b0c0061363929c"
 # and NEVER land in this file.
 [env.production]
 name = "athlya-api-production"
+# Axiom log pipeline (issue #697): athlya-axiom-tail-production must be deployed first.
+tail_consumers = [{ service = "athlya-axiom-tail-production" }]
 route = { pattern = "api.athlya.app/*", zone_name = "athlya.app" }
 
 [env.production.vars]
