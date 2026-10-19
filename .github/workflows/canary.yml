@@ -155,11 +155,19 @@ jobs:
             pnpm --filter @athlya/api exec wrangler deploy -c "wrangler.${worker}.toml" --env production --var "VERSION:${VERSION}" --outdir "dist/${worker}" --dry-run
           done
 
+      # Issue #697 — the Axiom log Tail Worker before any API Worker: they
+      # name it in `tail_consumers`. It only forwards log lines, so it is not
+      # part of the rollback below (an older API version tails to it too).
+      - name: Deploy Axiom log tail Worker
+        id: deploy_tail
+        if: steps.config.outputs.ready == 'true' && steps.bundle_subworkers.outcome == 'success'
+        run: pnpm --filter @athlya/api exec wrangler deploy -c wrangler.axiom-tail.toml --env production --outdir dist/axiom-tail
+
       # Uploading a version shifts no traffic: the gateway keeps serving the
       # previous deployment until canary-deploy.mjs promotes this version.
       - name: Upload gateway version
         id: upload_gateway
-        if: steps.config.outputs.ready == 'true' && steps.bundle_subworkers.outcome == 'success'
+        if: steps.config.outputs.ready == 'true' && steps.deploy_tail.outcome == 'success'
         env:
           VERSION: ${{ steps.config.outputs.release }}
         run: |

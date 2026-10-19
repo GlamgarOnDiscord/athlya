@@ -59,18 +59,61 @@ What the runtime guarantees:
   the queries in `axiom-monitors.tf`, runs the real emitters and fails if
   a referenced field is missing, nested or not numeric.
 
-What the log pipeline must do (it is set up outside this repository):
+The log pipeline is declared in this repository (issue #697): the Tail
+Worker `athlya-axiom-tail-<env>` (`packages/api/src/workers/axiom-tail.ts`,
+`packages/api/wrangler.axiom-tail.toml`), named in `tail_consumers` by the
+staging and production envs of the four API Worker configs.
 
-- Deliver that single argument **as the Axiom event**: its keys become
-  the event's top-level fields. A pipeline that ships the raw Workers
-  trace event (Logpush `workers_trace_events`, a Tail Worker forwarding
-  `TraceItem` as is) nests it under `Logs[].Message[0]`; a pipeline that
-  wraps it (OTLP log `attributes`, a shipper's `fields` / `data` key)
-  nests it too. Flatten it before ingest, or the monitors see no data.
-- Not sample the scheduled and queue invocations. A4 and A16 alert on
-  **no data**, so dropping cron ticks (for example a Workers Logs export
-  subject to `head_sampling_rate = 0.1` in production, `wrangler.toml`)
-  pages on silence.
+- It turns each log entry whose console message is one plain object into
+  one Axiom event: the object's keys at the top level, plus `_time` and
+  `level` of the entry and `scriptName`, `outcome`, `eventTimestamp`,
+  `eventType` (`scheduled` / `queue` / `fetch`) and `cron` or `queue` from
+  the trace. A key the object sets itself (for example `outcome` on
+  `device attestation verdict`) wins. Everything else is dropped: request
+  URL and headers, exceptions, string lines and `console.log(label, meta)`
+  argument lists.
+- It posts batches of 500 events to
+  `<AXIOM_URL>/v1/datasets/<AXIOM_LOGS_DATASET>/ingest` with the
+  `AXIOM_INGEST_TOKEN` secret, 5 s per request. It never throws: a failed
+  batch is logged on the tail Worker (`wrangler tail -c
+wrangler.axiom-tail.toml --env <env>`) and lost, the producer is never
+  affected.
+- `packages/api/src/__tests__/axiom-tail.test.ts` runs the real emitters
+  through the tail Worker and checks the shipped events against the same
+  monitor contract as the runtime suite (`helpers/axiom-log-contract.ts`).
+
+Sampling: `head_sampling_rate` (0.5 on staging, 0.1 in production) is the
+Workers Logs setting of the `[observability]` block. Cloudflare documents
+it for Workers Logs only; it does not document it as applying to
+`tail_consumers`, so this pipeline is expected to receive every invocation,
+the per-minute drain cron and the queue batches included. This is checked
+on the environment, not assumed: the post-apply check below counts the
+`outbox.backlog` events of the last 15 minutes. If production returns about
+1 or 2 instead of about 15, sampling does apply to the tail: set
+`head_sampling_rate = 1.0` in `[env.production.observability]` of
+`wrangler.toml` (the Worker that runs the cron and the queue consumers) and
+redeploy it.
+
+### Setup and deploy order
+
+1. Create an Axiom API token with **ingest** permission on the logs dataset
+   only.
+2. Make the `AXIOM_LOGS_DATASET` var of `[env.<env>.vars]` in
+   `wrangler.axiom-tail.toml` equal to the `AXIOM_LOGS_DATASET` variable of
+   the GitHub environment (the Terraform monitors read that one).
+   `deploy-production.yml` refuses to deploy when they differ
+   (`scripts/axiom-tail-dataset.mjs`).
+3. Set the secret on each environment, before any deploy (verify-secrets
+   checks it):
+   `pnpm --filter @athlya/api exec wrangler secret put AXIOM_INGEST_TOKEN -c wrangler.axiom-tail.toml --env <staging|production>`.
+4. Deploy the tail Worker **first**, then the API Workers. Cloudflare
+   refuses to deploy a Worker whose `tail_consumers` names a Worker that
+   does not exist. `deploy-production.yml` (staging and production) and
+   `canary.yml` do it in that order; by hand:
+   `pnpm --filter @athlya/api exec wrangler deploy -c wrangler.axiom-tail.toml --env <env>`.
+5. Remove any log shipping set up by hand for these Workers (a Logpush job
+   or another tail consumer to the same dataset), or every line arrives
+   twice.
 
 Post-apply check, on each environment, once the drain cron has run for a
 few minutes (each query must return rows with a non-null value):
@@ -79,8 +122,18 @@ few minutes (each query must return rows with a non-null value):
 ['<AXIOM_LOGS_DATASET>']
 | where _time > now(-15m)
 | where ['message'] == "outbox.backlog"
-| project _time, ['pending'], ['ageMs']
+| project _time, ['pending'], ['ageMs'], ['scriptName'], ['eventType']
 | take 5
+```
+
+Then check that no cron tick is sampled out (one `outbox.backlog` line per
+minute, so about 15):
+
+```apl
+['<AXIOM_LOGS_DATASET>']
+| where _time > now(-15m)
+| where ['message'] == "outbox.backlog"
+| summarize count()
 ```
 
 A5 only gets data after a DLQ batch: run the T3 test fire below, then

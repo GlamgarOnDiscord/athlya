@@ -109,6 +109,14 @@ configs wrangler des sub-workers donnent la même liste ;
 `scripts/__tests__/verify-secrets.test.mjs` échoue si les deux divergent ou si
 un secret vérifié par `assertRequiredSecrets()` manque.
 
+Axiom log Tail Worker (`wrangler.axiom-tail.toml`, issue #697) : secret
+`AXIOM_INGEST_TOKEN` (staging + production, `TAIL_REQUIRED` dans
+`verify-secrets.mjs`). Les quatre Workers API le nomment dans
+`tail_consumers` : `deploy-production.yml` et `canary.yml` le déploient
+**avant** eux, et `scripts/axiom-tail-dataset.mjs` refuse le déploiement si
+son dataset diffère de `vars.AXIOM_LOGS_DATASET`. Procédure :
+[`axiom-alerts-provision.md`](./axiom-alerts-provision.md#setup-and-deploy-order).
+
 Bindings (not secrets, declared in each wrangler config): the reservations
 Worker binds `HYPERDRIVE` (staging, production) and the `AVATARS_BUCKET` /
 `EXPORTS_BUCKET` R2 buckets in every env, with the gateway's bucket names,
