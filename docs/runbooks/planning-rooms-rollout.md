@@ -34,8 +34,8 @@ schéma pendant le canary.
    production (`node packages/db/scripts/migrate.mjs`). À la main, avec la
    chaîne de connexion du propriétaire du schéma (secret
    `MIGRATION_DB_URL_*`) : `DATABASE_URL=… node packages/db/scripts/migrate.mjs`.
-2. Vérifier : `SELECT relrowsecurity, relforcerowsecurity FROM pg_class
-   WHERE oid = 'rooms'::regclass;` rend `t, t`, puis
+2. Vérifier que `rooms` a la RLS ENABLE + FORCE (`relrowsecurity` et
+   `relforcerowsecurity` à `t` dans `pg_class`), puis lancer
    `node scripts/verify-role-contract.mjs` (variables dans l'en-tête).
 3. Déployer le Worker reservations (canary habituel), puis le studio.
    Aucune nouvelle route de zone : tout passe sous `/v1/classes/*`.
