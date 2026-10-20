@@ -36,8 +36,11 @@ Un booking qui tombe entre la lecture PG et la lecture Redis crée une dérive �
 5. Reset manuel forcé d'une classe (depuis la vérité PG) :
 
 ```sql
--- valeur attendue (clampée à 0 comme le reconciler: max(0, capacity - confirmed))
-SELECT GREATEST(c.capacity - COUNT(r.id) FILTER (WHERE r.status='confirmed'), 0) AS expected
+-- valeur attendue (clampée à 0 comme le reconciler) : capacité moins
+-- confirmés et holds actifs (migration 0050, issue #723)
+SELECT GREATEST(c.capacity - COUNT(r.id) FILTER (
+         WHERE r.status = 'confirmed'
+            OR (r.status = 'pending' AND r.hold_expires_at > now())), 0) AS expected
   FROM classes c LEFT JOIN reservations r ON r.class_id=c.id
  WHERE c.id = '<classId>' GROUP BY c.capacity;
 ```

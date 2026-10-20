@@ -11,7 +11,8 @@ slice future.
 
 Les routes `POST` et `DELETE /v1/reservations` utilisent désormais un
 mode strict, activé par route (`idempotencyFor` dans
-`reservations-deps.ts`). Les autres routes gardent le comportement
+`reservations-deps.ts`), comme `POST /v1/reservations/holds` et
+`POST /v1/reservations/{id}/confirm` (issue #723). Les autres routes gardent le comportement
 décrit plus bas.
 
 - **B4.1.1 corrigé (réservations)** : le hash SHA-256 de méthode,
