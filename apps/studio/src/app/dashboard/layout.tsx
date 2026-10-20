@@ -21,7 +21,7 @@ export default function DashboardLayout({ children }: { readonly children: React
   return (
     <RequireAdmin>
       <DashboardNav>
-        <main id="main-content" className="mx-auto w-full max-w-5xl p-6">
+        <main id="main-content" className="mx-auto w-full max-w-[90rem] px-4 py-6 sm:px-6 lg:px-8">
           {children}
         </main>
       </DashboardNav>

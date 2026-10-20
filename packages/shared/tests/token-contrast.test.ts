@@ -175,6 +175,13 @@ describe('logo palette (docs/brand/README.md)', () => {
     expect(contrastRatio(brandPalette.white, colors.dark.muted)).toBeGreaterThanOrEqual(3);
   });
 
+  it('studio dashboard marks: fill meter on its track, live pill', () => {
+    for (const mode of MODES) {
+      expect(contrastRatio(chartColors[mode].series, colors[mode].muted)).toBeGreaterThanOrEqual(3);
+    }
+    expect(contrastRatio(brandPalette.ink, brandPalette.volt)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('volt on white stays forbidden: below even the 3:1 UI minimum', () => {
     expect(contrastRatio(brandPalette.volt, brandPalette.white)).toBeLessThan(3);
   });

@@ -473,18 +473,17 @@
     },
     "dashboard": {
       "title": "Dashboard",
-      "subtitle": "Manage classes, members, branding and billing for your studio.",
       "classes": {
         "title": "Classes",
         "body": "Create, update and schedule the sessions of your studio."
       },
       "members": {
         "title": "Members",
-        "body": "List members and their upcoming reservations."
+        "body": "Directory of your studio's members."
       },
       "branding": {
         "title": "Branding",
-        "body": "Brand color, logo and email customisation."
+        "body": "Your studio's brand color."
       },
       "billing": {
         "title": "Billing",
@@ -501,6 +500,94 @@
       "programs": {
         "title": "Programs",
         "body": "Author multi-week training programs your members follow."
+      },
+      "tiles": {
+        "todayClasses": "Classes today",
+        "weekBookings": "Bookings this week",
+        "weekFill": "Fill rate this week",
+        "members": "Members",
+        "noData": "None",
+        "membersCapped": "{count}+",
+        "openPlanning": "Open the planning",
+        "seeMembers": "See members",
+        "vsSameDay": "vs last {day}",
+        "vsPreviousWeek": "vs previous week",
+        "points": "pts",
+        "thisWeek": "this week"
+      },
+      "today": {
+        "title": "Today",
+        "empty": "No class today.",
+        "done": "Done",
+        "live": "In progress",
+        "fillLabel": "{booked} of {capacity} seats booked",
+        "columns": {
+          "time": "Time",
+          "class": "Class",
+          "booked": "Booked",
+          "status": "Status"
+        },
+        "now": "Now {time}",
+        "inTime": "In {time}",
+        "countOne": "{count} class",
+        "countOther": "{count} classes",
+        "totalOne": "{count} booked in total",
+        "totalOther": "{count} booked in total"
+      },
+      "upcoming": {
+        "title": "Next classes",
+        "empty": "No class planned in the next days.",
+        "window": "next 7 days",
+        "columns": {
+          "day": "Day",
+          "time": "Time",
+          "class": "Class",
+          "duration": "Duration",
+          "booked": "Booked",
+          "left": "Seats left",
+          "fill": "Fill"
+        }
+      },
+      "activity": {
+        "title": "Recent activity",
+        "empty": "No admin action yet.",
+        "link": "Open the audit log"
+      },
+      "sections": {
+        "title": "Manage the studio"
+      },
+      "loadError": "The overview could not load.",
+      "greeting": "Hello {name}",
+      "nextIn": "next class in {time}",
+      "noNext": "no class planned",
+      "actions": {
+        "openKiosk": "Open the kiosk"
+      },
+      "duration": {
+        "minutes": "{m} min",
+        "hours": "{h}h {mm}",
+        "days": "{d} d"
+      },
+      "bookings": {
+        "title": "Bookings per day",
+        "total": "{count} this week",
+        "empty": "No class this week yet.",
+        "dayLabel": "{day}: {count} seats booked"
+      },
+      "occupancy": {
+        "title": "Occupancy",
+        "window": "last {weeks} weeks",
+        "windowLabel": "Period",
+        "weeks": "{weeks} wk",
+        "caption": "Fill rate by weekday and time over the last {weeks} weeks",
+        "hour": "{hour}h",
+        "cell": "{day}, {hour}h: {rate} full over {classes} classes",
+        "cellEmpty": "{day}, {hour}h: no class",
+        "less": "Less",
+        "more": "More",
+        "peakLegend": "90 % and up",
+        "insight": "Busiest slot: {day} from {hour}h, {rate} full.",
+        "empty": "No past class in this period yet: the map fills in as classes are held."
       }
     },
     "forbidden": {
@@ -570,7 +657,6 @@
       "title": "Members",
       "subtitle": "Directory of your studio's members.",
       "empty": "No members yet.",
-      "count": "{n} member(s) loaded",
       "joinedAt": "Joined",
       "loadMore": "Load more",
       "search": "Search members…",
@@ -578,7 +664,39 @@
         "member": "Member",
         "coach": "Coach",
         "admin": "Admin"
-      }
+      },
+      "columns": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role",
+        "actions": "Actions"
+      },
+      "countOne": "{count} member loaded",
+      "countOther": "{count} members loaded",
+      "noMatch": "No member matches this search.",
+      "tabs": {
+        "label": "Filter by role",
+        "all": "All",
+        "member": "Members",
+        "coach": "Coaches",
+        "admin": "Admins"
+      },
+      "exportCsv": "Export CSV",
+      "you": "You",
+      "selectAll": "Select all shown members",
+      "selectRow": "Select {name}",
+      "selectedOne": "{count} selected",
+      "selectedOther": "{count} selected",
+      "bulk": {
+        "copyEmails": "Copy emails",
+        "export": "Export selection",
+        "clear": "Clear selection"
+      },
+      "rowMenu": "Actions for {name}",
+      "copyEmail": "Copy email",
+      "emailCopied": "Email copied.",
+      "emailsCopied": "Emails copied.",
+      "copyFailed": "The clipboard is not available."
     },
     "branding": {
       "title": "Branding",
@@ -638,11 +756,47 @@
       "subtitle": "All admin actions for your studio, newest first.",
       "empty": "No audit events yet.",
       "loadMore": "Load more",
-      "count": "{n} event(s) loaded",
       "actorLabel": "Actor",
       "actionLabel": "Action",
       "targetLabel": "Target",
-      "timestampLabel": "Date"
+      "timestampLabel": "Date",
+      "countOne": "{count} event loaded",
+      "countOther": "{count} events loaded",
+      "system": "System",
+      "filter": {
+        "noMatch": "No event of this type in the loaded events."
+      },
+      "actions": {
+        "userRegistered": "Member signed up",
+        "userDeleted": "Account deleted",
+        "userConsentsUpdated": "Consents updated",
+        "reservationCancelledByAdmin": "Booking cancelled by an admin",
+        "rlsViolation": "Access blocked by data isolation",
+        "billingWebhookProcessed": "Payment event processed",
+        "billingWebhookSignatureFailed": "Payment event rejected: invalid signature",
+        "jwtKeyRotationPrep": "Signing key rotation prepared",
+        "dlqEntryReplayed": "Failed job replayed",
+        "dlqEntryDiscarded": "Failed job discarded",
+        "tokenRefreshReuseDetected": "Session token reuse detected"
+      },
+      "targets": {
+        "user": "Member",
+        "reservation": "Booking",
+        "class": "Class",
+        "studio": "Studio",
+        "stripe_webhook": "Payment event"
+      },
+      "export": "Export",
+      "search": "Filter by action, name or id",
+      "categories": {
+        "label": "Category",
+        "all": "All",
+        "reservations": "Bookings",
+        "billing": "Billing",
+        "accounts": "Accounts",
+        "system": "System"
+      },
+      "appendOnly": "Append-only log: no entry can be edited."
     },
     "billing": {
       "title": "Billing",
@@ -747,6 +901,36 @@
           "archived": "This program is archived and can no longer be edited.",
           "loadFailed": "Could not load the program."
         }
+      }
+    },
+    "shell": {
+      "breadcrumb": "Breadcrumb",
+      "search": "Search",
+      "newClass": "New class",
+      "help": "Help",
+      "studioBadge": "Studio",
+      "palette": {
+        "title": "Search the console",
+        "placeholder": "Search a page, a class or a member…",
+        "pages": "Pages",
+        "classes": "Classes",
+        "members": "Members",
+        "empty": "No result.",
+        "loading": "Loading classes and members…",
+        "hint": "Arrow keys to move, Enter to open, Esc to close."
+      },
+      "theme": {
+        "label": "Theme",
+        "light": "Light theme",
+        "dark": "Dark theme"
+      },
+      "shortcuts": {
+        "title": "Keyboard shortcuts",
+        "palette": "Open the search",
+        "memberSearch": "Search members (Members page)",
+        "help": "Show this help",
+        "close": "Close a window",
+        "escapeKey": "Esc"
       }
     }
   },

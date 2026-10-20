@@ -2,9 +2,11 @@
 
 import { Menu } from '@base-ui/react/menu';
 import { DotsThreeIcon, ProhibitIcon, UsersIcon } from '@phosphor-icons/react';
-import { useCallback, useMemo, useSyncExternalStore, type ReactElement } from 'react';
+import { useCallback, useMemo, type ReactElement } from 'react';
 
 import { cn } from '@/lib/utils';
+
+import { useNowMinute } from '../../../lib/use-now-minute';
 
 import {
   blockDensity,
@@ -188,20 +190,6 @@ function TileMenu({
         </Menu.Positioner>
       </Menu.Portal>
     </Menu.Root>
-  );
-}
-
-const subscribeToMinute = (onStoreChange: () => void): (() => void) => {
-  const timer = window.setInterval(onStoreChange, 15_000);
-  return () => window.clearInterval(timer);
-};
-
-/** The current minute since the epoch, `null` during server rendering. */
-function useNowMinute(): number | null {
-  return useSyncExternalStore(
-    subscribeToMinute,
-    () => Math.floor(Date.now() / 60_000),
-    () => null,
   );
 }
 
