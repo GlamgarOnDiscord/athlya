@@ -85,6 +85,8 @@
     "displayName": "Nom affiché",
     "avatar": "Photo de profil",
     "avatarHint": "PNG, JPEG ou WebP. Taille max {max} Mo.",
+    "avatarChoose": "Choisir une photo",
+    "avatarNoFile": "Aucun fichier choisi",
     "avatarTooLarge": "Fichier trop volumineux (max {max} Mo).",
     "avatarUploadError": "Échec de l'envoi de la photo. Réessayez.",
     "avatarRemove": "Retirer la photo",
@@ -99,7 +101,18 @@
   "classes": {
     "list": {
       "title": "Cours à venir",
-      "empty": "Aucun cours planifié pour cette période."
+      "empty": "Aucun cours planifié pour cette période.",
+      "dayEmpty": "Aucun cours ce jour-là.",
+      "nextDay": "Voir le prochain jour avec des cours"
+    },
+    "week": {
+      "label": "Choisir un jour",
+      "today": "Auj.",
+      "todayLong": "aujourd'hui",
+      "classCount": "{count} cours",
+      "noClass": "aucun cours",
+      "previous": "Semaine précédente",
+      "next": "Semaine suivante"
     },
     "card": {
       "capacity": "Capacité",
@@ -107,7 +120,27 @@
       "book": "Réserver",
       "booked": "Réservé",
       "full": "Complet",
-      "joinWaitlist": "Rejoindre la liste d'attente"
+      "joinWaitlist": "Rejoindre la liste d'attente",
+      "duration": "{minutes} min",
+      "taken": "{taken} sur {capacity} prises",
+      "placeLeft": "1 place restante",
+      "placesLeft": "{count} places restantes",
+      "fullWaitlist": "Complet, liste d'attente ouverte",
+      "onWaitlist": "Sur liste d'attente",
+      "waitlistPosition": "Liste d'attente, position {position}",
+      "manage": "Voir mes réservations"
+    },
+    "upcoming": {
+      "title": "Mes prochaines réservations",
+      "empty": "Aucune réservation à venir.",
+      "confirmed": "Confirmée",
+      "waitlist": "Liste d'attente",
+      "cancel": "Annuler",
+      "cancelLabel": "Annuler la réservation « {title} »",
+      "confirmPrompt": "Annuler ce cours ?",
+      "confirmCancel": "Oui, annuler",
+      "keep": "Garder",
+      "cancelClosed": "Annulation fermée moins de 2 h avant le cours"
     }
   },
   "reservations": {

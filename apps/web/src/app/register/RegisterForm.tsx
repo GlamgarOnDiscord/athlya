@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label';
 import { CircleNotchIcon } from '@phosphor-icons/react';
 
 import { TurnstileWidget, type TurnstileWidgetHandle } from '../../components/TurnstileWidget';
+import { postAuthDestination } from '../../lib/auth/post-auth-destination';
 import { setAccessToken } from '../../lib/auth/token-store';
 import { getTurnstileSiteKey } from '../../lib/env';
 import { useLocale } from '../../lib/i18n/LocaleContext';
@@ -125,7 +126,7 @@ export function RegisterForm({ nonce }: RegisterFormProps): ReactElement {
           readonly accessToken: string;
         };
         setAccessToken(payload.accessToken);
-        push('/');
+        push(postAuthDestination(window.location.search));
       } catch {
         setError(t('auth.errors.networkError'));
         turnstileRef.current?.reset();

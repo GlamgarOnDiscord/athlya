@@ -164,6 +164,15 @@ test('register → book → cancel (happy path, stubbed network)', async ({ page
     });
   });
 
+  // The member holds no booking yet, so every class is bookable.
+  await page.route('**/v1/reservations/me*', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [], nextCursor: null }),
+    });
+  });
+
   // Stub the cancel DELETE. Playwright records the observed
   // request so we can assert on method + path after the test drives
   // the call.
@@ -198,26 +207,28 @@ test('register → book → cancel (happy path, stubbed network)', async ({ page
   // Submit.
   await page.getByRole('button', { name: /s'inscrire|sign up/i }).click();
 
-  // `RegisterForm.tsx` does `router.push('/')` on success. Wait
-  // for the URL to settle before moving on.
-  await page.waitForURL('/');
+  // `RegisterForm.tsx` lands on `/classes` on success (no `next`
+  // parameter here). Wait for the URL to settle before moving on.
+  await page.waitForURL('/classes');
 
   // --------------------------------------------------------------
   // Step 2 — Browse /classes and book
   // --------------------------------------------------------------
   await page.goto('/classes');
 
-  // The seeded card renders title + 5/12 remaining counter.
+  // The seeded card renders its title and the seats taken: 7 of 12
+  // (5 remaining). The strip opens on the class's day, a week ahead.
   // CardTitle renders as a <div data-slot="card-title">, not a heading element.
   await expect(page.locator('[data-slot="card-title"]', { hasText: 'CrossFit WOD' })).toBeVisible();
-  await expect(page.getByText('5 / 12')).toBeVisible();
+  await expect(page.getByText(/^(7 sur 12 prises|7 of 12 taken)$/u)).toBeVisible();
 
   const bookCta = page.getByRole('button', { name: /^(réserver|book)\b/i });
   await expect(bookCta).toBeEnabled();
   await bookCta.click();
 
-  // Optimistic decrement (5 → 4) confirms the booking succeeded
-  // client-side and the seat counter advanced. We do NOT assert on
+  // Optimistic decrement (7 → 8 seats taken) confirms the booking
+  // succeeded client-side and the seat counter advanced, and the card
+  // now states the booking instead of offering the button. We do NOT assert on
   // the sonner toast (`role="status"`) here because Toaster's
   // mount + render timing under Next 16's Turbopack prod build is
   // racy with Playwright's 5 s default `toBeVisible` window — the
@@ -225,7 +236,8 @@ test('register → book → cancel (happy path, stubbed network)', async ({ page
   // (the on-success branch of `<ClassesList>` is the only call site
   // that fires `toast.success(reservations.confirmed)`, so seeing
   // the POST proves the toast path executed).
-  await expect(page.getByText('4 / 12')).toBeVisible();
+  await expect(page.getByText(/^(8 sur 12 prises|8 of 12 taken)$/u)).toBeVisible();
+  await expect(page.getByText(/^(réservé|booked)$/iu)).toBeVisible();
 
   // Booking stub observed exactly one POST with the `Idempotency-Key` header.
   expect(bookingCalls).toHaveLength(1);

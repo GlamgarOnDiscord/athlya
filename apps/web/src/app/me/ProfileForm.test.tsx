@@ -167,4 +167,29 @@ describe('<ProfileForm />', () => {
     const alert = screen.getByText('Too long');
     expect(alert.getAttribute('role')).toBe('alert');
   });
+
+  it('translates the picture picker and keeps the native input reachable by its label', async () => {
+    const client = buildFakeClient({
+      put: vi.fn().mockResolvedValue({
+        avatarUrl: 'https://cdn.example/avatar.png',
+      }) as unknown as ApiClient['put'],
+    });
+    render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
+
+    const input = screen.getByLabelText(new RegExp(t('profile.avatarChoose'))) as HTMLInputElement;
+    expect(input.type).toBe('file');
+    expect(input.className).toContain('sr-only');
+    expect(screen.getByLabelText(new RegExp(t('profile.avatar')))).toBe(input);
+    expect(screen.getByText(t('profile.avatarNoFile'))).toBeDefined();
+
+    const file = new File(['png'], 'portrait.png', { type: 'image/png' });
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file] } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('portrait.png')).toBeDefined();
+    expect(client.put).toHaveBeenCalledTimes(1);
+  });
 });

@@ -6,8 +6,14 @@
  *     `GET /v1/classes?from=&to=` on mount. Range is "today 00:00
  *     UTC" to "today + 14 days 23:59 UTC", matching the API's
  *     90-day cap (Req 7.3) with plenty of headroom.
+ *   - Fetch the member's own reservations over the same window
+ *     (`GET /v1/reservations/me`) so a class already held shows as
+ *     booked or on the waitlist. That read is best effort: when it
+ *     fails, the list still renders and every class stays bookable.
  *   - Render the four states: `loading`, `error` with retry,
- *     `empty`, and `ready` (grid of `<ClassCard>`s).
+ *     `empty`, and `ready`: a week strip of seven days above the
+ *     selected day's `<ClassCard>`s (docs/design/ui-direction.md,
+ *     "Booking calendar").
  *   - Handle booking via `POST /v1/reservations`, carrying a
  *     client-generated `Idempotency-Key` (Req 8.5, 20.3).
  *
@@ -17,7 +23,8 @@
  *      attempt. While the request is in-flight we keep the key in
  *      `keysInFlight` (keyed by `classId`); mid-flight retries
  *      reuse the same key, and we release the entry on resolve.
- *   3. Server outcomes:
+ *   3. Server outcomes (each success is also announced in the
+ *      list's polite live region, the toast being visual only):
  *        • 201 `{ status: 'confirmed' }` → keep decrement, flash
  *          the success banner.
  *        • 202 `{ status: 'waitlist', position }` → keep
@@ -38,15 +45,19 @@
 'use client';
 
 import { CalendarBlankIcon } from '@phosphor-icons/react';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { type ApiClient } from '../../lib/api/client';
 import { ApiError, ApiServerError } from '../../lib/api/client';
+import {
+  bookingsByClass,
+  fetchMyReservations,
+  type MemberBooking,
+} from '../../lib/api/reservations';
 import { useApiClient } from '../../lib/api/use-api-client';
 import { useAuth } from '../../lib/auth/AuthContext';
 import { useLocale } from '../../lib/i18n/LocaleContext';
@@ -54,6 +65,15 @@ import { createTranslator, type Translator } from '../../lib/i18n/t';
 import { newIdempotencyKey } from '../../lib/idempotency';
 
 import { ClassCard, type ClassCardInfo } from './ClassCard';
+import {
+  groupByDay,
+  initialSelection,
+  localDayKey,
+  nextDayWithClasses,
+  weekDays,
+  WEEKS_SHOWN,
+} from './schedule';
+import { dayTabId, WeekStrip } from './WeekStrip';
 
 import type { ClassWithRemaining } from '@athlya/shared/schemas/api';
 
@@ -85,7 +105,7 @@ export interface ClassesListProps {
  * pure function so tests that stub `Date.now` can predict the output
  * without re-implementing the arithmetic.
  */
-function buildRange(now: Date): { from: string; to: string } {
+function buildRange(now: Date): { from: Date; to: Date } {
   const startOfDay = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0),
   );
@@ -100,7 +120,7 @@ function buildRange(now: Date): { from: string; to: string } {
       999,
     ),
   );
-  return { from: startOfDay.toISOString(), to: endOfLastDay.toISOString() };
+  return { from: startOfDay, to: endOfLastDay };
 }
 
 /**
@@ -113,6 +133,7 @@ function toCardInfo(item: ClassWithRemaining): ClassCardInfo {
     id: item.id,
     title: item.title,
     startsAt: item.startsAt,
+    durationMin: item.durationMin,
     capacity: item.capacity,
     remaining: item.remaining,
   };
@@ -129,18 +150,31 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
     status: FetchStatus;
     reloadNonce: number;
     bookingInFlight: ReadonlySet<string>;
-    bookedClassIds: ReadonlySet<string>;
+    /** `classId → the member's place`, from the API and this session's bookings. */
+    bookings: ReadonlyMap<string, MemberBooking>;
     errorByClassId: Readonly<Record<string, string>>;
+    /** Day picked in the week strip; `null` until the member picks one. */
+    selection: { readonly weekOffset: number; readonly dayKey: string } | null;
+    /** Last booking outcome, read out by the polite live region. */
+    announcement: string;
   }
 
-  const [{ status, reloadNonce, bookingInFlight, bookedClassIds, errorByClassId }, setState] =
-    useState<ClassesListState>(() => ({
-      status: { kind: 'loading' },
-      reloadNonce: 0,
-      bookingInFlight: new Set<string>(),
-      bookedClassIds: new Set<string>(),
-      errorByClassId: {},
-    }));
+  const [
+    { status, reloadNonce, bookingInFlight, bookings, errorByClassId, selection, announcement },
+    setState,
+  ] = useState<ClassesListState>(() => ({
+    status: { kind: 'loading' },
+    reloadNonce: 0,
+    bookingInFlight: new Set<string>(),
+    bookings: new Map<string, MemberBooking>(),
+    errorByClassId: {},
+    selection: null,
+    announcement: '',
+  }));
+
+  /** Reference day of the week strip, fixed for the page's lifetime. */
+  const [now] = useState(() => new Date());
+  const panelId = useId();
 
   /**
    * `classId → in-flight Idempotency-Key`. A fresh key is generated
@@ -157,11 +191,15 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
     if (!bootResolved) return;
     let cancelled = false;
 
-    const { from, to } = buildRange(new Date());
-    const qs = new URLSearchParams({ from, to }).toString();
+    const range = buildRange(new Date());
+    const qs = new URLSearchParams({
+      from: range.from.toISOString(),
+      to: range.to.toISOString(),
+    }).toString();
     const path = `/v1/classes?${qs}`;
 
     void (async () => {
+      const held = fetchMyReservations(client, range).then(bookingsByClass, () => null);
       let next: FetchStatus;
       try {
         const response = await client.get<{
@@ -174,7 +212,15 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
       } catch {
         next = { kind: 'error' };
       }
-      if (!cancelled) setState((s) => ({ ...s, status: next }));
+      const known = await held;
+      if (cancelled) return;
+      setState((s) => {
+        if (known === null) return { ...s, status: next };
+        // This session's outcomes are newer than the read, so they win.
+        const merged = new Map(known);
+        for (const [classId, booking] of s.bookings) merged.set(classId, booking);
+        return { ...s, status: next, bookings: merged };
+      });
     })();
 
     return () => {
@@ -229,13 +275,14 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
         keysInFlightRef.current.set(classId, key);
       }
 
-      // Clear any stale per-card error before the new attempt.
+      // Clear any stale per-card error before the new attempt, and the
+      // previous announcement so the same outcome is read out again.
       setCardError(classId, null);
       setState((s) => {
         if (s.bookingInFlight.has(classId)) return s;
         const next = new Set(s.bookingInFlight);
         next.add(classId);
-        return { ...s, bookingInFlight: next };
+        return { ...s, bookingInFlight: next, announcement: '' };
       });
 
       // Optimistic decrement.
@@ -248,15 +295,21 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
           { headers: { 'Idempotency-Key': key } },
         );
 
+        let booking: MemberBooking;
+        let message: string;
         if (body.status === 'waitlist') {
-          toast.info(t('reservations.waitlistPosition', { position: body.position ?? 0 }));
+          booking = { kind: 'waitlist', position: body.position };
+          message = t('reservations.waitlistPosition', { position: body.position ?? 0 });
+          toast.info(message);
         } else {
-          toast.success(t('reservations.confirmed'));
+          booking = { kind: 'confirmed' };
+          message = t('reservations.confirmed');
+          toast.success(message);
         }
         setState((s) => {
-          const next = new Set(s.bookedClassIds);
-          next.add(classId);
-          return { ...s, bookedClassIds: next };
+          const next = new Map(s.bookings);
+          next.set(classId, booking);
+          return { ...s, bookings: next, announcement: message };
         });
       } catch (err) {
         if (err instanceof ApiError) {
@@ -264,11 +317,12 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
           // ours already; surface as a confirmation and
           // keep the optimistic decrement.
           if (err.status === 409) {
-            toast.success(t('reservations.confirmed'));
+            const message = t('reservations.confirmed');
+            toast.success(message);
             setState((s) => {
-              const next = new Set(s.bookedClassIds);
-              next.add(classId);
-              return { ...s, bookedClassIds: next };
+              const next = new Map(s.bookings);
+              next.set(classId, { kind: 'confirmed' });
+              return { ...s, bookings: next, announcement: message };
             });
           } else if (err.status === 422 && err.problem?.code === 'class_in_past') {
             mutateRemaining(classId, +1);
@@ -302,28 +356,53 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
     [client, mutateRemaining, setCardError, t],
   );
 
+  /* --------------------------- week strip ------------------------- */
+
+  const groups = useMemo(
+    () => (status.kind === 'ready' ? groupByDay(status.items) : new Map<string, ClassCardInfo[]>()),
+    [status],
+  );
+  const counts = useMemo(
+    () => new Map([...groups].map(([key, items]) => [key, items.length] as const)),
+    [groups],
+  );
+  const current = selection ?? initialSelection(now, groups);
+  const days = useMemo(() => weekDays(now, current.weekOffset), [now, current.weekOffset]);
+
+  const selectDay = useCallback(
+    (dayKey: string) => {
+      setState((s) => ({
+        ...s,
+        selection: { weekOffset: s.selection?.weekOffset ?? current.weekOffset, dayKey },
+      }));
+    },
+    [current.weekOffset],
+  );
+
+  const showWeek = useCallback(
+    (weekOffset: number) => {
+      const week = weekDays(now, weekOffset).map(localDayKey);
+      const dayKey = week.find((key) => (groups.get(key)?.length ?? 0) > 0) ?? week[0] ?? '';
+      setState((s) => ({ ...s, selection: { weekOffset, dayKey } }));
+    },
+    [now, groups],
+  );
+
   /* --------------------------- render ----------------------------- */
 
   if (status.kind === 'loading') {
     return (
-      <ul className="grid list-none grid-cols-1 gap-4 p-0 md:grid-cols-2 lg:grid-cols-3">
-        {(['s1', 's2', 's3'] as const).map((id) => (
-          <li key={id} aria-hidden="true">
-            <Card>
-              <CardHeader>
-                <Skeleton className="h-5 w-48" />
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-2/3" />
-              </CardContent>
-              <CardFooter>
-                <Skeleton className="h-9 w-24" />
-              </CardFooter>
-            </Card>
-          </li>
-        ))}
-      </ul>
+      <div className="flex flex-col gap-6" aria-hidden="true">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-6 w-48" />
+        <ul className="flex list-none flex-col gap-3 p-0">
+          {(['s1', 's2', 's3'] as const).map((id) => (
+            <li key={id}>
+              <Skeleton className="h-36 w-full rounded-xl" />
+            </li>
+          ))}
+        </ul>
+      </div>
     );
   }
 
@@ -347,27 +426,75 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
     );
   }
 
+  const dayItems = groups.get(current.dayKey) ?? [];
+  const selectedDay = days.find((day) => localDayKey(day) === current.dayKey) ?? now;
+  const next = dayItems.length === 0 ? nextDayWithClasses(now, current.dayKey, groups) : null;
+
   return (
-    <div className="flex flex-col gap-4" data-reload-key={reloadNonce}>
-      <ul
-        // `grid` / responsive breakpoints are a visual concern;
-        // semantically the cards form a list.
-        className="grid list-none grid-cols-1 gap-4 p-0 md:grid-cols-2 lg:grid-cols-3"
+    <div className="flex flex-col gap-6" data-reload-key={reloadNonce}>
+      <WeekStrip
+        days={days}
+        todayKey={localDayKey(now)}
+        selectedKey={current.dayKey}
+        counts={counts}
+        panelId={panelId}
+        locale={locale}
+        t={t}
+        onSelect={selectDay}
+        onPreviousWeek={current.weekOffset > 0 ? () => showWeek(current.weekOffset - 1) : undefined}
+        onNextWeek={
+          current.weekOffset < WEEKS_SHOWN - 1 ? () => showWeek(current.weekOffset + 1) : undefined
+        }
+      />
+
+      <section
+        id={panelId}
+        role="tabpanel"
+        aria-labelledby={dayTabId(current.dayKey)}
+        className="flex flex-col gap-3"
       >
-        {status.items.map((item) => (
-          <li key={item.id}>
-            <ClassCard
-              classInfo={item}
-              t={t}
-              locale={locale}
-              onBook={handleBook}
-              booked={bookedClassIds.has(item.id)}
-              disabled={bookingInFlight.has(item.id)}
-              error={errorByClassId[item.id] ?? null}
-            />
-          </li>
-        ))}
-      </ul>
+        <h2 className="text-lg font-semibold first-letter:uppercase">
+          {new Intl.DateTimeFormat(locale, {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+          }).format(selectedDay)}
+        </h2>
+        {dayItems.length === 0 ? (
+          <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed p-6">
+            <p className="text-muted-foreground">{t('classes.list.dayEmpty')}</p>
+            {next !== null ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setState((s) => ({ ...s, selection: next }))}
+              >
+                {t('classes.list.nextDay')}
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <ul className="flex list-none flex-col gap-3 p-0">
+            {dayItems.map((item) => (
+              <li key={item.id}>
+                <ClassCard
+                  classInfo={item}
+                  t={t}
+                  locale={locale}
+                  onBook={handleBook}
+                  booking={bookings.get(item.id) ?? null}
+                  disabled={bookingInFlight.has(item.id)}
+                  error={errorByClassId[item.id] ?? null}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
     </div>
   );
 }

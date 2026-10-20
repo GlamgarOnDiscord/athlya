@@ -79,6 +79,15 @@ test('login → edit display name → success banner (hermetic)', async ({ page 
     });
   });
 
+  // Upcoming bookings on `/classes` and `/me`: none.
+  await page.route('**/v1/reservations/me*', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [], nextCursor: null }),
+    });
+  });
+
   // Members/me — handles both GET (initial load) and PATCH (update).
   const patchCalls: Request[] = [];
   await page.route('**/v1/members/me', async (route: Route) => {
@@ -113,7 +122,7 @@ test('login → edit display name → success banner (hermetic)', async ({ page 
   await page.getByLabel(/adresse e-mail|email/i).fill('alice@athlya.app');
   await page.getByLabel(/mot de passe|password/i).fill('Password1234');
   await page.getByRole('button', { name: /se connecter|sign in/i }).click();
-  await page.waitForURL('/');
+  await page.waitForURL('/classes');
 
   // Navigate to profile page — boot refresh fires again (stubbed).
   await page.goto('/me');

@@ -21,6 +21,42 @@
 
 @import 'shadcn/tailwind.css';
 
+/*
+ * Booking marks in the logo palette: the capacity fill and the selected
+ * day of the week strip are ink on light and volt on dark, and volt
+ * always sits under ink text. Pairs are pinned in
+ * packages/shared/tests/token-contrast.test.ts.
+ */
+.class-capacity-fill {
+  background-color: var(--athlya-brand-ink);
+}
+.week-day-selected {
+  background-color: var(--athlya-brand-ink);
+  color: var(--athlya-brand-white);
+}
+
+:root.dark {
+  .class-capacity-fill {
+    background-color: var(--athlya-brand-volt);
+  }
+  .week-day-selected {
+    background-color: var(--athlya-brand-volt);
+    color: var(--athlya-brand-ink);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    .class-capacity-fill {
+      background-color: var(--athlya-brand-volt);
+    }
+    .week-day-selected {
+      background-color: var(--athlya-brand-volt);
+      color: var(--athlya-brand-ink);
+    }
+  }
+}
+
 .class-card-capacity-bar {
   transform: scaleX(var(--bar-scale, 0));
 }
