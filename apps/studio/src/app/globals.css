@@ -27,3 +27,72 @@
   background-color: var(--brand-bg, var(--color-brand-primary));
   color: var(--brand-fg, var(--color-brand-on-primary));
 }
+
+/*
+ * Planning marks in the logo palette. Volt is the one accent and always
+ * sits under ink text: seats still open, and the current time on dark.
+ * Pairs are pinned in packages/shared/tests/token-contrast.test.ts.
+ */
+.planning-pill-open {
+  background-color: var(--athlya-brand-volt);
+  color: var(--athlya-brand-ink);
+}
+.planning-pill-full,
+.planning-today {
+  background-color: var(--athlya-brand-ink);
+  color: var(--athlya-brand-white);
+}
+.planning-now-line {
+  background-color: var(--athlya-brand-ink);
+}
+.planning-now-pill {
+  background-color: var(--athlya-brand-ink);
+  color: var(--athlya-brand-volt);
+}
+
+:root.dark {
+  .planning-pill-full,
+  .planning-today {
+    background-color: var(--athlya-brand-white);
+    color: var(--athlya-brand-ink);
+  }
+  .planning-now-line {
+    background-color: var(--athlya-brand-volt);
+  }
+  .planning-now-pill {
+    background-color: var(--athlya-brand-volt);
+    color: var(--athlya-brand-ink);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    .planning-pill-full,
+    .planning-today {
+      background-color: var(--athlya-brand-white);
+      color: var(--athlya-brand-ink);
+    }
+    .planning-now-line {
+      background-color: var(--athlya-brand-volt);
+    }
+    .planning-now-pill {
+      background-color: var(--athlya-brand-volt);
+      color: var(--athlya-brand-ink);
+    }
+  }
+}
+
+/* Current-time line on today's column, placed from CSSOM like the blocks. */
+.planning-now {
+  top: var(--now-top);
+}
+
+/* Planning week grid: block position via CSSOM vars (CSP #75, no style="" attrs).
+   Tiles float inside their slot, clear of the grid lines. */
+.planning-block {
+  top: calc(var(--block-top) + 2px);
+  left: calc(var(--block-left) + 4px);
+  width: calc(var(--block-width) - 8px);
+  height: calc(var(--block-height) - 4px);
+  min-height: 1.5rem;
+}

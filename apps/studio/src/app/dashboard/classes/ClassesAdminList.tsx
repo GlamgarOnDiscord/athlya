@@ -1,6 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { CaretLeftIcon, CaretRightIcon } from '@phosphor-icons/react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactElement,
+} from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -21,17 +29,76 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 
 import { useApiClient } from '../../../lib/api/buildClient';
 import { useAuth } from '../../../lib/auth/AuthContext';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
 
+import { ClassesPlanning } from './ClassesPlanning';
 import { ClassFormDialog, type ClassFormMode } from './ClassFormDialog';
+import {
+  buildWeekDays,
+  fromDayKey,
+  resolveView,
+  shiftAnchor,
+  toDayKey,
+  visibleRange,
+  WIDE_VIEWS,
+  type PlanningView,
+} from './planning-grid';
 
 import type { ClassWithRemaining } from '@athlya/shared/schemas/api';
 
 const DEFAULT_LOOKAHEAD_DAYS = 30;
+
+type AdminView = PlanningView | 'list';
+
+const WIDE_QUERY = '(min-width: 48rem)';
+
+function subscribeToWide(onStoreChange: () => void): () => void {
+  const query = window.matchMedia(WIDE_QUERY);
+  query.addEventListener('change', onStoreChange);
+  return () => query.removeEventListener('change', onStoreChange);
+}
+
+/** Whether the viewport reaches the `md` breakpoint; wide during server rendering. */
+function useIsWide(): boolean {
+  return useSyncExternalStore(
+    subscribeToWide,
+    () => window.matchMedia(WIDE_QUERY).matches,
+    () => true,
+  );
+}
+
+/** Notifies once per local midnight so the today marker follows the date. */
+function subscribeToDay(onStoreChange: () => void): () => void {
+  let timer: number | undefined;
+  const schedule = (): void => {
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0);
+    timer = window.setTimeout(
+      () => {
+        onStoreChange();
+        schedule();
+      },
+      Math.max(1, nextMidnight.getTime() - now.getTime()),
+    );
+  };
+  schedule();
+  return () => window.clearTimeout(timer);
+}
+
+/** Today's local day key, `null` during server rendering and hydration. */
+function useTodayKey(): string | null {
+  return useSyncExternalStore(
+    subscribeToDay,
+    () => toDayKey(new Date()),
+    () => null,
+  );
+}
 
 function dateInputToIso(value: string, endOfDay = false): string {
   return new Date(`${value}T${endOfDay ? '23:59:59' : '00:00:00'}Z`).toISOString();
@@ -65,6 +132,8 @@ export function ClassesAdminList(): ReactElement {
   const client = useApiClient(getToken);
 
   interface AdminListState {
+    view: AdminView;
+    anchorKey: string | null;
     from: string;
     to: string;
     status: Status;
@@ -74,6 +143,8 @@ export function ClassesAdminList(): ReactElement {
   }
 
   const [state, setState] = useState<AdminListState>(() => ({
+    view: 'week',
+    anchorKey: null,
     from: todayStartIso(),
     to: nDaysFromNowIso(DEFAULT_LOOKAHEAD_DAYS),
     status: { kind: 'loading' },
@@ -86,10 +157,28 @@ export function ClassesAdminList(): ReactElement {
     setState((s) => ({ ...s, refreshNonce: s.refreshNonce + 1 }));
   }, []);
 
+  const todayKey = useTodayKey();
+  const anchorKey = state.anchorKey ?? todayKey;
+  const anchor = useMemo(() => (anchorKey === null ? null : fromDayKey(anchorKey)), [anchorKey]);
+
+  const wide = useIsWide();
+  const view: AdminView = state.view === 'list' ? 'list' : resolveView(state.view, wide);
+  const viewOptions: ReadonlyArray<AdminView> = wide ? [...WIDE_VIEWS, 'list'] : ['day', 'list'];
+
+  const range = useMemo(() => {
+    if (view === 'list') return { from: state.from, to: state.to };
+    if (anchor === null) return null;
+    const { from, to } = visibleRange(view, anchor);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }, [view, state.from, state.to, anchor]);
+  const rangeFrom = range?.from ?? null;
+  const rangeTo = range?.to ?? null;
+
   useEffect(() => {
+    if (rangeFrom === null || rangeTo === null) return;
     let cancelled = false;
     setState((s) => ({ ...s, status: { kind: 'loading' } }));
-    const path = `/v1/classes?from=${encodeURIComponent(state.from)}&to=${encodeURIComponent(state.to)}`;
+    const path = `/v1/classes?from=${encodeURIComponent(rangeFrom)}&to=${encodeURIComponent(rangeTo)}`;
     void (async () => {
       let next: Status;
       try {
@@ -107,7 +196,75 @@ export function ClassesAdminList(): ReactElement {
     return () => {
       cancelled = true;
     };
-  }, [client, state.from, state.to, state.refreshNonce]);
+  }, [client, rangeFrom, rangeTo, state.refreshNonce]);
+
+  const periodLabel = useMemo(() => {
+    if (anchor === null || view === 'list') return null;
+    if (view === 'day') {
+      return new Intl.DateTimeFormat(locale, {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }).format(anchor);
+    }
+    if (view === 'month') {
+      return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(anchor);
+    }
+    const days = buildWeekDays(anchor);
+    return new Intl.DateTimeFormat(locale, {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).formatRange(days[0] ?? anchor, days[6] ?? anchor);
+  }, [anchor, locale, view]);
+
+  const step = useCallback(
+    (direction: -1 | 1) => {
+      if (anchor === null || view === 'list') return;
+      const next = toDayKey(shiftAnchor(view, anchor, direction));
+      setState((s) => ({ ...s, anchorKey: next }));
+    },
+    [anchor, view],
+  );
+
+  const showDay = useCallback((day: Date) => {
+    setState((s) => ({
+      ...s,
+      view: s.view === 'month' ? 'week' : s.view,
+      anchorKey: toDayKey(day),
+    }));
+  }, []);
+
+  const previousLabel = t(
+    view === 'day'
+      ? 'studio.classes.planning.previousDay'
+      : view === 'week'
+        ? 'studio.classes.planning.previousWeek'
+        : 'studio.classes.planning.previousMonth',
+  );
+  const nextLabel = t(
+    view === 'day'
+      ? 'studio.classes.planning.nextDay'
+      : view === 'week'
+        ? 'studio.classes.planning.nextWeek'
+        : 'studio.classes.planning.nextMonth',
+  );
+
+  const openCreateAt = useCallback((startsAt: Date) => {
+    setState((s) => ({
+      ...s,
+      dialogMode: { kind: 'create', startsAt: startsAt.toISOString() },
+    }));
+  }, []);
+
+  const openEdit = useCallback((cls: ClassWithRemaining) => {
+    setState((s) => ({ ...s, dialogMode: { kind: 'edit', cls } }));
+  }, []);
+
+  const openDelete = useCallback((cls: ClassWithRemaining) => {
+    setState((s) => ({ ...s, deleteTarget: cls }));
+  }, []);
 
   const onCloseDialog = useCallback((committed: boolean) => {
     setState((s) => ({
@@ -141,41 +298,98 @@ export function ClassesAdminList(): ReactElement {
 
   return (
     <div className="flex flex-col gap-4" data-reload-key={state.refreshNonce}>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <fieldset className="flex flex-wrap items-end gap-3">
-          <legend className="sr-only">
-            {t('studio.classes.range.from')} / {t('studio.classes.range.to')}
-          </legend>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="classes-range-from" className="text-muted-foreground">
-              {t('studio.classes.range.from')}
-            </Label>
-            <Input
-              id="classes-range-from"
-              type="date"
-              value={state.from.slice(0, 10)}
-              onChange={(e) => setState((s) => ({ ...s, from: dateInputToIso(e.target.value) }))}
-              className="w-36"
-            />
+      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between">
+        {view === 'list' ? (
+          <fieldset className="flex flex-wrap items-end gap-3">
+            <legend className="sr-only">
+              {t('studio.classes.range.from')} / {t('studio.classes.range.to')}
+            </legend>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="classes-range-from" className="text-muted-foreground">
+                {t('studio.classes.range.from')}
+              </Label>
+              <Input
+                id="classes-range-from"
+                type="date"
+                value={state.from.slice(0, 10)}
+                onChange={(e) => setState((s) => ({ ...s, from: dateInputToIso(e.target.value) }))}
+                className="w-36"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="classes-range-to" className="text-muted-foreground">
+                {t('studio.classes.range.to')}
+              </Label>
+              <Input
+                id="classes-range-to"
+                type="date"
+                value={state.to.slice(0, 10)}
+                onChange={(e) =>
+                  setState((s) => ({ ...s, to: dateInputToIso(e.target.value, true) }))
+                }
+                className="w-36"
+              />
+            </div>
+          </fieldset>
+        ) : periodLabel === null ? (
+          <Skeleton className="h-7 w-56" />
+        ) : (
+          <h2 aria-live="polite" className="text-lg font-semibold first-letter:uppercase">
+            {periodLabel}
+          </h2>
+        )}
+        <div className="flex flex-col gap-2 md:flex-row md:items-center">
+          <div
+            role="group"
+            aria-label={t('studio.classes.planning.viewLabel')}
+            className="grid auto-cols-fr grid-flow-col rounded-lg border border-border bg-muted p-0.5 md:inline-grid"
+          >
+            {viewOptions.map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={view === option}
+                onClick={() => setState((s) => ({ ...s, view: option }))}
+                className={cn(
+                  'h-7 rounded-md px-3 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  view === option &&
+                    'bg-background text-foreground shadow-sm dark:bg-foreground dark:text-background dark:hover:text-background',
+                )}
+              >
+                {t(`studio.classes.planning.views.${option}`)}
+              </button>
+            ))}
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="classes-range-to" className="text-muted-foreground">
-              {t('studio.classes.range.to')}
-            </Label>
-            <Input
-              id="classes-range-to"
-              type="date"
-              value={state.to.slice(0, 10)}
-              onChange={(e) =>
-                setState((s) => ({ ...s, to: dateInputToIso(e.target.value, true) }))
-              }
-              className="w-36"
-            />
+          <div className="flex items-center gap-2">
+            {view === 'list' ? null : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setState((s) => ({ ...s, anchorKey: null }))}
+                >
+                  {t('studio.classes.planning.today')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={previousLabel}
+                  onClick={() => step(-1)}
+                >
+                  <CaretLeftIcon aria-hidden="true" />
+                </Button>
+                <Button variant="ghost" size="icon" aria-label={nextLabel} onClick={() => step(1)}>
+                  <CaretRightIcon aria-hidden="true" />
+                </Button>
+              </>
+            )}
+            <Button
+              className="ml-auto md:ml-0"
+              onClick={() => setState((s) => ({ ...s, dialogMode: { kind: 'create' } }))}
+            >
+              {t('studio.classes.create')}
+            </Button>
           </div>
-        </fieldset>
-        <Button onClick={() => setState((s) => ({ ...s, dialogMode: { kind: 'create' } }))}>
-          {t('studio.classes.create')}
-        </Button>
+        </div>
       </div>
 
       {state.status.kind === 'error' ? (
@@ -184,63 +398,89 @@ export function ClassesAdminList(): ReactElement {
         </p>
       ) : null}
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t('studio.classes.title')}</TableHead>
-            <TableHead className="hidden sm:table-cell">{t('studio.classes.range.from')}</TableHead>
-            <TableHead className="hidden md:table-cell">
-              {t('studio.classes.fields.durationMin')}
-            </TableHead>
-            <TableHead>{t('studio.classes.fields.capacity')}</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {state.status.kind === 'loading'
-            ? Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={`skeleton-${i}`}>
-                  <TableCell>
-                    <Skeleton className="h-4 w-40" />
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    <Skeleton className="h-4 w-32" />
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    <Skeleton className="h-4 w-16" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-20" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-8 w-14" />
-                  </TableCell>
-                </TableRow>
-              ))
-            : null}
+      {view !== 'list' && view !== 'day' && state.status.kind === 'empty' ? (
+        <p className="text-sm text-muted-foreground">{t('studio.classes.empty')}</p>
+      ) : null}
 
-          {state.status.kind === 'empty' ? (
+      {view === 'list' ? null : anchor === null || todayKey === null ? (
+        <Skeleton className="h-[32rem] w-full" />
+      ) : (
+        <ClassesPlanning
+          view={view}
+          anchor={anchor}
+          todayKey={todayKey}
+          items={state.status.kind === 'ready' ? state.status.items : []}
+          busy={state.status.kind === 'loading'}
+          locale={locale}
+          t={t}
+          onSelectClass={openEdit}
+          onDeleteClass={openDelete}
+          onCreateAt={openCreateAt}
+          onShowDay={showDay}
+        />
+      )}
+
+      {view === 'list' ? (
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
-                {t('studio.classes.empty')}
-              </TableCell>
+              <TableHead>{t('studio.classes.title')}</TableHead>
+              <TableHead className="hidden sm:table-cell">
+                {t('studio.classes.range.from')}
+              </TableHead>
+              <TableHead className="hidden md:table-cell">
+                {t('studio.classes.fields.durationMin')}
+              </TableHead>
+              <TableHead>{t('studio.classes.fields.capacity')}</TableHead>
+              <TableHead />
             </TableRow>
-          ) : null}
+          </TableHeader>
+          <TableBody>
+            {state.status.kind === 'loading'
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={`skeleton-${i}`}>
+                    <TableCell>
+                      <Skeleton className="h-4 w-40" />
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <Skeleton className="h-4 w-32" />
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <Skeleton className="h-4 w-16" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-20" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-8 w-14" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              : null}
 
-          {state.status.kind === 'ready'
-            ? state.status.items.map((cls) => (
-                <ClassRow
-                  key={cls.id}
-                  cls={cls}
-                  locale={locale}
-                  t={t}
-                  onEdit={() => setState((s) => ({ ...s, dialogMode: { kind: 'edit', cls } }))}
-                  onDelete={() => setState((s) => ({ ...s, deleteTarget: cls }))}
-                />
-              ))
-            : null}
-        </TableBody>
-      </Table>
+            {state.status.kind === 'empty' ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  {t('studio.classes.empty')}
+                </TableCell>
+              </TableRow>
+            ) : null}
+
+            {state.status.kind === 'ready'
+              ? state.status.items.map((cls) => (
+                  <ClassRow
+                    key={cls.id}
+                    cls={cls}
+                    locale={locale}
+                    t={t}
+                    onEdit={() => openEdit(cls)}
+                    onDelete={() => openDelete(cls)}
+                  />
+                ))
+              : null}
+          </TableBody>
+        </Table>
+      ) : null}
 
       {state.dialogMode !== null ? (
         <ClassFormDialog

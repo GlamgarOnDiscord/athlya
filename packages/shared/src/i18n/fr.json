@@ -542,6 +542,28 @@
       "errors": {
         "generic": "Erreur lors de l'enregistrement.",
         "versionConflict": "Le cours a été modifié entre temps. Liste rafraîchie — réessayez."
+      },
+      "planning": {
+        "viewLabel": "Vue du calendrier",
+        "views": {
+          "day": "Jour",
+          "week": "Semaine",
+          "month": "Mois",
+          "list": "Liste"
+        },
+        "today": "Aujourd'hui",
+        "previousWeek": "Semaine précédente",
+        "nextWeek": "Semaine suivante",
+        "previousMonth": "Mois précédent",
+        "nextMonth": "Mois suivant",
+        "createAt": "Nouveau cours le {date}",
+        "full": "Complet",
+        "more": "+{count} de plus",
+        "localTime": "Horaires en heure locale ({timeZone}).",
+        "previousDay": "Jour précédent",
+        "nextDay": "Jour suivant",
+        "seatsLeft": "{count} places",
+        "actionsFor": "Actions pour {title}"
       }
     },
     "members": {

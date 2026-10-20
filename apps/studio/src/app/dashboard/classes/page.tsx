@@ -2,9 +2,9 @@
  * `/dashboard/classes` — admin classes management.
  *
  * Server entry that resolves the locale and delegates to the client
- * `<ClassesAdminList>` component. The actual list + create + edit
- * flows live there so the auth-token-bound API client can run in the
- * browser.
+ * `<ClassesAdminList>` component. The week and month planning, the
+ * list and the create + edit flows live there so the auth-token-bound
+ * API client can run in the browser.
  *
  * The route inherits the `<RequireAdmin>` gate from
  * `app/dashboard/layout.tsx` — non-admin users never reach this
