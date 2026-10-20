@@ -395,10 +395,17 @@ export type ClassListResponse = z.infer<typeof ClassListResponseSchema>;
  * `POST /v1/reservations`. The `Idempotency-Key` header provides at-most-
  * once semantics (Requirement 8.5, 20.1) and is handled by the API
  * gateway middleware, not by this body schema.
+ *
+ * `classVersion` is optional (issue #723): the class `version` the
+ * member saw. When present the booking is refused with 409
+ * `class_changed` if the class was edited since (time, capacity, …),
+ * checked under the class row lock. Omitted, the booking behaves as
+ * before.
  */
 export const BookingRequestSchema = z
   .object({
     classId: ClassIdSchema,
+    classVersion: z.number().int().nonnegative().optional(),
   })
   .strict();
 
@@ -439,6 +446,58 @@ export const CancelReservationParamsSchema = z
   .strict();
 
 export type CancelReservationParams = z.infer<typeof CancelReservationParamsSchema>;
+
+/**
+ * Response for a cancel. A retried cancel of a reservation that is
+ * already cancelled answers the same shape with `alreadyCancelled: true`.
+ */
+export const CancelReservationResponseSchema = z
+  .object({
+    status: z.literal('cancelled'),
+    reservation: ReservationSchema,
+    alreadyCancelled: z.literal(true).optional(),
+  })
+  .strict();
+
+export type CancelReservationResponse = z.infer<typeof CancelReservationResponseSchema>;
+
+/**
+ * `POST /v1/reservations/holds` (issue #723). Same body as a booking: a
+ * hold keeps a seat of `classId` for a bounded time while the client
+ * finishes (a checkout, a slow confirmation step), then
+ * `POST /v1/reservations/{reservationId}/confirm` turns it into a
+ * confirmed reservation. `DELETE /v1/reservations/{reservationId}`
+ * releases it; an unconfirmed hold expires on its own.
+ */
+export const HoldRequestSchema = BookingRequestSchema;
+
+export type HoldRequest = z.infer<typeof HoldRequestSchema>;
+
+/**
+ * Response for a hold. `reservationId` is the id to confirm or release;
+ * `expiresAt` is when the seat returns to the class if the hold is not
+ * confirmed. A hold is never reported as a reservation row: its
+ * `pending` status is not part of the wire `ReservationSchema`.
+ */
+export const HoldResponseSchema = z
+  .object({
+    status: z.literal('held'),
+    hold: z
+      .object({
+        reservationId: ReservationIdSchema,
+        classId: ClassIdSchema,
+        expiresAt: IsoDateTimeSchema,
+      })
+      .strict(),
+  })
+  .strict();
+
+export type HoldResponse = z.infer<typeof HoldResponseSchema>;
+
+/** Path parameters for `POST /v1/reservations/{reservationId}/confirm`. */
+export const ConfirmHoldParamsSchema = CancelReservationParamsSchema;
+
+export type ConfirmHoldParams = z.infer<typeof ConfirmHoldParamsSchema>;
 
 /* ------------------------------------------------------------------ */
 /*  checkins — /v1/checkins                                            */

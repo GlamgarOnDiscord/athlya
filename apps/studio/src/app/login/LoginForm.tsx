@@ -1,5 +1,5 @@
 /**
- * `/login` client form for the studio admin app.
+ * `/login` client form for the studio console (administrators and coaches).
  *
  * Minimal copy of `apps/web/src/app/login/LoginForm.tsx` without the
  * Turnstile widget. The studio admin login is gated by the same API
@@ -32,6 +32,7 @@ import { Label } from '@/components/ui/label';
 
 import { TurnstileWidget, type TurnstileWidgetHandle } from '../../components/TurnstileWidget';
 import { useAuth } from '../../lib/auth/AuthContext';
+import { canUseStudio } from '../../lib/auth/studio-access';
 import { getTurnstileSiteKey } from '../../lib/env';
 import { useLocale } from '../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../lib/i18n/t';
@@ -46,7 +47,7 @@ export function LoginForm({ nonce }: LoginFormProps): ReactElement {
   const { push } = useRouter();
   const locale = useLocale();
   const t = useMemo(() => createTranslator(locale), [locale]);
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
 
   interface FormState {
     turnstileToken: string;
@@ -95,8 +96,11 @@ export function LoginForm({ nonce }: LoginFormProps): ReactElement {
           password: form.password,
           turnstileToken: consumedToken,
         });
-        if (session.user.role !== 'admin') {
-          setForm((s) => ({ ...s, error: t('studio.login.adminRequired') }));
+        if (!canUseStudio(session.user.role)) {
+          // A member is refused, and the session this sign-in just opened is closed
+          // (a failed sign-out still clears the local token).
+          await logout().catch(() => undefined);
+          setForm((s) => ({ ...s, error: t('studio.login.staffRequired') }));
           turnstileRef.current?.reset();
           return;
         }
@@ -118,7 +122,7 @@ export function LoginForm({ nonce }: LoginFormProps): ReactElement {
         setForm((s) => ({ ...s, pending: false }));
       }
     },
-    [form, siteKey, login, push, t],
+    [form, siteKey, login, logout, push, t],
   );
 
   return (

@@ -92,6 +92,8 @@ describe('GET /openapi.json', () => {
       '/v1/classes/{id}',
       '/v1/reservations',
       '/v1/reservations/{reservationId}',
+      '/v1/reservations/holds',
+      '/v1/reservations/{reservationId}/confirm',
       '/v1/reservations/me',
       '/v1/studios/me',
       '/v1/sessions',
@@ -196,6 +198,25 @@ describe('GET /openapi.json', () => {
         'crossTrainer',
       ]);
       expect(schema?.required ?? []).not.toContain('cardio');
+    }
+  });
+});
+
+describe('DELETE /v1/reservations/{reservationId} in the spec', () => {
+  it('documents the 200 cancel body and the strict idempotency problems', async () => {
+    const res = await buildApp().request('/openapi.json', { method: 'GET' }, mockEnv());
+    const body = await readJson<{
+      paths: Record<
+        string,
+        { delete?: { responses: Record<string, { content?: Record<string, unknown> }> } }
+      >;
+    }>(res);
+    const responses = body.paths['/v1/reservations/{reservationId}']?.delete?.responses ?? {};
+
+    expect(responses['204']).toBeUndefined();
+    expect(responses['200']?.content?.['application/json']).toBeDefined();
+    for (const status of ['409', '422', '503']) {
+      expect(responses[status]?.content?.['application/problem+json'], status).toBeDefined();
     }
   });
 });

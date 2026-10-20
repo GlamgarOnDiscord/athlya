@@ -22,6 +22,17 @@ import type { NextConfig } from 'next';
 
 const workspaceRoot = path.resolve(process.cwd(), '..', '..');
 
+/**
+ * Powerful APIs stay off everywhere. The check-in kiosk is the single
+ * exception: it needs the camera to scan member QR codes, so its route
+ * gets `camera=(self)` (same origin only) and every other route keeps
+ * `camera=()`. The two `source` patterns are disjoint, so no route ever
+ * receives two Permissions-Policy headers.
+ */
+const PERMISSIONS_POLICY_REST =
+  'microphone=(), geolocation=(), interest-cohort=(), payment=(), usb=()';
+const CHECKIN_ROUTE = '/dashboard/checkin';
+
 const staticSecurityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'Referrer-Policy', value: 'strict-origin' },
@@ -29,14 +40,6 @@ const staticSecurityHeaders = [
   {
     key: 'Strict-Transport-Security',
     value: 'max-age=63072000; includeSubDomains; preload',
-  },
-  // Sprint-3 SP3.1 (Vague 31, audit findings S6-002 / S6-003).
-  // Same hardening as `apps/web`. Studio carries admin-role
-  // privileges so the post-XSS surface reduction is even more
-  // important here than on the member app — see audit-S6 §3.B.
-  {
-    key: 'Permissions-Policy',
-    value: 'camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=(), usb=()',
   },
   { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
   { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
@@ -49,7 +52,26 @@ const nextConfig: NextConfig = {
   turbopack: { root: workspaceRoot },
   transpilePackages: ['@athlya/shared'],
   async headers() {
-    return [{ source: '/:path*', headers: staticSecurityHeaders }];
+    // Sprint-3 SP3.1 (Vague 31, audit findings S6-002 / S6-003).
+    // Same hardening as `apps/web`. Studio carries admin-role
+    // privileges so the post-XSS surface reduction is even more
+    // important here than on the member app — see audit-S6 §3.B.
+    return [
+      {
+        source: '/((?!dashboard/checkin(?:/|$)).*)',
+        headers: [
+          ...staticSecurityHeaders,
+          { key: 'Permissions-Policy', value: `camera=(), ${PERMISSIONS_POLICY_REST}` },
+        ],
+      },
+      {
+        source: `${CHECKIN_ROUTE}/:path*`,
+        headers: [
+          ...staticSecurityHeaders,
+          { key: 'Permissions-Policy', value: `camera=(self), ${PERMISSIONS_POLICY_REST}` },
+        ],
+      },
+    ];
   },
 };
 

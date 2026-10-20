@@ -24,6 +24,8 @@
  * wrap their query calls without repeating the detection table.
  */
 
+import { isPostgresDeadlockDetected, isPostgresSerializationFailure } from '@athlya/db/errors';
+
 /**
  * Retry `fn` exactly once when the underlying TCP connection was
  * silently closed by the server. Any other failure propagates
@@ -71,4 +73,56 @@ function isTransientConnectionError(err: unknown): boolean {
     msg.includes('connection ended') ||
     msg.includes('socket hang up')
   );
+}
+
+/** Attempts (first try included) for a transaction aborted by Postgres. */
+export const TX_RETRY_ATTEMPTS = 3;
+
+/** Base backoff before the second attempt; doubles on each retry. */
+const TX_RETRY_BASE_MS = 25;
+
+export interface TxRetryOptions {
+  readonly attempts?: number;
+  /** Returns a value in `[0, 1)`. Defaults to `Math.random`. */
+  readonly random?: () => number;
+  readonly sleep?: (ms: number) => Promise<void>;
+}
+
+/**
+ * Re-run a whole transaction when Postgres aborted it with SQLSTATE
+ * 40001 (serialization_failure) or 40P01 (deadlock_detected). Both
+ * codes guarantee the transaction rolled back, so running the callback
+ * again cannot apply its writes twice. Any other error, including a
+ * unique or capacity violation, propagates on the first attempt.
+ *
+ * Backoff is "full jitter": a random delay in `[0, base * 2^n)`, so
+ * the losers of a deadlock do not collide again in lock step.
+ */
+export async function withTransactionRetry<T>(
+  fn: () => Promise<T>,
+  options: TxRetryOptions = {},
+): Promise<T> {
+  const attempts = options.attempts ?? TX_RETRY_ATTEMPTS;
+  const random = options.random ?? Math.random;
+  const sleep =
+    options.sleep ??
+    ((ms: number) =>
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, ms);
+      }));
+
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt >= attempts || !isRetryableTxAbort(err)) {
+        throw err;
+      }
+      await sleep(Math.floor(random() * TX_RETRY_BASE_MS * 2 ** (attempt - 1)));
+    }
+  }
+}
+
+function isRetryableTxAbort(err: unknown): boolean {
+  return isPostgresSerializationFailure(err) || isPostgresDeadlockDetected(err);
 }

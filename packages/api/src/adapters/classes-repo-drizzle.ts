@@ -7,8 +7,9 @@
  *   - {@link CreateClassRepo}  — `createClass` for admin-side
  *     `POST /v1/classes`.
  *   - {@link UpdateClassRepo}  — `findById` + `updateClassOptimistic`
- *     for admin-side `PATCH /v1/classes/:id` with optimistic locking
- *     on the `version` column.
+ *     for admin-side `PATCH /v1/classes/:id`: optimistic locking on
+ *     `version`, plus a capacity guard and waitlist promotion run in
+ *     one transaction under the class row lock.
  *   - {@link ClassSearchRepo}  — `search` for the FTS endpoint
  *     `GET /v1/classes/search` (CN.8.2, migration 0007).
  *
@@ -21,13 +22,17 @@
  * @see Requirements 6.1, 6.5, 6.6, 6.7, 7.1, CN.8.2.
  */
 
-import { withTenantHttp } from '@athlya/db';
-import { classes, reservations } from '@athlya/db/schema';
+import { withTenant, withTenantHttp } from '@athlya/db';
+import { isPostgresRaiseException } from '@athlya/db/errors';
+import { classes, outbox, reservations } from '@athlya/db/schema';
 import { and, asc, between, eq, inArray, isNull, sql } from 'drizzle-orm';
 
-import { withConnectionRetry } from './db-retry.js';
+import { noteOutboxWrite } from '../events/outbox-kick.js';
 
-import type { AthlyaDbHttp, TenantClaims } from '@athlya/db/client';
+import { withConnectionRetry, withTransactionRetry } from './db-retry.js';
+import { toDateOrNull } from './service-functions.js';
+
+import type { AthlyaDb, AthlyaDbHttp, AthlyaTx, TenantClaims } from '@athlya/db/client';
 import type { ClassRow } from '@athlya/db/schema';
 import type {
   ClassRepo as ListClassesRepo,
@@ -43,7 +48,11 @@ import type {
   ClassSearchRow,
   ClassSearchRange,
 } from '@athlya/reservations/search';
-import type { ClassRepo as UpdateClassRepo, UpdateClassFields } from '@athlya/reservations/update';
+import type {
+  GuardedClassUpdate,
+  ClassRepo as UpdateClassRepo,
+  UpdateClassFields,
+} from '@athlya/reservations/update';
 
 /* ------------------------------------------------------------------ */
 /*  Row projection                                                     */
@@ -178,17 +187,26 @@ export function createDrizzleDeleteClassRepoHttp(db: AthlyaDbHttp, claims: Tenan
   };
 }
 
-export function createDrizzleUpdateClassRepoHttp(
-  db: AthlyaDbHttp,
+/**
+ * Update adapter. `findById` reads over the HTTP driver; the guarded
+ * update needs an interactive transaction (row lock, count, UPDATE,
+ * promotions), so it runs on the postgres-js write handle as the
+ * admin, under RLS (`classes_update_admin`,
+ * `reservations_read_admin_same_studio`, `reservations_update_admin`,
+ * `outbox_insert_tenant`).
+ */
+export function createDrizzleUpdateClassRepo(
+  dbHttp: AthlyaDbHttp,
+  dbWrite: AthlyaDb,
   claims: TenantClaims,
 ): UpdateClassRepo {
   return {
     async findById(studioId: string, classId: string): Promise<ClassRow | null> {
       const rows = await withConnectionRetry(() =>
         withTenantHttp(
-          db,
+          dbHttp,
           claims,
-          db
+          dbHttp
             .select()
             .from(classes)
             .where(
@@ -209,7 +227,7 @@ export function createDrizzleUpdateClassRepoHttp(
       classId: string,
       patch: UpdateClassFields,
       expectedVersion: number,
-    ): Promise<ClassRow | null> {
+    ): Promise<GuardedClassUpdate> {
       const columns: Partial<typeof classes.$inferInsert> = {
         version: expectedVersion + 1,
       };
@@ -220,27 +238,141 @@ export function createDrizzleUpdateClassRepoHttp(
       if (patch.coachId !== undefined) columns.coachId = patch.coachId;
       if (patch.description !== undefined) columns.description = patch.description;
 
-      const rows = await withConnectionRetry(() =>
-        withTenantHttp(
-          db,
-          claims,
-          db
-            .update(classes)
-            .set(columns)
+      return withTransactionRetry(() =>
+        withTenant(dbWrite, claims, async (tx): Promise<GuardedClassUpdate> => {
+          // Same lock `enforce_class_capacity()` takes before every
+          // confirmation: no booking commits between the count below
+          // and the UPDATE.
+          const [current] = await tx
+            .select({
+              version: classes.version,
+              capacity: classes.capacity,
+              startsAt: classes.startsAt,
+              dbNow: sql<Date | string>`now()`,
+            })
+            .from(classes)
             .where(
               and(
                 eq(classes.id, classId),
                 eq(classes.studioId, studioId),
-                eq(classes.version, expectedVersion),
                 isNull(classes.deletedAt),
               ),
             )
-            .returning(),
-        ),
+            .for('update')
+            .limit(1);
+          if (current?.version !== expectedVersion) {
+            return { outcome: 'version_conflict' };
+          }
+
+          // The transaction clock, the one `guard_class_schedule()` reads.
+          const nowMs = toDateOrNull(current.dbNow)?.getTime() ?? Date.now();
+          const newStart = columns.startsAt;
+          if (newStart !== undefined && newStart.getTime() !== current.startsAt.getTime()) {
+            if (current.startsAt.getTime() <= nowMs) {
+              return { outcome: 'class_already_started' };
+            }
+            if (newStart.getTime() <= nowMs) {
+              return { outcome: 'starts_at_in_past' };
+            }
+          }
+
+          let confirmed = await countOccupied(tx, classId);
+          if (patch.capacity !== undefined && patch.capacity < confirmed) {
+            return { outcome: 'capacity_below_confirmed', confirmed };
+          }
+
+          let row: ClassRow | undefined;
+          try {
+            [row] = await tx
+              .update(classes)
+              .set(columns)
+              .where(and(eq(classes.id, classId), eq(classes.version, expectedVersion)))
+              .returning();
+          } catch (err) {
+            const refused = guardRefusal(err, confirmed);
+            if (refused !== null) return refused;
+            throw err;
+          }
+          if (row === undefined) {
+            return { outcome: 'version_conflict' };
+          }
+
+          if (patch.capacity !== undefined && row.capacity > confirmed) {
+            confirmed += await promoteWaiters(tx, classId, row.capacity - confirmed);
+          }
+          return { outcome: 'updated', row, confirmed };
+        }),
       );
-      return rows[0] ?? null;
     },
   };
+}
+
+/**
+ * Occupied seats: confirmed reservations plus unexpired seat holds,
+ * the count `enforce_class_capacity()` and `guard_class_schedule()`
+ * use (migration 0050). `hold_expires_at` is not in the Drizzle table.
+ */
+async function countOccupied(tx: AthlyaTx, classId: string): Promise<number> {
+  const [row] = await tx
+    .select({ n: sql<number | string>`count(*)` })
+    .from(reservations)
+    .where(
+      and(
+        eq(reservations.classId, classId),
+        sql`(${reservations.status} = 'confirmed'
+             OR (${reservations.status} = 'pending' AND hold_expires_at > now()))`,
+      ),
+    );
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * Map a `guard_class_schedule()` refusal (migration 0050) to the
+ * outcome the service checks above would have given. Reached only if
+ * the trigger and these checks disagree, so it stays a clean 409/422.
+ */
+function guardRefusal(err: unknown, confirmed: number): GuardedClassUpdate | null {
+  if (isPostgresRaiseException(err, 'class_capacity_below_booked')) {
+    return { outcome: 'capacity_below_confirmed', confirmed };
+  }
+  if (isPostgresRaiseException(err, 'class_already_started')) {
+    return { outcome: 'class_already_started' };
+  }
+  if (isPostgresRaiseException(err, 'class_starts_in_past')) {
+    return { outcome: 'starts_at_in_past' };
+  }
+  return null;
+}
+
+/**
+ * Promote up to `seats` waiters, oldest first (`created_at`, then `id`,
+ * the order `reservation_promote_oldest_waitlist` uses). `SKIP LOCKED`
+ * leaves a waiter a concurrent cancel is already promoting to that
+ * cancel. The capacity trigger still checks every UPDATE.
+ */
+async function promoteWaiters(tx: AthlyaTx, classId: string, seats: number): Promise<number> {
+  const waiters = await tx
+    .select({ id: reservations.id, userId: reservations.userId })
+    .from(reservations)
+    .where(and(eq(reservations.classId, classId), eq(reservations.status, 'waitlist')))
+    .orderBy(asc(reservations.createdAt), asc(reservations.id))
+    .limit(seats)
+    .for('update', { skipLocked: true });
+
+  for (const waiter of waiters) {
+    await tx
+      .update(reservations)
+      .set({ status: 'confirmed' })
+      .where(eq(reservations.id, waiter.id));
+    await tx.insert(outbox).values({
+      eventId: crypto.randomUUID(),
+      eventType: 'reservation.promoted',
+      payload: { reservationId: waiter.id, classId, userId: waiter.userId },
+      occurredAt: new Date(),
+    });
+    noteOutboxWrite('reservation.promoted');
+  }
+  return waiters.length;
 }
 
 export function createDrizzleSearchClassesRepoHttp(

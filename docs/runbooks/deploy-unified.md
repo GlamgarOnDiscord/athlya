@@ -38,5 +38,6 @@ Rollback : web puis API (ordre inverse), via `wrangler rollback` / `scripts/cana
 ## Références
 
 - [`deploy-web-adr.md`](../security/deploy-web-adr.md)
+- [`deploy-vercel.md`](./deploy-vercel.md) (Vercel target for web + studio, same ordering)
 - [`deploy-production.md`](./deploy-production.md) (API), [`canary-deploy.md`](./canary-deploy.md)
 - `.github/workflows/deploy-production.yml`

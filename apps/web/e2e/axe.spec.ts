@@ -4,8 +4,8 @@
  * Runs axe over every member-facing page called out in Task 10.7:
  *  - Public: `/`, `/login`, `/register`
  *  - Authenticated: `/classes`, `/me`, `/me/export`, `/me/delete`,
- *    `/me/progression` (strength and cardio charts rendered) and `/me/coach` (answer
- *    rendered)
+ *    `/me/progression` (strength and cardio charts rendered), `/me/checkin` (QR
+ *    code rendered) and `/me/coach` (answer rendered)
  *
  * Authenticated pages are opened through `openAuthenticatedPage`, which
  * stubs the boot refresh and the member API reads, then waits for
@@ -78,6 +78,11 @@ test('axe: /me/progression (authenticated, charts rendered)', async ({ page }) =
   // Analyse the rendered charts (marks, data tables), not the loading state:
   // three strength charts, then the cardio distance, power and speed charts.
   await expect(figures).toHaveCount(6);
+  await expectNoViolations(page);
+});
+
+test('axe: /me/checkin (authenticated, QR code rendered)', async ({ page }) => {
+  await openAuthenticatedPage(page, '/me/checkin', page.getByTestId('checkin-qr'));
   await expectNoViolations(page);
 });
 

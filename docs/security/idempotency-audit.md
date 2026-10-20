@@ -7,7 +7,32 @@ Audit du middleware `packages/api/src/middleware/idempotency.ts` + store
 écarts par rapport au pattern Stripe canonique, et les recommandations
 slice future.
 
-## État actuel
+## Mise à jour (issue #713)
+
+Les routes `POST` et `DELETE /v1/reservations` utilisent désormais un
+mode strict, activé par route (`idempotencyFor` dans
+`reservations-deps.ts`), comme `POST /v1/reservations/holds` et
+`POST /v1/reservations/{id}/confirm` (issue #723). Les autres routes gardent le comportement
+décrit plus bas.
+
+- **B4.1.1 corrigé (réservations)** : le hash SHA-256 de méthode,
+  chemin, utilisateur et corps est stocké dans le JSON de la réponse,
+  sous une clé réservée retirée au rejeu. Pas de migration. Une clé
+  réutilisée avec un autre corps renvoie 422 `idempotency_key_reused`.
+  Les entrées antérieures, sans hash, sont rejouées telles quelles.
+- **B4.1.2 corrigé (réservations)** : lookup ou verrou injoignable donne
+  503 `idempotency_unavailable` avec `Retry-After`. Un échec du store
+  APRÈS la mutation renvoie quand même la vraie réponse (la mutation est
+  commitée) et journalise en erreur.
+- **Nouveau, verrou en vol** : `SET NX EX 30` dans Redis après un miss,
+  puis second lookup. Un doublon concurrent reçoit 409
+  `idempotency_in_progress` avec `Retry-After`. Libération par
+  suppression conditionnée au jeton (script Lua).
+- Les rejeux portent l'en-tête `Idempotent-Replayed: true`.
+
+Conception complète : `docs/architecture/booking-concurrency.md`.
+
+## État actuel (avant #713, toujours vrai hors réservations)
 
 ### Architecture
 

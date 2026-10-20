@@ -173,8 +173,11 @@ export function lazyReservationsDeps(resolve: () => ReservationsDeps): Reservati
   return {
     bookClass: forward('bookClass'),
     cancelReservation: forward('cancelReservation'),
+    placeHold: forward('placeHold'),
+    confirmHold: forward('confirmHold'),
     listMyReservations: forward('listMyReservations'),
     getRemainingSeats: forward('getRemainingSeats'),
+    idempotencyFor: (claims) => resolve().idempotencyFor?.(claims),
   };
 }
 
@@ -465,6 +468,8 @@ export function defaultReservationsDeps(env: AthlyaBindings, cf?: RequestCf): Re
     : {
         bookClass: () => notImplemented('reservations.bookClass'),
         cancelReservation: () => notImplemented('reservations.cancelReservation'),
+        placeHold: () => notImplemented('reservations.placeHold'),
+        confirmHold: () => notImplemented('reservations.confirmHold'),
         listMyReservations: () => notImplemented('reservations.listMyReservations'),
         getRemainingSeats: () => notImplemented('reservations.getRemainingSeats'),
       };

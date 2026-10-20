@@ -137,6 +137,11 @@ interface Doubles {
   insertReservation: Mock<BookingRepo['insertReservation']>;
   insertOutbox: Mock<BookingRepo['insertOutbox']>;
   countWaitlistAhead: Mock<BookingRepo['countWaitlistAhead']>;
+  readClassClock: Mock<BookingRepo['readClassClock']>;
+  lockClassForBooking: Mock<BookingRepo['lockClassForBooking']>;
+  findOwnHold: Mock<BookingRepo['findOwnHold']>;
+  confirmHold: Mock<BookingRepo['confirmHold']>;
+  releaseHold: Mock<BookingRepo['releaseHold']>;
   decrRemaining: Mock<BookingCounter['decrRemaining']>;
   decrRemainingOrInit: Mock<BookingCounter['decrRemainingOrInit']>;
   incrRemaining: Mock<BookingCounter['incrRemaining']>;
@@ -158,6 +163,20 @@ function buildDoubles(): Doubles {
   const insertReservation = vi.fn<BookingRepo['insertReservation']>();
   const insertOutbox = vi.fn<BookingRepo['insertOutbox']>();
   const countWaitlistAhead = vi.fn<BookingRepo['countWaitlistAhead']>();
+  // The in-transaction re-check sees the class still in the future by
+  // default; individual tests override it.
+  const readClassClock = vi
+    .fn<BookingRepo['readClassClock']>()
+    .mockResolvedValue({ startsAt: FUTURE_CLASS.startsAt, now: new Date(FROZEN_NOW) });
+  const lockClassForBooking = vi.fn<BookingRepo['lockClassForBooking']>().mockResolvedValue({
+    startsAt: FUTURE_CLASS.startsAt,
+    now: new Date(FROZEN_NOW),
+    version: FUTURE_CLASS.version,
+  });
+  // No seat hold unless a test seeds one.
+  const findOwnHold = vi.fn<BookingRepo['findOwnHold']>().mockResolvedValue(null);
+  const confirmHold = vi.fn<BookingRepo['confirmHold']>();
+  const releaseHold = vi.fn<BookingRepo['releaseHold']>().mockResolvedValue(undefined);
 
   const txSeen: BookingTx[] = [];
   const withTransaction = vi.fn<WithTransactionMonomorphic>(async (fn) => {
@@ -193,6 +212,11 @@ function buildDoubles(): Doubles {
     insertReservation,
     insertOutbox,
     countWaitlistAhead,
+    readClassClock,
+    lockClassForBooking,
+    findOwnHold,
+    confirmHold,
+    releaseHold,
   };
   const counter: BookingCounter = { decrRemaining, decrRemainingOrInit, incrRemaining };
   const publisher: BookingEventPublisher = {
@@ -208,6 +232,11 @@ function buildDoubles(): Doubles {
     insertReservation,
     insertOutbox,
     countWaitlistAhead,
+    readClassClock,
+    lockClassForBooking,
+    findOwnHold,
+    confirmHold,
+    releaseHold,
     decrRemaining,
     decrRemainingOrInit,
     incrRemaining,
@@ -410,10 +439,11 @@ describe('bookClass — UniqueViolation on confirmed insert', () => {
     // Compensating INCR once; never a second DECR.
     expect(d.incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
 
-    // Two transactions in total: one for the failed insert, one
-    // for the lookup. The lookup runs under a fresh tx handle.
-    expect(d.withTransaction).toHaveBeenCalledTimes(2);
-    expect(d.findExisting).toHaveBeenCalledExactlyOnceWith(d.txSeen[1], CLASS_ID, USER_ID);
+    // Three transactions: the failed insert, the own-hold check (no
+    // hold), then the lookup, each under a fresh tx handle.
+    expect(d.withTransaction).toHaveBeenCalledTimes(3);
+    expect(d.findOwnHold).toHaveBeenCalledExactlyOnceWith(d.txSeen[1], CLASS_ID, USER_ID);
+    expect(d.findExisting).toHaveBeenCalledExactlyOnceWith(d.txSeen[2], CLASS_ID, USER_ID);
 
     // Crucially: no outbox write — this is a replay, not a fresh
     // booking. The event.id was already published on the first
@@ -460,7 +490,7 @@ describe('bookClass — UniqueViolation on confirmed insert', () => {
     d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
     d.findExisting.mockResolvedValueOnce(null);
 
-    await expect(invoke(d.deps)).rejects.toThrow(/unique-violation.*no existing reservation/);
+    await expect(invoke(d.deps)).rejects.toThrow(/unique-violation.*no live reservation/);
 
     // Compensating INCR still happened — we must not leak seats.
     expect(d.incrRemaining).toHaveBeenCalledOnce();
@@ -509,14 +539,18 @@ describe('bookClass — UniqueViolation on waitlist insert (DECR < 0)', () => {
     d.decrRemainingOrInit.mockResolvedValueOnce(-1);
     // The waitlist INSERT throws UniqueViolationError (duplicate replay)
     d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
-    // The fallback lookup returns the pre-existing waitlist row
+    // The fallback lookup returns the pre-existing waitlist row, two
+    // waiters ahead of it.
     d.findExisting.mockResolvedValueOnce(WAITLIST_ROW);
+    d.countWaitlistAhead.mockResolvedValueOnce(2);
 
     const result = await invoke(d.deps);
 
+    // The replay reports the real state: waitlist, position 3.
     expect(result).toEqual({
       code: 'already_booked',
       reservation: WAITLIST_ROW,
+      position: 3,
     });
 
     // Compensating INCR (for DECR < 0) was done before entering the
@@ -528,10 +562,10 @@ describe('bookClass — UniqueViolation on waitlist insert (DECR < 0)', () => {
     expect(d.buildWaitlisted).not.toHaveBeenCalled();
     expect(d.buildCreated).not.toHaveBeenCalled();
 
-    // Two withTransaction calls: one for the failed waitlist insert,
-    // one for the fallback lookup.
-    expect(d.withTransaction).toHaveBeenCalledTimes(2);
-    expect(d.findExisting).toHaveBeenCalledExactlyOnceWith(d.txSeen[1], CLASS_ID, USER_ID);
+    // Three withTransaction calls: the failed waitlist insert, the
+    // own-hold check (no hold), then the fallback lookup.
+    expect(d.withTransaction).toHaveBeenCalledTimes(3);
+    expect(d.findExisting).toHaveBeenCalledExactlyOnceWith(d.txSeen[2], CLASS_ID, USER_ID);
   });
 
   it('throws when the waitlist unique-violation lookup returns null', async () => {
@@ -541,9 +575,7 @@ describe('bookClass — UniqueViolation on waitlist insert (DECR < 0)', () => {
     d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
     d.findExisting.mockResolvedValueOnce(null);
 
-    await expect(invoke(d.deps)).rejects.toThrow(
-      /unique-violation.*waitlist.*no existing reservation/,
-    );
+    await expect(invoke(d.deps)).rejects.toThrow(/unique-violation.*no live reservation/);
 
     expect(d.incrRemaining).toHaveBeenCalledOnce();
   });
@@ -702,5 +734,260 @@ describe('bookClass — type surface (smoke)', () => {
     const row: BookingReservationRow = CONFIRMED_ROW;
     const backToRow: ReservationRow = row;
     expect(backToRow).toBe(row);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Database clock and in-transaction re-check                         */
+/* ------------------------------------------------------------------ */
+
+describe('bookClass: database clock', () => {
+  it('uses the database clock from the pre-flight when no test clock is injected', async () => {
+    const d = buildDoubles();
+    const { clock: _clock, ...withoutClock } = d.deps;
+    void _clock;
+    // Worker clock says the class is hours away; the database says
+    // it started a minute ago.
+    d.findClass.mockResolvedValueOnce({
+      ...FUTURE_CLASS,
+      dbNow: new Date(FUTURE_CLASS.startsAt.getTime() + 60_000),
+    });
+
+    const result = await invoke(withoutClock);
+
+    expect(result).toEqual({ code: 'class_in_past' });
+    expect(d.decrRemainingOrInit).not.toHaveBeenCalled();
+  });
+
+  it('re-checks inside the transaction and compensates when the class started meanwhile', async () => {
+    const d = buildDoubles();
+    const { clock: _clock, ...withoutClock } = d.deps;
+    void _clock;
+    d.findClass.mockResolvedValueOnce({ ...FUTURE_CLASS, dbNow: new Date(FROZEN_NOW) });
+    d.decrRemainingOrInit.mockResolvedValueOnce(4);
+    d.readClassClock.mockResolvedValueOnce({
+      startsAt: FUTURE_CLASS.startsAt,
+      now: new Date(FUTURE_CLASS.startsAt.getTime()),
+    });
+
+    const result = await invoke(withoutClock);
+
+    expect(result).toEqual({ code: 'class_in_past' });
+    expect(d.insertReservation).not.toHaveBeenCalled();
+    expect(d.incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+  });
+
+  it('answers class_not_found when the class vanished before the transaction', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(-1);
+    d.readClassClock.mockResolvedValueOnce(null);
+
+    const result = await invoke(d.deps);
+
+    expect(result).toEqual({ code: 'class_not_found' });
+    expect(d.insertReservation).not.toHaveBeenCalled();
+  });
+});
+
+describe('bookClass: compensation failures', () => {
+  it('logs a failed compensating INCR and still returns the business outcome', async () => {
+    const d = buildDoubles();
+    const logger = { error: vi.fn() };
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(-1);
+    d.incrRemaining.mockRejectedValueOnce(new Error('redis down'));
+    d.insertReservation.mockResolvedValueOnce(WAITLIST_ROW);
+    d.countWaitlistAhead.mockResolvedValueOnce(0);
+
+    const result = await bookClass({
+      classId: CLASS_ID,
+      userId: USER_ID,
+      studioId: STUDIO_ID,
+      ...d.deps,
+      logger,
+    });
+
+    expect(result).toMatchObject({ code: 'waitlisted', position: 1 });
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      'booking: compensating INCR failed',
+      expect.objectContaining({ classId: CLASS_ID, reason: 'counter_exhausted' }),
+    );
+  });
+
+  it('rethrows the original error, not the compensation error', async () => {
+    const d = buildDoubles();
+    const logger = { error: vi.fn() };
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(3);
+    const boom = new Error('db outage');
+    d.insertReservation.mockRejectedValueOnce(boom);
+    d.incrRemaining.mockRejectedValueOnce(new Error('redis down'));
+
+    await expect(
+      bookClass({ classId: CLASS_ID, userId: USER_ID, studioId: STUDIO_ID, ...d.deps, logger }),
+    ).rejects.toBe(boom);
+    expect(logger.error).toHaveBeenCalledOnce();
+  });
+});
+
+describe('bookClass: classVersion fence (issue #723)', () => {
+  it('refuses a stale classVersion before touching the counter', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce({ ...FUTURE_CLASS, version: 4 });
+
+    const result = await bookClass({
+      classId: CLASS_ID,
+      userId: USER_ID,
+      studioId: STUDIO_ID,
+      classVersion: 3,
+      ...d.deps,
+    });
+
+    expect(result).toEqual({ code: 'class_changed' });
+    expect(d.decrRemainingOrInit).not.toHaveBeenCalled();
+    expect(d.withTransaction).not.toHaveBeenCalled();
+  });
+
+  it('checks the version under the class lock and compensates when it moved', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(5);
+    d.lockClassForBooking.mockResolvedValueOnce({
+      startsAt: FUTURE_CLASS.startsAt,
+      now: new Date(FROZEN_NOW),
+      version: FUTURE_CLASS.version + 1,
+    });
+
+    const result = await bookClass({
+      classId: CLASS_ID,
+      userId: USER_ID,
+      studioId: STUDIO_ID,
+      classVersion: FUTURE_CLASS.version,
+      ...d.deps,
+    });
+
+    expect(result).toEqual({ code: 'class_changed' });
+    expect(d.lockClassForBooking).toHaveBeenCalledExactlyOnceWith(d.txSeen[0], CLASS_ID);
+    expect(d.readClassClock).not.toHaveBeenCalled();
+    expect(d.insertReservation).not.toHaveBeenCalled();
+    expect(d.incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+  });
+
+  it('books when the version still matches, under the lock', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(5);
+    d.insertReservation.mockResolvedValueOnce(CONFIRMED_ROW);
+
+    const result = await bookClass({
+      classId: CLASS_ID,
+      userId: USER_ID,
+      studioId: STUDIO_ID,
+      classVersion: FUTURE_CLASS.version,
+      ...d.deps,
+    });
+
+    expect(result).toEqual({ code: 'ok', reservation: CONFIRMED_ROW, remaining: 5 });
+    expect(d.lockClassForBooking).toHaveBeenCalledOnce();
+    expect(d.readClassClock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the unlocked clock read when no classVersion is sent', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(5);
+    d.insertReservation.mockResolvedValueOnce(CONFIRMED_ROW);
+
+    await invoke(d.deps);
+
+    expect(d.readClassClock).toHaveBeenCalledOnce();
+    expect(d.lockClassForBooking).not.toHaveBeenCalled();
+  });
+});
+
+describe('bookClass: the member already holds a seat (issue #723)', () => {
+  it('confirms the member own active hold instead of answering already_booked', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(4);
+    d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
+    d.findOwnHold.mockResolvedValueOnce({
+      id: RESERVATION_ID,
+      expiresAt: new Date(FROZEN_NOW + 60_000),
+      now: new Date(FROZEN_NOW),
+    });
+    d.confirmHold.mockResolvedValueOnce(CONFIRMED_ROW);
+
+    const result = await invoke(d.deps);
+
+    expect(result).toEqual({ code: 'ok', reservation: CONFIRMED_ROW, remaining: 4 });
+    expect(d.confirmHold).toHaveBeenCalledExactlyOnceWith(d.txSeen[1], RESERVATION_ID);
+    // One reservation.created event, written in the confirming tx.
+    expect(d.insertOutbox).toHaveBeenCalledExactlyOnceWith(d.txSeen[1], CREATED_EVENT);
+    // The booking's own DECR is compensated: the hold already owns the seat.
+    expect(d.incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+    expect(d.findExisting).not.toHaveBeenCalled();
+  });
+
+  it('does not confirm an active hold once the class has started', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(4);
+    d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
+    d.findOwnHold.mockResolvedValueOnce({
+      id: RESERVATION_ID,
+      expiresAt: new Date(FROZEN_NOW + 60_000),
+      now: new Date(FROZEN_NOW),
+    });
+    // Open for the insert attempt, started by the time the hold is settled.
+    d.readClassClock
+      .mockResolvedValueOnce({ startsAt: FUTURE_CLASS.startsAt, now: new Date(FROZEN_NOW) })
+      .mockResolvedValueOnce({ startsAt: new Date(FROZEN_NOW), now: new Date(FROZEN_NOW) });
+
+    const result = await invoke(d.deps);
+
+    expect(result).toEqual({ code: 'class_in_past' });
+    expect(d.confirmHold).not.toHaveBeenCalled();
+    expect(d.insertOutbox).not.toHaveBeenCalled();
+  });
+
+  it('releases an expired own hold and books once more', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValue(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(4).mockResolvedValueOnce(4);
+    d.insertReservation
+      .mockRejectedValueOnce(new UniqueViolationError())
+      .mockResolvedValueOnce(CONFIRMED_ROW);
+    d.findOwnHold.mockResolvedValueOnce({
+      id: 'expired-hold',
+      expiresAt: new Date(FROZEN_NOW - 1),
+      now: new Date(FROZEN_NOW),
+    });
+
+    const result = await invoke(d.deps);
+
+    expect(result).toEqual({ code: 'ok', reservation: CONFIRMED_ROW, remaining: 4 });
+    expect(d.releaseHold).toHaveBeenCalledExactlyOnceWith(d.txSeen[1], 'expired-hold');
+    expect(d.confirmHold).not.toHaveBeenCalled();
+    expect(d.insertReservation).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries at most once after releasing an expired hold', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValue(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValue(4);
+    d.insertReservation.mockRejectedValue(new UniqueViolationError());
+    d.findOwnHold.mockResolvedValue({
+      id: 'expired-hold',
+      expiresAt: new Date(FROZEN_NOW - 1),
+      now: new Date(FROZEN_NOW),
+    });
+    d.findExisting.mockResolvedValueOnce(CONFIRMED_ROW);
+
+    const result = await invoke(d.deps);
+
+    expect(result).toEqual({ code: 'already_booked', reservation: CONFIRMED_ROW });
+    expect(d.insertReservation).toHaveBeenCalledTimes(2);
   });
 });

@@ -148,6 +148,9 @@ export function ProfileSection({
           {t('workouts.progression.link')}
         </Link>
         <CoachLink client={client} t={t} />
+        <Link href="/me/checkin" className="text-sm text-muted-foreground hover:text-foreground">
+          {t('checkin.link')}
+        </Link>
         <Link href="/me/export" className="text-sm text-muted-foreground hover:text-foreground">
           {t('profile.dataExport')}
         </Link>

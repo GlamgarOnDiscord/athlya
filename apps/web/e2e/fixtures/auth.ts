@@ -12,7 +12,8 @@
  * Strategy:
  *  1. Stub the boot refresh so the session is restored on load.
  *  2. Stub the member API reads (`/v1/members/me`, `/v1/classes`,
- *     `/v1/me/progression`, `/v1/me/progression/cardio`, `/v1/coach`) so the authenticated pages
+ *     `/v1/me/progression`, `/v1/me/progression/cardio`, `/v1/coach`,
+ *     `/v1/checkins/token`) so the authenticated pages
  *     render their populated state instead of loading or error markup.
  *  3. Wait for a locator that only exists inside the page's
  *     `<RequireAuth>` subtree and check the URL did not move, so a
@@ -21,6 +22,17 @@
  * @see Requirements 27.1, 27.2.
  */
 import { expect, type Locator, type Page, type Route } from '@playwright/test';
+
+/**
+ * `hour`:00 UTC tomorrow. The classes page shows a strip of days from
+ * today, so the class stubs must stay in the future whenever the suite runs.
+ */
+function tomorrowAt(hour: number): string {
+  const day = new Date();
+  day.setUTCDate(day.getUTCDate() + 1);
+  day.setUTCHours(hour, 0, 0, 0);
+  return day.toISOString();
+}
 
 async function fulfillJson(route: Route, body: unknown): Promise<void> {
   await route.fulfill({
@@ -66,7 +78,7 @@ export async function stubMemberApi(page: Page): Promise<void> {
           studioId: '00000000-0000-4000-8000-0000000000aa',
           coachId: null,
           title: 'Morning yoga',
-          startsAt: '2026-10-20T07:00:00.000Z',
+          startsAt: tomorrowAt(7),
           durationMin: 60,
           capacity: 12,
           version: 0,
@@ -78,7 +90,7 @@ export async function stubMemberApi(page: Page): Promise<void> {
           studioId: '00000000-0000-4000-8000-0000000000aa',
           coachId: null,
           title: 'Evening HIIT',
-          startsAt: '2026-10-20T18:00:00.000Z',
+          startsAt: tomorrowAt(18),
           durationMin: 45,
           capacity: 10,
           version: 0,
@@ -87,6 +99,12 @@ export async function stubMemberApi(page: Page): Promise<void> {
         },
       ],
     }),
+  );
+
+  // No booking yet: `/classes` offers every class and `/me` shows the
+  // empty "upcoming bookings" state with its call to action.
+  await page.route('**/v1/reservations/me*', (route) =>
+    fulfillJson(route, { items: [], nextCursor: null }),
   );
 
   await page.route('**/v1/me/progression*', (route) =>
@@ -181,6 +199,15 @@ export async function stubMemberApi(page: Page): Promise<void> {
       ],
       truncated: false,
       skippedSessions: 0,
+    }),
+  );
+
+  // Check-in QR token so `/me/checkin` renders its code. The page only
+  // encodes the opaque string, so it is deliberately not JWT-shaped.
+  await page.route('**/v1/checkins/token', (route) =>
+    fulfillJson(route, {
+      token: 'e2e-checkin-token-not-a-jwt',
+      expiresAt: new Date(Date.now() + 120_000).toISOString(),
     }),
   );
 

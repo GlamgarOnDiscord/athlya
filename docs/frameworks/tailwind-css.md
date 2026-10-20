@@ -85,13 +85,13 @@ The project correctly uses the new CSS-first approach:
 
 ```
 @athlya/shared/tokens.ts (source of truth)
-    → tokens.css (CSS custom properties)
-        → globals.css @theme (Tailwind utilities)
+    → @athlya/shared/theme.css (generated: custom properties, shadcn bridge, @theme)
+        → apps/{web,studio}/src/app/globals.css @import (Tailwind utilities)
 ```
 
 ### Dark Mode (Correct)
 
-Using `@media (prefers-color-scheme: dark)` to swap CSS variable values. Tailwind 4's `dark:` variant uses this automatically.
+next-themes writes `.dark` or `.light` on `<html>`; the shared theme swaps the CSS variables on that class and falls back to `@media (prefers-color-scheme: dark)` when no class is set. The `dark:` variant follows the same rule (`@custom-variant dark` in `theme.css`).
 
 ---
 

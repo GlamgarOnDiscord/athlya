@@ -5,7 +5,8 @@
  *
  * The reservation domain has four statuses — `confirmed`, `waitlist`,
  * `cancelled`, `no_show` — and Requirement 10 spells out a strict
- * state machine over them. The `canTransition` predicate in
+ * state machine over them. Seat holds (issue #723) add `pending`,
+ * whose only exits are `confirmed` and `cancelled`. The `canTransition` predicate in
  * `src/state-machine.ts` is the single source of truth every mutation
  * handler consults before writing to the database. This file fixes
  * its contract with property-based tests so any future change that
@@ -23,11 +24,11 @@
  *   - 10.4 — `cancelled → confirmed` is **never** legal.
  *
  * Why property-based rather than example-based?
- *   The state machine is small (16 ordered pairs) and a hand-coded
+ *   The state machine is small (25 ordered pairs) and a hand-coded
  *   truth table already lives in `src/__tests__/state-machine.test.ts`.
  *   The property test complements that suite by exercising **random
  *   transition sequences** of up to 20 steps: it draws `(from, to)`
- *   pairs uniformly from the full 16-element cartesian product and
+ *   pairs uniformly from the full 25-element cartesian product and
  *   asserts the predicate agrees with the legal set on *every* step
  *   of *every* sequence, with a fast-check seed pinned for
  *   reproducibility. Universal claims — "the predicate is monotonic
@@ -46,7 +47,7 @@
  *     {@link LEGAL_TRANSITIONS}) on purpose: a regression where
  *     somebody accidentally adds a new edge to the source array
  *     would pass a self-referential test. The oracle here tracks
- *     Requirement 10.1 directly.
+ *     Requirement 10.1 and the hold exits directly.
  */
 
 import fc from 'fast-check';
@@ -55,7 +56,8 @@ import { describe, expect, it } from 'vitest';
 import { canTransition, type ReservationStatus } from '../../src/state-machine.js';
 
 /**
- * All four reservation statuses in declaration order. Declared local
+ * All five reservation statuses (the four of Requirement 10 and the
+ * `pending` hold) in declaration order. Declared local
  * to the test so a future refactor of `src/state-machine.ts` cannot
  * accidentally shrink or reorder the set fast-check draws from — that
  * would silently reduce coverage instead of producing a red test.
@@ -65,6 +67,7 @@ const STATUSES: readonly ReservationStatus[] = [
   'waitlist',
   'cancelled',
   'no_show',
+  'pending',
 ] as const;
 
 /**
@@ -81,6 +84,8 @@ const LEGAL_SET: ReadonlySet<string> = new Set<string>([
   'confirmed->no_show',
   'waitlist->confirmed',
   'waitlist->cancelled',
+  'pending->confirmed',
+  'pending->cancelled',
 ]);
 
 /**
@@ -101,10 +106,11 @@ const statusArb = fc.constantFrom<ReservationStatus>(...STATUSES);
 
 /**
  * Arbitrary drawing an ordered `(from, to)` pair from the full
- * 16-element cartesian product `STATUSES × STATUSES`. Roughly
- * 4/16 = 25 % of pairs are no-op same-state transitions (Req 10.2),
- * 4/16 = 25 % are legal non-identity edges (Req 10.1), and the
- * remaining 8/16 = 50 % are illegal non-identity edges (Req 10.3, 10.4).
+ * 25-element cartesian product `STATUSES × STATUSES`. Roughly
+ * 5/25 = 20 % of pairs are no-op same-state transitions (Req 10.2),
+ * 6/25 = 24 % are legal non-identity edges (Req 10.1 and the two hold
+ * exits), and the remaining 14/25 = 56 % are illegal non-identity
+ * edges (Req 10.3, 10.4).
  * That split gives fast-check meaningful coverage of every branch in
  * a single run.
  */
@@ -140,7 +146,7 @@ describe('canTransition — Property 3 (state-machine monotonicity)', () => {
     fc.assert(
       fc.property(transitionArb, ([from, to]) => {
         // Only consider the legal-non-identity slice of the
-        // 16-element sample space on this property; the
+        // 25-element sample space on this property; the
         // negative path is covered by the next one.
         fc.pre(from !== to);
         fc.pre(LEGAL_SET.has(key(from, to)));

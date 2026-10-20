@@ -18,14 +18,42 @@
  *     accidental navigation, and avoids the FOUC of admin UI
  *     showing for a few hundred ms before the API rejects the page.
  *
+ * Coaches are let through on {@link COACH_ROUTES} only: their home, their
+ * read-only schedule, the members directory and the check-in kiosk, all
+ * backed by endpoints the API opens to the `coach` role
+ * (`GET /v1/classes`, `GET /v1/members`, `POST /v1/checkins`). A coach
+ * landing anywhere else under `/dashboard` is sent to their home.
+ *
  * @see Requirements 6.5 (admin-only routes), 14.1 (auth chain).
  */
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactElement, type ReactNode } from 'react';
 
 import { useAuth } from '../lib/auth/AuthContext';
+import { navigateTo } from '../lib/full-reload';
+
+/** The console landing: the coach home for a coach. Matched exactly, never as a prefix. */
+const DASHBOARD_HOME = '/dashboard';
+
+/**
+ * Dashboard routes a coach may open, home first (where a coach is sent
+ * from any other route). Every other route is admin-only.
+ */
+export const COACH_ROUTES: readonly string[] = [
+  DASHBOARD_HOME,
+  '/dashboard/planning',
+  '/dashboard/members',
+  '/dashboard/checkin',
+];
+
+/** True when `pathname` is one of {@link COACH_ROUTES} or below one (the home only exactly). */
+export function isCoachRoute(pathname: string): boolean {
+  return COACH_ROUTES.some(
+    (route) => pathname === route || (route !== DASHBOARD_HOME && pathname.startsWith(`${route}/`)),
+  );
+}
 
 export interface RequireAdminProps {
   readonly children: ReactNode;
@@ -33,7 +61,10 @@ export interface RequireAdminProps {
 
 export function RequireAdmin({ children }: RequireAdminProps): ReactElement | null {
   const { push } = useRouter();
+  const pathname = usePathname();
   const { isAuthenticated, isAdmin, user, bootResolved } = useAuth();
+  const isCoach = user?.role === 'coach';
+  const allowed = isAdmin || (isCoach && isCoachRoute(pathname));
 
   useEffect(() => {
     // Wait for the boot silent-refresh to resolve before
@@ -41,22 +72,24 @@ export function RequireAdmin({ children }: RequireAdminProps): ReactElement | nu
     // /dashboard always bounces to /login during the ~200-500 ms
     // the refresh fetch takes, even when the cookie is valid.
     if (!bootResolved) return;
+    // Leaving or entering the kiosk loads a new document so each page keeps
+    // its own camera policy (`lib/full-reload.ts`).
     if (!isAuthenticated) {
-      push('/login');
+      navigateTo('/login', push, pathname);
       return;
     }
     // `user` is null for a brief tick on the very first render
     // after `setAccessToken(...)` lands but before `setUser(...)`
     // — guard against premature redirect to `/forbidden` during
     // that tick.
-    if (user !== null && !isAdmin) {
-      push('/forbidden');
+    if (user !== null && !allowed) {
+      navigateTo(isCoach ? (COACH_ROUTES[0] ?? '/forbidden') : '/forbidden', push, pathname);
     }
-  }, [bootResolved, isAuthenticated, isAdmin, user, push]);
+  }, [bootResolved, isAuthenticated, allowed, isCoach, user, push, pathname]);
 
   if (!bootResolved) return null;
   if (!isAuthenticated) return null;
-  if (user !== null && !isAdmin) return null;
+  if (user !== null && !allowed) return null;
 
   return <>{children}</>;
 }

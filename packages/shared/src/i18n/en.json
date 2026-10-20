@@ -7,7 +7,15 @@
     "retry": "Retry",
     "confirm": "Confirm",
     "back": "Back",
-    "skipToContent": "Skip to main content"
+    "skipToContent": "Skip to main content",
+    "nav": {
+      "main": "Main navigation",
+      "collapse": "Collapse sidebar",
+      "expand": "Expand sidebar",
+      "openMenu": "Open menu",
+      "closeMenu": "Close menu",
+      "menu": "Menu"
+    }
   },
   "auth": {
     "login": {
@@ -77,6 +85,8 @@
     "displayName": "Display name",
     "avatar": "Profile picture",
     "avatarHint": "PNG, JPEG or WebP. Max size {max} MB.",
+    "avatarChoose": "Choose a photo",
+    "avatarNoFile": "No file chosen",
     "avatarTooLarge": "File too large (max {max} MB).",
     "avatarUploadError": "Upload failed. Please try again.",
     "avatarRemove": "Remove picture",
@@ -91,7 +101,19 @@
   "classes": {
     "list": {
       "title": "Upcoming classes",
-      "empty": "No classes scheduled for this period."
+      "empty": "No classes scheduled for this period.",
+      "dayEmpty": "No classes on this day.",
+      "nextDay": "Show the next day with classes"
+    },
+    "week": {
+      "label": "Choose a day",
+      "today": "Today",
+      "todayLong": "today",
+      "classCountOne": "1 class",
+      "classCount": "{count} classes",
+      "noClass": "no classes",
+      "previous": "Previous week",
+      "next": "Next week"
     },
     "card": {
       "capacity": "Capacity",
@@ -99,7 +121,27 @@
       "book": "Book",
       "booked": "Booked",
       "full": "Full",
-      "joinWaitlist": "Join waitlist"
+      "joinWaitlist": "Join waitlist",
+      "duration": "{minutes} min",
+      "taken": "{taken} of {capacity} taken",
+      "placeLeft": "1 place left",
+      "placesLeft": "{count} places left",
+      "fullWaitlist": "Full, waitlist open",
+      "onWaitlist": "On the waitlist",
+      "waitlistPosition": "Waitlist, position {position}",
+      "manage": "See my bookings"
+    },
+    "upcoming": {
+      "title": "My upcoming bookings",
+      "empty": "No upcoming bookings.",
+      "confirmed": "Confirmed",
+      "waitlist": "Waitlist",
+      "cancel": "Cancel",
+      "cancelLabel": "Cancel the booking “{title}”",
+      "confirmPrompt": "Cancel this class?",
+      "confirmCancel": "Yes, cancel",
+      "keep": "Keep",
+      "cancelClosed": "Cancellation closes 2 h before the class"
     }
   },
   "reservations": {
@@ -111,8 +153,14 @@
     "cancelWindowClosed": "Cancellation is not possible less than 2 hours before the class."
   },
   "checkin": {
-    "title": "Check-in",
+    "title": "Check in at the front desk",
+    "link": "My check-in QR code",
+    "intro": "Show this code at the front desk. It changes every 2 minutes and works once.",
+    "qrLabel": "Check-in QR code, valid for {seconds} more seconds",
     "qrExpiresIn": "QR code expires in {seconds}s",
+    "loading": "Getting your code…",
+    "offline": "You are offline. A new check-in code needs a connection.",
+    "loadError": "Could not get a check-in code.",
     "refresh": "Generate a new QR code"
   },
   "workouts": {
@@ -279,7 +327,122 @@
       "login": "Sign in",
       "classes": "Browse classes",
       "me": "My account",
-      "logout": "Sign out"
+      "logout": "Sign out",
+      "hero": {
+        "eyebrow": "Open source, multi-tenant, GDPR-first",
+        "titleLine1": "Train hard.",
+        "titleLine2": "We handle the rest.",
+        "lead": "Book classes, log your sessions and follow your progress in one place. The studio publishes its schedule; Athlya handles the spots and the waitlist.",
+        "proof": "Source code open under the AGPLv3 licence. Your data stays yours.",
+        "photoAlt": "Two runners mid-stride on a road, blurred by speed."
+      },
+      "nextClass": {
+        "label": "Next class",
+        "eta": "In 2 h 05",
+        "name": "Boxing technique",
+        "meta": "18:30 · Room 2 · Inès M.",
+        "booked": "Booked",
+        "spots": "13 / 16"
+      },
+      "how": {
+        "eyebrow": "How it works",
+        "title": "A member side, a studio side. The same app.",
+        "members": {
+          "title": "For members",
+          "step1Title": "Book",
+          "step1Body": "The studio schedule and the spots left, live. Class full: you join the waitlist and get the spot if it frees up.",
+          "step2Title": "Train",
+          "step2Body": "Your QR code at the front desk, then your sets logged during the session. Your Apple Health workouts come in from the iPhone.",
+          "step3Title": "Progress",
+          "step3Body": "Volume, estimated 1RM and cardio, computed from your real sessions, with an AI coach that answers from your data."
+        },
+        "studios": {
+          "title": "For studios",
+          "step1Title": "Publish",
+          "step1Body": "Classes, times and capacity in a week, month or list schedule. Members book online.",
+          "step2Title": "Welcome",
+          "step2Body": "Each member shows their QR code at the door. Check-in takes one scan.",
+          "step3Title": "Coach",
+          "step3Body": "Programs over several weeks that your members follow session after session."
+        }
+      },
+      "disciplines": {
+        "title": "One studio, every discipline.",
+        "combat": "Combat",
+        "strength": "Strength",
+        "cardio": "Cardio",
+        "mobility": "Mobility",
+        "combatAlt": "A boxer on guard, gloves up in front of his face, training.",
+        "strengthAlt": "Two hands gripping the handle of a kettlebell on the floor.",
+        "cardioAlt": "A runner at full speed, the background blurred behind him.",
+        "mobilityAlt": "A woman lying on a Pilates reformer, feet in the straps."
+      },
+      "product": {
+        "eyebrow": "The schedule",
+        "title": "One schedule, on both sides of the front desk.",
+        "body": "The studio publishes and adjusts its classes. Members see the spots live, book or join the waitlist, and cancel from their account.",
+        "caption": "Preview of the studio schedule and a member's bookings.",
+        "studioLabel": "Studio · Classes",
+        "viewWeek": "Week",
+        "viewMonth": "Month",
+        "viewList": "List",
+        "dayMon": "Mon",
+        "dayTue": "Tue",
+        "dayWed": "Wed",
+        "dayThu": "Thu",
+        "dayFri": "Fri",
+        "classCross": "Cross training",
+        "classBoxing": "Boxing technique",
+        "classPilates": "Pilates reformer",
+        "classMobility": "Mobility",
+        "classHiit": "HIIT 45",
+        "classYoga": "Vinyasa yoga",
+        "spotsLeft": "{count} spots",
+        "full": "Full",
+        "memberLabel": "My bookings",
+        "booked": "Booked",
+        "waitlist": "Waitlist · 2nd",
+        "checkedIn": "Checked in"
+      },
+      "features": {
+        "eyebrow": "Features",
+        "title": "What Athlya already does.",
+        "waitlistTitle": "Waitlist",
+        "waitlistBody": "A spot frees up, the first person on the list gets it.",
+        "checkinTitle": "QR code check-in",
+        "checkinBody": "One code per member, scanned at the studio front desk.",
+        "programsTitle": "Programs",
+        "programsBody": "Plans over several weeks, session by session.",
+        "coachTitle": "AI coach",
+        "coachBody": "Answers about your sessions, only with your consent.",
+        "healthTitle": "Apple Health import",
+        "healthBody": "Your iPhone workouts join your progress."
+      },
+      "trust": {
+        "eyebrow": "GDPR-first and open source",
+        "tagline": "Your sessions, your data. Nothing goes anywhere without your consent.",
+        "exportTitle": "Full export",
+        "exportBody": "All your data, with a download link by email within 48 hours.",
+        "deletionTitle": "Deletion",
+        "deletionBody": "Your account and your data deleted within 30 days, from your profile.",
+        "trackersTitle": "No trackers",
+        "trackersBody": "Only the cookies the service needs. No audience measurement without your consent.",
+        "openSourceTitle": "Open source",
+        "openSourceBody": "Code published under the AGPLv3 licence. Each studio's data is isolated.",
+        "sourceLink": "View the source code"
+      },
+      "final": {
+        "titleStart": "Your next session",
+        "titleAccent": "starts here."
+      },
+      "footer": {
+        "rights": "© {year} Athlya",
+        "legal": "Legal notice",
+        "privacy": "Privacy",
+        "cookies": "Cookies",
+        "source": "Source code",
+        "nav": "Footer links"
+      }
     },
     "notFound": {
       "title": "Page not found",
@@ -313,6 +476,10 @@
           "description": "Client-side bug diagnostics. Includes your user-agent and technical stack trace. Data hosted in the EU."
         }
       }
+    },
+    "nav": {
+      "classes": "Classes",
+      "progression": "Progress"
     }
   },
   "studio": {
@@ -322,9 +489,9 @@
       "dashboard": "Open dashboard"
     },
     "login": {
-      "title": "Admin sign-in",
-      "subtitle": "Studio owners only. Members sign in on the main app.",
-      "adminRequired": "This account does not have admin rights."
+      "title": "Studio sign-in",
+      "subtitle": "For the studio team: administrators and coaches. Members sign in on the main app.",
+      "staffRequired": "This is a member account. Sign in on the Athlya app to book your classes."
     },
     "nav": {
       "brand": "Athlya Studio",
@@ -334,22 +501,25 @@
       "billing": "Billing",
       "checkin": "Check-in",
       "audit": "Audit",
-      "programs": "Programs"
+      "programs": "Programs",
+      "dashboard": "Dashboard",
+      "settings": "Settings",
+      "home": "Home",
+      "planning": "My schedule"
     },
     "dashboard": {
       "title": "Dashboard",
-      "subtitle": "Manage classes, members, branding and billing for your studio.",
       "classes": {
         "title": "Classes",
         "body": "Create, update and schedule the sessions of your studio."
       },
       "members": {
         "title": "Members",
-        "body": "List members and their upcoming reservations."
+        "body": "Directory of your studio's members."
       },
       "branding": {
         "title": "Branding",
-        "body": "Brand color, logo and email customisation."
+        "body": "Your studio's brand color."
       },
       "billing": {
         "title": "Billing",
@@ -366,6 +536,94 @@
       "programs": {
         "title": "Programs",
         "body": "Author multi-week training programs your members follow."
+      },
+      "tiles": {
+        "todayClasses": "Classes today",
+        "weekBookings": "Bookings this week",
+        "weekFill": "Fill rate this week",
+        "members": "Members",
+        "noData": "None",
+        "membersCapped": "{count}+",
+        "openPlanning": "Open the planning",
+        "seeMembers": "See members",
+        "vsSameDay": "vs last {day}",
+        "vsPreviousWeek": "vs previous week",
+        "points": "pts",
+        "thisWeek": "this week"
+      },
+      "today": {
+        "title": "Today",
+        "empty": "No class today.",
+        "done": "Done",
+        "live": "In progress",
+        "fillLabel": "{booked} of {capacity} seats booked",
+        "columns": {
+          "time": "Time",
+          "class": "Class",
+          "booked": "Booked",
+          "status": "Status"
+        },
+        "now": "Now {time}",
+        "inTime": "In {time}",
+        "countOne": "{count} class",
+        "countOther": "{count} classes",
+        "totalOne": "{count} booked in total",
+        "totalOther": "{count} booked in total"
+      },
+      "upcoming": {
+        "title": "Next classes",
+        "empty": "No class planned in the next days.",
+        "window": "next 7 days",
+        "columns": {
+          "day": "Day",
+          "time": "Time",
+          "class": "Class",
+          "duration": "Duration",
+          "booked": "Booked",
+          "left": "Seats left",
+          "fill": "Fill"
+        }
+      },
+      "activity": {
+        "title": "Recent activity",
+        "empty": "No admin action yet.",
+        "link": "Open the audit log"
+      },
+      "sections": {
+        "title": "Manage the studio"
+      },
+      "loadError": "The overview could not load.",
+      "greeting": "Hello {name}",
+      "nextIn": "next class in {time}",
+      "noNext": "no class planned",
+      "actions": {
+        "openKiosk": "Open the kiosk"
+      },
+      "duration": {
+        "minutes": "{m} min",
+        "hours": "{h}h {mm}",
+        "days": "{d} d"
+      },
+      "bookings": {
+        "title": "Bookings per day",
+        "total": "{count} this week",
+        "empty": "No class this week yet.",
+        "dayLabel": "{day}: {count} seats booked"
+      },
+      "occupancy": {
+        "title": "Occupancy",
+        "window": "last {weeks} weeks",
+        "windowLabel": "Period",
+        "weeks": "{weeks} wk",
+        "caption": "Fill rate by weekday and time over the last {weeks} weeks",
+        "hour": "{hour}h",
+        "cell": "{day}, {hour}h: {rate} full over {classes} classes",
+        "cellEmpty": "{day}, {hour}h: no class",
+        "less": "Less",
+        "more": "More",
+        "peakLegend": "90 % and up",
+        "insight": "Busiest slot: {day} from {hour}h, {rate} full.",
+        "empty": "No past class in this period yet: the map fills in as classes are held."
       }
     },
     "forbidden": {
@@ -378,10 +636,6 @@
       "subtitle": "Schedule, edit and manage session capacity.",
       "create": "+ New class",
       "empty": "No classes in this range. Create one to get started.",
-      "range": {
-        "from": "From",
-        "to": "To"
-      },
       "row": {
         "capacity": "{remaining} / {capacity} seats",
         "edit": "Edit",
@@ -407,13 +661,44 @@
       "errors": {
         "generic": "Failed to save.",
         "versionConflict": "The class was edited meanwhile. List refreshed — please retry."
+      },
+      "planning": {
+        "viewLabel": "Calendar view",
+        "views": {
+          "day": "Day",
+          "week": "Week",
+          "month": "Month",
+          "list": "List"
+        },
+        "today": "Today",
+        "previousWeek": "Previous week",
+        "nextWeek": "Next week",
+        "previousMonth": "Previous month",
+        "nextMonth": "Next month",
+        "createAt": "New class on {date}",
+        "full": "Full",
+        "more": "+{count} more",
+        "localTime": "Times in your local time zone ({timeZone}).",
+        "previousDay": "Previous day",
+        "nextDay": "Next day",
+        "seatLeft": "{count} left",
+        "seatsLeft": "{count} left",
+        "actionsFor": "Actions for {title}"
+      },
+      "columns": {
+        "date": "Date"
+      },
+      "list": {
+        "export": "Export",
+        "summary": "{classes} classes · {seats} seats · {booked} booked",
+        "deleteNote": "Deleting a class cancels its bookings.",
+        "remaining": "Seats left"
       }
     },
     "members": {
       "title": "Members",
       "subtitle": "Directory of your studio's members.",
       "empty": "No members yet.",
-      "count": "{n} member(s) loaded",
       "joinedAt": "Joined",
       "loadMore": "Load more",
       "search": "Search members…",
@@ -421,7 +706,40 @@
         "member": "Member",
         "coach": "Coach",
         "admin": "Admin"
-      }
+      },
+      "columns": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role",
+        "actions": "Actions"
+      },
+      "countOne": "{count} member loaded",
+      "countOther": "{count} members loaded",
+      "noMatch": "No member matches this search.",
+      "tabs": {
+        "label": "Filter by role",
+        "all": "All",
+        "member": "Members",
+        "coach": "Coaches",
+        "admin": "Admins"
+      },
+      "exportCsv": "Export CSV",
+      "you": "You",
+      "selectAll": "Select all shown members",
+      "selectRow": "Select {name}",
+      "selectedOne": "{count} selected",
+      "selectedOther": "{count} selected",
+      "bulk": {
+        "copyEmails": "Copy emails",
+        "export": "Export selection",
+        "clear": "Clear selection"
+      },
+      "rowMenu": "Actions for {name}",
+      "copyEmail": "Copy email",
+      "emailCopied": "Email copied.",
+      "emailsCopied": "Emails copied.",
+      "copyFailed": "The clipboard is not available.",
+      "readOnly": "Directory of your studio's members, read only."
     },
     "branding": {
       "title": "Branding",
@@ -452,8 +770,16 @@
       "manualPlaceholder": "Paste QR token here",
       "manualSubmit": "Validate",
       "success": "Welcome, {name}!",
+      "successNoName": "Welcome! Check-in confirmed.",
       "resetIn": "Resetting in {seconds}s…",
       "noCameraFallback": "Camera unavailable. Enter the QR token manually.",
+      "camera": {
+        "starting": "Starting the camera…",
+        "denied": "Camera access was refused. Allow the camera for this site in the browser settings, then reload the page.",
+        "not_found": "No camera was found on this device.",
+        "unsupported": "This browser cannot open a camera.",
+        "error": "The camera could not start."
+      },
       "errors": {
         "invalid_signature": "Invalid QR code.",
         "token_expired": "QR code expired. Ask the member to generate a new one.",
@@ -463,7 +789,35 @@
         "malformed": "Unreadable QR code.",
         "outside_window": "Check-in window is closed for this class.",
         "no_reservation": "No reservation found for this member.",
+        "already_checked_in": "This member is already checked in for this class.",
+        "checkin_limit_reached": "Too many check-ins for this member in the last hour. Try again later.",
         "generic": "Check-in failed. Please try again."
+      },
+      "kiosk": {
+        "enter": "Kiosk mode",
+        "exit": "Exit kiosk mode"
+      },
+      "frameHint": "Center the QR code in the frame.",
+      "confirmed": "Check-in confirmed",
+      "scanNext": "Scan the next member",
+      "enterHint": "or press",
+      "enterKey": "Enter",
+      "scanner": {
+        "title": "Scanner",
+        "camera": "Rear camera",
+        "active": "Camera on"
+      },
+      "manual": {
+        "title": "Manual entry",
+        "hint": "If the camera cannot read the code"
+      },
+      "passes": {
+        "title": "This session",
+        "countOne": "{count} check-in",
+        "countOther": "{count} check-ins",
+        "empty": "No check-in since this kiosk opened.",
+        "unnamed": "Unnamed member",
+        "note": "Kept on this kiosk only and cleared on reload."
       }
     },
     "audit": {
@@ -471,11 +825,49 @@
       "subtitle": "All admin actions for your studio, newest first.",
       "empty": "No audit events yet.",
       "loadMore": "Load more",
-      "count": "{n} event(s) loaded",
       "actorLabel": "Actor",
       "actionLabel": "Action",
       "targetLabel": "Target",
-      "timestampLabel": "Date"
+      "timestampLabel": "Date",
+      "countOne": "{count} event loaded",
+      "countOther": "{count} events loaded",
+      "system": "System",
+      "filter": {
+        "noMatch": "No event of this type in the loaded events."
+      },
+      "actions": {
+        "userRegistered": "Member signed up",
+        "userDeleted": "Account deleted",
+        "userConsentsUpdated": "Consents updated",
+        "reservationCancelledByAdmin": "Booking cancelled by an admin",
+        "rlsViolation": "Access blocked by data isolation",
+        "billingWebhookProcessed": "Payment event processed",
+        "billingWebhookSignatureFailed": "Payment event rejected: invalid signature",
+        "jwtKeyRotationPrep": "Signing key rotation prepared",
+        "dlqEntryReplayed": "Failed job replayed",
+        "dlqEntryDiscarded": "Failed job discarded",
+        "tokenRefreshReuseDetected": "Session token reuse detected"
+      },
+      "targets": {
+        "user": "Member",
+        "reservation": "Booking",
+        "class": "Class",
+        "studio": "Studio",
+        "stripe_webhook": "Payment event",
+        "dlq_entry": "Failed job",
+        "jwt_key": "Signing key"
+      },
+      "export": "Export",
+      "search": "Filter by action, name or id",
+      "categories": {
+        "label": "Category",
+        "all": "All",
+        "reservations": "Bookings",
+        "billing": "Billing",
+        "accounts": "Accounts",
+        "system": "System"
+      },
+      "appendOnly": "Append-only log: no entry can be edited."
     },
     "billing": {
       "title": "Billing",
@@ -580,6 +972,65 @@
           "archived": "This program is archived and can no longer be edited.",
           "loadFailed": "Could not load the program."
         }
+      }
+    },
+    "shell": {
+      "breadcrumb": "Breadcrumb",
+      "search": "Search",
+      "newClass": "New class",
+      "help": "Help",
+      "studioBadge": "Studio",
+      "palette": {
+        "title": "Search the console",
+        "placeholder": "Search a page, a class or a member…",
+        "pages": "Pages",
+        "classes": "Classes",
+        "members": "Members",
+        "empty": "No result.",
+        "loading": "Loading classes and members…",
+        "hint": "Arrow keys to move, Enter to open, Esc to close."
+      },
+      "theme": {
+        "label": "Theme",
+        "light": "Light theme",
+        "dark": "Dark theme"
+      },
+      "shortcuts": {
+        "title": "Keyboard shortcuts",
+        "palette": "Open the search",
+        "memberSearch": "Search members (Members page)",
+        "help": "Show this help",
+        "close": "Close a window",
+        "escapeKey": "Esc"
+      }
+    },
+    "coach": {
+      "next": {
+        "title": "Next class",
+        "endsIn": "ends in {time}",
+        "at": "{day}, {start} - {end}",
+        "empty": "No upcoming class is assigned to you."
+      },
+      "today": {
+        "title": "My classes today",
+        "empty": "No class is assigned to you today."
+      },
+      "upcoming": {
+        "title": "My upcoming classes",
+        "empty": "No class is assigned to you in the next 7 days."
+      },
+      "unassigned": "An administrator assigns classes to you from the studio schedule.",
+      "loadError": "Your classes could not be loaded.",
+      "planning": {
+        "title": "My schedule",
+        "subtitle": "Your classes, read only. An administrator creates and edits classes.",
+        "scopeLabel": "Classes shown",
+        "scope": {
+          "mine": "My classes",
+          "all": "Whole studio"
+        },
+        "emptyMine": "No class is assigned to you in this period.",
+        "emptyAll": "No class at the studio in this period."
       }
     }
   },

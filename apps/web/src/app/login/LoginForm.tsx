@@ -27,9 +27,10 @@ import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { CircleNotchIcon } from '@phosphor-icons/react';
 
 import { TurnstileWidget, type TurnstileWidgetHandle } from '../../components/TurnstileWidget';
+import { postAuthDestination } from '../../lib/auth/post-auth-destination';
 import { setAccessToken } from '../../lib/auth/token-store';
 import { getTurnstileSiteKey } from '../../lib/env';
 import { useLocale } from '../../lib/i18n/LocaleContext';
@@ -115,7 +116,7 @@ export function LoginForm({ nonce }: LoginFormProps): ReactElement {
           readonly accessToken: string;
         };
         setAccessToken(payload.accessToken);
-        push('/');
+        push(postAuthDestination(window.location.search));
       } catch {
         setForm((s) => ({ ...s, error: t('auth.errors.networkError') }));
         turnstileRef.current?.reset();
@@ -179,7 +180,7 @@ export function LoginForm({ nonce }: LoginFormProps): ReactElement {
       >
         {form.pending ? (
           <>
-            <Loader2 className="mr-2 size-4 animate-spin" />
+            <CircleNotchIcon className="mr-2 size-4 animate-spin" aria-hidden="true" />
             {t('common.loading')}
           </>
         ) : (

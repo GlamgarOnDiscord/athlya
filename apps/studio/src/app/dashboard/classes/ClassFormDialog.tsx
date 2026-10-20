@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { CircleNotchIcon } from '@phosphor-icons/react';
 
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
@@ -26,7 +26,8 @@ import { newIdempotencyKey } from '../../../lib/idempotency';
 import type { ApiClient } from '../../../lib/api/client';
 
 export type ClassFormMode =
-  { readonly kind: 'create' } | { readonly kind: 'edit'; readonly cls: ClassWithRemaining };
+  | { readonly kind: 'create'; readonly startsAt?: string }
+  | { readonly kind: 'edit'; readonly cls: ClassWithRemaining };
 
 export interface ClassFormDialogProps {
   readonly mode: ClassFormMode;
@@ -70,7 +71,7 @@ function defaultState(mode: ClassFormMode): FormState {
   tomorrow.setHours(9, 0, 0, 0);
   return {
     title: '',
-    startsAt: isoToLocalInput(tomorrow.toISOString()),
+    startsAt: isoToLocalInput(mode.startsAt ?? tomorrow.toISOString()),
     durationMin: '60',
     capacity: '12',
   };
@@ -267,7 +268,9 @@ export function ClassFormDialog({
             {t('common.cancel')}
           </Button>
           <Button type="submit" form="class-form" disabled={pending}>
-            {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+            {pending ? (
+              <CircleNotchIcon className="mr-2 size-4 animate-spin" aria-hidden="true" />
+            ) : null}
             {mode.kind === 'create'
               ? t('studio.classes.dialog.createSubmit')
               : t('studio.classes.dialog.editSubmit')}

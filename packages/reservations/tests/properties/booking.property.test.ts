@@ -30,31 +30,16 @@
  * Test shape
  * ----------
  *   1. A single Postgres 17 container is spun up in `beforeAll` via
- *      `@testcontainers/postgresql`. We apply `0000_init.sql` and
- *      `0001_rls.sql` verbatim, then create a dedicated
- *      `athlya_booking_test` LOGIN role with BYPASSRLS. Why
- *      BYPASSRLS rather than the NOBYPASSRLS role the RLS property
- *      suite uses?
- *        • The outbox table declares NO `FOR INSERT` policy — any
- *          non-BYPASSRLS session fails with SQLSTATE 42501
- *          (insufficient_privilege) on `insertOutbox`, which would
- *          roll back the entire booking transaction and make every
- *          run vacuous (no reservations ever commit). The RLS
- *          regression suite (`tests/rls/outbox.sql`) documents this
- *          on purpose: the drain worker runs under BYPASSRLS in
- *          production, and so does the booking write path.
- *        • The capacity invariant is enforced by the
- *          `UNIQUE(class_id, user_id)` index and by the Postgres
- *          serialisation of concurrent INSERTs — both of which are
- *          orthogonal to RLS. Bypassing RLS here shaves the policy-
- *          evaluation overhead from every INSERT without weakening
- *          the property.
- *        • `withTenant` still runs on every transaction so the three
- *          `app.*` session variables are set to the caller's
- *          identity. That mirrors production exactly: the write path
- *          uses a BYPASSRLS role AND sets session vars, so any
- *          future tightening that routes outbox writes through a
- *          separate connection does not require this test to change.
+ *      `@testcontainers/postgresql`. EVERY forward migration in
+ *      `packages/db/migrations` is applied in order (the capacity
+ *      trigger of 0008, the partial unique index of 0028, the
+ *      SECURITY DEFINER functions of 0040, the outbox policies of
+ *      0031), then the bookings run as the production runtime role
+ *      `athlya_app`, which is NOBYPASSRLS. RLS, the column grants and
+ *      the outbox INSERT policy are therefore exercised exactly as in
+ *      production: a policy regression makes the property fail
+ *      instead of being bypassed. `withTenant` sets the three `app.*`
+ *      session variables on every transaction, as the API does.
  *   2. Each fast-check sample truncates all tenant-scoped tables,
  *      seeds one studio, one class (capacity drawn from [1, 20]) and
  *      N users (N drawn from [1, 60] — the task description allows
@@ -114,7 +99,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -122,13 +107,13 @@ import {
   createDbFromClient,
   withTenant,
   classes,
+  outbox,
   reservations,
   type AthlyaDb,
   type AthlyaTx,
   type TenantClaims,
 } from '@athlya/db';
-import { insertOutbox as dbInsertOutbox } from '@athlya/db/outbox';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import fc from 'fast-check';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -184,14 +169,14 @@ let container: { stop: () => Promise<void> } | null = null;
 /** Superuser connection used for migrations, seeds, truncates, final SELECT. */
 let rootClient: Sql | null = null;
 
-/** Connection bound to the BYPASSRLS `athlya_booking_test` role. */
+/** Connection bound to the NOBYPASSRLS `athlya_app` runtime role. */
 let tenantClient: Sql | null = null;
 
 /** Drizzle handle wrapping `tenantClient`. */
 let tenantDb: AthlyaDb | null = null;
 
 const ROOT_ROLE = 'postgres';
-const BOOKING_ROLE = 'athlya_booking_test';
+const BOOKING_ROLE = 'athlya_app';
 const BOOKING_PASSWORD = 'booking_test';
 
 // ---------------------------------------------------------------------
@@ -237,44 +222,35 @@ async function applyMigration(client: Sql, sqlText: string, connStr?: string): P
  * the suite works whether vitest runs from the package or the monorepo
  * root.
  */
-function readMigration(name: string): string {
+function migrationsDir(): string {
   const here = fileURLToPath(new URL('.', import.meta.url));
   // From packages/reservations/tests/properties/ go up three levels
   // to `packages/` and reach `packages/db/migrations/`.
-  const file = resolve(here, '..', '..', '..', 'db', 'migrations', name);
-  return readFileSync(file, 'utf8');
+  return resolve(here, '..', '..', '..', 'db', 'migrations');
+}
+
+function readMigration(name: string): string {
+  return readFileSync(resolve(migrationsDir(), name), 'utf8');
 }
 
 // ---------------------------------------------------------------------
-// BYPASSRLS booking-test role bootstrap.
+// Runtime role login.
 //
-// The role attributes mirror what the production service role does on
-// Neon for the reservations write path:
-//   - LOGIN:       needed to open a postgres-js connection directly.
-//   - BYPASSRLS:   required so `insertOutbox` (no INSERT policy) does
-//                  not fail with SQLSTATE 42501 and roll back the whole
-//                  booking transaction. This is the only reason we
-//                  diverge from the NOBYPASSRLS role used by the RLS
-//                  property suite (task 2.7); the capacity invariant
-//                  itself is enforced by the UNIQUE index regardless.
-//   - full DML:    GRANT on all tables in schema public so every
-//                  `INSERT`, `UPDATE`, `DELETE` through the tenant
-//                  client succeeds without role-level rejections.
+// The migrations create `athlya_app` without LOGIN (production logs in
+// through a connection role that is a member of it). The test only
+// grants it LOGIN and a password so postgres-js can connect as it
+// directly; its NOBYPASSRLS attribute and every grant stay as the
+// migrations left them, and the bootstrap refuses to run otherwise.
 // ---------------------------------------------------------------------
 
 async function bootstrapBookingRole(client: Sql): Promise<void> {
-  await client.unsafe(`
-        DO $$
-        BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${BOOKING_ROLE}') THEN
-                CREATE ROLE ${BOOKING_ROLE} LOGIN PASSWORD '${BOOKING_PASSWORD}' BYPASSRLS;
-            END IF;
-        END$$;
-        GRANT USAGE ON SCHEMA public TO ${BOOKING_ROLE};
-        GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${BOOKING_ROLE};
-        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${BOOKING_ROLE};
-        GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO ${BOOKING_ROLE};
-    `);
+  await client.unsafe(`ALTER ROLE ${BOOKING_ROLE} WITH LOGIN PASSWORD '${BOOKING_PASSWORD}'`);
+  const [role] = await client<{ rolbypassrls: boolean }[]>`
+        SELECT rolbypassrls FROM pg_roles WHERE rolname = ${BOOKING_ROLE}
+    `;
+  if (role?.rolbypassrls !== false) {
+    throw new Error(`${BOOKING_ROLE} must be NOBYPASSRLS for this property to mean anything`);
+  }
 }
 
 /**
@@ -491,16 +467,20 @@ function buildBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
 
   return {
     async findClass(classId: string): Promise<BookingClassRow | null> {
-      const rows = await db
-        .select({
-          id: classes.id,
-          studioId: classes.studioId,
-          capacity: classes.capacity,
-          startsAt: classes.startsAt,
-          version: classes.version,
-        })
-        .from(classes)
-        .where(eq(classes.id, classId));
+      // Under RLS the class is only visible with the tenant session
+      // variables set, as in the production adapter.
+      const rows = await withTenant(db, claims, (tx) =>
+        tx
+          .select({
+            id: classes.id,
+            studioId: classes.studioId,
+            capacity: classes.capacity,
+            startsAt: classes.startsAt,
+            version: classes.version,
+          })
+          .from(classes)
+          .where(eq(classes.id, classId)),
+      );
       const row = rows[0];
       if (row === undefined) return null;
       return {
@@ -519,6 +499,31 @@ function buildBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
         return fn(handle);
       }),
 
+    async readClassClock(tx: BookingTx, classId: string) {
+      const rows = await resolveCtx(tx)
+        .select({ startsAt: classes.startsAt })
+        .from(classes)
+        .where(eq(classes.id, classId));
+      const row = rows[0];
+      return row === undefined ? null : { startsAt: row.startsAt, now: new Date() };
+    },
+
+    async lockClassForBooking(tx: BookingTx, classId: string) {
+      const rows = await resolveCtx(tx)
+        .select({ startsAt: classes.startsAt, version: classes.version })
+        .from(classes)
+        .where(eq(classes.id, classId));
+      const row = rows[0];
+      return row === undefined
+        ? null
+        : { startsAt: row.startsAt, version: row.version, now: new Date() };
+    },
+
+    // This suite never places a seat hold.
+    findOwnHold: async () => null,
+    confirmHold: () => Promise.reject(new Error('no seat hold in this suite')),
+    releaseHold: () => Promise.reject(new Error('no seat hold in this suite')),
+
     async findExistingConfirmedOrWaitlistReservation(
       tx: BookingTx,
       classId: string,
@@ -528,7 +533,13 @@ function buildBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
       const rows = await ctx
         .select()
         .from(reservations)
-        .where(and(eq(reservations.classId, classId), eq(reservations.userId, userId)));
+        .where(
+          and(
+            eq(reservations.classId, classId),
+            eq(reservations.userId, userId),
+            inArray(reservations.status, ['confirmed', 'waitlist']),
+          ),
+        );
       const row = rows[0];
       if (row === undefined) return null;
       // `row` from drizzle is already in camelCase (`$inferSelect`);
@@ -589,10 +600,16 @@ function buildBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
     },
 
     async insertOutbox(tx: BookingTx, event: BookingOutboxEvent): Promise<void> {
-      // Delegate to the canonical helper so the envelope shape,
-      // `ON CONFLICT (event_id) DO NOTHING` clause and `::jsonb`
-      // cast all match production.
-      await dbInsertOutbox(resolveCtx(tx), event);
+      // Same statement as the production booking adapter
+      // (`insertOutboxRow` in `reservations-write-drizzle.ts`): a plain
+      // INSERT, stamped with the tenant studio by the column default and
+      // checked by the `outbox_insert_tenant` policy (migration 0031).
+      await resolveCtx(tx).insert(outbox).values({
+        eventId: event.eventId,
+        eventType: event.eventType,
+        payload: event.payload,
+        occurredAt: event.occurredAt,
+      });
     },
 
     async countWaitlistAhead(
@@ -600,17 +617,14 @@ function buildBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
       classId: string,
       reservation: { readonly id: string; readonly createdAt: Date },
     ): Promise<number> {
+      // Other members' waitlist rows are hidden by RLS; the SECURITY
+      // DEFINER function counts them, as in the production adapter.
       const ctx = resolveCtx(tx);
-      const result = await ctx.execute<{ count: string }>(sql`
-                SELECT COUNT(*)::text AS count
-                  FROM "reservations"
-                 WHERE class_id = ${classId}
-                   AND status = 'waitlist'
-                   AND (created_at, id) < (${reservation.createdAt.toISOString()}::timestamptz, ${reservation.id}::uuid)
-            `);
-      const rows = result as unknown as readonly { count: string }[];
-      const raw = rows[0]?.count ?? '0';
-      return Number.parseInt(raw, 10);
+      const result = await ctx.execute<{ ahead: number | string | null }>(
+        sql`SELECT reservation_waitlist_ahead(${classId}::uuid, ${reservation.id}::uuid) AS ahead`,
+      );
+      const rows = result as unknown as readonly { ahead: number | string | null }[];
+      return Number(rows[0]?.ahead ?? 0);
     },
   };
 }
@@ -733,34 +747,9 @@ beforeAll(async () => {
   const rootConnString = started.getConnectionUri();
   rootClient = postgres(rootConnString, { max: 2, prepare: false });
 
-  const migrations = [
-    '0000_init.sql',
-    '0001_rls.sql',
-    '0002_export_jobs.sql',
-    '0003_audit_anonymization.sql',
-    '0004_rls_hardening.sql',
-    '0005_password_reset_audit_anonymize.sql',
-    '0006_anonymize_audit_scalar_guard.sql',
-    '0007_classes_fts.sql',
-    '0008_capacity_guard.sql',
-    '0009_audit_cron_grants.sql',
-    '0010_stripe_webhook_events.sql',
-    '0011_audit_log_app_insert.sql',
-    '0012_revoke_cron_audit_grant.sql',
-    '0013_reservations_waitlist_idx.sql',
-    '0014_outbox_studio_id.sql',
-    '0015_audit_log_studio_id.sql',
-    '0016_uuid_v7.sql',
-    '0017_audit_log_partition.sql',
-    '0018_reservations_user_id_idx.sql',
-    '0019_cron_role_nobypassrls.sql',
-    '0020_outbox_backfill_studio_id.sql',
-    '0021_classes_fts_composite_gin.sql',
-    '0022_reservation_rls_studio_isolation.sql',
-    '0023_restrict_null_studio_admin_policy.sql',
-    '0024_classes_scalar_constraints.sql',
-    '0025_reservations_confirmed_idx.sql',
-  ];
+  const migrations = readdirSync(migrationsDir())
+    .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+    .sort();
   for (const name of migrations) {
     await applyMigration(rootClient, readMigration(name), rootConnString);
   }

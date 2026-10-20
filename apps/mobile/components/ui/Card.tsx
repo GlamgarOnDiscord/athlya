@@ -13,7 +13,7 @@ export interface CardProps {
  */
 export function Card({ children }: CardProps) {
   return (
-    <View className="gap-sm rounded-lg border border-border bg-background p-md dark:border-dark-border dark:bg-dark-background">
+    <View className="gap-sm rounded-lg border border-border bg-card p-md dark:border-dark-border dark:bg-dark-card">
       {children}
     </View>
   );

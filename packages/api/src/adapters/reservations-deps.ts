@@ -12,6 +12,8 @@
  *   - `listMyReservations`   — `GET /v1/reservations/me` (Req 7.4).
  *   - `bookClass`            — `POST /v1/reservations` (Algorithm 1).
  *   - `cancelReservation`    — `DELETE /v1/reservations/:id` (Algorithm 2).
+ *   - `placeHold` / `confirmHold`: `POST /v1/reservations/holds` and
+ *     `POST /v1/reservations/:id/confirm` (seat holds, issue #723).
  *
  * Cloudflare Workers caching strategy (Vague 18 — slice B1)
  * ---------------------------------------------------------
@@ -52,6 +54,10 @@ import {
   searchClasses as svcSearchClasses,
 } from '@athlya/reservations';
 import { cancelReservation as svcCancelReservation } from '@athlya/reservations/cancel';
+import {
+  confirmHold as svcConfirmHold,
+  placeHold as svcPlaceHold,
+} from '@athlya/reservations/hold';
 import { updateClass as svcUpdateClass } from '@athlya/reservations/update';
 
 import {
@@ -59,7 +65,7 @@ import {
   createDrizzleDeleteClassRepoHttp,
   createDrizzleListClassesRepoHttp,
   createDrizzleSearchClassesRepoHttp,
-  createDrizzleUpdateClassRepoHttp,
+  createDrizzleUpdateClassRepo,
 } from './classes-repo-drizzle.js';
 import {
   getOrCreateDbHttp,
@@ -69,12 +75,14 @@ import {
   primeDbHttpForTests,
   resetAllDepsCachesForTests,
 } from './deps-cache.js';
+import { createRedisInFlightLock } from './idempotency-in-flight.js';
 import { listMyReservations as queryListMyReservations } from './reservations-list-drizzle.js';
 import {
   createBookingEventPublisher,
   createDrizzleBookingRepo,
   createDrizzleCancelRepo,
 } from './reservations-write-drizzle.js';
+import { createTenantIdempotencyDb } from './tenant-idempotency.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
 import type { ClassesDeps, DeleteClassOutcome, UpdateClassOutcome } from '../routes/classes.js';
@@ -211,7 +219,11 @@ export function buildClassesDeps(
     ): Promise<UpdateClassOutcome> {
       const db = getOrCreateDbHttp(env.DB_URL);
       const redis = getOrCreateRedisForEnv(env);
-      const classRepo = createDrizzleUpdateClassRepoHttp(db, toTenantClaims(claims));
+      const classRepo = createDrizzleUpdateClassRepo(
+        db,
+        getOrCreateWriteDb(env),
+        toTenantClaims(claims),
+      );
       const counter = createRedisRemainingCounter(redis);
 
       try {
@@ -227,6 +239,9 @@ export function buildClassesDeps(
         const code = extractUpdateErrorCode(err);
         if (code === 'not_found') return { kind: 'not_found' };
         if (code === 'conflict') return { kind: 'conflict' };
+        if (code === 'capacity_below_confirmed') return { kind: 'capacity_below_confirmed' };
+        if (code === 'class_already_started') return { kind: 'class_already_started' };
+        if (code === 'starts_at_in_past') return { kind: 'starts_at_in_past' };
         throw err;
       }
     },
@@ -293,6 +308,7 @@ export function buildReservationsDeps(
         classId: input.classId,
         userId: claims.userId,
         studioId: claims.studioId,
+        ...(input.classVersion !== undefined ? { classVersion: input.classVersion } : {}),
         repo,
         // Adapt `RemainingCounter` (`decr`/`incr`) → the
         // narrower `BookingCounter` shape the service
@@ -324,14 +340,76 @@ export function buildReservationsDeps(
         case 'already_booked':
           return {
             kind: 'conflict',
+            status: result.reservation.status === 'waitlist' ? 'waitlist' : 'confirmed',
             reservation: result.reservation,
+            ...(result.position !== undefined ? { position: result.position } : {}),
           };
         case 'class_in_past':
           return { kind: 'class_in_past' };
+        case 'class_changed':
+          return { kind: 'class_changed' };
         case 'class_not_found':
           return { kind: 'not_found' };
         case 'counter_unavailable':
           return { kind: 'counter_unavailable' };
+      }
+    },
+
+    async placeHold(claims, input) {
+      const counter = createRedisRemainingCounter(getOrCreateRedisForEnv(env));
+      const result = await svcPlaceHold({
+        classId: input.classId,
+        userId: claims.userId,
+        studioId: claims.studioId,
+        ...(input.classVersion !== undefined ? { classVersion: input.classVersion } : {}),
+        repo: createDrizzleBookingRepo(getOrCreateWriteDb(env), toTenantClaims(claims)),
+        counter: {
+          decrRemaining: (classId: string) => counter.decr(classId),
+          decrRemainingOrInit: (classId: string, capacity: number) =>
+            counter.decrOrInit(classId, capacity),
+          incrRemaining: (classId: string) => counter.incr(classId),
+        },
+      });
+
+      switch (result.code) {
+        case 'held':
+        case 'already_held':
+          return { kind: result.code, hold: result.hold };
+        case 'already_booked':
+          return {
+            kind: 'conflict',
+            status: result.reservation.status === 'waitlist' ? 'waitlist' : 'confirmed',
+            reservation: result.reservation,
+            ...(result.position !== undefined ? { position: result.position } : {}),
+          };
+        case 'class_full':
+        case 'class_in_past':
+        case 'class_changed':
+        case 'counter_unavailable':
+          return { kind: result.code };
+        case 'class_not_found':
+          return { kind: 'not_found' };
+      }
+    },
+
+    async confirmHold(claims, params) {
+      const result = await svcConfirmHold({
+        reservationId: params.reservationId,
+        userId: claims.userId,
+        studioId: claims.studioId,
+        repo: createDrizzleBookingRepo(getOrCreateWriteDb(env), toTenantClaims(claims)),
+        publisher: createBookingEventPublisher(),
+      });
+
+      switch (result.code) {
+        case 'confirmed':
+        case 'already_confirmed':
+          return { kind: result.code, reservation: result.reservation };
+        case 'hold_expired':
+        case 'not_a_hold':
+        case 'class_in_past':
+        case 'not_found':
+          return { kind: result.code };
       }
     },
 
@@ -363,6 +441,8 @@ export function buildReservationsDeps(
                 kind: 'cancelled',
                 reservation: result.cancelled,
               };
+        case 'already_cancelled':
+          return { kind: 'already_cancelled', reservation: result.cancelled };
         case 'not_found':
           return { kind: 'not_found' };
         case 'invalid_transition':
@@ -376,6 +456,17 @@ export function buildReservationsDeps(
       const redis = getOrCreateRedisForEnv(env);
       const counter = createRedisRemainingCounter(redis);
       return counter.getRemaining(classId);
+    },
+
+    // Strict mode: a duplicate booking or cancel costs a seat, so the
+    // routes refuse to run unprotected (503) rather than degrade.
+    idempotencyFor(claims) {
+      return {
+        db: createTenantIdempotencyDb(getOrCreateDbHttp(env.DB_URL), toTenantClaims(claims)),
+        inFlight: createRedisInFlightLock(getOrCreateRedisForEnv(env)),
+        bindRequest: true,
+        failClosed: true,
+      };
     },
   };
 }

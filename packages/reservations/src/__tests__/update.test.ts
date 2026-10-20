@@ -152,7 +152,11 @@ describe('updateClass — happy path', () => {
       title: 'HIIT morning (renamed)',
       version: BASE_ROW.version + 1,
     };
-    updateClassOptimistic.mockResolvedValueOnce(updatedRow);
+    updateClassOptimistic.mockResolvedValueOnce({
+      outcome: 'updated',
+      row: updatedRow,
+      confirmed: 0,
+    });
 
     const result = await updateClass(
       STUDIO_ID,
@@ -188,8 +192,9 @@ describe('updateClass — happy path', () => {
 
     findById.mockResolvedValueOnce(BASE_ROW);
     updateClassOptimistic.mockResolvedValueOnce({
-      ...BASE_ROW,
-      version: BASE_ROW.version + 1,
+      outcome: 'updated',
+      row: { ...BASE_ROW, version: BASE_ROW.version + 1 },
+      confirmed: 0,
     });
 
     await updateClass(
@@ -217,7 +222,7 @@ describe('updateClass — optimistic-lock conflict', () => {
     findById.mockResolvedValueOnce(BASE_ROW);
     // Simulate the DB returning 0 affected rows because the
     // caller's `expectedVersion` was stale.
-    updateClassOptimistic.mockResolvedValueOnce(null);
+    updateClassOptimistic.mockResolvedValueOnce({ outcome: 'version_conflict' });
 
     const err = await updateClass(
       STUDIO_ID,
@@ -248,27 +253,89 @@ describe('updateClass — optimistic-lock conflict', () => {
 /* ------------------------------------------------------------------ */
 
 describe('updateClass — capacity change', () => {
-  it('resets the Redis counter to the new capacity after a successful UPDATE', async () => {
+  it('resets the Redis counter to capacity minus confirmed after a successful UPDATE', async () => {
     const { deps, findById, updateClassOptimistic, reset } = buildDeps();
 
     findById.mockResolvedValueOnce(BASE_ROW);
     const NEW_CAPACITY = 30;
     updateClassOptimistic.mockResolvedValueOnce({
-      ...BASE_ROW,
-      capacity: NEW_CAPACITY,
-      version: BASE_ROW.version + 1,
+      outcome: 'updated',
+      row: { ...BASE_ROW, capacity: NEW_CAPACITY, version: BASE_ROW.version + 1 },
+      confirmed: 12,
     });
 
     await updateClass(STUDIO_ID, CLASS_ID, { version: 3, capacity: NEW_CAPACITY }, 'admin', deps);
 
-    expect(reset).toHaveBeenCalledExactlyOnceWith(CLASS_ID, NEW_CAPACITY);
+    expect(reset).toHaveBeenCalledExactlyOnceWith(CLASS_ID, NEW_CAPACITY - 12);
   });
+
+  it('never resets the counter below zero', async () => {
+    const { deps, findById, updateClassOptimistic, reset } = buildDeps();
+
+    findById.mockResolvedValueOnce(BASE_ROW);
+    updateClassOptimistic.mockResolvedValueOnce({
+      outcome: 'updated',
+      row: { ...BASE_ROW, capacity: 5, version: BASE_ROW.version + 1 },
+      confirmed: 7,
+    });
+
+    await updateClass(STUDIO_ID, CLASS_ID, { version: 3, capacity: 5 }, 'admin', deps);
+
+    expect(reset).toHaveBeenCalledExactlyOnceWith(CLASS_ID, 0);
+  });
+
+  it('rejects a capacity below the confirmed count with capacity_below_confirmed', async () => {
+    const { deps, findById, updateClassOptimistic, reset } = buildDeps();
+
+    findById.mockResolvedValueOnce(BASE_ROW);
+    updateClassOptimistic.mockResolvedValueOnce({
+      outcome: 'capacity_below_confirmed',
+      confirmed: 8,
+    });
+
+    const err = await updateClass(
+      STUDIO_ID,
+      CLASS_ID,
+      { version: 3, capacity: 4 },
+      'admin',
+      deps,
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(UpdateClassError);
+    expect((err as UpdateClassError).code).toBe('capacity_below_confirmed');
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['class_already_started', 'class_already_started'],
+    ['starts_at_in_past', 'starts_at_in_past'],
+  ] as const)(
+    'maps the %s outcome to a typed error without touching the counter',
+    async (outcome, code) => {
+      const { deps, findById, updateClassOptimistic, reset } = buildDeps();
+
+      findById.mockResolvedValueOnce(BASE_ROW);
+      updateClassOptimistic.mockResolvedValueOnce({ outcome });
+
+      const err = await updateClass(
+        STUDIO_ID,
+        CLASS_ID,
+        { version: 3, startsAt: '2031-01-01T09:00:00.000Z' },
+        'admin',
+        deps,
+      ).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(UpdateClassError);
+      expect((err as UpdateClassError).code).toBe(code);
+      expect(reset).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not reset the counter when the DB UPDATE reports a conflict', async () => {
     const { deps, findById, updateClassOptimistic, reset } = buildDeps();
 
     findById.mockResolvedValueOnce(BASE_ROW);
-    updateClassOptimistic.mockResolvedValueOnce(null);
+    updateClassOptimistic.mockResolvedValueOnce({ outcome: 'version_conflict' });
 
     await updateClass(STUDIO_ID, CLASS_ID, { version: 2, capacity: 40 }, 'admin', deps).catch(
       () => {

@@ -21,6 +21,10 @@ import {
   BookingRequestSchema,
   BookingResponseSchema,
   CancelReservationParamsSchema,
+  CancelReservationResponseSchema,
+  ConfirmHoldParamsSchema,
+  HoldRequestSchema,
+  HoldResponseSchema,
   CardioProgressionQuerySchema,
   CardioProgressionResponseSchema,
   CheckInRequestSchema,
@@ -557,11 +561,14 @@ const updateClassRoute = createRoute({
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     409: {
-      description: 'Optimistic lock conflict',
+      description:
+        '`version_conflict` (stale `version`), `capacity_below_confirmed` (capacity under the ' +
+        'confirmed reservations and held seats) or `class_already_started` (the start time of a ' +
+        'class that started cannot change)',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     422: {
-      description: 'Validation error',
+      description: 'Validation error, or `starts_at_in_past` for a start time not in the future',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
   },
@@ -619,11 +626,20 @@ const bookRoute = createRoute({
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     409: {
-      description: 'Already booked',
+      description:
+        'Already booked (body carries the live `status` and, for a waitlist row, its `position`), ' +
+        '`class_changed` when the `classVersion` sent is stale, ' +
+        'or `idempotency_in_progress` while a request with the same Idempotency-Key runs (`Retry-After`)',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     422: {
-      description: 'Validation error',
+      description:
+        'Validation error, or `idempotency_key_reused` for a key bound to another request',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    503: {
+      description:
+        '`counter_unavailable` or `idempotency_unavailable`: nothing was written, retry after `Retry-After`',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
   },
@@ -639,13 +655,130 @@ const cancelRoute = createRoute({
     params: CancelReservationParamsSchema,
   },
   responses: {
-    204: { description: 'Reservation cancelled' },
+    200: {
+      description:
+        'Reservation cancelled, or seat hold released. A retried cancel of an already ' +
+        'cancelled reservation also answers 200, with `alreadyCancelled: true`',
+      content: { 'application/json': { schema: CancelReservationResponseSchema } },
+    },
     401: {
       description: 'Not authenticated',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     404: {
       description: 'Reservation not found',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    409: {
+      description:
+        '`idempotency_in_progress` while a request with the same Idempotency-Key runs (`Retry-After`)',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    422: {
+      description:
+        '`cancellation_window_closed`, `invalid_transition`, or `idempotency_key_reused` for a ' +
+        'key bound to another request',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    503: {
+      description: '`idempotency_unavailable`: nothing was written, retry after `Retry-After`',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+  },
+});
+
+const holdRoute = createRoute({
+  method: 'post',
+  path: '/v1/reservations/holds',
+  tags: ['reservations'],
+  summary: 'Hold a seat for a bounded time before booking it',
+  description:
+    'Keeps one seat of the class for the member until `expiresAt` (10 minutes). Confirm it with ' +
+    '`POST /v1/reservations/{reservationId}/confirm`, release it with ' +
+    '`DELETE /v1/reservations/{reservationId}`; an unconfirmed hold expires on its own.',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: HoldRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'The member already holds an active hold on this class: that hold',
+      content: { 'application/json': { schema: HoldResponseSchema } },
+    },
+    201: {
+      description: 'Seat held',
+      content: { 'application/json': { schema: HoldResponseSchema } },
+    },
+    401: {
+      description: 'Not authenticated',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    404: {
+      description: 'Class not found',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    409: {
+      description:
+        '`class_full` (no seat to hold; book to join the waitlist), `class_changed` (stale ' +
+        '`classVersion`), already booked (body carries the live `status`), or ' +
+        '`idempotency_in_progress`',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    422: {
+      description: 'Validation error, `class_in_past`, or `idempotency_key_reused`',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    503: {
+      description:
+        '`counter_unavailable` or `idempotency_unavailable`: nothing was held, retry after `Retry-After`',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+  },
+});
+
+const confirmHoldRoute = createRoute({
+  method: 'post',
+  path: '/v1/reservations/{reservationId}/confirm',
+  tags: ['reservations'],
+  summary: 'Confirm a seat hold into a booking',
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: ConfirmHoldParamsSchema,
+  },
+  responses: {
+    200: {
+      description: 'Already confirmed (a retry): the reservation, unchanged',
+      content: { 'application/json': { schema: BookingResponseSchema } },
+    },
+    201: {
+      description: 'Hold confirmed',
+      content: { 'application/json': { schema: BookingResponseSchema } },
+    },
+    401: {
+      description: 'Not authenticated',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    404: {
+      description: 'Reservation not found',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    409: {
+      description:
+        '`hold_expired` (expired or released: hold or book again), `not_a_hold`, or ' +
+        '`idempotency_in_progress`',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    422: {
+      description:
+        'Validation error, `class_in_past` (the class started while the seat was held), or ' +
+        '`idempotency_key_reused`',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    503: {
+      description: '`idempotency_unavailable`: nothing was written, retry after `Retry-After`',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
   },
@@ -1387,6 +1520,8 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   // reservations
   app.openapi(bookRoute, stub);
   app.openapi(cancelRoute, stub);
+  app.openapi(holdRoute, stub);
+  app.openapi(confirmHoldRoute, stub);
   app.openapi(myReservationsRoute, stub);
 
   // studios

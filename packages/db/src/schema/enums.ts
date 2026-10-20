@@ -27,13 +27,17 @@ export const userRoleEnum = pgEnum('user_role', ['member', 'coach', 'admin']);
  * order and PostgreSQL check constraints cannot express the predecessor
  * relation efficiently.
  *
- * Matches `ReservationStatusSchema` in `@athlya/shared/schemas/primitives`.
+ * `pending` is a seat hold (migration 0050, issue #723): it never leaves
+ * the API as a reservation row, so the wire `ReservationStatusSchema` in
+ * `@athlya/shared/schemas/primitives` holds every label but this one
+ * (the strict schema is already shipped in mobile clients).
  */
 export const reservationStatusEnum = pgEnum('reservation_status', [
   'confirmed',
   'waitlist',
   'cancelled',
   'no_show',
+  'pending',
 ]);
 
 /**
@@ -96,10 +100,14 @@ type _RoleAligned = User['role'] extends 'member' | 'coach' | 'admin'
     ? true
     : false
   : false;
-type _StatusAligned = Reservation['status'] extends
-  'confirmed' | 'waitlist' | 'cancelled' | 'no_show'
-  ? 'confirmed' | 'waitlist' | 'cancelled' | 'no_show' extends Reservation['status']
-    ? true
+/** Database labels that are never sent to a client as a reservation status. */
+type InternalStatus = 'pending';
+type DbStatus = 'confirmed' | 'waitlist' | 'cancelled' | 'no_show' | InternalStatus;
+type _StatusAligned = Reservation['status'] | InternalStatus extends DbStatus
+  ? DbStatus extends Reservation['status'] | InternalStatus
+    ? InternalStatus extends Reservation['status']
+      ? false
+      : true
     : false
   : false;
 

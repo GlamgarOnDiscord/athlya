@@ -22,13 +22,15 @@
 'use client';
 
 import { UpdateProfileRequestSchema } from '@athlya/shared/schemas/api';
+import { UploadSimpleIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 
 import Image from 'next/image';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 import { ApiError, type ApiClient } from '../../lib/api/client';
 import { newIdempotencyKey } from '../../lib/idempotency';
@@ -52,6 +54,8 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
   interface ProfileFormState {
     displayName: string;
     avatarUrl: string;
+    /** Name of the last picture chosen, shown next to the picker. */
+    avatarFileName: string | null;
     fieldErrors: Record<string, string>;
     genericError: string | null;
     pending: boolean;
@@ -61,6 +65,7 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
   const [form, setForm] = useState<ProfileFormState>(() => ({
     displayName: profile.displayName,
     avatarUrl: profile.avatarUrl ?? '',
+    avatarFileName: null,
     fieldErrors: {},
     genericError: null,
     pending: false,
@@ -188,54 +193,73 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
               className="size-20 rounded-full border border-border object-cover"
             />
           ) : null}
-          <input
-            id="profile-avatar-file"
-            type="file"
-            accept="image/png, image/jpeg, image/webp"
-            disabled={form.pending}
-            onChange={async (e) => {
-              setForm((s) => {
-                const { avatarUrl: _omit, ...rest } = s.fieldErrors;
-                void _omit;
-                return { ...s, fieldErrors: rest };
-              });
-              const file = e.target.files?.[0];
-              if (file === undefined) return;
-              if (file.size > AVATAR_MAX_BYTES) {
-                setForm((s) => ({
-                  ...s,
-                  fieldErrors: {
-                    ...s.fieldErrors,
-                    avatarUrl: t('profile.avatarTooLarge', {
-                      max: Math.floor(AVATAR_MAX_BYTES / (1024 * 1024)),
-                    }),
-                  },
-                }));
-                e.target.value = '';
-                return;
-              }
-              setForm((s) => ({ ...s, pending: true }));
-              try {
-                const result = await client.put<{ avatarUrl: string }>(
-                  '/v1/members/me/avatar',
-                  file,
-                  { headers: { 'Content-Type': file.type } },
-                );
-                setForm((s) => ({ ...s, avatarUrl: result.avatarUrl, pending: false }));
-              } catch {
-                setForm((s) => ({
-                  ...s,
-                  pending: false,
-                  fieldErrors: {
-                    ...s.fieldErrors,
-                    avatarUrl: t('profile.avatarUploadError'),
-                  },
-                }));
-              }
-            }}
-            aria-describedby="profile-avatar-file-hint profile-avatar-url-error"
-            className="rounded-md border border-border bg-transparent px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1 file:text-sm"
-          />
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              id="profile-avatar-file"
+              type="file"
+              accept="image/png, image/jpeg, image/webp"
+              disabled={form.pending}
+              onChange={async (e) => {
+                const input = e.currentTarget;
+                setForm((s) => {
+                  const { avatarUrl: _omit, ...rest } = s.fieldErrors;
+                  void _omit;
+                  return { ...s, fieldErrors: rest };
+                });
+                const file = input.files?.[0];
+                if (file === undefined) return;
+                if (file.size > AVATAR_MAX_BYTES) {
+                  setForm((s) => ({
+                    ...s,
+                    fieldErrors: {
+                      ...s.fieldErrors,
+                      avatarUrl: t('profile.avatarTooLarge', {
+                        max: Math.floor(AVATAR_MAX_BYTES / (1024 * 1024)),
+                      }),
+                    },
+                  }));
+                  input.value = '';
+                  return;
+                }
+                setForm((s) => ({ ...s, avatarFileName: file.name, pending: true }));
+                try {
+                  const result = await client.put<{ avatarUrl: string }>(
+                    '/v1/members/me/avatar',
+                    file,
+                    { headers: { 'Content-Type': file.type } },
+                  );
+                  setForm((s) => ({ ...s, avatarUrl: result.avatarUrl, pending: false }));
+                } catch {
+                  // Clear the input so picking the same file again retries.
+                  input.value = '';
+                  setForm((s) => ({
+                    ...s,
+                    avatarFileName: null,
+                    pending: false,
+                    fieldErrors: {
+                      ...s.fieldErrors,
+                      avatarUrl: t('profile.avatarUploadError'),
+                    },
+                  }));
+                }
+              }}
+              aria-describedby="profile-avatar-file-hint profile-avatar-url-error"
+              className="peer sr-only"
+            />
+            <label
+              htmlFor="profile-avatar-file"
+              className={cn(
+                buttonVariants({ variant: 'outline', size: 'sm' }),
+                'cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background peer-disabled:pointer-events-none peer-disabled:opacity-50',
+              )}
+            >
+              <UploadSimpleIcon aria-hidden="true" />
+              {t('profile.avatarChoose')}
+            </label>
+            <span className="min-w-0 truncate text-sm text-muted-foreground">
+              {form.avatarFileName ?? t('profile.avatarNoFile')}
+            </span>
+          </div>
           <span id="profile-avatar-file-hint" className="text-xs text-muted-foreground">
             {t('profile.avatarHint', {
               max: Math.floor(AVATAR_MAX_BYTES / (1024 * 1024)),
@@ -247,7 +271,7 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
               variant="link"
               size="sm"
               className="self-start px-0 text-muted-foreground"
-              onClick={() => setForm((s) => ({ ...s, avatarUrl: '' }))}
+              onClick={() => setForm((s) => ({ ...s, avatarUrl: '', avatarFileName: null }))}
             >
               {t('profile.avatarRemove')}
             </Button>

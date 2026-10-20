@@ -7,7 +7,7 @@
  * the coach only when the `ai-coach` flag is on for the member.
  */
 
-import { ChevronLeft } from 'lucide-react';
+import { CaretLeftIcon } from '@phosphor-icons/react/dist/ssr';
 import Link from 'next/link';
 
 import { RequireAuth } from '../../../components/RequireAuth';
@@ -33,7 +33,7 @@ export default async function MeCoachPage(): Promise<ReactElement> {
         href="/me"
         className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ChevronLeft className="size-4" aria-hidden="true" />
+        <CaretLeftIcon className="size-4" aria-hidden="true" />
         {t('common.back')}
       </Link>
       <h1 id="coach-heading" className="text-3xl font-semibold">
