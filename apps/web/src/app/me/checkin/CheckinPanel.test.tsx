@@ -139,6 +139,27 @@ describe('<CheckinPanel />', () => {
     expect(screen.getByTestId('checkin-qr')).toBeDefined();
   });
 
+  it('stops refreshing when it unmounts while a request is in flight', async () => {
+    let resolve: (value: unknown) => void = () => undefined;
+    const post = vi.fn(
+      () =>
+        new Promise((r) => {
+          resolve = r;
+        }),
+    );
+    renderPanel(post);
+    expect(post).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    resolve(tokenFrom(1));
+    await flush();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TTL_MS * 3);
+    });
+
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
   it('says a connection is needed when offline without a valid code', async () => {
     const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
     const post = vi.fn();

@@ -94,6 +94,13 @@ export function CheckinPanel({
   // callback always runs the latest `fetchToken`.
   const fetchRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const inFlight = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const statusRef = useRef<Status>(status);
   useEffect(() => {
     statusRef.current = status;
@@ -116,12 +123,14 @@ export function CheckinPanel({
     if (statusRef.current.kind !== 'ready') setStatus({ kind: 'loading' });
     try {
       const raw = await client.post<unknown>(CHECKIN_TOKEN_PATH, {});
+      if (!mounted.current) return;
       const parsed = CheckInTokenResponseSchema.parse(raw);
       const expiresAt = Date.parse(parsed.expiresAt);
       setStatus({ kind: 'ready', token: parsed.token, expiresAt });
       const delay = Math.max(1_000, expiresAt - REFRESH_MARGIN_MS - now());
       timer.current = window.setTimeout(() => void fetchRef.current(), delay);
     } catch (err: unknown) {
+      if (!mounted.current) return;
       const retry =
         err instanceof ApiError && err.status === 429 ? RATE_LIMIT_RETRY_MS : ERROR_RETRY_MS;
       setStatus(isOnline() ? { kind: 'error' } : { kind: 'offline' });

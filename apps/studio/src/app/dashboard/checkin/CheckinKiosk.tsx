@@ -214,6 +214,8 @@ export function useCameraScanner({
 
   useEffect(() => {
     if (!enabled || !canUseCamera()) return;
+    // A blocked status hides the <video>; reset it so a restart can mount it again.
+    setStatus('starting');
 
     let cancelled = false;
     let timer: number | null = null;
@@ -233,7 +235,12 @@ export function useCameraScanner({
         return;
       }
       const video = videoRef.current;
-      if (video === null) return;
+      if (video === null) {
+        for (const track of stream.getTracks()) track.stop();
+        stream = null;
+        setStatus('error');
+        return;
+      }
       video.srcObject = stream;
       try {
         await video.play();
