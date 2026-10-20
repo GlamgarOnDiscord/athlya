@@ -480,11 +480,11 @@
       },
       "members": {
         "title": "Members",
-        "body": "List members and their upcoming reservations."
+        "body": "Directory of your studio's members."
       },
       "branding": {
         "title": "Branding",
-        "body": "Brand color, logo and email customisation."
+        "body": "Your studio's brand color."
       },
       "billing": {
         "title": "Billing",
@@ -698,7 +698,6 @@
         "userRegistered": "Member signed up",
         "userDeleted": "Account deleted",
         "userConsentsUpdated": "Consents updated",
-        "reservationCreated": "Booking created",
         "reservationCancelledByAdmin": "Booking cancelled by an admin",
         "rlsViolation": "Access blocked by data isolation",
         "billingWebhookProcessed": "Payment event processed",

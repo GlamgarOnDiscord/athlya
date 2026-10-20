@@ -21,6 +21,36 @@ describe('actionLabel', () => {
   });
 });
 
+/**
+ * Every action slug the API writes to `audit_log`: `AUDIT_ACTIONS` in
+ * `packages/api/src/audit.ts`, plus the one literal slug written outside
+ * it, `token.refresh.reuse.detected` (`packages/auth/src/service.ts`).
+ */
+const API_ACTIONS = [
+  'user.registered',
+  'user.deleted',
+  'reservation.cancelled_by_admin',
+  'rls.violation',
+  'billing.webhook.signature_failed',
+  'billing.webhook.processed',
+  'user.consents.updated',
+  'jwt.key.rotation_prep',
+  'dlq.entry.replayed',
+  'dlq.entry.discarded',
+  'token.refresh.reuse.detected',
+] as const;
+
+describe('actionLabel coverage', () => {
+  it.each(API_ACTIONS)('labels %s in French and in English', (action) => {
+    const frLabel = actionLabel(action, fr);
+    const enLabel = actionLabel(action, en);
+    expect(frLabel).not.toBeNull();
+    expect(enLabel).not.toBeNull();
+    expect(frLabel).not.toBe(action);
+    expect(frLabel, 'French falls back to English').not.toBe(enLabel);
+  });
+});
+
 describe('targetTypeLabel', () => {
   it('labels a known type and keeps an unknown one raw', () => {
     expect(targetTypeLabel('reservation', fr)).toBe('Réservation');
