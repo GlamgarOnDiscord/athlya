@@ -554,7 +554,9 @@ export function ProgramEditor({ mode, client, t, onDone }: ProgramEditorProps): 
               {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? <CircleNotchIcon className="mr-2 size-4 animate-spin" aria-hidden="true" /> : null}
+              {pending ? (
+                <CircleNotchIcon className="mr-2 size-4 animate-spin" aria-hidden="true" />
+              ) : null}
               {pending
                 ? t('studio.programs.editor.saving')
                 : mode.kind === 'create'

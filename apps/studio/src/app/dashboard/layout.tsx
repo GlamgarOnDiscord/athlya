@@ -14,13 +14,10 @@
  */
 import { DashboardNav } from '../../components/DashboardNav';
 import { RequireAdmin } from '../../components/RequireAdmin';
+
 import type { ReactNode } from 'react';
 
-export default function DashboardLayout({
-  children,
-}: {
-  readonly children: ReactNode;
-}): ReactNode {
+export default function DashboardLayout({ children }: { readonly children: ReactNode }): ReactNode {
   return (
     <RequireAdmin>
       <DashboardNav>

@@ -63,7 +63,7 @@ Copying source code from these is allowed; each copy gets a row in [`docs/third-
 | [Radix primitives](https://www.radix-ui.com/primitives) | MIT                                      | Accessible primitives where Base UI has no equivalent.                               |
 | [Motion](https://motion.dev)                            | MIT                                      | Animation; mind the no-`style=""` CSP rule on server-rendered initial states.        |
 
-Icons and illustrations, free licences only: [Lucide](https://lucide.dev) (ISC, already used), [Heroicons](https://heroicons.com) (MIT), [unDraw](https://undraw.co) (its own free licence; recolour to tokens).
+Icons and illustrations, free licences only: [Phosphor](https://phosphoricons.com) (MIT, already used, `@phosphor-icons/react`), [Heroicons](https://heroicons.com) (MIT), [unDraw](https://undraw.co) (its own free licence; recolour to tokens).
 
 Mobile equivalents: [react-native-reusables](https://reactnativereusables.com) (MIT, shadcn/ui ported to NativeWind), [Moti](https://moti.fyi) (MIT) on [Reanimated](https://docs.swmansion.com/react-native-reanimated/) (MIT).
 

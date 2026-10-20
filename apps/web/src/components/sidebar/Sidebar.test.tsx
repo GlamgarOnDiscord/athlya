@@ -112,9 +112,7 @@ describe('<SidebarShell />', () => {
     // Collapsed: groups close, labels stay as accessible names.
     const toggle = within(desktopNav()).getByRole('button', { name: 'My account', hidden: true });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(
-      within(desktopNav()).getByRole('link', { name: 'Classes', hidden: true }),
-    ).toBeDefined();
+    expect(within(desktopNav()).getByRole('link', { name: 'Classes', hidden: true })).toBeDefined();
 
     cleanup();
     renderShell();
@@ -128,9 +126,7 @@ describe('<SidebarShell />', () => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, '1');
     pathnameMock.mockReturnValue('/classes');
     renderShell();
-    fireEvent.click(
-      within(desktopNav()).getByRole('button', { name: 'My account', hidden: true }),
-    );
+    fireEvent.click(within(desktopNav()).getByRole('button', { name: 'My account', hidden: true }));
     expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe('0');
     expect(
       within(desktopNav())

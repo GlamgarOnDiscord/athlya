@@ -87,7 +87,9 @@ function ItemLabel({
   readonly label: string;
   readonly collapsed: boolean;
 }): ReactElement {
-  return <span className={cn('min-w-0 flex-1 truncate text-left', collapsed && 'sr-only')}>{label}</span>;
+  return (
+    <span className={cn('min-w-0 flex-1 truncate text-left', collapsed && 'sr-only')}>{label}</span>
+  );
 }
 
 export interface SidebarActionProps {
@@ -122,7 +124,7 @@ interface NavLinkItemProps {
   readonly pathname: string;
   readonly collapsed: boolean;
   readonly nested?: boolean;
-  readonly onNavigate?: () => void;
+  readonly onNavigate?: (() => void) | undefined;
 }
 
 function NavLinkItem({
@@ -138,7 +140,7 @@ function NavLinkItem({
     <Link
       href={link.href}
       aria-current={active ? 'page' : undefined}
-      onClick={onNavigate}
+      onClick={() => onNavigate?.()}
       className={cn(
         itemBase,
         active ? activeItem : idleItem,
@@ -164,7 +166,7 @@ interface NavGroupItemProps {
   readonly open: boolean;
   readonly panelId: string;
   readonly onToggle: () => void;
-  readonly onNavigate?: () => void;
+  readonly onNavigate?: (() => void) | undefined;
 }
 
 function NavGroupItem({
@@ -238,7 +240,7 @@ interface SidebarNavProps {
   readonly collapsed: boolean;
   /** Called when a collapsed group is activated: the sidebar expands first. */
   readonly onExpand?: () => void;
-  readonly onNavigate?: () => void;
+  readonly onNavigate?: (() => void) | undefined;
 }
 
 function SidebarNav({
