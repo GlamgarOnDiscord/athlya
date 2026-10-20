@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import * as schema from '@athlya/db/schema';
 import { bookClass, type BookingCounter } from '@athlya/reservations';
 import { cancelReservation } from '@athlya/reservations/cancel';
+import { confirmHold, placeHold } from '@athlya/reservations/hold';
 import { PGlite } from '@electric-sql/pglite';
 import { btree_gin } from '@electric-sql/pglite/contrib/btree_gin';
 import { citext } from '@electric-sql/pglite/contrib/citext';
@@ -78,6 +79,37 @@ async function book(userId: string, counter: BookingCounter, classId = CLASS_ID)
   });
 }
 
+function hold(userId: string, counter: BookingCounter, classVersion?: number) {
+  return placeHold({
+    classId: CLASS_ID,
+    userId,
+    studioId: STUDIO,
+    ...(classVersion !== undefined ? { classVersion } : {}),
+    repo: createDrizzleBookingRepo(db, member(userId)),
+    counter,
+    logger: { error: () => undefined },
+  });
+}
+
+function confirm(userId: string, reservationId: string) {
+  return confirmHold({
+    reservationId,
+    userId,
+    studioId: STUDIO,
+    repo: createDrizzleBookingRepo(db, member(userId)),
+    publisher: createBookingEventPublisher(),
+  });
+}
+
+async function ownerQuery<T>(query: string): Promise<T[]> {
+  await pglite.exec('RESET ROLE');
+  try {
+    return (await pglite.query<T>(query)).rows;
+  } finally {
+    await pglite.exec('SET ROLE athlya_app');
+  }
+}
+
 async function statuses(): Promise<Record<string, string>> {
   await pglite.exec('RESET ROLE');
   try {
@@ -119,9 +151,13 @@ beforeAll(async () => {
 }, 120_000);
 
 beforeEach(async () => {
+  // Recreated rather than updated: `guard_class_schedule()` refuses a
+  // capacity change that does not move `version` forward (0050).
   await asOwner(`
     DELETE FROM reservations;
-    UPDATE classes SET capacity = 2, version = 0 WHERE id = '${CLASS_ID}';
+    DELETE FROM classes WHERE id = '${CLASS_ID}';
+    INSERT INTO classes (id, studio_id, title, starts_at, duration_min, capacity, version)
+    VALUES ('${CLASS_ID}', '${STUDIO}', 'Future', '2099-01-01 09:00:00+00', 60, 2, 0);
   `);
 });
 
@@ -238,5 +274,179 @@ describe('class update adapter under athlya_app (admin)', () => {
   it('answers version_conflict on a stale version', async () => {
     const result = await repo().updateClassOptimistic(STUDIO, CLASS_ID, { capacity: 3 }, 7);
     expect(result).toEqual({ outcome: 'version_conflict' });
+  });
+});
+
+describe('seat holds through the adapters (issue #723)', () => {
+  it('holds a seat that a confirmed booking can then not take', async () => {
+    const [m1, m2, m3] = MEMBERS as [string, string, string];
+    const counter = memoryCounter(2);
+
+    const held = await hold(m1, counter);
+    await book(m2, counter);
+    const third = await book(m3, counter);
+
+    expect(held).toMatchObject({ code: 'held', hold: { classId: CLASS_ID } });
+    if (held.code !== 'held') throw new Error(`unexpected ${held.code}`);
+    expect(held.hold.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(third.code).toBe('waitlisted');
+    expect(await statuses()).toEqual({ [m1]: 'pending', [m2]: 'confirmed', [m3]: 'waitlist' });
+  });
+
+  it('answers class_full when the class has no seat left for a hold', async () => {
+    const [m1, m2, m3] = MEMBERS as [string, string, string];
+    const counter = memoryCounter(5);
+    await book(m1, counter);
+    await hold(m2, counter);
+
+    await expect(hold(m3, counter)).resolves.toEqual({ code: 'class_full' });
+    expect(await statuses()).toEqual({ [m1]: 'confirmed', [m2]: 'pending' });
+  });
+
+  it('answers already_held on a second hold of the same member', async () => {
+    const [m1] = MEMBERS as [string];
+    const counter = memoryCounter(5);
+    const first = await hold(m1, counter);
+    const second = await hold(m1, counter);
+
+    if (first.code !== 'held') throw new Error(`unexpected ${first.code}`);
+    expect(second).toEqual({ code: 'already_held', hold: first.hold });
+  });
+
+  it('confirms a hold into a confirmed row with one reservation.created event', async () => {
+    const [m1, m2] = MEMBERS as [string, string];
+    const counter = memoryCounter(2);
+    const held = await hold(m1, counter);
+    await book(m2, counter);
+    if (held.code !== 'held') throw new Error(`unexpected ${held.code}`);
+
+    const confirmed = await confirm(m1, held.hold.reservationId);
+    const replay = await confirm(m1, held.hold.reservationId);
+
+    expect(confirmed).toMatchObject({ code: 'confirmed', reservation: { status: 'confirmed' } });
+    expect(replay).toMatchObject({ code: 'already_confirmed' });
+    // The wire row never carries the hold column.
+    if (confirmed.code !== 'confirmed') throw new Error('unexpected');
+    expect(Object.keys(confirmed.reservation).sort()).toEqual(
+      ['cancelledAt', 'checkedInAt', 'classId', 'createdAt', 'id', 'status', 'userId'].sort(),
+    );
+    const events = await ownerQuery<{ n: number }>(
+      `SELECT count(*)::int AS n FROM outbox
+        WHERE event_type = 'reservation.created'
+          AND payload->>'reservationId' = '${held.hold.reservationId}'`,
+    );
+    expect(events[0]?.n).toBe(1);
+  });
+
+  it('refuses to confirm an expired hold, and a booking replaces it', async () => {
+    const [m1] = MEMBERS as [string];
+    await asOwner(`
+      SET session_replication_role = replica;
+      INSERT INTO reservations (id, class_id, user_id, status, hold_expires_at)
+      VALUES ('dddddddd-dddd-4ddd-8ddd-ddddddd72301', '${CLASS_ID}', '${m1}', 'pending', now() - interval '1 minute');
+      SET session_replication_role = origin;
+    `);
+
+    await expect(confirm(m1, 'dddddddd-dddd-4ddd-8ddd-ddddddd72301')).resolves.toEqual({
+      code: 'hold_expired',
+    });
+    const booked = await book(m1, memoryCounter(2));
+
+    expect(booked.code).toBe('ok');
+    const rows = await ownerQuery<{ status: string }>(
+      `SELECT status FROM reservations WHERE id = 'dddddddd-dddd-4ddd-8ddd-ddddddd72301'`,
+    );
+    expect(rows[0]?.status).toBe('cancelled');
+  });
+
+  it('turns a booking on top of an active own hold into its confirmation', async () => {
+    const [m1] = MEMBERS as [string];
+    const counter = memoryCounter(2);
+    const held = await hold(m1, counter);
+    if (held.code !== 'held') throw new Error(`unexpected ${held.code}`);
+
+    const booked = await book(m1, counter);
+
+    expect(booked).toMatchObject({
+      code: 'ok',
+      reservation: { id: held.hold.reservationId, status: 'confirmed' },
+    });
+  });
+
+  it('releases an active hold on cancel and promotes the oldest waiter', async () => {
+    const [m1, m2, m3] = MEMBERS as [string, string, string];
+    const counter = memoryCounter(2);
+    const held = await hold(m1, counter);
+    await book(m2, counter);
+    await book(m3, counter);
+    if (held.code !== 'held') throw new Error(`unexpected ${held.code}`);
+
+    const released = await cancelReservation({
+      reservationId: held.hold.reservationId,
+      userId: m1,
+      repo: createDrizzleCancelRepo(db, member(m1)),
+      counter: { incrRemaining: () => Promise.resolve() },
+    });
+
+    expect(released).toMatchObject({ code: 'ok', promoted: { userId: m3 } });
+    expect(await statuses()).toEqual({ [m2]: 'confirmed', [m3]: 'confirmed' });
+  });
+});
+
+describe('class version fence and schedule guard (issue #723)', () => {
+  const repo = () => createDrizzleUpdateClassRepo(db as unknown as AthlyaDbHttp, db, admin);
+
+  it('refuses a booking and a hold that carry a stale classVersion', async () => {
+    const [m1, m2] = MEMBERS as [string, string];
+    await repo().updateClassOptimistic(STUDIO, CLASS_ID, { title: 'Moved' }, 0);
+
+    const booking = await bookClass({
+      classId: CLASS_ID,
+      userId: m1,
+      studioId: STUDIO,
+      classVersion: 0,
+      repo: createDrizzleBookingRepo(db, member(m1)),
+      counter: memoryCounter(2),
+      publisher: createBookingEventPublisher(),
+      logger: { error: () => undefined },
+    });
+
+    expect(booking).toEqual({ code: 'class_changed' });
+    await expect(hold(m2, memoryCounter(2), 0)).resolves.toEqual({ code: 'class_changed' });
+    await expect(hold(m2, memoryCounter(2), 1)).resolves.toMatchObject({ code: 'held' });
+  });
+
+  it('counts an active hold when capacity is lowered', async () => {
+    const [m1, m2] = MEMBERS as [string, string];
+    const counter = memoryCounter(2);
+    await book(m1, counter);
+    await hold(m2, counter);
+
+    await expect(
+      repo().updateClassOptimistic(STUDIO, CLASS_ID, { capacity: 1 }, 0),
+    ).resolves.toEqual({ outcome: 'capacity_below_confirmed', confirmed: 2 });
+  });
+
+  it('refuses to move a class into the past or a class that already started', async () => {
+    await expect(
+      repo().updateClassOptimistic(STUDIO, CLASS_ID, { startsAt: '2020-01-01T09:00:00.000Z' }, 0),
+    ).resolves.toEqual({ outcome: 'starts_at_in_past' });
+
+    const startedRepo = () =>
+      createDrizzleUpdateClassRepo(db as unknown as AthlyaDbHttp, db, admin);
+    await expect(
+      startedRepo().updateClassOptimistic(
+        STUDIO,
+        PAST_CLASS_ID,
+        { startsAt: '2099-06-01T09:00:00.000Z' },
+        0,
+      ),
+    ).resolves.toEqual({ outcome: 'class_already_started' });
+  });
+
+  it('refuses, in the database, a capacity change that does not bump version', async () => {
+    await expect(
+      ownerQuery(`UPDATE classes SET capacity = 9 WHERE id = '${CLASS_ID}'`),
+    ).rejects.toThrow(/class_version_not_bumped/u);
   });
 });

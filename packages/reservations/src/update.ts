@@ -103,15 +103,24 @@ export interface ClassRepo {
    *      trigger takes on every confirmation, so no booking can commit
    *      in between);
    *   2. answers `version_conflict` when the version moved;
-   *   3. counts the confirmed reservations under that lock and answers
+   *   2b. when the patch moves `startsAt`, answers
+   *      `class_already_started` if the class already started, and
+   *      `starts_at_in_past` if the new time is not in the future,
+   *      both against the database clock (nothing is written);
+   *   3. counts the occupied seats (confirmed reservations and active
+   *      seat holds) under that lock and answers
    *      `capacity_below_confirmed` when the patch lowers `capacity`
    *      below that count (nothing is written);
    *   4. runs `UPDATE classes SET <patch>, version = version + 1`;
    *   5. when seats are now free, promotes the oldest waiters (FIFO by
    *      `created_at`, then `id`) into them and appends one
    *      `reservation.promoted` outbox row each;
-   *   6. returns the row and the confirmed count after step 5, so the
+   *   6. returns the row and the occupied count after step 5, so the
    *      caller can reset the counter to `capacity - confirmed`.
+   *
+   * The `guard_class_schedule()` trigger (migration 0050) enforces
+   * steps 2b and 3 again, and that `version` moves forward, for any
+   * writer: the adapter maps its refusals to the same outcomes.
    */
   updateClassOptimistic(
     studioId: string,
@@ -126,10 +135,15 @@ export type GuardedClassUpdate =
   | {
       readonly outcome: 'updated';
       readonly row: ClassRow;
-      /** Confirmed reservations after any waitlist promotion, same transaction. */
+      /**
+       * Occupied seats (confirmed reservations and active holds) after
+       * any waitlist promotion, same transaction.
+       */
       readonly confirmed: number;
     }
   | { readonly outcome: 'version_conflict' }
+  | { readonly outcome: 'class_already_started' }
+  | { readonly outcome: 'starts_at_in_past' }
   | { readonly outcome: 'capacity_below_confirmed'; readonly confirmed: number };
 
 /**
@@ -198,10 +212,18 @@ export interface UpdateClassValidationIssue {
  *   - `not_found`         → 404 (row missing, or cross-tenant via RLS).
  *   - `conflict`          → 409 (stale `version`, Requirement 6.6).
  *   - `capacity_below_confirmed` → 409 (the patch would leave more
- *     confirmed members than seats).
+ *     confirmed members and held seats than seats).
+ *   - `class_already_started` → 409 (the class started; its time is fixed).
+ *   - `starts_at_in_past` → 422 (the new start time is not in the future).
  */
 export type UpdateClassErrorCode =
-  'forbidden' | 'validation_failed' | 'not_found' | 'conflict' | 'capacity_below_confirmed';
+  | 'forbidden'
+  | 'validation_failed'
+  | 'not_found'
+  | 'conflict'
+  | 'capacity_below_confirmed'
+  | 'class_already_started'
+  | 'starts_at_in_past';
 
 /**
  * Typed error thrown by {@link updateClass}. The `code` field is
@@ -328,6 +350,15 @@ export async function updateClass(
       'conflict',
       `class ${classId} has a newer version; expected ${expectedVersion}`,
     );
+  }
+  if (result.outcome === 'class_already_started') {
+    throw new UpdateClassError(
+      'class_already_started',
+      `class ${classId} already started; its start time cannot change`,
+    );
+  }
+  if (result.outcome === 'starts_at_in_past') {
+    throw new UpdateClassError('starts_at_in_past', `class ${classId} cannot start in the past`);
   }
   if (result.outcome === 'capacity_below_confirmed') {
     throw new UpdateClassError(

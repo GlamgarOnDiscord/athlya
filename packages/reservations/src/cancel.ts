@@ -25,6 +25,13 @@
  *           are accepted; any other current status surfaces as
  *           `invalid_transition`.
  *
+ * A `pending` seat hold (issue #723) is released through the same
+ * call: no 2-hour window (a hold is not a booking yet), no
+ * `reservation.cancelled` event (no cancellation notice for a seat
+ * that was never booked). When the hold was still active its seat
+ * goes to the oldest waiter, or back to the Redis counter, exactly as
+ * for a confirmed cancellation.
+ *
  * The service is deliberately a *pure function over injected ports*.
  * It never throws on expected business failures — instead it returns
  * a discriminated {@link CancelReservationResult} union. The API
@@ -230,6 +237,14 @@ export interface CancelRepo {
     stampedAt: Date,
   ): Promise<ReservationRow>;
 
+  /**
+   * True when the `pending` reservation `reservationId` (already locked
+   * by {@link findReservationForUpdate}) is an unexpired hold, judged
+   * against the transaction's `now()`. An expired hold no longer takes
+   * a seat, so releasing it frees nothing.
+   */
+  isHoldActive(tx: unknown, reservationId: string): Promise<boolean>;
+
   promoteOldestWaitlist(tx: unknown, classId: string): Promise<WaitlistPromotion>;
 
   insertOutbox(tx: unknown, event: CancelOutboxEvent): Promise<void>;
@@ -378,7 +393,7 @@ export type CancelReservationResult =
 /* ------------------------------------------------------------------ */
 
 /**
- * Shape returned by the transactional callback. Carries `wasConfirmed`
+ * Shape returned by the transactional callback. Carries `seatFreed`
  * and `classId` so the post-commit step can decide whether to
  * increment the Redis counter without re-reading the row. Kept
  * internal — the public result type strips these fields out.
@@ -388,7 +403,8 @@ type TxOutcome =
       readonly code: 'ok';
       readonly cancelled: ReservationRow;
       readonly promoted: PromotedReservation | null;
-      readonly wasConfirmed: boolean;
+      /** The row held a seat: a confirmed reservation or an active hold. */
+      readonly seatFreed: boolean;
       readonly classId: string;
       readonly promotionBlockedByCapacity: boolean;
     }
@@ -430,6 +446,36 @@ function defaultNewEventId(): string {
 /* ------------------------------------------------------------------ */
 
 /**
+ * Promote the oldest waiter into the seat just freed, writing its
+ * `reservation.promoted` event in the same transaction. `blocked` is
+ * true when PostgreSQL still counts the class as full.
+ */
+async function promoteInto(
+  repo: CancelRepo,
+  tx: unknown,
+  classId: string,
+  now: Date,
+  newEventId: NewEventId,
+): Promise<{ readonly promoted: PromotedReservation | null; readonly blocked: boolean }> {
+  const promotion = await repo.promoteOldestWaitlist(tx, classId);
+  if (promotion.outcome === 'promoted') {
+    const promoted = promotion.reservation;
+    await repo.insertOutbox(tx, {
+      eventId: newEventId(),
+      eventType: 'reservation.promoted',
+      payload: {
+        reservationId: promoted.id,
+        classId: promoted.classId,
+        userId: promoted.userId,
+      },
+      occurredAt: now,
+    });
+    return { promoted, blocked: false };
+  }
+  return { promoted: null, blocked: promotion.outcome === 'no_capacity' };
+}
+
+/**
  * Cancel a reservation, atomically promoting the oldest waitlisted
  * reservation when the cancelled one was `confirmed` and a waiter
  * exists.
@@ -445,6 +491,10 @@ function defaultNewEventId(): string {
  *   3. `SELECT ... FOR UPDATE` the related class to read `startsAt`.
  *      A `null` result also surfaces as `not_found` (degenerate
  *      state — orphaned reservation row).
+ *   3b. A `'pending'` seat hold is released here: stamped `cancelled`,
+ *      its seat promoted (step 7) or returned to the counter (step 10)
+ *      when the hold was still active, and no `reservation.cancelled`
+ *      event. Steps 4 to 9 do not apply to it.
  *   4. Guard `now ≤ startsAt − 2h`, with `now` the transaction's
  *      database clock (or the injected test clock). Violations surface as
  *      `cancellation_window_closed` (Requirement 9.2). The
@@ -514,6 +564,26 @@ export async function cancelReservation(
     const nowMs =
       input.clock !== undefined ? input.clock() : (classRow.now?.getTime() ?? Date.now());
     const now = new Date(nowMs);
+
+    // A seat hold is released, not cancelled: no window, no
+    // `reservation.cancelled` event. Its seat, when the hold was still
+    // active, is handed on like a confirmed one.
+    if (reservation.status === 'pending') {
+      const seatFreed = await repo.isHoldActive(tx, reservation.id);
+      const released = await repo.updateReservationStatus(tx, reservation.id, 'cancelled', now);
+      const promotion = seatFreed
+        ? await promoteInto(repo, tx, reservation.classId, now, newEventId)
+        : { promoted: null, blocked: false };
+      return {
+        code: 'ok',
+        cancelled: released,
+        promoted: promotion.promoted,
+        seatFreed,
+        classId: reservation.classId,
+        promotionBlockedByCapacity: promotion.blocked,
+      };
+    }
+
     const cutoffMs = classRow.startsAt.getTime() - CANCELLATION_WINDOW_MS;
     if (nowMs > cutoffMs) {
       return { code: 'cancellation_window_closed' };
@@ -543,26 +613,9 @@ export async function cancelReservation(
     // waitlist-originated cancellation never triggers a promotion
     // (Req 9.3 speaks of "a confirmed reservation [that] is
     // successfully cancelled").
-    let promoted: PromotedReservation | null = null;
-    let promotionBlockedByCapacity = false;
-    if (wasConfirmed) {
-      const promotion = await repo.promoteOldestWaitlist(tx, reservation.classId);
-      if (promotion.outcome === 'promoted') {
-        promoted = promotion.reservation;
-        await repo.insertOutbox(tx, {
-          eventId: newEventId(),
-          eventType: 'reservation.promoted',
-          payload: {
-            reservationId: promoted.id,
-            classId: promoted.classId,
-            userId: promoted.userId,
-          },
-          occurredAt: now,
-        });
-      } else if (promotion.outcome === 'no_capacity') {
-        promotionBlockedByCapacity = true;
-      }
-    }
+    const promotion = wasConfirmed
+      ? await promoteInto(repo, tx, reservation.classId, now, newEventId)
+      : { promoted: null, blocked: false };
 
     // Step 9 — exactly one `reservation.cancelled` outbox row per
     // successful cancellation (Req 9.5). Emitted from within the
@@ -582,10 +635,10 @@ export async function cancelReservation(
     return {
       code: 'ok',
       cancelled,
-      promoted,
-      wasConfirmed,
+      promoted: promotion.promoted,
+      seatFreed: wasConfirmed,
       classId: reservation.classId,
-      promotionBlockedByCapacity,
+      promotionBlockedByCapacity: promotion.blocked,
     };
   });
 
@@ -603,7 +656,7 @@ export async function cancelReservation(
   // A failed INCR leaves the counter one seat low (false "full",
   // never an oversell); the cancellation itself is committed, so it is
   // logged for the reconcile cron instead of failing the request.
-  if (outcome.wasConfirmed && outcome.promoted === null && !outcome.promotionBlockedByCapacity) {
+  if (outcome.seatFreed && outcome.promoted === null && !outcome.promotionBlockedByCapacity) {
     try {
       await counter.incrRemaining(outcome.classId);
     } catch (err) {

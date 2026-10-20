@@ -19,6 +19,10 @@
  *   4. A capacity decrease racing bookings never leaves more confirmed
  *      rows than the final capacity, and a decrease below the
  *      confirmed count is refused.
+ *   5. Seat holds (issue #723): N concurrent holds on C free seats hold
+ *      at most C (confirmed + active holds <= capacity), holds racing
+ *      bookings keep that bound, and confirming every hold while
+ *      bookings race never loses a held seat.
  *
  * Docker-gated like the other Testcontainers suites: without a daemon
  * the suite skips with a log line.
@@ -37,6 +41,7 @@ import {
 } from '@athlya/db/client';
 import { bookClass, type BookingCounter } from '@athlya/reservations';
 import { cancelReservation } from '@athlya/reservations/cancel';
+import { confirmHold, placeHold } from '@athlya/reservations/hold';
 import postgres, { type Sql } from 'postgres';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -132,6 +137,40 @@ function cancel(reservationId: string, userId: string) {
   });
 }
 
+function hold(userId: string, counter: BookingCounter) {
+  const { db: appDb } = requireDb();
+  return placeHold({
+    classId: CLASS_ID,
+    userId,
+    studioId: STUDIO,
+    repo: createDrizzleBookingRepo(appDb, member(userId)),
+    counter,
+    logger: silent,
+  });
+}
+
+function confirm(reservationId: string, userId: string) {
+  const { db: appDb } = requireDb();
+  return confirmHold({
+    reservationId,
+    userId,
+    studioId: STUDIO,
+    repo: createDrizzleBookingRepo(appDb, member(userId)),
+    publisher: createBookingEventPublisher(),
+  });
+}
+
+/** Seats taken: confirmed rows and unexpired holds, as the capacity trigger counts. */
+async function occupied(): Promise<{ confirmed: number; held: number }> {
+  const { root: su } = requireDb();
+  const [row] = await su<{ confirmed: number; held: number }[]>`
+    SELECT count(*) FILTER (WHERE status = 'confirmed')::int AS confirmed,
+           count(*) FILTER (WHERE status = 'pending' AND hold_expires_at > now())::int AS held
+      FROM reservations WHERE class_id = ${CLASS_ID}
+  `;
+  return row ?? { confirmed: -1, held: -1 };
+}
+
 interface Row {
   readonly id: string;
   readonly user_id: string;
@@ -160,7 +199,13 @@ async function resetClass(cap: number): Promise<void> {
   const { root: su } = requireDb();
   await su`DELETE FROM outbox`;
   await su`DELETE FROM reservations`;
-  await su`UPDATE classes SET capacity = ${cap}, version = 0 WHERE id = ${CLASS_ID}`;
+  // Recreated: `guard_class_schedule()` refuses a capacity change that
+  // does not move `version` forward (migration 0050).
+  await su`DELETE FROM classes WHERE id = ${CLASS_ID}`;
+  await su`
+    INSERT INTO classes (id, studio_id, title, starts_at, duration_min, capacity, version)
+    VALUES (${CLASS_ID}, ${STUDIO}, 'Contended', now() + interval '7 days', 60, ${cap}, 0)
+  `;
 }
 
 beforeAll(async () => {
@@ -208,11 +253,6 @@ beforeAll(async () => {
               ${consents}::text::jsonb)
     `;
   }
-  await root`
-    INSERT INTO classes (id, studio_id, title, starts_at, duration_min, capacity, version)
-    VALUES (${CLASS_ID}, ${STUDIO}, 'Contended', now() + interval '7 days', 60, 5, 0)
-  `;
-
   const appUri = new URL(rootUri);
   appUri.username = APP_ROLE;
   appUri.password = APP_PASSWORD;
@@ -317,6 +357,55 @@ describe.skipIf(!dockerReady)('booking concurrency (Postgres, athlya_app)', () =
         ? await repo.updateClassOptimistic(STUDIO, CLASS_ID, { capacity: 1 }, version)
         : refused;
     expect(retry).toMatchObject({ outcome: 'capacity_below_confirmed' });
+  }, 120_000);
+
+  it('N concurrent holds on C free seats hold at most C, even with a lying counter', async () => {
+    for (const counter of [atomicCounter(5), lyingCounter]) {
+      await resetClass(5);
+      await book(MEMBERS[0] as string, atomicCounter(5));
+      await book(MEMBERS[1] as string, atomicCounter(5));
+
+      const outcomes = await Promise.allSettled(MEMBERS.slice(2).map((m) => hold(m, counter)));
+
+      const seats = await occupied();
+      expect(seats).toEqual({ confirmed: 2, held: 3 });
+      const codes = outcomes.flatMap((o) => (o.status === 'fulfilled' ? [o.value.code] : []));
+      expect(codes).toHaveLength(MEMBER_COUNT - 2);
+      expect(codes.filter((c) => c === 'held')).toHaveLength(3);
+      expect(codes.filter((c) => c !== 'held').every((c) => c === 'class_full')).toBe(true);
+    }
+  }, 120_000);
+
+  it('holds racing bookings never take more than C seats together', async () => {
+    await Promise.allSettled(
+      MEMBERS.map((m, i) => (i % 2 === 0 ? hold(m, lyingCounter) : book(m, lyingCounter))),
+    );
+
+    const seats = await occupied();
+    expect(seats.confirmed + seats.held).toBe(5);
+    const rows = await liveRows();
+    expect(new Set(rows.map((r) => r.user_id)).size).toBe(rows.length);
+  }, 120_000);
+
+  it('confirming every hold while bookings race never loses a held seat', async () => {
+    const holders = MEMBERS.slice(0, 3);
+    const held = await Promise.all(holders.map((m) => hold(m, atomicCounter(5))));
+    const holds = held.map((h, i) => {
+      if (h.code !== 'held') throw new Error(`hold ${String(i)}: ${h.code}`);
+      return { id: h.hold.reservationId, userId: holders[i] as string };
+    });
+
+    const [confirmations] = await Promise.all([
+      Promise.all(holds.map((h) => confirm(h.id, h.userId))),
+      Promise.allSettled(MEMBERS.slice(3, 20).map((m) => book(m, lyingCounter))),
+    ]);
+
+    expect(confirmations.map((c) => c.code)).toEqual(['confirmed', 'confirmed', 'confirmed']);
+    const rows = await liveRows();
+    const confirmed = rows.filter((r) => r.status === 'confirmed').map((r) => r.user_id);
+    expect(confirmed).toHaveLength(5);
+    expect(holders.every((m) => confirmed.includes(m))).toBe(true);
+    expect(await occupied()).toEqual({ confirmed: 5, held: 0 });
   }, 120_000);
 });
 

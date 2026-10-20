@@ -30,7 +30,8 @@ import {
 } from '../state-machine.js';
 
 /**
- * All four statuses in declaration order. Kept local to the test so it
+ * All five statuses (the four of Requirement 10 and the `pending` hold)
+ * in declaration order. Kept local to the test so it
  * cannot accidentally be mutated by a future refactor of the source
  * module.
  */
@@ -39,13 +40,14 @@ const STATUSES: readonly ReservationStatus[] = [
   'waitlist',
   'cancelled',
   'no_show',
+  'pending',
 ] as const;
 
 /**
  * Hand-coded expected truth table for `canTransition(from, to)`. Rows
  * are `from`, columns are `to`, in the same order as {@link STATUSES}.
  * The diagonal is `true` (Req 10.2 no-op). Off-diagonal `true` cells
- * correspond exactly to the four edges in {@link LEGAL_TRANSITIONS}.
+ * correspond exactly to the six edges in {@link LEGAL_TRANSITIONS}.
  */
 const EXPECTED: Readonly<Record<ReservationStatus, Readonly<Record<ReservationStatus, boolean>>>> =
   {
@@ -54,29 +56,40 @@ const EXPECTED: Readonly<Record<ReservationStatus, Readonly<Record<ReservationSt
       waitlist: false,
       cancelled: true,
       no_show: true,
+      pending: false,
     },
     waitlist: {
       confirmed: true,
       waitlist: true,
       cancelled: true,
       no_show: false,
+      pending: false,
     },
     cancelled: {
       confirmed: false,
       waitlist: false,
       cancelled: true,
       no_show: false,
+      pending: false,
     },
     no_show: {
       confirmed: false,
       waitlist: false,
       cancelled: false,
       no_show: true,
+      pending: false,
+    },
+    pending: {
+      confirmed: true,
+      waitlist: false,
+      cancelled: true,
+      no_show: false,
+      pending: true,
     },
   };
 
 describe('canTransition', () => {
-  it('matches the hand-coded truth table for all 16 ordered pairs (Req 10.1, 10.2)', () => {
+  it('matches the hand-coded truth table for all 25 ordered pairs (Req 10.1, 10.2)', () => {
     for (const from of STATUSES) {
       for (const to of STATUSES) {
         const expected = EXPECTED[from][to];
@@ -108,10 +121,10 @@ describe('canTransition', () => {
     }
   });
 
-  it('contains exactly the four edges required by Req 10.1', () => {
+  it('contains exactly the four edges of Req 10.1 and the two hold exits', () => {
     // Defensive: if someone adds or removes an edge in the source
     // file without updating the requirement, this fails loudly.
-    expect(LEGAL_TRANSITIONS).toHaveLength(4);
+    expect(LEGAL_TRANSITIONS).toHaveLength(6);
     const serialised = LEGAL_TRANSITIONS.map(([a, b]) => `${a}->${b}`).sort();
     expect(serialised).toStrictEqual(
       [
@@ -119,6 +132,8 @@ describe('canTransition', () => {
         'confirmed->no_show',
         'waitlist->cancelled',
         'waitlist->confirmed',
+        'pending->cancelled',
+        'pending->confirmed',
       ].sort(),
     );
   });
