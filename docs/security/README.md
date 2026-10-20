@@ -31,6 +31,7 @@ Documentation sécurité pour la plateforme Athlya. Tous les findings audit, spr
 - [`audit-S5-rgpd.md`](./audit-S5-rgpd.md) — RGPD / Data Privacy
 - [`audit-S6-frontend.md`](./audit-S6-frontend.md) — Frontend (web + studio)
 - [`audit-backlog.md`](./audit-backlog.md) — checklist MEDIUM/LOW/INFO résiduels (#79)
+- [`build-time-advisories.md`](./build-time-advisories.md) — avis de dépendances sans correctif, limités au build mobile (node-forge, braces)
 
 ### Procédures ops
 
