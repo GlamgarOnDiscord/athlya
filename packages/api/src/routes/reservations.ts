@@ -157,13 +157,15 @@ export type HoldOutcome =
 
 /**
  * Outcome for `confirmHold`: `confirmed` → 201, `already_confirmed` →
- * 200 (a retry), `hold_expired` / `not_a_hold` → 409, `not_found` → 404.
+ * 200 (a retry), `hold_expired` / `not_a_hold` → 409, `class_in_past` →
+ * 422 (the class started while the seat was held), `not_found` → 404.
  */
 export type ConfirmHoldOutcome =
   | { readonly kind: 'confirmed'; readonly reservation: unknown }
   | { readonly kind: 'already_confirmed'; readonly reservation: unknown }
   | { readonly kind: 'hold_expired' }
   | { readonly kind: 'not_a_hold' }
+  | { readonly kind: 'class_in_past' }
   | { readonly kind: 'not_found' };
 
 /** Outcome for `cancelReservation`. Mirrors design §6.11. */
@@ -478,6 +480,14 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
             'Conflict',
             'not_a_hold',
             'this reservation is not a seat hold',
+          );
+        case 'class_in_past':
+          return problemBody(
+            c,
+            422,
+            'Unprocessable Entity',
+            'class_in_past',
+            'class has already started',
           );
         case 'not_found':
           return problemBody(c, 404, 'Not Found', 'not_found', 'reservation not found');

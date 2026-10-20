@@ -284,6 +284,18 @@ describe('confirmHold', () => {
     expect(d.m.insertOutbox).toHaveBeenCalledExactlyOnceWith(d.txs[0], CREATED);
   });
 
+  it('refuses to confirm a hold once the class started', async () => {
+    const d = doubles();
+    d.m.findReservationForUpdate.mockResolvedValueOnce(row('pending'));
+    d.m.readClassClock.mockResolvedValueOnce({
+      startsAt: new Date(NOW - 60_000),
+      now: new Date(NOW),
+    });
+
+    await expect(confirm(d)).resolves.toEqual({ code: 'class_in_past' });
+    expect(d.m.confirmHold).not.toHaveBeenCalled();
+  });
+
   it('answers hold_expired when the trigger refuses an expired hold', async () => {
     const d = doubles();
     d.m.findReservationForUpdate.mockResolvedValueOnce(row('pending'));

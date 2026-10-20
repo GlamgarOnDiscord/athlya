@@ -284,6 +284,8 @@ export interface ConfirmHoldInput {
  *                           retry): the row, unchanged, no new event.
  *   - `hold_expired`      : the hold expired, or was released or swept.
  *   - `not_a_hold`        : a waitlist or no-show row.
+ *   - `class_in_past`     : the class started while the seat was held;
+ *                           a started class is never booked (Req 8.6).
  *   - `not_found`         : missing, or owned by someone else.
  */
 export type ConfirmHoldResult =
@@ -291,6 +293,7 @@ export type ConfirmHoldResult =
   | { readonly code: 'already_confirmed'; readonly reservation: BookingReservationRow }
   | { readonly code: 'hold_expired' }
   | { readonly code: 'not_a_hold' }
+  | { readonly code: 'class_in_past' }
   | { readonly code: 'not_found' };
 
 /**
@@ -315,6 +318,13 @@ export async function confirmHold(input: ConfirmHoldInput): Promise<ConfirmHoldR
       }
       if (row.status !== 'pending') {
         return { code: 'not_a_hold' };
+      }
+      const clock = await repo.readClassClock(tx, row.classId);
+      if (clock === null) {
+        return { code: 'not_found' };
+      }
+      if (clock.startsAt.getTime() <= clock.now.getTime()) {
+        return { code: 'class_in_past' };
       }
       const reservation = await repo.confirmHold(tx, row.id);
       await repo.insertOutbox(

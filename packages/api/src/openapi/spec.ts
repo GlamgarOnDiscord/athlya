@@ -772,7 +772,9 @@ const confirmHoldRoute = createRoute({
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     422: {
-      description: 'Validation error or `idempotency_key_reused`',
+      description:
+        'Validation error, `class_in_past` (the class started while the seat was held), or ' +
+        '`idempotency_key_reused`',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     503: {

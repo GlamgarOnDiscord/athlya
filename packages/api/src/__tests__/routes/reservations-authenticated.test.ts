@@ -313,6 +313,7 @@ describe('seat holds (issue #723)', () => {
   it.each([
     ['hold_expired', 409],
     ['not_a_hold', 409],
+    ['class_in_past', 422],
     ['not_found', 404],
   ] as const)('POST /:id/confirm maps %s to %i', async (kind, status) => {
     const confirmHold = vi.fn().mockResolvedValue({ kind });

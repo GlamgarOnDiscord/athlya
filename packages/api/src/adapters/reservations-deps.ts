@@ -407,6 +407,7 @@ export function buildReservationsDeps(
           return { kind: result.code, reservation: result.reservation };
         case 'hold_expired':
         case 'not_a_hold':
+        case 'class_in_past':
         case 'not_found':
           return { kind: result.code };
       }
