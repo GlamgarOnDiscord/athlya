@@ -9,18 +9,20 @@ import {
   type ClassCapacitySnapshot,
 } from '../reconcile.js';
 
+import type { CounterReading } from '../counter.js';
+
 function repoOf(rows: ClassCapacitySnapshot[]): CapacityReconcileRepo {
   return { listActiveClassCapacities: vi.fn().mockResolvedValue(rows) };
 }
 
-function healerOf(remaining: Record<string, number | null>): Omit<
+function healerOf(remaining: Record<string, CounterReading>): Omit<
   CapacityHealer,
   'compareAndSet'
 > & {
   compareAndSet: Mock<CapacityHealer['compareAndSet']>;
 } {
   return {
-    getRemaining: vi.fn(async (id: string) => remaining[id] ?? null),
+    inspectRemaining: vi.fn(async (id: string) => remaining[id] ?? null),
     compareAndSet: vi.fn(async () => true),
   };
 }
@@ -114,7 +116,7 @@ describe('reconcileCapacityDrift', () => {
       { classId: 'good', capacity: 20, confirmed: 1 },
     ]);
     const counter: CapacityHealer = {
-      getRemaining: vi.fn(async (id: string) =>
+      inspectRemaining: vi.fn(async (id: string) =>
         id === 'bad' ? Promise.reject(new Error('redis down')) : 19,
       ),
       compareAndSet: vi.fn(async () => true),
@@ -129,7 +131,7 @@ describe('reconcileCapacityDrift', () => {
   it('counts heal failures when the compare-and-set throws', async () => {
     const repo = repoOf([{ classId: 'c1', capacity: 20, confirmed: 18 }]);
     const counter: CapacityHealer = {
-      getRemaining: vi.fn(async () => 9),
+      inspectRemaining: vi.fn(async () => 9),
       compareAndSet: vi.fn(async () => Promise.reject(new Error('cas boom'))),
     };
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -152,5 +154,29 @@ describe('reconcileCapacityDrift', () => {
 
     expect(report).toMatchObject({ drifted: 1, healed: 0, raced: 1, healFailures: 0 });
     expect(report.drifts[0]?.healed).toBe(false);
+  });
+
+  it('repairs a non-integer counter by compare-and-set on the invalid value', async () => {
+    const repo = repoOf([{ classId: 'c1', capacity: 20, confirmed: 8 }]);
+    const counter = healerOf({ c1: 'invalid' });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const report = await reconcileCapacityDrift({ repo, counter });
+
+    expect(report).toMatchObject({ repaired: 1, seeded: 0, drifted: 0, raced: 0 });
+    expect(counter.compareAndSet).toHaveBeenCalledWith('c1', 'invalid', 12);
+  });
+
+  it('counts a repair as raced when the invalid value moved first', async () => {
+    const repo = repoOf([{ classId: 'c1', capacity: 20, confirmed: 8 }]);
+    const counter = healerOf({ c1: 'invalid' });
+    counter.compareAndSet.mockResolvedValueOnce(false);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const report = await reconcileCapacityDrift({ repo, counter });
+
+    expect(report).toMatchObject({ repaired: 0, raced: 1, healFailures: 0 });
   });
 });

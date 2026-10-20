@@ -69,6 +69,13 @@ export interface RemainingCounterReader {
  */
 export interface RemainingCounter extends RemainingCounterReader {
   /**
+   * Like {@link RemainingCounterReader.getRemaining}, but tells an
+   * absent key (`null`) apart from a key holding something that is not
+   * an integer (`'invalid'`), which `DECR` and `INCR` refuse.
+   */
+  inspectRemaining(classId: string): Promise<CounterReading>;
+
+  /**
    * Atomically decrement the counter and return the new value.
    *
    * A negative return value is **legal** and signals "capacity
@@ -97,6 +104,10 @@ export interface RemainingCounter extends RemainingCounterReader {
    * `ClassCapacityExceededError` path in `bookClass` compensates with
    * INCR and falls through to the waitlist branch. The scheduled
    * reconcile job corrects the counter for subsequent bookings.
+   *
+   * A key holding a non-integer value is repaired the same way: when
+   * the DECR fails, the value is replaced by `capacity` only if it is
+   * still not an integer, and the DECR is retried once.
    */
   decrOrInit(classId: string, capacity: number): Promise<number>;
 
@@ -116,11 +127,12 @@ export interface RemainingCounter extends RemainingCounterReader {
 
   /**
    * Atomically overwrite the counter with `value` only when it still
-   * holds `expected` (`null` = key absent). One Lua script, so no DECR
-   * or INCR can land between the comparison and the write. Returns
-   * `false` when the value moved; the caller re-reads on its next pass.
+   * holds `expected` (`null` = key absent, `'invalid'` = key holds a
+   * value that is not an integer). One Lua script, so no DECR or INCR
+   * can land between the comparison and the write. Returns `false`
+   * when the value moved; the caller re-reads on its next pass.
    */
-  compareAndSet(classId: string, expected: number | null, value: number): Promise<boolean>;
+  compareAndSet(classId: string, expected: CounterReading, value: number): Promise<boolean>;
 
   /**
    * Expose the computed Redis key. Useful for logging, debugging,
@@ -129,6 +141,12 @@ export interface RemainingCounter extends RemainingCounterReader {
    */
   key(classId: string): string;
 }
+
+/**
+ * What a counter read found: the integer value, `null` for an absent
+ * key, or `'invalid'` for a key holding something `DECR` cannot use.
+ */
+export type CounterReading = number | null | 'invalid';
 
 /**
  * Default Redis key prefix. The full key is `${prefix}:{classId}:remaining`,
@@ -161,13 +179,26 @@ export interface RedisLike {
   eval(script: string, keys: string[], args: string[]): Promise<unknown>;
 }
 
+/** `ARGV[1]` of {@link COMPARE_AND_SET_SCRIPT} for a key that must hold a non-integer. */
+export const INVALID_EXPECTATION = 'invalid';
+
 /**
  * Compare-and-set. `ARGV[1]` is the value the caller read (`''` for an
- * absent key), `ARGV[2]` the value to write. Returns 1 on write, 0 when
- * the key moved in between.
+ * absent key, {@link INVALID_EXPECTATION} for a value that is not an
+ * integer, checked on the raw Redis bytes), `ARGV[2]` the value to
+ * write. Returns 1 on write, 0 when the key moved in between.
  */
 export const COMPARE_AND_SET_SCRIPT = `local cur = redis.call('GET', KEYS[1])
-if (cur == false and ARGV[1] == '') or cur == ARGV[1] then
+local hit
+if ARGV[1] == '' then
+  hit = cur == false
+elseif ARGV[1] == '${INVALID_EXPECTATION}' then
+  local n = cur and tonumber(cur)
+  hit = cur ~= false and (n == nil or string.format('%d', n) ~= cur)
+else
+  hit = cur == ARGV[1]
+end
+if hit then
   redis.call('SET', KEYS[1], ARGV[2])
   return 1
 end
@@ -227,6 +258,12 @@ export function createRedisRemainingCounter(
       return parseRemaining(raw);
     },
 
+    async inspectRemaining(classId: string): Promise<CounterReading> {
+      const raw = await client.get(key(classId));
+      if (raw === null || raw === undefined) return null;
+      return parseRemaining(raw) ?? 'invalid';
+    },
+
     async getManyRemaining(classIds: string[]): Promise<(number | null)[]> {
       if (classIds.length === 0) return [];
       const keys = classIds.map(key);
@@ -245,7 +282,20 @@ export function createRedisRemainingCounter(
       // concurrent "first bookings" may both call SETNX — one wins
       // (sets to capacity) and one is a noop; both then DECR safely.
       await client.setnx(k, capacity);
-      return client.decr(k);
+      try {
+        return await client.decr(k);
+      } catch (err) {
+        // DECR refuses a value that is not an integer. Replace it by
+        // `capacity` only if it is still invalid; any other failure
+        // (or a value repaired in between) surfaces unchanged.
+        const repaired = await client.eval(
+          COMPARE_AND_SET_SCRIPT,
+          [k],
+          [INVALID_EXPECTATION, String(capacity)],
+        );
+        if (Number(repaired) !== 1) throw err;
+        return client.decr(k);
+      }
     },
 
     async incr(classId: string): Promise<number> {

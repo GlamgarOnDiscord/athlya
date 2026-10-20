@@ -414,7 +414,11 @@ describe('idempotencyMiddleware: strict mode', () => {
     const res = await post(app, 'k-reuse', '{"classId":"c2"}');
 
     expect(res.status).toBe(422);
+    expect(res.headers.get('content-type')).toBe('application/problem+json');
     await expect(readJson<{ code: string }>(res)).resolves.toMatchObject({
+      type: 'about:blank',
+      title: 'idempotency_key_reused',
+      status: 422,
       code: 'idempotency_key_reused',
     });
     expect(handlerSpy).toHaveBeenCalledTimes(1);
@@ -440,11 +444,36 @@ describe('idempotencyMiddleware: strict mode', () => {
 
     expect(res.status).toBe(409);
     expect(res.headers.get('retry-after')).toBe('1');
+    expect(res.headers.get('content-type')).toBe('application/problem+json');
     await expect(readJson<{ code: string }>(res)).resolves.toMatchObject({
+      status: 409,
       code: 'idempotency_in_progress',
     });
     expect(handlerSpy).not.toHaveBeenCalled();
     expect(mocks.store).not.toHaveBeenCalled();
+  });
+
+  it('carries the request traceId on a strict-mode problem', async () => {
+    const lock = memoryLock();
+    lock.held.set(`idem:inflight:${USER_ID}:k-trace`, 'other-request');
+    const app = new Hono<IdempotencyEnv>();
+    app.use('*', async (c, next) => {
+      c.set('userId', USER_ID);
+      (c as unknown as { set: (key: string, value: unknown) => void }).set('traceId', 'trace-1');
+      await next();
+    });
+    app.use(
+      '*',
+      idempotencyMiddleware({ db: {} as AthlyaDb, logger: silentLogger(), ...strictDeps(lock) }),
+    );
+    app.post('/resource', (c) => c.json({ id: 'never' }, 201));
+
+    const res = await post(app, 'k-trace');
+
+    expect(res.status).toBe(409);
+    await expect(readJson<{ traceId: string }>(res)).resolves.toMatchObject({
+      traceId: 'trace-1',
+    });
   });
 
   it('runs a single handler when two identical requests race', async () => {
@@ -508,7 +537,9 @@ describe('idempotencyMiddleware: strict mode', () => {
 
     expect(res.status).toBe(503);
     expect(res.headers.get('retry-after')).toBe('1');
+    expect(res.headers.get('content-type')).toBe('application/problem+json');
     await expect(readJson<{ code: string }>(res)).resolves.toMatchObject({
+      status: 503,
       code: 'idempotency_unavailable',
     });
     expect(handlerSpy).not.toHaveBeenCalled();

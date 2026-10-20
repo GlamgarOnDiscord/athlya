@@ -44,6 +44,8 @@
  * handler — see `@athlya/api`'s capacity reconcile runner.
  */
 
+import type { CounterReading } from './counter.js';
+
 /** Structured-log message + metric name for drift events (alert A17). */
 export const CAPACITY_DRIFT_METRIC = 'capacity_redis_pg_drift';
 export const CAPACITY_DRIFT_LOG_MESSAGE = 'capacity.drift';
@@ -70,12 +72,13 @@ export interface CapacityReconcileRepo {
 
 /**
  * Minimal Redis counter surface the reconciler needs: read the current
- * value and replace it with the PG truth only if it did not move.
- * Satisfied structurally by `RemainingCounter` from `./counter.js`.
+ * value (an absent key and a non-integer value told apart) and replace
+ * it with the PG truth only if it did not move. Satisfied structurally
+ * by `RemainingCounter` from `./counter.js`.
  */
 export interface CapacityHealer {
-  getRemaining(classId: string): Promise<number | null>;
-  compareAndSet(classId: string, expected: number | null, value: number): Promise<boolean>;
+  inspectRemaining(classId: string): Promise<CounterReading>;
+  compareAndSet(classId: string, expected: CounterReading, value: number): Promise<boolean>;
 }
 
 export interface ReconcileLogger {
@@ -106,6 +109,8 @@ export interface CapacityDriftReport {
   readonly checked: number;
   /** Missing Redis keys seeded from PG (not counted as drift). */
   readonly seeded: number;
+  /** Non-integer Redis values replaced by the PG truth. */
+  readonly repaired: number;
   readonly drifted: number;
   readonly healed: number;
   /** Classes whose reset threw — left for the next pass. */
@@ -143,6 +148,7 @@ export async function reconcileCapacityDrift(
   const snapshots = await repo.listActiveClassCapacities();
 
   let seeded = 0;
+  let repaired = 0;
   let drifted = 0;
   let healed = 0;
   let healFailures = 0;
@@ -151,9 +157,9 @@ export async function reconcileCapacityDrift(
 
   for (const snap of snapshots) {
     const expected = Math.max(0, snap.capacity - snap.confirmed);
-    let redisRemaining: number | null;
+    let redisRemaining: CounterReading;
     try {
-      redisRemaining = await counter.getRemaining(snap.classId);
+      redisRemaining = await counter.inspectRemaining(snap.classId);
     } catch (err) {
       healFailures += 1;
       logger.error('capacity reconcile: redis read failed', {
@@ -176,6 +182,30 @@ export async function reconcileCapacityDrift(
       } catch (err) {
         healFailures += 1;
         logger.error('capacity reconcile: seed failed', {
+          classId: snap.classId,
+          expected,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      continue;
+    }
+
+    // A value DECR cannot use blocks every booking of the class: replace
+    // it while it is still invalid, compared on the raw Redis value.
+    if (redisRemaining === 'invalid') {
+      logger.warn('capacity reconcile: counter holds a non-integer value', {
+        classId: snap.classId,
+        expected,
+      });
+      try {
+        if (await counter.compareAndSet(snap.classId, 'invalid', expected)) {
+          repaired += 1;
+        } else {
+          raced += 1;
+        }
+      } catch (err) {
+        healFailures += 1;
+        logger.error('capacity reconcile: repair failed', {
           classId: snap.classId,
           expected,
           error: err instanceof Error ? err.message : String(err),
@@ -235,6 +265,7 @@ export async function reconcileCapacityDrift(
   const report: CapacityDriftReport = {
     checked: snapshots.length,
     seeded,
+    repaired,
     drifted,
     healed,
     healFailures,
@@ -245,6 +276,7 @@ export async function reconcileCapacityDrift(
   logger.info('capacity reconcile: sweep complete', {
     checked: report.checked,
     seeded: report.seeded,
+    repaired: report.repaired,
     drifted: report.drifted,
     healed: report.healed,
     healFailures: report.healFailures,

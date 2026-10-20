@@ -279,12 +279,13 @@ describe.skipIf(!dockerReady)('booking concurrency (Postgres, athlya_app)', () =
 
     const after = await liveRows();
     const confirmed = after.filter((r) => r.status === 'confirmed').map((r) => r.user_id);
-    expect(confirmed.length).toBeLessThanOrEqual(5);
-    // The promoted waiters are exactly the oldest ones: a prefix of
-    // the original waitlist order.
+    // The late bookings see a negative counter and join the waitlist,
+    // and the cancels serialise on the class row lock, so each one
+    // promotes the oldest waiter still waiting: the seats stay full and
+    // exactly the three oldest waiters are promoted, in order.
+    expect(confirmed).toHaveLength(5);
     const promoted = waitOrder.filter((u) => confirmed.includes(u));
-    expect(promoted).toEqual(waitOrder.slice(0, promoted.length));
-    expect(waiters.length).toBeGreaterThan(0);
+    expect(promoted).toEqual(waitOrder.slice(0, 3));
   }, 120_000);
 
   it('a capacity decrease racing bookings never leaves confirmed above capacity', async () => {

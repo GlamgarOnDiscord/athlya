@@ -9,7 +9,7 @@ function counterStub(
   remaining: number | null,
 ): CapacityHealer & { compareAndSet: ReturnType<typeof vi.fn> } {
   return {
-    getRemaining: vi.fn(async () => remaining),
+    inspectRemaining: vi.fn(async () => remaining),
     compareAndSet: vi.fn(async () => true),
   };
 }

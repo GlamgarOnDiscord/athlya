@@ -62,6 +62,8 @@
 
 import { lookup, store } from '@athlya/db/idempotency';
 
+import { PROBLEM_JSON_CONTENT_TYPE } from './problem-details.js';
+
 import type { IdempotencyDb, IdempotencyEntry } from '@athlya/db/idempotency';
 import type { Context, MiddlewareHandler } from 'hono';
 
@@ -272,15 +274,11 @@ export function idempotencyMiddleware(
         return unavailable(c);
       }
       if (acquired === false) {
-        return c.json(
-          {
-            type: 'about:blank',
-            title: 'idempotency_in_progress',
-            status: 409,
-            code: 'idempotency_in_progress',
-            detail: 'A request with this Idempotency-Key is still being processed',
-          },
+        return problem(
+          c,
           409,
+          'idempotency_in_progress',
+          'A request with this Idempotency-Key is still being processed',
           { 'retry-after': RETRY_AFTER_SEC },
         );
       }
@@ -382,15 +380,11 @@ function replay(
 ): Response {
   const { [IDEMPOTENCY_REQUEST_HASH_FIELD]: storedHash, ...body } = hit.response;
   if (fingerprint !== undefined && typeof storedHash === 'string' && storedHash !== fingerprint) {
-    return c.json(
-      {
-        type: 'about:blank',
-        title: 'idempotency_key_reused',
-        status: 422,
-        code: 'idempotency_key_reused',
-        detail: 'This Idempotency-Key was already used for a different request',
-      },
+    return problem(
+      c,
       422,
+      'idempotency_key_reused',
+      'This Idempotency-Key was already used for a different request',
     );
   }
   c.header('idempotent-replayed', 'true');
@@ -398,16 +392,40 @@ function replay(
 }
 
 function unavailable(c: Context<IdempotencyEnv>): Response {
-  return c.json(
-    {
-      type: 'about:blank',
-      title: 'idempotency_unavailable',
-      status: 503,
-      code: 'idempotency_unavailable',
-      detail: 'Duplicate protection is temporarily unavailable; retry in a moment',
-    },
+  return problem(
+    c,
     503,
+    'idempotency_unavailable',
+    'Duplicate protection is temporarily unavailable; retry in a moment',
     { 'retry-after': RETRY_AFTER_SEC },
+  );
+}
+
+/**
+ * Strict-mode refusal as RFC 9457 Problem Details, with the same
+ * envelope and `application/problem+json` content type as the
+ * reservation route errors, so a client can tell a `409
+ * idempotency_in_progress` from a `409` booking conflict.
+ */
+function problem(
+  c: Context<IdempotencyEnv>,
+  status: 409 | 422 | 503,
+  code: string,
+  detail: string,
+  headers: Record<string, string> = {},
+): Response {
+  const traceId: unknown = (c as unknown as { get: (key: string) => unknown }).get('traceId');
+  return c.body(
+    JSON.stringify({
+      type: 'about:blank',
+      title: code,
+      status,
+      detail,
+      code,
+      ...(typeof traceId === 'string' && traceId.length > 0 ? { traceId } : {}),
+    }),
+    status,
+    { ...headers, 'content-type': PROBLEM_JSON_CONTENT_TYPE },
   );
 }
 
