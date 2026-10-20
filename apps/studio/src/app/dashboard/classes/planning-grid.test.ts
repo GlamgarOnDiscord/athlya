@@ -5,6 +5,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 
 import {
+  blockDensity,
   blockGeometry,
   buildMonthGrid,
   buildWeekDays,
@@ -12,6 +13,7 @@ import {
   groupByDay,
   hourBounds,
   layoutDay,
+  resolveView,
   shiftAnchor,
   toDayKey,
   visibleRange,
@@ -168,5 +170,49 @@ describe('hourBounds and blockGeometry', () => {
       left: 50,
       width: 50,
     });
+  });
+});
+
+describe('day agenda helpers', () => {
+  it('steps one day and loads the whole week of the day', () => {
+    const anchor = fromDayKey('2026-10-25');
+    expect(toDayKey(shiftAnchor('day', anchor, 1))).toBe('2026-10-26');
+    expect(toDayKey(shiftAnchor('day', anchor, -1))).toBe('2026-10-24');
+    const { from, to } = visibleRange('day', anchor);
+    expect(toDayKey(from)).toBe('2026-10-19');
+    expect(toDayKey(to)).toBe('2026-10-26');
+  });
+
+  it('shows the day agenda on a narrow screen and the week grid in place of it on a wide one', () => {
+    expect(resolveView('week', false)).toBe('day');
+    expect(resolveView('month', false)).toBe('day');
+    expect(resolveView('day', false)).toBe('day');
+    expect(resolveView('day', true)).toBe('week');
+    expect(resolveView('week', true)).toBe('week');
+    expect(resolveView('month', true)).toBe('month');
+  });
+});
+
+describe('blockDensity', () => {
+  const density = (durationMin: number) => {
+    const [block] = layoutDay([item('2026-10-23T08:00:00.000Z', durationMin)]);
+    if (block === undefined) throw new Error('block missing');
+    return blockDensity(block);
+  };
+
+  it('keeps three lines from 60 minutes, two from 45 and one below', () => {
+    expect(density(90)).toBe('full');
+    expect(density(60)).toBe('full');
+    expect(density(59)).toBe('medium');
+    expect(density(45)).toBe('medium');
+    expect(density(44)).toBe('compact');
+    expect(density(30)).toBe('compact');
+    expect(density(5)).toBe('compact');
+  });
+
+  it('uses the clipped length of a class running past midnight', () => {
+    const [block] = layoutDay([item('2026-10-23T21:30:00.000Z', 90)]);
+    if (block === undefined) throw new Error('block missing');
+    expect(blockDensity(block)).toBe('compact');
   });
 });

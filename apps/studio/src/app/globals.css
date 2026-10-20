@@ -34,5 +34,5 @@
   left: calc(var(--block-left) + 2px);
   width: calc(var(--block-width) - 4px);
   height: var(--block-height);
-  min-height: 1.25rem;
+  min-height: 1.5rem;
 }

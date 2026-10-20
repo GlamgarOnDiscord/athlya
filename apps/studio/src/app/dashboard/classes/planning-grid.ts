@@ -19,7 +19,10 @@ import {
   startOfWeek,
 } from 'date-fns';
 
-export type PlanningView = 'week' | 'month';
+export type PlanningView = 'day' | 'week' | 'month';
+
+/** Views offered on a wide screen; below it the planning is a single-day agenda. */
+export const WIDE_VIEWS: ReadonlyArray<PlanningView> = ['week', 'month'];
 
 const WEEK_OPTIONS = { weekStartsOn: 1 } as const;
 const MINUTES_PER_DAY = 24 * 60;
@@ -69,9 +72,22 @@ export function buildMonthGrid(anchor: Date): MonthCell[][] {
   return weeks;
 }
 
-/** Visible period of a view: `from` inclusive, `to` exclusive, both local midnights. */
+/**
+ * The view actually drawn: a narrow screen always gets the day agenda, a
+ * wide one the week grid in place of it.
+ */
+export function resolveView(view: PlanningView, wide: boolean): PlanningView {
+  if (!wide) return 'day';
+  return view === 'day' ? 'week' : view;
+}
+
+/**
+ * Visible period of a view: `from` inclusive, `to` exclusive, both local
+ * midnights. The day agenda loads its whole week so its day strip moves
+ * without a refetch.
+ */
 export function visibleRange(view: PlanningView, anchor: Date): { from: Date; to: Date } {
-  if (view === 'week') {
+  if (view === 'week' || view === 'day') {
     const from = startOfWeek(anchor, WEEK_OPTIONS);
     return { from, to: addDays(from, 7) };
   }
@@ -82,6 +98,7 @@ export function visibleRange(view: PlanningView, anchor: Date): { from: Date; to
 
 /** The anchor one period before (`-1`) or after (`1`) `anchor`. */
 export function shiftAnchor(view: PlanningView, anchor: Date, step: -1 | 1): Date {
+  if (view === 'day') return addDays(anchor, step);
   return view === 'week' ? addWeeks(anchor, step) : addMonths(startOfMonth(anchor), step);
 }
 
@@ -191,4 +208,19 @@ export function blockGeometry(block: DayBlock<unknown>, bounds: HourBounds): Blo
     left: (block.lane / block.lanes) * 100,
     width: 100 / block.lanes,
   };
+}
+
+export type BlockDensity = 'full' | 'medium' | 'compact';
+
+/** Shortest block, in minutes, that fits title, time range and seats on three lines. */
+export const FULL_BLOCK_MINUTES = 60;
+/** Shortest block, in minutes, that fits title and time range on two lines. */
+export const MEDIUM_BLOCK_MINUTES = 45;
+
+/** How much text a week block can show without clipping a line. */
+export function blockDensity(block: DayBlock<unknown>): BlockDensity {
+  const minutes = block.endMin - block.startMin;
+  if (minutes >= FULL_BLOCK_MINUTES) return 'full';
+  if (minutes >= MEDIUM_BLOCK_MINUTES) return 'medium';
+  return 'compact';
 }

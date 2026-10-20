@@ -431,6 +431,7 @@
       "planning": {
         "viewLabel": "Vue du calendrier",
         "views": {
+          "day": "Jour",
           "week": "Semaine",
           "month": "Mois",
           "list": "Liste"
@@ -443,7 +444,9 @@
         "createAt": "Nouveau cours le {date}",
         "full": "Complet",
         "more": "+{count} de plus",
-        "localTime": "Horaires en heure locale ({timeZone})."
+        "localTime": "Horaires en heure locale ({timeZone}).",
+        "previousDay": "Jour précédent",
+        "nextDay": "Jour suivant"
       }
     },
     "members": {

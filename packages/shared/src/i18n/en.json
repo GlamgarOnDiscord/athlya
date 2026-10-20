@@ -431,6 +431,7 @@
       "planning": {
         "viewLabel": "Calendar view",
         "views": {
+          "day": "Day",
           "week": "Week",
           "month": "Month",
           "list": "List"
@@ -443,7 +444,9 @@
         "createAt": "New class on {date}",
         "full": "Full",
         "more": "+{count} more",
-        "localTime": "Times in your local time zone ({timeZone})."
+        "localTime": "Times in your local time zone ({timeZone}).",
+        "previousDay": "Previous day",
+        "nextDay": "Next day"
       }
     },
     "members": {

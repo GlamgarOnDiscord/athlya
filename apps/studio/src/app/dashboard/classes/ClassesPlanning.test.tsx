@@ -125,3 +125,40 @@ describe('<ClassesPlanning /> month view', () => {
     expect(props.onShowDay).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('<ClassesPlanning /> short blocks and full markers', () => {
+  it('puts a 30-minute class on one line and keeps its seats in the accessible name', () => {
+    const short = { ...cls('s1', 'Core blast', '2026-10-22T07:00:00.000Z'), durationMin: 30 };
+    const { day } = renderPlanning({ items: [short] });
+    const block = within(day('2026-10-22')).getByRole('button', { name: /Core blast/ });
+    expect(block.dataset['density']).toBe('compact');
+    expect(block.textContent).toContain('4 / 12 seats');
+    expect(within(block).getByText(/4 \/ 12 seats/).className).toContain('sr-only');
+  });
+
+  it('lets a full class title win the month cell, with the state kept for assistive tech', () => {
+    const { day } = renderPlanning({ view: 'month' });
+    const button = within(day('2026-10-25')).getByRole('button', { name: /Sunday yoga/ });
+    expect(button.textContent).toContain('Full');
+    expect(within(button).queryByText('Full')).toBeNull();
+    expect(within(button).getByText(/Full/).className).toContain('sr-only');
+  });
+});
+
+describe('<ClassesPlanning /> day agenda', () => {
+  it('lists the anchor day and moves through its week strip', () => {
+    const { props, day } = renderPlanning({ view: 'day', anchor: fromDayKey('2026-10-20') });
+    expect(within(day('2026-10-20')).getByText('Boxing technique')).toBeDefined();
+    expect(screen.queryByText('Sunday yoga')).toBeNull();
+
+    const sunday = screen.getByRole('button', { name: 'Sunday, October 25' });
+    expect(sunday.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(sunday);
+    expect(vi.mocked(props.onShowDay).mock.calls[0]?.[0].getDate()).toBe(25);
+
+    fireEvent.click(screen.getByRole('button', { name: /^New class on Tuesday, October 20$/ }));
+    expect(vi.mocked(props.onCreateAt).mock.calls[0]?.[0].toISOString()).toBe(
+      '2026-10-20T07:00:00.000Z',
+    );
+  });
+});

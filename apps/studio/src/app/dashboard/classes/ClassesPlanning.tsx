@@ -1,10 +1,12 @@
 'use client';
 
+import { ProhibitIcon } from '@phosphor-icons/react';
 import { useCallback, useMemo, type ReactElement } from 'react';
 
 import { cn } from '@/lib/utils';
 
 import {
+  blockDensity,
   blockGeometry,
   buildMonthGrid,
   buildWeekDays,
@@ -22,7 +24,7 @@ import type { Locale } from '@athlya/shared/i18n';
 import type { ClassWithRemaining } from '@athlya/shared/schemas/api';
 
 const MONTH_CELL_LIMIT = 3;
-const MONTH_CREATE_HOUR = 9;
+const DEFAULT_CREATE_HOUR = 9;
 
 export interface ClassesPlanningProps {
   readonly view: PlanningView;
@@ -70,7 +72,13 @@ export function ClassesPlanning(props: ClassesPlanningProps): ReactElement {
         aria-busy={props.busy}
         className="overflow-x-auto rounded-lg border border-border bg-background"
       >
-        {props.view === 'week' ? <WeekGrid {...props} /> : <MonthGrid {...props} />}
+        {props.view === 'week' ? (
+          <WeekGrid {...props} />
+        ) : props.view === 'month' ? (
+          <MonthGrid {...props} />
+        ) : (
+          <DayAgenda {...props} />
+        )}
       </div>
       <p className="text-xs text-muted-foreground">
         {props.t('studio.classes.planning.localTime', { timeZone })}
@@ -83,6 +91,16 @@ function capacityLabel(cls: ClassWithRemaining, t: Translator): string {
   return cls.remaining <= 0
     ? t('studio.classes.planning.full')
     : t('studio.classes.row.capacity', { remaining: cls.remaining, capacity: cls.capacity });
+}
+
+/** Full-class marker for tight spaces: an icon, with the word for assistive tech. */
+function FullMarker({ t }: { readonly t: Translator }): ReactElement {
+  return (
+    <span className="flex shrink-0 items-center text-destructive">
+      <ProhibitIcon aria-hidden="true" className="size-3" />
+      <span className="sr-only">, {t('studio.classes.planning.full')}</span>
+    </span>
+  );
 }
 
 function WeekGrid({
@@ -147,7 +165,7 @@ function WeekGrid({
         {hours.map((hour) => (
           <div
             key={hour}
-            className="h-12 pr-2 text-right text-[0.7rem] text-muted-foreground tabular-nums"
+            className="h-14 pr-2 text-right text-[0.7rem] text-muted-foreground tabular-nums"
           >
             {hour === bounds.startHour ? null : (
               <span className="relative -top-2">{`${String(hour).padStart(2, '0')}:00`}</span>
@@ -185,7 +203,7 @@ function WeekGrid({
                     date: fmt.slot.format(start),
                   })}
                   onClick={() => onCreateAt(start)}
-                  className="block h-12 w-full border-t border-border first:border-t-0 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                  className="block h-14 w-full border-t border-border first:border-t-0 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 />
               );
             })}
@@ -210,6 +228,7 @@ function WeekBlock({ block, bounds, fmt, t, onSelect }: WeekBlockProps): ReactEl
   const start = new Date(cls.startsAt);
   const end = new Date(start.getTime() + cls.durationMin * 60_000);
   const full = cls.remaining <= 0;
+  const density = blockDensity(block);
 
   const placeBlock = useCallback(
     (node: HTMLButtonElement | null) => {
@@ -228,16 +247,43 @@ function WeekBlock({ block, bounds, fmt, t, onSelect }: WeekBlockProps): ReactEl
       type="button"
       data-class-id={cls.id}
       onClick={() => onSelect(cls)}
-      className="planning-block absolute z-10 flex flex-col items-start overflow-hidden rounded-md border border-l-4 border-border border-l-primary bg-background px-1.5 py-0.5 text-left text-xs hover:bg-muted focus-visible:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      data-density={density}
+      className={cn(
+        'planning-block absolute z-10 flex flex-col items-start overflow-hidden rounded-md border border-l-4 border-border bg-background px-1.5 py-0.5 text-left text-xs leading-4 hover:bg-muted focus-visible:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        full ? 'border-l-destructive' : 'border-l-primary',
+      )}
     >
-      <span className="w-full truncate font-semibold text-foreground">{cls.title}</span>
-      <span className="w-full truncate text-muted-foreground tabular-nums">
-        <span className="sr-only">{fmt.dayLong.format(start)}, </span>
-        {fmt.time.format(start)} - {fmt.time.format(end)}
-      </span>
-      <span className={cn('w-full truncate', full ? 'text-destructive' : 'text-muted-foreground')}>
-        {capacityLabel(cls, t)}
-      </span>
+      {density === 'compact' ? (
+        <span className="flex w-full min-w-0 items-center gap-1">
+          <span className="min-w-0 flex-1 truncate font-semibold text-foreground">{cls.title}</span>
+          <span className="shrink-0 text-muted-foreground tabular-nums">
+            <span className="sr-only">, {fmt.dayLong.format(start)}, </span>
+            {fmt.time.format(start)}
+            <span className="sr-only"> - {fmt.time.format(end)}</span>
+          </span>
+          {full ? <FullMarker t={t} /> : <span className="sr-only">, {capacityLabel(cls, t)}</span>}
+        </span>
+      ) : (
+        <>
+          <span className="w-full truncate font-semibold text-foreground">{cls.title}</span>
+          <span className="flex w-full min-w-0 items-center gap-1 text-muted-foreground tabular-nums">
+            <span className="min-w-0 truncate">
+              <span className="sr-only">{fmt.dayLong.format(start)}, </span>
+              {fmt.time.format(start)} - {fmt.time.format(end)}
+            </span>
+            {density === 'medium' && full ? <FullMarker t={t} /> : null}
+          </span>
+          {density === 'full' ? (
+            <span
+              className={cn('w-full truncate', full ? 'text-destructive' : 'text-muted-foreground')}
+            >
+              {capacityLabel(cls, t)}
+            </span>
+          ) : full ? null : (
+            <span className="sr-only">{capacityLabel(cls, t)}</span>
+          )}
+        </>
+      )}
     </button>
   );
 }
@@ -277,7 +323,7 @@ function MonthGrid({
             const isToday = key === todayKey;
             const weekend = date.getDay() === 0 || date.getDay() === 6;
             const createStart = new Date(date);
-            createStart.setHours(MONTH_CREATE_HOUR, 0, 0, 0);
+            createStart.setHours(DEFAULT_CREATE_HOUR, 0, 0, 0);
             return (
               <div
                 key={key}
@@ -312,18 +358,19 @@ function MonthGrid({
                     type="button"
                     data-class-id={cls.id}
                     onClick={() => onSelectClass(cls)}
-                    className="relative z-10 flex w-full items-center gap-1.5 truncate rounded-md border border-l-4 border-border border-l-primary bg-background px-1.5 py-0.5 text-left text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className={cn(
+                      'relative z-10 flex w-full min-w-0 items-center gap-1.5 rounded-md border border-l-4 border-border bg-background px-1.5 py-0.5 text-left text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      cls.remaining <= 0 ? 'border-l-destructive' : 'border-l-primary',
+                    )}
                   >
-                    <span className="text-muted-foreground tabular-nums">
+                    <span className="shrink-0 text-muted-foreground tabular-nums">
                       <span className="sr-only">{fmt.dayLong.format(date)}, </span>
                       {fmt.time.format(new Date(cls.startsAt))}
                     </span>
-                    <span className="truncate font-medium text-foreground">{cls.title}</span>
-                    {cls.remaining <= 0 ? (
-                      <span className="ml-auto text-destructive">
-                        {t('studio.classes.planning.full')}
-                      </span>
-                    ) : null}
+                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                      {cls.title}
+                    </span>
+                    {cls.remaining <= 0 ? <FullMarker t={t} /> : null}
                   </button>
                 ))}
                 {hidden > 0 ? (
@@ -341,6 +388,105 @@ function MonthGrid({
           })}
         </div>
       ))}
+    </div>
+  );
+}
+
+function DayAgenda({
+  anchor,
+  todayKey,
+  items,
+  locale,
+  t,
+  onSelectClass,
+  onCreateAt,
+  onShowDay,
+}: ClassesPlanningProps): ReactElement {
+  const fmt = useFormatters(locale);
+  const days = useMemo(() => buildWeekDays(anchor), [anchor]);
+  const anchorKey = toDayKey(anchor);
+  const dayItems = useMemo(() => groupByDay(items).get(anchorKey) ?? [], [items, anchorKey]);
+  const createStart = new Date(anchor);
+  createStart.setHours(DEFAULT_CREATE_HOUR, 0, 0, 0);
+
+  return (
+    <div className="flex flex-col">
+      <div className="grid grid-cols-7 gap-1 border-b border-border p-1.5">
+        {days.map((date) => {
+          const key = toDayKey(date);
+          const selected = key === anchorKey;
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={selected}
+              aria-current={key === todayKey ? 'date' : undefined}
+              onClick={() => onShowDay(date)}
+              className={cn(
+                'flex flex-col items-center rounded-md py-1.5 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                selected && 'bg-foreground text-background hover:bg-foreground',
+                !selected && key === todayKey && 'font-semibold text-foreground',
+              )}
+            >
+              <span aria-hidden="true" className="text-[0.7rem]">
+                {fmt.weekday.format(date)}
+              </span>
+              <span aria-hidden="true" className="text-base font-semibold tabular-nums">
+                {date.getDate()}
+              </span>
+              <span className="sr-only">{fmt.dayLong.format(date)}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div data-day={anchorKey} className="flex flex-col gap-2 p-2">
+        {dayItems.map((cls) => {
+          const start = new Date(cls.startsAt);
+          const end = new Date(start.getTime() + cls.durationMin * 60_000);
+          const full = cls.remaining <= 0;
+          return (
+            <button
+              key={cls.id}
+              type="button"
+              data-class-id={cls.id}
+              onClick={() => onSelectClass(cls)}
+              className={cn(
+                'flex w-full min-w-0 items-center gap-3 rounded-md border border-l-4 border-border bg-background px-3 py-2 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                full ? 'border-l-destructive' : 'border-l-primary',
+              )}
+            >
+              <span className="flex shrink-0 flex-col text-xs text-muted-foreground tabular-nums">
+                <span>{fmt.time.format(start)}</span>
+                <span>
+                  <span className="sr-only"> - </span>
+                  {fmt.time.format(end)}
+                </span>
+              </span>
+              <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                {cls.title}
+              </span>
+              <span
+                className={cn(
+                  'shrink-0 text-xs',
+                  full ? 'text-destructive' : 'text-muted-foreground',
+                )}
+              >
+                {capacityLabel(cls, t)}
+              </span>
+            </button>
+          );
+        })}
+        {dayItems.length === 0 ? (
+          <p className="px-1 py-2 text-sm text-muted-foreground">{t('studio.classes.empty')}</p>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => onCreateAt(createStart)}
+          className="rounded-md border border-dashed border-border px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {t('studio.classes.planning.createAt', { date: fmt.dayLong.format(anchor) })}
+        </button>
+      </div>
     </div>
   );
 }

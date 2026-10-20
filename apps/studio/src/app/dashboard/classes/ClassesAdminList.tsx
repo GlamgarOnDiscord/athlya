@@ -41,9 +41,11 @@ import { ClassFormDialog, type ClassFormMode } from './ClassFormDialog';
 import {
   buildWeekDays,
   fromDayKey,
+  resolveView,
   shiftAnchor,
   toDayKey,
   visibleRange,
+  WIDE_VIEWS,
   type PlanningView,
 } from './planning-grid';
 
@@ -53,7 +55,22 @@ const DEFAULT_LOOKAHEAD_DAYS = 30;
 
 type AdminView = PlanningView | 'list';
 
-const VIEWS: ReadonlyArray<AdminView> = ['week', 'month', 'list'];
+const WIDE_QUERY = '(min-width: 48rem)';
+
+function subscribeToWide(onStoreChange: () => void): () => void {
+  const query = window.matchMedia(WIDE_QUERY);
+  query.addEventListener('change', onStoreChange);
+  return () => query.removeEventListener('change', onStoreChange);
+}
+
+/** Whether the viewport reaches the `md` breakpoint; wide during server rendering. */
+function useIsWide(): boolean {
+  return useSyncExternalStore(
+    subscribeToWide,
+    () => window.matchMedia(WIDE_QUERY).matches,
+    () => true,
+  );
+}
 
 /** Notifies once per local midnight so the today marker follows the date. */
 function subscribeToDay(onStoreChange: () => void): () => void {
@@ -144,12 +161,16 @@ export function ClassesAdminList(): ReactElement {
   const anchorKey = state.anchorKey ?? todayKey;
   const anchor = useMemo(() => (anchorKey === null ? null : fromDayKey(anchorKey)), [anchorKey]);
 
+  const wide = useIsWide();
+  const view: AdminView = state.view === 'list' ? 'list' : resolveView(state.view, wide);
+  const viewOptions: ReadonlyArray<AdminView> = wide ? [...WIDE_VIEWS, 'list'] : ['day', 'list'];
+
   const range = useMemo(() => {
-    if (state.view === 'list') return { from: state.from, to: state.to };
+    if (view === 'list') return { from: state.from, to: state.to };
     if (anchor === null) return null;
-    const { from, to } = visibleRange(state.view, anchor);
+    const { from, to } = visibleRange(view, anchor);
     return { from: from.toISOString(), to: to.toISOString() };
-  }, [state.view, state.from, state.to, anchor]);
+  }, [view, state.from, state.to, anchor]);
   const rangeFrom = range?.from ?? null;
   const rangeTo = range?.to ?? null;
 
@@ -178,8 +199,16 @@ export function ClassesAdminList(): ReactElement {
   }, [client, rangeFrom, rangeTo, state.refreshNonce]);
 
   const periodLabel = useMemo(() => {
-    if (anchor === null || state.view === 'list') return null;
-    if (state.view === 'month') {
+    if (anchor === null || view === 'list') return null;
+    if (view === 'day') {
+      return new Intl.DateTimeFormat(locale, {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }).format(anchor);
+    }
+    if (view === 'month') {
       return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(anchor);
     }
     const days = buildWeekDays(anchor);
@@ -188,20 +217,39 @@ export function ClassesAdminList(): ReactElement {
       month: 'long',
       year: 'numeric',
     }).formatRange(days[0] ?? anchor, days[6] ?? anchor);
-  }, [anchor, locale, state.view]);
+  }, [anchor, locale, view]);
 
   const step = useCallback(
     (direction: -1 | 1) => {
-      if (anchor === null || state.view === 'list') return;
-      const next = toDayKey(shiftAnchor(state.view, anchor, direction));
+      if (anchor === null || view === 'list') return;
+      const next = toDayKey(shiftAnchor(view, anchor, direction));
       setState((s) => ({ ...s, anchorKey: next }));
     },
-    [anchor, state.view],
+    [anchor, view],
   );
 
   const showDay = useCallback((day: Date) => {
-    setState((s) => ({ ...s, view: 'week', anchorKey: toDayKey(day) }));
+    setState((s) => ({
+      ...s,
+      view: s.view === 'month' ? 'week' : s.view,
+      anchorKey: toDayKey(day),
+    }));
   }, []);
+
+  const previousLabel = t(
+    view === 'day'
+      ? 'studio.classes.planning.previousDay'
+      : view === 'week'
+        ? 'studio.classes.planning.previousWeek'
+        : 'studio.classes.planning.previousMonth',
+  );
+  const nextLabel = t(
+    view === 'day'
+      ? 'studio.classes.planning.nextDay'
+      : view === 'week'
+        ? 'studio.classes.planning.nextWeek'
+        : 'studio.classes.planning.nextMonth',
+  );
 
   const openCreateAt = useCallback((startsAt: Date) => {
     setState((s) => ({
@@ -246,8 +294,8 @@ export function ClassesAdminList(): ReactElement {
 
   return (
     <div className="flex flex-col gap-4" data-reload-key={state.refreshNonce}>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        {state.view === 'list' ? (
+      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between">
+        {view === 'list' ? (
           <fieldset className="flex flex-wrap items-end gap-3">
             <legend className="sr-only">
               {t('studio.classes.range.from')} / {t('studio.classes.range.to')}
@@ -286,64 +334,56 @@ export function ClassesAdminList(): ReactElement {
             {periodLabel}
           </h2>
         )}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center">
           <div
             role="group"
             aria-label={t('studio.classes.planning.viewLabel')}
-            className="inline-flex rounded-lg border border-border bg-muted p-0.5"
+            className="grid auto-cols-fr grid-flow-col rounded-lg border border-border bg-muted p-0.5 md:inline-grid"
           >
-            {VIEWS.map((view) => (
+            {viewOptions.map((option) => (
               <button
-                key={view}
+                key={option}
                 type="button"
-                aria-pressed={state.view === view}
-                onClick={() => setState((s) => ({ ...s, view }))}
+                aria-pressed={view === option}
+                onClick={() => setState((s) => ({ ...s, view: option }))}
                 className={cn(
                   'h-7 rounded-md px-3 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  state.view === view && 'bg-background text-foreground shadow-sm',
+                  view === option && 'bg-background text-foreground shadow-sm',
                 )}
               >
-                {t(`studio.classes.planning.views.${view}`)}
+                {t(`studio.classes.planning.views.${option}`)}
               </button>
             ))}
           </div>
-          {state.view === 'list' ? null : (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => setState((s) => ({ ...s, anchorKey: null }))}
-              >
-                {t('studio.classes.planning.today')}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={t(
-                  state.view === 'week'
-                    ? 'studio.classes.planning.previousWeek'
-                    : 'studio.classes.planning.previousMonth',
-                )}
-                onClick={() => step(-1)}
-              >
-                <CaretLeftIcon aria-hidden="true" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={t(
-                  state.view === 'week'
-                    ? 'studio.classes.planning.nextWeek'
-                    : 'studio.classes.planning.nextMonth',
-                )}
-                onClick={() => step(1)}
-              >
-                <CaretRightIcon aria-hidden="true" />
-              </Button>
-            </>
-          )}
-          <Button onClick={() => setState((s) => ({ ...s, dialogMode: { kind: 'create' } }))}>
-            {t('studio.classes.create')}
-          </Button>
+          <div className="flex items-center gap-2">
+            {view === 'list' ? null : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setState((s) => ({ ...s, anchorKey: null }))}
+                >
+                  {t('studio.classes.planning.today')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={previousLabel}
+                  onClick={() => step(-1)}
+                >
+                  <CaretLeftIcon aria-hidden="true" />
+                </Button>
+                <Button variant="ghost" size="icon" aria-label={nextLabel} onClick={() => step(1)}>
+                  <CaretRightIcon aria-hidden="true" />
+                </Button>
+              </>
+            )}
+            <Button
+              className="ml-auto md:ml-0"
+              onClick={() => setState((s) => ({ ...s, dialogMode: { kind: 'create' } }))}
+            >
+              {t('studio.classes.create')}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -353,15 +393,15 @@ export function ClassesAdminList(): ReactElement {
         </p>
       ) : null}
 
-      {state.view !== 'list' && state.status.kind === 'empty' ? (
+      {view !== 'list' && view !== 'day' && state.status.kind === 'empty' ? (
         <p className="text-sm text-muted-foreground">{t('studio.classes.empty')}</p>
       ) : null}
 
-      {state.view === 'list' ? null : anchor === null || todayKey === null ? (
+      {view === 'list' ? null : anchor === null || todayKey === null ? (
         <Skeleton className="h-[32rem] w-full" />
       ) : (
         <ClassesPlanning
-          view={state.view}
+          view={view}
           anchor={anchor}
           todayKey={todayKey}
           items={state.status.kind === 'ready' ? state.status.items : []}
@@ -374,7 +414,7 @@ export function ClassesAdminList(): ReactElement {
         />
       )}
 
-      {state.view === 'list' ? (
+      {view === 'list' ? (
         <Table>
           <TableHeader>
             <TableRow>
