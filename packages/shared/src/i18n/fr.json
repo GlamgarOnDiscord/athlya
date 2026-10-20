@@ -650,6 +650,12 @@
       },
       "columns": {
         "date": "Date"
+      },
+      "list": {
+        "export": "Exporter",
+        "summary": "{classes} cours · {seats} places · {booked} réservées",
+        "deleteNote": "Supprimer un cours annule ses réservations.",
+        "remaining": "Places libres"
       }
     },
     "members": {
@@ -755,7 +761,26 @@
       },
       "frameHint": "Centrez le QR code dans le cadre.",
       "confirmed": "Check-in confirmé",
-      "scanNext": "Scanner le membre suivant"
+      "scanNext": "Scanner le membre suivant",
+      "enterHint": "ou appuyez sur",
+      "enterKey": "Entrée",
+      "scanner": {
+        "title": "Scanner",
+        "camera": "Caméra arrière",
+        "active": "Caméra active"
+      },
+      "manual": {
+        "title": "Saisie manuelle",
+        "hint": "Si la caméra ne lit pas le code"
+      },
+      "passes": {
+        "title": "Passages de cette session",
+        "countOne": "{count} passage",
+        "countOther": "{count} passages",
+        "empty": "Aucun passage depuis l'ouverture de la borne.",
+        "unnamed": "Membre sans nom",
+        "note": "Liste propre à cette borne, effacée au rechargement."
+      }
     },
     "audit": {
       "title": "Journal d'audit",

@@ -1,6 +1,13 @@
 'use client';
 
-import { ArrowsInIcon, ArrowsOutIcon, CheckCircleIcon } from '@phosphor-icons/react';
+import {
+  ArrowsInIcon,
+  ArrowsOutIcon,
+  CheckCircleIcon,
+  InfoIcon,
+  KeyReturnIcon,
+  WarningIcon,
+} from '@phosphor-icons/react';
 import Image from 'next/image';
 import {
   useCallback,
@@ -16,12 +23,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+import { PageHeader } from '../../../components/shell/PageHeader';
 import { useApiClient } from '../../../lib/api/buildClient';
 import { ApiError } from '../../../lib/api/client';
 import { useAuth } from '../../../lib/auth/AuthContext';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
+import { pluralKey } from '../../../lib/i18n/plural';
 import { createTranslator } from '../../../lib/i18n/t';
 import { newIdempotencyKey } from '../../../lib/idempotency';
+import { initials } from '../members/members-view';
 
 import { createFrameDecoder } from './qr-frame-decoder';
 
@@ -75,9 +85,12 @@ type KioskState =
       readonly member: CheckInSuccessResponse['member'];
       readonly countdown: number;
     }
-  | { readonly kind: 'error'; readonly message: string };
+  | { readonly kind: 'error'; readonly message: string; readonly code: string | undefined };
 
 const SUCCESS_COUNTDOWN_SECONDS = 5;
+/** Check-ins of this kiosk session listed beside the scanner. */
+const SESSION_PASSES_SHOWN = 8;
+const CARD = 'flex flex-col rounded-lg border border-border bg-card text-card-foreground';
 
 /** Minimum gap between two decoded frames: about 8 per second. */
 export const DECODE_INTERVAL_MS = 125;
@@ -130,11 +143,8 @@ function ManualInput({ onSubmit, disabled, t }: ManualInputProps): ReactElement 
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex w-full max-w-md flex-col gap-3 group-data-[kiosk=true]/kiosk:max-w-2xl"
-    >
-      <div className="flex flex-col gap-1">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="qr-token-input">{t('studio.checkin.manualLabel')}</Label>
         <Input
           id="qr-token-input"
@@ -146,9 +156,18 @@ function ManualInput({ onSubmit, disabled, t }: ManualInputProps): ReactElement 
           autoComplete="off"
         />
       </div>
-      <Button type="submit" disabled={disabled || token.trim().length === 0}>
-        {t('studio.checkin.manualSubmit')}
-      </Button>
+      <div className="flex items-center gap-3">
+        <Button type="submit" disabled={disabled || token.trim().length === 0}>
+          {t('studio.checkin.manualSubmit')}
+        </Button>
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {t('studio.checkin.enterHint')}
+          <kbd className="rounded border border-border px-1 font-sans text-[0.6875rem]">
+            <KeyReturnIcon aria-hidden="true" className="inline size-3" />
+            <span className="sr-only">{t('studio.checkin.enterKey')}</span>
+          </kbd>
+        </span>
+      </div>
     </form>
   );
 }
@@ -162,47 +181,66 @@ interface SuccessBannerProps {
 
 function SuccessBanner({ member, countdown, onNext, t }: SuccessBannerProps): ReactElement {
   const named = member.displayName.trim().length > 0;
+  const barRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    barRef.current?.style.setProperty(
+      '--fill',
+      `${String((countdown / SUCCESS_COUNTDOWN_SECONDS) * 100)}%`,
+    );
+  }, [countdown]);
   return (
-    <div
-      role="alert"
-      className="flex w-full max-w-md flex-col items-center gap-4 rounded-lg border border-border bg-card p-8 text-center text-card-foreground group-data-[kiosk=true]/kiosk:max-w-2xl"
-    >
-      {member.avatarUrl !== null && member.avatarUrl !== '' ? (
-        <Image
-          src={member.avatarUrl}
-          alt=""
-          width={96}
-          height={96}
-          unoptimized
-          className="size-24 rounded-full border border-border object-cover"
-        />
-      ) : (
-        <div
-          aria-hidden="true"
-          className="flex size-24 items-center justify-center rounded-full border border-border bg-muted text-4xl font-semibold"
-        >
-          {member.displayName.charAt(0).toUpperCase() || '?'}
+    <div role="alert" className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
+      <div className="flex items-center gap-4">
+        {member.avatarUrl !== null && member.avatarUrl !== '' ? (
+          <Image
+            src={member.avatarUrl}
+            alt=""
+            width={56}
+            height={56}
+            unoptimized
+            className="size-14 shrink-0 rounded-full border border-border object-cover"
+          />
+        ) : (
+          <span
+            aria-hidden="true"
+            className="grid size-14 shrink-0 place-items-center rounded-full border border-border bg-muted text-lg font-semibold"
+          >
+            {initials(member.displayName)}
+          </span>
+        )}
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <p className="truncate text-xl font-semibold">
+            {named
+              ? t('studio.checkin.success', { name: member.displayName })
+              : t('studio.checkin.successNoName')}
+          </p>
+          {named ? (
+            <p className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
+              <CheckCircleIcon aria-hidden="true" weight="fill" className="size-4" />
+              {t('studio.checkin.confirmed')}
+            </p>
+          ) : null}
         </div>
-      )}
-      {named ? (
-        <p className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
-          <CheckCircleIcon aria-hidden="true" weight="fill" className="size-5" />
-          {t('studio.checkin.confirmed')}
+        <Button variant="outline" onClick={onNext}>
+          {t('studio.checkin.scanNext')}
+        </Button>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <span aria-hidden="true" className="h-1 overflow-hidden rounded-full bg-muted">
+          <span ref={barRef} className="fill-meter-bar block h-full rounded-full bg-chart-1" />
+        </span>
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {t('studio.checkin.resetIn', { seconds: countdown })}
         </p>
-      ) : null}
-      <p className="text-3xl font-semibold">
-        {named
-          ? t('studio.checkin.success', { name: member.displayName })
-          : t('studio.checkin.successNoName')}
-      </p>
-      <p className="text-sm text-muted-foreground tabular-nums">
-        {t('studio.checkin.resetIn', { seconds: countdown })}
-      </p>
-      <Button variant="outline" onClick={onNext}>
-        {t('studio.checkin.scanNext')}
-      </Button>
+      </div>
     </div>
   );
+}
+
+interface SessionPass {
+  readonly reservationId: string;
+  readonly name: string;
+  readonly at: Date;
 }
 
 /* ------------------------------------------------------------------ */
@@ -363,6 +401,7 @@ export function CheckinKiosk(): ReactElement {
   const client = useApiClient(getToken);
 
   const [state, setState] = useState<KioskState>({ kind: 'scanning' });
+  const [passes, setPasses] = useState<ReadonlyArray<SessionPass>>([]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const kioskRef = useRef<HTMLDivElement | null>(null);
   const kiosk = useKioskMode(kioskRef);
@@ -405,9 +444,23 @@ export function CheckinKiosk(): ReactElement {
         member: response.member,
         countdown: SUCCESS_COUNTDOWN_SECONDS,
       });
+      setPasses((prev) =>
+        [
+          {
+            reservationId: response.reservationId,
+            name: response.member.displayName,
+            at: new Date(),
+          },
+          ...prev,
+        ].slice(0, SESSION_PASSES_SHOWN),
+      );
     } catch (err: unknown) {
       const code = err instanceof ApiError ? err.problem?.code : undefined;
-      setState({ kind: 'error', message: resolveErrorMessage(code, t) });
+      setState({
+        kind: 'error',
+        message: resolveErrorMessage(code, t),
+        code: code !== undefined && KNOWN_FAIL_CODES.has(code) ? code : undefined,
+      });
     }
   }
 
@@ -415,93 +468,189 @@ export function CheckinKiosk(): ReactElement {
     setState({ kind: 'scanning' });
   }
 
+  const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
+
   return (
     <div
       ref={kioskRef}
       data-kiosk={kiosk.active}
-      className="group/kiosk flex flex-col gap-6 data-[kiosk=true]:items-center data-[kiosk=true]:justify-center data-[kiosk=true]:overflow-auto data-[kiosk=true]:bg-background data-[kiosk=true]:p-8 data-[kiosk=true]:text-foreground"
+      className="group/kiosk flex flex-col gap-6 data-[kiosk=true]:overflow-auto data-[kiosk=true]:bg-background data-[kiosk=true]:p-8 data-[kiosk=true]:text-foreground"
     >
-      {kiosk.supported ? (
-        <Button
-          variant="outline"
-          onClick={kiosk.toggle}
-          aria-pressed={kiosk.active}
-          className="self-start group-data-[kiosk=true]/kiosk:fixed group-data-[kiosk=true]/kiosk:top-6 group-data-[kiosk=true]/kiosk:right-6"
-        >
-          {kiosk.active ? (
-            <ArrowsInIcon aria-hidden="true" data-icon="inline-start" />
-          ) : (
-            <ArrowsOutIcon aria-hidden="true" data-icon="inline-start" />
-          )}
-          {kiosk.active ? t('studio.checkin.kiosk.exit') : t('studio.checkin.kiosk.enter')}
-        </Button>
-      ) : null}
+      <PageHeader
+        title={t('studio.checkin.title')}
+        subtitle={t('studio.checkin.subtitle')}
+        actions={
+          kiosk.supported ? (
+            <Button variant="outline" size="lg" onClick={kiosk.toggle} aria-pressed={kiosk.active}>
+              {kiosk.active ? (
+                <ArrowsInIcon aria-hidden="true" data-icon="inline-start" />
+              ) : (
+                <ArrowsOutIcon aria-hidden="true" data-icon="inline-start" />
+              )}
+              {kiosk.active ? t('studio.checkin.kiosk.exit') : t('studio.checkin.kiosk.enter')}
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {state.kind === 'success' ? (
-        <SuccessBanner member={state.member} countdown={state.countdown} onNext={reset} t={t} />
-      ) : null}
-
-      {state.kind === 'error' ? (
-        <p role="alert" className="text-sm text-destructive">
-          {state.message}
-        </p>
-      ) : null}
-
-      {state.kind === 'error' ? (
-        <Button variant="outline" onClick={reset} className="self-start">
-          {t('common.retry')}
-        </Button>
-      ) : null}
-
-      {state.kind !== 'success' ? (
-        <>
-          {cameraBlocked ? (
-            <p
-              role="status"
-              data-testid="checkin-camera-status"
-              className="text-sm text-muted-foreground"
-            >
-              {t(`studio.checkin.camera.${cameraStatus}` as Parameters<typeof t>[0])}{' '}
-              {t('studio.checkin.noCameraFallback')}
-            </p>
-          ) : (
-            <div className="flex w-full max-w-md flex-col gap-2 group-data-[kiosk=true]/kiosk:max-w-2xl">
-              <p className="text-sm text-muted-foreground">
-                {cameraStatus === 'starting'
-                  ? t('studio.checkin.camera.starting')
-                  : `${t('studio.checkin.scanPrompt')} ${t('studio.checkin.frameHint')}`}
-              </p>
-              <div className="kiosk-video relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-border">
-                <video
-                  ref={videoRef}
-                  aria-label={t('studio.checkin.scanPrompt')}
-                  className="size-full object-cover"
-                  muted
-                  playsInline
-                />
-                <div
-                  aria-hidden="true"
-                  data-testid="checkin-frame-guide"
-                  className="pointer-events-none absolute inset-0 flex items-center justify-center"
-                >
-                  <div className="relative aspect-square h-3/5">
-                    <span className="kiosk-guide-corner absolute top-0 left-0 size-8 rounded-tl-lg border-t-4 border-l-4" />
-                    <span className="kiosk-guide-corner absolute top-0 right-0 size-8 rounded-tr-lg border-t-4 border-r-4" />
-                    <span className="kiosk-guide-corner absolute bottom-0 left-0 size-8 rounded-bl-lg border-b-4 border-l-4" />
-                    <span className="kiosk-guide-corner absolute right-0 bottom-0 size-8 rounded-br-lg border-r-4 border-b-4" />
-                  </div>
-                </div>
-              </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="flex flex-col gap-4 lg:col-span-7">
+          <section aria-labelledby="checkin-scanner" className={CARD}>
+            <div className="flex min-h-12 items-center justify-between gap-3 border-b border-border px-4 py-2">
+              <h2 id="checkin-scanner" className="flex items-baseline gap-2 text-sm font-semibold">
+                {t('studio.checkin.scanner.title')}
+                <span className="text-xs font-normal text-muted-foreground">
+                  {t('studio.checkin.scanner.camera')}
+                </span>
+              </h2>
             </div>
-          )}
+            <div className="p-4">
+              {cameraBlocked ? (
+                <p
+                  role="status"
+                  data-testid="checkin-camera-status"
+                  className="flex items-start gap-2 rounded-lg border border-border p-3 text-sm text-muted-foreground"
+                >
+                  <InfoIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                  <span>
+                    {t(`studio.checkin.camera.${cameraStatus}` as Parameters<typeof t>[0])}{' '}
+                    {t('studio.checkin.noCameraFallback')}
+                  </span>
+                </p>
+              ) : (
+                <div className="kiosk-video relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-border group-data-[kiosk=true]/kiosk:aspect-video">
+                  <video
+                    ref={videoRef}
+                    aria-label={t('studio.checkin.scanPrompt')}
+                    className="size-full object-cover"
+                    muted
+                    playsInline
+                  />
+                  {cameraStatus === 'active' && state.kind === 'scanning' ? (
+                    <span className="planning-pill-open absolute top-3 left-3 rounded-md px-1.5 py-0.5 text-xs font-medium">
+                      {t('studio.checkin.scanner.active')}
+                    </span>
+                  ) : null}
+                  <div
+                    aria-hidden="true"
+                    data-testid="checkin-frame-guide"
+                    className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                  >
+                    <div className="relative aspect-square h-1/2">
+                      <span className="kiosk-guide-corner absolute top-0 left-0 size-8 rounded-tl-lg border-t-4 border-l-4" />
+                      <span className="kiosk-guide-corner absolute top-0 right-0 size-8 rounded-tr-lg border-t-4 border-r-4" />
+                      <span className="kiosk-guide-corner absolute bottom-0 left-0 size-8 rounded-bl-lg border-b-4 border-l-4" />
+                      <span className="kiosk-guide-corner absolute right-0 bottom-0 size-8 rounded-br-lg border-r-4 border-b-4" />
+                    </div>
+                  </div>
+                  <p className="kiosk-caption absolute inset-x-0 bottom-0 px-4 py-2 text-center text-sm">
+                    {cameraStatus === 'starting'
+                      ? t('studio.checkin.camera.starting')
+                      : `${t('studio.checkin.scanPrompt')} ${t('studio.checkin.frameHint')}`}
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
 
-          <ManualInput
-            onSubmit={(token) => void submitToken(token)}
-            disabled={state.kind === 'submitting'}
-            t={t}
-          />
-        </>
-      ) : null}
+          {state.kind === 'success' ? (
+            <SuccessBanner member={state.member} countdown={state.countdown} onNext={reset} t={t} />
+          ) : null}
+
+          {state.kind === 'error' ? (
+            <div
+              role="alert"
+              className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4"
+            >
+              <p className="flex items-start gap-2 text-sm font-medium text-destructive">
+                <WarningIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                <span className="flex flex-col gap-0.5">
+                  {state.message}
+                  {state.code === undefined ? null : (
+                    <span className="font-mono text-xs font-normal">{state.code}</span>
+                  )}
+                </span>
+              </p>
+              <Button variant="outline" onClick={reset}>
+                {t('common.retry')}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col gap-4 lg:col-span-5">
+          <section aria-labelledby="checkin-manual" className={CARD}>
+            <div className="flex min-h-12 items-center border-b border-border px-4 py-2">
+              <h2
+                id="checkin-manual"
+                className="flex flex-wrap items-baseline gap-x-2 text-sm font-semibold"
+              >
+                {t('studio.checkin.manual.title')}
+                <span className="text-xs font-normal text-muted-foreground">
+                  {t('studio.checkin.manual.hint')}
+                </span>
+              </h2>
+            </div>
+            <div className="p-4">
+              <ManualInput
+                onSubmit={(token) => void submitToken(token)}
+                disabled={state.kind === 'submitting'}
+                t={t}
+              />
+            </div>
+          </section>
+
+          <section aria-labelledby="checkin-passes" className={CARD}>
+            <div className="flex min-h-12 items-center border-b border-border px-4 py-2">
+              <h2 id="checkin-passes" className="flex items-baseline gap-2 text-sm font-semibold">
+                {t('studio.checkin.passes.title')}
+                <span className="text-xs font-normal text-muted-foreground tabular-nums">
+                  {t(
+                    pluralKey(locale, passes.length, {
+                      one: 'studio.checkin.passes.countOne',
+                      other: 'studio.checkin.passes.countOther',
+                    }),
+                    { count: passes.length },
+                  )}
+                </span>
+              </h2>
+            </div>
+            {passes.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-muted-foreground">
+                {t('studio.checkin.passes.empty')}
+              </p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {passes.map((pass) => (
+                  <li
+                    key={pass.reservationId}
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="grid size-7 shrink-0 place-items-center rounded-full border border-border bg-muted text-[0.6875rem] font-medium"
+                    >
+                      {initials(pass.name)}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-medium">
+                      {pass.name.trim() === '' ? t('studio.checkin.passes.unnamed') : pass.name}
+                    </span>
+                    <time
+                      dateTime={pass.at.toISOString()}
+                      className="text-xs text-muted-foreground tabular-nums"
+                    >
+                      {time.format(pass.at)}
+                    </time>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
+              {t('studio.checkin.passes.note')}
+            </p>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }

@@ -199,6 +199,7 @@ describe('logo palette (docs/brand/README.md)', () => {
       );
     }
     expect(contrastRatio(brandPalette.volt, brandPalette.ink)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(brandPalette.white, brandPalette.ink)).toBeGreaterThanOrEqual(4.5);
   });
 
   it('volt on white stays forbidden: below even the 3:1 UI minimum', () => {

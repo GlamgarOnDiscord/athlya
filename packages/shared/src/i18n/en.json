@@ -650,6 +650,12 @@
       },
       "columns": {
         "date": "Date"
+      },
+      "list": {
+        "export": "Export",
+        "summary": "{classes} classes · {seats} seats · {booked} booked",
+        "deleteNote": "Deleting a class cancels its bookings.",
+        "remaining": "Seats left"
       }
     },
     "members": {
@@ -755,7 +761,26 @@
       },
       "frameHint": "Center the QR code in the frame.",
       "confirmed": "Check-in confirmed",
-      "scanNext": "Scan the next member"
+      "scanNext": "Scan the next member",
+      "enterHint": "or press",
+      "enterKey": "Enter",
+      "scanner": {
+        "title": "Scanner",
+        "camera": "Rear camera",
+        "active": "Camera on"
+      },
+      "manual": {
+        "title": "Manual entry",
+        "hint": "If the camera cannot read the code"
+      },
+      "passes": {
+        "title": "This session",
+        "countOne": "{count} check-in",
+        "countOther": "{count} check-ins",
+        "empty": "No check-in since this kiosk opened.",
+        "unnamed": "Unnamed member",
+        "note": "Kept on this kiosk only and cleared on reload."
+      }
     },
     "audit": {
       "title": "Audit log",

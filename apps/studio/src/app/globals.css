@@ -178,3 +178,9 @@
     }
   }
 }
+
+/* Check-in prompt over the camera: white on an ink strip, solid (no blur). */
+.kiosk-caption {
+  background-color: var(--athlya-brand-ink);
+  color: var(--athlya-brand-white);
+}

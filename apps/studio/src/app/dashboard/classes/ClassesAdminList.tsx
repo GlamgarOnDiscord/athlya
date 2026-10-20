@@ -1,6 +1,6 @@
 'use client';
 
-import { CaretLeftIcon, CaretRightIcon } from '@phosphor-icons/react';
+import { CaretLeftIcon, CaretRightIcon, DownloadSimpleIcon } from '@phosphor-icons/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   useCallback,
@@ -32,9 +32,11 @@ import { cn } from '@/lib/utils';
 
 import { useApiClient } from '../../../lib/api/buildClient';
 import { useAuth } from '../../../lib/auth/AuthContext';
+import { downloadCsv, toCsv } from '../../../lib/csv';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
 import { useNowMinute } from '../../../lib/use-now-minute';
+import { FillMeter } from '../overview/parts';
 
 import { ClassesPlanning } from './ClassesPlanning';
 import { ClassFormDialog, type ClassFormMode } from './ClassFormDialog';
@@ -261,6 +263,41 @@ export function ClassesAdminList(): ReactElement {
     [createRequested, router],
   );
 
+  const listSummary = useMemo(() => {
+    if (state.status.kind !== 'ready') return null;
+    const listed = state.status.items;
+    const seatsTotal = listed.reduce((sum, c) => sum + c.capacity, 0);
+    const booked = listed.reduce((sum, c) => sum + Math.max(0, c.capacity - c.remaining), 0);
+    return t('studio.classes.list.summary', {
+      classes: listed.length,
+      seats: seatsTotal,
+      booked,
+    });
+  }, [state.status, t]);
+
+  const exportList = useCallback(() => {
+    if (state.status.kind !== 'ready') return;
+    downloadCsv(
+      'cours.csv',
+      toCsv(
+        [
+          t('studio.classes.fields.title'),
+          t('studio.classes.fields.startsAt'),
+          t('studio.classes.fields.durationMin'),
+          t('studio.classes.fields.capacity'),
+          t('studio.classes.list.remaining'),
+        ],
+        state.status.items.map((c) => [
+          c.title,
+          c.startsAt,
+          String(c.durationMin),
+          String(c.capacity),
+          String(c.remaining),
+        ]),
+      ),
+    );
+  }, [state.status, t]);
+
   const handleDelete = useCallback(async () => {
     const target = state.deleteTarget;
     if (target === null) return;
@@ -364,70 +401,89 @@ export function ClassesAdminList(): ReactElement {
       )}
 
       {view === 'list' ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('studio.classes.title')}</TableHead>
-              <TableHead className="hidden sm:table-cell">
-                {t('studio.classes.columns.date')}
-              </TableHead>
-              <TableHead className="hidden md:table-cell">
-                {t('studio.classes.fields.durationMin')}
-              </TableHead>
-              <TableHead className="hidden sm:table-cell">
-                {t('studio.classes.fields.capacity')}
-              </TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {state.status.kind === 'loading'
-              ? Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={`skeleton-${i}`}>
-                    <TableCell>
-                      <Skeleton className="h-4 w-40" />
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <Skeleton className="h-4 w-32" />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <Skeleton className="h-4 w-16" />
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <Skeleton className="h-4 w-20" />
-                    </TableCell>
-                    <TableCell>
-                      <Skeleton className="h-8 w-14" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              : null}
-
-            {state.status.kind === 'empty' ? (
+        <div className="flex flex-col rounded-lg border border-border bg-card">
+          <div className="flex min-h-12 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2">
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {listSummary === null ? null : listSummary}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={state.status.kind !== 'ready'}
+              onClick={exportList}
+            >
+              <DownloadSimpleIcon aria-hidden="true" data-icon="inline-start" />
+              {t('studio.classes.list.export')}
+            </Button>
+          </div>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
-                  {t('studio.classes.empty')}
-                </TableCell>
+                <TableHead>{t('studio.classes.title')}</TableHead>
+                <TableHead className="hidden sm:table-cell">
+                  {t('studio.classes.columns.date')}
+                </TableHead>
+                <TableHead className="hidden md:table-cell">
+                  {t('studio.classes.fields.durationMin')}
+                </TableHead>
+                <TableHead className="hidden sm:table-cell">
+                  {t('studio.classes.fields.capacity')}
+                </TableHead>
+                <TableHead />
               </TableRow>
-            ) : null}
+            </TableHeader>
+            <TableBody>
+              {state.status.kind === 'loading'
+                ? Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={`skeleton-${i}`}>
+                      <TableCell>
+                        <Skeleton className="h-4 w-40" />
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <Skeleton className="h-4 w-32" />
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <Skeleton className="h-4 w-16" />
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <Skeleton className="h-4 w-20" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-8 w-14" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                : null}
 
-            {state.status.kind === 'ready'
-              ? state.status.items.map((cls) => (
-                  <ClassRow
-                    key={cls.id}
-                    cls={cls}
-                    started={
-                      nowMinute !== null && hasStarted(cls.startsAt, new Date(nowMinute * 60_000))
-                    }
-                    locale={locale}
-                    t={t}
-                    onEdit={() => openEdit(cls)}
-                    onDelete={() => openDelete(cls)}
-                  />
-                ))
-              : null}
-          </TableBody>
-        </Table>
+              {state.status.kind === 'empty' ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    {t('studio.classes.empty')}
+                  </TableCell>
+                </TableRow>
+              ) : null}
+
+              {state.status.kind === 'ready'
+                ? state.status.items.map((cls) => (
+                    <ClassRow
+                      key={cls.id}
+                      cls={cls}
+                      started={
+                        nowMinute !== null && hasStarted(cls.startsAt, new Date(nowMinute * 60_000))
+                      }
+                      locale={locale}
+                      t={t}
+                      onEdit={() => openEdit(cls)}
+                      onDelete={() => openDelete(cls)}
+                    />
+                  ))
+                : null}
+            </TableBody>
+          </Table>
+          <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
+            {t('studio.classes.list.deleteNote')}
+          </p>
+        </div>
       ) : null}
 
       {state.dialogMode !== null ? (
@@ -518,7 +574,18 @@ function ClassRow({ cls, started, locale, t, onEdit, onDelete }: ClassRowProps):
       <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
         {cls.durationMin}&nbsp;min
       </TableCell>
-      <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">{seats}</TableCell>
+      <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
+        <span className="flex items-center gap-3">
+          <FillMeter
+            booked={cls.capacity - cls.remaining}
+            capacity={cls.capacity}
+            label={t('studio.dashboard.today.fillLabel', {
+              booked: cls.capacity - cls.remaining,
+              capacity: cls.capacity,
+            })}
+          />
+        </span>
+      </TableCell>
       <TableCell>
         <div className="flex items-center justify-end gap-2">
           {started ? null : (
