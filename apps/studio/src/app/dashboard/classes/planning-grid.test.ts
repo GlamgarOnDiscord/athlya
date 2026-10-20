@@ -13,9 +13,11 @@ import {
   groupByDay,
   hourBounds,
   layoutDay,
+  PLANNING_TONES,
   resolveView,
   shiftAnchor,
   toDayKey,
+  toneForTitle,
   visibleRange,
 } from './planning-grid';
 
@@ -214,5 +216,34 @@ describe('blockDensity', () => {
     const [block] = layoutDay([item('2026-10-23T21:30:00.000Z', 90)]);
     if (block === undefined) throw new Error('block missing');
     expect(blockDensity(block)).toBe('compact');
+  });
+});
+
+describe('toneForTitle', () => {
+  const titles = [
+    'Yoga Vinyasa',
+    'Pilates Reformer',
+    'HIIT 45',
+    'Mobilité',
+    'Cross Training',
+    'Barre',
+    'Spinning',
+    'Boxe fitness',
+    'Yin Yoga',
+    'Renfo full body',
+  ];
+
+  it('is stable and ignores case and surrounding spaces', () => {
+    expect(toneForTitle('Yoga Vinyasa')).toBe(toneForTitle('Yoga Vinyasa'));
+    expect(toneForTitle('  yoga vinyasa ')).toBe(toneForTitle('Yoga Vinyasa'));
+    expect(toneForTitle('Yoga Vinyasa')).toBe('butter');
+  });
+
+  it('always lands in the palette and spreads a studio timetable over it', () => {
+    const tones = titles.map(toneForTitle);
+    for (const tone of [...tones, toneForTitle(''), toneForTitle('🥊 Boxe')]) {
+      expect(PLANNING_TONES).toContain(tone);
+    }
+    expect(new Set(tones).size).toBeGreaterThanOrEqual(4);
   });
 });

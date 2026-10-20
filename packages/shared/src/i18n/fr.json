@@ -446,7 +446,9 @@
         "more": "+{count} de plus",
         "localTime": "Horaires en heure locale ({timeZone}).",
         "previousDay": "Jour précédent",
-        "nextDay": "Jour suivant"
+        "nextDay": "Jour suivant",
+        "seatsLeft": "{count} places",
+        "actionsFor": "Actions pour {title}"
       }
     },
     "members": {

@@ -8,7 +8,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { createTranslator } from '../../../lib/i18n/t';
 
 import { ClassesPlanning, type ClassesPlanningProps } from './ClassesPlanning';
-import { fromDayKey } from './planning-grid';
+import { fromDayKey, toneForTitle } from './planning-grid';
 
 import type { ClassWithRemaining } from '@athlya/shared/schemas/api';
 
@@ -54,6 +54,7 @@ function renderPlanning(overrides: Partial<ClassesPlanningProps> = {}) {
     locale: 'en',
     t,
     onSelectClass: vi.fn(),
+    onDeleteClass: vi.fn(),
     onCreateAt: vi.fn(),
     onShowDay: vi.fn(),
     ...overrides,
@@ -64,7 +65,15 @@ function renderPlanning(overrides: Partial<ClassesPlanningProps> = {}) {
     if (cell === null) throw new Error(`no cell for ${key}`);
     return cell;
   };
-  return { props, day };
+  const tile = (id: string): { button: HTMLElement; frame: HTMLElement } => {
+    const button = container.querySelector<HTMLElement>(`button[data-class-id="${id}"]`);
+    const frame = button?.closest<HTMLElement>('[data-tone]');
+    if (button === null || button === undefined || frame === null || frame === undefined) {
+      throw new Error(`no tile for ${id}`);
+    }
+    return { button, frame };
+  };
+  return { props, day, tile };
 }
 
 describe('<ClassesPlanning /> week view', () => {
@@ -77,17 +86,17 @@ describe('<ClassesPlanning /> week view', () => {
   });
 
   it('marks today and positions blocks through CSS variables, not inline style attributes', () => {
-    const { day } = renderPlanning();
+    const { tile } = renderPlanning();
     const header = screen.getAllByText('20').find((el) => el.closest('[aria-current="date"]'));
     expect(header).toBeDefined();
-    const block = within(day('2026-10-20')).getByRole('button', { name: /Boxing technique/ });
+    const block = tile('c1').frame;
     expect(block.style.getPropertyValue('--block-top')).toBe('78.125%');
     expect(block.style.getPropertyValue('--block-height')).toBe('6.25%');
   });
 
   it('opens edit on a class and a prefilled create on an empty hour slot', () => {
-    const { props, day } = renderPlanning();
-    fireEvent.click(within(day('2026-10-20')).getByRole('button', { name: /Boxing technique/ }));
+    const { props, day, tile } = renderPlanning();
+    fireEvent.click(tile('c1').button);
     expect(props.onSelectClass).toHaveBeenCalledWith(BOXING);
 
     fireEvent.click(
@@ -127,19 +136,19 @@ describe('<ClassesPlanning /> month view', () => {
 });
 
 describe('<ClassesPlanning /> short blocks and full markers', () => {
-  it('puts a 30-minute class on one line and keeps its seats in the accessible name', () => {
+  it('collapses a 30-minute class to its title and keeps the rest in the accessible name', () => {
     const short = { ...cls('s1', 'Core blast', '2026-10-22T07:00:00.000Z'), durationMin: 30 };
-    const { day } = renderPlanning({ items: [short] });
-    const block = within(day('2026-10-22')).getByRole('button', { name: /Core blast/ });
-    expect(block.dataset['density']).toBe('compact');
-    expect(block.textContent).toContain('4 / 12 seats');
-    expect(within(block).getByText(/4 \/ 12 seats/).className).toContain('sr-only');
+    const { tile } = renderPlanning({ items: [short] });
+    const { button, frame } = tile('s1');
+    expect(frame.dataset['density']).toBe('compact');
+    expect(within(button).getByText(/09:00 AM - 09:30 AM/).className).toContain('sr-only');
+    expect(within(button).getByText(/4 left/).className).toContain('sr-only');
   });
 
   it('lets a full class title win the month cell, with the state kept for assistive tech', () => {
     const { day } = renderPlanning({ view: 'month' });
     const button = within(day('2026-10-25')).getByRole('button', { name: /Sunday yoga/ });
-    expect(button.textContent).toContain('Full');
+    expect(button.dataset['full']).toBe('true');
     expect(within(button).queryByText('Full')).toBeNull();
     expect(within(button).getByText(/Full/).className).toContain('sr-only');
   });
@@ -160,5 +169,42 @@ describe('<ClassesPlanning /> day agenda', () => {
     expect(vi.mocked(props.onCreateAt).mock.calls[0]?.[0].toISOString()).toBe(
       '2026-10-20T07:00:00.000Z',
     );
+  });
+});
+
+describe('<ClassesPlanning /> tiles', () => {
+  it('colours a tile by its title and shows the seats left in a pill', () => {
+    const { tile } = renderPlanning();
+    const { button, frame } = tile('c1');
+    expect(frame.dataset['tone']).toBe(toneForTitle('Boxing technique'));
+    expect(frame.dataset['full']).toBe('false');
+    expect(within(button).getByText('4 left').className).toContain('planning-pill');
+  });
+
+  it('turns a full class grey with a "Full" pill when the tile has room', () => {
+    const { tile } = renderPlanning();
+    const { button, frame } = tile('c2');
+    expect(frame.dataset['full']).toBe('true');
+    expect(within(button).getByText('Full').className).toContain('planning-pill');
+  });
+
+  it('drops the pill from a 45-minute tile but keeps the state for assistive tech', () => {
+    const medium = { ...cls('m1', 'Spin', '2026-10-21T08:00:00.000Z', 0), durationMin: 45 };
+    const { tile } = renderPlanning({ items: [medium] });
+    const { button, frame } = tile('m1');
+    expect(frame.dataset['density']).toBe('medium');
+    expect(within(button).getByText(/Full/).className).toContain('sr-only');
+    expect(within(frame).queryByRole('button', { name: /Actions for/ })).toBeNull();
+  });
+
+  it('offers edit and delete from the menu of a tall tile', async () => {
+    const { props, tile } = renderPlanning();
+    const trigger = within(tile('c1').frame).getByRole('button', {
+      name: 'Actions for Boxing technique',
+    });
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    expect(props.onDeleteClass).toHaveBeenCalledWith(BOXING);
+    expect(props.onSelectClass).not.toHaveBeenCalled();
   });
 });

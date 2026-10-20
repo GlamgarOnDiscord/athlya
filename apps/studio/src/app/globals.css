@@ -28,11 +28,155 @@
   color: var(--brand-fg, var(--color-brand-on-primary));
 }
 
-/* Planning week grid: block position via CSSOM vars (CSP #75, no style="" attrs). */
+/*
+ * Planning tiles. Six pastel tones picked per class title and a neutral
+ * fill for full classes, each with a border one shade darker and an ink
+ * for the title. Every text pair passes WCAG AA (pinned in
+ * `planning-tones.test.ts`). Dark mode swaps in deep, muted tints of the
+ * same hues with light ink.
+ */
+:root {
+  --planning-lavender: #efecfe;
+  --planning-lavender-line: #d9d2fb;
+  --planning-lavender-ink: #4c3a9e;
+  --planning-mint: #e1f5ea;
+  --planning-mint-line: #bfe6d0;
+  --planning-mint-ink: #1f6b47;
+  --planning-sky: #e2effd;
+  --planning-sky-line: #c3dcf8;
+  --planning-sky-ink: #1f5591;
+  --planning-peach: #fdeadf;
+  --planning-peach-line: #f7cfb8;
+  --planning-peach-ink: #8a4316;
+  --planning-butter: #fbf2cf;
+  --planning-butter-line: #ecdc9a;
+  --planning-butter-ink: #6e5509;
+  --planning-rose: #fce7ee;
+  --planning-rose-line: #f4c6d6;
+  --planning-rose-ink: #96294f;
+  --planning-full: #eef0f3;
+  --planning-full-line: #dde1e7;
+  --planning-full-ink: #334155;
+  --planning-tile-muted: #475569;
+  --planning-pill-bg: #ffffff;
+  --planning-pill-fg: #334155;
+}
+
+:root.dark {
+  --planning-lavender: #29253f;
+  --planning-lavender-line: #3a3459;
+  --planning-lavender-ink: #ddd6fe;
+  --planning-mint: #1a3129;
+  --planning-mint-line: #285040;
+  --planning-mint-ink: #c6f0da;
+  --planning-sky: #19293d;
+  --planning-sky-line: #29425f;
+  --planning-sky-ink: #cfe3fb;
+  --planning-peach: #36231b;
+  --planning-peach-line: #553628;
+  --planning-peach-ink: #fbd9c6;
+  --planning-butter: #322c17;
+  --planning-butter-line: #4d4424;
+  --planning-butter-ink: #f5e7b0;
+  --planning-rose: #37202a;
+  --planning-rose-line: #563243;
+  --planning-rose-ink: #f9d2e0;
+  --planning-full: #1f2530;
+  --planning-full-line: #303847;
+  --planning-full-ink: #e2e8f0;
+  --planning-tile-muted: #b4bfcd;
+  --planning-pill-bg: #0b1220;
+  --planning-pill-fg: #e2e8f0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --planning-lavender: #29253f;
+    --planning-lavender-line: #3a3459;
+    --planning-lavender-ink: #ddd6fe;
+    --planning-mint: #1a3129;
+    --planning-mint-line: #285040;
+    --planning-mint-ink: #c6f0da;
+    --planning-sky: #19293d;
+    --planning-sky-line: #29425f;
+    --planning-sky-ink: #cfe3fb;
+    --planning-peach: #36231b;
+    --planning-peach-line: #553628;
+    --planning-peach-ink: #fbd9c6;
+    --planning-butter: #322c17;
+    --planning-butter-line: #4d4424;
+    --planning-butter-ink: #f5e7b0;
+    --planning-rose: #37202a;
+    --planning-rose-line: #563243;
+    --planning-rose-ink: #f9d2e0;
+    --planning-full: #1f2530;
+    --planning-full-line: #303847;
+    --planning-full-ink: #e2e8f0;
+    --planning-tile-muted: #b4bfcd;
+    --planning-pill-bg: #0b1220;
+    --planning-pill-fg: #e2e8f0;
+  }
+}
+
+.planning-tile {
+  background-color: var(--planning-tone);
+  border-color: var(--planning-tone-line);
+  color: var(--planning-tone-ink);
+}
+.planning-tile[data-tone='lavender'] {
+  --planning-tone: var(--planning-lavender);
+  --planning-tone-line: var(--planning-lavender-line);
+  --planning-tone-ink: var(--planning-lavender-ink);
+}
+.planning-tile[data-tone='mint'] {
+  --planning-tone: var(--planning-mint);
+  --planning-tone-line: var(--planning-mint-line);
+  --planning-tone-ink: var(--planning-mint-ink);
+}
+.planning-tile[data-tone='sky'] {
+  --planning-tone: var(--planning-sky);
+  --planning-tone-line: var(--planning-sky-line);
+  --planning-tone-ink: var(--planning-sky-ink);
+}
+.planning-tile[data-tone='peach'] {
+  --planning-tone: var(--planning-peach);
+  --planning-tone-line: var(--planning-peach-line);
+  --planning-tone-ink: var(--planning-peach-ink);
+}
+.planning-tile[data-tone='butter'] {
+  --planning-tone: var(--planning-butter);
+  --planning-tone-line: var(--planning-butter-line);
+  --planning-tone-ink: var(--planning-butter-ink);
+}
+.planning-tile[data-tone='rose'] {
+  --planning-tone: var(--planning-rose);
+  --planning-tone-line: var(--planning-rose-line);
+  --planning-tone-ink: var(--planning-rose-ink);
+}
+.planning-tile[data-full='true'] {
+  --planning-tone: var(--planning-full);
+  --planning-tone-line: var(--planning-full-line);
+  --planning-tone-ink: var(--planning-full-ink);
+}
+.planning-tile-muted {
+  color: var(--planning-tile-muted);
+}
+.planning-pill {
+  background-color: var(--planning-pill-bg);
+  color: var(--planning-pill-fg);
+}
+
+/* Current-time line on today's column, placed from CSSOM like the blocks. */
+.planning-now {
+  top: var(--now-top);
+}
+
+/* Planning week grid: block position via CSSOM vars (CSP #75, no style="" attrs).
+   Tiles float inside their slot, clear of the grid lines. */
 .planning-block {
-  top: var(--block-top);
-  left: calc(var(--block-left) + 2px);
-  width: calc(var(--block-width) - 4px);
-  height: var(--block-height);
+  top: calc(var(--block-top) + 2px);
+  left: calc(var(--block-left) + 4px);
+  width: calc(var(--block-width) - 8px);
+  height: calc(var(--block-height) - 4px);
   min-height: 1.5rem;
 }

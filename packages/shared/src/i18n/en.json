@@ -446,7 +446,9 @@
         "more": "+{count} more",
         "localTime": "Times in your local time zone ({timeZone}).",
         "previousDay": "Previous day",
-        "nextDay": "Next day"
+        "nextDay": "Next day",
+        "seatsLeft": "{count} left",
+        "actionsFor": "Actions for {title}"
       }
     },
     "members": {

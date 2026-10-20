@@ -212,9 +212,9 @@ export function blockGeometry(block: DayBlock<unknown>, bounds: HourBounds): Blo
 
 export type BlockDensity = 'full' | 'medium' | 'compact';
 
-/** Shortest block, in minutes, that fits title, time range and seats on three lines. */
+/** Shortest block, in minutes, that fits the title and two meta rows. */
 export const FULL_BLOCK_MINUTES = 60;
-/** Shortest block, in minutes, that fits title and time range on two lines. */
+/** Shortest block, in minutes, that fits the title and one meta row. */
 export const MEDIUM_BLOCK_MINUTES = 45;
 
 /** How much text a week block can show without clipping a line. */
@@ -223,4 +223,22 @@ export function blockDensity(block: DayBlock<unknown>): BlockDensity {
   if (minutes >= FULL_BLOCK_MINUTES) return 'full';
   if (minutes >= MEDIUM_BLOCK_MINUTES) return 'medium';
   return 'compact';
+}
+
+export const PLANNING_TONES = ['lavender', 'mint', 'sky', 'peach', 'butter', 'rose'] as const;
+
+export type PlanningTone = (typeof PLANNING_TONES)[number];
+
+/**
+ * Pastel tone of a class, from an FNV-1a hash of its trimmed, lower-cased
+ * title, so every session of "Yoga Vinyasa" shares one colour on every
+ * device and render.
+ */
+export function toneForTitle(title: string): PlanningTone {
+  let hash = 0x811c9dc5;
+  for (const char of title.trim().toLowerCase()) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return PLANNING_TONES[(hash >>> 0) % PLANNING_TONES.length] ?? 'lavender';
 }

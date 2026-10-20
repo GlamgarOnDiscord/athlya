@@ -262,6 +262,10 @@ export function ClassesAdminList(): ReactElement {
     setState((s) => ({ ...s, dialogMode: { kind: 'edit', cls } }));
   }, []);
 
+  const openDelete = useCallback((cls: ClassWithRemaining) => {
+    setState((s) => ({ ...s, deleteTarget: cls }));
+  }, []);
+
   const onCloseDialog = useCallback((committed: boolean) => {
     setState((s) => ({
       ...s,
@@ -348,7 +352,8 @@ export function ClassesAdminList(): ReactElement {
                 onClick={() => setState((s) => ({ ...s, view: option }))}
                 className={cn(
                   'h-7 rounded-md px-3 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  view === option && 'bg-background text-foreground shadow-sm',
+                  view === option &&
+                    'bg-background text-foreground shadow-sm dark:bg-foreground dark:text-background dark:hover:text-background',
                 )}
               >
                 {t(`studio.classes.planning.views.${option}`)}
@@ -409,6 +414,7 @@ export function ClassesAdminList(): ReactElement {
           locale={locale}
           t={t}
           onSelectClass={openEdit}
+          onDeleteClass={openDelete}
           onCreateAt={openCreateAt}
           onShowDay={showDay}
         />
@@ -468,7 +474,7 @@ export function ClassesAdminList(): ReactElement {
                     locale={locale}
                     t={t}
                     onEdit={() => openEdit(cls)}
-                    onDelete={() => setState((s) => ({ ...s, deleteTarget: cls }))}
+                    onDelete={() => openDelete(cls)}
                   />
                 ))
               : null}

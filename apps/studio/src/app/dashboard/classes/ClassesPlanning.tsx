@@ -1,7 +1,8 @@
 'use client';
 
-import { ProhibitIcon } from '@phosphor-icons/react';
-import { useCallback, useMemo, type ReactElement } from 'react';
+import { Menu } from '@base-ui/react/menu';
+import { DotsThreeIcon, ProhibitIcon, UsersIcon } from '@phosphor-icons/react';
+import { useCallback, useMemo, useSyncExternalStore, type ReactElement } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -14,6 +15,7 @@ import {
   hourBounds,
   layoutDay,
   toDayKey,
+  toneForTitle,
   type DayBlock,
   type HourBounds,
   type PlanningView,
@@ -35,6 +37,7 @@ export interface ClassesPlanningProps {
   readonly locale: Locale;
   readonly t: Translator;
   readonly onSelectClass: (cls: ClassWithRemaining) => void;
+  readonly onDeleteClass: (cls: ClassWithRemaining) => void;
   readonly onCreateAt: (startsAt: Date) => void;
   readonly onShowDay: (day: Date) => void;
 }
@@ -70,7 +73,7 @@ export function ClassesPlanning(props: ClassesPlanningProps): ReactElement {
     <div className="flex flex-col gap-2">
       <div
         aria-busy={props.busy}
-        className="overflow-x-auto rounded-lg border border-border bg-background"
+        className="overflow-x-auto rounded-xl border border-border bg-background"
       >
         {props.view === 'week' ? (
           <WeekGrid {...props} />
@@ -87,19 +90,96 @@ export function ClassesPlanning(props: ClassesPlanningProps): ReactElement {
   );
 }
 
-function capacityLabel(cls: ClassWithRemaining, t: Translator): string {
-  return cls.remaining <= 0
-    ? t('studio.classes.planning.full')
-    : t('studio.classes.row.capacity', { remaining: cls.remaining, capacity: cls.capacity });
+function isFull(cls: ClassWithRemaining): boolean {
+  return cls.remaining <= 0;
 }
 
-/** Full-class marker for tight spaces: an icon, with the word for assistive tech. */
-function FullMarker({ t }: { readonly t: Translator }): ReactElement {
+/** Data attributes that pick the tile fill, border and ink from the planning tokens. */
+function tileAttributes(cls: ClassWithRemaining): {
+  'data-tone': string;
+  'data-full': 'true' | 'false';
+} {
+  return { 'data-tone': toneForTitle(cls.title), 'data-full': isFull(cls) ? 'true' : 'false' };
+}
+
+/** "Mon 19" without the abbreviation dot some locales add. */
+function shortWeekday(fmt: Formatters, date: Date): string {
+  return fmt.weekday.format(date).replace(/\.$/u, '');
+}
+
+/** Status pill: "Full", or the seats still open. */
+function StatusPill({
+  cls,
+  t,
+}: {
+  readonly cls: ClassWithRemaining;
+  readonly t: Translator;
+}): ReactElement {
+  const full = isFull(cls);
+  const Icon = full ? ProhibitIcon : UsersIcon;
   return (
-    <span className="flex shrink-0 items-center text-destructive">
-      <ProhibitIcon aria-hidden="true" className="size-3" />
-      <span className="sr-only">, {t('studio.classes.planning.full')}</span>
+    <span className="planning-pill inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-2 text-[0.6875rem] leading-none font-medium tabular-nums">
+      <Icon aria-hidden="true" className="size-3 shrink-0" />
+      {full
+        ? t('studio.classes.planning.full')
+        : t('studio.classes.planning.seatsLeft', { count: cls.remaining })}
     </span>
+  );
+}
+
+/** Edit / delete menu behind a "..." button on roomy tiles. */
+function TileMenu({
+  cls,
+  t,
+  onEdit,
+  onDelete,
+}: {
+  readonly cls: ClassWithRemaining;
+  readonly t: Translator;
+  readonly onEdit: (cls: ClassWithRemaining) => void;
+  readonly onDelete: (cls: ClassWithRemaining) => void;
+}): ReactElement {
+  return (
+    <Menu.Root>
+      <Menu.Trigger
+        aria-label={t('studio.classes.planning.actionsFor', { title: cls.title })}
+        className="absolute top-1.5 right-1.5 z-10 grid size-6 place-items-center rounded-md hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-black/5 dark:hover:bg-white/10 dark:data-popup-open:bg-white/10"
+      >
+        <DotsThreeIcon aria-hidden="true" weight="bold" className="size-4" />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
+          <Menu.Popup className="min-w-36 rounded-lg border border-border bg-popover p-1 text-sm text-popover-foreground shadow-sm outline-none">
+            <Menu.Item
+              onClick={() => onEdit(cls)}
+              className="flex h-8 cursor-default items-center rounded-md px-2 outline-none data-highlighted:bg-muted"
+            >
+              {t('studio.classes.row.edit')}
+            </Menu.Item>
+            <Menu.Item
+              onClick={() => onDelete(cls)}
+              className="flex h-8 cursor-default items-center rounded-md px-2 text-destructive outline-none data-highlighted:bg-muted"
+            >
+              {t('studio.classes.row.delete')}
+            </Menu.Item>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
+  );
+}
+
+const subscribeToMinute = (onStoreChange: () => void): (() => void) => {
+  const timer = window.setInterval(onStoreChange, 15_000);
+  return () => window.clearInterval(timer);
+};
+
+/** The current minute since the epoch, `null` during server rendering. */
+function useNowMinute(): number | null {
+  return useSyncExternalStore(
+    subscribeToMinute,
+    () => Math.floor(Date.now() / 60_000),
+    () => null,
   );
 }
 
@@ -110,10 +190,14 @@ function WeekGrid({
   locale,
   t,
   onSelectClass,
+  onDeleteClass,
   onCreateAt,
 }: ClassesPlanningProps): ReactElement {
   const fmt = useFormatters(locale);
   const days = useMemo(() => buildWeekDays(anchor), [anchor]);
+  const nowMinute = useNowMinute();
+  const now = nowMinute === null ? null : new Date(nowMinute * 60_000);
+  const nowKey = now === null ? null : toDayKey(now);
 
   const columns = useMemo(() => {
     const byDay = groupByDay(items);
@@ -138,25 +222,13 @@ function WeekGrid({
           <div
             key={key}
             aria-current={isToday ? 'date' : undefined}
-            className="flex flex-col justify-center border-b border-l border-border px-2 py-2"
+            className={cn(
+              'flex h-10 items-center justify-center gap-1 border-b border-l border-border text-sm',
+              isToday ? 'bg-foreground font-medium text-background' : 'text-muted-foreground',
+            )}
           >
-            <span
-              className={cn(
-                'text-xs text-muted-foreground',
-                isToday && 'font-semibold text-foreground',
-              )}
-            >
-              {fmt.weekday.format(date)}
-            </span>
-            <span
-              className={cn(
-                'text-lg font-semibold tabular-nums',
-                isToday &&
-                  'inline-grid size-7 place-items-center rounded-md bg-foreground text-base text-background',
-              )}
-            >
-              {date.getDate()}
-            </span>
+            <span className="first-letter:uppercase">{shortWeekday(fmt, date)}</span>
+            <span className="tabular-nums">{date.getDate()}</span>
           </div>
         );
       })}
@@ -165,7 +237,7 @@ function WeekGrid({
         {hours.map((hour) => (
           <div
             key={hour}
-            className="h-14 pr-2 text-right text-[0.7rem] text-muted-foreground tabular-nums"
+            className="h-20 pr-2 text-right text-[0.7rem] text-muted-foreground tabular-nums"
           >
             {hour === bounds.startHour ? null : (
               <span className="relative -top-2">{`${String(hour).padStart(2, '0')}:00`}</span>
@@ -174,42 +246,74 @@ function WeekGrid({
         ))}
       </div>
 
-      {columns.map(({ date, key, blocks }) => {
-        const weekend = date.getDay() === 0 || date.getDay() === 6;
-        return (
-          <div
-            key={key}
-            data-day={key}
-            className={cn('relative border-l border-border', weekend && 'bg-muted/40')}
-          >
-            {blocks.map((block) => (
-              <WeekBlock
-                key={block.item.id}
-                block={block}
-                bounds={bounds}
-                fmt={fmt}
-                t={t}
-                onSelect={onSelectClass}
+      {columns.map(({ date, key, blocks }) => (
+        <div
+          key={key}
+          data-day={key}
+          className={cn('relative border-l border-border', key === todayKey && 'bg-muted/50')}
+        >
+          {blocks.map((block) => (
+            <WeekBlock
+              key={block.item.id}
+              block={block}
+              bounds={bounds}
+              fmt={fmt}
+              t={t}
+              onSelect={onSelectClass}
+              onDelete={onDeleteClass}
+            />
+          ))}
+          {now !== null && key === nowKey ? <NowLine now={now} bounds={bounds} fmt={fmt} /> : null}
+          {hours.map((hour) => {
+            const start = new Date(date);
+            start.setHours(hour, 0, 0, 0);
+            return (
+              <button
+                key={hour}
+                type="button"
+                aria-label={t('studio.classes.planning.createAt', {
+                  date: fmt.slot.format(start),
+                })}
+                onClick={() => onCreateAt(start)}
+                className="block h-20 w-full border-t border-border first:border-t-0 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
               />
-            ))}
-            {hours.map((hour) => {
-              const start = new Date(date);
-              start.setHours(hour, 0, 0, 0);
-              return (
-                <button
-                  key={hour}
-                  type="button"
-                  aria-label={t('studio.classes.planning.createAt', {
-                    date: fmt.slot.format(start),
-                  })}
-                  onClick={() => onCreateAt(start)}
-                  className="block h-14 w-full border-t border-border first:border-t-0 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                />
-              );
-            })}
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NowLine({
+  now,
+  bounds,
+  fmt,
+}: {
+  readonly now: Date;
+  readonly bounds: HourBounds;
+  readonly fmt: Formatters;
+}): ReactElement | null {
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const top =
+    ((minutes - bounds.startHour * 60) / ((bounds.endHour - bounds.startHour) * 60)) * 100;
+  const place = useCallback(
+    (node: HTMLDivElement | null) => {
+      node?.style.setProperty('--now-top', `${top}%`);
+    },
+    [top],
+  );
+  if (top < 0 || top > 100) return null;
+  return (
+    <div
+      ref={place}
+      aria-hidden="true"
+      data-testid="planning-now"
+      className="planning-now pointer-events-none absolute inset-x-0 z-30 h-px bg-foreground"
+    >
+      <span className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground px-1.5 py-0.5 text-[0.6875rem] leading-none font-medium text-background tabular-nums">
+        {fmt.time.format(now)}
+      </span>
     </div>
   );
 }
@@ -220,18 +324,18 @@ interface WeekBlockProps {
   readonly fmt: Formatters;
   readonly t: Translator;
   readonly onSelect: (cls: ClassWithRemaining) => void;
+  readonly onDelete: (cls: ClassWithRemaining) => void;
 }
 
-function WeekBlock({ block, bounds, fmt, t, onSelect }: WeekBlockProps): ReactElement {
+function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps): ReactElement {
   const cls = block.item;
   const geometry = blockGeometry(block, bounds);
   const start = new Date(cls.startsAt);
   const end = new Date(start.getTime() + cls.durationMin * 60_000);
-  const full = cls.remaining <= 0;
   const density = blockDensity(block);
 
   const placeBlock = useCallback(
-    (node: HTMLButtonElement | null) => {
+    (node: HTMLDivElement | null) => {
       if (node === null) return;
       node.style.setProperty('--block-top', `${geometry.top}%`);
       node.style.setProperty('--block-height', `${geometry.height}%`);
@@ -242,49 +346,51 @@ function WeekBlock({ block, bounds, fmt, t, onSelect }: WeekBlockProps): ReactEl
   );
 
   return (
-    <button
+    <div
       ref={placeBlock}
-      type="button"
-      data-class-id={cls.id}
-      onClick={() => onSelect(cls)}
       data-density={density}
-      className={cn(
-        'planning-block absolute z-10 flex flex-col items-start overflow-hidden rounded-md border border-l-4 border-border bg-background px-1.5 py-0.5 text-left text-xs leading-4 hover:bg-muted focus-visible:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        full ? 'border-l-destructive' : 'border-l-primary',
-      )}
+      {...tileAttributes(cls)}
+      className="planning-block planning-tile absolute z-10 rounded-xl border focus-within:z-20"
     >
-      {density === 'compact' ? (
-        <span className="flex w-full min-w-0 items-center gap-1">
-          <span className="min-w-0 flex-1 truncate font-semibold text-foreground">{cls.title}</span>
-          <span className="shrink-0 text-muted-foreground tabular-nums">
-            <span className="sr-only">, {fmt.dayLong.format(start)}, </span>
-            {fmt.time.format(start)}
-            <span className="sr-only"> - {fmt.time.format(end)}</span>
-          </span>
-          {full ? <FullMarker t={t} /> : <span className="sr-only">, {capacityLabel(cls, t)}</span>}
+      <button
+        type="button"
+        data-class-id={cls.id}
+        onClick={() => onSelect(cls)}
+        className={cn(
+          'flex size-full flex-col items-start overflow-hidden rounded-[inherit] px-2.5 text-left text-xs leading-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          density === 'compact' ? 'justify-center' : 'py-2',
+        )}
+      >
+        <span className="sr-only">{fmt.dayLong.format(start)}, </span>
+        <span className={cn('w-full truncate font-medium', density === 'full' && 'pr-6')}>
+          {cls.title}
         </span>
-      ) : (
-        <>
-          <span className="w-full truncate font-semibold text-foreground">{cls.title}</span>
-          <span className="flex w-full min-w-0 items-center gap-1 text-muted-foreground tabular-nums">
-            <span className="min-w-0 truncate">
-              <span className="sr-only">{fmt.dayLong.format(start)}, </span>
-              {fmt.time.format(start)} - {fmt.time.format(end)}
-            </span>
-            {density === 'medium' && full ? <FullMarker t={t} /> : null}
+        {density === 'compact' ? (
+          <span className="sr-only">
+            , {fmt.time.format(start)} - {fmt.time.format(end)}
           </span>
-          {density === 'full' ? (
-            <span
-              className={cn('w-full truncate', full ? 'text-destructive' : 'text-muted-foreground')}
-            >
-              {capacityLabel(cls, t)}
-            </span>
-          ) : full ? null : (
-            <span className="sr-only">{capacityLabel(cls, t)}</span>
-          )}
-        </>
-      )}
-    </button>
+        ) : (
+          <span className="planning-tile-muted w-full truncate tabular-nums">
+            {fmt.time.format(start)} - {fmt.time.format(end)}
+          </span>
+        )}
+        {density === 'full' ? (
+          <span className="mt-auto">
+            <StatusPill cls={cls} t={t} />
+          </span>
+        ) : (
+          <span className="sr-only">
+            ,{' '}
+            {isFull(cls)
+              ? t('studio.classes.planning.full')
+              : t('studio.classes.planning.seatsLeft', { count: cls.remaining })}
+          </span>
+        )}
+      </button>
+      {density === 'full' ? (
+        <TileMenu cls={cls} t={t} onEdit={onSelect} onDelete={onDelete} />
+      ) : null}
+    </div>
   );
 }
 
@@ -308,9 +414,9 @@ function MonthGrid({
         {weeks[0]?.map(({ key, date }) => (
           <div
             key={key}
-            className="border-l border-border px-2 py-2 text-xs text-muted-foreground first:border-l-0"
+            className="border-l border-border px-2.5 py-2 text-xs text-muted-foreground first:border-l-0"
           >
-            {fmt.weekday.format(date)}
+            <span className="first-letter:uppercase">{shortWeekday(fmt, date)}</span>
           </div>
         ))}
       </div>
@@ -321,7 +427,6 @@ function MonthGrid({
             const shown = dayItems.slice(0, MONTH_CELL_LIMIT);
             const hidden = dayItems.length - shown.length;
             const isToday = key === todayKey;
-            const weekend = date.getDay() === 0 || date.getDay() === 6;
             const createStart = new Date(date);
             createStart.setHours(DEFAULT_CREATE_HOUR, 0, 0, 0);
             return (
@@ -330,8 +435,8 @@ function MonthGrid({
                 data-day={key}
                 aria-current={isToday ? 'date' : undefined}
                 className={cn(
-                  'relative flex min-h-28 flex-col gap-1 border-l border-border p-1.5 pt-9 first:border-l-0',
-                  weekend && 'bg-muted/40',
+                  'relative flex min-h-28 flex-col gap-1 border-l border-border px-1.5 pt-9 pb-1.5 first:border-l-0',
+                  isToday && 'bg-muted/50',
                 )}
               >
                 <button
@@ -344,7 +449,7 @@ function MonthGrid({
                 >
                   <span
                     className={cn(
-                      'inline-grid size-7 place-items-center rounded-md text-sm tabular-nums',
+                      'inline-grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-sm tabular-nums',
                       inMonth ? 'text-foreground' : 'text-muted-foreground',
                       isToday && 'bg-foreground font-semibold text-background',
                     )}
@@ -357,27 +462,25 @@ function MonthGrid({
                     key={cls.id}
                     type="button"
                     data-class-id={cls.id}
+                    {...tileAttributes(cls)}
                     onClick={() => onSelectClass(cls)}
-                    className={cn(
-                      'relative z-10 flex w-full min-w-0 items-center gap-1.5 rounded-md border border-l-4 border-border bg-background px-1.5 py-0.5 text-left text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      cls.remaining <= 0 ? 'border-l-destructive' : 'border-l-primary',
-                    )}
+                    className="planning-tile relative z-10 flex h-6 w-full min-w-0 items-center gap-1.5 rounded-lg border px-2 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <span className="shrink-0 text-muted-foreground tabular-nums">
+                    <span className="planning-tile-muted shrink-0 tabular-nums">
                       <span className="sr-only">{fmt.dayLong.format(date)}, </span>
                       {fmt.time.format(new Date(cls.startsAt))}
                     </span>
-                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-                      {cls.title}
-                    </span>
-                    {cls.remaining <= 0 ? <FullMarker t={t} /> : null}
+                    <span className="min-w-0 flex-1 truncate font-medium">{cls.title}</span>
+                    {isFull(cls) ? (
+                      <span className="sr-only">, {t('studio.classes.planning.full')}</span>
+                    ) : null}
                   </button>
                 ))}
                 {hidden > 0 ? (
                   <button
                     type="button"
                     onClick={() => onShowDay(date)}
-                    className="relative z-10 self-start rounded-md px-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="relative z-10 self-start rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {t('studio.classes.planning.more', { count: hidden })}
                     <span className="sr-only">, {fmt.dayLong.format(date)}</span>
@@ -399,6 +502,7 @@ function DayAgenda({
   locale,
   t,
   onSelectClass,
+  onDeleteClass,
   onCreateAt,
   onShowDay,
 }: ClassesPlanningProps): ReactElement {
@@ -423,13 +527,13 @@ function DayAgenda({
               aria-current={key === todayKey ? 'date' : undefined}
               onClick={() => onShowDay(date)}
               className={cn(
-                'flex flex-col items-center rounded-md py-1.5 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'flex flex-col items-center rounded-xl py-1.5 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 selected && 'bg-foreground text-background hover:bg-foreground',
                 !selected && key === todayKey && 'font-semibold text-foreground',
               )}
             >
-              <span aria-hidden="true" className="text-[0.7rem]">
-                {fmt.weekday.format(date)}
+              <span aria-hidden="true" className="text-[0.7rem] first-letter:uppercase">
+                {shortWeekday(fmt, date)}
               </span>
               <span aria-hidden="true" className="text-base font-semibold tabular-nums">
                 {date.getDate()}
@@ -439,41 +543,34 @@ function DayAgenda({
           );
         })}
       </div>
-      <div data-day={anchorKey} className="flex flex-col gap-2 p-2">
+      <div data-day={anchorKey} className="flex flex-col gap-2 p-3">
         {dayItems.map((cls) => {
           const start = new Date(cls.startsAt);
           const end = new Date(start.getTime() + cls.durationMin * 60_000);
-          const full = cls.remaining <= 0;
           return (
-            <button
-              key={cls.id}
-              type="button"
-              data-class-id={cls.id}
-              onClick={() => onSelectClass(cls)}
-              className={cn(
-                'flex w-full min-w-0 items-center gap-3 rounded-md border border-l-4 border-border bg-background px-3 py-2 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                full ? 'border-l-destructive' : 'border-l-primary',
-              )}
-            >
-              <span className="flex shrink-0 flex-col text-xs text-muted-foreground tabular-nums">
-                <span>{fmt.time.format(start)}</span>
-                <span>
-                  <span className="sr-only"> - </span>
-                  {fmt.time.format(end)}
-                </span>
+            <div key={cls.id} className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2">
+              <span aria-hidden="true" className="pt-3 text-xs text-muted-foreground tabular-nums">
+                {fmt.time.format(start)}
               </span>
-              <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-                {cls.title}
-              </span>
-              <span
-                className={cn(
-                  'shrink-0 text-xs',
-                  full ? 'text-destructive' : 'text-muted-foreground',
-                )}
-              >
-                {capacityLabel(cls, t)}
-              </span>
-            </button>
+              <div {...tileAttributes(cls)} className="planning-tile relative rounded-xl border">
+                <button
+                  type="button"
+                  data-class-id={cls.id}
+                  onClick={() => onSelectClass(cls)}
+                  className="flex w-full min-w-0 flex-col items-start gap-0.5 rounded-[inherit] py-2.5 pr-10 pl-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="sr-only">{fmt.dayLong.format(start)}, </span>
+                  <span className="w-full truncate font-medium">{cls.title}</span>
+                  <span className="planning-tile-muted text-xs tabular-nums">
+                    {fmt.time.format(start)} - {fmt.time.format(end)}
+                  </span>
+                  <span className="mt-2">
+                    <StatusPill cls={cls} t={t} />
+                  </span>
+                </button>
+                <TileMenu cls={cls} t={t} onEdit={onSelectClass} onDelete={onDeleteClass} />
+              </div>
+            </div>
           );
         })}
         {dayItems.length === 0 ? (
@@ -482,7 +579,7 @@ function DayAgenda({
         <button
           type="button"
           onClick={() => onCreateAt(createStart)}
-          className="rounded-md border border-dashed border-border px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-xl px-3 py-2.5 text-left text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {t('studio.classes.planning.createAt', { date: fmt.dayLong.format(anchor) })}
         </button>
