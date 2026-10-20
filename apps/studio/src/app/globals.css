@@ -102,6 +102,14 @@
   width: var(--fill, 0%);
 }
 
+/* Check-in camera: ink letterbox under volt framing corners (pair pinned in token-contrast). */
+.kiosk-video {
+  background-color: var(--athlya-brand-ink);
+}
+.kiosk-guide-corner {
+  border-color: var(--athlya-brand-volt);
+}
+
 /*
  * Dashboard marks. Bar heights come from a CSSOM var (CSP #75). One accent
  * per chart: volt, outlined in ink on light so the mark keeps 3:1. The
@@ -169,4 +177,10 @@
       background-color: color-mix(in srgb, var(--athlya-brand-volt) 66%, var(--card));
     }
   }
+}
+
+/* Check-in prompt over the camera: white on an ink strip, solid (no blur). */
+.kiosk-caption {
+  background-color: var(--athlya-brand-ink);
+  color: var(--athlya-brand-white);
 }

@@ -600,10 +600,6 @@
       "subtitle": "Schedule, edit and manage session capacity.",
       "create": "+ New class",
       "empty": "No classes in this range. Create one to get started.",
-      "range": {
-        "from": "From",
-        "to": "To"
-      },
       "row": {
         "capacity": "{remaining} / {capacity} seats",
         "edit": "Edit",
@@ -651,6 +647,15 @@
         "nextDay": "Next day",
         "seatsLeft": "{count} left",
         "actionsFor": "Actions for {title}"
+      },
+      "columns": {
+        "date": "Date"
+      },
+      "list": {
+        "export": "Export",
+        "summary": "{classes} classes · {seats} seats · {booked} booked",
+        "deleteNote": "Deleting a class cancels its bookings.",
+        "remaining": "Seats left"
       }
     },
     "members": {
@@ -749,6 +754,32 @@
         "already_checked_in": "This member is already checked in for this class.",
         "checkin_limit_reached": "Too many check-ins for this member in the last hour. Try again later.",
         "generic": "Check-in failed. Please try again."
+      },
+      "kiosk": {
+        "enter": "Kiosk mode",
+        "exit": "Exit kiosk mode"
+      },
+      "frameHint": "Center the QR code in the frame.",
+      "confirmed": "Check-in confirmed",
+      "scanNext": "Scan the next member",
+      "enterHint": "or press",
+      "enterKey": "Enter",
+      "scanner": {
+        "title": "Scanner",
+        "camera": "Rear camera",
+        "active": "Camera on"
+      },
+      "manual": {
+        "title": "Manual entry",
+        "hint": "If the camera cannot read the code"
+      },
+      "passes": {
+        "title": "This session",
+        "countOne": "{count} check-in",
+        "countOther": "{count} check-ins",
+        "empty": "No check-in since this kiosk opened.",
+        "unnamed": "Unnamed member",
+        "note": "Kept on this kiosk only and cleared on reload."
       }
     },
     "audit": {

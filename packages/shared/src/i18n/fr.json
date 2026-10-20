@@ -600,10 +600,6 @@
       "subtitle": "Planifier, modifier et gérer la capacité des sessions.",
       "create": "+ Nouveau cours",
       "empty": "Aucun cours sur cette plage. Créez-en un pour commencer.",
-      "range": {
-        "from": "Du",
-        "to": "Au"
-      },
       "row": {
         "capacity": "{remaining} / {capacity} places",
         "edit": "Modifier",
@@ -651,6 +647,15 @@
         "nextDay": "Jour suivant",
         "seatsLeft": "{count} places",
         "actionsFor": "Actions pour {title}"
+      },
+      "columns": {
+        "date": "Date"
+      },
+      "list": {
+        "export": "Exporter",
+        "summary": "{classes} cours · {seats} places · {booked} réservées",
+        "deleteNote": "Supprimer un cours annule ses réservations.",
+        "remaining": "Places libres"
       }
     },
     "members": {
@@ -749,6 +754,32 @@
         "already_checked_in": "Ce membre est déjà pointé pour ce cours.",
         "checkin_limit_reached": "Trop de check-ins pour ce membre dans la dernière heure. Réessayez plus tard.",
         "generic": "Échec du check-in. Veuillez réessayer."
+      },
+      "kiosk": {
+        "enter": "Mode borne",
+        "exit": "Quitter le mode borne"
+      },
+      "frameHint": "Centrez le QR code dans le cadre.",
+      "confirmed": "Check-in confirmé",
+      "scanNext": "Scanner le membre suivant",
+      "enterHint": "ou appuyez sur",
+      "enterKey": "Entrée",
+      "scanner": {
+        "title": "Scanner",
+        "camera": "Caméra arrière",
+        "active": "Caméra active"
+      },
+      "manual": {
+        "title": "Saisie manuelle",
+        "hint": "Si la caméra ne lit pas le code"
+      },
+      "passes": {
+        "title": "Passages de cette session",
+        "countOne": "{count} passage",
+        "countOther": "{count} passages",
+        "empty": "Aucun passage depuis l'ouverture de la borne.",
+        "unnamed": "Membre sans nom",
+        "note": "Liste propre à cette borne, effacée au rechargement."
       }
     },
     "audit": {
