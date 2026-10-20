@@ -7,8 +7,8 @@
  * sign in, signed-in members see their links), and `<TaglineReveal />`.
  *
  * The page is always dark, whatever the theme: `.landing-dark`
- * (`globals.css`) remaps the semantic colours from the brand palette inside
- * `<main>`, and the public top bar applies the same class on `/`.
+ * (`globals.css`) points the semantic colours at the shared dark tokens
+ * inside `<main>`, and the public top bar applies the same class on `/`.
  *
  * Every string flows through `createTranslator(locale)` (`web.home.*`).
  * Product facts only: no price, customer logo, testimonial or figure that

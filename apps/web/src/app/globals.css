@@ -27,31 +27,31 @@
 
 /*
  * Landing scope: the public home is always dark, whatever the theme. The
- * semantic variables are remapped from the brand palette (ink, volt,
- * white) inside this class only, so shadcn/ui components and Tailwind
- * utilities (`bg-background`, `text-muted-foreground`, `bg-primary`) read
- * the landing colours without forcing the rest of the site into dark.
- * Greys are mixes of the brand white into ink, never new hex values.
+ * shadcn/ui variables are pointed at the shared dark tokens inside this
+ * class only, so components and Tailwind utilities (`bg-background`,
+ * `text-muted-foreground`, `bg-primary`) read the same neutral ink scale
+ * as the app in dark mode without forcing the rest of the site into dark.
+ * Primary stays the brand volt, never a studio override.
  */
 @layer components {
   .landing-dark {
     color-scheme: dark;
-    --background: var(--athlya-brand-ink);
-    --foreground: var(--athlya-brand-white);
-    --card: color-mix(in srgb, var(--athlya-brand-white) 4%, var(--athlya-brand-ink));
-    --card-foreground: var(--athlya-brand-white);
-    --popover: var(--card);
-    --popover-foreground: var(--athlya-brand-white);
+    --background: var(--color-dark-background);
+    --foreground: var(--color-dark-foreground);
+    --card: var(--color-dark-card);
+    --card-foreground: var(--color-dark-foreground);
+    --popover: var(--color-dark-card);
+    --popover-foreground: var(--color-dark-foreground);
     --primary: var(--athlya-brand-volt);
     --primary-foreground: var(--athlya-brand-ink);
-    --secondary: color-mix(in srgb, var(--athlya-brand-white) 10%, var(--athlya-brand-ink));
-    --secondary-foreground: var(--athlya-brand-white);
-    --muted: color-mix(in srgb, var(--athlya-brand-white) 8%, var(--athlya-brand-ink));
-    --muted-foreground: color-mix(in srgb, var(--athlya-brand-white) 64%, var(--athlya-brand-ink));
-    --accent: var(--muted);
-    --accent-foreground: var(--athlya-brand-white);
-    --border: color-mix(in srgb, var(--athlya-brand-white) 14%, var(--athlya-brand-ink));
-    --input: color-mix(in srgb, var(--athlya-brand-white) 22%, var(--athlya-brand-ink));
+    --secondary: var(--color-dark-secondary);
+    --secondary-foreground: var(--color-dark-foreground);
+    --muted: var(--color-dark-muted);
+    --muted-foreground: var(--color-dark-muted-foreground);
+    --accent: var(--color-dark-accent);
+    --accent-foreground: var(--color-dark-foreground);
+    --border: var(--color-dark-border);
+    --input: var(--color-dark-input);
     --ring: var(--athlya-brand-volt);
     --color-border: var(--border);
     --color-ring: var(--ring);

@@ -37,9 +37,9 @@ type BridgeSource = SemanticColor | 'brandPrimary' | 'brandOnPrimary';
 export const SHADCN_BRIDGE: ReadonlyArray<readonly [string, BridgeSource]> = [
   ['background', 'background'],
   ['foreground', 'foreground'],
-  ['card', 'background'],
+  ['card', 'card'],
   ['card-foreground', 'foreground'],
-  ['popover', 'background'],
+  ['popover', 'card'],
   ['popover-foreground', 'foreground'],
   ['primary', 'brandPrimary'],
   ['primary-foreground', 'brandOnPrimary'],

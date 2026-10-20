@@ -61,7 +61,7 @@ export function TextField({
         {...(textContentType === undefined ? {} : { textContentType })}
         {...(maxLength === undefined ? {} : { maxLength })}
         {...(multiline === true ? { multiline: true, textAlignVertical: 'top' as const } : {})}
-        className={`min-h-12 rounded-md border px-md text-base text-foreground dark:text-dark-foreground ${invalid ? 'border-destructive dark:border-dark-destructive' : 'border-border dark:border-dark-border'} ${multiline === true ? 'min-h-24 py-sm' : ''}`}
+        className={`min-h-12 rounded-md border px-md text-base text-foreground dark:text-dark-foreground ${invalid ? 'border-destructive dark:border-dark-destructive' : 'border-input dark:border-dark-input'} ${multiline === true ? 'min-h-24 py-sm' : ''}`}
       />
       {hint === undefined ? null : (
         <Text
