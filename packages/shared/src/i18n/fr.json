@@ -1032,6 +1032,87 @@
         "emptyMine": "Aucun cours ne vous est attribué sur cette période.",
         "emptyAll": "Aucun cours au studio sur cette période."
       }
+    },
+    "roster": {
+      "openRoster": "Inscrits",
+      "openRosterFor": "Ouvrir la liste des inscrits de {title}",
+      "coach": "Coach : {name}",
+      "noCoach": "Aucun coach attribué",
+      "stats": {
+        "booked": "Inscrits",
+        "checkedIn": "Présents",
+        "waitlist": "Liste d'attente"
+      },
+      "confirmed": {
+        "title": "Membres inscrits",
+        "empty": "Personne n'est encore inscrit à ce cours."
+      },
+      "waitlist": {
+        "title": "Liste d'attente",
+        "empty": "Personne n'attend de place."
+      },
+      "columns": {
+        "member": "Membre",
+        "bookedAt": "Inscription",
+        "attendance": "Présence",
+        "position": "Rang"
+      },
+      "checkIn": "Marquer présent",
+      "checkInFor": "Marquer {name} présent",
+      "checkedInAt": "Présent à {time}",
+      "notCheckedIn": "Pas encore pointé",
+      "checkedInToast": "{name} est pointé.",
+      "notConfirmed": "Cette réservation n'est plus confirmée. La liste a été actualisée.",
+      "window": {
+        "before": "Le pointage ouvre à {time}, 30 minutes avant le cours.",
+        "open": "Marquez les membres présents à leur arrivée. Les scans de la borne s'affichent ici aussi.",
+        "closed": "Le pointage est fermé depuis le {date}."
+      },
+      "forbidden": "Ce cours est attribué à un autre coach. Seuls son coach et les admins du studio voient ses inscrits.",
+      "notFound": "Ce cours n'existe pas ou a été supprimé.",
+      "loadError": "La liste des inscrits n'a pas pu se charger."
+    },
+    "memberFile": {
+      "open": "Ouvrir la fiche",
+      "openFor": "Ouvrir la fiche de {name}",
+      "memberSince": "Membre depuis le {date}",
+      "stats": {
+        "checkIns": "Présences",
+        "lastCheckIn": "Dernière présence",
+        "never": "Jamais",
+        "noShows": "Absences",
+        "cancellations": "Annulations"
+      },
+      "upcoming": {
+        "title": "Réservations à venir",
+        "empty": "Aucune réservation à venir."
+      },
+      "past": {
+        "title": "Historique",
+        "empty": "Aucune réservation passée.",
+        "latest": "{count} dernières"
+      },
+      "columns": {
+        "date": "Date",
+        "class": "Cours",
+        "status": "Statut"
+      },
+      "status": {
+        "confirmed": "Inscrit",
+        "waitlist": "Liste d'attente",
+        "cancelled": "Annulé",
+        "no_show": "Absent",
+        "attended": "Présent",
+        "missed": "Non pointé"
+      },
+      "consents": {
+        "title": "Consentements",
+        "granted": "Oui",
+        "refused": "Non"
+      },
+      "forbidden": "Seuls les admins du studio peuvent ouvrir une fiche membre.",
+      "notFound": "Ce membre n'existe pas dans votre studio.",
+      "loadError": "La fiche membre n'a pas pu se charger."
     }
   },
   "mobile": {
