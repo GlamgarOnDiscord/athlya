@@ -13,7 +13,13 @@
  *   • 8.1, 8.2 — `POST /` returns 201 Created for a confirmed seat
  *                or 202 Accepted for a waitlisted one.
  *   • 8.4, 8.5 — idempotent booking via `Idempotency-Key` header +
- *                `UNIQUE(class_id, user_id)` DB constraint.
+ *                the partial `UNIQUE(class_id, user_id)` index. Both
+ *                mutations run the idempotency middleware in strict
+ *                mode (in-flight marker, request hash, fail closed),
+ *                resolved per request from the caller's claims.
+ *   • A retried `DELETE` of a reservation that is already cancelled
+ *                answers 200 with the stored row and
+ *                `alreadyCancelled: true`, never a 422.
  *   • 9.1, 9.2 — `DELETE /:id` respects the 2-hour cancellation
  *                window (`cancellation_window_closed` on violation).
  *   • 9.3      — waitlist FIFO promotion runs in the same
@@ -43,7 +49,7 @@ import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
 import type { BookingRequest, CancelReservationParams } from '@athlya/shared/schemas/api';
-import type { Context } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 
 /* ------------------------------------------------------------------ */
 /*  Local schemas                                                      */
@@ -76,7 +82,9 @@ type ListMyReservationsQuery = z.infer<typeof ListMyReservationsQuerySchema>;
  *
  *   • `confirmed`           → HTTP 201 with the reservation body.
  *   • `waitlist`            → HTTP 202 with the reservation + `position`.
- *   • `conflict`            → HTTP 409 (already-booked idempotent replay).
+ *   • `conflict`            → HTTP 409 (already-booked idempotent replay),
+ *                             with the existing row's real status and,
+ *                             for a waitlist row, its position.
  *   • `class_in_past`       → HTTP 422.
  *   • `counter_unavailable` → HTTP 503 (Redis down; client should retry).
  */
@@ -87,7 +95,12 @@ export type BookingOutcome =
       readonly reservation: unknown;
       readonly position: number;
     }
-  | { readonly kind: 'conflict'; readonly reservation: unknown }
+  | {
+      readonly kind: 'conflict';
+      readonly status: 'confirmed' | 'waitlist';
+      readonly reservation: unknown;
+      readonly position?: number;
+    }
   | { readonly kind: 'class_in_past' }
   | { readonly kind: 'not_found' }
   | { readonly kind: 'counter_unavailable' };
@@ -96,6 +109,7 @@ export type BookingOutcome =
 export type CancelOutcome =
   | { readonly kind: 'cancelled'; readonly reservation: unknown }
   | { readonly kind: 'promoted'; readonly reservation: unknown }
+  | { readonly kind: 'already_cancelled'; readonly reservation: unknown }
   | { readonly kind: 'window_closed' }
   | { readonly kind: 'invalid_transition' }
   | { readonly kind: 'not_found' };
@@ -110,7 +124,11 @@ export interface ReservationsDeps {
   ): Promise<{ items: ReadonlyArray<unknown>; nextCursor: string | null }>;
   getRemainingSeats(classId: string): Promise<number | null>;
 
-  readonly idempotency?: IdempotencyMiddlewareDeps;
+  /**
+   * Idempotency store bound to the caller's tenant claims. `undefined`
+   * (dev stub) runs the route without replay protection.
+   */
+  idempotencyFor?(claims: AuthClaims): IdempotencyMiddlewareDeps | undefined;
 }
 
 /* ------------------------------------------------------------------ */
@@ -145,7 +163,17 @@ function problemBody(
 /** Build the `/v1/reservations/*` sub-router. */
 export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  const idem = deps.idempotency;
+
+  /** Idempotency bound per request to the caller's tenant claims. */
+  const idem: MiddlewareHandler<HonoEnv> = async (c, next) => {
+    const claims = c.get('authClaims');
+    const store = claims === undefined ? undefined : deps.idempotencyFor?.(claims);
+    if (store === undefined) {
+      await next();
+      return;
+    }
+    return idempotency(store)(c, next);
+  };
 
   // Every /v1/reservations route is authenticated.
   router.use('*', jwtAuth());
@@ -168,7 +196,7 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
     '/',
     projectUserIdFromClaims(),
     zValidator('json', BookingRequestSchema),
-    ...(idem ? [idempotency(idem)] : []),
+    idem,
     async (c) => {
       traceOperation(c, 'reservations.book');
       const claims = c.get('authClaims');
@@ -218,8 +246,9 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
         case 'conflict':
           return c.json(
             {
-              status: 'confirmed',
+              status: outcome.status,
               reservation: outcome.reservation,
+              ...(outcome.position !== undefined ? { position: outcome.position } : {}),
             },
             409,
           );
@@ -263,7 +292,7 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
     '/:reservationId',
     projectUserIdFromClaims(),
     zValidator('param', CancelReservationParamsSchema),
-    ...(idem ? [idempotency(idem)] : []),
+    idem,
     async (c) => {
       traceOperation(c, 'reservations.cancel');
       const claims = c.get('authClaims');
@@ -300,6 +329,15 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
             {
               status: 'cancelled',
               reservation: outcome.reservation,
+            },
+            200,
+          );
+        case 'already_cancelled':
+          return c.json(
+            {
+              status: 'cancelled',
+              reservation: outcome.reservation,
+              alreadyCancelled: true,
             },
             200,
           );

@@ -59,7 +59,7 @@ import {
   createDrizzleDeleteClassRepoHttp,
   createDrizzleListClassesRepoHttp,
   createDrizzleSearchClassesRepoHttp,
-  createDrizzleUpdateClassRepoHttp,
+  createDrizzleUpdateClassRepo,
 } from './classes-repo-drizzle.js';
 import {
   getOrCreateDbHttp,
@@ -69,12 +69,14 @@ import {
   primeDbHttpForTests,
   resetAllDepsCachesForTests,
 } from './deps-cache.js';
+import { createRedisInFlightLock } from './idempotency-in-flight.js';
 import { listMyReservations as queryListMyReservations } from './reservations-list-drizzle.js';
 import {
   createBookingEventPublisher,
   createDrizzleBookingRepo,
   createDrizzleCancelRepo,
 } from './reservations-write-drizzle.js';
+import { createTenantIdempotencyDb } from './tenant-idempotency.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
 import type { ClassesDeps, DeleteClassOutcome, UpdateClassOutcome } from '../routes/classes.js';
@@ -211,7 +213,11 @@ export function buildClassesDeps(
     ): Promise<UpdateClassOutcome> {
       const db = getOrCreateDbHttp(env.DB_URL);
       const redis = getOrCreateRedisForEnv(env);
-      const classRepo = createDrizzleUpdateClassRepoHttp(db, toTenantClaims(claims));
+      const classRepo = createDrizzleUpdateClassRepo(
+        db,
+        getOrCreateWriteDb(env),
+        toTenantClaims(claims),
+      );
       const counter = createRedisRemainingCounter(redis);
 
       try {
@@ -227,6 +233,7 @@ export function buildClassesDeps(
         const code = extractUpdateErrorCode(err);
         if (code === 'not_found') return { kind: 'not_found' };
         if (code === 'conflict') return { kind: 'conflict' };
+        if (code === 'capacity_below_confirmed') return { kind: 'capacity_below_confirmed' };
         throw err;
       }
     },
@@ -324,7 +331,9 @@ export function buildReservationsDeps(
         case 'already_booked':
           return {
             kind: 'conflict',
+            status: result.reservation.status === 'waitlist' ? 'waitlist' : 'confirmed',
             reservation: result.reservation,
+            ...(result.position !== undefined ? { position: result.position } : {}),
           };
         case 'class_in_past':
           return { kind: 'class_in_past' };
@@ -363,6 +372,8 @@ export function buildReservationsDeps(
                 kind: 'cancelled',
                 reservation: result.cancelled,
               };
+        case 'already_cancelled':
+          return { kind: 'already_cancelled', reservation: result.cancelled };
         case 'not_found':
           return { kind: 'not_found' };
         case 'invalid_transition':
@@ -376,6 +387,17 @@ export function buildReservationsDeps(
       const redis = getOrCreateRedisForEnv(env);
       const counter = createRedisRemainingCounter(redis);
       return counter.getRemaining(classId);
+    },
+
+    // Strict mode: a duplicate booking or cancel costs a seat, so the
+    // routes refuse to run unprotected (503) rather than degrade.
+    idempotencyFor(claims) {
+      return {
+        db: createTenantIdempotencyDb(getOrCreateDbHttp(env.DB_URL), toTenantClaims(claims)),
+        inFlight: createRedisInFlightLock(getOrCreateRedisForEnv(env)),
+        bindRequest: true,
+        failClosed: true,
+      };
     },
   };
 }

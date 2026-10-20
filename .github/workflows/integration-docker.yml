@@ -63,3 +63,10 @@ jobs:
 
       - name: Reservations property suites (@athlya/reservations)
         run: pnpm --filter @athlya/reservations exec vitest run tests/properties/
+
+      # The API suite imports @athlya/shared through its compiled `dist`.
+      - name: Build @athlya/shared for the API suite
+        run: pnpm --filter @athlya/shared build
+
+      - name: Booking concurrency on real Postgres (@athlya/api)
+        run: pnpm --filter @athlya/api exec vitest run tests/integration/

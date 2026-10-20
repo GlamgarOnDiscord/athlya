@@ -182,6 +182,7 @@ export function lazyReservationsDeps(resolve: () => ReservationsDeps): Reservati
     cancelReservation: forward('cancelReservation'),
     listMyReservations: forward('listMyReservations'),
     getRemainingSeats: forward('getRemainingSeats'),
+    idempotencyFor: (claims) => resolve().idempotencyFor?.(claims),
   };
 }
 

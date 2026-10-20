@@ -13,8 +13,8 @@
  *  1. Stub the boot refresh so the session is restored on load.
  *  2. Stub the member API reads (`/v1/members/me`, `/v1/classes`,
  *     `/v1/me/progression`, `/v1/me/progression/cardio`, `/v1/coach`,
- *     `/v1/calendar/feed-url`, `/v1/reservations/me`) so the authenticated pages
- *     render their populated state instead of loading or error markup.
+ *     `/v1/calendar/feed-url`, `/v1/reservations/me`, `/v1/checkins/token`) so
+ *     the authenticated pages render their populated state instead of loading or error markup.
  *  3. Wait for a locator that only exists inside the page's
  *     `<RequireAuth>` subtree and check the URL did not move, so a
  *     silent redirect to `/login` fails the test before axe runs.
@@ -214,6 +214,15 @@ export async function stubMemberApi(page: Page): Promise<void> {
         },
       ],
       nextCursor: null,
+    }),
+  );
+
+  // Check-in QR token so `/me/checkin` renders its code. The page only
+  // encodes the opaque string, so it is deliberately not JWT-shaped.
+  await page.route('**/v1/checkins/token', (route) =>
+    fulfillJson(route, {
+      token: 'e2e-checkin-token-not-a-jwt',
+      expiresAt: new Date(Date.now() + 120_000).toISOString(),
     }),
   );
 
