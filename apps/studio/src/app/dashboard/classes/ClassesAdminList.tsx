@@ -1,6 +1,7 @@
 'use client';
 
 import { CaretLeftIcon, CaretRightIcon } from '@phosphor-icons/react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   useCallback,
   useEffect,
@@ -130,6 +131,10 @@ export function ClassesAdminList(): ReactElement {
   const { accessToken } = useAuth();
   const getToken = useCallback(() => accessToken, [accessToken]);
   const client = useApiClient(getToken);
+  // `?new=1` (sidebar quick create, dashboard action) opens the create dialog once.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const createRequested = searchParams.get('new') === '1';
 
   interface AdminListState {
     view: AdminView;
@@ -149,7 +154,7 @@ export function ClassesAdminList(): ReactElement {
     to: nDaysFromNowIso(DEFAULT_LOOKAHEAD_DAYS),
     status: { kind: 'loading' },
     refreshNonce: 0,
-    dialogMode: null,
+    dialogMode: createRequested ? { kind: 'create' } : null,
     deleteTarget: null,
   }));
 
@@ -266,13 +271,17 @@ export function ClassesAdminList(): ReactElement {
     setState((s) => ({ ...s, deleteTarget: cls }));
   }, []);
 
-  const onCloseDialog = useCallback((committed: boolean) => {
-    setState((s) => ({
-      ...s,
-      dialogMode: null,
-      refreshNonce: committed ? s.refreshNonce + 1 : s.refreshNonce,
-    }));
-  }, []);
+  const onCloseDialog = useCallback(
+    (committed: boolean) => {
+      setState((s) => ({
+        ...s,
+        dialogMode: null,
+        refreshNonce: committed ? s.refreshNonce + 1 : s.refreshNonce,
+      }));
+      if (createRequested) router.replace('/dashboard/classes', { scroll: false });
+    },
+    [createRequested, router],
+  );
 
   const handleDelete = useCallback(async () => {
     const target = state.deleteTarget;

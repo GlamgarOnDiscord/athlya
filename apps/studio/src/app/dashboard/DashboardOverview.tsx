@@ -1,36 +1,39 @@
 'use client';
 
 /**
- * `/dashboard` overview: four summary tiles, then today's classes, the
- * next ones, the latest admin actions and compact links to every section.
- *
- * Everything is read from endpoints the console already uses:
- * `GET /v1/classes` (this week and the next), `GET /v1/members` (walked
- * for the count) and `GET /v1/audit`. Each card loads and fails on its
- * own, and shows a skeleton of its final size while it loads.
+ * `/dashboard` overview. Every number is read from endpoints the console
+ * already uses: `GET /v1/classes` (twelve past weeks and the current two,
+ * in two calls because the API caps a range at 90 days), `GET /v1/members`
+ * (walked for the count and the sign-up trend) and `GET /v1/audit`. A card
+ * whose source fails says so; a card without data says that instead of
+ * drawing zeros.
  */
 import {
-  ArrowRightIcon,
   BookOpenIcon,
   CalendarBlankIcon,
   CaretRightIcon,
   CreditCardIcon,
   ListBulletsIcon,
   PaletteIcon,
+  PlusIcon,
   ScanIcon,
   UsersIcon,
   type Icon,
 } from '@phosphor-icons/react';
+import { startOfWeek } from 'date-fns';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 
+import { buttonVariants } from '@/components/ui/button-variants';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
+import { PageHeader } from '../../components/shell/PageHeader';
 import { useApiClient } from '../../lib/api/buildClient';
-import { fetchMemberDirectory } from '../../lib/api/members';
+import { fetchMemberDirectory, type StudioMember } from '../../lib/api/members';
 import { useAuth } from '../../lib/auth/AuthContext';
 import { useLocale } from '../../lib/i18n/LocaleContext';
+import { pluralKey } from '../../lib/i18n/plural';
 import { createTranslator, type Translator } from '../../lib/i18n/t';
 import { useNowMinute } from '../../lib/use-now-minute';
 
@@ -41,18 +44,26 @@ import {
   type AuditItem,
 } from './audit/audit-format';
 import {
-  bookedSeats,
-  classTiming,
-  overviewRange,
+  minutesUntil,
+  newMembersPerWeek,
+  overviewRanges,
   summarize,
   type OverviewClass,
 } from './dashboard-summary';
+import { formatDuration } from './format-duration';
+import { BookingsChart } from './overview/BookingsChart';
+import { KpiTile, type KpiDelta } from './overview/KpiTile';
+import { OccupancyCard } from './overview/OccupancyCard';
+import { CARD, CardHeader, CardLink, CardMessage, RowsSkeleton } from './overview/parts';
+import { TodayTimeline } from './overview/TodayTimeline';
+import { UpcomingTable } from './overview/UpcomingTable';
 
-import type { Locale, TranslationKeys } from '@athlya/shared/i18n';
+import type { TranslationKeys } from '@athlya/shared/i18n';
 
 type Load<T> = { kind: 'loading' } | { kind: 'ready'; value: T } | { kind: 'error' };
 
-const ACTIVITY_LIMIT = 5;
+const ACTIVITY_LIMIT = 6;
+const MEMBER_TREND_WEEKS = 8;
 
 interface Section {
   readonly href: string;
@@ -106,15 +117,21 @@ const SECTIONS: ReadonlyArray<Section> = [
   },
 ];
 
-const CARD = 'flex flex-col rounded-lg border border-border bg-card text-card-foreground';
-const LINK =
-  'inline-flex items-center gap-1 rounded-sm text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+function signed(value: number, suffix: string, locale: string): string {
+  const n = new Intl.NumberFormat(locale, { signDisplay: 'exceptZero' }).format(value);
+  return suffix === '' ? n : `${n} ${suffix}`;
+}
+
+function direction(value: number): KpiDelta['direction'] {
+  if (value > 0) return 'up';
+  return value < 0 ? 'down' : 'flat';
+}
 
 export function DashboardOverview(): ReactElement {
   const locale = useLocale();
   const t = useMemo(() => createTranslator(locale), [locale]);
 
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const getToken = useCallback(() => accessToken, [accessToken]);
   const client = useApiClient(getToken);
 
@@ -123,27 +140,29 @@ export function DashboardOverview(): ReactElement {
     () => (nowMinute === null ? null : new Date(nowMinute * 60_000)),
     [nowMinute],
   );
+
   const [classes, setClasses] = useState<Load<ReadonlyArray<OverviewClass>>>({ kind: 'loading' });
-  const [members, setMembers] = useState<Load<{ count: number; complete: boolean }>>({
+  const [members, setMembers] = useState<
+    Load<{ items: ReadonlyArray<StudioMember>; complete: boolean }>
+  >({
     kind: 'loading',
   });
   const [activity, setActivity] = useState<Load<ReadonlyArray<AuditItem>>>({ kind: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
-    const { from, to } = overviewRange(new Date());
-    const range = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
-
-    void client
-      .get<{ items: ReadonlyArray<OverviewClass> }>(`/v1/classes?${range.toString()}`)
-      .then(
-        (res) => !cancelled && setClasses({ kind: 'ready', value: res.items }),
-        () => !cancelled && setClasses({ kind: 'error' }),
+    const { history, current } = overviewRanges(new Date());
+    const read = (from: Date, to: Date): Promise<{ items: ReadonlyArray<OverviewClass> }> =>
+      client.get(
+        `/v1/classes?${new URLSearchParams({ from: from.toISOString(), to: to.toISOString() }).toString()}`,
       );
+    void Promise.all([read(history.from, history.to), read(current.from, current.to)]).then(
+      ([past, coming]) =>
+        !cancelled && setClasses({ kind: 'ready', value: [...past.items, ...coming.items] }),
+      () => !cancelled && setClasses({ kind: 'error' }),
+    );
     void fetchMemberDirectory(client).then(
-      (dir) =>
-        !cancelled &&
-        setMembers({ kind: 'ready', value: { count: dir.items.length, complete: dir.complete } }),
+      (dir) => !cancelled && setMembers({ kind: 'ready', value: dir }),
       () => !cancelled && setMembers({ kind: 'error' }),
     );
     void client.get<{ items: ReadonlyArray<AuditItem> }>(`/v1/audit?limit=${ACTIVITY_LIMIT}`).then(
@@ -161,345 +180,380 @@ export function DashboardOverview(): ReactElement {
     [classes, now],
   );
   const number = useMemo(() => new Intl.NumberFormat(locale), [locale]);
-  const percent = useMemo(
-    () => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }),
-    [locale],
-  );
+  const loadError = t('studio.dashboard.loadError');
+  const classesFailed = classes.kind === 'error' ? loadError : null;
+  const weekStart = now === null ? null : startOfWeek(now, { weekStartsOn: 1 });
+  const todayIndex = now === null ? 0 : (now.getDay() + 6) % 7;
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: 'long' });
 
-  const classesFailed = classes.kind === 'error';
-  const membersValue =
-    members.kind === 'ready'
-      ? members.value.complete
-        ? number.format(members.value.count)
-        : t('studio.dashboard.tiles.membersCapped', { count: number.format(members.value.count) })
+  const firstName = user?.displayName.trim().split(/\s+/u)[0] ?? '';
+  const nextLine =
+    summary === null || now === null
+      ? null
+      : summary.next === null
+        ? t('studio.dashboard.noNext')
+        : t('studio.dashboard.nextIn', {
+            time: formatDuration(minutesUntil(summary.next.startsAt, now), t),
+          });
+
+  const deltas = summary === null || !summary.hasHistory ? null : summary;
+  const memberTrend =
+    members.kind === 'ready' && now !== null && members.value.complete
+      ? newMembersPerWeek(
+          members.value.items.map((m) => m.createdAt),
+          now,
+          MEMBER_TREND_WEEKS,
+        )
       : null;
+  const newThisWeek = memberTrend?.at(-1) ?? null;
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
-      <Tile
-        label={t('studio.dashboard.tiles.todayClasses')}
-        value={summary === null ? null : number.format(summary.today.length)}
-        failed={classesFailed}
-        href="/dashboard/classes"
-        linkLabel={t('studio.dashboard.tiles.openPlanning')}
-        t={t}
-      />
-      <Tile
-        label={t('studio.dashboard.tiles.weekBookings')}
-        value={summary === null ? null : number.format(summary.week.booked)}
-        failed={classesFailed}
-        href="/dashboard/classes"
-        linkLabel={t('studio.dashboard.tiles.openPlanning')}
-        t={t}
-      />
-      <Tile
-        label={t('studio.dashboard.tiles.weekFill')}
-        value={
-          summary === null
-            ? null
-            : summary.week.percent === null
-              ? t('studio.dashboard.tiles.noData')
-              : percent.format(summary.week.percent / 100)
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title={
+          firstName === ''
+            ? t('studio.dashboard.title')
+            : t('studio.dashboard.greeting', { name: firstName })
         }
-        failed={classesFailed}
-        href="/dashboard/classes"
-        linkLabel={t('studio.dashboard.tiles.openPlanning')}
-        t={t}
-      />
-      <Tile
-        label={t('studio.dashboard.tiles.members')}
-        value={membersValue}
-        failed={members.kind === 'error'}
-        href="/dashboard/members"
-        linkLabel={t('studio.dashboard.tiles.seeMembers')}
-        t={t}
+        subtitle={
+          now === null ? (
+            <Skeleton className="h-4 w-64" />
+          ) : (
+            <span className="first-letter:uppercase">
+              {new Intl.DateTimeFormat(locale, {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+              }).format(now)}
+              {nextLine === null ? null : ` · ${nextLine}`}
+            </span>
+          )
+        }
+        actions={
+          <>
+            <Link
+              href="/dashboard/checkin"
+              className={buttonVariants({ variant: 'outline', size: 'lg' })}
+            >
+              <ScanIcon aria-hidden="true" data-icon="inline-start" />
+              {t('studio.dashboard.actions.openKiosk')}
+            </Link>
+            <Link href="/dashboard/classes?new=1" className={buttonVariants({ size: 'lg' })}>
+              <PlusIcon aria-hidden="true" data-icon="inline-start" />
+              {t('studio.shell.newClass')}
+            </Link>
+          </>
+        }
       />
 
-      <section
-        aria-labelledby="dashboard-today"
-        className={cn(CARD, 'md:col-span-2 lg:col-span-6')}
-      >
-        <CardHeading
-          id="dashboard-today"
-          title={t('studio.dashboard.today.title')}
-          detail={
-            now === null
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
+        <KpiTile
+          label={t('studio.dashboard.tiles.todayClasses')}
+          value={summary === null ? null : number.format(summary.today.length)}
+          delta={
+            deltas === null || now === null
               ? null
-              : new Intl.DateTimeFormat(locale, {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                }).format(now)
+              : {
+                  text: signed(deltas.today.length - deltas.sameDayLastWeek, '', locale),
+                  direction: direction(deltas.today.length - deltas.sameDayLastWeek),
+                  context: t('studio.dashboard.tiles.vsSameDay', { day: weekday.format(now) }),
+                }
           }
+          trend={summary?.classesTrend ?? null}
+          failed={classesFailed}
           href="/dashboard/classes"
           linkLabel={t('studio.dashboard.tiles.openPlanning')}
         />
-        {classesFailed ? (
-          <CardMessage text={t('studio.dashboard.loadError')} />
-        ) : summary === null || now === null ? (
-          <RowsSkeleton rows={4} />
-        ) : summary.today.length === 0 ? (
-          <CardMessage text={t('studio.dashboard.today.empty')} />
-        ) : (
-          <ul className="divide-y divide-border">
-            {summary.today.map((cls) => (
-              <ClassLine key={cls.id} cls={cls} now={now} locale={locale} t={t} showTiming />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section
-        aria-labelledby="dashboard-upcoming"
-        className={cn(CARD, 'md:col-span-2 lg:col-span-6')}
-      >
-        <CardHeading id="dashboard-upcoming" title={t('studio.dashboard.upcoming.title')} />
-        {classesFailed ? (
-          <CardMessage text={t('studio.dashboard.loadError')} />
-        ) : summary === null || now === null ? (
-          <RowsSkeleton rows={4} />
-        ) : summary.upcoming.length === 0 ? (
-          <CardMessage text={t('studio.dashboard.upcoming.empty')} />
-        ) : (
-          <ul className="divide-y divide-border">
-            {summary.upcoming.map((cls) => (
-              <ClassLine key={cls.id} cls={cls} now={now} locale={locale} t={t} showDay />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section
-        aria-labelledby="dashboard-activity"
-        className={cn(CARD, 'md:col-span-2 lg:col-span-6')}
-      >
-        <CardHeading
-          id="dashboard-activity"
-          title={t('studio.dashboard.activity.title')}
-          href="/dashboard/audit"
-          linkLabel={t('studio.dashboard.activity.link')}
+        <KpiTile
+          label={t('studio.dashboard.tiles.weekBookings')}
+          value={summary === null ? null : number.format(summary.week.booked)}
+          delta={
+            deltas === null || deltas.previousWeek.booked === 0
+              ? null
+              : (() => {
+                  const change = Math.round(
+                    ((deltas.week.booked - deltas.previousWeek.booked) /
+                      deltas.previousWeek.booked) *
+                      100,
+                  );
+                  return {
+                    text: signed(change, '%', locale),
+                    direction: direction(change),
+                    context: t('studio.dashboard.tiles.vsPreviousWeek'),
+                  };
+                })()
+          }
+          trend={summary?.bookingsTrend ?? null}
+          failed={classesFailed}
+          href="/dashboard/classes"
+          linkLabel={t('studio.dashboard.tiles.openPlanning')}
         />
-        {activity.kind === 'error' ? (
-          <CardMessage text={t('studio.dashboard.loadError')} />
-        ) : activity.kind === 'loading' || now === null ? (
-          <RowsSkeleton rows={ACTIVITY_LIMIT} />
-        ) : activity.value.length === 0 ? (
-          <CardMessage text={t('studio.dashboard.activity.empty')} />
-        ) : (
+        <KpiTile
+          label={t('studio.dashboard.tiles.weekFill')}
+          value={
+            summary === null
+              ? null
+              : summary.week.percent === null
+                ? t('studio.dashboard.tiles.noData')
+                : number.format(summary.week.percent)
+          }
+          {...(summary?.week.percent === null ? {} : { unit: '%' })}
+          delta={
+            deltas === null || deltas.week.percent === null || deltas.previousWeek.percent === null
+              ? null
+              : {
+                  text: signed(
+                    deltas.week.percent - deltas.previousWeek.percent,
+                    t('studio.dashboard.tiles.points'),
+                    locale,
+                  ),
+                  direction: direction(deltas.week.percent - deltas.previousWeek.percent),
+                  context: t('studio.dashboard.tiles.vsPreviousWeek'),
+                }
+          }
+          trend={summary?.fillTrend ?? null}
+          failed={classesFailed}
+          href="/dashboard/classes"
+          linkLabel={t('studio.dashboard.tiles.openPlanning')}
+        />
+        <KpiTile
+          label={t('studio.dashboard.tiles.members')}
+          value={
+            members.kind !== 'ready'
+              ? null
+              : members.value.complete
+                ? number.format(members.value.items.length)
+                : t('studio.dashboard.tiles.membersCapped', {
+                    count: number.format(members.value.items.length),
+                  })
+          }
+          delta={
+            newThisWeek === null
+              ? null
+              : {
+                  text: signed(newThisWeek, '', locale),
+                  direction: direction(newThisWeek),
+                  context: t('studio.dashboard.tiles.thisWeek'),
+                }
+          }
+          trend={memberTrend}
+          failed={members.kind === 'error' ? loadError : null}
+          href="/dashboard/members"
+          linkLabel={t('studio.dashboard.tiles.seeMembers')}
+        />
+
+        <section
+          aria-labelledby="dashboard-today"
+          className={cn(CARD, 'md:col-span-2 lg:col-span-8')}
+        >
+          <CardHeader
+            id="dashboard-today"
+            title={t('studio.dashboard.today.title')}
+            detail={
+              summary === null
+                ? null
+                : t(
+                    pluralKey(locale, summary.today.length, {
+                      one: 'studio.dashboard.today.countOne',
+                      other: 'studio.dashboard.today.countOther',
+                    }),
+                    { count: summary.today.length },
+                  )
+            }
+            action={
+              <CardLink
+                href="/dashboard/classes"
+                label={t('studio.dashboard.tiles.openPlanning')}
+              />
+            }
+          />
+          {classesFailed !== null ? (
+            <CardMessage text={loadError} />
+          ) : summary === null || now === null ? (
+            <RowsSkeleton rows={4} />
+          ) : summary.today.length === 0 ? (
+            <CardMessage text={t('studio.dashboard.today.empty')} />
+          ) : (
+            <>
+              <TodayTimeline
+                classes={summary.today}
+                next={summary.next}
+                now={now}
+                locale={locale}
+                t={t}
+              />
+              <p className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+                <span className="inline-block first-letter:uppercase">{nextLine}</span>
+                <span className="tabular-nums">
+                  {(() => {
+                    const total = summary.today.reduce(
+                      (sum, c) => sum + Math.max(0, c.capacity - c.remaining),
+                      0,
+                    );
+                    return t(
+                      pluralKey(locale, total, {
+                        one: 'studio.dashboard.today.totalOne',
+                        other: 'studio.dashboard.today.totalOther',
+                      }),
+                      { count: total },
+                    );
+                  })()}
+                </span>
+              </p>
+            </>
+          )}
+        </section>
+
+        <section
+          aria-labelledby="dashboard-bookings"
+          className={cn(CARD, 'md:col-span-2 lg:col-span-4')}
+        >
+          <CardHeader
+            id="dashboard-bookings"
+            title={t('studio.dashboard.bookings.title')}
+            detail={
+              summary === null
+                ? null
+                : t('studio.dashboard.bookings.total', {
+                    count: number.format(summary.week.booked),
+                  })
+            }
+          />
+          {classesFailed !== null ? (
+            <CardMessage text={loadError} />
+          ) : summary === null || weekStart === null ? (
+            <RowsSkeleton rows={4} />
+          ) : summary.week.classes === 0 ? (
+            <CardMessage text={t('studio.dashboard.bookings.empty')} />
+          ) : (
+            <BookingsChart
+              values={summary.bookingsByDay}
+              weekStart={weekStart}
+              todayIndex={todayIndex}
+              locale={locale}
+              t={t}
+            />
+          )}
+        </section>
+
+        <section
+          aria-labelledby="dashboard-upcoming"
+          className={cn(CARD, 'md:col-span-2 lg:col-span-8')}
+        >
+          <CardHeader
+            id="dashboard-upcoming"
+            title={t('studio.dashboard.upcoming.title')}
+            detail={t('studio.dashboard.upcoming.window')}
+          />
+          {classesFailed !== null ? (
+            <CardMessage text={loadError} />
+          ) : summary === null ? (
+            <RowsSkeleton rows={5} />
+          ) : summary.upcoming.length === 0 ? (
+            <CardMessage text={t('studio.dashboard.upcoming.empty')} />
+          ) : (
+            <UpcomingTable classes={summary.upcoming} locale={locale} t={t} />
+          )}
+        </section>
+
+        <OccupancyCard
+          classes={classes.kind === 'ready' ? classes.value : null}
+          failed={classes.kind === 'error'}
+          now={now}
+          locale={locale}
+          t={t}
+        />
+
+        <nav
+          aria-labelledby="dashboard-sections"
+          className={cn(CARD, 'md:col-span-2 lg:col-span-8')}
+        >
+          <CardHeader id="dashboard-sections" title={t('studio.dashboard.sections.title')} />
           <ul className="divide-y divide-border">
-            {activity.value.map((item) => {
-              const label = actionLabel(item.action, t);
+            {SECTIONS.map((section) => {
+              const SectionIcon = section.icon;
               return (
-                <li key={item.id} className="flex items-baseline justify-between gap-4 px-6 py-3">
-                  {label === null ? (
-                    <span className="min-w-0 truncate font-mono text-sm">{item.action}</span>
-                  ) : (
-                    <span className="min-w-0 truncate text-sm font-medium">{label}</span>
-                  )}
-                  <time
-                    dateTime={item.createdAt}
-                    title={formatEventDate(item.createdAt, locale)}
-                    className="shrink-0 text-sm text-muted-foreground tabular-nums"
+                <li key={section.href}>
+                  <Link
+                    href={section.href}
+                    className="grid grid-cols-[1.25rem_1fr_1rem] items-center gap-3 px-4 py-3 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:grid-cols-[1.25rem_11rem_1fr_1rem]"
                   >
-                    {formatEventTime(item.createdAt, now, locale)}
-                  </time>
+                    <SectionIcon aria-hidden="true" className="size-[18px] text-muted-foreground" />
+                    <span className="text-sm font-medium">{t(section.titleKey)}</span>
+                    <span className="hidden truncate text-sm text-muted-foreground sm:block">
+                      {t(section.bodyKey)}
+                    </span>
+                    <CaretRightIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+                  </Link>
                 </li>
               );
             })}
           </ul>
-        )}
-      </section>
+        </nav>
 
-      <nav aria-labelledby="dashboard-sections" className={cn(CARD, 'md:col-span-2 lg:col-span-6')}>
-        <CardHeading id="dashboard-sections" title={t('studio.dashboard.sections.title')} />
+        <ActivityCard activity={activity} now={now} t={t} locale={locale} />
+      </div>
+    </div>
+  );
+}
+
+function ActivityCard({
+  activity,
+  now,
+  t,
+  locale,
+}: {
+  readonly activity: Load<ReadonlyArray<AuditItem>>;
+  readonly now: Date | null;
+  readonly t: Translator;
+  readonly locale: 'fr' | 'en';
+}): ReactElement {
+  return (
+    <section
+      aria-labelledby="dashboard-activity"
+      className={cn(CARD, 'md:col-span-2 lg:col-span-4')}
+    >
+      <CardHeader
+        id="dashboard-activity"
+        title={t('studio.dashboard.activity.title')}
+        action={<CardLink href="/dashboard/audit" label={t('studio.dashboard.activity.link')} />}
+      />
+      {activity.kind === 'error' ? (
+        <CardMessage text={t('studio.dashboard.loadError')} />
+      ) : activity.kind === 'loading' || now === null ? (
+        <RowsSkeleton rows={5} />
+      ) : activity.value.length === 0 ? (
+        <CardMessage text={t('studio.dashboard.activity.empty')} />
+      ) : (
         <ul className="divide-y divide-border">
-          {SECTIONS.map((section) => {
-            const SectionIcon = section.icon;
+          {activity.value.map((item) => {
+            const label = actionLabel(item.action, t);
             return (
-              <li key={section.href}>
-                <Link
-                  href={section.href}
-                  className="group flex items-center gap-3 px-6 py-2.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                >
-                  <SectionIcon aria-hidden="true" className="size-[18px] shrink-0" />
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="text-sm font-medium">{t(section.titleKey)}</span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {t(section.bodyKey)}
-                    </span>
+              <li key={item.id} className="flex items-start justify-between gap-4 px-4 py-2.5">
+                <span className="flex min-w-0 flex-col">
+                  <span
+                    className={cn('truncate text-sm', label === null ? 'font-mono' : 'font-medium')}
+                  >
+                    {label ?? item.action}
                   </span>
-                  <CaretRightIcon
-                    aria-hidden="true"
-                    className="size-4 shrink-0 text-muted-foreground"
-                  />
-                </Link>
+                  {label === null ? null : (
+                    <span className="truncate font-mono text-xs text-muted-foreground">
+                      {item.action}
+                    </span>
+                  )}
+                </span>
+                <time
+                  dateTime={item.createdAt}
+                  title={formatEventDate(item.createdAt, locale)}
+                  className="shrink-0 text-xs text-muted-foreground tabular-nums"
+                >
+                  {formatEventTime(item.createdAt, now, locale)}
+                </time>
               </li>
             );
           })}
         </ul>
-      </nav>
-    </div>
-  );
-}
-
-interface TileProps {
-  readonly label: string;
-  readonly value: string | null;
-  readonly failed: boolean;
-  readonly href: string;
-  readonly linkLabel: string;
-  readonly t: Translator;
-}
-
-function Tile({ label, value, failed, href, linkLabel, t }: TileProps): ReactElement {
-  return (
-    <section className={cn(CARD, 'justify-between gap-3 p-4 sm:p-6 lg:col-span-3')}>
-      <h2 className="text-sm text-muted-foreground">{label}</h2>
-      <div className="flex flex-col gap-2">
-        {failed ? (
-          <p className="text-sm text-destructive">{t('studio.dashboard.loadError')}</p>
-        ) : value === null ? (
-          <Skeleton className="h-9 w-16" />
-        ) : (
-          <p className="text-3xl font-semibold tabular-nums">{value}</p>
-        )}
-        <Link href={href} className={cn(LINK, 'self-start')}>
-          {linkLabel}
-          <ArrowRightIcon aria-hidden="true" className="size-3.5" />
-        </Link>
-      </div>
+      )}
     </section>
-  );
-}
-
-interface CardHeadingProps {
-  readonly id: string;
-  readonly title: string;
-  readonly detail?: string | null;
-  readonly href?: string;
-  readonly linkLabel?: string;
-}
-
-function CardHeading({ id, title, detail, href, linkLabel }: CardHeadingProps): ReactElement {
-  return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border px-6 py-4">
-      <h2 id={id} className="text-base font-semibold">
-        {title}
-        {detail === undefined || detail === null ? null : (
-          <span className="ml-2 text-sm font-normal text-muted-foreground first-letter:uppercase">
-            {detail}
-          </span>
-        )}
-      </h2>
-      {href === undefined || linkLabel === undefined ? null : (
-        <Link href={href} className={LINK}>
-          {linkLabel}
-          <ArrowRightIcon aria-hidden="true" className="size-3.5" />
-        </Link>
-      )}
-    </div>
-  );
-}
-
-function CardMessage({ text }: { readonly text: string }): ReactElement {
-  return <p className="px-6 py-6 text-sm text-muted-foreground">{text}</p>;
-}
-
-function RowsSkeleton({ rows }: { readonly rows: number }): ReactElement {
-  return (
-    <ul className="divide-y divide-border" aria-hidden="true">
-      {Array.from({ length: rows }).map((_, i) => (
-        <li key={`skeleton-${i}`} className="flex items-center gap-4 px-6 py-3">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 flex-1" />
-          <Skeleton className="h-4 w-12" />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-interface ClassLineProps {
-  readonly cls: OverviewClass;
-  readonly now: Date;
-  readonly locale: Locale;
-  readonly t: Translator;
-  readonly showTiming?: boolean;
-  readonly showDay?: boolean;
-}
-
-function ClassLine({ cls, now, locale, t, showTiming, showDay }: ClassLineProps): ReactElement {
-  const start = new Date(cls.startsAt);
-  const end = new Date(start.getTime() + cls.durationMin * 60_000);
-  const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
-  const day = new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric' });
-  const booked = bookedSeats(cls);
-  const timing = classTiming(cls, now);
-
-  return (
-    <li
-      className={cn(
-        'grid grid-cols-[auto_1fr_auto] items-center gap-x-4 gap-y-1 px-6 py-3',
-        showTiming === true && timing === 'done' && 'text-muted-foreground',
-      )}
-    >
-      <span className="w-28 text-sm tabular-nums">
-        {showDay === true ? <span className="mr-2 font-medium">{day.format(start)}</span> : null}
-        <time dateTime={cls.startsAt}>{time.format(start)}</time>
-        {showDay === true ? null : (
-          <span className="text-muted-foreground">
-            {' - '}
-            <time dateTime={end.toISOString()}>{time.format(end)}</time>
-          </span>
-        )}
-      </span>
-      <span className="flex min-w-0 items-center gap-2">
-        <span className="truncate text-sm font-medium">{cls.title}</span>
-        {showTiming === true && timing === 'live' ? (
-          <span className="planning-pill-open shrink-0 rounded-full px-2 py-0.5 text-xs font-medium">
-            {t('studio.dashboard.today.live')}
-          </span>
-        ) : null}
-        {showTiming === true && timing === 'done' ? (
-          <span className="hidden shrink-0 text-xs sm:inline">
-            {t('studio.dashboard.today.done')}
-          </span>
-        ) : null}
-      </span>
-      <FillMeter booked={booked} capacity={cls.capacity} t={t} />
-    </li>
-  );
-}
-
-interface FillMeterProps {
-  readonly booked: number;
-  readonly capacity: number;
-  readonly t: Translator;
-}
-
-/** Seats booked over capacity; the bar width is set from CSSOM (strict CSP, no style=""). */
-function FillMeter({ booked, capacity, t }: FillMeterProps): ReactElement {
-  const barRef = useRef<HTMLSpanElement | null>(null);
-  const ratio = capacity === 0 ? 0 : Math.min(1, booked / capacity);
-  useEffect(() => {
-    barRef.current?.style.setProperty('--fill', `${String(ratio * 100)}%`);
-  }, [ratio]);
-
-  return (
-    <span
-      className="flex items-center gap-2"
-      aria-label={t('studio.dashboard.today.fillLabel', { booked, capacity })}
-      role="img"
-    >
-      <span
-        aria-hidden="true"
-        className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-muted sm:block"
-      >
-        <span ref={barRef} className="fill-meter-bar block h-full rounded-full bg-chart-1" />
-      </span>
-      <span aria-hidden="true" className="text-sm tabular-nums">
-        {t('studio.dashboard.today.fill', { booked, capacity })}
-      </span>
-    </span>
   );
 }

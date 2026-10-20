@@ -101,3 +101,72 @@
 .fill-meter-bar {
   width: var(--fill, 0%);
 }
+
+/*
+ * Dashboard marks. Bar heights come from a CSSOM var (CSP #75). One accent
+ * per chart: volt, outlined in ink on light so the mark keeps 3:1. The
+ * occupancy heatmap ramps grey on light with a volt peak, volt on dark.
+ */
+.mark-bar {
+  height: var(--h, 0%);
+}
+.mark-accent,
+.heat-4 {
+  background-color: var(--athlya-brand-volt);
+  box-shadow: inset 0 0 0 1px var(--athlya-brand-ink);
+}
+.heat-empty {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.heat-0 {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--card));
+}
+.heat-1 {
+  background-color: color-mix(in srgb, var(--foreground) 18%, var(--card));
+}
+.heat-2 {
+  background-color: color-mix(in srgb, var(--foreground) 36%, var(--card));
+}
+.heat-3 {
+  background-color: color-mix(in srgb, var(--foreground) 60%, var(--card));
+}
+
+:root.dark {
+  .mark-accent,
+  .heat-4 {
+    box-shadow: none;
+  }
+  .heat-0 {
+    background-color: color-mix(in srgb, var(--athlya-brand-volt) 8%, var(--card));
+  }
+  .heat-1 {
+    background-color: color-mix(in srgb, var(--athlya-brand-volt) 22%, var(--card));
+  }
+  .heat-2 {
+    background-color: color-mix(in srgb, var(--athlya-brand-volt) 42%, var(--card));
+  }
+  .heat-3 {
+    background-color: color-mix(in srgb, var(--athlya-brand-volt) 66%, var(--card));
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    .mark-accent,
+    .heat-4 {
+      box-shadow: none;
+    }
+    .heat-0 {
+      background-color: color-mix(in srgb, var(--athlya-brand-volt) 8%, var(--card));
+    }
+    .heat-1 {
+      background-color: color-mix(in srgb, var(--athlya-brand-volt) 22%, var(--card));
+    }
+    .heat-2 {
+      background-color: color-mix(in srgb, var(--athlya-brand-volt) 42%, var(--card));
+    }
+    .heat-3 {
+      background-color: color-mix(in srgb, var(--athlya-brand-volt) 66%, var(--card));
+    }
+  }
+}
