@@ -382,9 +382,7 @@
         "coachTitle": "AI coach",
         "coachBody": "Answers about your sessions, only with your consent.",
         "healthTitle": "Apple Health import",
-        "healthBody": "Your iPhone workouts join your progress.",
-        "calendarTitle": "Calendar export",
-        "calendarBody": "Your bookings in the calendar you already use."
+        "healthBody": "Your iPhone workouts join your progress."
       },
       "trust": {
         "eyebrow": "GDPR-first and open source",

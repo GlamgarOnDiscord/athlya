@@ -54,7 +54,7 @@ const DISCIPLINES = [
 
 const STEPS = ['1', '2', '3'] as const;
 
-const FEATURES = ['waitlist', 'checkin', 'programs', 'coach', 'health', 'calendar'] as const;
+const FEATURES = ['waitlist', 'checkin', 'programs', 'coach', 'health'] as const;
 
 const TRUST = ['export', 'deletion', 'trackers', 'openSource'] as const;
 

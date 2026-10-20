@@ -382,9 +382,7 @@
         "coachTitle": "Coach IA",
         "coachBody": "Des réponses sur tes séances, seulement avec ton accord.",
         "healthTitle": "Import Apple Santé",
-        "healthBody": "Tes entraînements iPhone rejoignent ta progression.",
-        "calendarTitle": "Export calendrier",
-        "calendarBody": "Tes réservations dans ton agenda habituel."
+        "healthBody": "Tes entraînements iPhone rejoignent ta progression."
       },
       "trust": {
         "eyebrow": "RGPD-first et open source",
