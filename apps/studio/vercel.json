@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "buildCommand": "cd ../.. && pnpm exec turbo run build --filter=@athlya/studio",
+  "ignoreCommand": "npx turbo-ignore@2.11.9 @athlya/studio --fallback=HEAD^1",
+  "regions": ["cdg1"]
+}

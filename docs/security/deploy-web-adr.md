@@ -48,6 +48,10 @@
 - OpenNext CF régresse ou ne suit pas Next 16 → fallback Vercel (accepter le cross-origin + durcir CSRF) documenté.
 - Besoin produit incompatible avec le runtime Workers (ISR avancé, etc.).
 
+## Mise à jour 2026-10-20 (issue #744)
+
+Des projets Vercel **de test** (`athlya-web.vercel.app`, `athlya-studio.vercel.app`) sont ajoutés pour `apps/web` et `apps/studio`, à côté d'OpenNext qui reste la cible de production. Aucun domaine personnalisé ni changement DNS : cette décision reste valable pour la production. Une bascule de domaine demanderait de revoir cet ADR, le DPA Vercel et la liste des sous-traitants de `/privacy`. Runbook : [`deploy-vercel.md`](../runbooks/deploy-vercel.md).
+
 ## Références
 
 - `apps/web/next.config.ts` (TODO résolu → ref ADR)
