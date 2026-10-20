@@ -18,8 +18,10 @@ import {
 import { cn } from '@/lib/utils';
 
 import {
+  crossesDocument,
   isGroupActive,
   isLinkActive,
+  ownDocumentAt,
   type SidebarGroup,
   type SidebarLink,
   type SidebarSection,
@@ -123,6 +125,8 @@ export function SidebarAction({
 interface NavLinkItemProps {
   readonly link: SidebarLink;
   readonly pathname: string;
+  /** Own-document route the current page sits in (`ownDocumentAt`). */
+  readonly ownDocument: string | null;
   readonly collapsed: boolean;
   readonly nested?: boolean;
   readonly onNavigate?: (() => void) | undefined;
@@ -131,14 +135,16 @@ interface NavLinkItemProps {
 function NavLinkItem({
   link,
   pathname,
+  ownDocument,
   collapsed,
   nested = false,
   onNavigate,
 }: NavLinkItemProps): ReactElement {
   const active = isLinkActive(pathname, link);
   const LinkIcon = link.icon;
+  const Anchor = crossesDocument(ownDocument, link) ? 'a' : Link;
   return (
-    <Link
+    <Anchor
       href={link.href}
       aria-current={active ? 'page' : undefined}
       onClick={() => onNavigate?.()}
@@ -156,13 +162,14 @@ function NavLinkItem({
       />
       <ItemLabel label={link.label} collapsed={collapsed} />
       {collapsed ? <SidebarTooltip label={link.label} /> : null}
-    </Link>
+    </Anchor>
   );
 }
 
 interface NavGroupItemProps {
   readonly group: SidebarGroup;
   readonly pathname: string;
+  readonly ownDocument: string | null;
   readonly collapsed: boolean;
   readonly open: boolean;
   readonly panelId: string;
@@ -173,6 +180,7 @@ interface NavGroupItemProps {
 function NavGroupItem({
   group,
   pathname,
+  ownDocument,
   collapsed,
   open,
   panelId,
@@ -224,6 +232,7 @@ function NavGroupItem({
             <NavLinkItem
               link={child}
               pathname={pathname}
+              ownDocument={ownDocument}
               collapsed={false}
               nested
               onNavigate={onNavigate}
@@ -252,6 +261,7 @@ function SidebarNav({
   onNavigate,
 }: SidebarNavProps): ReactElement {
   const pathname = usePathname();
+  const ownDocument = ownDocumentAt(sections, pathname);
   const baseId = useId();
   // Explicit choices only; an untouched group is open when it holds the
   // active route.
@@ -273,6 +283,7 @@ function SidebarNav({
                     <NavLinkItem
                       link={item}
                       pathname={pathname}
+                      ownDocument={ownDocument}
                       collapsed={collapsed}
                       onNavigate={onNavigate}
                     />
@@ -285,6 +296,7 @@ function SidebarNav({
                   <NavGroupItem
                     group={item}
                     pathname={pathname}
+                    ownDocument={ownDocument}
                     collapsed={collapsed}
                     open={open}
                     panelId={`${baseId}-${item.id}`}

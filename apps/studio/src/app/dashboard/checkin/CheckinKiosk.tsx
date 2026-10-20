@@ -91,6 +91,9 @@ const SUCCESS_COUNTDOWN_SECONDS = 5;
 /** Check-ins of this kiosk session listed beside the scanner. */
 const SESSION_PASSES_SHOWN = 8;
 const CARD = 'flex flex-col rounded-lg border border-border bg-card text-card-foreground';
+/** In kiosk mode on a wide screen, the scanner column grows to the free height. */
+const KIOSK_FILL =
+  'lg:group-data-[kiosk=true]/kiosk:min-h-0 lg:group-data-[kiosk=true]/kiosk:flex-1';
 
 /** Minimum gap between two decoded frames: about 8 per second. */
 export const DECODE_INTERVAL_MS = 125;
@@ -162,8 +165,8 @@ function ManualInput({ onSubmit, disabled, t }: ManualInputProps): ReactElement 
         </Button>
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
           {t('studio.checkin.enterHint')}
-          <kbd className="rounded border border-border px-1 font-sans text-[0.6875rem]">
-            <KeyReturnIcon aria-hidden="true" className="inline size-3" />
+          <kbd className="inline-flex h-6 min-w-6 items-center justify-center rounded border border-border bg-muted px-1.5 font-sans text-xs text-foreground">
+            <KeyReturnIcon aria-hidden="true" className="size-4" />
             <span className="sr-only">{t('studio.checkin.enterKey')}</span>
           </kbd>
         </span>
@@ -190,38 +193,40 @@ function SuccessBanner({ member, countdown, onNext, t }: SuccessBannerProps): Re
   }, [countdown]);
   return (
     <div role="alert" className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center gap-4">
-        {member.avatarUrl !== null && member.avatarUrl !== '' ? (
-          <Image
-            src={member.avatarUrl}
-            alt=""
-            width={56}
-            height={56}
-            unoptimized
-            className="size-14 shrink-0 rounded-full border border-border object-cover"
-          />
-        ) : (
-          <span
-            aria-hidden="true"
-            className="grid size-14 shrink-0 place-items-center rounded-full border border-border bg-muted text-lg font-semibold"
-          >
-            {initials(member.displayName)}
-          </span>
-        )}
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <p className="truncate text-xl font-semibold">
-            {named
-              ? t('studio.checkin.success', { name: member.displayName })
-              : t('studio.checkin.successNoName')}
-          </p>
-          {named ? (
-            <p className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
-              <CheckCircleIcon aria-hidden="true" weight="fill" className="size-4" />
-              {t('studio.checkin.confirmed')}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          {member.avatarUrl !== null && member.avatarUrl !== '' ? (
+            <Image
+              src={member.avatarUrl}
+              alt=""
+              width={56}
+              height={56}
+              unoptimized
+              className="size-14 shrink-0 rounded-full border border-border object-cover"
+            />
+          ) : (
+            <span
+              aria-hidden="true"
+              className="grid size-14 shrink-0 place-items-center rounded-full border border-border bg-muted text-lg font-semibold"
+            >
+              {initials(member.displayName)}
+            </span>
+          )}
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <p className="text-xl font-semibold break-words">
+              {named
+                ? t('studio.checkin.success', { name: member.displayName })
+                : t('studio.checkin.successNoName')}
             </p>
-          ) : null}
+            {named ? (
+              <p className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
+                <CheckCircleIcon aria-hidden="true" weight="fill" className="size-4" />
+                {t('studio.checkin.confirmed')}
+              </p>
+            ) : null}
+          </div>
         </div>
-        <Button variant="outline" onClick={onNext}>
+        <Button variant="outline" onClick={onNext} className="w-full sm:w-auto">
           {t('studio.checkin.scanNext')}
         </Button>
       </div>
@@ -474,7 +479,7 @@ export function CheckinKiosk(): ReactElement {
     <div
       ref={kioskRef}
       data-kiosk={kiosk.active}
-      className="group/kiosk flex flex-col gap-6 data-[kiosk=true]:overflow-auto data-[kiosk=true]:bg-background data-[kiosk=true]:p-8 data-[kiosk=true]:text-foreground"
+      className="group/kiosk flex min-h-0 flex-col gap-6 data-[kiosk=true]:overflow-auto data-[kiosk=true]:bg-background data-[kiosk=true]:p-8 data-[kiosk=true]:text-foreground"
     >
       <PageHeader
         title={t('studio.checkin.title')}
@@ -493,9 +498,9 @@ export function CheckinKiosk(): ReactElement {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="flex flex-col gap-4 lg:col-span-7">
-          <section aria-labelledby="checkin-scanner" className={CARD}>
+      <div className={`grid grid-cols-1 gap-4 lg:grid-cols-12 ${KIOSK_FILL}`}>
+        <div className="flex min-h-0 flex-col gap-4 lg:col-span-7">
+          <section aria-labelledby="checkin-scanner" className={`${CARD} ${KIOSK_FILL}`}>
             <div className="flex min-h-12 items-center justify-between gap-3 border-b border-border px-4 py-2">
               <h2 id="checkin-scanner" className="flex items-baseline gap-2 text-sm font-semibold">
                 {t('studio.checkin.scanner.title')}
@@ -504,7 +509,7 @@ export function CheckinKiosk(): ReactElement {
                 </span>
               </h2>
             </div>
-            <div className="p-4">
+            <div className={`flex flex-col p-4 ${KIOSK_FILL}`}>
               {cameraBlocked ? (
                 <p
                   role="status"
@@ -518,7 +523,9 @@ export function CheckinKiosk(): ReactElement {
                   </span>
                 </p>
               ) : (
-                <div className="kiosk-video relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-border group-data-[kiosk=true]/kiosk:aspect-video">
+                <div
+                  className={`kiosk-video relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-border group-data-[kiosk=true]/kiosk:aspect-video lg:group-data-[kiosk=true]/kiosk:aspect-auto ${KIOSK_FILL}`}
+                >
                   <video
                     ref={videoRef}
                     aria-label={t('studio.checkin.scanPrompt')}

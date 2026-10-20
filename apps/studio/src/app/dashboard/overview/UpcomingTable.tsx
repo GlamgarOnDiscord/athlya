@@ -1,5 +1,7 @@
 'use client';
 
+import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { bookedSeats, type OverviewClass } from '../dashboard-summary';
 
 import type { Translator } from '../../../lib/i18n/t';
@@ -9,7 +11,13 @@ import type { ReactElement } from 'react';
 const COLUMNS = ['day', 'time', 'class', 'duration', 'booked', 'left', 'fill'] as const;
 const NUMERIC = new Set<string>(['duration', 'booked', 'left', 'fill']);
 
-/** Dense table of the coming classes: tabular numbers, right aligned, sticky header. */
+/**
+ * Dense table of the coming classes: tabular numbers, right aligned, sticky
+ * header. On a wide screen the card takes its neighbour's height and the
+ * rows scroll inside it; while rows remain below, the last one fades out so
+ * a row cut by the edge reads as "more below", not as a broken layout.
+ * The scroll box takes focus so keyboard users can scroll it.
+ */
 export function UpcomingTable({
   classes,
   locale,
@@ -22,8 +30,29 @@ export function UpcomingTable({
   const day = new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'short' });
   const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
   const percent = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 });
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [more, setMore] = useState(false);
+  const measure = useCallback(() => {
+    const el = scrollRef.current;
+    if (el === null) return;
+    setMore(el.scrollTop + el.clientHeight < el.scrollHeight - 1);
+  }, []);
+  useEffect(() => {
+    measure();
+    const el = scrollRef.current;
+    if (el === null || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [measure, classes]);
   return (
-    <div className="max-h-80 overflow-auto">
+    <div
+      ref={scrollRef}
+      onScroll={measure}
+      data-more={more}
+      tabIndex={0}
+      className="scroll-fade-bottom max-h-80 overflow-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset lg:h-0 lg:max-h-none lg:min-h-48 lg:flex-1"
+    >
       <table className="w-full text-sm">
         <thead className="sticky top-0 z-10 bg-card">
           <tr className="border-b border-border">

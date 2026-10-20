@@ -28,6 +28,7 @@ import { buttonVariants } from '@/components/ui/button-variants';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
+import { AppLink } from '../../components/AppLink';
 import { PageHeader } from '../../components/shell/PageHeader';
 import { useApiClient } from '../../lib/api/buildClient';
 import { fetchMemberDirectory, type StudioMember } from '../../lib/api/members';
@@ -231,13 +232,13 @@ export function DashboardOverview(): ReactElement {
         }
         actions={
           <>
-            <Link
+            <AppLink
               href="/dashboard/checkin"
               className={buttonVariants({ variant: 'outline', size: 'lg' })}
             >
               <ScanIcon aria-hidden="true" data-icon="inline-start" />
               {t('studio.dashboard.actions.openKiosk')}
-            </Link>
+            </AppLink>
             <Link href="/dashboard/classes?new=1" className={buttonVariants({ size: 'lg' })}>
               <PlusIcon aria-hidden="true" data-icon="inline-start" />
               {t('studio.shell.newClass')}
@@ -474,7 +475,7 @@ export function DashboardOverview(): ReactElement {
               const SectionIcon = section.icon;
               return (
                 <li key={section.href}>
-                  <Link
+                  <AppLink
                     href={section.href}
                     className="grid grid-cols-[1.25rem_1fr_1rem] items-center gap-3 px-4 py-3 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:grid-cols-[1.25rem_11rem_1fr_1rem]"
                   >
@@ -484,7 +485,7 @@ export function DashboardOverview(): ReactElement {
                       {t(section.bodyKey)}
                     </span>
                     <CaretRightIcon aria-hidden="true" className="size-4 text-muted-foreground" />
-                  </Link>
+                  </AppLink>
                 </li>
               );
             })}

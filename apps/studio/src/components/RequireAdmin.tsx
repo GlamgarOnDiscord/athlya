@@ -30,6 +30,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactElement, type ReactNode } from 'react';
 
 import { useAuth } from '../lib/auth/AuthContext';
+import { navigateTo } from '../lib/full-reload';
 
 /** Dashboard routes a coach may open. Every other route is admin-only. */
 export const COACH_ROUTES: readonly string[] = ['/dashboard/checkin'];
@@ -56,8 +57,10 @@ export function RequireAdmin({ children }: RequireAdminProps): ReactElement | nu
     // /dashboard always bounces to /login during the ~200-500 ms
     // the refresh fetch takes, even when the cookie is valid.
     if (!bootResolved) return;
+    // Leaving or entering the kiosk loads a new document so each page keeps
+    // its own camera policy (`lib/full-reload.ts`).
     if (!isAuthenticated) {
-      push('/login');
+      navigateTo('/login', push, pathname);
       return;
     }
     // `user` is null for a brief tick on the very first render
@@ -65,9 +68,9 @@ export function RequireAdmin({ children }: RequireAdminProps): ReactElement | nu
     // — guard against premature redirect to `/forbidden` during
     // that tick.
     if (user !== null && !allowed) {
-      push(isCoach ? (COACH_ROUTES[0] ?? '/forbidden') : '/forbidden');
+      navigateTo(isCoach ? (COACH_ROUTES[0] ?? '/forbidden') : '/forbidden', push, pathname);
     }
-  }, [bootResolved, isAuthenticated, allowed, isCoach, user, push]);
+  }, [bootResolved, isAuthenticated, allowed, isCoach, user, push, pathname]);
 
   if (!bootResolved) return null;
   if (!isAuthenticated) return null;

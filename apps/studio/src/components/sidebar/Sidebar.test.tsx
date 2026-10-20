@@ -122,6 +122,25 @@ describe('<SidebarShell />', () => {
     expect(screen.getByRole('button', { name: 'Collapse sidebar', hidden: true })).toBeDefined();
   });
 
+  it('swaps the full logo for the compact mark when collapsed', () => {
+    render(
+      <SidebarShell
+        sections={sections}
+        labels={labels}
+        brand={<span>Athlya lockup</span>}
+        brandCollapsed={<span>Athlya mark</span>}
+      >
+        <main id="main-content">Page</main>
+      </SidebarShell>,
+    );
+    const aside = document.querySelector('aside');
+    if (aside === null) throw new Error('no desktop sidebar');
+    expect(within(aside).queryByText('Athlya mark')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar', hidden: true }));
+    expect(within(aside).getByText('Athlya mark')).toBeDefined();
+    expect(within(aside).queryByText('Athlya lockup')).toBeNull();
+  });
+
   it('expands the sidebar and opens the group when a collapsed group is activated', () => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, '1');
     pathnameMock.mockReturnValue('/classes');

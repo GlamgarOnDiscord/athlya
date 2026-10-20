@@ -94,7 +94,11 @@ export function MarkBar({
   );
 }
 
-/** Inline sparkline of bars, the last value (current period) in the accent. */
+/**
+ * Inline sparkline of bars over a baseline, the last value (current period)
+ * in the accent. An empty period draws no bar, so it reads as the baseline
+ * rather than as a stray dash.
+ */
 export function MiniBars({
   values,
 }: {
@@ -102,10 +106,15 @@ export function MiniBars({
 }): ReactElement {
   const max = Math.max(1, ...values.map((v) => v ?? 0));
   return (
-    <span aria-hidden="true" className="flex h-8 w-20 shrink-0 items-end gap-0.5">
+    <span
+      aria-hidden="true"
+      className="flex h-8 w-20 shrink-0 items-end gap-0.5 border-b border-border"
+    >
       {values.map((value, index) => (
         <span key={`bar-${String(index)}`} className="flex h-full flex-1 items-end">
-          <MarkBar ratio={(value ?? 0) / max} accent={index === values.length - 1} />
+          {value === null || value <= 0 ? null : (
+            <MarkBar ratio={value / max} accent={index === values.length - 1} />
+          )}
         </span>
       ))}
     </span>

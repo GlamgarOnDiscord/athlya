@@ -565,7 +565,8 @@ function ClassRow({ cls, started, locale, t, onEdit, onDelete }: ClassRowProps):
       <TableCell className="whitespace-normal sm:whitespace-nowrap">
         <span className="font-medium">{cls.title}</span>
         <span className="block text-xs text-muted-foreground sm:hidden">
-          <time dateTime={cls.startsAt}>{formatted}</time>, {seats}
+          <time dateTime={cls.startsAt}>{formatted}</time>,{' '}
+          <span className="whitespace-nowrap">{seats}</span>
         </span>
       </TableCell>
       <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">

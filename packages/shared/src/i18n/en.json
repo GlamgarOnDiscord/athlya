@@ -679,6 +679,7 @@
         "localTime": "Times in your local time zone ({timeZone}).",
         "previousDay": "Previous day",
         "nextDay": "Next day",
+        "seatLeft": "{count} left",
         "seatsLeft": "{count} left",
         "actionsFor": "Actions for {title}"
       },
@@ -849,7 +850,9 @@
         "reservation": "Booking",
         "class": "Class",
         "studio": "Studio",
-        "stripe_webhook": "Payment event"
+        "stripe_webhook": "Payment event",
+        "dlq_entry": "Failed job",
+        "jwt_key": "Signing key"
       },
       "export": "Export",
       "search": "Filter by action, name or id",
