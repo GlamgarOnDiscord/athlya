@@ -35,7 +35,7 @@ import { cn } from '@/lib/utils';
 import { ApiError, type ApiClient } from '../../lib/api/client';
 import { newIdempotencyKey } from '../../lib/idempotency';
 
-import type { MeProfile } from './ProfileSection';
+import type { MeProfile } from './MemberProfileGate';
 import type { Translator } from '../../lib/i18n/t';
 
 export interface ProfileFormProps {
