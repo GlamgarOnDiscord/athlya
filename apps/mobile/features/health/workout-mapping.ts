@@ -4,14 +4,17 @@
  *
  * Like a machine session (task 23.1), an imported workout is one exercise
  * named after the activity type with one set carrying the duration, and
- * a readable line of totals in `notes`. `source` names the HealthKit
- * workout, so the API keeps one session per workout and user.
+ * a readable line of totals in `notes`. The same totals travel as the
+ * structured `cardio` summary (issue #690) when HealthKit reports at
+ * least one of them. `source` names the HealthKit workout, so the API
+ * keeps one session per workout and user.
  */
 import {
   LogSessionRequestSchema,
   type LogSessionRequest,
   type SessionSourceProvider,
 } from '@athlya/shared/schemas/api';
+import { CardioMetricsSchema, type CardioMetrics } from '@athlya/shared/schemas/domain';
 
 import { formatNumber } from '../format';
 
@@ -109,6 +112,44 @@ export function describeHealthWorkout(
   return parts.join(' · ');
 }
 
+/** A converted quantity rounded to a whole unit, or null when it rounds to zero. */
+function wholeAmount(value: number | null): number | null {
+  if (value === null) return null;
+  const rounded = Math.round(value);
+  return rounded > 0 ? rounded : null;
+}
+
+/**
+ * The structured summary sent as `cardio`, or undefined when HealthKit
+ * reports no distance, energy or heart rate: a session with only a
+ * duration (yoga, strength) is not a cardio session. A metric outside
+ * the schema bounds is dropped on its own, so it never costs the whole
+ * session. `machine` stays unset: a HealthKit workout is not an FTMS
+ * machine.
+ */
+export function healthCardioMetrics(
+  workout: HealthWorkout,
+  durationSec: number,
+): CardioMetrics | undefined {
+  const reported: Readonly<
+    Record<'distanceM' | 'energyKcal' | 'avgHeartRateBpm' | 'maxHeartRateBpm', number | null>
+  > = {
+    distanceM: wholeAmount(convert(workout.totalDistance, METRES_PER_UNIT)),
+    energyKcal: wholeAmount(convert(workout.totalEnergyBurned, KCAL_PER_UNIT)),
+    avgHeartRateBpm: bpm(workout.averageHeartRateBpm),
+    maxHeartRateBpm: bpm(workout.maxHeartRateBpm),
+  };
+  const metrics: Record<string, number> = {};
+  for (const [key, value] of Object.entries(reported)) {
+    const field = CardioMetricsSchema.shape[key as keyof CardioMetrics];
+    if (value !== null && field.safeParse(value).success) {
+      metrics[key] = value;
+    }
+  }
+  if (Object.keys(metrics).length === 0) return undefined;
+  return CardioMetricsSchema.parse({ durationSec, ...metrics });
+}
+
 /** Workout duration in whole seconds, from its duration or else its dates. */
 function durationSeconds(workout: HealthWorkout): number {
   const fromQuantity = convert(workout.duration, SECONDS_PER_UNIT);
@@ -126,6 +167,7 @@ export function buildHealthSessionRequest(
   if (!Number.isFinite(startMs)) return null;
   const durationSec = durationSeconds(workout);
   if (durationSec <= 0) return null;
+  const cardio = healthCardioMetrics(workout, durationSec);
   const parsed = LogSessionRequestSchema.safeParse({
     startedAt: new Date(startMs).toISOString(),
     durationMin: Math.max(1, Math.round(durationSec / 60)),
@@ -133,6 +175,7 @@ export function buildHealthSessionRequest(
       { name: t(activityNameKey(workout.activityType)), sets: [{ reps: 0, durationSec }] },
     ],
     notes: describeHealthWorkout(workout, t, locale),
+    ...(cardio === undefined ? {} : { cardio }),
     source: { provider: APPLE_HEALTH_PROVIDER, externalId: workout.uuid },
   });
   return parsed.success ? parsed.data : null;

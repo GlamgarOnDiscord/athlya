@@ -62,6 +62,13 @@ migration is different: requests fail with raw database errors instead — the e
 `README.txt` describes each file and the CSV encoding (UTF-8, CRLF, every cell quoted, formula
 prefix).
 
+**Workout sessions** carry `cardio` (migration `0046`) when they have a structured cardio summary,
+and `source` / `externalId` (migration `0049`, issue #690) when they were imported from another
+app: the provider (`appleHealth`) and the workout id there (the HealthKit workout UUID). Sessions
+without them keep the shorter JSON shape. `workout_sessions.csv` has the columns `id, userId,
+studioId, startedAt, durationMin, exercisesJson, notes, cardioJson, createdAt, source,
+externalId`; a session without these values leaves their cells empty.
+
 **Invoices: members have no invoices in v1.** Athlya only bills studios for their own platform
 subscription (`studio_invoices`, migration `0036`, issue #122). Those invoices belong to the
 studio, carry no member id and are not a member's personal data, so they are not exported.

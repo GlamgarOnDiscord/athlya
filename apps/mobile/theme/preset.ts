@@ -4,9 +4,10 @@
  * same semantic palette, spacing, radii and type scale.
  *
  * Semantic colors become kebab-case utilities (`bg-primary-foreground`);
- * dark variants live under `dark-*` (`dark:bg-dark-background`).
+ * dark variants live under `dark-*` (`dark:bg-dark-background`). The logo
+ * palette is `brand-ink`, `brand-volt` and `brand-white`.
  */
-import { colors, radii, spacing, typography } from '@athlya/shared/tokens';
+import { brandPalette, colors, radii, spacing, typography } from '@athlya/shared/tokens';
 
 type Palette = Record<string, string>;
 
@@ -35,6 +36,7 @@ export function buildMobileTheme(): MobileTheme {
       transparent: 'transparent',
       ...kebabKeys(colors.light),
       ...kebabKeys(colors.dark, 'dark-'),
+      ...kebabKeys(brandPalette, 'brand-'),
     },
     spacing: { ...spacing },
     borderRadius: { ...radii },

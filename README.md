@@ -203,7 +203,7 @@ Ce ne sont que des exemples : la liste complète, par Worker et par environnemen
 | 📖 **Manuel du projet** | [État, tests, coûts, limites, RGPD, incidents, fournisseurs](docs/project-handbook.md)                                                                                                                                                 |
 | 🛠️ **Runbooks**         | [Déploiement](docs/runbooks/deploy-production.md) · [Rollback](docs/runbooks/automatic-rollback.md) · [Migrations](docs/runbooks/expand-contract-migrations.md) · [Rôles DB](docs/runbooks/db-role-switch.md) · [tous](docs/runbooks/) |
 | 🔒 **Sécurité**         | [Dossier sécurité](docs/security/) · [Politique](SECURITY.md)                                                                                                                                                                          |
-| 🎨 **Marque**           | [Logo, mascotte, couleurs](docs/brand/README.md)                                                                                                                                                                                       |
+| 🎨 **Marque**           | [Logo, mascotte, couleurs](docs/brand/README.md) · [Direction UI](docs/design/ui-direction.md) · [Code UI tiers](docs/third-party-ui.md)                                                                                               |
 | 📝 **Historique**       | [CHANGELOG](CHANGELOG.md)                                                                                                                                                                                                              |
 
 ---

@@ -1,4 +1,4 @@
-import { colors, radii, spacing } from '@athlya/shared/tokens';
+import { brandPalette, colors, radii, spacing } from '@athlya/shared/tokens';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -37,6 +37,13 @@ describe('theme preset', () => {
       expect(theme.colors[`dark-${toKebabCase(key)}`]).toBe(value);
     }
     expect(theme.colors['primary-foreground']).toBe(colors.light.primaryForeground);
+  });
+
+  it('exposes the logo palette as brand-* colors', () => {
+    const theme = buildMobileTheme();
+    expect(theme.colors['brand-ink']).toBe(brandPalette.ink);
+    expect(theme.colors['brand-volt']).toBe(brandPalette.volt);
+    expect(theme.colors['brand-white']).toBe(brandPalette.white);
   });
 
   it('reuses the shared spacing and radii scales', () => {

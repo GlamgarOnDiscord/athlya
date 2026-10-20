@@ -635,7 +635,7 @@ Use official CLI to create, init the project .. and recent package version and s
     - Audit `apps/web`, `apps/studio`, `apps/mobile` for residual literals; migrate to `packages/shared/i18n`
     - _Requirements: 28.3_
 
-- [ ] 20. Checkpoint — v0.2 complete
+- [x] 20. Checkpoint — v0.2 complete
   - Ensure all tests pass, ask the user if questions arise.
 
 ---
@@ -701,7 +701,7 @@ Use official CLI to create, init the project .. and recent package version and s
     - Done (#647): `components/TodayProgramCard.tsx` renders `GET /v1/programs/today?date=<device local date>` (validated with `TodayWorkoutResponseSchema`), one card per subscription: scheduled workout, rest day, not started, completed
     - _Requirements: 3.5_
 
-- [ ] 25. Final checkpoint — v0.3 complete
+- [x] 25. Final checkpoint — v0.3 complete
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
