@@ -5,9 +5,10 @@
  */
 'use client';
 
-import { CoachStatusResponseSchema } from '@athlya/shared/schemas/api';
 import Link from 'next/link';
-import { useEffect, useState, type ReactElement } from 'react';
+import { type ReactElement } from 'react';
+
+import { useCoachEnabled } from './use-coach-enabled';
 
 import type { ApiClient } from '../../../lib/api/client';
 import type { Translator } from '../../../lib/i18n/t';
@@ -18,23 +19,7 @@ export interface CoachLinkProps {
 }
 
 export function CoachLink({ client, t }: CoachLinkProps): ReactElement | null {
-  const [enabled, setEnabled] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    client
-      .get<unknown>('/v1/coach')
-      .then((raw) => {
-        const parsed = CoachStatusResponseSchema.safeParse(raw);
-        if (!cancelled) setEnabled(parsed.success && parsed.data.enabled);
-      })
-      .catch(() => {
-        if (!cancelled) setEnabled(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [client]);
+  const enabled = useCoachEnabled(client);
 
   if (!enabled) return null;
   return (

@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { CircleNotchIcon } from '@phosphor-icons/react';
 
 import { TurnstileWidget, type TurnstileWidgetHandle } from '../../components/TurnstileWidget';
 import { setAccessToken } from '../../lib/auth/token-store';
@@ -281,7 +281,7 @@ export function RegisterForm({ nonce }: RegisterFormProps): ReactElement {
       <Button type="submit" disabled={pending || (siteKey !== undefined && turnstileToken === '')}>
         {pending ? (
           <>
-            <Loader2 className="mr-2 size-4 animate-spin" />
+            <CircleNotchIcon className="mr-2 size-4 animate-spin" />
             {t('common.loading')}
           </>
         ) : (

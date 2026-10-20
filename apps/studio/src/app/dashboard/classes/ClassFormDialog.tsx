@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { CircleNotchIcon } from '@phosphor-icons/react';
 
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
@@ -267,7 +267,7 @@ export function ClassFormDialog({
             {t('common.cancel')}
           </Button>
           <Button type="submit" form="class-form" disabled={pending}>
-            {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+            {pending ? <CircleNotchIcon className="mr-2 size-4 animate-spin" /> : null}
             {mode.kind === 'create'
               ? t('studio.classes.dialog.createSubmit')
               : t('studio.classes.dialog.editSubmit')}

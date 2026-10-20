@@ -7,7 +7,15 @@
     "retry": "Réessayer",
     "confirm": "Confirmer",
     "back": "Retour",
-    "skipToContent": "Aller au contenu principal"
+    "skipToContent": "Aller au contenu principal",
+    "nav": {
+      "main": "Navigation principale",
+      "collapse": "Réduire la barre latérale",
+      "expand": "Déplier la barre latérale",
+      "openMenu": "Ouvrir le menu",
+      "closeMenu": "Fermer le menu",
+      "menu": "Menu"
+    }
   },
   "auth": {
     "login": {
@@ -313,6 +321,10 @@
           "description": "Diagnostic des bugs côté client. Inclut votre user-agent et la trace d'exécution technique. Données hébergées en UE."
         }
       }
+    },
+    "nav": {
+      "classes": "Cours",
+      "progression": "Progression"
     }
   },
   "studio": {
@@ -334,7 +346,9 @@
       "billing": "Facturation",
       "checkin": "Check-in",
       "audit": "Audit",
-      "programs": "Programmes"
+      "programs": "Programmes",
+      "dashboard": "Tableau de bord",
+      "settings": "Configuration"
     },
     "dashboard": {
       "title": "Tableau de bord",

@@ -15,7 +15,7 @@
  * The draft is validated with the shared Zod schemas before any
  * request; mutations carry an `Idempotency-Key`.
  */
-import { Loader2 } from 'lucide-react';
+import { CircleNotchIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useId, useRef, useState, type ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -554,7 +554,7 @@ export function ProgramEditor({ mode, client, t, onDone }: ProgramEditorProps): 
               {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" /> : null}
+              {pending ? <CircleNotchIcon className="mr-2 size-4 animate-spin" aria-hidden="true" /> : null}
               {pending
                 ? t('studio.programs.editor.saving')
                 : mode.kind === 'create'
