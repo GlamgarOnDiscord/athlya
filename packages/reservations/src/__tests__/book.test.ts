@@ -137,6 +137,7 @@ interface Doubles {
   insertReservation: Mock<BookingRepo['insertReservation']>;
   insertOutbox: Mock<BookingRepo['insertOutbox']>;
   countWaitlistAhead: Mock<BookingRepo['countWaitlistAhead']>;
+  readClassClock: Mock<BookingRepo['readClassClock']>;
   decrRemaining: Mock<BookingCounter['decrRemaining']>;
   decrRemainingOrInit: Mock<BookingCounter['decrRemainingOrInit']>;
   incrRemaining: Mock<BookingCounter['incrRemaining']>;
@@ -158,6 +159,11 @@ function buildDoubles(): Doubles {
   const insertReservation = vi.fn<BookingRepo['insertReservation']>();
   const insertOutbox = vi.fn<BookingRepo['insertOutbox']>();
   const countWaitlistAhead = vi.fn<BookingRepo['countWaitlistAhead']>();
+  // The in-transaction re-check sees the class still in the future by
+  // default; individual tests override it.
+  const readClassClock = vi
+    .fn<BookingRepo['readClassClock']>()
+    .mockResolvedValue({ startsAt: FUTURE_CLASS.startsAt, now: new Date(FROZEN_NOW) });
 
   const txSeen: BookingTx[] = [];
   const withTransaction = vi.fn<WithTransactionMonomorphic>(async (fn) => {
@@ -193,6 +199,7 @@ function buildDoubles(): Doubles {
     insertReservation,
     insertOutbox,
     countWaitlistAhead,
+    readClassClock,
   };
   const counter: BookingCounter = { decrRemaining, decrRemainingOrInit, incrRemaining };
   const publisher: BookingEventPublisher = {
@@ -208,6 +215,7 @@ function buildDoubles(): Doubles {
     insertReservation,
     insertOutbox,
     countWaitlistAhead,
+    readClassClock,
     decrRemaining,
     decrRemainingOrInit,
     incrRemaining,
@@ -460,7 +468,7 @@ describe('bookClass — UniqueViolation on confirmed insert', () => {
     d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
     d.findExisting.mockResolvedValueOnce(null);
 
-    await expect(invoke(d.deps)).rejects.toThrow(/unique-violation.*no existing reservation/);
+    await expect(invoke(d.deps)).rejects.toThrow(/unique-violation.*no live reservation/);
 
     // Compensating INCR still happened — we must not leak seats.
     expect(d.incrRemaining).toHaveBeenCalledOnce();
@@ -509,14 +517,18 @@ describe('bookClass — UniqueViolation on waitlist insert (DECR < 0)', () => {
     d.decrRemainingOrInit.mockResolvedValueOnce(-1);
     // The waitlist INSERT throws UniqueViolationError (duplicate replay)
     d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
-    // The fallback lookup returns the pre-existing waitlist row
+    // The fallback lookup returns the pre-existing waitlist row, two
+    // waiters ahead of it.
     d.findExisting.mockResolvedValueOnce(WAITLIST_ROW);
+    d.countWaitlistAhead.mockResolvedValueOnce(2);
 
     const result = await invoke(d.deps);
 
+    // The replay reports the real state: waitlist, position 3.
     expect(result).toEqual({
       code: 'already_booked',
       reservation: WAITLIST_ROW,
+      position: 3,
     });
 
     // Compensating INCR (for DECR < 0) was done before entering the
@@ -541,9 +553,7 @@ describe('bookClass — UniqueViolation on waitlist insert (DECR < 0)', () => {
     d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
     d.findExisting.mockResolvedValueOnce(null);
 
-    await expect(invoke(d.deps)).rejects.toThrow(
-      /unique-violation.*waitlist.*no existing reservation/,
-    );
+    await expect(invoke(d.deps)).rejects.toThrow(/unique-violation.*no live reservation/);
 
     expect(d.incrRemaining).toHaveBeenCalledOnce();
   });
@@ -702,5 +712,99 @@ describe('bookClass — type surface (smoke)', () => {
     const row: BookingReservationRow = CONFIRMED_ROW;
     const backToRow: ReservationRow = row;
     expect(backToRow).toBe(row);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Database clock and in-transaction re-check                         */
+/* ------------------------------------------------------------------ */
+
+describe('bookClass: database clock', () => {
+  it('uses the database clock from the pre-flight when no test clock is injected', async () => {
+    const d = buildDoubles();
+    const { clock: _clock, ...withoutClock } = d.deps;
+    void _clock;
+    // Worker clock says the class is hours away; the database says
+    // it started a minute ago.
+    d.findClass.mockResolvedValueOnce({
+      ...FUTURE_CLASS,
+      dbNow: new Date(FUTURE_CLASS.startsAt.getTime() + 60_000),
+    });
+
+    const result = await invoke(withoutClock);
+
+    expect(result).toEqual({ code: 'class_in_past' });
+    expect(d.decrRemainingOrInit).not.toHaveBeenCalled();
+  });
+
+  it('re-checks inside the transaction and compensates when the class started meanwhile', async () => {
+    const d = buildDoubles();
+    const { clock: _clock, ...withoutClock } = d.deps;
+    void _clock;
+    d.findClass.mockResolvedValueOnce({ ...FUTURE_CLASS, dbNow: new Date(FROZEN_NOW) });
+    d.decrRemainingOrInit.mockResolvedValueOnce(4);
+    d.readClassClock.mockResolvedValueOnce({
+      startsAt: FUTURE_CLASS.startsAt,
+      now: new Date(FUTURE_CLASS.startsAt.getTime()),
+    });
+
+    const result = await invoke(withoutClock);
+
+    expect(result).toEqual({ code: 'class_in_past' });
+    expect(d.insertReservation).not.toHaveBeenCalled();
+    expect(d.incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+  });
+
+  it('answers class_not_found when the class vanished before the transaction', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(-1);
+    d.readClassClock.mockResolvedValueOnce(null);
+
+    const result = await invoke(d.deps);
+
+    expect(result).toEqual({ code: 'class_not_found' });
+    expect(d.insertReservation).not.toHaveBeenCalled();
+  });
+});
+
+describe('bookClass: compensation failures', () => {
+  it('logs a failed compensating INCR and still returns the business outcome', async () => {
+    const d = buildDoubles();
+    const logger = { error: vi.fn() };
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(-1);
+    d.incrRemaining.mockRejectedValueOnce(new Error('redis down'));
+    d.insertReservation.mockResolvedValueOnce(WAITLIST_ROW);
+    d.countWaitlistAhead.mockResolvedValueOnce(0);
+
+    const result = await bookClass({
+      classId: CLASS_ID,
+      userId: USER_ID,
+      studioId: STUDIO_ID,
+      ...d.deps,
+      logger,
+    });
+
+    expect(result).toMatchObject({ code: 'waitlisted', position: 1 });
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      'booking: compensating INCR failed',
+      expect.objectContaining({ classId: CLASS_ID, reason: 'counter_exhausted' }),
+    );
+  });
+
+  it('rethrows the original error, not the compensation error', async () => {
+    const d = buildDoubles();
+    const logger = { error: vi.fn() };
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(3);
+    const boom = new Error('db outage');
+    d.insertReservation.mockRejectedValueOnce(boom);
+    d.incrRemaining.mockRejectedValueOnce(new Error('redis down'));
+
+    await expect(
+      bookClass({ classId: CLASS_ID, userId: USER_ID, studioId: STUDIO_ID, ...d.deps, logger }),
+    ).rejects.toBe(boom);
+    expect(logger.error).toHaveBeenCalledOnce();
   });
 });

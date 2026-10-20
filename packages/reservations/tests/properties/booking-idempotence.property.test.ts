@@ -163,6 +163,9 @@ function buildFakeRepo(
   return {
     findClass: async (classId: string) => (classId === classRow.id ? classRow : null),
 
+    readClassClock: async (_tx: BookingTx, classId: string) =>
+      classId === classRow.id ? { startsAt: classRow.startsAt, now: new Date(clock()) } : null,
+
     withTransaction: async <T>(fn: (tx: BookingTx) => Promise<T>): Promise<T> => {
       const tx: FakeTx = { __brand: 'BookingTx', id: state.txCount++ };
       // Snapshot the state so we can roll back on rejection.

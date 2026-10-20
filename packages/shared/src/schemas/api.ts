@@ -440,6 +440,20 @@ export const CancelReservationParamsSchema = z
 
 export type CancelReservationParams = z.infer<typeof CancelReservationParamsSchema>;
 
+/**
+ * Response for a cancel. A retried cancel of a reservation that is
+ * already cancelled answers the same shape with `alreadyCancelled: true`.
+ */
+export const CancelReservationResponseSchema = z
+  .object({
+    status: z.literal('cancelled'),
+    reservation: ReservationSchema,
+    alreadyCancelled: z.literal(true).optional(),
+  })
+  .strict();
+
+export type CancelReservationResponse = z.infer<typeof CancelReservationResponseSchema>;
+
 /* ------------------------------------------------------------------ */
 /*  checkins — /v1/checkins                                            */
 /* ------------------------------------------------------------------ */

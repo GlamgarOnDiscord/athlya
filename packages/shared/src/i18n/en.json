@@ -111,8 +111,14 @@
     "cancelWindowClosed": "Cancellation is not possible less than 2 hours before the class."
   },
   "checkin": {
-    "title": "Check-in",
+    "title": "Check in at the front desk",
+    "link": "My check-in QR code",
+    "intro": "Show this code at the front desk. It changes every 2 minutes and works once.",
+    "qrLabel": "Check-in QR code, valid for {seconds} more seconds",
     "qrExpiresIn": "QR code expires in {seconds}s",
+    "loading": "Getting your code…",
+    "offline": "You are offline. A new check-in code needs a connection.",
+    "loadError": "Could not get a check-in code.",
     "refresh": "Generate a new QR code"
   },
   "workouts": {
@@ -452,8 +458,16 @@
       "manualPlaceholder": "Paste QR token here",
       "manualSubmit": "Validate",
       "success": "Welcome, {name}!",
+      "successNoName": "Welcome! Check-in confirmed.",
       "resetIn": "Resetting in {seconds}s…",
       "noCameraFallback": "Camera unavailable. Enter the QR token manually.",
+      "camera": {
+        "starting": "Starting the camera…",
+        "denied": "Camera access was refused. Allow the camera for this site in the browser settings, then reload the page.",
+        "not_found": "No camera was found on this device.",
+        "unsupported": "This browser cannot open a camera.",
+        "error": "The camera could not start."
+      },
       "errors": {
         "invalid_signature": "Invalid QR code.",
         "token_expired": "QR code expired. Ask the member to generate a new one.",
@@ -463,6 +477,8 @@
         "malformed": "Unreadable QR code.",
         "outside_window": "Check-in window is closed for this class.",
         "no_reservation": "No reservation found for this member.",
+        "already_checked_in": "This member is already checked in for this class.",
+        "checkin_limit_reached": "Too many check-ins for this member in the last hour. Try again later.",
         "generic": "Check-in failed. Please try again."
       }
     },

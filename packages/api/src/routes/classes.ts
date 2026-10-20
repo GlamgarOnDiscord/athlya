@@ -79,6 +79,7 @@ type ClassIdParam = z.infer<typeof ClassIdParamSchema>;
 export type UpdateClassOutcome =
   | { readonly kind: 'updated'; readonly class: unknown }
   | { readonly kind: 'conflict' }
+  | { readonly kind: 'capacity_below_confirmed' }
   | { readonly kind: 'not_found' };
 
 /**
@@ -119,14 +120,18 @@ export interface ClassesDeps {
  * guard fails (Req 6.6). `code` matches the `conflict` slug the
  * mobile drain loop expects (design §E2).
  */
-function problem409(c: Context<HonoEnv>, detail: string): Response {
+function problem409(
+  c: Context<HonoEnv>,
+  detail: string,
+  code: 'version_conflict' | 'capacity_below_confirmed' = 'version_conflict',
+): Response {
   return c.body(
     JSON.stringify({
       type: 'about:blank',
       title: 'Conflict',
       status: 409,
       detail,
-      code: 'version_conflict',
+      code,
       traceId: c.get('traceId'),
     }),
     409,
@@ -283,6 +288,12 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
           return c.json(outcome.class as Record<string, unknown>, 200);
         case 'conflict':
           return problem409(c, 'class version mismatch — refetch and retry');
+        case 'capacity_below_confirmed':
+          return problem409(
+            c,
+            'capacity cannot be lowered below the number of confirmed reservations',
+            'capacity_below_confirmed',
+          );
         case 'not_found':
           return problem404(c, `class ${id} not found`);
       }
