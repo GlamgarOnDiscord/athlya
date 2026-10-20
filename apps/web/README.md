@@ -43,15 +43,15 @@ La description de la tâche mentionne un preset Tailwind partagé dans
 `packages/config/tailwind/web.ts`. Tailwind 4 a abandonné le modèle de preset JS/TS
 en faveur de `@import "tailwindcss"` + `@theme { ... }` en CSS, le preset partagé
 n'est donc plus nécessaire. Les tokens sémantiques équivalents sont importés depuis
-`@athlya/shared/tokens` et projetés dans `src/styles/tokens.css` en tant que
-propriétés CSS custom. Si Tailwind 4 réintroduit le support des presets, on pourra
-ré-extraire le snapshot dans un package partagé.
+`@athlya/shared/tokens` et projetés dans la feuille partagée
+`@athlya/shared/theme.css` (propriétés CSS custom, pont shadcn/ui, variables `@theme`),
+importée par web et studio.
 
 La description de la tâche s'articule aussi bien avec le helper `buildBrandColorCss`
 de la tâche 15.2 dans `@athlya/shared/theming`. L'intégration directe a été mise
 hors scope de la 10.1 car le resolver de Turbopack trébuche sur l'import relatif
 non buildé `./brand-color.js` du package partagé (résolution `moduleResolution` mode
-bundler sur des fichiers `.ts` bruts). Le snapshot `tokens.css` expose déjà les
+bundler sur des fichiers `.ts` bruts). La feuille `theme.css` partagée expose déjà les
 valeurs par défaut de `--athlya-brand-primary`, et le resolver de tenant de la tâche
 15.1 les écrasera au moment de la requête — à ce stade on pourra réintroduire
 `buildBrandColorCss` une fois le package partagé buildé en amont de l'app web via
@@ -68,7 +68,7 @@ apps/web/
 ├── public/                   # assets statiques
 └── src/
     ├── app/
-    │   ├── globals.css       # @import "tailwindcss" + extension @theme
+    │   ├── globals.css       # @import "tailwindcss" + @athlya/shared/theme.css
     │   ├── layout.tsx        # coquille HTML racine + CSS de marque par tenant
     │   ├── not-found.tsx     # page 404
     │   └── page.tsx          # page d'accueil
@@ -76,9 +76,7 @@ apps/web/
     │   ├── csp.ts            # generateCsp({ nonce, apiUrl })
     │   ├── env.ts            # accès typé aux variables d'environnement publiques
     │   └── nonce.ts          # générateur de nonce base64url 128 bits
-    ├── proxy.ts              # proxy edge — CSP par requête + header x-nonce
-    └── styles/
-        └── tokens.css        # propriétés CSS custom miroir de tokens.ts
+    └── proxy.ts              # proxy edge — CSP par requête + header x-nonce
 ```
 
 ## Traçabilité des exigences

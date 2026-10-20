@@ -41,6 +41,7 @@ import type {
   MembersExportRequestedEvent,
 } from '@athlya/shared/events';
 import type { Consents } from '@athlya/shared/schemas';
+import type { SessionSourceProvider } from '@athlya/shared/schemas/api';
 import type { AuditLog, Reservation, WorkoutSession } from '@athlya/shared/schemas/domain';
 
 /* ------------------------------------------------------------------ */
@@ -115,6 +116,17 @@ export interface InvoiceRecord {
 }
 
 /**
+ * A workout session as exported. Sessions imported from another app
+ * (task 18.1) also carry where they come from: the provider and the
+ * workout id there (issue #690). The API never returns these two keys;
+ * they are the member's data, so the Article 15/20 export does.
+ */
+export type ExportWorkoutSession = WorkoutSession & {
+  readonly source?: SessionSourceProvider;
+  readonly externalId?: string;
+};
+
+/**
  * Bundle of data returned by the data source port. Profile and
  * consents are single-value (fetched eagerly); every list-shaped
  * collection is an `AsyncIterable` of pages so each collection is
@@ -125,7 +137,7 @@ export interface MemberExportData {
   profile: ExportProfile;
   consents: ReadonlyArray<Consents>;
   reservations: AsyncIterable<ReadonlyArray<Reservation>>;
-  sessions: AsyncIterable<ReadonlyArray<WorkoutSession>>;
+  sessions: AsyncIterable<ReadonlyArray<ExportWorkoutSession>>;
   checkins: AsyncIterable<ReadonlyArray<CheckinRecord>>;
   invoices: AsyncIterable<ReadonlyArray<InvoiceRecord>>;
   /**
@@ -275,7 +287,7 @@ export interface MemberDataSource {
   fetchProfile(userId: string, jobId: string): Promise<ExportProfile>;
   fetchConsents(userId: string, jobId: string): Promise<ReadonlyArray<Consents>>;
   listReservations(userId: string, jobId: string): AsyncIterable<ReadonlyArray<Reservation>>;
-  listSessions(userId: string, jobId: string): AsyncIterable<ReadonlyArray<WorkoutSession>>;
+  listSessions(userId: string, jobId: string): AsyncIterable<ReadonlyArray<ExportWorkoutSession>>;
   listCheckins(userId: string, jobId: string): AsyncIterable<ReadonlyArray<CheckinRecord>>;
   listInvoices(userId: string, jobId: string): AsyncIterable<ReadonlyArray<InvoiceRecord>>;
   /** Optional — audit trail visible to the subject. */
@@ -473,7 +485,7 @@ export const ARCHIVE_README = [
   '  profile.json                  your account profile',
   '  consents.json                 your current consent choices',
   '  reservations.json / .csv      your class reservations',
-  '  workout_sessions.json / .csv  the workout sessions you logged',
+  '  workout_sessions.json / .csv  the workout sessions you logged or imported',
   '  checkins.json / .csv          your class check-ins',
   '  invoices.json / .csv          invoices issued to you (see below)',
   '  audit_trail.json              account and security events about you (when available)',
@@ -518,7 +530,7 @@ export async function* buildArchiveEntries(data: MemberExportData): AsyncGenerat
     ]),
   };
 
-  const sessions: WorkoutSession[] = [];
+  const sessions: ExportWorkoutSession[] = [];
   for await (const page of data.sessions) {
     for (const row of page) sessions.push(row);
   }
@@ -535,6 +547,8 @@ export async function* buildArchiveEntries(data: MemberExportData): AsyncGenerat
       ['notes', (s) => s.notes],
       ['cardioJson', (s) => s.cardio],
       ['createdAt', (s) => s.createdAt],
+      ['source', (s) => s.source],
+      ['externalId', (s) => s.externalId],
     ]),
   };
 
