@@ -7,7 +7,7 @@ feed that keeps every booking in sync. No migration, no change to auth or billin
 
 | Surface                            | Where                                  | What                                                                                                     |
 | ---------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| "Ajouter au calendrier"            | Class card once booked, `/me`          | One-event `.ics` built in the browser, plus a Google Calendar template link. Nothing is sent to the API. |
+| "Ajouter au calendrier"            | Confirmed class card, `/me` bookings   | One-event `.ics` built in the browser, plus a Google Calendar template link. Nothing is sent to the API. |
 | `GET /v1/calendar/feed-url`        | Gateway, `jwtAuth` + `studioRateLimit` | The member's subscription URL, as `https://` and `webcal://`. `Cache-Control: private, no-store`.        |
 | `GET /v1/calendar/feed.ics?token=` | Gateway, public                        | RFC 5545 feed, `text/calendar; charset=utf-8`, `Cache-Control: private, max-age=300`, ETag and 304.      |
 

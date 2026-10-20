@@ -175,10 +175,6 @@
       "refresh": "Votre agenda se met à jour de lui-même, avec un délai qui peut atteindre quelques heures selon le service.",
       "privacy": "Cette adresse est personnelle : toute personne qui la connaît voit vos réservations. Elle cesse de fonctionner si vous vous déconnectez de tous vos appareils ou changez de mot de passe ; revenez alors ici pour la nouvelle adresse.",
       "unavailable": "La synchronisation d'agenda n'est pas disponible pour le moment."
-    },
-    "upcoming": {
-      "title": "Mes prochaines séances",
-      "empty": "Aucune séance réservée pour les 30 prochains jours."
     }
   },
   "checkin": {

@@ -202,35 +202,12 @@ export async function stubMemberApi(page: Page): Promise<void> {
     }),
   );
 
-  // Calendar block on `/me` (issue #719): the subscription URL and one
-  // upcoming confirmed booking, so the copy control and the "add to
-  // calendar" links are part of the scan.
+  // Calendar block on `/me` (issue #719): the subscription URL, so the
+  // copy control and the instructions are part of the scan.
   await page.route('**/v1/calendar/feed-url', (route) =>
     fulfillJson(route, {
       httpsUrl: 'https://api.athlya.test/v1/calendar/feed.ics?token=e2e.token',
       webcalUrl: 'webcal://api.athlya.test/v1/calendar/feed.ics?token=e2e.token',
-    }),
-  );
-  await page.route('**/v1/reservations/me*', (route) =>
-    fulfillJson(route, {
-      items: [
-        {
-          id: 'reservation-1',
-          classId: 'class-1',
-          userId: 'user-1',
-          status: 'confirmed',
-          createdAt: '2026-10-01T09:00:00.000Z',
-          cancelledAt: null,
-          checkedInAt: null,
-          class: {
-            id: 'class-1',
-            title: 'Morning Yoga',
-            startsAt: '2030-01-07T08:00:00.000Z',
-            durationMin: 60,
-          },
-        },
-      ],
-      nextCursor: null,
     }),
   );
 

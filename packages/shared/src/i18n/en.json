@@ -175,10 +175,6 @@
       "refresh": "Your calendar updates by itself, with a delay of up to a few hours depending on the service.",
       "privacy": "This address is personal: anyone who has it can see your bookings. It stops working if you sign out of all your devices or change your password; come back here for the new address.",
       "unavailable": "Calendar sync is not available right now."
-    },
-    "upcoming": {
-      "title": "My upcoming classes",
-      "empty": "No classes booked for the next 30 days."
     }
   },
   "checkin": {
