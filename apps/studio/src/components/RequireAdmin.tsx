@@ -18,14 +18,26 @@
  *     accidental navigation, and avoids the FOUC of admin UI
  *     showing for a few hundred ms before the API rejects the page.
  *
+ * Coaches are let through on {@link COACH_ROUTES} only: the check-in
+ * kiosk, which the API opens to the `coach` role too. A coach landing
+ * anywhere else under `/dashboard` is sent to the kiosk.
+ *
  * @see Requirements 6.5 (admin-only routes), 14.1 (auth chain).
  */
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactElement, type ReactNode } from 'react';
 
 import { useAuth } from '../lib/auth/AuthContext';
+
+/** Dashboard routes a coach may open. Every other route is admin-only. */
+export const COACH_ROUTES: readonly string[] = ['/dashboard/checkin'];
+
+/** True when `pathname` is one of {@link COACH_ROUTES} or below it. */
+export function isCoachRoute(pathname: string): boolean {
+  return COACH_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
 
 export interface RequireAdminProps {
   readonly children: ReactNode;
@@ -33,7 +45,10 @@ export interface RequireAdminProps {
 
 export function RequireAdmin({ children }: RequireAdminProps): ReactElement | null {
   const { push } = useRouter();
+  const pathname = usePathname();
   const { isAuthenticated, isAdmin, user, bootResolved } = useAuth();
+  const isCoach = user?.role === 'coach';
+  const allowed = isAdmin || (isCoach && isCoachRoute(pathname));
 
   useEffect(() => {
     // Wait for the boot silent-refresh to resolve before
@@ -49,14 +64,14 @@ export function RequireAdmin({ children }: RequireAdminProps): ReactElement | nu
     // after `setAccessToken(...)` lands but before `setUser(...)`
     // — guard against premature redirect to `/forbidden` during
     // that tick.
-    if (user !== null && !isAdmin) {
-      push('/forbidden');
+    if (user !== null && !allowed) {
+      push(isCoach ? (COACH_ROUTES[0] ?? '/forbidden') : '/forbidden');
     }
-  }, [bootResolved, isAuthenticated, isAdmin, user, push]);
+  }, [bootResolved, isAuthenticated, allowed, isCoach, user, push]);
 
   if (!bootResolved) return null;
   if (!isAuthenticated) return null;
-  if (user !== null && !isAdmin) return null;
+  if (user !== null && !allowed) return null;
 
   return <>{children}</>;
 }
