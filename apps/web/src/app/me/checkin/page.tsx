@@ -4,7 +4,7 @@
  * `<CheckinPanel />`: the access token lives in JS memory only.
  */
 
-import { ChevronLeft } from 'lucide-react';
+import { CaretLeftIcon } from '@phosphor-icons/react/dist/ssr';
 import Link from 'next/link';
 
 import { RequireAuth } from '../../../components/RequireAuth';
@@ -30,7 +30,7 @@ export default async function MeCheckinPage(): Promise<ReactElement> {
         href="/me"
         className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ChevronLeft className="size-4" aria-hidden="true" />
+        <CaretLeftIcon className="size-4" aria-hidden="true" />
         {t('common.back')}
       </Link>
       <h1 id="checkin-heading" className="text-3xl font-semibold">

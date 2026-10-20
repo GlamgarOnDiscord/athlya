@@ -37,7 +37,7 @@
  */
 'use client';
 
-import { Calendar as CalendarIcon } from 'lucide-react';
+import { CalendarBlankIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { toast } from 'sonner';
 
@@ -341,7 +341,7 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
   if (status.kind === 'empty') {
     return (
       <div className="flex flex-col items-center gap-4 py-16 text-center">
-        <CalendarIcon className="size-12 text-muted-foreground" aria-hidden="true" />
+        <CalendarBlankIcon className="size-12 text-muted-foreground" aria-hidden="true" />
         <p className="text-muted-foreground">{t('classes.list.empty')}</p>
       </div>
     );

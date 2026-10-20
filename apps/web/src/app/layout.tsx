@@ -115,8 +115,7 @@ export default async function RootLayout({
         <ThemeProvider nonce={nonce}>
           <LocaleProvider locale={locale}>
             <AuthProvider>
-              <AppNav />
-              {children}
+              <AppNav>{children}</AppNav>
               <Toaster richColors position="top-right" />
               {/* Sprint-7 SP7.1 (Vague 35) — finalises
                               S5-009. The banner self-renders only on
