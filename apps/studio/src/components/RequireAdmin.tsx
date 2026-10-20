@@ -57,8 +57,10 @@ export function RequireAdmin({ children }: RequireAdminProps): ReactElement | nu
     // /dashboard always bounces to /login during the ~200-500 ms
     // the refresh fetch takes, even when the cookie is valid.
     if (!bootResolved) return;
+    // Leaving or entering the kiosk loads a new document so each page keeps
+    // its own camera policy (`lib/full-reload.ts`).
     if (!isAuthenticated) {
-      push('/login');
+      navigateTo('/login', push, pathname);
       return;
     }
     // `user` is null for a brief tick on the very first render
@@ -66,10 +68,9 @@ export function RequireAdmin({ children }: RequireAdminProps): ReactElement | nu
     // — guard against premature redirect to `/forbidden` during
     // that tick.
     if (user !== null && !allowed) {
-      // The kiosk loads as a new document so it gets its own camera policy.
-      navigateTo(isCoach ? (COACH_ROUTES[0] ?? '/forbidden') : '/forbidden', push);
+      navigateTo(isCoach ? (COACH_ROUTES[0] ?? '/forbidden') : '/forbidden', push, pathname);
     }
-  }, [bootResolved, isAuthenticated, allowed, isCoach, user, push]);
+  }, [bootResolved, isAuthenticated, allowed, isCoach, user, push, pathname]);
 
   if (!bootResolved) return null;
   if (!isAuthenticated) return null;

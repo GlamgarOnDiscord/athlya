@@ -15,7 +15,6 @@ import {
   SquaresFourIcon,
   UsersIcon,
 } from '@phosphor-icons/react';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   useCallback,
@@ -30,9 +29,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 import { initials } from '../app/dashboard/members/members-view';
 import { useAuth } from '../lib/auth/AuthContext';
+import { navigateTo } from '../lib/full-reload';
 import { useLocale } from '../lib/i18n/LocaleContext';
 import { createTranslator, type Translator } from '../lib/i18n/t';
 
+import { AppLink } from './AppLink';
 import { AthlyaLogo } from './AthlyaLogo';
 import { isCoachRoute } from './RequireAdmin';
 import { CommandPalette } from './shell/CommandPalette';
@@ -181,8 +182,8 @@ function DashboardShell({ children }: { readonly children: ReactNode }): ReactEl
 
   const onLogout = useCallback(async () => {
     await logout();
-    push('/login');
-  }, [logout, push]);
+    navigateTo('/login', push, pathname);
+  }, [logout, push, pathname]);
 
   const isCoach = user?.role === 'coach';
   const sections = useMemo(
@@ -231,16 +232,16 @@ function DashboardShell({ children }: { readonly children: ReactNode }): ReactEl
         skipToContent: t('common.skipToContent'),
       }}
       brandCollapsed={
-        <Link
+        <AppLink
           href="/dashboard"
           aria-label={t('studio.nav.brand')}
           className="grid size-9 place-items-center rounded-md text-foreground outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         >
           <AthlyaLogo variant="mascot" height={28} />
-        </Link>
+        </AppLink>
       }
       brand={
-        <Link
+        <AppLink
           href="/dashboard"
           aria-label={t('studio.nav.brand')}
           className="flex items-center gap-2 rounded-md px-1 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
@@ -252,7 +253,7 @@ function DashboardShell({ children }: { readonly children: ReactNode }): ReactEl
           >
             {t('studio.shell.studioBadge')}
           </span>
-        </Link>
+        </AppLink>
       }
       mobileActions={
         <>
@@ -378,13 +379,13 @@ function IconAction({
 
 function QuickCreate({ label }: { readonly label: string }): ReactElement {
   return (
-    <Link
+    <AppLink
       href="/dashboard/classes?new=1"
       aria-label={label}
       title={label}
       className="grid size-8 shrink-0 place-items-center rounded-lg border border-sidebar-border text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <PlusIcon aria-hidden="true" className="size-4" />
-    </Link>
+    </AppLink>
   );
 }

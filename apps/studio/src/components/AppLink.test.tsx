@@ -1,11 +1,15 @@
 /**
- * `AppLink` hands the kiosk a plain anchor (full document load) and every
- * other route to `next/link`.
+ * `AppLink` hands a link that enters or leaves the kiosk a plain anchor
+ * (full document load) and every other one to `next/link`.
  */
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppLink } from './AppLink';
+
+let pathname = '/dashboard';
+
+vi.mock('next/navigation', () => ({ usePathname: () => pathname }));
 
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => (
@@ -19,16 +23,29 @@ afterEach(() => {
   cleanup();
 });
 
+function isClientLink(name: string): boolean {
+  return screen.getByRole('link', { name }).dataset['clientLink'] === 'true';
+}
+
 describe('<AppLink />', () => {
-  it('renders the kiosk as a plain anchor', () => {
+  it('renders a link into the kiosk as a plain anchor', () => {
+    pathname = '/dashboard';
     render(<AppLink href="/dashboard/checkin">Kiosk</AppLink>);
-    const link = screen.getByRole('link', { name: 'Kiosk' });
-    expect(link.getAttribute('href')).toBe('/dashboard/checkin');
-    expect(link.dataset['clientLink']).toBeUndefined();
+    expect(screen.getByRole('link', { name: 'Kiosk' }).getAttribute('href')).toBe(
+      '/dashboard/checkin',
+    );
+    expect(isClientLink('Kiosk')).toBe(false);
   });
 
-  it('keeps next/link for any other route', () => {
+  it('renders a link out of the kiosk as a plain anchor', () => {
+    pathname = '/dashboard/checkin';
+    render(<AppLink href="/dashboard">Dashboard</AppLink>);
+    expect(isClientLink('Dashboard')).toBe(false);
+  });
+
+  it('keeps next/link between two ordinary pages', () => {
+    pathname = '/dashboard';
     render(<AppLink href="/dashboard/members">Members</AppLink>);
-    expect(screen.getByRole('link', { name: 'Members' }).dataset['clientLink']).toBe('true');
+    expect(isClientLink('Members')).toBe(true);
   });
 });

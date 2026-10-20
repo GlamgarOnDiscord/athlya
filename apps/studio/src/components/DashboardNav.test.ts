@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { needsFullReload } from '../lib/full-reload';
+import { ownDocumentRoute } from '../lib/full-reload';
 import { createTranslator } from '../lib/i18n/t';
 
 import { coachSections, pageLabelFor, studioSections } from './DashboardNav';
@@ -31,12 +31,12 @@ describe('coachSections', () => {
 });
 
 describe('studioSections', () => {
-  it('loads the kiosk link as a new document, and only that link', () => {
+  it('marks the kiosk link, and only that link, as its own document', () => {
     const links = studioSections(t).flatMap((section) =>
       section.items.flatMap((item) => (item.kind === 'link' ? [item] : item.children)),
     );
     for (const link of links) {
-      expect(link.fullReload === true).toBe(needsFullReload(link.href));
+      expect(link.fullReload === true).toBe(ownDocumentRoute(link.href) !== null);
     }
     expect(links.some((link) => link.fullReload === true)).toBe(true);
   });
