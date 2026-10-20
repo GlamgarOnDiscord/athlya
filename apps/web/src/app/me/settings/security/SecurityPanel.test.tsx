@@ -76,6 +76,15 @@ describe('<SecurityPanel />', () => {
     expect(pushMock).toHaveBeenCalledWith('/login');
   });
 
+  it('still goes to the login page when the local sign-out request fails', async () => {
+    logoutMock.mockRejectedValue(new Error('offline'));
+    renderPanel(fakeClient(vi.fn()));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: t('auth.logout') }));
+    });
+    expect(pushMock).toHaveBeenCalledWith('/login');
+  });
+
   it('signs out everywhere after confirmation', async () => {
     const post = vi.fn().mockResolvedValue(undefined);
     renderPanel(fakeClient(post));

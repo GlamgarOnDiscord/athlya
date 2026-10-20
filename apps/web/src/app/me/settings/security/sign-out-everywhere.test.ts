@@ -27,4 +27,12 @@ describe('signOutEverywhere', () => {
     await expect(signOutEverywhere(client, signOutLocally)).resolves.toBe(false);
     expect(signOutLocally).not.toHaveBeenCalled();
   });
+
+  it('reports success when the local sign-out fails after the revocation', async () => {
+    const client = { post: vi.fn().mockResolvedValue(undefined) };
+    const signOutLocally = vi.fn().mockRejectedValue(new Error('offline'));
+
+    await expect(signOutEverywhere(client, signOutLocally)).resolves.toBe(true);
+    expect(signOutLocally).toHaveBeenCalledTimes(1);
+  });
 });

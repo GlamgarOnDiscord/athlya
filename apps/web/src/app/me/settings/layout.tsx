@@ -11,7 +11,10 @@ export default function SettingsLayout({
   readonly children: ReactNode;
 }): ReactElement {
   return (
-    <main id="main-content" className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-6 py-12">
+    <main
+      id="main-content"
+      className="mx-auto flex min-h-[calc(100dvh-3.5rem)] max-w-2xl flex-col gap-8 px-6 py-12 lg:min-h-dvh"
+    >
       {children}
     </main>
   );

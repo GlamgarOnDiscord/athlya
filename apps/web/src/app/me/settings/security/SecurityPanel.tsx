@@ -43,7 +43,11 @@ export function SecurityPanel({
 
   const onSignOut = useCallback(async () => {
     setPending('local');
-    await logout();
+    try {
+      await logout();
+    } catch {
+      // logout() clears the local token even when its request fails.
+    }
     push('/login');
   }, [logout, push]);
 
