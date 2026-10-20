@@ -179,7 +179,7 @@ export function LoginForm({ nonce }: LoginFormProps): ReactElement {
       >
         {form.pending ? (
           <>
-            <CircleNotchIcon className="mr-2 size-4 animate-spin" />
+            <CircleNotchIcon className="mr-2 size-4 animate-spin" aria-hidden="true" />
             {t('common.loading')}
           </>
         ) : (

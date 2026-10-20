@@ -25,11 +25,15 @@ export function isMemberPath(pathname: string): boolean {
 
 /**
  * Navigation for every page: the member area (`/classes`, `/me/*`) gets
- * the sidebar shell, public pages keep the top bar.
+ * the sidebar shell, public pages keep the top bar. A visitor known to be
+ * signed out gets the top bar too; while the session restores, the
+ * member shell stays so a signed-in reload does not flicker.
  */
 export function AppNav({ children }: { readonly children: ReactNode }): ReactElement {
   const pathname = usePathname();
-  if (isMemberPath(pathname)) return <MemberSidebar>{children}</MemberSidebar>;
+  const { isAuthenticated, bootResolved } = useAuth();
+  const signedOut = bootResolved && !isAuthenticated;
+  if (isMemberPath(pathname) && !signedOut) return <MemberSidebar>{children}</MemberSidebar>;
   return (
     <>
       <PublicTopBar />

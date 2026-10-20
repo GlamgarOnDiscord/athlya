@@ -1,5 +1,6 @@
 'use client';
 
+// Mirrored in apps/studio/src/components/sidebar/Sidebar.tsx: keep the code in both copies identical.
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { CaretDownIcon, ListIcon, SidebarSimpleIcon, XIcon } from '@phosphor-icons/react';
 import Link from 'next/link';

@@ -1,3 +1,5 @@
+// Mirrored in apps/studio/src/components/sidebar/use-sidebar-collapsed.ts: keep the code in both copies identical.
+
 import { useCallback, useSyncExternalStore } from 'react';
 
 /** localStorage key holding `'1'` (collapsed) or `'0'` (expanded). */

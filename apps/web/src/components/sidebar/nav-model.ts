@@ -1,3 +1,5 @@
+// Mirrored in apps/studio/src/components/sidebar/nav-model.ts: keep the code in both copies identical.
+
 import type { Icon } from '@phosphor-icons/react';
 
 /** A navigation entry that points at an existing route. */
