@@ -11,8 +11,10 @@ import {
   buildWeekDays,
   fromDayKey,
   groupByDay,
+  hasStarted,
   hourBounds,
   layoutDay,
+  listRange,
   resolveView,
   shiftAnchor,
   toDayKey,
@@ -214,5 +216,23 @@ describe('blockDensity', () => {
     const [block] = layoutDay([item('2026-10-23T21:30:00.000Z', 90)]);
     if (block === undefined) throw new Error('block missing');
     expect(blockDensity(block)).toBe('compact');
+  });
+});
+
+describe('listRange', () => {
+  it('covers the calendar month of the anchor, without spilling weeks', () => {
+    const { from, to } = listRange(new Date(2026, 9, 20));
+    expect(toDayKey(from)).toBe('2026-10-01');
+    expect(toDayKey(to)).toBe('2026-11-01');
+  });
+});
+
+describe('hasStarted', () => {
+  const now = new Date('2026-10-20T10:00:00.000Z');
+
+  it('is true from the start time on and false before it', () => {
+    expect(hasStarted('2026-10-20T09:59:00.000Z', now)).toBe(true);
+    expect(hasStarted('2026-10-20T10:00:00.000Z', now)).toBe(true);
+    expect(hasStarted('2026-10-20T10:01:00.000Z', now)).toBe(false);
   });
 });
