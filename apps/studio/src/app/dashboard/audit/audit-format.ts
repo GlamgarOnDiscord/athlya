@@ -86,3 +86,20 @@ export function formatEventDate(iso: string, locale: Locale): string {
     minute: '2-digit',
   }).format(new Date(iso));
 }
+
+export type AuditCategory = 'reservations' | 'billing' | 'accounts' | 'system';
+export const AUDIT_CATEGORIES: ReadonlyArray<AuditCategory> = [
+  'reservations',
+  'billing',
+  'accounts',
+  'system',
+];
+
+/** Category tab of a slug, from its first segment. */
+export function auditCategory(action: string): AuditCategory {
+  const head = action.split('.')[0];
+  if (head === 'reservation') return 'reservations';
+  if (head === 'billing') return 'billing';
+  if (head === 'user' || head === 'token') return 'accounts';
+  return 'system';
+}

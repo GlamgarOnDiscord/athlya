@@ -473,7 +473,6 @@
     },
     "dashboard": {
       "title": "Tableau de bord",
-      "subtitle": "Gérez les cours, les membres, l'identité visuelle et la facturation de votre studio.",
       "classes": {
         "title": "Cours",
         "body": "Créer, mettre à jour et planifier les sessions de votre studio."
@@ -510,19 +509,44 @@
         "noData": "Aucun",
         "membersCapped": "{count}+",
         "openPlanning": "Ouvrir le planning",
-        "seeMembers": "Voir les membres"
+        "seeMembers": "Voir les membres",
+        "vsSameDay": "vs {day} dernier",
+        "vsPreviousWeek": "vs semaine précédente",
+        "points": "pts",
+        "thisWeek": "cette semaine"
       },
       "today": {
         "title": "Aujourd'hui",
         "empty": "Aucun cours aujourd'hui.",
         "done": "Terminé",
         "live": "En cours",
-        "fill": "{booked} / {capacity}",
-        "fillLabel": "{booked} places réservées sur {capacity}"
+        "fillLabel": "{booked} places réservées sur {capacity}",
+        "columns": {
+          "time": "Horaire",
+          "class": "Cours",
+          "booked": "Inscrits",
+          "status": "État"
+        },
+        "now": "Maintenant {time}",
+        "inTime": "Dans {time}",
+        "countOne": "{count} cours",
+        "countOther": "{count} cours",
+        "totalOne": "{count} inscrit au total",
+        "totalOther": "{count} inscrits au total"
       },
       "upcoming": {
         "title": "Prochains cours",
-        "empty": "Aucun cours prévu dans les prochains jours."
+        "empty": "Aucun cours prévu dans les prochains jours.",
+        "window": "7 prochains jours",
+        "columns": {
+          "day": "Jour",
+          "time": "Heure",
+          "class": "Cours",
+          "duration": "Durée",
+          "booked": "Inscrits",
+          "left": "Places libres",
+          "fill": "Remplissage"
+        }
       },
       "activity": {
         "title": "Dernières actions",
@@ -532,7 +556,39 @@
       "sections": {
         "title": "Gestion du studio"
       },
-      "loadError": "La vue d'ensemble n'a pas pu se charger."
+      "loadError": "La vue d'ensemble n'a pas pu se charger.",
+      "greeting": "Bonjour {name}",
+      "nextIn": "prochain cours dans {time}",
+      "noNext": "aucun cours prévu",
+      "actions": {
+        "openKiosk": "Ouvrir la borne"
+      },
+      "duration": {
+        "minutes": "{m} min",
+        "hours": "{h} h {mm}",
+        "days": "{d} j"
+      },
+      "bookings": {
+        "title": "Réservations par jour",
+        "total": "{count} cette semaine",
+        "empty": "Aucun cours cette semaine pour le moment.",
+        "dayLabel": "{day} : {count} places réservées"
+      },
+      "occupancy": {
+        "title": "Affluence",
+        "window": "{weeks} dernières semaines",
+        "windowLabel": "Période",
+        "weeks": "{weeks} sem.",
+        "caption": "Taux de remplissage par jour et par heure sur les {weeks} dernières semaines",
+        "hour": "{hour} h",
+        "cell": "{day}, {hour} h : {rate} de remplissage sur {classes} cours",
+        "cellEmpty": "{day}, {hour} h : aucun cours",
+        "less": "Moins",
+        "more": "Plus",
+        "peakLegend": "90 % et plus",
+        "insight": "Créneau le plus rempli : le {day} à partir de {hour} h, {rate} de remplissage.",
+        "empty": "Pas encore de cours passé sur cette période : la carte se remplit au fil des séances."
+      }
     },
     "forbidden": {
       "title": "Accès refusé",
@@ -611,11 +667,35 @@
       "columns": {
         "name": "Nom",
         "email": "E-mail",
-        "role": "Rôle"
+        "role": "Rôle",
+        "actions": "Actions"
       },
       "countOne": "{count} membre chargé",
       "countOther": "{count} membres chargés",
-      "noMatch": "Aucun membre ne correspond à cette recherche."
+      "noMatch": "Aucun membre ne correspond à cette recherche.",
+      "tabs": {
+        "label": "Filtrer par rôle",
+        "all": "Tous",
+        "member": "Membres",
+        "coach": "Coachs",
+        "admin": "Admins"
+      },
+      "exportCsv": "Exporter CSV",
+      "you": "Vous",
+      "selectAll": "Sélectionner tous les membres affichés",
+      "selectRow": "Sélectionner {name}",
+      "selectedOne": "{count} sélectionné",
+      "selectedOther": "{count} sélectionnés",
+      "bulk": {
+        "copyEmails": "Copier les e-mails",
+        "export": "Exporter la sélection",
+        "clear": "Désélectionner"
+      },
+      "rowMenu": "Actions pour {name}",
+      "copyEmail": "Copier l'e-mail",
+      "emailCopied": "E-mail copié.",
+      "emailsCopied": "E-mails copiés.",
+      "copyFailed": "Le presse-papiers n'est pas disponible."
     },
     "branding": {
       "title": "Identité visuelle",
@@ -690,8 +770,6 @@
       "countOther": "{count} événements chargés",
       "system": "Système",
       "filter": {
-        "label": "Action",
-        "all": "Toutes les actions",
         "noMatch": "Aucun événement de ce type parmi ceux chargés."
       },
       "actions": {
@@ -713,7 +791,18 @@
         "class": "Cours",
         "studio": "Studio",
         "stripe_webhook": "Événement de paiement"
-      }
+      },
+      "export": "Exporter",
+      "search": "Filtrer par action, nom ou id",
+      "categories": {
+        "label": "Catégorie",
+        "all": "Tout",
+        "reservations": "Réservations",
+        "billing": "Facturation",
+        "accounts": "Comptes",
+        "system": "Système"
+      },
+      "appendOnly": "Journal en ajout seul : aucune entrée ne peut être modifiée."
     },
     "billing": {
       "title": "Facturation",
@@ -818,6 +907,36 @@
           "archived": "Ce programme est archivé et ne peut plus être modifié.",
           "loadFailed": "Impossible de charger le programme."
         }
+      }
+    },
+    "shell": {
+      "breadcrumb": "Fil d'Ariane",
+      "search": "Rechercher",
+      "newClass": "Nouveau cours",
+      "help": "Aide",
+      "studioBadge": "Studio",
+      "palette": {
+        "title": "Rechercher dans la console",
+        "placeholder": "Rechercher une page, un cours, un membre…",
+        "pages": "Pages",
+        "classes": "Cours",
+        "members": "Membres",
+        "empty": "Aucun résultat.",
+        "loading": "Chargement des cours et des membres…",
+        "hint": "Flèches pour naviguer, Entrée pour ouvrir, Échap pour fermer."
+      },
+      "theme": {
+        "label": "Thème",
+        "light": "Thème clair",
+        "dark": "Thème sombre"
+      },
+      "shortcuts": {
+        "title": "Raccourcis clavier",
+        "palette": "Ouvrir la recherche",
+        "memberSearch": "Chercher un membre (page Membres)",
+        "help": "Afficher cette aide",
+        "close": "Fermer une fenêtre",
+        "escapeKey": "Échap"
       }
     }
   },

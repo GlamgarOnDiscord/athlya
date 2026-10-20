@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createTranslator } from '../lib/i18n/t';
 
-import { coachSections, studioSections } from './DashboardNav';
+import { coachSections, pageLabelFor, studioSections } from './DashboardNav';
 
 const t = createTranslator('en');
 
@@ -26,5 +26,15 @@ describe('coachSections', () => {
 
   it('leaves the admin navigation untouched', () => {
     expect(hrefs(studioSections(t))).toContain('/dashboard/billing');
+  });
+});
+
+describe('pageLabelFor', () => {
+  it('names the page from the longest matching link, nested ones included', () => {
+    const sections = studioSections(t);
+    expect(pageLabelFor(sections, '/dashboard')).toBe('Dashboard');
+    expect(pageLabelFor(sections, '/dashboard/members')).toBe('Members');
+    expect(pageLabelFor(sections, '/dashboard/audit')).toBe('Audit');
+    expect(pageLabelFor(sections, '/login')).toBeNull();
   });
 });

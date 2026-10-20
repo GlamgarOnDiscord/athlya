@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { createTranslator } from '../../../lib/i18n/t';
 
-import { actionLabel, formatEventTime, shortId, targetTypeLabel } from './audit-format';
+import {
+  actionLabel,
+  auditCategory,
+  formatEventTime,
+  shortId,
+  targetTypeLabel,
+} from './audit-format';
 
 const fr = createTranslator('fr');
 const en = createTranslator('en');
@@ -81,5 +87,15 @@ describe('formatEventTime', () => {
     expect(old).toContain('Oct');
     expect(old).toContain('2026');
     expect(formatEventTime('2026-10-20T13:00:00.000Z', now, 'en')).toContain('2026');
+  });
+});
+
+describe('auditCategory', () => {
+  it('groups slugs by their first segment', () => {
+    expect(auditCategory('reservation.cancelled_by_admin')).toBe('reservations');
+    expect(auditCategory('billing.webhook.processed')).toBe('billing');
+    expect(auditCategory('user.consents.updated')).toBe('accounts');
+    expect(auditCategory('token.refresh.reuse.detected')).toBe('accounts');
+    expect(auditCategory('dlq.entry.replayed')).toBe('system');
   });
 });

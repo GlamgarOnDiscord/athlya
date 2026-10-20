@@ -48,6 +48,10 @@ export interface SidebarShellProps {
   readonly labels: SidebarLabels;
   /** Bottom of the sidebar (account actions); receives the collapsed state. */
   readonly renderFooter?: (collapsed: boolean) => ReactNode;
+  /** Block under the brand row: studio card, search, quick actions. */
+  readonly renderHeader?: (collapsed: boolean) => ReactNode;
+  /** Controls at the right end of the phone header bar. */
+  readonly mobileActions?: ReactNode;
   readonly children: ReactNode;
 }
 
@@ -320,6 +324,8 @@ export function SidebarShell({
   brand,
   labels,
   renderFooter,
+  renderHeader,
+  mobileActions,
   children,
 }: SidebarShellProps): ReactElement {
   const [collapsed, setCollapsed] = useSidebarCollapsed();
@@ -360,6 +366,7 @@ export function SidebarShell({
                   <XIcon className="size-5" aria-hidden="true" />
                 </DialogClose>
               </div>
+              {renderHeader ? <div className="px-3 pb-2">{renderHeader(false)}</div> : null}
               <SidebarNav
                 sections={sections}
                 label={labels.navigation}
@@ -373,6 +380,9 @@ export function SidebarShell({
           </DialogPortal>
         </Dialog>
         {brand}
+        {mobileActions === undefined ? null : (
+          <div className="ml-auto flex items-center gap-2">{mobileActions}</div>
+        )}
       </header>
 
       <aside
@@ -405,6 +415,7 @@ export function SidebarShell({
             {collapsed ? <SidebarTooltip label={labels.expand} /> : null}
           </button>
         </div>
+        {renderHeader ? <div className="px-3 pb-2">{renderHeader(collapsed)}</div> : null}
         <SidebarNav
           sections={sections}
           label={labels.navigation}
