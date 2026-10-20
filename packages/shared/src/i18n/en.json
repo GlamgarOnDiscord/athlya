@@ -505,7 +505,8 @@
       "dashboard": "Dashboard",
       "settings": "Settings",
       "home": "Home",
-      "planning": "My schedule"
+      "planning": "My schedule",
+      "rooms": "Rooms"
     },
     "dashboard": {
       "title": "Dashboard",
@@ -644,13 +645,18 @@
       "deleteConfirm": {
         "title": "Delete this class?",
         "body": "This action cannot be undone. Existing reservations will be cancelled.",
-        "confirm": "Delete"
+        "confirm": "Delete",
+        "seriesBody": "This class is part of a series. Bookings of the deleted classes will be cancelled."
       },
       "fields": {
         "title": "Title",
         "startsAt": "Start date and time",
         "durationMin": "Duration (min)",
-        "capacity": "Capacity"
+        "capacity": "Capacity",
+        "room": "Room",
+        "coach": "Coach",
+        "noRoom": "No room",
+        "noCoach": "No coach"
       },
       "dialog": {
         "createTitle": "New class",
@@ -660,7 +666,8 @@
       },
       "errors": {
         "generic": "Failed to save.",
-        "versionConflict": "The class was edited meanwhile. List refreshed — please retry."
+        "versionConflict": "The class was edited meanwhile. List refreshed, please retry.",
+        "roomNotFound": "This room no longer exists. Pick another one."
       },
       "planning": {
         "viewLabel": "Calendar view",
@@ -683,17 +690,83 @@
         "nextDay": "Next day",
         "seatLeft": "{count} left",
         "seatsLeft": "{count} left",
-        "actionsFor": "Actions for {title}"
+        "actionsFor": "Actions for {title}",
+        "roomFilter": "Room",
+        "allRooms": "All rooms",
+        "roomLabel": "Room {name}"
       },
       "columns": {
-        "date": "Date"
+        "date": "Date",
+        "room": "Room"
       },
       "list": {
         "export": "Export",
         "summary": "{classes} classes · {seats} seats · {booked} booked",
         "deleteNote": "Deleting a class cancels its bookings.",
         "remaining": "Seats left"
+      },
+      "repeat": {
+        "label": "Repeat every week",
+        "weekdays": "Days",
+        "end": "Series ends",
+        "endCount": "After a number of classes",
+        "endUntil": "On a date",
+        "count": "Number of classes",
+        "until": "Last day",
+        "noWeekday": "Pick at least one day."
+      },
+      "series": {
+        "badge": "Series",
+        "partOf": "This class is part of a weekly series.",
+        "scopeLegend": "Apply to",
+        "scopeOne": "This class only",
+        "scopeFollowing": "This and following classes",
+        "created": "{count} classes created.",
+        "timeOnly": "For the following classes only the start time changes; each keeps its own day."
+      },
+      "conflict": {
+        "title": "Time slot already taken",
+        "body": "The room or the coach is already booked for these classes:",
+        "room": "same room",
+        "coach": "same coach",
+        "more": "+{count} more",
+        "confirm": "Schedule anyway"
       }
+    },
+    "rooms": {
+      "title": "Rooms",
+      "subtitle": "The places in your studio where classes run.",
+      "create": "New room",
+      "empty": "No rooms yet. Add one to pick it in the planning.",
+      "columns": {
+        "name": "Name",
+        "capacity": "Capacity"
+      },
+      "noCapacity": "Not set",
+      "capacityValue": "{count} seats",
+      "fields": {
+        "name": "Name",
+        "capacity": "Capacity (optional)",
+        "capacityHelp": "Offered as the default capacity of classes in this room."
+      },
+      "dialog": {
+        "createTitle": "New room",
+        "editTitle": "Edit room",
+        "createSubmit": "Create",
+        "editSubmit": "Save"
+      },
+      "deleteConfirm": {
+        "title": "Delete this room?",
+        "body": "Upcoming classes in this room will no longer have a room. Past classes keep it.",
+        "confirm": "Delete"
+      },
+      "errors": {
+        "nameTaken": "A room already has this name.",
+        "generic": "Could not save the room."
+      },
+      "edit": "Edit",
+      "delete": "Delete",
+      "actionsFor": "Actions for {name}"
     },
     "members": {
       "title": "Members",

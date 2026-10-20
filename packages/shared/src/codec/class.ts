@@ -27,6 +27,8 @@ function toJSON(value: Class): ClassWire {
     capacity: value.capacity,
     version: value.version,
     createdAt: value.createdAt,
+    ...(value.roomId !== undefined ? { roomId: value.roomId } : {}),
+    ...(value.seriesId !== undefined ? { seriesId: value.seriesId } : {}),
   };
 }
 

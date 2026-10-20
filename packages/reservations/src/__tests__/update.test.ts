@@ -52,6 +52,8 @@ const BASE_ROW: ClassRow = {
   id: CLASS_ID,
   studioId: STUDIO_ID,
   coachId: COACH_ID,
+  roomId: null,
+  seriesId: null,
   title: 'HIIT morning',
   description: null,
   startsAt: new Date('2026-03-01T09:00:00.000Z'),

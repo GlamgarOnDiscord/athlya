@@ -270,3 +270,42 @@ describe('<ClassesPlanning /> read only', () => {
     },
   );
 });
+
+describe('<ClassesPlanning /> rooms and series (issue #748)', () => {
+  const ROOM = '0a510000-0000-4000-8000-000000000001';
+  const roomed: ClassWithRemaining = {
+    ...BOXING,
+    roomId: ROOM,
+    seriesId: '0f510000-0000-4000-8000-000000000001',
+  };
+
+  it.each(['week', 'day'] as const)('names the room and marks the series on a %s tile', (view) => {
+    const { day } = renderPlanning({
+      view,
+      anchor: fromDayKey('2026-10-20'),
+      items: [roomed],
+      roomNames: new Map([[ROOM, 'Studio 1']]),
+    });
+    const cell = within(day('2026-10-20'));
+    expect(cell.getByText(/Studio 1/)).toBeTruthy();
+    expect(cell.getByText(/Series/)).toBeTruthy();
+  });
+
+  it('tells a screen reader the room on a month tile', () => {
+    const { day } = renderPlanning({
+      view: 'month',
+      items: [roomed],
+      roomNames: new Map([[ROOM, 'Studio 1']]),
+    });
+    expect(within(day('2026-10-20')).getByText(/Room Studio 1/)).toBeTruthy();
+  });
+
+  it('shows no room for a class without one or an unknown room', () => {
+    const { day } = renderPlanning({
+      view: 'day',
+      anchor: fromDayKey('2026-10-20'),
+      items: [roomed],
+    });
+    expect(within(day('2026-10-20')).queryByText(/Studio 1/)).toBeNull();
+  });
+});

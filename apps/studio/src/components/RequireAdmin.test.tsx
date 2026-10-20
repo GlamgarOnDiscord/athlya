@@ -61,6 +61,7 @@ describe('isCoachRoute', () => {
     for (const admin of [
       '/dashboard/classes',
       '/dashboard/programs',
+      '/dashboard/rooms',
       '/dashboard/branding',
       '/dashboard/billing',
       '/dashboard/audit',
