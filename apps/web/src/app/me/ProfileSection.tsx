@@ -32,6 +32,7 @@ import { useApiClient } from '../../lib/api/use-api-client';
 import { useLocale } from '../../lib/i18n/LocaleContext';
 import { createTranslator, type Translator } from '../../lib/i18n/t';
 
+import { CalendarSection } from './calendar/CalendarSection';
 import { CoachLink } from './coach/CoachLink';
 import { ConsentsForm } from './ConsentsForm';
 import { ProfileForm } from './ProfileForm';
@@ -139,6 +140,7 @@ export function ProfileSection({
     <div className="flex flex-col gap-10" data-reload-key={reloadNonce}>
       <ProfileForm profile={status.profile} client={client} t={t} />
       <ConsentsForm consents={status.consents} client={client} t={t} />
+      <CalendarSection client={client} t={t} />
       <Separator />
       <nav className="flex flex-col gap-2" aria-label={t('profile.accountActions')}>
         <Link

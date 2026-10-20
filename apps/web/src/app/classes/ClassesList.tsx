@@ -113,9 +113,26 @@ function toCardInfo(item: ClassWithRemaining): ClassCardInfo {
     id: item.id,
     title: item.title,
     startsAt: item.startsAt,
+    durationMin: item.durationMin,
     capacity: item.capacity,
     remaining: item.remaining,
   };
+}
+
+/** Booking id from the `reservation` of a booking response, when present. */
+function reservationIdOf(reservation: unknown): string | null {
+  if (typeof reservation !== 'object' || reservation === null) return null;
+  const id = (reservation as { id?: unknown }).id;
+  return typeof id === 'string' ? id : null;
+}
+
+function confirmedBookingOf(
+  confirmed: ReadonlyMap<string, string | null>,
+  classId: string,
+): { readonly reservationId?: string } | null {
+  if (!confirmed.has(classId)) return null;
+  const reservationId = confirmed.get(classId);
+  return typeof reservationId === 'string' ? { reservationId } : {};
 }
 
 export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps): ReactElement {
@@ -130,17 +147,22 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
     reloadNonce: number;
     bookingInFlight: ReadonlySet<string>;
     bookedClassIds: ReadonlySet<string>;
+    /** `classId → reservation id (or null)` of confirmed seats, not waitlist. */
+    confirmedBookings: ReadonlyMap<string, string | null>;
     errorByClassId: Readonly<Record<string, string>>;
   }
 
-  const [{ status, reloadNonce, bookingInFlight, bookedClassIds, errorByClassId }, setState] =
-    useState<ClassesListState>(() => ({
-      status: { kind: 'loading' },
-      reloadNonce: 0,
-      bookingInFlight: new Set<string>(),
-      bookedClassIds: new Set<string>(),
-      errorByClassId: {},
-    }));
+  const [
+    { status, reloadNonce, bookingInFlight, bookedClassIds, confirmedBookings, errorByClassId },
+    setState,
+  ] = useState<ClassesListState>(() => ({
+    status: { kind: 'loading' },
+    reloadNonce: 0,
+    bookingInFlight: new Set<string>(),
+    bookedClassIds: new Set<string>(),
+    confirmedBookings: new Map<string, string | null>(),
+    errorByClassId: {},
+  }));
 
   /**
    * `classId → in-flight Idempotency-Key`. A fresh key is generated
@@ -256,7 +278,10 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
         setState((s) => {
           const next = new Set(s.bookedClassIds);
           next.add(classId);
-          return { ...s, bookedClassIds: next };
+          if (body.status !== 'confirmed') return { ...s, bookedClassIds: next };
+          const confirmed = new Map(s.confirmedBookings);
+          confirmed.set(classId, reservationIdOf(body.reservation));
+          return { ...s, bookedClassIds: next, confirmedBookings: confirmed };
         });
       } catch (err) {
         if (err instanceof ApiError) {
@@ -268,7 +293,9 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
             setState((s) => {
               const next = new Set(s.bookedClassIds);
               next.add(classId);
-              return { ...s, bookedClassIds: next };
+              const confirmed = new Map(s.confirmedBookings);
+              confirmed.set(classId, null);
+              return { ...s, bookedClassIds: next, confirmedBookings: confirmed };
             });
           } else if (err.status === 422 && err.problem?.code === 'class_in_past') {
             mutateRemaining(classId, +1);
@@ -362,6 +389,7 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
               locale={locale}
               onBook={handleBook}
               booked={bookedClassIds.has(item.id)}
+              confirmedBooking={confirmedBookingOf(confirmedBookings, item.id)}
               disabled={bookingInFlight.has(item.id)}
               error={errorByClassId[item.id] ?? null}
             />

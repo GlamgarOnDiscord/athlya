@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
+import { AddToCalendar } from '@/components/calendar/AddToCalendar';
+
 import type { Translator } from '../../lib/i18n/t';
 import type { Locale } from '@athlya/shared/i18n';
 
@@ -13,6 +15,7 @@ export interface ClassCardInfo {
   readonly id: string;
   readonly title: string;
   readonly startsAt: string;
+  readonly durationMin: number;
   readonly capacity: number;
   readonly remaining: number;
   readonly coachName?: string | undefined;
@@ -24,6 +27,12 @@ export interface ClassCardProps {
   readonly locale: Locale;
   readonly onBook: (classId: string) => Promise<void>;
   readonly booked?: boolean;
+  /**
+   * The booking is a confirmed seat (not a waitlist entry): the card then
+   * offers "Add to calendar". `reservationId` aligns the event UID with
+   * the member's calendar feed when the API returned it.
+   */
+  readonly confirmedBooking?: { readonly reservationId?: string | undefined } | null;
   readonly disabled?: boolean;
   readonly error?: string | null;
 }
@@ -34,10 +43,11 @@ export function ClassCard({
   locale,
   onBook,
   booked = false,
+  confirmedBooking = null,
   disabled = false,
   error = null,
 }: ClassCardProps): ReactElement {
-  const { id, title, startsAt, capacity, remaining, coachName } = classInfo;
+  const { id, title, startsAt, durationMin, capacity, remaining, coachName } = classInfo;
 
   const isFull = remaining <= 0;
   const pct = capacity > 0 ? Math.round(((capacity - remaining) / capacity) * 100) : 100;
@@ -127,6 +137,19 @@ export function ClassCard({
             {t('classes.card.book')}
           </Button>
         )}
+
+        {booked && confirmedBooking !== null ? (
+          <AddToCalendar
+            event={{
+              classId: id,
+              reservationId: confirmedBooking.reservationId,
+              title,
+              startsAt,
+              durationMin,
+            }}
+            t={t}
+          />
+        ) : null}
 
         {error !== null ? (
           <span

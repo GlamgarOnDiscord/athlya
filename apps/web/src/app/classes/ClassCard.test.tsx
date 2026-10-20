@@ -25,6 +25,7 @@ const BASE_CLASS: ClassCardInfo = {
   id: 'class-1',
   title: 'CrossFit',
   startsAt: '2025-06-15T10:30:00.000Z',
+  durationMin: 45,
   capacity: 12,
   remaining: 4,
 };
@@ -91,5 +92,28 @@ describe('<ClassCard />', () => {
     const alert = screen.getByRole('alert');
     expect(alert.textContent).toBe(t('errors.bookingFull'));
     expect(alert.getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('offers "add to calendar" once the seat is confirmed', () => {
+    render(
+      <ClassCard
+        classInfo={BASE_CLASS}
+        t={t}
+        locale="fr"
+        onBook={vi.fn()}
+        booked
+        confirmedBooking={{ reservationId: 'reservation-1' }}
+      />,
+    );
+
+    expect(screen.getByRole('group', { name: t('calendar.add.label') })).toBeDefined();
+    const ics = screen.getByRole('link', { name: /^Fichier \.ics pour « CrossFit »$/u });
+    expect(ics.getAttribute('download')).toBe('athlya-2025-06-15-class-1.ics');
+  });
+
+  it('does not offer "add to calendar" for a waitlist entry', () => {
+    render(<ClassCard classInfo={BASE_CLASS} t={t} locale="fr" onBook={vi.fn()} booked />);
+
+    expect(screen.queryByRole('group', { name: t('calendar.add.label') })).toBeNull();
   });
 });
