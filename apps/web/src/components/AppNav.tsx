@@ -85,11 +85,13 @@ function PublicTopBar(): ReactElement {
         className="mx-auto flex max-w-3xl items-center justify-between px-6 py-3"
         aria-label={t('common.nav.main')}
       >
-        <Link href="/" aria-label={t('common.appName')} className="text-foreground">
-          <AthlyaLogo height={24} />
+        <Link href="/" aria-label={t('common.appName')} className="shrink-0 text-foreground">
+          {/* The full lockup needs about 150 px; phones get the mascot alone. */}
+          <AthlyaLogo height={24} className="hidden sm:block" />
+          <AthlyaLogo variant="mascot" height={28} className="sm:hidden" />
         </Link>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
           {!bootResolved ? (
             <>
               <Skeleton className="h-4 w-16" />
@@ -117,7 +119,7 @@ function PublicTopBar(): ReactElement {
               {navLink('/register', t('auth.register.title'))}
             </>
           )}
-          <LocaleSwitcher />
+          <LocaleSwitcher compact />
         </div>
       </nav>
     </header>

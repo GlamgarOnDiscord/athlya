@@ -189,11 +189,35 @@ describe('<ClassesPlanning /> tiles', () => {
     expect(within(button).getByText('Full').className).toContain('planning-pill-full');
   });
 
-  it('drops the pill from a 45-minute tile but keeps the state for assistive tech', () => {
+  it('keeps a compact "Full" pill and the menu on a full 45-minute tile', async () => {
     const medium = { ...cls('m1', 'Spin', '2026-10-21T08:00:00.000Z', 0), durationMin: 45 };
-    const { tile } = renderPlanning({ items: [medium] });
+    const { props, tile } = renderPlanning({ items: [medium] });
     const { button, frame } = tile('m1');
     expect(frame.dataset['density']).toBe('medium');
+    const pill = within(button).getByText('Full');
+    expect(pill.className).toContain('planning-pill-full');
+    expect(pill.className).toContain('h-4');
+    expect(pill.className).not.toContain('sr-only');
+
+    const trigger = within(frame).getByRole('button', { name: 'Actions for Spin' });
+    expect(trigger.className).toContain('size-5');
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }));
+    expect(props.onSelectClass).toHaveBeenCalledWith(medium);
+  });
+
+  it('shows the seats left in a compact pill on an open 45-minute tile', () => {
+    const medium = { ...cls('m2', 'Spin', '2026-10-21T08:00:00.000Z', 3), durationMin: 45 };
+    const { tile } = renderPlanning({ items: [medium] });
+    const pill = within(tile('m2').button).getByText('3 left');
+    expect(pill.className).toContain('planning-pill-open');
+    expect(pill.className).toContain('h-4');
+  });
+
+  it('keeps only the title on a 30-minute tile, without pill or menu', () => {
+    const short = { ...cls('s2', 'Core blast', '2026-10-22T07:00:00.000Z', 0), durationMin: 30 };
+    const { tile } = renderPlanning({ items: [short] });
+    const { button, frame } = tile('s2');
     expect(within(button).getByText(/Full/).className).toContain('sr-only');
     expect(within(frame).queryByRole('button', { name: /Actions for/ })).toBeNull();
   });
