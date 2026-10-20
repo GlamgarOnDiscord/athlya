@@ -4,6 +4,7 @@ import {
   BookOpenIcon,
   CalendarBlankIcon,
   CreditCardIcon,
+  HouseIcon,
   ListBulletsIcon,
   MagnifyingGlassIcon,
   PaletteIcon,
@@ -35,7 +36,6 @@ import { createTranslator, type Translator } from '../lib/i18n/t';
 
 import { AppLink } from './AppLink';
 import { AthlyaLogo } from './AthlyaLogo';
-import { isCoachRoute } from './RequireAdmin';
 import { CommandPalette } from './shell/CommandPalette';
 import { ShortcutsDialog } from './shell/ShortcutsDialog';
 import { StudioProvider, useStudio } from './shell/StudioProvider';
@@ -44,7 +44,7 @@ import { SearchButton, TopBar } from './shell/TopBar';
 import { SidebarAction, SidebarShell } from './sidebar/Sidebar';
 
 import type { CommandItem } from './shell/command-search';
-import type { SidebarSection } from './sidebar/nav-model';
+import type { SidebarLink, SidebarSection } from './sidebar/nav-model';
 
 /** Navigation of the studio console; every link is an existing route. */
 export function studioSections(t: Translator): SidebarSection[] {
@@ -120,14 +120,44 @@ export function studioSections(t: Translator): SidebarSection[] {
   ];
 }
 
-/** A coach only reaches the kiosk, so only its links are kept (groups drop out). */
-export function coachSections(sections: readonly SidebarSection[]): SidebarSection[] {
-  return sections
-    .map((section) => ({
-      ...section,
-      items: section.items.filter((item) => item.kind === 'link' && isCoachRoute(item.href)),
-    }))
-    .filter((section) => section.items.length > 0);
+/** Admin links a coach shares as they are: the members directory and the kiosk. */
+const SHARED_WITH_COACH: ReadonlySet<string> = new Set([
+  '/dashboard/members',
+  '/dashboard/checkin',
+]);
+
+/**
+ * Navigation of a coach: their home, their read-only schedule, then the
+ * admin links they share (taken from {@link studioSections} so both stay in
+ * step). Every href is one of the `COACH_ROUTES` of `<RequireAdmin>`.
+ */
+export function coachSections(t: Translator): SidebarSection[] {
+  const shared = studioSections(t)
+    .flatMap((section) => section.items)
+    .filter(
+      (item): item is SidebarLink => item.kind === 'link' && SHARED_WITH_COACH.has(item.href),
+    );
+  return [
+    {
+      id: 'main',
+      items: [
+        {
+          kind: 'link',
+          href: '/dashboard',
+          label: t('studio.nav.home'),
+          icon: HouseIcon,
+          match: 'exact',
+        },
+        {
+          kind: 'link',
+          href: '/dashboard/planning',
+          label: t('studio.nav.planning'),
+          icon: CalendarBlankIcon,
+        },
+        ...shared,
+      ],
+    },
+  ];
 }
 
 /** Label of the navigation link that owns `pathname`: the longest matching href. */
@@ -186,10 +216,7 @@ function DashboardShell({ children }: { readonly children: ReactNode }): ReactEl
   }, [logout, push, pathname]);
 
   const isCoach = user?.role === 'coach';
-  const sections = useMemo(
-    () => (isCoach ? coachSections(studioSections(t)) : studioSections(t)),
-    [t, isCoach],
-  );
+  const sections = useMemo(() => (isCoach ? coachSections(t) : studioSections(t)), [t, isCoach]);
   const pages = useMemo<CommandItem[]>(
     () =>
       flattenLinks(sections).map((link) => ({
@@ -348,6 +375,7 @@ function DashboardShell({ children }: { readonly children: ReactNode }): ReactEl
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         pages={pages}
+        classesHref={isCoach ? '/dashboard/planning' : '/dashboard/classes'}
         locale={locale}
         t={t}
       />

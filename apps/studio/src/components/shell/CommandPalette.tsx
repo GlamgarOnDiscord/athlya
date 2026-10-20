@@ -35,6 +35,8 @@ interface CommandPaletteProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly pages: ReadonlyArray<CommandItem>;
+  /** Where a class hit leads: the admin classes page, or a coach's schedule. */
+  readonly classesHref: string;
   readonly locale: Locale;
   readonly t: Translator;
 }
@@ -49,6 +51,7 @@ export function CommandPalette({
   open,
   onOpenChange,
   pages,
+  classesHref,
   locale,
   t,
 }: CommandPaletteProps): ReactElement {
@@ -96,7 +99,7 @@ export function CommandPalette({
             kind: 'class',
             label: c.title,
             hint: when.format(new Date(c.startsAt)),
-            href: '/dashboard/classes',
+            href: classesHref,
           });
         }
       }
@@ -116,7 +119,7 @@ export function CommandPalette({
     return () => {
       cancelled = true;
     };
-  }, [client, locale, requested]);
+  }, [client, classesHref, locale, requested]);
 
   const results = useMemo(
     () => searchCommands([...pages, ...(loaded ?? [])], query),

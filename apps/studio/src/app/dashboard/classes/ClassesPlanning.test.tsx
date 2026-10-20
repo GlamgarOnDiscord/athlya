@@ -44,8 +44,12 @@ function cls(id: string, title: string, startsAt: string, remaining = 4): ClassW
 const BOXING = cls('c1', 'Boxing technique', '2026-10-20T16:30:00.000Z');
 const YOGA = cls('c2', 'Sunday yoga', '2026-10-25T09:00:00.000Z', 0);
 
+/** The admin planning: every edit handler is set. */
+type EditablePlanningProps = ClassesPlanningProps &
+  Required<Pick<ClassesPlanningProps, 'onSelectClass' | 'onDeleteClass' | 'onCreateAt'>>;
+
 function renderPlanning(overrides: Partial<ClassesPlanningProps> = {}) {
-  const props: ClassesPlanningProps = {
+  const props: EditablePlanningProps = {
     view: 'week',
     anchor: fromDayKey('2026-10-21'),
     todayKey: '2026-10-20',
@@ -239,4 +243,30 @@ describe('<ClassesPlanning /> tiles', () => {
     expect(props.onDeleteClass).toHaveBeenCalledWith(BOXING);
     expect(props.onSelectClass).not.toHaveBeenCalled();
   });
+});
+
+describe('<ClassesPlanning /> read only', () => {
+  it.each(['week', 'month', 'day'] as const)(
+    'shows the classes of the %s view without create, edit or delete',
+    (view) => {
+      const onShowDay = vi.fn();
+      const { container } = render(
+        <ClassesPlanning
+          view={view}
+          anchor={fromDayKey('2026-10-20')}
+          todayKey="2026-10-20"
+          items={[BOXING, YOGA]}
+          busy={false}
+          locale="en"
+          t={t}
+          onShowDay={onShowDay}
+        />,
+      );
+      expect(screen.getAllByText('Boxing technique').length).toBeGreaterThan(0);
+      expect(container.querySelector('[data-class-id="c1"]')?.tagName).toBe('DIV');
+      expect(container.querySelector('button[data-class-id]')).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Actions for / })).toBeNull();
+      expect(screen.queryByRole('button', { name: /^New class on / })).toBeNull();
+    },
+  );
 });

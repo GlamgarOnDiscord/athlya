@@ -1,6 +1,8 @@
 /**
- * The dashboard gate: admins see every page, coaches only the check-in
- * kiosk (the API opens `POST /v1/checkins` to them too), members none.
+ * The dashboard gate: admins see every page; coaches their home, their
+ * schedule, the members directory and the kiosk (the API opens
+ * `GET /v1/classes`, `GET /v1/members` and `POST /v1/checkins` to them);
+ * members none.
  */
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -47,12 +49,26 @@ afterEach(() => {
 });
 
 describe('isCoachRoute', () => {
-  it('matches the kiosk and its sub-paths only', () => {
+  it('matches the coach pages and their sub-paths', () => {
+    expect(isCoachRoute('/dashboard')).toBe(true);
+    expect(isCoachRoute('/dashboard/planning')).toBe(true);
+    expect(isCoachRoute('/dashboard/members')).toBe(true);
     expect(isCoachRoute('/dashboard/checkin')).toBe(true);
     expect(isCoachRoute('/dashboard/checkin/')).toBe(true);
-    expect(isCoachRoute('/dashboard/checkins')).toBe(false);
-    expect(isCoachRoute('/dashboard/members')).toBe(false);
-    expect(isCoachRoute('/dashboard')).toBe(false);
+  });
+
+  it('matches the home exactly, so it never opens the admin pages below it', () => {
+    for (const admin of [
+      '/dashboard/classes',
+      '/dashboard/programs',
+      '/dashboard/branding',
+      '/dashboard/billing',
+      '/dashboard/audit',
+      '/dashboard/checkins',
+      '/dashboard/planning-admin',
+    ]) {
+      expect(isCoachRoute(admin)).toBe(false);
+    }
   });
 });
 
@@ -73,15 +89,27 @@ describe('<RequireAdmin />', () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it('sends a coach from any other dashboard page to the kiosk with a full page load', () => {
-    role = 'coach';
-    pathname = '/dashboard/members';
-    renderGate();
-    expect(screen.queryByText('dashboard content')).toBeNull();
-    // A client transition would keep the camera=() policy of the page left behind.
-    expect(assign).toHaveBeenCalledWith('/dashboard/checkin');
-    expect(push).not.toHaveBeenCalled();
-  });
+  it.each(['/dashboard', '/dashboard/planning', '/dashboard/members'])(
+    'lets a coach open %s',
+    (path) => {
+      role = 'coach';
+      pathname = path;
+      renderGate();
+      expect(screen.getByText('dashboard content')).toBeDefined();
+      expect(push).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['/dashboard/classes', '/dashboard/billing', '/dashboard/audit'])(
+    'sends a coach from the admin page %s to their home',
+    (path) => {
+      role = 'coach';
+      pathname = path;
+      renderGate();
+      expect(screen.queryByText('dashboard content')).toBeNull();
+      expect(push).toHaveBeenCalledWith('/dashboard');
+    },
+  );
 
   it('keeps a member out of the kiosk, leaving it with a full page load', () => {
     role = 'member';

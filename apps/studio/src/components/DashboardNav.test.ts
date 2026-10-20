@@ -1,5 +1,6 @@
 /**
- * Studio navigation model: a coach only sees the check-in kiosk.
+ * Studio navigation model: a coach sees their home, their schedule, the
+ * members directory and the kiosk, and nothing the gate would refuse.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -7,6 +8,7 @@ import { ownDocumentRoute } from '../lib/full-reload';
 import { createTranslator } from '../lib/i18n/t';
 
 import { coachSections, pageLabelFor, studioSections } from './DashboardNav';
+import { isCoachRoute } from './RequireAdmin';
 
 const t = createTranslator('en');
 
@@ -19,10 +21,27 @@ function hrefs(sections: ReturnType<typeof studioSections>): string[] {
 }
 
 describe('coachSections', () => {
-  it('keeps only the check-in link and drops empty sections and groups', () => {
-    const sections = coachSections(studioSections(t));
-    expect(hrefs(sections)).toEqual(['/dashboard/checkin']);
+  it('lists home, schedule, members and check-in, in that order, without groups', () => {
+    const sections = coachSections(t);
+    expect(hrefs(sections)).toEqual([
+      '/dashboard',
+      '/dashboard/planning',
+      '/dashboard/members',
+      '/dashboard/checkin',
+    ]);
     expect(sections).toHaveLength(1);
+    expect(sections[0]?.items.every((item) => item.kind === 'link')).toBe(true);
+  });
+
+  it('names the coach pages for a coach', () => {
+    const sections = coachSections(t);
+    expect(pageLabelFor(sections, '/dashboard')).toBe('Home');
+    expect(pageLabelFor(sections, '/dashboard/planning')).toBe('My schedule');
+    expect(pageLabelFor(sections, '/dashboard/checkin')).toBe('Check-in');
+  });
+
+  it('only links pages the dashboard gate opens to a coach', () => {
+    expect(hrefs(coachSections(t)).every(isCoachRoute)).toBe(true);
   });
 
   it('leaves the admin navigation untouched', () => {

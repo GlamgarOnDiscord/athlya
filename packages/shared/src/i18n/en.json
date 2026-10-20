@@ -489,9 +489,9 @@
       "dashboard": "Open dashboard"
     },
     "login": {
-      "title": "Admin sign-in",
-      "subtitle": "Studio owners only. Members sign in on the main app.",
-      "adminRequired": "This account does not have admin rights."
+      "title": "Studio sign-in",
+      "subtitle": "For the studio team: administrators and coaches. Members sign in on the main app.",
+      "staffRequired": "This is a member account. Sign in on the Athlya app to book your classes."
     },
     "nav": {
       "brand": "Athlya Studio",
@@ -503,7 +503,9 @@
       "audit": "Audit",
       "programs": "Programs",
       "dashboard": "Dashboard",
-      "settings": "Settings"
+      "settings": "Settings",
+      "home": "Home",
+      "planning": "My schedule"
     },
     "dashboard": {
       "title": "Dashboard",
@@ -736,7 +738,8 @@
       "copyEmail": "Copy email",
       "emailCopied": "Email copied.",
       "emailsCopied": "Emails copied.",
-      "copyFailed": "The clipboard is not available."
+      "copyFailed": "The clipboard is not available.",
+      "readOnly": "Directory of your studio's members, read only."
     },
     "branding": {
       "title": "Branding",
@@ -999,6 +1002,35 @@
         "help": "Show this help",
         "close": "Close a window",
         "escapeKey": "Esc"
+      }
+    },
+    "coach": {
+      "next": {
+        "title": "Next class",
+        "endsIn": "ends in {time}",
+        "at": "{day}, {start} - {end}",
+        "empty": "No upcoming class is assigned to you."
+      },
+      "today": {
+        "title": "My classes today",
+        "empty": "No class is assigned to you today."
+      },
+      "upcoming": {
+        "title": "My upcoming classes",
+        "empty": "No class is assigned to you in the next 7 days."
+      },
+      "unassigned": "An administrator assigns classes to you from the studio schedule.",
+      "loadError": "Your classes could not be loaded.",
+      "planning": {
+        "title": "My schedule",
+        "subtitle": "Your classes, read only. An administrator creates and edits classes.",
+        "scopeLabel": "Classes shown",
+        "scope": {
+          "mine": "My classes",
+          "all": "Whole studio"
+        },
+        "emptyMine": "No class is assigned to you in this period.",
+        "emptyAll": "No class at the studio in this period."
       }
     }
   },
