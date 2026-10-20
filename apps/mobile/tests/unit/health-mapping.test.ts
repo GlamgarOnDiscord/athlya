@@ -5,6 +5,7 @@ import {
   activityNameKey,
   buildHealthSessionRequest,
   describeHealthWorkout,
+  healthCardioMetrics,
   importIdempotencyKey,
 } from '../../features/health/workout-mapping';
 import { AppleHealthLinkStore } from '../../infrastructure/health/link-store';
@@ -24,6 +25,13 @@ describe('buildHealthSessionRequest', () => {
       notes:
         'Imported from Apple Health · Distance 8.2 km · Energy 612 kcal · ' +
         'Avg heart rate 152 bpm · Max heart rate 178 bpm',
+      cardio: {
+        durationSec: 2700,
+        distanceM: 8240,
+        energyKcal: 612,
+        avgHeartRateBpm: 152,
+        maxHeartRateBpm: 178,
+      },
       source: { provider: 'appleHealth', externalId: '5B2D7C1E-3F4A-4B6C-8D9E-0F1A2B3C4D5E' },
     });
   });
@@ -47,6 +55,11 @@ describe('buildHealthSessionRequest', () => {
     expect(request?.exercises[0]?.sets[0]?.durationSec).toBe(1800);
     expect(request?.notes).toContain('Distance 3.2 km');
     expect(request?.notes).toContain('Energy 100 kcal');
+    expect(request?.cardio).toMatchObject({
+      durationSec: 1800,
+      distanceM: 3219,
+      energyKcal: 100,
+    });
   });
 
   it('falls back to the dates for a duration in an unknown unit', () => {
@@ -70,6 +83,20 @@ describe('buildHealthSessionRequest', () => {
       'en',
     );
     expect(request?.notes).toBe('Imported from Apple Health');
+    expect(request).not.toHaveProperty('cardio');
+  });
+
+  it('omits cardio for a workout with only a duration', () => {
+    const {
+      totalDistance: _distance,
+      totalEnergyBurned: _energy,
+      averageHeartRateBpm: _avg,
+      maxHeartRateBpm: _max,
+      ...durationOnly
+    } = workout({ activityType: 57 });
+    const request = buildHealthSessionRequest(durationOnly, en, 'en');
+    expect(request?.exercises[0]?.name).toBe('Yoga');
+    expect(request).not.toHaveProperty('cardio');
   });
 
   it('caps the duration at one day and rounds a short workout up to one minute', () => {
@@ -91,6 +118,34 @@ describe('buildHealthSessionRequest', () => {
       buildHealthSessionRequest(workout({ startDate: new Date(Number.NaN) }), en, 'en'),
     ).toBeNull();
     expect(buildHealthSessionRequest(workout({ uuid: ' ' }), en, 'en')).toBeNull();
+  });
+
+  it('drops each cardio metric outside the schema bounds on its own', () => {
+    const cardio = healthCardioMetrics(
+      workout({
+        totalDistance: { unit: 'km', quantity: 1500 },
+        totalEnergyBurned: { unit: 'kcal', quantity: 0.4 },
+        averageHeartRateBpm: 12,
+        maxHeartRateBpm: 260,
+      }),
+      2700,
+    );
+    expect(cardio).toBeUndefined();
+
+    expect(
+      healthCardioMetrics(
+        workout({
+          totalDistance: { unit: 'km', quantity: 1500 },
+          averageHeartRateBpm: 12,
+          maxHeartRateBpm: 260,
+        }),
+        2700,
+      ),
+    ).toEqual({ durationSec: 2700, energyKcal: 612 });
+  });
+
+  it('never sets a machine on an imported workout', () => {
+    expect(healthCardioMetrics(workout({ activityType: 13 }), 2700)).not.toHaveProperty('machine');
   });
 
   it('names unknown activity types "Workout"', () => {

@@ -3,10 +3,14 @@
  *   - any workout HealthKit can report maps to null or to a request the
  *     API accepts (`LogSessionRequestSchema`), never throws;
  *   - a mapped request always names its workout as the source;
+ *   - its `cardio` summary, when present, passes `CardioMetricsSchema`,
+ *     carries the set duration and at least one reported metric, and
+ *     never names a machine;
  *   - the import key is a UUID v4 and a function of the workout id only.
  */
 import { createTranslator } from '@athlya/shared/i18n';
 import { LogSessionRequestSchema } from '@athlya/shared/schemas/api';
+import { CardioMetricsSchema } from '@athlya/shared/schemas/domain';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
@@ -63,6 +67,12 @@ describe('Apple Health mapping properties', () => {
         });
         expect(request.exercises).toHaveLength(1);
         expect(request.durationMin).toBeGreaterThanOrEqual(1);
+        if (request.cardio !== undefined) {
+          expect(CardioMetricsSchema.safeParse(request.cardio).success).toBe(true);
+          expect(request.cardio.durationSec).toBe(request.exercises[0]?.sets[0]?.durationSec);
+          expect(request.cardio.machine).toBeUndefined();
+          expect(Object.keys(request.cardio).length).toBeGreaterThan(1);
+        }
       }),
     );
   });
