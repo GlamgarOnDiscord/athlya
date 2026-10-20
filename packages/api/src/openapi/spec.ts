@@ -21,6 +21,7 @@ import {
   BookingRequestSchema,
   BookingResponseSchema,
   CancelReservationParamsSchema,
+  CancelReservationResponseSchema,
   CardioProgressionQuerySchema,
   CardioProgressionResponseSchema,
   CheckInRequestSchema,
@@ -619,11 +620,19 @@ const bookRoute = createRoute({
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     409: {
-      description: 'Already booked',
+      description:
+        'Already booked (body carries the live `status` and, for a waitlist row, its `position`), ' +
+        'or `idempotency_in_progress` while a request with the same Idempotency-Key runs (`Retry-After`)',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     422: {
-      description: 'Validation error',
+      description:
+        'Validation error, or `idempotency_key_reused` for a key bound to another request',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    503: {
+      description:
+        '`counter_unavailable` or `idempotency_unavailable`: nothing was written, retry after `Retry-After`',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
   },
@@ -639,13 +648,33 @@ const cancelRoute = createRoute({
     params: CancelReservationParamsSchema,
   },
   responses: {
-    204: { description: 'Reservation cancelled' },
+    200: {
+      description:
+        'Reservation cancelled. A retried cancel of an already cancelled reservation also ' +
+        'answers 200, with `alreadyCancelled: true`',
+      content: { 'application/json': { schema: CancelReservationResponseSchema } },
+    },
     401: {
       description: 'Not authenticated',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     404: {
       description: 'Reservation not found',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    409: {
+      description:
+        '`idempotency_in_progress` while a request with the same Idempotency-Key runs (`Retry-After`)',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    422: {
+      description:
+        '`cancellation_window_closed`, `invalid_transition`, or `idempotency_key_reused` for a ' +
+        'key bound to another request',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    503: {
+      description: '`idempotency_unavailable`: nothing was written, retry after `Retry-After`',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
   },

@@ -14,12 +14,20 @@
  *      this is the hot path that lets the service hit p99 < 500 ms
  *      under a thundering-herd popular class opening.
  *
- *   2. Postgres transaction — `BEGIN`, `SELECT FOR UPDATE` on the
- *      `classes` row, `INSERT` the reservation row (protected by the
- *      `UNIQUE(class_id, user_id)` constraint), `INSERT` the outbox
- *      event row, `COMMIT`. The unique constraint is the last-line
- *      defence against double-booking even under Redis loss of
- *      atomicity or replay.
+ *   2. Postgres transaction: `BEGIN`, read the class start time against
+ *      the database clock, `INSERT` the reservation row, `INSERT` the
+ *      outbox event row, `COMMIT`. The service itself takes no row
+ *      lock. Two database guards are authoritative:
+ *        - the `enforce_class_capacity()` trigger (migration 0008)
+ *          locks the `classes` row `FOR UPDATE` and counts the
+ *          confirmed rows before every confirmed INSERT or UPDATE, so
+ *          concurrent confirmations of one class serialise on that
+ *          lock and never exceed `capacity`;
+ *        - the partial unique index on `(class_id, user_id) WHERE
+ *          status IN ('confirmed', 'waitlist')` (migration 0028) stops
+ *          a second live row for the same member.
+ *      Redis is only an optimistic pre-filter: a wrong counter routes
+ *      a member to the wrong branch, it can never oversell.
  *
  * Compensating actions are the mirror image of the Redis step:
  *
@@ -73,10 +81,10 @@ import type { ReservationRow } from '@athlya/db/schema';
  * still doesn't depend on Drizzle.
  *
  * Why this matters: the booking algorithm is the most contention-
- * critical path in the codebase. A wrong `tx` passed to
- * `BookingRepo.lockClass` would silently bypass the SELECT FOR
- * UPDATE and reintroduce the double-booking race the algorithm
- * exists to prevent. The brand is a structural guard.
+ * critical path in the codebase. A wrong `tx` passed to a repo method
+ * would run the INSERT outside the transaction that carries the
+ * tenant session variables and the outbox row. The brand is a
+ * structural guard.
  */
 export type BookingTx = { readonly __brand: 'BookingTx' };
 
@@ -91,6 +99,18 @@ export interface BookingClassRow {
   readonly capacity: number;
   readonly startsAt: Date;
   readonly version: number;
+  /**
+   * Database clock read in the same statement as the row. When present
+   * it replaces the Worker clock for the `class_in_past` pre-flight,
+   * so a skewed isolate cannot book a class that already started.
+   */
+  readonly dbNow?: Date;
+}
+
+/** Class start time and database clock, read inside a booking transaction. */
+export interface BookingClassClock {
+  readonly startsAt: Date;
+  readonly now: Date;
 }
 
 /**
@@ -196,6 +216,14 @@ export interface BookingRepo {
    * error instead of leaking a downstream failure.
    */
   findClass(classId: string): Promise<BookingClassRow | null>;
+
+  /**
+   * Read the class start time and `now()` inside `tx`, so the
+   * `class_in_past` decision uses the transaction's own clock instead
+   * of the pre-flight read. `null` when the class vanished (soft
+   * delete) between the pre-flight and the transaction.
+   */
+  readClassClock(tx: BookingTx, classId: string): Promise<BookingClassClock | null>;
 
   /**
    * Run `fn` inside a Postgres transaction. The adapter is
@@ -379,6 +407,8 @@ export interface BookWaitlisted {
 export interface BookAlreadyBooked {
   readonly code: 'already_booked';
   readonly reservation: BookingReservationRow;
+  /** 1-based waitlist position, present only when the existing row is a waitlist row. */
+  readonly position?: number;
 }
 
 /**
@@ -427,6 +457,17 @@ export type BookResult =
  */
 export type BookClock = () => number;
 
+/** Logger for failures the flow survives (a lost compensating INCR). */
+export interface BookingLogger {
+  error(msg: string, ctx?: Record<string, unknown>): void;
+}
+
+const consoleBookingLogger: BookingLogger = {
+  error: (msg, ctx) => {
+    console.error(msg, ctx ?? {});
+  },
+};
+
 /**
  * Argument bundle for {@link bookClass}. Destructured inside the
  * function body so call sites read as named parameters.
@@ -447,13 +488,106 @@ export interface BookClassInput {
   readonly repo: BookingRepo;
   readonly counter: BookingCounter;
   readonly publisher: BookingEventPublisher;
-  /** Defaults to `Date.now`. Supplied explicitly in tests. */
+  /**
+   * Test seam. When supplied it replaces the database clock for every
+   * `class_in_past` decision; production leaves it unset so the
+   * decision uses Postgres `now()`.
+   */
   readonly clock?: BookClock;
+  /** Defaults to `console`. */
+  readonly logger?: BookingLogger;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Use case                                                           */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Thrown inside a booking transaction when the class can no longer be
+ * booked (started, or soft-deleted since the pre-flight). Rolls the
+ * transaction back; {@link bookClass} turns it into a result code.
+ */
+class BookingClosedError extends Error {
+  public override readonly name = 'BookingClosedError';
+  public constructor(public readonly result: 'class_in_past' | 'class_not_found') {
+    super(result);
+  }
+}
+
+/**
+ * Re-check, inside `tx`, that the class still exists and has not
+ * started. Uses the injected test clock when there is one, else the
+ * transaction's `now()`.
+ */
+async function assertClassOpen(
+  repo: BookingRepo,
+  tx: BookingTx,
+  classId: string,
+  clock: BookClock | undefined,
+): Promise<void> {
+  const times = await repo.readClassClock(tx, classId);
+  if (times === null) {
+    throw new BookingClosedError('class_not_found');
+  }
+  const nowMs = clock !== undefined ? clock() : times.now.getTime();
+  if (times.startsAt.getTime() <= nowMs) {
+    throw new BookingClosedError('class_in_past');
+  }
+}
+
+/**
+ * Compensating INCR that never masks the caller's outcome. A failure
+ * leaves the counter one seat low (a false "full", never an
+ * oversell: Postgres stays authoritative) until the reconcile cron
+ * heals it, so it is logged for the drift alert instead of thrown.
+ */
+async function compensate(
+  counter: BookingCounter,
+  logger: BookingLogger,
+  classId: string,
+  reason: string,
+): Promise<void> {
+  try {
+    await counter.incrRemaining(classId);
+  } catch (err) {
+    logger.error('booking: compensating INCR failed', {
+      classId,
+      reason,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Load the live row the member already holds after a unique violation,
+ * with its waitlist position when it is a waitlist row, so the replay
+ * answers with the real state instead of assuming `confirmed`.
+ */
+async function loadExistingBooking(
+  repo: BookingRepo,
+  classId: string,
+  userId: string,
+): Promise<BookAlreadyBooked> {
+  return repo.withTransaction(async (tx) => {
+    const existing = await repo.findExistingConfirmedOrWaitlistReservation(tx, classId, userId);
+    if (existing === null) {
+      // A unique violation means a live row existed when the INSERT
+      // ran; it vanishing before this read is a concurrent cancel.
+      // Surface a 5xx rather than invent a state.
+      throw new Error(
+        `bookClass: unique-violation on (${classId}, ${userId}) but no live reservation found`,
+      );
+    }
+    if (existing.status !== 'waitlist') {
+      return { code: 'already_booked', reservation: existing };
+    }
+    const ahead = await repo.countWaitlistAhead(tx, classId, {
+      id: existing.id,
+      createdAt: existing.createdAt,
+    });
+    return { code: 'already_booked', reservation: existing, position: ahead + 1 };
+  });
+}
 
 /**
  * Book a class following Algorithm 1.
@@ -462,52 +596,46 @@ export interface BookClassInput {
  *
  *   0. Pre-flight: load the class row. Short-circuit with
  *      `class_not_found` on `null` and `class_in_past` on
- *      `startsAt ≤ now()`. BOTH checks run BEFORE any Redis traffic
- *      so a malformed or cross-tenant request never perturbs the
- *      counter (no compensating INCR needed on these paths).
+ *      `startsAt <= now`, where `now` is the database clock read with
+ *      the row (or the injected test clock). BOTH checks run BEFORE
+ *      any Redis traffic so a malformed or cross-tenant request never
+ *      perturbs the counter.
  *
- *   1. Redis `DECR` on `class:{classId}:remaining`. This is the
- *      atomic claim primitive.
+ *   1. Redis `DECR` on `class:{classId}:remaining`, seeded from the
+ *      capacity when the key is missing. Optimistic pre-filter only.
  *
- *   2. If `DECR ≥ 0`: attempt the confirmed-booking transaction.
- *      Inside the tx:
- *         - `insertReservation(status='confirmed')` — the unique
- *           constraint on `(class_id, user_id)` is the ultimate
- *           safeguard against double-booking.
- *         - `insertOutbox(reservation.created)` — publishes on
- *           commit (Req 16.1). The drain worker picks up the row
- *           within 30 s (Req 16.4).
- *      Commit returns `{ code: 'ok' }` with the inserted row and
- *      the `remaining` value seen from the DECR.
+ *   2. If `DECR >= 0`: the confirmed-booking transaction re-checks the
+ *      class against the transaction clock, inserts the `confirmed`
+ *      row (the capacity trigger and the partial unique index are the
+ *      authoritative guards) and the `reservation.created` outbox row.
  *
- *   3. If the tx throws a {@link ClassCapacityExceededError}: the
- *      Redis counter was optimistic — compensate with INCR and fall
- *      through to the waitlist branch (PostgreSQL is authoritative).
- *   4. If the tx throws a {@link UniqueViolationError}: the user
- *      already holds a row. Compensating `INCR` (we over-claimed)
- *      and return the existing row as `already_booked`. No second
- *      outbox event.
- *   5. If the tx throws anything else: compensating `INCR` and
- *      rethrow. The API gateway's handler turns this into a 5xx.
+ *   3. Capacity trigger refused: compensate the DECR and fall through
+ *      to the waitlist branch (Postgres is authoritative).
+ *   4. Unique violation: the member already holds a live row.
+ *      Compensate and return it as `already_booked`, with its real
+ *      status and waitlist position. No second outbox event.
+ *   5. Class closed inside the transaction: compensate and return
+ *      `class_in_past` / `class_not_found`.
+ *   6. Anything else: compensate and rethrow (5xx at the gateway).
  *
- *   6. If `DECR < 0`: compensating `INCR` (we didn't actually
- *      consume a seat — the value was already at 0 or below), then
- *      enter the waitlist branch. A fresh transaction inserts with
- *      `status='waitlist'`, computes the 1-based position from
- *      `countWaitlistAhead`, and publishes `reservation.waitlisted`.
+ *   7. If `DECR < 0`: compensate (no seat was consumed) and insert a
+ *      `waitlist` row with its 1-based position and the
+ *      `reservation.waitlisted` event.
+ *
+ * Every compensating INCR is best-effort and logged on failure: it can
+ * only leave the counter low, which the reconcile cron heals.
  *
  * **Invariant preserved** (Req 8.3): for every class `c`,
  * `count(reservations WHERE class_id = c AND status = 'confirmed')
- *  ≤ c.capacity` at every externally-observable instant. The proof
- * rests on the two-step protocol: Redis enforces the capacity cap
- * across concurrent contenders, and the unique SQL index enforces
- * the idempotence cap across retries of the same user.
+ *  <= c.capacity` at every committed instant. The proof rests on the
+ * capacity trigger alone: it serialises confirmations of one class on
+ * the class row lock and counts under that lock. Redis can be wrong in
+ * either direction without breaking it.
  *
  * **Idempotence** (Req 8.4, 8.5): replaying `bookClass` with the same
  * `(userId, classId)` yields `already_booked` on the second call.
- * Combined with the gateway's `Idempotency-Key` dedup layer this
- * guarantees at-most-once logical booking even under arbitrarily
- * aggressive retries.
+ * Combined with the gateway's `Idempotency-Key` layer this gives
+ * at-most-once logical booking under arbitrarily aggressive retries.
  */
 async function completeWaitlistBooking(input: {
   readonly classId: string;
@@ -515,11 +643,18 @@ async function completeWaitlistBooking(input: {
   readonly studioId: string;
   readonly repo: BookingRepo;
   readonly publisher: BookingEventPublisher;
-}): Promise<Extract<BookResult, { code: 'waitlisted' | 'already_booked' }>> {
-  const { classId, userId, studioId, repo, publisher } = input;
+  readonly clock: BookClock | undefined;
+}): Promise<
+  Extract<
+    BookResult,
+    { code: 'waitlisted' | 'already_booked' | 'class_in_past' | 'class_not_found' }
+  >
+> {
+  const { classId, userId, studioId, repo, publisher, clock } = input;
 
   try {
     const { reservation: waitlisted, position } = await repo.withTransaction(async (tx) => {
+      await assertClassOpen(repo, tx, classId, clock);
       const row = await repo.insertReservation(tx, {
         classId,
         userId,
@@ -543,64 +678,40 @@ async function completeWaitlistBooking(input: {
 
     return { code: 'waitlisted', reservation: waitlisted, position };
   } catch (err) {
+    if (err instanceof BookingClosedError) {
+      return { code: err.result };
+    }
     if (isUniqueViolation(err)) {
-      // The user already holds a waitlist row (double-tap / retry).
-      // The transaction rolled back so no second outbox event is committed.
-      // Fetch the existing row and return already_booked — same idempotence
-      // contract as the confirmed branch.
-      const existing = await repo.withTransaction((tx) =>
-        repo.findExistingConfirmedOrWaitlistReservation(tx, classId, userId),
-      );
-      if (existing === null) {
-        throw new Error(
-          `bookClass: unique-violation on waitlist (${classId}, ${userId}) but no existing reservation found`,
-        );
-      }
-      return { code: 'already_booked', reservation: existing };
+      // The member already holds a live row (double tap / retry). The
+      // transaction rolled back, so no second outbox event commits.
+      return loadExistingBooking(repo, classId, userId);
     }
     throw err;
   }
 }
 
 export async function bookClass(input: BookClassInput): Promise<BookResult> {
-  const { classId, userId, studioId, repo, counter, publisher } = input;
-  const now = (input.clock ?? Date.now)();
+  const { classId, userId, studioId, repo, counter, publisher, clock } = input;
+  const logger = input.logger ?? consoleBookingLogger;
 
   // ---- Step 0: pre-flight (cheap, idempotent, no side-effects) ------
-  //
-  // We look up the class BEFORE touching Redis so:
-  //   - a `null` row (unknown id / wrong tenant under RLS) surfaces
-  //     as `class_not_found` with zero compensating work;
-  //   - a class whose `startsAt ≤ now()` surfaces as `class_in_past`
-  //     (Req 8.6) without perturbing the counter.
-  // Both short-circuits preserve the global capacity invariant.
   const classRow = await repo.findClass(classId);
   if (classRow === null) {
     return { code: 'class_not_found' };
   }
-  if (classRow.startsAt.getTime() <= now) {
+  const nowMs = clock !== undefined ? clock() : (classRow.dbNow?.getTime() ?? Date.now());
+  if (classRow.startsAt.getTime() <= nowMs) {
     return { code: 'class_in_past' };
   }
 
-  // ---- Step 1: atomic "claim a seat" primitive (Req 8.3) -----------
+  // ---- Step 1: optimistic seat claim --------------------------------
   //
-  // Redis DECR returns the new value. A non-negative value means we
-  // have a provisional claim; we still need the SQL transaction to
-  // turn it into a durable reservation. A negative value means the
-  // counter was already exhausted — fall through to the waitlist
-  // branch.
-  //
-  // If Redis is unavailable we fail-closed: the booking is rejected
-  // with counter_unavailable so the client gets a retryable 503
-  // rather than an opaque 5xx, and the capacity invariant is preserved.
+  // If Redis is unavailable we fail closed: `counter_unavailable` gives
+  // the client a retryable 503 rather than an opaque 5xx. Seeding an
+  // absent key to the capacity (#412) can make the counter optimistic;
+  // the capacity trigger then refuses and Step 3 routes to waitlist.
   let remaining: number;
   try {
-    // Use decrRemainingOrInit so an absent/evicted key does not falsely
-    // route to waitlist. Seeds the counter to classRow.capacity via SETNX
-    // before decrementing. If the class already has confirmed seats the
-    // counter will be temporarily optimistic; the PostgreSQL trigger is
-    // the authoritative guard and ClassCapacityExceededError falls through
-    // to the waitlist branch. The reconcile job corrects the counter. (#412)
     remaining = await counter.decrRemainingOrInit(classId, classRow.capacity);
   } catch {
     return { code: 'counter_unavailable' };
@@ -608,12 +719,9 @@ export async function bookClass(input: BookClassInput): Promise<BookResult> {
 
   if (remaining >= 0) {
     // ---- Step 2: confirmed-booking transaction --------------------
-    //
-    // We cannot `return await` straight from inside the try block
-    // without shadowing the catch below, so we stash the result in
-    // a local and dispatch on it after the catch.
     try {
       const confirmed = await repo.withTransaction(async (tx) => {
+        await assertClassOpen(repo, tx, classId, clock);
         const reservation = await repo.insertReservation(tx, {
           classId,
           userId,
@@ -631,53 +739,27 @@ export async function bookClass(input: BookClassInput): Promise<BookResult> {
 
       return { code: 'ok', reservation: confirmed, remaining };
     } catch (err) {
+      await compensate(counter, logger, classId, 'confirmed_tx_failed');
+
       if (isUniqueViolation(err)) {
-        // ---- Step 3: idempotent replay ------------------------
-        //
-        // The user already holds a row for this class. Undo our
-        // DECR (we optimistically claimed a seat we don't need)
-        // and return the existing reservation. No second event.
-        await counter.incrRemaining(classId);
-        const existing = await repo.withTransaction((tx) =>
-          repo.findExistingConfirmedOrWaitlistReservation(tx, classId, userId),
-        );
-        if (existing === null) {
-          // Invariant broken: a unique-violation means there
-          // MUST be a pre-existing row. If the lookup comes
-          // back empty something external deleted it between
-          // the INSERT attempt and this SELECT — rethrow as
-          // a generic error so the gateway returns 5xx.
-          throw new Error(
-            `bookClass: unique-violation on (${classId}, ${userId}) but no existing reservation found`,
-          );
-        }
-        return { code: 'already_booked', reservation: existing };
+        // ---- Step 4: idempotent replay ------------------------
+        return loadExistingBooking(repo, classId, userId);
       }
-
       if (isClassCapacityExceeded(err)) {
-        await counter.incrRemaining(classId);
-        return completeWaitlistBooking({ classId, userId, studioId, repo, publisher });
+        // ---- Step 3: Postgres says full -----------------------
+        return completeWaitlistBooking({ classId, userId, studioId, repo, publisher, clock });
       }
-
-      // ---- Step 4: transient / unexpected error ------------------
-      //
-      // Any OTHER failure (DB outage, RLS rejection on insert,
-      // deadlock, etc.) leaves us holding a phantom DECR. Restore
-      // the counter and rethrow so the API gateway can map this
-      // to a 5xx Problem Details envelope.
-      await counter.incrRemaining(classId);
+      if (err instanceof BookingClosedError) {
+        // ---- Step 5: class closed under the tx clock ----------
+        return { code: err.result };
+      }
+      // ---- Step 6: transient / unexpected error -----------------
       throw err;
     }
   }
 
-  // ---- Step 5: waitlist branch (DECR < 0, class is full) ----------
-  //
-  // The counter was already at 0 or lower when we came in. The DECR
-  // drove it further negative; we compensate with an INCR so the
-  // counter reflects reality again (the counter is only meaningful
-  // as long as it is ≥ 0; the service's own reads clamp it via
-  // Math.max(0, …)).
-  await counter.incrRemaining(classId);
+  // ---- Step 7: waitlist branch (DECR < 0, class is full) ----------
+  await compensate(counter, logger, classId, 'counter_exhausted');
 
-  return completeWaitlistBooking({ classId, userId, studioId, repo, publisher });
+  return completeWaitlistBooking({ classId, userId, studioId, repo, publisher, clock });
 }
