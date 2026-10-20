@@ -81,6 +81,7 @@ export function studioSections(t: Translator): SidebarSection[] {
           href: '/dashboard/checkin',
           label: t('studio.nav.checkin'),
           icon: ScanIcon,
+          fullReload: true,
         },
       ],
     },
@@ -229,6 +230,15 @@ function DashboardShell({ children }: { readonly children: ReactNode }): ReactEl
         menu: t('common.nav.menu'),
         skipToContent: t('common.skipToContent'),
       }}
+      brandCollapsed={
+        <Link
+          href="/dashboard"
+          aria-label={t('studio.nav.brand')}
+          className="grid size-9 place-items-center rounded-md text-foreground outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+        >
+          <AthlyaLogo variant="mascot" height={28} />
+        </Link>
+      }
       brand={
         <Link
           href="/dashboard"

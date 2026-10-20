@@ -45,6 +45,8 @@ export interface SidebarShellProps {
   readonly sections: ReadonlyArray<SidebarSection>;
   /** Logo link shown at the top of the sidebar and of the mobile bar. */
   readonly brand: ReactNode;
+  /** Compact logo link shown above the toggle when the sidebar is collapsed. */
+  readonly brandCollapsed?: ReactNode;
   readonly labels: SidebarLabels;
   /** Bottom of the sidebar (account actions); receives the collapsed state. */
   readonly renderFooter?: (collapsed: boolean) => ReactNode;
@@ -141,8 +143,9 @@ function NavLinkItem({
 }: NavLinkItemProps): ReactElement {
   const active = isLinkActive(pathname, link);
   const LinkIcon = link.icon;
+  const Anchor = link.fullReload === true ? 'a' : Link;
   return (
-    <Link
+    <Anchor
       href={link.href}
       aria-current={active ? 'page' : undefined}
       onClick={() => onNavigate?.()}
@@ -160,7 +163,7 @@ function NavLinkItem({
       />
       <ItemLabel label={link.label} collapsed={collapsed} />
       {collapsed ? <SidebarTooltip label={link.label} /> : null}
-    </Link>
+    </Anchor>
   );
 }
 
@@ -322,6 +325,7 @@ const iconButton = cn(
 export function SidebarShell({
   sections,
   brand,
+  brandCollapsed,
   labels,
   renderFooter,
   renderHeader,
@@ -400,11 +404,11 @@ export function SidebarShell({
       >
         <div
           className={cn(
-            'flex h-14 shrink-0 items-center gap-2 px-3',
-            collapsed ? 'justify-center' : 'justify-between',
+            'flex shrink-0 items-center gap-2 px-3',
+            collapsed ? 'flex-col justify-center py-3' : 'h-14 justify-between',
           )}
         >
-          {collapsed ? null : brand}
+          {collapsed ? brandCollapsed : brand}
           <button
             type="button"
             className={iconButton}

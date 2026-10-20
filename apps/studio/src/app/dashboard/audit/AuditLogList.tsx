@@ -191,7 +191,7 @@ export function AuditLogList(): ReactElement {
           <div
             role="group"
             aria-label={t('studio.audit.categories.label')}
-            className="inline-flex max-w-full overflow-x-auto rounded-lg border border-border p-0.5"
+            className="inline-flex max-w-full flex-wrap gap-0.5 rounded-lg border border-border p-0.5"
           >
             {(['all', ...AUDIT_CATEGORIES] as const).map((c) => (
               <button

@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { needsFullReload } from '../lib/full-reload';
 import { createTranslator } from '../lib/i18n/t';
 
 import { coachSections, pageLabelFor, studioSections } from './DashboardNav';
@@ -26,6 +27,18 @@ describe('coachSections', () => {
 
   it('leaves the admin navigation untouched', () => {
     expect(hrefs(studioSections(t))).toContain('/dashboard/billing');
+  });
+});
+
+describe('studioSections', () => {
+  it('loads the kiosk link as a new document, and only that link', () => {
+    const links = studioSections(t).flatMap((section) =>
+      section.items.flatMap((item) => (item.kind === 'link' ? [item] : item.children)),
+    );
+    for (const link of links) {
+      expect(link.fullReload === true).toBe(needsFullReload(link.href));
+    }
+    expect(links.some((link) => link.fullReload === true)).toBe(true);
   });
 });
 

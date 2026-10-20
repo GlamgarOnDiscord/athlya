@@ -30,6 +30,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactElement, type ReactNode } from 'react';
 
 import { useAuth } from '../lib/auth/AuthContext';
+import { navigateTo } from '../lib/full-reload';
 
 /** Dashboard routes a coach may open. Every other route is admin-only. */
 export const COACH_ROUTES: readonly string[] = ['/dashboard/checkin'];
@@ -65,7 +66,8 @@ export function RequireAdmin({ children }: RequireAdminProps): ReactElement | nu
     // — guard against premature redirect to `/forbidden` during
     // that tick.
     if (user !== null && !allowed) {
-      push(isCoach ? (COACH_ROUTES[0] ?? '/forbidden') : '/forbidden');
+      // The kiosk loads as a new document so it gets its own camera policy.
+      navigateTo(isCoach ? (COACH_ROUTES[0] ?? '/forbidden') : '/forbidden', push);
     }
   }, [bootResolved, isAuthenticated, allowed, isCoach, user, push]);
 

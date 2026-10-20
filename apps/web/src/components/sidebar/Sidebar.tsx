@@ -137,8 +137,9 @@ function NavLinkItem({
 }: NavLinkItemProps): ReactElement {
   const active = isLinkActive(pathname, link);
   const LinkIcon = link.icon;
+  const Anchor = link.fullReload === true ? 'a' : Link;
   return (
-    <Link
+    <Anchor
       href={link.href}
       aria-current={active ? 'page' : undefined}
       onClick={() => onNavigate?.()}
@@ -156,7 +157,7 @@ function NavLinkItem({
       />
       <ItemLabel label={link.label} collapsed={collapsed} />
       {collapsed ? <SidebarTooltip label={link.label} /> : null}
-    </Link>
+    </Anchor>
   );
 }
 

@@ -13,6 +13,11 @@ export interface SidebarLink {
    * also on nested paths, so `/classes/123` keeps "Classes" active.
    */
   readonly match?: 'exact' | 'prefix';
+  /**
+   * Load the route as a new document instead of a client transition, for a
+   * route whose response headers grant what the current document lacks.
+   */
+  readonly fullReload?: boolean;
 }
 
 /** A disclosure that groups related links under one heading. */

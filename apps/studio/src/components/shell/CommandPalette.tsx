@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { useApiClient } from '../../lib/api/buildClient';
 import { fetchMemberDirectory } from '../../lib/api/members';
 import { useAuth } from '../../lib/auth/AuthContext';
+import { navigateTo } from '../../lib/full-reload';
 
 import { searchCommands, type CommandItem, type CommandKind } from './command-search';
 
@@ -133,7 +134,7 @@ export function CommandPalette({
   const go = (item: CommandItem | undefined): void => {
     if (item === undefined) return;
     close(false);
-    router.push(item.href);
+    navigateTo(item.href, router.push);
   };
 
   const groupLabel: Record<CommandKind, string> = {
