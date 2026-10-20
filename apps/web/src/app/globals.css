@@ -60,3 +60,48 @@
 .class-card-capacity-bar {
   transform: scaleX(var(--bar-scale, 0));
 }
+
+/*
+ * Landing scope: the public home is always dark, whatever the theme. The
+ * semantic variables are remapped from the brand palette (ink, volt,
+ * white) inside this class only, so shadcn/ui components and Tailwind
+ * utilities (`bg-background`, `text-muted-foreground`, `bg-primary`) read
+ * the landing colours without forcing the rest of the site into dark.
+ * Greys are mixes of the brand white into ink, never new hex values.
+ */
+@layer components {
+  .landing-dark {
+    color-scheme: dark;
+    --background: var(--athlya-brand-ink);
+    --foreground: var(--athlya-brand-white);
+    --card: color-mix(in srgb, var(--athlya-brand-white) 4%, var(--athlya-brand-ink));
+    --card-foreground: var(--athlya-brand-white);
+    --popover: var(--card);
+    --popover-foreground: var(--athlya-brand-white);
+    --primary: var(--athlya-brand-volt);
+    --primary-foreground: var(--athlya-brand-ink);
+    --secondary: color-mix(in srgb, var(--athlya-brand-white) 10%, var(--athlya-brand-ink));
+    --secondary-foreground: var(--athlya-brand-white);
+    --muted: color-mix(in srgb, var(--athlya-brand-white) 8%, var(--athlya-brand-ink));
+    --muted-foreground: color-mix(in srgb, var(--athlya-brand-white) 64%, var(--athlya-brand-ink));
+    --accent: var(--muted);
+    --accent-foreground: var(--athlya-brand-white);
+    --border: color-mix(in srgb, var(--athlya-brand-white) 14%, var(--athlya-brand-ink));
+    --input: color-mix(in srgb, var(--athlya-brand-white) 22%, var(--athlya-brand-ink));
+    --ring: var(--athlya-brand-volt);
+    --color-border: var(--border);
+    --color-ring: var(--ring);
+    /* Words of the tagline before they are read: 3:1 or more on ink at display size. */
+    --landing-unread: color-mix(in srgb, var(--athlya-brand-white) 45%, var(--athlya-brand-ink));
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  .landing-word {
+    transition: color 600ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  [data-armed] .landing-word:not([data-read]) {
+    color: var(--landing-unread);
+  }
+}

@@ -24,7 +24,8 @@ type SemanticColor = keyof Tokens['colors']['light'];
 
 /**
  * A shadcn/ui variable is either a semantic token of the active mode or
- * the per-tenant brand colour, which is the same in both modes.
+ * the per-tenant brand colour, whose default is the active mode's
+ * `primary` pair.
  */
 type BridgeSource = SemanticColor | 'brandPrimary' | 'brandOnPrimary';
 
@@ -121,7 +122,12 @@ function bridgeSource(source: BridgeSource, mode: Mode): string {
 }
 
 /** Everything that changes between the light and the dark theme. */
-function modeBlock(tokens: Tokens, mode: Mode, indent: string): string[] {
+function modeBlock(
+  tokens: Tokens,
+  brand: BrandColorVariables,
+  mode: Mode,
+  indent: string,
+): string[] {
   const chart = tokens.chartColors[mode];
   return [
     `${indent}/* Active semantic colors (${mode}) */`,
@@ -136,19 +142,35 @@ function modeBlock(tokens: Tokens, mode: Mode, indent: string): string[] {
     `${indent}--chart-1: ${value(chart.series)};`,
     `${indent}--chart-2: ${value(chart.marker)};`,
     `${indent}--chart-3: ${value(chart.band)};`,
+    '',
+    `${indent}/* Per-tenant brand color (${mode} default), overridden server-side by buildBrandColorCss */`,
+    `${indent}--athlya-brand-primary: ${value(brand.brandPrimary)};`,
+    `${indent}--athlya-brand-primary-rgb: ${brand.brandPrimaryRgb};`,
+    `${indent}--athlya-brand-on-primary: ${value(tokens.colors[mode].primaryForeground)};`,
+    `${indent}--athlya-brand-primary-tint: ${value(brand.brandPrimaryTint)};`,
+    `${indent}--athlya-brand-primary-shade: ${value(brand.brandPrimaryShade)};`,
   ];
 }
 
 /**
  * Serialize the tokens into the shared theme stylesheet.
  *
+ * The default brand variables differ per mode (ink on light, volt on
+ * dark), so a studio override has to set them in both modes: its
+ * selector must win over `:root.dark` and the `:root:not(.light)` media
+ * block as well as `:root`.
+ *
  * @param tokens - The aggregated `tokens` object from `@athlya/shared/tokens`.
- * @param brandDefaults - `deriveBrandColorVariables(colors.light.primary)`,
- *   the default per-tenant brand variables before any studio override.
+ * @param brandDefaults - `deriveBrandColorVariables(colors[mode].primary)`
+ *   for each mode, the default per-tenant brand variables before any
+ *   studio override.
  */
-export function buildThemeCss(tokens: Tokens, brandDefaults: BrandColorVariables): string {
+export function buildThemeCss(
+  tokens: Tokens,
+  brandDefaults: Readonly<Record<Mode, BrandColorVariables>>,
+): string {
   const { colors, spacing, typography, radii, shadows, brandPalette } = tokens;
-  const darkBlock = modeBlock(tokens, 'dark', `${I}${I}`);
+  const darkBlock = modeBlock(tokens, brandDefaults.dark, 'dark', `${I}${I}`);
   const lines: string[] = [
     '/*',
     ' * Athlya theme: design tokens as CSS custom properties, the shadcn/ui',
@@ -184,7 +206,7 @@ export function buildThemeCss(tokens: Tokens, brandDefaults: BrandColorVariables
     `${I}/* Dark theme semantic colors */`,
     ...declarations('color-dark', colors.dark, I),
     '',
-    ...modeBlock(tokens, 'light', I),
+    ...modeBlock(tokens, brandDefaults.light, 'light', I),
     '',
     `${I}/* Spacing */`,
     ...declarations('spacing', spacing, I),
@@ -201,17 +223,10 @@ export function buildThemeCss(tokens: Tokens, brandDefaults: BrandColorVariables
     '',
     `${I}/* Shadows */`,
     ...declarations('shadow', shadows, I),
-    '',
-    `${I}/* Per-tenant brand color, overridden server-side by buildBrandColorCss */`,
-    `${I}--athlya-brand-primary: ${value(brandDefaults.brandPrimary)};`,
-    `${I}--athlya-brand-primary-rgb: ${brandDefaults.brandPrimaryRgb};`,
-    `${I}--athlya-brand-on-primary: ${value(colors.light.primaryForeground)};`,
-    `${I}--athlya-brand-primary-tint: ${value(brandDefaults.brandPrimaryTint)};`,
-    `${I}--athlya-brand-primary-shade: ${value(brandDefaults.brandPrimaryShade)};`,
     '}',
     '',
     ':root.dark {',
-    ...modeBlock(tokens, 'dark', I),
+    ...modeBlock(tokens, brandDefaults.dark, 'dark', I),
     '}',
     '',
     '@media (prefers-color-scheme: dark) {',
