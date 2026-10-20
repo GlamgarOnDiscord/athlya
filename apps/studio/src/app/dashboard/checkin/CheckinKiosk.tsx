@@ -15,6 +15,8 @@ import { newIdempotencyKey } from '../../../lib/idempotency';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
 
+import { createFrameDecoder } from './qr-frame-decoder';
+
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
@@ -27,7 +29,25 @@ type CheckInFailCode =
   | 'wrong_kind'
   | 'malformed'
   | 'outside_window'
-  | 'no_reservation';
+  | 'no_reservation'
+  | 'already_checked_in'
+  | 'checkin_limit_reached';
+
+const KNOWN_FAIL_CODES: ReadonlySet<string> = new Set<CheckInFailCode>([
+  'invalid_signature',
+  'token_expired',
+  'replay',
+  'wrong_studio',
+  'wrong_kind',
+  'malformed',
+  'outside_window',
+  'no_reservation',
+  'already_checked_in',
+  'checkin_limit_reached',
+]);
+
+/** Why the camera is not showing a live picture, when it is not. */
+export type CameraStatus = 'starting' | 'active' | 'denied' | 'not_found' | 'unsupported' | 'error';
 
 interface CheckInSuccessResponse {
   readonly success: true;
@@ -51,21 +71,33 @@ type KioskState =
 
 const SUCCESS_COUNTDOWN_SECONDS = 5;
 
+/** Minimum gap between two decoded frames: about 8 per second. */
+export const DECODE_INTERVAL_MS = 125;
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function isBarcodeDetectorAvailable(): boolean {
-  return typeof window !== 'undefined' && 'BarcodeDetector' in window;
+function canUseCamera(): boolean {
+  return (
+    typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getUserMedia === 'function'
+  );
 }
 
 function resolveErrorMessage(
-  code: CheckInFailCode | undefined,
+  code: string | undefined,
   t: ReturnType<typeof createTranslator>,
 ): string {
-  if (code === undefined) return t('studio.checkin.errors.generic');
+  if (code === undefined || !KNOWN_FAIL_CODES.has(code)) return t('studio.checkin.errors.generic');
   const key = `studio.checkin.errors.${code}` as Parameters<typeof t>[0];
   return t(key);
+}
+
+function cameraStatusFromError(err: unknown): CameraStatus {
+  const name = err instanceof DOMException || err instanceof Error ? err.name : '';
+  if (name === 'NotAllowedError' || name === 'SecurityError') return 'denied';
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'not_found';
+  return 'error';
 }
 
 /* ------------------------------------------------------------------ */
@@ -140,7 +172,9 @@ function SuccessBanner({ member, countdown, t }: SuccessBannerProps): ReactEleme
         </div>
       )}
       <p className="text-2xl font-semibold text-green-800 dark:text-green-200">
-        {t('studio.checkin.success', { name: member.displayName })}
+        {member.displayName.trim().length > 0
+          ? t('studio.checkin.success', { name: member.displayName })
+          : t('studio.checkin.successNoName')}
       </p>
       <p className="text-sm text-green-600 dark:text-green-400">
         {t('studio.checkin.resetIn', { seconds: countdown })}
@@ -159,82 +193,93 @@ interface UseCameraScannerOptions {
   readonly enabled: boolean;
 }
 
-function useCameraScanner({ videoRef, onDetected, enabled }: UseCameraScannerOptions): void {
-  const detectedRef = useRef(false);
-  const rafRef = useRef<number | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+/**
+ * Opens the rear camera while `enabled`, decodes at most one frame per
+ * {@link DECODE_INTERVAL_MS} and reports the first QR payload found.
+ * The callback is read through a ref so a parent re-render never
+ * restarts the camera.
+ */
+export function useCameraScanner({
+  videoRef,
+  onDetected,
+  enabled,
+}: UseCameraScannerOptions): CameraStatus {
+  const [status, setStatus] = useState<CameraStatus>(() =>
+    canUseCamera() ? 'starting' : 'unsupported',
+  );
+  const onDetectedRef = useRef(onDetected);
+  useEffect(() => {
+    onDetectedRef.current = onDetected;
+  }, [onDetected]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !canUseCamera()) return;
 
     let cancelled = false;
+    let timer: number | null = null;
+    let stream: MediaStream | null = null;
 
-    async function startCamera(): Promise<void> {
+    async function start(): Promise<void> {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment' },
         });
-        streamRef.current = stream;
-        if (videoRef.current !== null) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-      } catch {
+      } catch (err: unknown) {
+        if (!cancelled) setStatus(cameraStatusFromError(err));
         return;
       }
+      if (cancelled) {
+        for (const track of stream.getTracks()) track.stop();
+        return;
+      }
+      const video = videoRef.current;
+      if (video === null) return;
+      video.srcObject = stream;
+      try {
+        await video.play();
+      } catch (err: unknown) {
+        if (!cancelled) setStatus(cameraStatusFromError(err));
+        return;
+      }
+      if (cancelled) return;
+      setStatus('active');
 
-      // BarcodeDetector is a global Web API — not in TypeScript lib yet.
-      // We checked availability before enabling, so this cast is safe.
-      const detector = new (
-        window as unknown as {
-          BarcodeDetector: new (opts: { formats: string[] }) => {
-            detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>>;
-          };
+      const decode = await createFrameDecoder();
+
+      async function tick(): Promise<void> {
+        if (cancelled) return;
+        const current = videoRef.current;
+        let found: string | null = null;
+        if (current !== null && current.readyState >= 2) {
+          try {
+            found = await decode(current);
+          } catch {
+            found = null;
+          }
         }
-      ).BarcodeDetector({ formats: ['qr_code'] });
-
-      function poll(): void {
-        if (cancelled || detectedRef.current) return;
-        const video = videoRef.current;
-        if (video === null || video.readyState < 2) {
-          rafRef.current = requestAnimationFrame(poll);
+        if (cancelled) return;
+        if (found !== null) {
+          onDetectedRef.current(found);
           return;
         }
-        detector
-          .detect(video)
-          .then((barcodes) => {
-            if (cancelled || detectedRef.current) return;
-            const first = barcodes[0];
-            if (barcodes.length > 0 && first !== undefined && first.rawValue.length > 0) {
-              detectedRef.current = true;
-              onDetected(first.rawValue);
-            } else {
-              rafRef.current = requestAnimationFrame(poll);
-            }
-          })
-          .catch(() => {
-            if (!cancelled) rafRef.current = requestAnimationFrame(poll);
-          });
+        timer = window.setTimeout(() => void tick(), DECODE_INTERVAL_MS);
       }
 
-      rafRef.current = requestAnimationFrame(poll);
+      void tick();
     }
 
-    void startCamera();
+    void start();
 
     return () => {
       cancelled = true;
-      detectedRef.current = false;
-      const rafId = rafRef.current;
-      rafRef.current = null;
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      const stream = streamRef.current;
-      streamRef.current = null;
+      if (timer !== null) window.clearTimeout(timer);
       if (stream !== null) {
         for (const track of stream.getTracks()) track.stop();
       }
     };
-  }, [enabled, onDetected, videoRef]);
+  }, [enabled, videoRef]);
+
+  return status;
 }
 
 /* ------------------------------------------------------------------ */
@@ -250,17 +295,18 @@ export function CheckinKiosk(): ReactElement {
   const client = useApiClient(getToken);
 
   const [state, setState] = useState<KioskState>({ kind: 'scanning' });
-  const [cameraAvailable] = useState(() => isBarcodeDetectorAvailable());
-
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const isCameraActive = state.kind === 'scanning' && cameraAvailable;
-
-  useCameraScanner({
+  const cameraStatus = useCameraScanner({
     videoRef,
     onDetected: (token) => void submitToken(token),
-    enabled: isCameraActive,
+    enabled: state.kind === 'scanning',
   });
+  const cameraBlocked =
+    cameraStatus === 'denied' ||
+    cameraStatus === 'not_found' ||
+    cameraStatus === 'unsupported' ||
+    cameraStatus === 'error';
 
   useEffect(() => {
     if (state.kind !== 'success') return;
@@ -290,8 +336,7 @@ export function CheckinKiosk(): ReactElement {
         countdown: SUCCESS_COUNTDOWN_SECONDS,
       });
     } catch (err: unknown) {
-      const code =
-        err instanceof ApiError ? (err.problem?.code as CheckInFailCode | undefined) : undefined;
+      const code = err instanceof ApiError ? err.problem?.code : undefined;
       setState({ kind: 'error', message: resolveErrorMessage(code, t) });
     }
   }
@@ -320,9 +365,22 @@ export function CheckinKiosk(): ReactElement {
 
       {state.kind !== 'success' ? (
         <>
-          {cameraAvailable ? (
+          {cameraBlocked ? (
+            <p
+              role="status"
+              data-testid="checkin-camera-status"
+              className="text-sm text-muted-foreground"
+            >
+              {t(`studio.checkin.camera.${cameraStatus}` as Parameters<typeof t>[0])}{' '}
+              {t('studio.checkin.noCameraFallback')}
+            </p>
+          ) : (
             <div className="flex flex-col gap-2">
-              <p className="text-sm text-muted-foreground">{t('studio.checkin.scanPrompt')}</p>
+              <p className="text-sm text-muted-foreground">
+                {cameraStatus === 'starting'
+                  ? t('studio.checkin.camera.starting')
+                  : t('studio.checkin.scanPrompt')}
+              </p>
               <video
                 ref={videoRef}
                 aria-label={t('studio.checkin.scanPrompt')}
@@ -331,8 +389,6 @@ export function CheckinKiosk(): ReactElement {
                 playsInline
               />
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">{t('studio.checkin.noCameraFallback')}</p>
           )}
 
           <ManualInput
