@@ -499,20 +499,17 @@ function WeekBlock({
         </span>
         {density === 'compact' ? (
           <span className="sr-only">, {timeAndRoom(fmt, start, end, room)}</span>
-        ) : density === 'medium' || room === null ? (
-          <span className="w-full truncate text-muted-foreground tabular-nums">
-            {timeAndRoom(fmt, start, end, room)}
-          </span>
         ) : (
-          <>
-            <span className="w-full truncate text-muted-foreground tabular-nums">
-              {fmt.time.format(start)} - {fmt.time.format(end)}
-            </span>
-            <span className="w-full truncate text-muted-foreground">
-              <span className="sr-only">, </span>
-              {room}
-            </span>
-          </>
+          <span className="w-full truncate text-muted-foreground tabular-nums">
+            {room === null ? (
+              timeAndRoom(fmt, start, end, null)
+            ) : (
+              <>
+                {fmt.time.format(start)}
+                <span className="sr-only"> - {fmt.time.format(end)}</span> · {room}
+              </>
+            )}
+          </span>
         )}
         {density === 'compact' ? (
           <span className="sr-only">
