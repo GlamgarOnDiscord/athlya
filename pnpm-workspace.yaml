@@ -17,6 +17,8 @@ overrides:
   '@babel/core@<7.29.6': '^7.29.6'
   '@sentry/cli>undici': '6.29.1'
   'glob@>=10.2.0 <10.5.0': '^10.5.0'
+  'uuid@<11.1.1': '^11.1.1'
+  'postcss-selector-parser@<7.1.6': '^7.1.6'
 
 # Next.js 16.4 loads `.next/server/preview-props.json` unconditionally; the
 # OpenNext manifest inliner only globs `*-manifest`, `required-server-files`
