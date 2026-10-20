@@ -56,9 +56,7 @@ for (const app of APPS) {
   });
 
   test(`${app}: skips unrelated commits with a pinned turbo-ignore`, () => {
-    const match = /^npx turbo-ignore@(\d+)\.\d+\.\d+ (\S+) --fallback=HEAD\^1$/.exec(
-      config.ignoreCommand,
-    );
+    const match = /^npx turbo-ignore@(\d+)\.\d+\.\d+ (\S+)$/.exec(config.ignoreCommand);
     assert.ok(match, `unexpected ignoreCommand: ${config.ignoreCommand}`);
     assert.equal(match[1], turboMajor);
     assert.equal(match[2], pkgName);

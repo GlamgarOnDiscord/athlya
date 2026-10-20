@@ -22,9 +22,9 @@ domain, no DNS change. The projects are Git-linked and build on push.
   Turbo builds `@athlya/shared` first (`dependsOn: ["^build"]`) and writes `.next/`
   in the app directory, where the `nextjs` framework preset reads it. Vercel enables
   its Remote Cache for Turbo on its own.
-- `ignoreCommand`: `npx turbo-ignore@2.11.9 @athlya/<app> --fallback=HEAD^1`. A
-  commit that touches neither the app nor one of its workspace dependencies (or the
-  lockfile) is not built.
+- `ignoreCommand`: `npx turbo-ignore@2.11.9 @athlya/<app>`. A commit that touches
+  neither the app nor one of its workspace dependencies (or the lockfile) is not
+  built; the first deployment of a new branch is always built.
 - `regions: ["cdg1"]` (Paris): the functions (route handlers, SSR) run in the EU.
 - No `headers` in `vercel.json` on purpose. Every security header comes from the
   Next build and is served unchanged by Vercel: static headers from `next.config.ts`
