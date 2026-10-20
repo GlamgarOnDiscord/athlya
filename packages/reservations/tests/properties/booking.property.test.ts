@@ -107,12 +107,12 @@ import {
   createDbFromClient,
   withTenant,
   classes,
+  outbox,
   reservations,
   type AthlyaDb,
   type AthlyaTx,
   type TenantClaims,
 } from '@athlya/db';
-import { insertOutbox as dbInsertOutbox } from '@athlya/db/outbox';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import fc from 'fast-check';
 import postgres from 'postgres';
@@ -584,10 +584,16 @@ function buildBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
     },
 
     async insertOutbox(tx: BookingTx, event: BookingOutboxEvent): Promise<void> {
-      // Delegate to the canonical helper so the envelope shape,
-      // `ON CONFLICT (event_id) DO NOTHING` clause and `::jsonb`
-      // cast all match production.
-      await dbInsertOutbox(resolveCtx(tx), event);
+      // Same statement as the production booking adapter
+      // (`insertOutboxRow` in `reservations-write-drizzle.ts`): a plain
+      // INSERT, stamped with the tenant studio by the column default and
+      // checked by the `outbox_insert_tenant` policy (migration 0031).
+      await resolveCtx(tx).insert(outbox).values({
+        eventId: event.eventId,
+        eventType: event.eventType,
+        payload: event.payload,
+        occurredAt: event.occurredAt,
+      });
     },
 
     async countWaitlistAhead(
