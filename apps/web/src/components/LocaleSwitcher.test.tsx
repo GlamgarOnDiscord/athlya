@@ -1,9 +1,10 @@
 /**
  * Component tests for `<LocaleSwitcher />`.
  *
- * Two cases — enough to prove the contract without over-testing:
+ * Three cases, enough to prove the contract without over-testing:
  *  1. The switcher renders both options under a `<LocaleProvider>`.
- *  2. Selecting a new locale writes `athlya.locale=<v>` to
+ *  2. The compact top-bar variant shows the code and keeps both options.
+ *  3. Selecting a new locale writes `athlya.locale=<v>` to
  *     `document.cookie` with the expected attributes.
  *
  * We avoid spying on `window.location.reload` — jsdom surfaces that
@@ -22,10 +23,10 @@ import { LocaleSwitcher } from './LocaleSwitcher';
 import type { ReactElement } from 'react';
 
 /** Wrap the switcher in its required provider. */
-function renderWithLocale(locale: 'fr' | 'en'): ReactElement {
+function renderWithLocale(locale: 'fr' | 'en', compact = false): ReactElement {
   return render(
     <LocaleProvider locale={locale}>
-      <LocaleSwitcher />
+      <LocaleSwitcher compact={compact} />
     </LocaleProvider>,
   ).container as unknown as ReactElement;
 }
@@ -78,6 +79,17 @@ describe('<LocaleSwitcher />', () => {
     expect(select.value).toBe('fr');
 
     // Both options are present regardless of which is currently selected.
+    expect(screen.getByRole('option', { name: 'Français' })).toBeDefined();
+    expect(screen.getByRole('option', { name: 'English' })).toBeDefined();
+  });
+
+  it('shows the two-letter code in compact mode and keeps the full names in the list', () => {
+    renderWithLocale('en', true);
+
+    const select = screen.getByLabelText('Locale') as HTMLSelectElement;
+    expect(select.value).toBe('en');
+    expect(select.className).toContain('opacity-0');
+    expect(screen.getByText('en').getAttribute('aria-hidden')).toBe('true');
     expect(screen.getByRole('option', { name: 'Français' })).toBeDefined();
     expect(screen.getByRole('option', { name: 'English' })).toBeDefined();
   });
