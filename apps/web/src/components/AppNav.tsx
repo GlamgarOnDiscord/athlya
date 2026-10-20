@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useMemo, type ReactElement } from 'react';
+import { useCallback, useMemo, type ReactElement, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,8 +14,35 @@ import { createTranslator } from '../lib/i18n/t';
 
 import { AthlyaLogo } from './AthlyaLogo';
 import { LocaleSwitcher } from './LocaleSwitcher';
+import { MemberSidebar } from './MemberSidebar';
 
-export function AppNav(): ReactElement {
+const MEMBER_AREA = ['/classes', '/me'] as const;
+
+/** Whether `pathname` belongs to the signed-in member area. */
+export function isMemberPath(pathname: string): boolean {
+  return MEMBER_AREA.some((root) => pathname === root || pathname.startsWith(`${root}/`));
+}
+
+/**
+ * Navigation for every page: the member area (`/classes`, `/me/*`) gets
+ * the sidebar shell, public pages keep the top bar. A visitor known to be
+ * signed out gets the top bar too; while the session restores, the
+ * member shell stays so a signed-in reload does not flicker.
+ */
+export function AppNav({ children }: { readonly children: ReactNode }): ReactElement {
+  const pathname = usePathname();
+  const { isAuthenticated, bootResolved } = useAuth();
+  const signedOut = bootResolved && !isAuthenticated;
+  if (isMemberPath(pathname) && !signedOut) return <MemberSidebar>{children}</MemberSidebar>;
+  return (
+    <>
+      <PublicTopBar />
+      {children}
+    </>
+  );
+}
+
+function PublicTopBar(): ReactElement {
   const pathname = usePathname();
   const locale = useLocale();
   const t = useMemo(() => createTranslator(locale), [locale]);
@@ -56,7 +83,7 @@ export function AppNav(): ReactElement {
       </a>
       <nav
         className="mx-auto flex max-w-3xl items-center justify-between px-6 py-3"
-        aria-label="Navigation principale"
+        aria-label={t('common.nav.main')}
       >
         <Link href="/" aria-label={t('common.appName')} className="text-foreground">
           <AthlyaLogo height={24} />

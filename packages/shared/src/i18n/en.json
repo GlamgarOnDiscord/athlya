@@ -7,7 +7,15 @@
     "retry": "Retry",
     "confirm": "Confirm",
     "back": "Back",
-    "skipToContent": "Skip to main content"
+    "skipToContent": "Skip to main content",
+    "nav": {
+      "main": "Main navigation",
+      "collapse": "Collapse sidebar",
+      "expand": "Expand sidebar",
+      "openMenu": "Open menu",
+      "closeMenu": "Close menu",
+      "menu": "Menu"
+    }
   },
   "auth": {
     "login": {
@@ -319,6 +327,10 @@
           "description": "Client-side bug diagnostics. Includes your user-agent and technical stack trace. Data hosted in the EU."
         }
       }
+    },
+    "nav": {
+      "classes": "Classes",
+      "progression": "Progress"
     }
   },
   "studio": {
@@ -340,7 +352,9 @@
       "billing": "Billing",
       "checkin": "Check-in",
       "audit": "Audit",
-      "programs": "Programs"
+      "programs": "Programs",
+      "dashboard": "Dashboard",
+      "settings": "Settings"
     },
     "dashboard": {
       "title": "Dashboard",

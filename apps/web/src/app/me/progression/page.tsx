@@ -8,7 +8,7 @@
  * @see Requirements 12.4, 27.1, 27.3.
  */
 
-import { ChevronLeft } from 'lucide-react';
+import { CaretLeftIcon } from '@phosphor-icons/react/dist/ssr';
 import Link from 'next/link';
 
 import { RequireAuth } from '../../../components/RequireAuth';
@@ -35,7 +35,7 @@ export default async function MeProgressionPage(): Promise<ReactElement> {
         href="/me"
         className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ChevronLeft className="size-4" aria-hidden="true" />
+        <CaretLeftIcon className="size-4" aria-hidden="true" />
         {t('common.back')}
       </Link>
       <h1 id="progression-heading" className="text-3xl font-semibold">
