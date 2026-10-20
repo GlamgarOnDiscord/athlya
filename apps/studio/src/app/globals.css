@@ -27,3 +27,12 @@
   background-color: var(--brand-bg, var(--color-brand-primary));
   color: var(--brand-fg, var(--color-brand-on-primary));
 }
+
+/* Planning week grid: block position via CSSOM vars (CSP #75, no style="" attrs). */
+.planning-block {
+  top: var(--block-top);
+  left: calc(var(--block-left) + 2px);
+  width: calc(var(--block-width) - 4px);
+  height: var(--block-height);
+  min-height: 1.25rem;
+}

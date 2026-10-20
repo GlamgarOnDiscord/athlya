@@ -427,6 +427,23 @@
       "errors": {
         "generic": "Failed to save.",
         "versionConflict": "The class was edited meanwhile. List refreshed — please retry."
+      },
+      "planning": {
+        "viewLabel": "Calendar view",
+        "views": {
+          "week": "Week",
+          "month": "Month",
+          "list": "List"
+        },
+        "today": "Today",
+        "previousWeek": "Previous week",
+        "nextWeek": "Next week",
+        "previousMonth": "Previous month",
+        "nextMonth": "Next month",
+        "createAt": "New class on {date}",
+        "full": "Full",
+        "more": "+{count} more",
+        "localTime": "Times in your local time zone ({timeZone})."
       }
     },
     "members": {
