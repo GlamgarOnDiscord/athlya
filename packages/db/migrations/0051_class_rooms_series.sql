@@ -34,8 +34,8 @@
 -- `classes` keeps its grants (table-wide DML for athlya_app since
 -- 0004), which cover the two new columns.
 --
--- Plain (non-CONCURRENTLY) index builds keep the whole step in one
--- transaction, like 0044: `classes` is small, the pause stays short.
+-- The indexes are built in the migration transaction, like 0044:
+-- `classes` is small, so the write pause stays short.
 --
 -- Expand only: one new table, two nullable columns, a FK that only
 -- checks non-null values, indexes and policies. An old Worker neither
