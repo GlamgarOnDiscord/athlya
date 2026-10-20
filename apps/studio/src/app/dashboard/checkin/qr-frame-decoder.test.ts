@@ -40,10 +40,10 @@ describe('canvasDecoder', () => {
   });
 
   it('downscales a large frame before decoding and returns the payload', async () => {
-    jsQRMock.mockReturnValue({ data: 'eyJ.token' });
+    jsQRMock.mockReturnValue({ data: 'qr-payload' });
     const { canvas, drawImage } = fakeCanvas();
     const decode = canvasDecoder(() => canvas);
-    expect(await decode(fakeVideo(1920, 1080))).toBe('eyJ.token');
+    expect(await decode(fakeVideo(1920, 1080))).toBe('qr-payload');
     expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 640, 360);
     expect(jsQRMock).toHaveBeenCalledWith(expect.any(Uint8ClampedArray), 640, 360, {
       inversionAttempts: 'dontInvert',

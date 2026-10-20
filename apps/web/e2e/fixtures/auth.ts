@@ -185,11 +185,11 @@ export async function stubMemberApi(page: Page): Promise<void> {
     }),
   );
 
-  // Check-in QR token so `/me/checkin` renders its code. The value only
-  // has to be encodable: the page never verifies it.
+  // Check-in QR token so `/me/checkin` renders its code. The page only
+  // encodes the opaque string, so it is deliberately not JWT-shaped.
   await page.route('**/v1/checkins/token', (route) =>
     fulfillJson(route, {
-      token: 'eyJhbGciOiJSUzI1NiJ9.eyJraW5kIjoiY2hlY2tpbiJ9.e2e-signature',
+      token: 'e2e-checkin-token-not-a-jwt',
       expiresAt: new Date(Date.now() + 120_000).toISOString(),
     }),
   );
