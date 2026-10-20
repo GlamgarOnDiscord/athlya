@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-import { loginAsAdmin } from './fixtures/auth';
+import { loginAsAdmin, STUDIO_BRAND_COLOR } from './fixtures/auth';
 
 const publicPaths = ['/login'] as const;
 
@@ -37,3 +37,11 @@ for (const path of adminPaths) {
     expect(results.violations).toEqual([]);
   });
 }
+
+// The admin audit above also passes on the error fallback, so the branding
+// page has to show the colour `/v1/studios/me` returned.
+test('branding: renders the stored brand colour (admin)', async ({ page }) => {
+  await loginAsAdmin(page);
+  await page.goto('/dashboard/branding');
+  await expect(page.getByText(STUDIO_BRAND_COLOR, { exact: true })).toBeVisible();
+});

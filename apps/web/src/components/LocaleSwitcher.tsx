@@ -13,7 +13,10 @@
  */
 'use client';
 
+import { CaretDownIcon } from '@phosphor-icons/react';
 import { type ChangeEvent, type ReactElement, useCallback } from 'react';
+
+import { cn } from '@/lib/utils';
 
 import { useLocale } from '../lib/i18n/LocaleContext';
 
@@ -50,8 +53,14 @@ function isLocale(value: string): value is Locale {
 /**
  * Drop-down locale switcher — renders an accessible `<label>` + `<select>`
  * pair and persists the user's choice before a full reload.
+ *
+ * `compact` shows the two-letter code ("FR") over a transparent native
+ * select, so the phone top bar fits while the opened list keeps the full
+ * language names. The caret only shows from `sm`, where there is room.
  */
-export function LocaleSwitcher(): ReactElement {
+export function LocaleSwitcher({
+  compact = false,
+}: { readonly compact?: boolean } = {}): ReactElement {
   const current = useLocale();
 
   const onChange = useCallback(
@@ -65,12 +74,33 @@ export function LocaleSwitcher(): ReactElement {
   );
 
   return (
-    <label className="flex items-center gap-2 text-sm">
+    <label
+      className={cn(
+        'flex items-center gap-2 text-sm',
+        compact &&
+          'relative shrink-0 gap-1 rounded-md border border-border px-2 py-1 focus-within:ring-2 focus-within:ring-ring',
+      )}
+    >
       <span className="sr-only">Locale</span>
+      {compact ? (
+        <>
+          <span aria-hidden="true" className="font-medium uppercase">
+            {current}
+          </span>
+          <CaretDownIcon
+            aria-hidden="true"
+            className="hidden size-3 text-muted-foreground sm:block"
+          />
+        </>
+      ) : null}
       <select
         value={current}
         onChange={onChange}
-        className="rounded-md border border-border bg-transparent px-2 py-1"
+        className={
+          compact
+            ? 'absolute inset-0 cursor-pointer opacity-0'
+            : 'rounded-md border border-border bg-transparent px-2 py-1'
+        }
         aria-label="Locale"
       >
         {OPTIONS.map((option) => (

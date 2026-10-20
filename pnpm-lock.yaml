@@ -17,6 +17,7 @@ overrides:
 
 patchedDependencies:
   '@opennextjs/cloudflare@1.20.10': cb9094d9ddd1702fff24915cbb952868b0a9f30762cf972213ec5fc02a98f07f
+  sonner@2.0.8: 291953af00ead2e4e07cdb121c355114295adc6a34250b8f928017c5bdaf2293
 
 importers:
 
@@ -236,7 +237,7 @@ importers:
         version: 0.0.1
       sonner:
         specifier: ^2.0.8
-        version: 2.0.8(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 2.0.8(patch_hash=291953af00ead2e4e07cdb121c355114295adc6a34250b8f928017c5bdaf2293)(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       tailwind-merge:
         specifier: ^3.7.0
         version: 3.7.0
@@ -351,7 +352,7 @@ importers:
         version: 4.22.0(supports-color@10.2.2)
       sonner:
         specifier: ^2.0.8
-        version: 2.0.8(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 2.0.8(patch_hash=291953af00ead2e4e07cdb121c355114295adc6a34250b8f928017c5bdaf2293)(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       tailwind-merge:
         specifier: ^3.7.0
         version: 3.7.0
@@ -16955,7 +16956,7 @@ snapshots:
       ip-address: 10.7.3
       smart-buffer: 4.2.0
 
-  sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
+  sonner@2.0.8(patch_hash=291953af00ead2e4e07cdb121c355114295adc6a34250b8f928017c5bdaf2293)(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
     dependencies:
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
