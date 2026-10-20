@@ -1,9 +1,10 @@
 # Avis de dépendances limités au build
 
 Avis de sécurité connus sur des dépendances que l'on ne peut pas corriger par
-un override, faute de version corrigée publiée. Tous arrivent par la chaîne
-d'outils mobile (Expo CLI, Metro) et ne sont exposés qu'au moment du build ou
-du serveur de développement : aucun n'est embarqué dans le bundle de l'app ni
+un override, faute de version corrigée publiée. Ils arrivent par la chaîne
+d'outils mobile (Expo CLI, Metro) et, pour `braces`, aussi par des outils de
+développement web (lint, CLI). Tous ne sont exposés qu'au moment du build ou du
+serveur de développement : aucun n'est embarqué dans le bundle de l'app ni
 exécuté par les Workers de production.
 
 **Date de réexamen : 2027-01-17** (même échéance que les `ignoreUntil` de
@@ -12,10 +13,10 @@ version corrigée paraît, remplacer l'entrée par un override scopé
 (`pkg@<fixed>: ^fixed` dans `pnpm-workspace.yaml`, justifié dans
 `scripts/overrides-rationale.json`) et retirer l'ignore OSV.
 
-| Paquet       | Avis                                                                     | Versions touchées | Correctif publié | Chemin                                                                                    | Exposition                                                                                                                                                                                                                                    |
-| ------------ | ------------------------------------------------------------------------ | ----------------- | ---------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node-forge` | [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv) | `<=1.4.0`         | aucun            | `expo` > `@expo/cli` > `@expo/code-signing-certificates` > `node-forge`                   | Build et dev uniquement : certificats du serveur de dev et signature des manifestes `expo-updates`, que l'app n'utilise pas. Ne vérifie jamais de signature tierce.                                                                           |
-| `braces`     | [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | `<=3.0.3`         | aucun            | `react-native` > `@react-native/community-cli-plugin` > `metro` > `micromatch` > `braces` | Build et dev uniquement : Metro et les outils CLI développent des globs écrits dans le dépôt, jamais une entrée utilisateur. Le même paquet arrive aussi par `fast-glob` (eslint-config-next, CLI shadcn, ts-morph), avec la même exposition. |
+| Paquet       | Avis                                                                     | Versions touchées | Correctif publié | Chemin                                                                                                                                                                         | Exposition                                                                                                                                                                                                                                    |
+| ------------ | ------------------------------------------------------------------------ | ----------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node-forge` | [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv) | `<=1.4.0`         | aucun            | `expo` > `@expo/cli` > `node-forge`, et `expo` > `@expo/cli` > `@expo/code-signing-certificates` > `node-forge`                                                                | Build et dev uniquement : certificats du serveur de dev et signature des manifestes `expo-updates`, que l'app n'utilise pas. Ne vérifie jamais de signature tierce.                                                                           |
+| `braces`     | [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | `<=3.0.3`         | aucun            | `react-native` > `@react-native/community-cli-plugin` > `metro` > `micromatch` > `braces`, et `fast-glob` > `micromatch` > `braces` (eslint-config-next, CLI shadcn, ts-morph) | Build et dev uniquement : Metro et les outils CLI développent des globs écrits dans le dépôt, jamais une entrée utilisateur. Le même paquet arrive aussi par `fast-glob` (eslint-config-next, CLI shadcn, ts-morph), avec la même exposition. |
 
 ## Corrigés par override
 
