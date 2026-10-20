@@ -15,7 +15,6 @@ import {
   hourBounds,
   layoutDay,
   toDayKey,
-  toneForTitle,
   type DayBlock,
   type HourBounds,
   type PlanningView,
@@ -94,12 +93,15 @@ function isFull(cls: ClassWithRemaining): boolean {
   return cls.remaining <= 0;
 }
 
-/** Data attributes that pick the tile fill, border and ink from the planning tokens. */
-function tileAttributes(cls: ClassWithRemaining): {
-  'data-tone': string;
-  'data-full': 'true' | 'false';
-} {
-  return { 'data-tone': toneForTitle(cls.title), 'data-full': isFull(cls) ? 'true' : 'false' };
+/**
+ * Tile surface: open classes sit on the muted surface with ink text, full
+ * ones on the plain background with quieter text, so the state reads from
+ * the pill and the tone, not from colour alone.
+ */
+function tileClass(cls: ClassWithRemaining): string {
+  return isFull(cls)
+    ? 'border-border bg-background text-muted-foreground'
+    : 'border-border bg-muted text-foreground hover:border-muted-foreground/40';
 }
 
 /** "Mon 19" without the abbreviation dot some locales add. */
@@ -118,7 +120,12 @@ function StatusPill({
   const full = isFull(cls);
   const Icon = full ? ProhibitIcon : UsersIcon;
   return (
-    <span className="planning-pill inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-2 text-[0.6875rem] leading-none font-medium tabular-nums">
+    <span
+      className={cn(
+        'inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-2 text-[0.6875rem] leading-none font-medium tabular-nums',
+        full ? 'planning-pill-full' : 'planning-pill-open',
+      )}
+    >
       <Icon aria-hidden="true" className="size-3 shrink-0" />
       {full
         ? t('studio.classes.planning.full')
@@ -143,7 +150,7 @@ function TileMenu({
     <Menu.Root>
       <Menu.Trigger
         aria-label={t('studio.classes.planning.actionsFor', { title: cls.title })}
-        className="absolute top-1.5 right-1.5 z-10 grid size-6 place-items-center rounded-md hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-black/5 dark:hover:bg-white/10 dark:data-popup-open:bg-white/10"
+        className="absolute top-1.5 right-1.5 z-10 grid size-6 place-items-center rounded-md hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-foreground/10"
       >
         <DotsThreeIcon aria-hidden="true" weight="bold" className="size-4" />
       </Menu.Trigger>
@@ -224,7 +231,7 @@ function WeekGrid({
             aria-current={isToday ? 'date' : undefined}
             className={cn(
               'flex h-10 items-center justify-center gap-1 border-b border-l border-border text-sm',
-              isToday ? 'bg-foreground font-medium text-background' : 'text-muted-foreground',
+              isToday ? 'planning-today font-medium' : 'text-muted-foreground',
             )}
           >
             <span className="first-letter:uppercase">{shortWeekday(fmt, date)}</span>
@@ -250,7 +257,7 @@ function WeekGrid({
         <div
           key={key}
           data-day={key}
-          className={cn('relative border-l border-border', key === todayKey && 'bg-muted/50')}
+          className={cn('relative border-l border-border', key === todayKey && 'bg-muted/30')}
         >
           {blocks.map((block) => (
             <WeekBlock
@@ -309,9 +316,9 @@ function NowLine({
       ref={place}
       aria-hidden="true"
       data-testid="planning-now"
-      className="planning-now pointer-events-none absolute inset-x-0 z-30 h-px bg-foreground"
+      className="planning-now planning-now-line pointer-events-none absolute inset-x-0 z-30 h-px"
     >
-      <span className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground px-1.5 py-0.5 text-[0.6875rem] leading-none font-medium text-background tabular-nums">
+      <span className="planning-now-pill absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 rounded-full px-1.5 py-0.5 text-[0.6875rem] leading-none font-medium tabular-nums">
         {fmt.time.format(now)}
       </span>
     </div>
@@ -349,8 +356,11 @@ function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps
     <div
       ref={placeBlock}
       data-density={density}
-      {...tileAttributes(cls)}
-      className="planning-block planning-tile absolute z-10 rounded-xl border focus-within:z-20"
+      data-full={isFull(cls)}
+      className={cn(
+        'planning-block absolute z-10 rounded-xl border focus-within:z-20',
+        tileClass(cls),
+      )}
     >
       <button
         type="button"
@@ -370,7 +380,7 @@ function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps
             , {fmt.time.format(start)} - {fmt.time.format(end)}
           </span>
         ) : (
-          <span className="planning-tile-muted w-full truncate tabular-nums">
+          <span className="w-full truncate text-muted-foreground tabular-nums">
             {fmt.time.format(start)} - {fmt.time.format(end)}
           </span>
         )}
@@ -436,7 +446,7 @@ function MonthGrid({
                 aria-current={isToday ? 'date' : undefined}
                 className={cn(
                   'relative flex min-h-28 flex-col gap-1 border-l border-border px-1.5 pt-9 pb-1.5 first:border-l-0',
-                  isToday && 'bg-muted/50',
+                  isToday && 'bg-muted/30',
                 )}
               >
                 <button
@@ -451,7 +461,7 @@ function MonthGrid({
                     className={cn(
                       'inline-grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-sm tabular-nums',
                       inMonth ? 'text-foreground' : 'text-muted-foreground',
-                      isToday && 'bg-foreground font-semibold text-background',
+                      isToday && 'planning-today font-semibold',
                     )}
                   >
                     {date.getDate()}
@@ -462,17 +472,23 @@ function MonthGrid({
                     key={cls.id}
                     type="button"
                     data-class-id={cls.id}
-                    {...tileAttributes(cls)}
+                    data-full={isFull(cls)}
                     onClick={() => onSelectClass(cls)}
-                    className="planning-tile relative z-10 flex h-6 w-full min-w-0 items-center gap-1.5 rounded-lg border px-2 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className={cn(
+                      'relative z-10 flex h-6 w-full min-w-0 items-center gap-1.5 rounded-lg border px-2 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      tileClass(cls),
+                    )}
                   >
-                    <span className="planning-tile-muted shrink-0 tabular-nums">
+                    <span className="shrink-0 text-muted-foreground tabular-nums">
                       <span className="sr-only">{fmt.dayLong.format(date)}, </span>
                       {fmt.time.format(new Date(cls.startsAt))}
                     </span>
                     <span className="min-w-0 flex-1 truncate font-medium">{cls.title}</span>
                     {isFull(cls) ? (
-                      <span className="sr-only">, {t('studio.classes.planning.full')}</span>
+                      <span className="flex shrink-0 items-center">
+                        <ProhibitIcon aria-hidden="true" className="size-3" />
+                        <span className="sr-only">, {t('studio.classes.planning.full')}</span>
+                      </span>
                     ) : null}
                   </button>
                 ))}
@@ -528,7 +544,7 @@ function DayAgenda({
               onClick={() => onShowDay(date)}
               className={cn(
                 'flex flex-col items-center rounded-xl py-1.5 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                selected && 'bg-foreground text-background hover:bg-foreground',
+                selected && 'planning-today',
                 !selected && key === todayKey && 'font-semibold text-foreground',
               )}
             >
@@ -552,7 +568,10 @@ function DayAgenda({
               <span aria-hidden="true" className="pt-3 text-xs text-muted-foreground tabular-nums">
                 {fmt.time.format(start)}
               </span>
-              <div {...tileAttributes(cls)} className="planning-tile relative rounded-xl border">
+              <div
+                data-full={isFull(cls)}
+                className={cn('relative rounded-xl border', tileClass(cls))}
+              >
                 <button
                   type="button"
                   data-class-id={cls.id}
@@ -561,7 +580,7 @@ function DayAgenda({
                 >
                   <span className="sr-only">{fmt.dayLong.format(start)}, </span>
                   <span className="w-full truncate font-medium">{cls.title}</span>
-                  <span className="planning-tile-muted text-xs tabular-nums">
+                  <span className="text-xs text-muted-foreground tabular-nums">
                     {fmt.time.format(start)} - {fmt.time.format(end)}
                   </span>
                   <span className="mt-2">

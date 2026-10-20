@@ -8,7 +8,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { createTranslator } from '../../../lib/i18n/t';
 
 import { ClassesPlanning, type ClassesPlanningProps } from './ClassesPlanning';
-import { fromDayKey, toneForTitle } from './planning-grid';
+import { fromDayKey } from './planning-grid';
 
 import type { ClassWithRemaining } from '@athlya/shared/schemas/api';
 
@@ -67,7 +67,7 @@ function renderPlanning(overrides: Partial<ClassesPlanningProps> = {}) {
   };
   const tile = (id: string): { button: HTMLElement; frame: HTMLElement } => {
     const button = container.querySelector<HTMLElement>(`button[data-class-id="${id}"]`);
-    const frame = button?.closest<HTMLElement>('[data-tone]');
+    const frame = button?.closest<HTMLElement>('[data-full]');
     if (button === null || button === undefined || frame === null || frame === undefined) {
       throw new Error(`no tile for ${id}`);
     }
@@ -173,19 +173,20 @@ describe('<ClassesPlanning /> day agenda', () => {
 });
 
 describe('<ClassesPlanning /> tiles', () => {
-  it('colours a tile by its title and shows the seats left in a pill', () => {
+  it('shows the seats left in a volt pill on an open tile', () => {
     const { tile } = renderPlanning();
     const { button, frame } = tile('c1');
-    expect(frame.dataset['tone']).toBe(toneForTitle('Boxing technique'));
     expect(frame.dataset['full']).toBe('false');
-    expect(within(button).getByText('4 left').className).toContain('planning-pill');
+    expect(frame.className).toContain('bg-muted');
+    expect(within(button).getByText('4 left').className).toContain('planning-pill-open');
   });
 
-  it('turns a full class grey with a "Full" pill when the tile has room', () => {
+  it('quiets a full class and gives it an ink "Full" pill when the tile has room', () => {
     const { tile } = renderPlanning();
     const { button, frame } = tile('c2');
     expect(frame.dataset['full']).toBe('true');
-    expect(within(button).getByText('Full').className).toContain('planning-pill');
+    expect(frame.className).toContain('text-muted-foreground');
+    expect(within(button).getByText('Full').className).toContain('planning-pill-full');
   });
 
   it('drops the pill from a 45-minute tile but keeps the state for assistive tech', () => {
