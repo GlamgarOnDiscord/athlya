@@ -8,6 +8,13 @@
 
 ---
 
+## Session 2026-10-19/20: Apple Health, cardio charts, UX refresh
+
+- **#691**: Apple Health workout import on iOS (task 18.1), merged; migration `0048_workout_sessions_external_source` (renumbered from 0047). Operator: apply 0048 before deploying the reservations Worker, then a new EAS build.
+- **#705**: cardio progression charts per machine on web and mobile (closes #683), merged.
+- Open: **#708** (Apple Health totals as structured cardio + import source in the RGPD export, migration 0049), **#704** (build-time advisories in the mobile tooling), **#707** (shared design tokens and theme).
+- In progress: QR check-in end to end (camera permission on the kiosk, fallback decoder, coach access, web entry card). Full UX refresh and the v1.4 scope are tracked in `docs/roadmap/post-1.0.md` § v1.4.
+
 ## Session 2026-10-19 — Epic 21 closed
 
 - **#675** — `POST /v1/coach/ask` streams its answer as server-sent events (Hono `streamSSE`) when the client sends `Accept: text/event-stream`: `partial` snapshots (bounded `CoachAdvicePartial`), then a terminal `done` (`CoachAskResponse` validated as a whole) or `error` (problem JSON). Refusals (flag, burst, body, consent, quota, `coach_not_configured`) keep their status because the stream only opens after them; the JSON response is unchanged. No migration. Operator steps, unchanged by the streaming and needed only to open the coach: the RGPD checklist in `docs/compliance/ai-coach.md`, then from `packages/api` `wrangler secret put MISTRAL_API_KEY --env <env>` and `wrangler secret put MISTRAL_API_KEY --config wrangler.reservations.toml --env <env>`, then `ai-coach` in `FEATURE_FLAGS_JSON` on both Workers (`deploy-production.md` § Enabling the AI coach). Without the key the coach answers 503 `coach_not_configured`. Web/mobile stream consumption: #676.
