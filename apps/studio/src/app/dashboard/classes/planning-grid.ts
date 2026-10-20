@@ -96,6 +96,21 @@ export function visibleRange(view: PlanningView, anchor: Date): { from: Date; to
   return { from, to };
 }
 
+/**
+ * Period of the list view: the anchor's calendar month, `from` inclusive
+ * and `to` exclusive. Unlike the month grid it does not spill into the
+ * neighbouring weeks, so every row belongs to the month in the heading.
+ */
+export function listRange(anchor: Date): { from: Date; to: Date } {
+  const from = startOfMonth(anchor);
+  return { from, to: addMonths(from, 1) };
+}
+
+/** Whether a class has started at `now`: it can no longer be edited. */
+export function hasStarted(startsAt: string, now: Date): boolean {
+  return parseISO(startsAt).getTime() <= now.getTime();
+}
+
 /** The anchor one period before (`-1`) or after (`1`) `anchor`. */
 export function shiftAnchor(view: PlanningView, anchor: Date, step: -1 | 1): Date {
   if (view === 'day') return addDays(anchor, step);

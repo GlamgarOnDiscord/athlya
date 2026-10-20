@@ -101,3 +101,11 @@
 .fill-meter-bar {
   width: var(--fill, 0%);
 }
+
+/* Check-in camera: ink letterbox under volt framing corners (pair pinned in token-contrast). */
+.kiosk-video {
+  background-color: var(--athlya-brand-ink);
+}
+.kiosk-guide-corner {
+  border-color: var(--athlya-brand-volt);
+}

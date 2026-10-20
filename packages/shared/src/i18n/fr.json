@@ -544,10 +544,6 @@
       "subtitle": "Planifier, modifier et gérer la capacité des sessions.",
       "create": "+ Nouveau cours",
       "empty": "Aucun cours sur cette plage. Créez-en un pour commencer.",
-      "range": {
-        "from": "Du",
-        "to": "Au"
-      },
       "row": {
         "capacity": "{remaining} / {capacity} places",
         "edit": "Modifier",
@@ -595,6 +591,9 @@
         "nextDay": "Jour suivant",
         "seatsLeft": "{count} places",
         "actionsFor": "Actions pour {title}"
+      },
+      "columns": {
+        "date": "Date"
       }
     },
     "members": {
@@ -669,7 +668,14 @@
         "already_checked_in": "Ce membre est déjà pointé pour ce cours.",
         "checkin_limit_reached": "Trop de check-ins pour ce membre dans la dernière heure. Réessayez plus tard.",
         "generic": "Échec du check-in. Veuillez réessayer."
-      }
+      },
+      "kiosk": {
+        "enter": "Mode borne",
+        "exit": "Quitter le mode borne"
+      },
+      "frameHint": "Centrez le QR code dans le cadre.",
+      "confirmed": "Check-in confirmé",
+      "scanNext": "Scanner le membre suivant"
     },
     "audit": {
       "title": "Journal d'audit",

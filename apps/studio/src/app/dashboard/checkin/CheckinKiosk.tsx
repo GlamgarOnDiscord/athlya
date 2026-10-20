@@ -1,8 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-
+import { ArrowsInIcon, ArrowsOutIcon, CheckCircleIcon } from '@phosphor-icons/react';
 import Image from 'next/image';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactElement,
+} from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,9 +19,9 @@ import { Label } from '@/components/ui/label';
 import { useApiClient } from '../../../lib/api/buildClient';
 import { ApiError } from '../../../lib/api/client';
 import { useAuth } from '../../../lib/auth/AuthContext';
-import { newIdempotencyKey } from '../../../lib/idempotency';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
+import { newIdempotencyKey } from '../../../lib/idempotency';
 
 import { createFrameDecoder } from './qr-frame-decoder';
 
@@ -122,7 +130,10 @@ function ManualInput({ onSubmit, disabled, t }: ManualInputProps): ReactElement 
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3 max-w-md">
+    <form
+      onSubmit={handleSubmit}
+      className="flex w-full max-w-md flex-col gap-3 group-data-[kiosk=true]/kiosk:max-w-2xl"
+    >
       <div className="flex flex-col gap-1">
         <Label htmlFor="qr-token-input">{t('studio.checkin.manualLabel')}</Label>
         <Input
@@ -145,42 +156,92 @@ function ManualInput({ onSubmit, disabled, t }: ManualInputProps): ReactElement 
 interface SuccessBannerProps {
   readonly member: CheckInSuccessResponse['member'];
   readonly countdown: number;
+  readonly onNext: () => void;
   readonly t: ReturnType<typeof createTranslator>;
 }
 
-function SuccessBanner({ member, countdown, t }: SuccessBannerProps): ReactElement {
+function SuccessBanner({ member, countdown, onNext, t }: SuccessBannerProps): ReactElement {
+  const named = member.displayName.trim().length > 0;
   return (
     <div
       role="alert"
-      className="flex flex-col items-center gap-4 rounded-xl border border-green-500 bg-green-50 p-8 text-center dark:bg-green-950"
+      className="flex w-full max-w-md flex-col items-center gap-4 rounded-lg border border-border bg-card p-8 text-center text-card-foreground group-data-[kiosk=true]/kiosk:max-w-2xl"
     >
       {member.avatarUrl !== null && member.avatarUrl !== '' ? (
         <Image
           src={member.avatarUrl}
           alt=""
-          width={80}
-          height={80}
+          width={96}
+          height={96}
           unoptimized
-          className="size-20 rounded-full border-2 border-green-500 object-cover"
+          className="size-24 rounded-full border border-border object-cover"
         />
       ) : (
         <div
           aria-hidden="true"
-          className="flex size-20 items-center justify-center rounded-full border-2 border-green-500 bg-green-100 text-3xl font-semibold text-green-700 dark:bg-green-900 dark:text-green-300"
+          className="flex size-24 items-center justify-center rounded-full border border-border bg-muted text-4xl font-semibold"
         >
           {member.displayName.charAt(0).toUpperCase() || '?'}
         </div>
       )}
-      <p className="text-2xl font-semibold text-green-800 dark:text-green-200">
-        {member.displayName.trim().length > 0
+      {named ? (
+        <p className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
+          <CheckCircleIcon aria-hidden="true" weight="fill" className="size-5" />
+          {t('studio.checkin.confirmed')}
+        </p>
+      ) : null}
+      <p className="text-3xl font-semibold">
+        {named
           ? t('studio.checkin.success', { name: member.displayName })
           : t('studio.checkin.successNoName')}
       </p>
-      <p className="text-sm text-green-600 dark:text-green-400">
+      <p className="text-sm text-muted-foreground tabular-nums">
         {t('studio.checkin.resetIn', { seconds: countdown })}
       </p>
+      <Button variant="outline" onClick={onNext}>
+        {t('studio.checkin.scanNext')}
+      </Button>
     </div>
   );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Kiosk mode (Fullscreen API)                                        */
+/* ------------------------------------------------------------------ */
+
+function subscribeToFullscreen(onStoreChange: () => void): () => void {
+  document.addEventListener('fullscreenchange', onStoreChange);
+  return () => document.removeEventListener('fullscreenchange', onStoreChange);
+}
+
+/**
+ * Full-screen state of `target`, and a toggle. `supported` is false during
+ * server rendering and in browsers without the Fullscreen API, where the
+ * toggle is not offered. Escape leaves full screen natively.
+ */
+function useKioskMode(target: React.RefObject<HTMLElement | null>): {
+  readonly supported: boolean;
+  readonly active: boolean;
+  readonly toggle: () => void;
+} {
+  const supported = useSyncExternalStore(
+    subscribeToFullscreen,
+    () => document.fullscreenEnabled,
+    () => false,
+  );
+  const active = useSyncExternalStore(
+    subscribeToFullscreen,
+    () => document.fullscreenElement !== null && document.fullscreenElement === target.current,
+    () => false,
+  );
+  const toggle = useCallback(() => {
+    if (document.fullscreenElement !== null) {
+      void document.exitFullscreen();
+      return;
+    }
+    void target.current?.requestFullscreen().catch(() => undefined);
+  }, [target]);
+  return { supported, active, toggle };
 }
 
 /* ------------------------------------------------------------------ */
@@ -303,6 +364,8 @@ export function CheckinKiosk(): ReactElement {
 
   const [state, setState] = useState<KioskState>({ kind: 'scanning' });
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const kioskRef = useRef<HTMLDivElement | null>(null);
+  const kiosk = useKioskMode(kioskRef);
 
   const cameraStatus = useCameraScanner({
     videoRef,
@@ -353,9 +416,29 @@ export function CheckinKiosk(): ReactElement {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div
+      ref={kioskRef}
+      data-kiosk={kiosk.active}
+      className="group/kiosk flex flex-col gap-6 data-[kiosk=true]:items-center data-[kiosk=true]:justify-center data-[kiosk=true]:overflow-auto data-[kiosk=true]:bg-background data-[kiosk=true]:p-8 data-[kiosk=true]:text-foreground"
+    >
+      {kiosk.supported ? (
+        <Button
+          variant="outline"
+          onClick={kiosk.toggle}
+          aria-pressed={kiosk.active}
+          className="self-start group-data-[kiosk=true]/kiosk:fixed group-data-[kiosk=true]/kiosk:top-6 group-data-[kiosk=true]/kiosk:right-6"
+        >
+          {kiosk.active ? (
+            <ArrowsInIcon aria-hidden="true" data-icon="inline-start" />
+          ) : (
+            <ArrowsOutIcon aria-hidden="true" data-icon="inline-start" />
+          )}
+          {kiosk.active ? t('studio.checkin.kiosk.exit') : t('studio.checkin.kiosk.enter')}
+        </Button>
+      ) : null}
+
       {state.kind === 'success' ? (
-        <SuccessBanner member={state.member} countdown={state.countdown} t={t} />
+        <SuccessBanner member={state.member} countdown={state.countdown} onNext={reset} t={t} />
       ) : null}
 
       {state.kind === 'error' ? (
@@ -382,19 +465,33 @@ export function CheckinKiosk(): ReactElement {
               {t('studio.checkin.noCameraFallback')}
             </p>
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="flex w-full max-w-md flex-col gap-2 group-data-[kiosk=true]/kiosk:max-w-2xl">
               <p className="text-sm text-muted-foreground">
                 {cameraStatus === 'starting'
                   ? t('studio.checkin.camera.starting')
-                  : t('studio.checkin.scanPrompt')}
+                  : `${t('studio.checkin.scanPrompt')} ${t('studio.checkin.frameHint')}`}
               </p>
-              <video
-                ref={videoRef}
-                aria-label={t('studio.checkin.scanPrompt')}
-                className="w-full max-w-md rounded-lg border border-border bg-black"
-                muted
-                playsInline
-              />
+              <div className="kiosk-video relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-border">
+                <video
+                  ref={videoRef}
+                  aria-label={t('studio.checkin.scanPrompt')}
+                  className="size-full object-cover"
+                  muted
+                  playsInline
+                />
+                <div
+                  aria-hidden="true"
+                  data-testid="checkin-frame-guide"
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                >
+                  <div className="relative aspect-square h-3/5">
+                    <span className="kiosk-guide-corner absolute top-0 left-0 size-8 rounded-tl-lg border-t-4 border-l-4" />
+                    <span className="kiosk-guide-corner absolute top-0 right-0 size-8 rounded-tr-lg border-t-4 border-r-4" />
+                    <span className="kiosk-guide-corner absolute bottom-0 left-0 size-8 rounded-bl-lg border-b-4 border-l-4" />
+                    <span className="kiosk-guide-corner absolute right-0 bottom-0 size-8 rounded-br-lg border-r-4 border-b-4" />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

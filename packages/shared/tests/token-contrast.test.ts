@@ -191,6 +191,18 @@ describe('logo palette (docs/brand/README.md)', () => {
     expect(contrastRatio(brandPalette.ink, brandPalette.volt)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('studio check-in: disabled button, success line, framing guide on the camera', () => {
+    for (const mode of MODES) {
+      expect(
+        contrastRatio(colors[mode].mutedForeground, colors[mode].muted),
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(colors[mode].success, colors[mode].background)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+    expect(contrastRatio(brandPalette.volt, brandPalette.ink)).toBeGreaterThanOrEqual(3);
+  });
+
   it('volt on white stays forbidden: below even the 3:1 UI minimum', () => {
     expect(contrastRatio(brandPalette.volt, brandPalette.white)).toBeLessThan(3);
   });

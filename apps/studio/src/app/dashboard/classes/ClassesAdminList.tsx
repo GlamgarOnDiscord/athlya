@@ -18,8 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -35,12 +33,15 @@ import { useApiClient } from '../../../lib/api/buildClient';
 import { useAuth } from '../../../lib/auth/AuthContext';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
+import { useNowMinute } from '../../../lib/use-now-minute';
 
 import { ClassesPlanning } from './ClassesPlanning';
 import { ClassFormDialog, type ClassFormMode } from './ClassFormDialog';
 import {
   buildWeekDays,
   fromDayKey,
+  hasStarted,
+  listRange,
   resolveView,
   shiftAnchor,
   toDayKey,
@@ -50,8 +51,6 @@ import {
 } from './planning-grid';
 
 import type { ClassWithRemaining } from '@athlya/shared/schemas/api';
-
-const DEFAULT_LOOKAHEAD_DAYS = 30;
 
 type AdminView = PlanningView | 'list';
 
@@ -100,23 +99,6 @@ function useTodayKey(): string | null {
   );
 }
 
-function dateInputToIso(value: string, endOfDay = false): string {
-  return new Date(`${value}T${endOfDay ? '23:59:59' : '00:00:00'}Z`).toISOString();
-}
-
-function nDaysFromNowIso(days: number): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() + days);
-  d.setUTCHours(0, 0, 0, 0);
-  return d.toISOString();
-}
-
-function todayStartIso(): string {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  return d.toISOString();
-}
-
 type Status =
   | { kind: 'loading' }
   | { kind: 'ready'; items: ReadonlyArray<ClassWithRemaining> }
@@ -134,8 +116,6 @@ export function ClassesAdminList(): ReactElement {
   interface AdminListState {
     view: AdminView;
     anchorKey: string | null;
-    from: string;
-    to: string;
     status: Status;
     refreshNonce: number;
     dialogMode: ClassFormMode | null;
@@ -145,8 +125,6 @@ export function ClassesAdminList(): ReactElement {
   const [state, setState] = useState<AdminListState>(() => ({
     view: 'week',
     anchorKey: null,
-    from: todayStartIso(),
-    to: nDaysFromNowIso(DEFAULT_LOOKAHEAD_DAYS),
     status: { kind: 'loading' },
     refreshNonce: 0,
     dialogMode: null,
@@ -158,6 +136,7 @@ export function ClassesAdminList(): ReactElement {
   }, []);
 
   const todayKey = useTodayKey();
+  const nowMinute = useNowMinute();
   const anchorKey = state.anchorKey ?? todayKey;
   const anchor = useMemo(() => (anchorKey === null ? null : fromDayKey(anchorKey)), [anchorKey]);
 
@@ -166,11 +145,10 @@ export function ClassesAdminList(): ReactElement {
   const viewOptions: ReadonlyArray<AdminView> = wide ? [...WIDE_VIEWS, 'list'] : ['day', 'list'];
 
   const range = useMemo(() => {
-    if (view === 'list') return { from: state.from, to: state.to };
     if (anchor === null) return null;
-    const { from, to } = visibleRange(view, anchor);
+    const { from, to } = view === 'list' ? listRange(anchor) : visibleRange(view, anchor);
     return { from: from.toISOString(), to: to.toISOString() };
-  }, [view, state.from, state.to, anchor]);
+  }, [view, anchor]);
   const rangeFrom = range?.from ?? null;
   const rangeTo = range?.to ?? null;
 
@@ -199,7 +177,7 @@ export function ClassesAdminList(): ReactElement {
   }, [client, rangeFrom, rangeTo, state.refreshNonce]);
 
   const periodLabel = useMemo(() => {
-    if (anchor === null || view === 'list') return null;
+    if (anchor === null) return null;
     if (view === 'day') {
       return new Intl.DateTimeFormat(locale, {
         weekday: 'long',
@@ -208,7 +186,7 @@ export function ClassesAdminList(): ReactElement {
         year: 'numeric',
       }).format(anchor);
     }
-    if (view === 'month') {
+    if (view === 'month' || view === 'list') {
       return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(anchor);
     }
     const days = buildWeekDays(anchor);
@@ -221,8 +199,8 @@ export function ClassesAdminList(): ReactElement {
 
   const step = useCallback(
     (direction: -1 | 1) => {
-      if (anchor === null || view === 'list') return;
-      const next = toDayKey(shiftAnchor(view, anchor, direction));
+      if (anchor === null) return;
+      const next = toDayKey(shiftAnchor(view === 'list' ? 'month' : view, anchor, direction));
       setState((s) => ({ ...s, anchorKey: next }));
     },
     [anchor, view],
@@ -299,39 +277,7 @@ export function ClassesAdminList(): ReactElement {
   return (
     <div className="flex flex-col gap-4" data-reload-key={state.refreshNonce}>
       <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between">
-        {view === 'list' ? (
-          <fieldset className="flex flex-wrap items-end gap-3">
-            <legend className="sr-only">
-              {t('studio.classes.range.from')} / {t('studio.classes.range.to')}
-            </legend>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="classes-range-from" className="text-muted-foreground">
-                {t('studio.classes.range.from')}
-              </Label>
-              <Input
-                id="classes-range-from"
-                type="date"
-                value={state.from.slice(0, 10)}
-                onChange={(e) => setState((s) => ({ ...s, from: dateInputToIso(e.target.value) }))}
-                className="w-36"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="classes-range-to" className="text-muted-foreground">
-                {t('studio.classes.range.to')}
-              </Label>
-              <Input
-                id="classes-range-to"
-                type="date"
-                value={state.to.slice(0, 10)}
-                onChange={(e) =>
-                  setState((s) => ({ ...s, to: dateInputToIso(e.target.value, true) }))
-                }
-                className="w-36"
-              />
-            </div>
-          </fieldset>
-        ) : periodLabel === null ? (
+        {periodLabel === null ? (
           <Skeleton className="h-7 w-56" />
         ) : (
           <h2 aria-live="polite" className="text-lg font-semibold first-letter:uppercase">
@@ -361,27 +307,15 @@ export function ClassesAdminList(): ReactElement {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            {view === 'list' ? null : (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => setState((s) => ({ ...s, anchorKey: null }))}
-                >
-                  {t('studio.classes.planning.today')}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={previousLabel}
-                  onClick={() => step(-1)}
-                >
-                  <CaretLeftIcon aria-hidden="true" />
-                </Button>
-                <Button variant="ghost" size="icon" aria-label={nextLabel} onClick={() => step(1)}>
-                  <CaretRightIcon aria-hidden="true" />
-                </Button>
-              </>
-            )}
+            <Button variant="outline" onClick={() => setState((s) => ({ ...s, anchorKey: null }))}>
+              {t('studio.classes.planning.today')}
+            </Button>
+            <Button variant="ghost" size="icon" aria-label={previousLabel} onClick={() => step(-1)}>
+              <CaretLeftIcon aria-hidden="true" />
+            </Button>
+            <Button variant="ghost" size="icon" aria-label={nextLabel} onClick={() => step(1)}>
+              <CaretRightIcon aria-hidden="true" />
+            </Button>
             <Button
               className="ml-auto md:ml-0"
               onClick={() => setState((s) => ({ ...s, dialogMode: { kind: 'create' } }))}
@@ -426,12 +360,14 @@ export function ClassesAdminList(): ReactElement {
             <TableRow>
               <TableHead>{t('studio.classes.title')}</TableHead>
               <TableHead className="hidden sm:table-cell">
-                {t('studio.classes.range.from')}
+                {t('studio.classes.columns.date')}
               </TableHead>
               <TableHead className="hidden md:table-cell">
                 {t('studio.classes.fields.durationMin')}
               </TableHead>
-              <TableHead>{t('studio.classes.fields.capacity')}</TableHead>
+              <TableHead className="hidden sm:table-cell">
+                {t('studio.classes.fields.capacity')}
+              </TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -448,7 +384,7 @@ export function ClassesAdminList(): ReactElement {
                     <TableCell className="hidden md:table-cell">
                       <Skeleton className="h-4 w-16" />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       <Skeleton className="h-4 w-20" />
                     </TableCell>
                     <TableCell>
@@ -471,6 +407,9 @@ export function ClassesAdminList(): ReactElement {
                   <ClassRow
                     key={cls.id}
                     cls={cls}
+                    started={
+                      nowMinute !== null && hasStarted(cls.startsAt, new Date(nowMinute * 60_000))
+                    }
                     locale={locale}
                     t={t}
                     onEdit={() => openEdit(cls)}
@@ -530,13 +469,15 @@ export function ClassesAdminList(): ReactElement {
 
 interface ClassRowProps {
   readonly cls: ClassWithRemaining;
+  /** A started class cannot be moved: the row offers no edit action. */
+  readonly started: boolean;
   readonly locale: 'fr' | 'en';
   readonly t: ReturnType<typeof createTranslator>;
   readonly onEdit: () => void;
   readonly onDelete: () => void;
 }
 
-function ClassRow({ cls, locale, t, onEdit, onDelete }: ClassRowProps): ReactElement {
+function ClassRow({ cls, started, locale, t, onEdit, onDelete }: ClassRowProps): ReactElement {
   const fmt = useMemo(
     () =>
       new Intl.DateTimeFormat(locale, {
@@ -549,27 +490,33 @@ function ClassRow({ cls, locale, t, onEdit, onDelete }: ClassRowProps): ReactEle
     [locale],
   );
   const formatted = fmt.format(new Date(cls.startsAt));
+  const seats = t('studio.classes.row.capacity', {
+    remaining: cls.remaining,
+    capacity: cls.capacity,
+  });
 
   return (
     <TableRow>
-      <TableCell className="font-medium">{cls.title}</TableCell>
+      <TableCell className="whitespace-normal sm:whitespace-nowrap">
+        <span className="font-medium">{cls.title}</span>
+        <span className="block text-xs text-muted-foreground sm:hidden">
+          <time dateTime={cls.startsAt}>{formatted}</time>, {seats}
+        </span>
+      </TableCell>
       <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
         <time dateTime={cls.startsAt}>{formatted}</time>
       </TableCell>
       <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
         {cls.durationMin}&nbsp;min
       </TableCell>
-      <TableCell className="text-muted-foreground text-sm">
-        {t('studio.classes.row.capacity', {
-          remaining: cls.remaining,
-          capacity: cls.capacity,
-        })}
-      </TableCell>
+      <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">{seats}</TableCell>
       <TableCell>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onEdit}>
-            {t('studio.classes.row.edit')}
-          </Button>
+        <div className="flex items-center justify-end gap-2">
+          {started ? null : (
+            <Button variant="outline" size="sm" onClick={onEdit}>
+              {t('studio.classes.row.edit')}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"

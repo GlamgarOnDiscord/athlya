@@ -544,10 +544,6 @@
       "subtitle": "Schedule, edit and manage session capacity.",
       "create": "+ New class",
       "empty": "No classes in this range. Create one to get started.",
-      "range": {
-        "from": "From",
-        "to": "To"
-      },
       "row": {
         "capacity": "{remaining} / {capacity} seats",
         "edit": "Edit",
@@ -595,6 +591,9 @@
         "nextDay": "Next day",
         "seatsLeft": "{count} left",
         "actionsFor": "Actions for {title}"
+      },
+      "columns": {
+        "date": "Date"
       }
     },
     "members": {
@@ -669,7 +668,14 @@
         "already_checked_in": "This member is already checked in for this class.",
         "checkin_limit_reached": "Too many check-ins for this member in the last hour. Try again later.",
         "generic": "Check-in failed. Please try again."
-      }
+      },
+      "kiosk": {
+        "enter": "Kiosk mode",
+        "exit": "Exit kiosk mode"
+      },
+      "frameHint": "Center the QR code in the frame.",
+      "confirmed": "Check-in confirmed",
+      "scanNext": "Scan the next member"
     },
     "audit": {
       "title": "Audit log",
