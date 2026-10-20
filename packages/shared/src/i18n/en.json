@@ -878,15 +878,14 @@
       "checkoutLoading": "Redirecting…",
       "checkoutError": "Subscription failed.",
       "checkoutNotConfigured": "Stripe is not yet configured on this environment.",
+      "pricePerMonth": "{price} / month",
       "plans": {
         "free": {
           "title": "Free",
-          "price": "€0 / month",
           "body": "Up to 50 members, core features."
         },
         "pro": {
           "title": "Pro",
-          "price": "€49 / month",
           "body": "Unlimited members, custom branding, advanced exports."
         }
       },
