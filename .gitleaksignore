@@ -9,3 +9,7 @@
 # Fake reset-token fixture in the password-reset transport test (PR #650),
 # not a secret; replaced by a low-entropy value in the next commit.
 e011ae100d61beccdfad3beef390e823417e9071:packages/api/src/__tests__/adapters/password-reset-email-transport.test.ts:generic-api-key:11
+
+# Fake caller Idempotency-Key fixture in the submitWrite test (PR #691),
+# not a secret; replaced by a low-entropy UUID in the next commit.
+0e689a555d78ba23a6c278149b29efa4698d719a:apps/mobile/tests/unit/writes.test.ts:generic-api-key:69

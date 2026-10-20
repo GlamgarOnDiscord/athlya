@@ -1,8 +1,9 @@
 import * as Crypto from 'expo-crypto';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Text } from 'react-native';
+import { Alert, Platform, Text } from 'react-native';
 
+import { AppleHealthSection } from '../components/AppleHealthSection';
 import { SignedIn, useDeadLetters, useSessionStore } from '../components/AppSession';
 import { ErrorNotice } from '../components/ErrorNotice';
 import { useRuntime } from '../components/RuntimeProvider';
@@ -151,6 +152,8 @@ function Settings({ userId }: { readonly userId: string }) {
         onValueChange={onToggleBiometric}
       />
       {biometricRefused === null ? null : <Notice tone="error" message={t(biometricRefused)} />}
+
+      {Platform.OS === 'ios' ? <AppleHealthSection userId={userId} /> : null}
 
       <SectionTitle>{t('mobile.settings.rejected.title')}</SectionTitle>
       <AppText variant="muted">{t('mobile.settings.rejected.description')}</AppText>

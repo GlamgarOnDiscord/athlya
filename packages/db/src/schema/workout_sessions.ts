@@ -37,6 +37,7 @@ import { createdAt, uuidPrimaryKey } from './_shared.js';
 import { studios } from './studios.js';
 import { users } from './users.js';
 
+import type { SessionSourceProvider } from '@athlya/shared/schemas/api';
 import type { CardioMetrics, Exercise } from '@athlya/shared/schemas/domain';
 
 export const workoutSessions = pgTable(
@@ -65,6 +66,13 @@ export const workoutSessions = pgTable(
      */
     idempotencyKey: text('idempotency_key'),
     /**
+     * App an imported session comes from, and the workout id there
+     * (migration 0048, task 18.1). Both NULL on sessions logged in
+     * Athlya; set together on imported ones.
+     */
+    source: text('source').$type<SessionSourceProvider>(),
+    externalId: text('external_id'),
+    /**
      * Structured cardio summary of a machine session (migration 0046,
      * issue #667), validated by `CardioMetricsSchema` at the API edge.
      * Nullable: sessions without one, and rows written by older Workers.
@@ -86,6 +94,19 @@ export const workoutSessions = pgTable(
     uniqueIndex('workout_sessions_user_idempotency_key_uniq')
       .on(table.userId, table.idempotencyKey)
       .where(sql`${table.idempotencyKey} IS NOT NULL`),
+    /** Importing the same workout twice never inserts a second row. */
+    uniqueIndex('workout_sessions_user_source_external_id_uniq')
+      .on(table.userId, table.source, table.externalId)
+      .where(sql`${table.externalId} IS NOT NULL`),
+    check('workout_sessions_source_known', sql`${table.source} IN ('appleHealth')`),
+    check(
+      'workout_sessions_source_pair',
+      sql`(${table.source} IS NULL) = (${table.externalId} IS NULL)`,
+    ),
+    check(
+      'workout_sessions_external_id_length',
+      sql`char_length(${table.externalId}) BETWEEN 1 AND 128`,
+    ),
     check(
       'workout_sessions_cardio_object',
       sql`${table.cardio} IS NULL OR jsonb_typeof(${table.cardio}) = 'object'`,
