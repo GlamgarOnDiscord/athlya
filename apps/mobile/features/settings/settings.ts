@@ -11,11 +11,13 @@ import { ExportJobResponseSchema } from '@athlya/shared/schemas/api';
 
 import { BOOK_CLASS_KIND } from '../classes/classes-controller';
 import { toErrorModel, type ErrorModel } from '../errors';
+import { IMPORT_HEALTH_WORKOUT_KIND } from '../health/apple-health';
 import { CANCEL_RESERVATION_KIND } from '../reservations/reservations-controller';
 import { LOG_SESSION_KIND } from '../workouts/workout-form';
 
 import type { ApiClient } from '../../infrastructure/api/client';
 import type { TokenStore } from '../../infrastructure/auth/token-store';
+import type { AppleHealthLinkStore } from '../../infrastructure/health/link-store';
 import type { UuidV4Generator } from '../../infrastructure/ids';
 import type { DeadLetter, MutationQueue } from '../../infrastructure/sync/queue';
 import type { SyncController } from '../../infrastructure/sync/sync-controller';
@@ -48,6 +50,7 @@ const KIND_KEYS: Readonly<Record<string, TranslationKeys>> = {
   [BOOK_CLASS_KIND]: 'mobile.settings.rejected.kinds.bookClass',
   [CANCEL_RESERVATION_KIND]: 'mobile.settings.rejected.kinds.cancelReservation',
   [LOG_SESSION_KIND]: 'mobile.settings.rejected.kinds.logSession',
+  [IMPORT_HEALTH_WORKOUT_KIND]: 'mobile.settings.rejected.kinds.importHealthWorkout',
 };
 
 export interface RejectedChangeItem {
@@ -118,6 +121,7 @@ export interface DeleteAccountDeps extends RgpdDeps {
     MutationQueue,
     'pendingFor' | 'remove' | 'deadLetters' | 'discardDeadLetter'
   >;
+  readonly healthLinks: Pick<AppleHealthLinkStore, 'disconnect'>;
 }
 
 export type DeleteResult =
@@ -134,7 +138,8 @@ export type DeleteResult =
  * exists, so the screen must always move on):
  * 1. its queued and rejected changes are removed first, so a drain still
  *    running for the user finds nothing left to send (the drain also stops
- *    as soon as the user is no longer signed in);
+ *    as soon as the user is no longer signed in), and its Apple Health
+ *    link is forgotten;
  * 2. then the session is cleared, or at least locked in memory if the
  *    secure storage fails, and the sync owner is re-read.
  */
@@ -153,6 +158,7 @@ export async function deleteAccount(
     for (const letter of deps.queue.deadLetters(userId)) {
       deps.queue.discardDeadLetter(letter.id, userId);
     }
+    deps.healthLinks.disconnect(userId);
   } catch {
     cleanupFailed = true;
   }

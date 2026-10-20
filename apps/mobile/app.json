@@ -39,6 +39,14 @@
         }
       ],
       [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "Athlya reads your workouts, with their heart rate, energy and distance, to log them as sessions.",
+          "NSHealthUpdateUsageDescription": false,
+          "background": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash-mascot.png",

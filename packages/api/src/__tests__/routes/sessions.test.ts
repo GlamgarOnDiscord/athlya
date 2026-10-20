@@ -261,6 +261,36 @@ describe('POST /v1/sessions', () => {
     expect(deps.sessions.logSession).not.toHaveBeenCalled();
   });
 
+  it('forwards the source of an imported session to the deps', async () => {
+    const logSession = vi.fn().mockResolvedValue({ kind: 'created', session: SESSION });
+    const deps = buildStubDeps({ sessions: { logSession } });
+    const source = { provider: 'appleHealth', externalId: '5B2D7C1E-3F4A-4B6C-8D9E-0F1A2B3C4D5E' };
+
+    const res = await call(deps, 'POST', '', { body: { ...LOG_BODY, source } });
+
+    expect(res.status).toBe(201);
+    expect(await readJson<unknown>(res)).toEqual(SESSION);
+    expect(logSession).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ source }),
+      undefined,
+    );
+  });
+
+  it.each([
+    ['an unknown provider', { provider: 'garmin', externalId: 'g-1' }],
+    ['a missing external id', { provider: 'appleHealth' }],
+    [
+      'an external id over 128 characters',
+      { provider: 'appleHealth', externalId: 'x'.repeat(129) },
+    ],
+  ])('rejects a source with %s with 422', async (_label, source) => {
+    const deps = buildStubDeps();
+    const res = await call(deps, 'POST', '', { body: { ...LOG_BODY, source } });
+    expect(res.status).toBe(422);
+    expect(deps.sessions.logSession).not.toHaveBeenCalled();
+  });
+
   it('maps studio_mismatch to 422 Problem Details', async () => {
     const logSession = vi.fn().mockResolvedValue({ kind: 'studio_mismatch' });
     const deps = buildStubDeps({ sessions: { logSession } });

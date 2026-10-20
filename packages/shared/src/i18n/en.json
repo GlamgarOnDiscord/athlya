@@ -168,7 +168,63 @@
       "empty": "No workout logged in this period yet.",
       "noWeight": "No weighted sets for this exercise in this period.",
       "truncated": "Only the most recent 1,000 sessions of this period are included.",
-      "link": "My progression"
+      "link": "My progression",
+      "cardio": {
+        "title": "Cardio",
+        "description": "Distance, average power and average speed of the sessions recorded on a connected machine.",
+        "machine": "Machine",
+        "machines": {
+          "indoorBike": "Indoor bike",
+          "treadmill": "Treadmill",
+          "rower": "Rower",
+          "crossTrainer": "Cross trainer",
+          "unspecified": "Other machine"
+        },
+        "bucket": {
+          "legend": "Group distance by",
+          "day": "Day",
+          "week": "Week"
+        },
+        "summary": {
+          "sessions": "Sessions",
+          "distance": "Distance",
+          "duration": "Moving time",
+          "energy": "Energy"
+        },
+        "distance": {
+          "titleWeek": "Weekly distance: {machine}",
+          "titleDay": "Daily distance: {machine}",
+          "description": "Distance covered on this machine in each period, in km.",
+          "pointWeek": "Week of {date}: {value} km",
+          "pointDay": "{date}: {value} km",
+          "empty": "No distance reported on this machine in this period."
+        },
+        "power": {
+          "title": "Average power: {machine}",
+          "description": "Average power of each session, in watts.",
+          "point": "{date}: {value} W",
+          "empty": "No power reported on this machine in this period."
+        },
+        "speed": {
+          "title": "Average speed: {machine}",
+          "description": "Average speed of each session, in km/h.",
+          "point": "{date}: {value} km/h",
+          "empty": "No speed reported on this machine in this period."
+        },
+        "table": {
+          "km": "km",
+          "watts": "W",
+          "kmh": "km/h"
+        },
+        "units": {
+          "km": "{value} km",
+          "kcal": "{value} kcal",
+          "hoursMinutes": "{hours} h {minutes} min",
+          "minutes": "{minutes} min"
+        },
+        "empty": "No cardio session recorded on a connected machine in this period yet.",
+        "unavailable": "Cardio progression is not available yet. Check back later."
+      }
     }
   },
   "consents": {
@@ -683,6 +739,7 @@
           "bookClass": "Class booking",
           "cancelReservation": "Reservation cancellation",
           "logSession": "Workout log",
+          "importHealthWorkout": "Apple Health import",
           "other": "Change"
         }
       },
@@ -724,6 +781,15 @@
         "lineSummary": "Days trained: {count}, from {from} to {to}. Latest: {latest} kg, highest: {max} kg, lowest: {min} kg.",
         "barSummary": "Weeks: {weeks}, from {from} to {to}. Sessions: {total} in total, {max} in the busiest week, {latest} in the latest week.",
         "noSessions": "No session logged in this period, so there is no weekly frequency to show."
+      },
+      "cardio": {
+        "machineLabel": "Machine",
+        "machineHint": "Shows the cardio charts of this machine.",
+        "bucketLabel": "Group distance by",
+        "bucketHint": "Groups the distance chart by day or by week.",
+        "distanceSummary": "Periods: {count}, from {from} to {to}. Distance: {total} km in total, {max} km at most in one period, {latest} km in the latest period.",
+        "powerSummary": "Sessions with power: {count}, from {from} to {to}. Latest: {latest} W, highest: {max} W, lowest: {min} W.",
+        "speedSummary": "Sessions with speed: {count}, from {from} to {to}. Latest: {latest} km/h, highest: {max} km/h, lowest: {min} km/h."
       }
     },
     "coach": {
@@ -847,6 +913,51 @@
           "timeout": "The machine did not answer. Try again.",
           "controlLost": "The machine took control back (a button on its console, or another app). Take control again to continue."
         }
+      }
+    },
+    "health": {
+      "title": "Apple Health",
+      "description": "Import your Apple Health workouts as sessions. Athlya only reads your workouts and their heart rate, energy and distance; it never writes to Apple Health.",
+      "connect": "Connect Apple Health",
+      "connectHint": "Asks for read access to your Apple Health workouts.",
+      "connectedSince": "Connected. Workouts from {date} onwards are imported.",
+      "importNow": "Import now",
+      "importNowHint": "Imports the workouts added to Apple Health since the last import.",
+      "disconnect": "Disconnect Apple Health",
+      "disconnectHint": "Stops importing on this device. Sessions already imported stay.",
+      "disconnected": "Disconnected. To remove Athlya's access, open the Health app, then Sharing, Apps, Athlya.",
+      "unavailable": "Apple Health is not available on this device.",
+      "consentRequired": "Importing from Apple Health needs your consent to share data with third parties. You can grant it in the consents section of your profile.",
+      "result": {
+        "done": "Import finished: {imported} imported, {queued} waiting to sync, {skipped} skipped.",
+        "none": "No new workout to import.",
+        "stopped": "Import stopped: {imported} imported, {queued} waiting to sync. Try again later."
+      },
+      "summary": {
+        "source": "Imported from Apple Health",
+        "distance": "Distance {km} km",
+        "energy": "Energy {kcal} kcal",
+        "avgHeartRate": "Avg heart rate {bpm} bpm",
+        "maxHeartRate": "Max heart rate {bpm} bpm"
+      },
+      "activities": {
+        "core": "Core training",
+        "crossTraining": "Cross training",
+        "cycling": "Cycling",
+        "dance": "Dance",
+        "elliptical": "Elliptical",
+        "hiit": "HIIT",
+        "hiking": "Hiking",
+        "mixedCardio": "Mixed cardio",
+        "pilates": "Pilates",
+        "rowing": "Rowing",
+        "running": "Running",
+        "stairs": "Stair climbing",
+        "strength": "Strength training",
+        "swimming": "Swimming",
+        "walking": "Walking",
+        "yoga": "Yoga",
+        "other": "Workout"
       }
     }
   },

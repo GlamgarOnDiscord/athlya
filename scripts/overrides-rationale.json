@@ -55,6 +55,22 @@
       "ghsa": "GHSA-5j98-mcp5-4vw2",
       "added": "2026-10-12",
       "remove_when": "@opennextjs/cloudflare depends on glob >=10.5.0"
+    },
+    "uuid@<11.1.1": {
+      "pinned": "^11.1.1",
+      "reason": "Fixes a missing buffer bounds check in v3/v5/v6 when a caller passes buf; reached only at build time through @expo/cli > @expo/config-plugins > xcode",
+      "cve": null,
+      "ghsa": "GHSA-w5hq-g745-h8pq",
+      "added": "2026-10-19",
+      "remove_when": "xcode (via @expo/config-plugins) depends on uuid >=11.1.1"
+    },
+    "postcss-selector-parser@<7.1.6": {
+      "pinned": "^7.1.6",
+      "reason": "Fixes quadratic complexity in flat selector parsing (CPU exhaustion); reached only at build time through nativewind > react-native-css-interop > tailwindcss 3 and postcss-nested",
+      "cve": null,
+      "ghsa": "GHSA-rj75-hqrm-r3gf",
+      "added": "2026-10-19",
+      "remove_when": "tailwindcss 3 / postcss-nested (via nativewind) depend on postcss-selector-parser >=7.1.6"
     }
   }
 }
