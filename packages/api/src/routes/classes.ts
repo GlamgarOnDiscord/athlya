@@ -80,6 +80,8 @@ export type UpdateClassOutcome =
   | { readonly kind: 'updated'; readonly class: unknown }
   | { readonly kind: 'conflict' }
   | { readonly kind: 'capacity_below_confirmed' }
+  | { readonly kind: 'class_already_started' }
+  | { readonly kind: 'starts_at_in_past' }
   | { readonly kind: 'not_found' };
 
 /**
@@ -123,7 +125,8 @@ export interface ClassesDeps {
 function problem409(
   c: Context<HonoEnv>,
   detail: string,
-  code: 'version_conflict' | 'capacity_below_confirmed' = 'version_conflict',
+  code:
+    'version_conflict' | 'capacity_below_confirmed' | 'class_already_started' = 'version_conflict',
 ): Response {
   return c.body(
     JSON.stringify({
@@ -135,6 +138,22 @@ function problem409(
       traceId: c.get('traceId'),
     }),
     409,
+    { 'content-type': 'application/problem+json' },
+  );
+}
+
+/** Problem Details body for a class start time that is not in the future. */
+function problem422StartsAtInPast(c: Context<HonoEnv>): Response {
+  return c.body(
+    JSON.stringify({
+      type: 'about:blank',
+      title: 'Unprocessable Entity',
+      status: 422,
+      detail: 'a class cannot be moved to a start time that is not in the future',
+      code: 'starts_at_in_past',
+      traceId: c.get('traceId'),
+    }),
+    422,
     { 'content-type': 'application/problem+json' },
   );
 }
@@ -291,9 +310,17 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
         case 'capacity_below_confirmed':
           return problem409(
             c,
-            'capacity cannot be lowered below the number of confirmed reservations',
+            'capacity cannot be lowered below the number of confirmed reservations and held seats',
             'capacity_below_confirmed',
           );
+        case 'class_already_started':
+          return problem409(
+            c,
+            'the class already started; its start time cannot change',
+            'class_already_started',
+          );
+        case 'starts_at_in_past':
+          return problem422StartsAtInPast(c);
         case 'not_found':
           return problem404(c, `class ${id} not found`);
       }

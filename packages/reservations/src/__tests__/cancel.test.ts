@@ -122,6 +122,7 @@ interface RepoMocks {
   findReservationForUpdate: Mock<CancelRepo['findReservationForUpdate']>;
   findClassForUpdate: Mock<CancelRepo['findClassForUpdate']>;
   updateReservationStatus: Mock<CancelRepo['updateReservationStatus']>;
+  isHoldActive: Mock<CancelRepo['isHoldActive']>;
   promoteOldestWaitlist: Mock<CancelRepo['promoteOldestWaitlist']>;
   insertOutbox: Mock<CancelRepo['insertOutbox']>;
 }
@@ -143,6 +144,7 @@ function buildRepo(): { repo: CancelRepo; mocks: RepoMocks } {
   const findReservationForUpdate = vi.fn<CancelRepo['findReservationForUpdate']>();
   const findClassForUpdate = vi.fn<CancelRepo['findClassForUpdate']>();
   const updateReservationStatus = vi.fn<CancelRepo['updateReservationStatus']>();
+  const isHoldActive = vi.fn<CancelRepo['isHoldActive']>().mockResolvedValue(true);
   const promoteOldestWaitlist = vi
     .fn<CancelRepo['promoteOldestWaitlist']>()
     .mockResolvedValue({ outcome: 'no_waiter' });
@@ -153,6 +155,7 @@ function buildRepo(): { repo: CancelRepo; mocks: RepoMocks } {
     findReservationForUpdate,
     findClassForUpdate,
     updateReservationStatus,
+    isHoldActive,
     promoteOldestWaitlist,
     insertOutbox,
   };
@@ -164,6 +167,7 @@ function buildRepo(): { repo: CancelRepo; mocks: RepoMocks } {
       findReservationForUpdate,
       findClassForUpdate,
       updateReservationStatus,
+      isHoldActive,
       promoteOldestWaitlist,
       insertOutbox,
     },
@@ -791,5 +795,104 @@ describe('cancelReservation — Req 9.3 FIFO ordering', () => {
     // Exactly two event ids were minted — no spurious calls on
     // behalf of T2 or T3.
     expect(newEventId).toHaveBeenCalledTimes(2);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Seat hold release (issue #723)                                     */
+/* ------------------------------------------------------------------ */
+
+describe('cancelReservation: releasing a seat hold', () => {
+  it('releases an active hold inside the 2-hour window and returns its seat to the counter', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation({ status: 'pending' }));
+    // One hour before the class: a booking could no longer be cancelled.
+    mocks.findClassForUpdate.mockResolvedValueOnce(
+      makeClass({ startsAt: new Date(FROZEN_NOW + 60 * 60 * 1000) }),
+    );
+    const released = makeReservation({ status: 'cancelled', cancelledAt: new Date(FROZEN_NOW) });
+    mocks.updateReservationStatus.mockResolvedValueOnce(released);
+
+    const result = await cancelReservation(input);
+
+    expect(result).toEqual({ code: 'ok', cancelled: released, promoted: null });
+    expect(mocks.isHoldActive).toHaveBeenCalledExactlyOnceWith(TX_TOKEN, RESERVATION_ID);
+    expect(mocks.updateReservationStatus).toHaveBeenCalledExactlyOnceWith(
+      TX_TOKEN,
+      RESERVATION_ID,
+      'cancelled',
+      new Date(FROZEN_NOW),
+    );
+    expect(mocks.promoteOldestWaitlist).toHaveBeenCalledExactlyOnceWith(TX_TOKEN, CLASS_ID);
+    // No cancellation notice for a seat that was never booked.
+    expect(mocks.insertOutbox).not.toHaveBeenCalled();
+    expect(incrRemaining).toHaveBeenCalledExactlyOnceWith(CLASS_ID);
+  });
+
+  it('hands the seat of an active hold to the oldest waiter', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation({ status: 'pending' }));
+    mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
+    mocks.updateReservationStatus.mockResolvedValueOnce(
+      makeReservation({ status: 'cancelled', cancelledAt: new Date(FROZEN_NOW) }),
+    );
+    mocks.promoteOldestWaitlist.mockResolvedValueOnce({ outcome: 'promoted', reservation: WAITER });
+
+    const result = await cancelReservation(input);
+
+    expect(result).toMatchObject({ code: 'ok', promoted: WAITER });
+    expect(collectOutboxEvents(mocks.insertOutbox).map((e) => e.eventType)).toEqual([
+      'reservation.promoted',
+    ]);
+    expect(incrRemaining).not.toHaveBeenCalled();
+  });
+
+  it('releases an expired hold without promoting or touching the counter', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation({ status: 'pending' }));
+    mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
+    mocks.isHoldActive.mockResolvedValueOnce(false);
+    mocks.updateReservationStatus.mockResolvedValueOnce(
+      makeReservation({ status: 'cancelled', cancelledAt: new Date(FROZEN_NOW) }),
+    );
+
+    const result = await cancelReservation(input);
+
+    expect(result).toMatchObject({ code: 'ok', promoted: null });
+    expect(mocks.promoteOldestWaitlist).not.toHaveBeenCalled();
+    expect(mocks.insertOutbox).not.toHaveBeenCalled();
+    expect(incrRemaining).not.toHaveBeenCalled();
+  });
+
+  it('releases an active hold of a started class without handing its seat on', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation({ status: 'pending' }));
+    // The class started ten minutes ago while the hold was still open.
+    mocks.findClassForUpdate.mockResolvedValueOnce(
+      makeClass({ startsAt: new Date(FROZEN_NOW - 10 * 60 * 1000) }),
+    );
+    mocks.updateReservationStatus.mockResolvedValueOnce(
+      makeReservation({ status: 'cancelled', cancelledAt: new Date(FROZEN_NOW) }),
+    );
+
+    const result = await cancelReservation(input);
+
+    expect(result).toMatchObject({ code: 'ok', promoted: null });
+    expect(mocks.promoteOldestWaitlist).not.toHaveBeenCalled();
+    expect(mocks.insertOutbox).not.toHaveBeenCalled();
+    expect(incrRemaining).not.toHaveBeenCalled();
+  });
+
+  it('never asks a confirmed cancellation whether it is a hold', async () => {
+    const { input, mocks } = buildInput();
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation());
+    mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
+    mocks.updateReservationStatus.mockResolvedValueOnce(
+      makeReservation({ status: 'cancelled', cancelledAt: new Date(FROZEN_NOW) }),
+    );
+
+    await cancelReservation(input);
+
+    expect(mocks.isHoldActive).not.toHaveBeenCalled();
   });
 });

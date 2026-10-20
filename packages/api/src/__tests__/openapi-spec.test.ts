@@ -92,6 +92,8 @@ describe('GET /openapi.json', () => {
       '/v1/classes/{id}',
       '/v1/reservations',
       '/v1/reservations/{reservationId}',
+      '/v1/reservations/holds',
+      '/v1/reservations/{reservationId}/confirm',
       '/v1/reservations/me',
       '/v1/studios/me',
       '/v1/sessions',

@@ -205,3 +205,24 @@ describe('listMyReservations cursor pagination (issue #334)', () => {
     ]);
   });
 });
+
+describe('listMyReservations leaves seat holds out (issue #723)', () => {
+  it('filters pending rows in SQL', async () => {
+    const db = buildFakeDb([makeRow(V4_ID, STARTS_AT)]);
+    await listMyReservations(USER_ID, {}, { db: db as never, claims: CLAIMS });
+
+    const where = db._selectQuery.where.mock.calls[0]?.[0] as SQL;
+    const rendered = dialect.sqlToQuery(where);
+    expect(rendered.sql).toMatch(/"reservations"\."status" <> \$\d+/u);
+    expect(rendered.params).toContain('pending');
+  });
+
+  it('never returns a pending row, even if one slipped through', async () => {
+    const pending = { ...makeRow(V7_ID, STARTS_AT), status: 'pending' as const };
+    const db = buildFakeDb([makeRow(V4_ID, STARTS_AT), pending as never]);
+
+    const result = await listMyReservations(USER_ID, {}, { db: db as never, claims: CLAIMS });
+
+    expect(result.items.map((i) => i.id)).toEqual([V4_ID]);
+  });
+});

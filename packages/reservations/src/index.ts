@@ -20,6 +20,7 @@ export * from './reconcile.js';
 export * from './checkin.js';
 export * from './cancel.js';
 export * from './book.js';
+export * from './hold.js';
 export type {
   CreateClassInput,
   CreateClassErrorCode,

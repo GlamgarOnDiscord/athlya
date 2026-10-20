@@ -57,7 +57,11 @@
 import { withTenant, type AthlyaDb, type AthlyaTx, type TenantClaims } from '@athlya/db/client';
 import { isPostgresRaiseException, isPostgresUniqueViolation } from '@athlya/db/errors';
 import { classes, outbox, reservations } from '@athlya/db/schema';
-import { ClassCapacityExceededError, UniqueViolationError } from '@athlya/reservations';
+import {
+  ClassCapacityExceededError,
+  HoldExpiredError,
+  UniqueViolationError,
+} from '@athlya/reservations';
 import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 
 import { noteOutboxWrite } from '../events/outbox-kick.js';
@@ -68,12 +72,16 @@ import { toDateOrNull } from './service-functions.js';
 import type { ReservationRow } from '@athlya/db/schema';
 import type {
   BookingClassClock,
+  BookingClassLock,
   BookingClassRow,
   BookingEventPublisher,
   BookingOutboxEvent,
   BookingRepo,
   BookingReservationRow,
   BookingTx,
+  HeldSeat,
+  HoldRepo,
+  OwnHold,
 } from '@athlya/reservations';
 import type {
   CancelOutboxEvent,
@@ -113,11 +121,19 @@ function toAthlyaTx(tx: BookingTx): AthlyaTx {
 /* ------------------------------------------------------------------ */
 
 /**
- * Factory — produces a `BookingRepo` bound to the supplied Drizzle
- * instance. Safe to rebuild per-request (see
- * `reservations-deps.ts` for the I/O-isolation rationale).
+ * Factory: produces the `BookingRepo` (and the `HoldRepo` of seat
+ * holds, issue #723) bound to the supplied Drizzle instance. Safe to
+ * rebuild per-request (see `reservations-deps.ts` for the
+ * I/O-isolation rationale).
+ *
+ * `hold_expires_at` is read and written with explicit SQL only: the
+ * Drizzle table leaves it out so it never reaches a wire row (see
+ * `@athlya/db/schema/reservations`).
  */
-export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
+export function createDrizzleBookingRepo(
+  db: AthlyaDb,
+  claims: TenantClaims,
+): BookingRepo & HoldRepo {
   return {
     async findClass(classId): Promise<BookingClassRow | null> {
       return withConnectionRetry(() =>
@@ -152,6 +168,121 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
       const row = rows[0];
       const now = toDateOrNull(row?.now ?? null);
       return row === undefined || now === null ? null : { startsAt: row.startsAt, now };
+    },
+
+    async lockClassForBooking(tx, classId): Promise<BookingClassLock | null> {
+      // `classes_update_admin` keeps a member from locking the class row
+      // directly; the function locks it for a class of the caller's
+      // studio only (migration 0050).
+      const rows = await txRows<{
+        starts_at: Date | string | null;
+        version: number | string | null;
+        db_now: Date | string | null;
+      }>(
+        toAthlyaTx(tx),
+        sql`SELECT starts_at, version, db_now FROM reservation_lock_class_for_booking(${classId}::uuid)`,
+      );
+      const row = rows[0];
+      const startsAt = toDateOrNull(row?.starts_at ?? null);
+      const now = toDateOrNull(row?.db_now ?? null);
+      if (row === undefined || startsAt === null || now === null || row.version === null) {
+        return null;
+      }
+      return { startsAt, now, version: Number(row.version) };
+    },
+
+    async findOwnHold(tx, classId, userId): Promise<OwnHold | null> {
+      const rows = await txRows<{
+        id: string;
+        expires_at: Date | string | null;
+        db_now: Date | string | null;
+      }>(
+        toAthlyaTx(tx),
+        sql`SELECT id::text AS id, hold_expires_at AS expires_at, now() AS db_now
+              FROM reservations
+             WHERE class_id = ${classId}::uuid
+               AND user_id = ${userId}::uuid
+               AND status = 'pending'
+             LIMIT 1
+               FOR UPDATE`,
+      );
+      const row = rows[0];
+      const expiresAt = toDateOrNull(row?.expires_at ?? null);
+      const now = toDateOrNull(row?.db_now ?? null);
+      return row === undefined || expiresAt === null || now === null
+        ? null
+        : { id: row.id, expiresAt, now };
+    },
+
+    async insertHold(tx, input): Promise<HeldSeat> {
+      try {
+        const rows = await txRows<{ id: string; expires_at: Date | string | null }>(
+          toAthlyaTx(tx),
+          sql`INSERT INTO reservations (class_id, user_id, status, hold_expires_at)
+              VALUES (${input.classId}::uuid, ${input.userId}::uuid, 'pending',
+                      now() + make_interval(secs => ${input.ttlSeconds}::int))
+              RETURNING id::text AS id, hold_expires_at AS expires_at`,
+        );
+        const row = rows[0];
+        const expiresAt = toDateOrNull(row?.expires_at ?? null);
+        if (row === undefined || expiresAt === null) {
+          throw new Error('insertHold: INSERT returned no row');
+        }
+        return { reservationId: row.id, classId: input.classId, expiresAt };
+      } catch (err) {
+        if (isPostgresUniqueViolation(err)) {
+          throw new UniqueViolationError();
+        }
+        if (isPostgresRaiseException(err, 'class_capacity_exceeded')) {
+          throw new ClassCapacityExceededError();
+        }
+        throw err;
+      }
+    },
+
+    async confirmHold(tx, reservationId): Promise<BookingReservationRow> {
+      try {
+        // The capacity trigger clears `hold_expires_at` and refuses an
+        // expired hold (`hold_expired`).
+        const [row] = await toAthlyaTx(tx)
+          .update(reservations)
+          .set({ status: 'confirmed' })
+          .where(and(eq(reservations.id, reservationId), eq(reservations.status, 'pending')))
+          .returning();
+        if (row === undefined) {
+          throw new HoldExpiredError(`confirmHold: ${reservationId} is no longer a hold`);
+        }
+        return row;
+      } catch (err) {
+        if (isPostgresRaiseException(err, 'hold_expired')) {
+          throw new HoldExpiredError();
+        }
+        if (isPostgresRaiseException(err, 'class_capacity_exceeded')) {
+          throw new ClassCapacityExceededError();
+        }
+        throw err;
+      }
+    },
+
+    async releaseHold(tx, reservationId): Promise<void> {
+      await toAthlyaTx(tx)
+        .update(reservations)
+        .set({ status: 'cancelled', cancelledAt: sql`now()` })
+        .where(and(eq(reservations.id, reservationId), eq(reservations.status, 'pending')));
+    },
+
+    async findReservationForUpdate(
+      tx,
+      reservationId,
+      userId,
+    ): Promise<BookingReservationRow | null> {
+      const rows = await toAthlyaTx(tx)
+        .select()
+        .from(reservations)
+        .where(and(eq(reservations.id, reservationId), eq(reservations.userId, userId)))
+        .for('update')
+        .limit(1);
+      return rows[0] ?? null;
     },
 
     async withTransaction<T>(fn: (tx: BookingTx) => Promise<T>): Promise<T> {
@@ -297,6 +428,14 @@ export function createDrizzleCancelRepo(db: AthlyaDb, claims: TenantClaims): Can
         }
         throw err;
       }
+    },
+
+    async isHoldActive(tx, reservationId): Promise<boolean> {
+      const rows = await txRows<{ active: boolean | null }>(
+        tx as AthlyaTx,
+        sql`SELECT hold_expires_at > now() AS active FROM reservations WHERE id = ${reservationId}::uuid`,
+      );
+      return rows[0]?.active === true;
     },
 
     async promoteOldestWaitlist(tx, classId): Promise<WaitlistPromotion> {

@@ -17,14 +17,18 @@
  *                              (incl. audit anonymisation and program
  *                              subscriptions purge) →
  *                              book, waitlist position, cancel with
- *                              waitlist promotion (member claims)
+ *                              waitlist promotion (member claims) →
+ *                              seat hold, fenced class lock, hold
+ *                              confirmation (member claims)
  *   athlya_cron (CRON_DB_URL)  leased outbox claim privileges, capacity
- *                              reconcile snapshot, expired idempotency
- *                              key purge, RGPD user anonymisation
+ *                              reconcile snapshot, hold expiry and
+ *                              waitlist promotion sweep, expired
+ *                              idempotency key purge, RGPD user
+ *                              anonymisation
  *   athlya_billing             Stripe event application (the only role
  *     (BILLING_DB_URL)         allowed to; athlya_app is refused)
  *
- * Usage (staging, after migrations 0031–0047):
+ * Usage (staging, after migrations 0031–0050):
  *   APP_DATABASE_URL=postgresql://athlya_app:...@.../athlya \
  *   CRON_DATABASE_URL=postgresql://athlya_cron:...@.../athlya \
  *   BILLING_DATABASE_URL=postgresql://athlya_billing:...@.../athlya \
@@ -71,6 +75,7 @@ export const REQUIRED_FUNCTIONS = [
   'reservation_waitlist_ahead',
   'rgpd_delete_program_subscriptions',
   'checkin_mark_reservation',
+  'reservation_lock_class_for_booking',
 ];
 
 /** Stripe event application: athlya_billing only (migration 0036). */
@@ -131,7 +136,7 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
   `;
   const present = new Set(fns.map((r) => r.name));
   const missing = REQUIRED_FUNCTIONS.filter((f) => !present.has(f));
-  check(missing.length === 0, `missing or not executable: ${missing.join(', ')} (apply 0032–0045)`);
+  check(missing.length === 0, `missing or not executable: ${missing.join(', ')} (apply 0032–0050)`);
   ok(`${REQUIRED_FUNCTIONS.length} service functions executable`);
 
   const [forge] = await app`SELECT has_function_privilege(${BILLING_APPLY}, 'EXECUTE') AS can`;
@@ -197,7 +202,10 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     const [unknownReset] = await tx`
       SELECT auth_request_password_reset(${`unknown+${userId}@athlya.invalid`}, ${randomUUID()}::uuid) AS enqueued
     `;
-    check(unknownReset.enqueued === false, 'password reset request recorded for an unknown address');
+    check(
+      unknownReset.enqueued === false,
+      'password reset request recorded for an unknown address',
+    );
     ok('password reset request: outbox event recorded without claims, none for an unknown address');
 
     const requestHash = randomUUID().replaceAll('-', '').repeat(2);
@@ -352,6 +360,11 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
   });
   ok('waitlist workloads rolled back — nothing persisted');
 
+  await rolledBack(app, async (tx) => {
+    await runHoldContract(tx, studioSlug, ok);
+  });
+  ok('seat hold workloads rolled back, nothing persisted');
+
   await assertNoBypass(billing, 'athlya_billing', ok);
   await rolledBack(billing, async (tx) => {
     const eventId = `evt_role_contract_${randomUUID()}`;
@@ -390,6 +403,18 @@ export async function runRoleContract({ app, cron, billing, studioSlug, log = co
     await tx`SELECT class_id, capacity, confirmed FROM capacity_reconcile_snapshot()`;
   });
   ok('capacity reconcile: cross-tenant snapshot through capacity_reconcile_snapshot()');
+
+  await rolledBack(cron, async (tx) => {
+    const [row] = await tx`
+      SELECT expired_holds, promoted_waiters, promoted_classes
+        FROM reservation_sweep_holds_and_promote(1)
+    `;
+    check(
+      Number.isInteger(row?.expired_holds) && Number.isInteger(row?.promoted_waiters),
+      'reservation_sweep_holds_and_promote returned no summary (apply 0050, issue #723)',
+    );
+  });
+  ok('hold and waitlist sweep: reservation_sweep_holds_and_promote() as athlya_cron');
 
   await rolledBack(cron, async (tx) => {
     const [row] = await tx`SELECT idempotency_purge_expired(1) AS n`;
@@ -547,6 +572,82 @@ async function runWaitlistContract(tx, studioSlug, ok) {
   const [full] = await tx`SELECT outcome FROM reservation_promote_oldest_waitlist(${cls.id}::uuid)`;
   check(full.outcome === 'no_capacity', `second promotion returned ${full.outcome}`);
   ok('promotion respects capacity');
+}
+
+/**
+ * Seat hold → fenced class lock → confirmation, as members of the smoke
+ * studio under `athlya_app` (migration 0050). Two throwaway members on
+ * a one-seat class: the hold takes the seat, a booking of the other
+ * member is refused, and the holder confirms.
+ */
+async function runHoldContract(tx, studioSlug, ok) {
+  const [studio] = await tx`SELECT id FROM auth_find_studio_by_slug(${studioSlug})`;
+  check(studio !== undefined, `studio slug "${studioSlug}" not found (pre-auth lookup)`);
+
+  const claims = async (userId, role) => {
+    await tx`SELECT set_config('app.user_id', ${userId}, true)`;
+    await tx`SELECT set_config('app.studio_id', ${studio.id}, true)`;
+    await tx`SELECT set_config('app.role', ${role}, true)`;
+  };
+  const member = async () => {
+    const userId = randomUUID();
+    const event = {
+      id: randomUUID(),
+      type: 'auth.user.registered',
+      occurredAt: new Date().toISOString(),
+      studioId: studio.id,
+      payload: { userId },
+    };
+    await tx`
+      SELECT id FROM auth_create_member_with_event(
+        ${userId}::uuid, ${studio.id}::uuid, ${`role-contract+${userId}@athlya.invalid`},
+        'Role contract', NULL, '{}'::jsonb, ${JSON.stringify(event)}::text::jsonb)
+    `;
+    return userId;
+  };
+  const [holder, other] = [await member(), await member()];
+
+  await claims(holder, 'admin');
+  const [cls] = await tx`
+    INSERT INTO classes (studio_id, title, starts_at, duration_min, capacity)
+    VALUES (${studio.id}::uuid, 'Role contract hold', now() + interval '7 days', 60, 1)
+    RETURNING id
+  `;
+
+  await claims(holder, 'member');
+  const [lock] = await tx`
+    SELECT version FROM reservation_lock_class_for_booking(${cls.id}::uuid)
+  `;
+  check(lock?.version === 0, 'a member could not lock the class for a fenced booking');
+  const [held] = await tx`
+    INSERT INTO reservations (class_id, user_id, status, hold_expires_at)
+    VALUES (${cls.id}::uuid, ${holder}::uuid, 'pending', now() + interval '10 minutes')
+    RETURNING id::text AS id
+  `;
+  ok('member locks the class with its version and holds the only seat');
+
+  await claims(other, 'member');
+  const refused = await tx
+    .savepoint(
+      (sp) => sp`
+        INSERT INTO reservations (class_id, user_id, status)
+        VALUES (${cls.id}::uuid, ${other}::uuid, 'confirmed')
+      `,
+    )
+    .then(
+      () => 'booked',
+      (err) => err.message,
+    );
+  check(refused === 'class_capacity_exceeded', `a booking took a held seat (${refused})`);
+  ok('an active hold keeps its seat from another member');
+
+  await claims(holder, 'member');
+  const [confirmed] = await tx`
+    UPDATE reservations SET status = 'confirmed' WHERE id = ${held.id}::uuid
+    RETURNING status::text AS status
+  `;
+  check(confirmed?.status === 'confirmed', 'the holder could not confirm the hold');
+  ok('the holder confirms the hold on the full class');
 }
 
 if (import.meta.main) {
