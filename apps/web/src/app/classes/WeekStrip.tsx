@@ -174,7 +174,11 @@ export function WeekStrip({
               </span>
               <span className="sr-only">
                 {`${longFmt.format(day)}${isToday ? `, ${t('classes.week.todayLong')}` : ''}, ${
-                  count > 0 ? t('classes.week.classCount', { count }) : t('classes.week.noClass')
+                  count === 0
+                    ? t('classes.week.noClass')
+                    : count === 1
+                      ? t('classes.week.classCountOne')
+                      : t('classes.week.classCount', { count })
                 }`}
               </span>
             </button>

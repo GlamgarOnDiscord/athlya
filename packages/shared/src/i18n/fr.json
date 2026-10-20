@@ -109,6 +109,7 @@
       "label": "Choisir un jour",
       "today": "Auj.",
       "todayLong": "aujourd'hui",
+      "classCountOne": "1 cours",
       "classCount": "{count} cours",
       "noClass": "aucun cours",
       "previous": "Semaine précédente",

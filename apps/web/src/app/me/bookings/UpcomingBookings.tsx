@@ -55,6 +55,10 @@ function confirmButtonId(reservationId: string): string {
   return `booking-${reservationId}-confirm`;
 }
 
+function titleId(reservationId: string): string {
+  return `booking-${reservationId}-title`;
+}
+
 export function UpcomingBookings({
   t: tProp,
   client: clientProp,
@@ -139,14 +143,20 @@ export function UpcomingBookings({
         );
         focusIdRef.current = headingId;
       } catch (err) {
-        const message =
+        const windowClosed =
           err instanceof ApiError &&
           err.status === 422 &&
-          err.problem?.code === 'cancellation_window_closed'
-            ? t('reservations.cancelWindowClosed')
-            : t('errors.generic');
+          err.problem?.code === 'cancellation_window_closed';
+        const message = windowClosed ? t('reservations.cancelWindowClosed') : t('errors.generic');
         setErrorById((current) => ({ ...current, [item.id]: message }));
-        focusIdRef.current = cancelButtonId(item.id);
+        if (windowClosed) {
+          // The window closed while the page was open: read it again so the
+          // row trades its cancel button for the note, and keep focus on the row.
+          setNow(new Date());
+          focusIdRef.current = titleId(item.id);
+        } else {
+          focusIdRef.current = cancelButtonId(item.id);
+        }
       } finally {
         setCancellingId(null);
       }
@@ -194,7 +204,6 @@ export function UpcomingBookings({
       ) : (
         <ul aria-labelledby={headingId} className="flex list-none flex-col gap-3 p-0">
           {load.items.map((item) => {
-            const titleId = `booking-${item.id}-title`;
             const error = errorById[item.id];
             return (
               <li
@@ -202,7 +211,7 @@ export function UpcomingBookings({
                 className="flex flex-col gap-3 rounded-xl p-4 ring-1 ring-foreground/10 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex min-w-0 flex-col gap-1">
-                  <p id={titleId} className="font-semibold">
+                  <p id={titleId(item.id)} tabIndex={-1} className="font-semibold outline-none">
                     {item.class.title}
                   </p>
                   <p className="text-sm text-muted-foreground">

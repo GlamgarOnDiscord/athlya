@@ -191,5 +191,30 @@ describe('<ProfileForm />', () => {
 
     expect(screen.getByText('portrait.png')).toBeDefined();
     expect(client.put).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: t('profile.avatarRemove') }));
+    expect(screen.queryByText('portrait.png')).toBeNull();
+    expect(screen.getByText(t('profile.avatarNoFile'))).toBeDefined();
+  });
+
+  it('forgets the picture and lets the same file be picked again when the upload fails', async () => {
+    const client = buildFakeClient({
+      put: vi.fn().mockRejectedValue(new Error('network')) as unknown as ApiClient['put'],
+    });
+    render(<ProfileForm profile={BASE_PROFILE} client={client} t={t} />);
+
+    const input = screen.getByLabelText(new RegExp(t('profile.avatarChoose'))) as HTMLInputElement;
+    const clearValue = vi.spyOn(input, 'value', 'set');
+    const file = new File(['png'], 'portrait.png', { type: 'image/png' });
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file] } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole('alert').textContent).toBe(t('profile.avatarUploadError'));
+    expect(screen.queryByText('portrait.png')).toBeNull();
+    expect(screen.getByText(t('profile.avatarNoFile'))).toBeDefined();
+    expect(clearValue).toHaveBeenCalledWith('');
   });
 });

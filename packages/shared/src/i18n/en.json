@@ -109,6 +109,7 @@
       "label": "Choose a day",
       "today": "Today",
       "todayLong": "today",
+      "classCountOne": "1 class",
       "classCount": "{count} classes",
       "noClass": "no classes",
       "previous": "Previous week",

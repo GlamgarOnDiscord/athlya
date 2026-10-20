@@ -170,11 +170,18 @@ describe('<UpcomingBookings />', () => {
     fireEvent.click(
       screen.getByRole('button', { name: (n) => n.startsWith('Annuler la réservation') }),
     );
+    // The page stayed open until the class was under two hours away.
+    vi.setSystemTime(new Date('2026-10-21T15:00:00.000Z'));
     fireEvent.click(screen.getByRole('button', { name: t('classes.upcoming.confirmCancel') }));
     await settle();
 
     expect(screen.getByRole('alert').textContent).toBe(t('reservations.cancelWindowClosed'));
-    expect(screen.getByText('Yoga Vinyasa')).toBeDefined();
+    const title = screen.getByText('Yoga Vinyasa');
+    expect(screen.getByText(t('classes.upcoming.cancelClosed'))).toBeDefined();
+    expect(
+      screen.queryByRole('button', { name: (n) => n.startsWith('Annuler la réservation') }),
+    ).toBeNull();
+    expect(document.activeElement).toBe(title);
   });
 
   it('offers a retry when the list cannot be read', async () => {

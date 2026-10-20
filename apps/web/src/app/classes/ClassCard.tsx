@@ -28,7 +28,8 @@ export interface ClassCardProps {
   readonly classInfo: ClassCardInfo;
   readonly t: Translator;
   readonly locale: Locale;
-  readonly onBook: (classId: string) => Promise<void>;
+  /** Called with the class id and the seats left as this card shows them. */
+  readonly onBook: (classId: string, remaining: number) => Promise<void>;
   /** The member's own place in this class, when they hold one. */
   readonly booking?: MemberBooking | null;
   readonly disabled?: boolean;
@@ -67,8 +68,8 @@ export function ClassCard({
   }, [seats.ratio]);
 
   const onClick = useCallback(() => {
-    void onBook(id);
-  }, [id, onBook]);
+    void onBook(id, remaining);
+  }, [id, remaining, onBook]);
 
   const seatsLabel = seats.full
     ? t('classes.card.fullWaitlist')

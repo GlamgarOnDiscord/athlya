@@ -18,7 +18,8 @@
  *     client-generated `Idempotency-Key` (Req 8.5, 20.3).
  *
  * Booking lifecycle:
- *   1. Click decrements `remaining` locally (optimistic).
+ *   1. Click decrements `remaining` locally (optimistic) when a seat
+ *      is left; joining the waitlist of a full class leaves it at 0.
  *   2. POST fires with a fresh `Idempotency-Key` per *logical*
  *      attempt. While the request is in-flight we keep the key in
  *      `keysInFlight` (keyed by `classId`); mid-flight retries
@@ -212,14 +213,16 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
       } catch {
         next = { kind: 'error' };
       }
-      const known = await held;
       if (cancelled) return;
+      // The schedule shows as soon as it arrives; held places follow.
+      setState((s) => ({ ...s, status: next }));
+      const known = await held;
+      if (cancelled || known === null) return;
       setState((s) => {
-        if (known === null) return { ...s, status: next };
         // This session's outcomes are newer than the read, so they win.
         const merged = new Map(known);
         for (const [classId, booking] of s.bookings) merged.set(classId, booking);
-        return { ...s, status: next, bookings: merged };
+        return { ...s, bookings: merged };
       });
     })();
 
@@ -267,7 +270,7 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
   /* --------------------------- booking ---------------------------- */
 
   const handleBook = useCallback(
-    async (classId: string): Promise<void> => {
+    async (classId: string, remaining: number): Promise<void> => {
       // Pick / mint the Idempotency-Key for this logical attempt.
       let key = keysInFlightRef.current.get(classId);
       if (key === undefined) {
@@ -285,8 +288,13 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
         return { ...s, bookingInFlight: next, announcement: '' };
       });
 
-      // Optimistic decrement.
-      mutateRemaining(classId, -1);
+      // Optimistic decrement. A full class (joining the waitlist) has no
+      // seat to take, so there is nothing to give back if the call fails.
+      const decremented = remaining > 0;
+      if (decremented) mutateRemaining(classId, -1);
+      const revertDecrement = (): void => {
+        if (decremented) mutateRemaining(classId, +1);
+      };
 
       try {
         const body = await client.post<BookingSuccessBody>(
@@ -325,21 +333,21 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
               return { ...s, bookings: next, announcement: message };
             });
           } else if (err.status === 422 && err.problem?.code === 'class_in_past') {
-            mutateRemaining(classId, +1);
+            revertDecrement();
             setCardError(classId, t('errors.classInPast'));
           } else if (err.status === 422) {
-            mutateRemaining(classId, +1);
+            revertDecrement();
             setCardError(classId, t('errors.bookingFull'));
           } else {
-            mutateRemaining(classId, +1);
+            revertDecrement();
             setCardError(classId, t('errors.generic'));
           }
         } else if (err instanceof ApiServerError) {
-          mutateRemaining(classId, +1);
+          revertDecrement();
           setCardError(classId, t('errors.generic'));
         } else {
           // Network / unknown.
-          mutateRemaining(classId, +1);
+          revertDecrement();
           setCardError(classId, t('errors.generic'));
         }
       } finally {

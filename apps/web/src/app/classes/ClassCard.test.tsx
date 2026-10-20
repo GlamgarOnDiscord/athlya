@@ -6,7 +6,7 @@
  * out to the parent:
  *   1. Title, start time, duration and the capacity line render, and
  *      the bar fills with the seats taken, like the text.
- *   2. Clicking the primary CTA invokes `onBook(classInfo.id)`.
+ *   2. Clicking the primary CTA invokes `onBook(classInfo.id, remaining)`.
  *   3. When `remaining === 0` the card offers the waitlist.
  *   4. The `role="alert"` slot surfaces when `error` is passed in.
  *   5. A held place replaces the action with its state in text.
@@ -77,7 +77,7 @@ describe('<ClassCard />', () => {
     expect(screen.getByText(t('classes.card.placeLeft'))).toBeDefined();
   });
 
-  it('calls onBook(classInfo.id) when the CTA is clicked', async () => {
+  it('calls onBook(classInfo.id, remaining) when the CTA is clicked', async () => {
     const onBook = vi.fn().mockResolvedValue(undefined);
     render(<ClassCard classInfo={BASE_CLASS} t={t} locale="fr" onBook={onBook} />);
 
@@ -90,7 +90,7 @@ describe('<ClassCard />', () => {
     });
 
     expect(onBook).toHaveBeenCalledTimes(1);
-    expect(onBook).toHaveBeenCalledWith('class-1');
+    expect(onBook).toHaveBeenCalledWith('class-1', 4);
   });
 
   it('renders the join-waitlist button and does not call onBook when remaining is 0', () => {

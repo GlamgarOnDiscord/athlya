@@ -187,6 +187,21 @@ describe('<ClassesList />', () => {
     ).toBeDefined();
   });
 
+  it('lists the classes without waiting for the reservations read', async () => {
+    const client = buildFakeClient({
+      get: routes(
+        () => Promise.resolve({ items: [klass({})] }),
+        () => new Promise(() => undefined),
+      ),
+    });
+
+    await renderAndSettle(<ClassesList client={client} t={t} />);
+
+    expect(
+      screen.getByRole('button', { name: (n) => n.startsWith(t('classes.card.book')) }),
+    ).toBeDefined();
+  });
+
   it('shows the classes the member already holds as booked or waitlisted', async () => {
     const booked = klass({ title: 'CrossFit' });
     const waitlisted = klass({
@@ -327,6 +342,30 @@ describe('<ClassesList />', () => {
     expect(alert.textContent).toBe(t('errors.classInPast'));
   });
 
+  it('keeps a full class full when joining its waitlist fails', async () => {
+    const item = klass({ remaining: 0 });
+    const client = buildFakeClient({
+      get: routes(() => Promise.resolve({ items: [item] })),
+      post: vi.fn().mockRejectedValue(new Error('network')) as unknown as ApiClient['post'],
+    });
+
+    await renderAndSettle(<ClassesList client={client} t={t} />);
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: (n) => n.startsWith(t('classes.card.joinWaitlist')) }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // No seat was taken, so none is given back: still 12 of 12 and full.
+    expect(screen.getByText('12 sur 12 prises')).toBeDefined();
+    expect(
+      screen.getByRole('button', { name: (n) => n.startsWith(t('classes.card.joinWaitlist')) }),
+    ).toBeDefined();
+    expect(screen.getByRole('alert').textContent).toBe(t('errors.generic'));
+  });
+
   describe('week strip', () => {
     const tomorrow = klass({
       id: '44444444-4444-4444-8444-444444444444' as ClassWithRemaining['id'],
@@ -352,6 +391,8 @@ describe('<ClassesList />', () => {
       expect(tabs[0]?.getAttribute('aria-current')).toBe('date');
       expect(tabs[0]?.textContent).toContain(t('classes.week.today'));
       expect(tabs[1]?.getAttribute('aria-selected')).toBe('true');
+      expect(tabs[0]?.textContent).toContain(t('classes.week.noClass'));
+      expect(tabs[1]?.textContent).toContain(t('classes.week.classCountOne'));
       expect(screen.getByText('Pilates')).toBeDefined();
       expect(screen.queryByText('Spinning')).toBeNull();
     });

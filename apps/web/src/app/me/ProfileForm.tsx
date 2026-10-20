@@ -200,12 +200,13 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
               accept="image/png, image/jpeg, image/webp"
               disabled={form.pending}
               onChange={async (e) => {
+                const input = e.currentTarget;
                 setForm((s) => {
                   const { avatarUrl: _omit, ...rest } = s.fieldErrors;
                   void _omit;
                   return { ...s, fieldErrors: rest };
                 });
-                const file = e.target.files?.[0];
+                const file = input.files?.[0];
                 if (file === undefined) return;
                 if (file.size > AVATAR_MAX_BYTES) {
                   setForm((s) => ({
@@ -217,7 +218,7 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
                       }),
                     },
                   }));
-                  e.target.value = '';
+                  input.value = '';
                   return;
                 }
                 setForm((s) => ({ ...s, avatarFileName: file.name, pending: true }));
@@ -229,8 +230,11 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
                   );
                   setForm((s) => ({ ...s, avatarUrl: result.avatarUrl, pending: false }));
                 } catch {
+                  // Clear the input so picking the same file again retries.
+                  input.value = '';
                   setForm((s) => ({
                     ...s,
+                    avatarFileName: null,
                     pending: false,
                     fieldErrors: {
                       ...s.fieldErrors,
@@ -267,7 +271,7 @@ export function ProfileForm({ profile, client, t }: ProfileFormProps): ReactElem
               variant="link"
               size="sm"
               className="self-start px-0 text-muted-foreground"
-              onClick={() => setForm((s) => ({ ...s, avatarUrl: '' }))}
+              onClick={() => setForm((s) => ({ ...s, avatarUrl: '', avatarFileName: null }))}
             >
               {t('profile.avatarRemove')}
             </Button>
