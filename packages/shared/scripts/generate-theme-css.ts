@@ -16,6 +16,9 @@ import { buildThemeCss } from '../src/theming/theme-css.ts';
 import { tokens } from '../src/tokens.ts';
 
 const target = resolve(dirname(fileURLToPath(import.meta.url)), '../src/styles/theme.css');
-const css = buildThemeCss(tokens, deriveBrandColorVariables(tokens.colors.light.primary));
+const css = buildThemeCss(tokens, {
+  light: deriveBrandColorVariables(tokens.colors.light.primary),
+  dark: deriveBrandColorVariables(tokens.colors.dark.primary),
+});
 writeFileSync(target, css, 'utf8');
 console.log(`[generate-theme-css] wrote ${target} (${css.length.toString()} bytes)`);

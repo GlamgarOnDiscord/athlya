@@ -31,34 +31,34 @@
   /* Light theme semantic colors */
   --color-light-background: #ffffff;
   --color-light-foreground: #0f172a;
-  --color-light-primary: #0ea5e9;
-  --color-light-primary-foreground: #0f172a;
+  --color-light-primary: #0a0a0a;
+  --color-light-primary-foreground: #ffffff;
   --color-light-secondary: #f1f5f9;
   --color-light-muted: #f1f5f9;
   --color-light-muted-foreground: #475569;
-  --color-light-accent: #e0f2fe;
+  --color-light-accent: #f1f5f9;
   --color-light-destructive: #b91c1c;
   --color-light-success: #15803d;
   --color-light-warning: #b45309;
   --color-light-border: #e2e8f0;
   --color-light-input: #e2e8f0;
-  --color-light-ring: #0284c7;
+  --color-light-ring: #0a0a0a;
 
   /* Dark theme semantic colors */
   --color-dark-background: #0b1220;
   --color-dark-foreground: #f8fafc;
-  --color-dark-primary: #38bdf8;
-  --color-dark-primary-foreground: #0b1220;
+  --color-dark-primary: #d7ff3a;
+  --color-dark-primary-foreground: #0a0a0a;
   --color-dark-secondary: #1e293b;
   --color-dark-muted: #1e293b;
   --color-dark-muted-foreground: #94a3b8;
-  --color-dark-accent: #0c4a6e;
+  --color-dark-accent: #1e293b;
   --color-dark-destructive: #f87171;
   --color-dark-success: #4ade80;
   --color-dark-warning: #fbbf24;
-  --color-dark-border: #1e293b;
-  --color-dark-input: #1e293b;
-  --color-dark-ring: #38bdf8;
+  --color-dark-border: #334155;
+  --color-dark-input: #64748b;
+  --color-dark-ring: #d7ff3a;
 
   /* Active semantic colors (light) */
   --color-background: var(--color-light-background);
@@ -109,6 +109,13 @@
   --chart-2: #d7ff3a;
   --chart-3: #d7ff3a;
 
+  /* Per-tenant brand color (light default), overridden server-side by buildBrandColorCss */
+  --athlya-brand-primary: #0a0a0a;
+  --athlya-brand-primary-rgb: 10, 10, 10;
+  --athlya-brand-on-primary: #ffffff;
+  --athlya-brand-primary-tint: #2f2f2f;
+  --athlya-brand-primary-shade: #090909;
+
   /* Spacing */
   --spacing-xs: 0.25rem;
   --spacing-sm: 0.5rem;
@@ -149,13 +156,6 @@
   --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(15, 23, 42, 0.1);
   --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.1);
-
-  /* Per-tenant brand color, overridden server-side by buildBrandColorCss */
-  --athlya-brand-primary: #0ea5e9;
-  --athlya-brand-primary-rgb: 14, 165, 233;
-  --athlya-brand-on-primary: #0f172a;
-  --athlya-brand-primary-tint: #32b3ec;
-  --athlya-brand-primary-shade: #0c8cc6;
 }
 
 :root.dark {
@@ -207,6 +207,13 @@
   --chart-1: #d7ff3a;
   --chart-2: #0b1220;
   --chart-3: #1e293b;
+
+  /* Per-tenant brand color (dark default), overridden server-side by buildBrandColorCss */
+  --athlya-brand-primary: #d7ff3a;
+  --athlya-brand-primary-rgb: 215, 255, 58;
+  --athlya-brand-on-primary: #0a0a0a;
+  --athlya-brand-primary-tint: #ddff58;
+  --athlya-brand-primary-shade: #b7d931;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -259,6 +266,13 @@
     --chart-1: #d7ff3a;
     --chart-2: #0b1220;
     --chart-3: #1e293b;
+
+    /* Per-tenant brand color (dark default), overridden server-side by buildBrandColorCss */
+    --athlya-brand-primary: #d7ff3a;
+    --athlya-brand-primary-rgb: 215, 255, 58;
+    --athlya-brand-on-primary: #0a0a0a;
+    --athlya-brand-primary-tint: #ddff58;
+    --athlya-brand-primary-shade: #b7d931;
   }
 }
 

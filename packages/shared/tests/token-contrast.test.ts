@@ -43,10 +43,13 @@ function over(top: string, alpha: number, bottom: string): string {
   return `#${mixed.join('')}`;
 }
 
-/** Resolves a shadcn/ui bridge source the way `theme.css` does. */
+/**
+ * Resolves a shadcn/ui bridge source the way `theme.css` does: the brand
+ * variables default to the active mode's primary pair.
+ */
 function bridgeColor(source: string, mode: Mode): string {
-  if (source === 'brandPrimary') return colors.light.primary;
-  if (source === 'brandOnPrimary') return colors.light.primaryForeground;
+  if (source === 'brandPrimary') return colors[mode].primary;
+  if (source === 'brandOnPrimary') return colors[mode].primaryForeground;
   return colors[mode][source as Semantic];
 }
 
@@ -93,8 +96,11 @@ function pairsFor(mode: Mode): Pair[] {
       bg: over(c.destructive, tintAlpha, c.background),
       level: 'text',
     },
+    ui('primary', 'background'),
+    ui('primary', 'muted'),
     ui('ring', 'background'),
     ui('ring', 'muted'),
+    ...(mode === 'dark' ? [ui('input', 'background')] : []),
     ui('destructive', 'background'),
     ui('success', 'background'),
     ui('warning', 'background'),
@@ -119,30 +125,22 @@ interface KnownGap {
 }
 
 const KNOWN_GAPS: readonly KnownGap[] = [
-  ...MODES.map((mode) => ({
+  {
     name: 'input on background (web form field boundary, shadcn border-input)',
-    mode,
-    fg: colors[mode].input,
-    bg: colors[mode].background,
-    level: 'ui' as const,
-    floor: mode === 'light' ? 1.23 : 1.28,
-  })),
+    mode: 'light',
+    fg: colors.light.input,
+    bg: colors.light.background,
+    level: 'ui',
+    floor: 1.23,
+  },
   ...MODES.map((mode) => ({
     name: 'border on background (mobile TextField boundary)',
     mode,
     fg: colors[mode].border,
     bg: colors[mode].background,
     level: 'ui' as const,
-    floor: mode === 'light' ? 1.23 : 1.28,
+    floor: mode === 'light' ? 1.23 : 1.81,
   })),
-  {
-    name: 'primary on background (checked checkbox fill, capacity bar)',
-    mode: 'light',
-    fg: colors.light.primary,
-    bg: colors.light.background,
-    level: 'ui',
-    floor: 2.77,
-  },
 ];
 
 describe('token contrast (WCAG 2.2 AA)', () => {
