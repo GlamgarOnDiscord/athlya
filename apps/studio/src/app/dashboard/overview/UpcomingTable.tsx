@@ -31,7 +31,7 @@ export function UpcomingTable({
               <th
                 key={col}
                 scope="col"
-                className={`px-4 py-2 text-[0.6875rem] font-medium tracking-wider whitespace-nowrap text-muted-foreground uppercase ${
+                className={`px-2 py-2 text-[0.6875rem] sm:px-4 font-medium tracking-wider whitespace-nowrap text-muted-foreground uppercase ${
                   NUMERIC.has(col) ? 'text-right' : 'text-left'
                 } ${col === 'duration' || col === 'left' ? 'hidden md:table-cell' : ''} ${col === 'booked' || col === 'time' ? 'hidden sm:table-cell' : ''}`}
               >
@@ -46,22 +46,24 @@ export function UpcomingTable({
             const booked = bookedSeats(cls);
             return (
               <tr key={cls.id} className="border-b border-border last:border-b-0 hover:bg-muted/50">
-                <td className="px-4 py-2 whitespace-nowrap text-muted-foreground">
+                <td className="px-2 py-2 sm:px-4 whitespace-nowrap text-muted-foreground">
                   {day.format(start)}
                   <span className="text-foreground sm:hidden"> {time.format(start)}</span>
                 </td>
-                <td className="hidden px-4 py-2 whitespace-nowrap sm:table-cell">
+                <td className="hidden px-2 py-2 sm:px-4 whitespace-nowrap sm:table-cell">
                   <time dateTime={cls.startsAt}>{time.format(start)}</time>
                 </td>
-                <td className="max-w-48 truncate px-4 py-2 font-medium">{cls.title}</td>
-                <td className="hidden px-4 py-2 text-right text-muted-foreground md:table-cell">
+                <td className="max-w-48 truncate px-2 py-2 font-medium sm:px-4">{cls.title}</td>
+                <td className="hidden px-2 py-2 sm:px-4 text-right text-muted-foreground md:table-cell">
                   {t('studio.dashboard.duration.minutes', { m: cls.durationMin })}
                 </td>
-                <td className="hidden px-4 py-2 text-right whitespace-nowrap sm:table-cell">
+                <td className="hidden px-2 py-2 sm:px-4 text-right whitespace-nowrap sm:table-cell">
                   {booked}/{cls.capacity}
                 </td>
-                <td className="hidden px-4 py-2 text-right md:table-cell">{cls.remaining}</td>
-                <td className="px-4 py-2 text-right">
+                <td className="hidden px-2 py-2 sm:px-4 text-right md:table-cell">
+                  {cls.remaining}
+                </td>
+                <td className="px-2 py-2 sm:px-4 text-right">
                   {cls.capacity === 0 ? '0' : percent.format(booked / cls.capacity)}
                 </td>
               </tr>

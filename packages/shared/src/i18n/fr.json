@@ -545,7 +545,7 @@
           "duration": "Durée",
           "booked": "Inscrits",
           "left": "Places libres",
-          "fill": "Remplissage"
+          "fill": "Taux"
         }
       },
       "activity": {
