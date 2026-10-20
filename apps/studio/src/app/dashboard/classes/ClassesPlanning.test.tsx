@@ -200,7 +200,8 @@ describe('<ClassesPlanning /> tiles', () => {
     expect(pill.className).not.toContain('sr-only');
 
     const trigger = within(frame).getByRole('button', { name: 'Actions for Spin' });
-    expect(trigger.className).toContain('size-5');
+    expect(trigger.className).toContain('size-6');
+    expect(trigger.className).toContain('top-0.5');
     fireEvent.click(trigger);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }));
     expect(props.onSelectClass).toHaveBeenCalledWith(medium);

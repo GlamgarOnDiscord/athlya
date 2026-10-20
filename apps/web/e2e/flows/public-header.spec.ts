@@ -18,7 +18,10 @@ for (const width of [320, 390] as const) {
         });
       });
       await page.goto(path);
-      const locale = page.getByRole('banner').getByLabel('Locale');
+      const banner = page.getByRole('banner');
+      // Measure the resolved signed-out bar, not the auth-pending skeletons.
+      await expect(banner.locator('a[href="/register"]')).toBeVisible();
+      const locale = banner.getByLabel('Locale');
       await expect(locale).toBeAttached();
 
       const { scrollWidth, innerWidth } = await page.evaluate(() => ({

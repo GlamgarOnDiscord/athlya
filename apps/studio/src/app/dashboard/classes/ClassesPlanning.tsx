@@ -142,7 +142,8 @@ function StatusPill({
 
 /**
  * Edit / delete menu behind a "..." button. The compact trigger sits
- * tighter in the corner so it fits the title line of a 45-minute tile.
+ * tighter in the corner so it fits the title line of a 45-minute tile,
+ * and keeps the 24 px minimum pointer target either way.
  */
 function TileMenu({
   cls,
@@ -163,7 +164,7 @@ function TileMenu({
         aria-label={t('studio.classes.planning.actionsFor', { title: cls.title })}
         className={cn(
           'absolute z-10 grid place-items-center rounded-md hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-foreground/10',
-          compact ? 'top-0.5 right-0.5 size-5' : 'top-1.5 right-1.5 size-6',
+          compact ? 'top-0.5 right-0.5 size-6' : 'top-1.5 right-1.5 size-6',
         )}
       >
         <DotsThreeIcon aria-hidden="true" weight="bold" className="size-4" />
