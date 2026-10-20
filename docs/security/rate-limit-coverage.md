@@ -34,6 +34,7 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 | `audit-list`              | `GET /v1/audit`                                         | GET     | 30 IP                              | **fail-closed** | ip (pre-jwt) |
 | `progression-read`        | `GET /v1/me/progression`                                | GET     | 30 IP (`rl:ip:progression`)        | **fail-closed** | ip (pre-jwt) |
 | `progression-cardio-read` | `GET /v1/me/progression/cardio`                         | GET     | 30 IP (`rl:ip:progression-cardio`) | **fail-closed** | ip (pre-jwt) |
+| `calendar-feed`           | `GET /v1/calendar/*` (feed + feed URL)                  | GET     | 60 IP (`rl:ip:calendar`)           | **fail-closed** | ip (pre-jwt) |
 | `admin-stats`             | `GET /admin/{dlq,outbox}/stats`, `GET /admin/jwt/state` | GET     | 10 user / 5 IP                     | **fail-closed** | ip+user      |
 | `studio-burst`            | Domain routers authentifiés                             | \*      | 1000 / studio                      | fail-open       | studio       |
 
@@ -44,6 +45,8 @@ Mutation limiters (issue #613) run an inline `jwtAuth()` pre-pass before the lim
 `coach-ask` (Epic 21) is mounted in the coach router (`routes/coach.ts`), after `jwtAuth` and the `ai-coach` flag check: with the flag off the route answers 404 and no bucket is touched. It adds a daily quota per member (`AI_COACH_DAILY_LIMIT`, default 10, UTC day) kept in the Redis counter `coach:quota:<day>:<userId>` by the use case. It fails closed too: a Redis error answers 503 `dependency_unavailable` before any model call, and an exhausted quota answers 429 `coach_quota_exceeded` with `Retry-After` set to the next UTC midnight.
 
 `checkin-post` (issue #654) is keyed on the kiosk operator, not the member: only admins and coaches may call it, so a per-member bucket would lock a front desk out. The per-member bound of issue #338 stays: `checkin_mark_reservation` (migration 0045) refuses a sixth check-in of the same member within an hour, whoever the operator and whatever the studio, and the API answers 429 `checkin_limit_reached` with `Retry-After: 3600`. On top of it, each QR token is single-use (`jti` consumed with `SET NX`) and a reservation is stamped only once.
+
+`calendar-feed` (issue #719) covers the public iCalendar feed (`/v1/calendar/feed.ics?token=`, authenticated by its signed token, no JWT) and the authenticated `GET /v1/calendar/feed-url`. Its budget is twice the expensive-read one because calendar providers poll from shared fetcher IPs; a 429 only delays a refresh. See [`calendar-feed.md`](../architecture/calendar-feed.md).
 
 Les limiters reads coûteux sont montés **avant** `jwtAuth` → bucket **IP** sur le limiter dédié ; le global `/v1/*` applique quand même le bucket user si le JWT est présent.
 

@@ -14,6 +14,7 @@
 import { buildAuditDeps } from './adapters/audit-deps.js';
 import { buildAuthDeps } from './adapters/auth-deps.js';
 import { buildBillingDeps } from './adapters/billing-deps.js';
+import { buildCalendarDeps } from './adapters/calendar-deps.js';
 import { buildCheckinsDeps } from './adapters/checkins-deps.js';
 import { buildCoachDeps } from './adapters/coach-deps.js';
 import { buildMembersDeps } from './adapters/members-deps.js';
@@ -25,6 +26,7 @@ import { buildStudiosDeps } from './adapters/studios-deps.js';
 import type { AuditDeps } from './routes/audit.js';
 import type { AuthDeps } from './routes/auth.js';
 import type { BillingDeps } from './routes/billing.js';
+import type { CalendarDeps } from './routes/calendar.js';
 import type { CheckinsDeps } from './routes/checkins.js';
 import type { ClassesDeps } from './routes/classes.js';
 import type { CoachDeps } from './routes/coach.js';
@@ -69,6 +71,11 @@ export interface DomainDeps {
    * valid; production and the lazy facade always provide it.
    */
   readonly programs?: ProgramsDeps;
+  /**
+   * Member calendar feed (issue #719), gateway only. Optional so partial
+   * test bundles stay valid; production and the lazy facade provide it.
+   */
+  readonly calendar?: CalendarDeps;
 }
 
 /* ------------------------------------------------------------------ */
@@ -252,6 +259,14 @@ export function lazyCheckinsDeps(resolve: () => CheckinsDeps): CheckinsDeps {
   };
 }
 
+export function lazyCalendarDeps(resolve: () => CalendarDeps): CalendarDeps {
+  const forward = forwarder(resolve);
+  return {
+    getFeedUrl: forward('getFeedUrl'),
+    getFeed: forward('getFeed'),
+  };
+}
+
 /** Lazy facade over the full {@link DomainDeps} bundle (monolith gateway). */
 export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
   return {
@@ -283,6 +298,13 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
         throw new Error('buildLazyDomainDeps: checkins dependency is not wired');
       }
       return checkins;
+    }),
+    calendar: lazyCalendarDeps(() => {
+      const calendar = resolve().calendar;
+      if (calendar === undefined) {
+        throw new Error('buildLazyDomainDeps: calendar dependency is not wired');
+      }
+      return calendar;
     }),
   };
 }
@@ -523,6 +545,20 @@ export function defaultCheckinsDeps(env: AthlyaBindings): CheckinsDeps {
 }
 
 /**
+ * The calendar feed reads users, reservations, classes and studios (DB);
+ * without DB_URL it falls back to the stub bundle. A missing signing key
+ * is not fatal: the adapter answers `not_configured` (503).
+ */
+export function defaultCalendarDeps(env: AthlyaBindings, cf?: RequestCf): CalendarDeps {
+  return nonEmpty(env.DB_URL)
+    ? buildCalendarDeps(env, cf)
+    : {
+        getFeedUrl: () => notImplemented('calendar.getFeedUrl'),
+        getFeed: () => notImplemented('calendar.getFeed'),
+      };
+}
+
+/**
  * Billing is always built — the adapter itself returns degraded
  * (`not_configured`) responses when STRIPE secrets are absent.
  */
@@ -564,5 +600,6 @@ export function buildDefaultDeps(env: AthlyaBindings, cf?: RequestCf): DomainDep
     programs: defaultProgramsDeps(env),
     sessions: defaultSessionsDeps(env),
     checkins: defaultCheckinsDeps(env),
+    calendar: defaultCalendarDeps(env, cf),
   };
 }

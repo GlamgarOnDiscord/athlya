@@ -32,6 +32,7 @@ describe('rate-limit-policies (#133)', () => {
       'audit-list',
       'progression-read',
       'progression-cardio-read',
+      'calendar-feed',
       'admin-stats',
     ]) {
       expect(RATE_LIMIT_COVERAGE.find((r) => r.id === id)?.failPolicy).toBe('fail-closed');
