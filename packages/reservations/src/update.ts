@@ -96,27 +96,41 @@ export interface ClassRepo {
 
   /**
    * Apply the mutable `patch` to the class identified by `classId`
-   * **only if** its current `version` column equals
-   * `expectedVersion`. Returns the updated row on success and
-   * `null` when the optimistic-lock guard failed (0 rows affected).
+   * **only if** its current `version` column equals `expectedVersion`,
+   * in ONE transaction that:
    *
-   * Implementations MUST issue a single statement of the form
-   *
-   *     UPDATE classes
-   *     SET <patch>, version = version + 1
-   *     WHERE id = $1 AND version = $2
-   *     RETURNING *
-   *
-   * so the `version` bump (Requirement 6.7) and the guard are both
-   * enforced atomically by the database.
+   *   1. locks the class row `FOR UPDATE` (the lock the capacity
+   *      trigger takes on every confirmation, so no booking can commit
+   *      in between);
+   *   2. answers `version_conflict` when the version moved;
+   *   3. counts the confirmed reservations under that lock and answers
+   *      `capacity_below_confirmed` when the patch lowers `capacity`
+   *      below that count (nothing is written);
+   *   4. runs `UPDATE classes SET <patch>, version = version + 1`;
+   *   5. when seats are now free, promotes the oldest waiters (FIFO by
+   *      `created_at`, then `id`) into them and appends one
+   *      `reservation.promoted` outbox row each;
+   *   6. returns the row and the confirmed count after step 5, so the
+   *      caller can reset the counter to `capacity - confirmed`.
    */
   updateClassOptimistic(
     studioId: string,
     classId: string,
     patch: UpdateClassFields,
     expectedVersion: number,
-  ): Promise<ClassRow | null>;
+  ): Promise<GuardedClassUpdate>;
 }
+
+/** Result of {@link ClassRepo.updateClassOptimistic}. */
+export type GuardedClassUpdate =
+  | {
+      readonly outcome: 'updated';
+      readonly row: ClassRow;
+      /** Confirmed reservations after any waitlist promotion, same transaction. */
+      readonly confirmed: number;
+    }
+  | { readonly outcome: 'version_conflict' }
+  | { readonly outcome: 'capacity_below_confirmed'; readonly confirmed: number };
 
 /**
  * Side-channel the service uses to keep the Redis-backed seat
@@ -132,12 +146,12 @@ export interface ClassRepo {
  */
 export interface ClassCounter {
   /**
-   * Overwrite the remaining-seats counter for `classId` to
-   * `capacity`. Called from {@link updateClass} only when the patch
-   * changed `capacity` (Requirement 6.7 — "recompute Redis counter
-   * if capacity changed").
+   * Overwrite the remaining-seats counter for `classId` with `value`.
+   * Called from {@link updateClass} only when the patch changed
+   * `capacity` (Requirement 6.7), with `max(0, capacity - confirmed)`
+   * computed from the update transaction.
    */
-  reset(classId: string, capacity: number): Promise<void>;
+  reset(classId: string, value: number): Promise<void>;
 }
 
 /**
@@ -183,8 +197,11 @@ export interface UpdateClassValidationIssue {
  *   - `validation_failed` → 422 (Requirement 14.2, 14.6).
  *   - `not_found`         → 404 (row missing, or cross-tenant via RLS).
  *   - `conflict`          → 409 (stale `version`, Requirement 6.6).
+ *   - `capacity_below_confirmed` → 409 (the patch would leave more
+ *     confirmed members than seats).
  */
-export type UpdateClassErrorCode = 'forbidden' | 'validation_failed' | 'not_found' | 'conflict';
+export type UpdateClassErrorCode =
+  'forbidden' | 'validation_failed' | 'not_found' | 'conflict' | 'capacity_below_confirmed';
 
 /**
  * Typed error thrown by {@link updateClass}. The `code` field is
@@ -232,19 +249,22 @@ export class UpdateClassError extends Error {
  *   3. Existence pre-flight via `classRepo.findById`. A `null` result
  *      is surfaced as `not_found` (HTTP 404). This pre-flight also
  *      gives us the current `capacity`, which we need in step 5.
- *   4. Optimistic UPDATE via `classRepo.updateClassOptimistic`. A
- *      `null` return means the DB UPDATE affected 0 rows, i.e. the
- *      caller's `expectedVersion` was stale → `conflict` (HTTP 409,
- *      Requirement 6.6). The repo is also responsible for bumping
- *      `version` by 1 on success (Requirement 6.7).
+ *   4. Guarded UPDATE via `classRepo.updateClassOptimistic`, under the
+ *      class row lock: a stale `expectedVersion` → `conflict` (HTTP
+ *      409, Requirement 6.6); a capacity below the confirmed count →
+ *      `capacity_below_confirmed` (HTTP 409). On success the repo has
+ *      bumped `version` by 1 (Requirement 6.7) and promoted waiters
+ *      into any seat the new capacity freed.
  *   5. Redis-counter reconciliation — only when the patch actually
  *      **changed** `capacity` (Requirement 6.7: "recompute Redis
  *      counter if capacity changed"). We compare against the row we
  *      just loaded in step 3, so the conditional is correct even if
- *      the caller echoes the same value. The reset runs *after* the
- *      DB write has committed, so a Redis hiccup can never leave the
- *      DB in an inconsistent state (it merely leaves the counter
- *      temporarily stale, which the drain job is designed to heal).
+ *      the caller echoes the same value. The counter is set to
+ *      `max(0, capacity - confirmed)` with `confirmed` read in the
+ *      update transaction. The reset runs *after* the DB write has
+ *      committed, so a Redis hiccup can never leave the DB in an
+ *      inconsistent state (it merely leaves the counter temporarily
+ *      stale, which the reconcile cron heals).
  *   6. Return the updated row; the gateway serialises it with the
  *      shared codec.
  *
@@ -297,24 +317,33 @@ export async function updateClass(
   // 4 — optimistic UPDATE. The repo returns `null` when the DB
   //     reports 0 rows affected, which we translate to `conflict`
   //     (Requirement 6.6 — "0 rows affected → 409 Conflict").
-  const updated = await deps.classRepo.updateClassOptimistic(
+  const result = await deps.classRepo.updateClassOptimistic(
     studioId,
     classId,
     fields,
     expectedVersion,
   );
-  if (updated === null) {
+  if (result.outcome === 'version_conflict') {
     throw new UpdateClassError(
       'conflict',
       `class ${classId} has a newer version; expected ${expectedVersion}`,
     );
   }
+  if (result.outcome === 'capacity_below_confirmed') {
+    throw new UpdateClassError(
+      'capacity_below_confirmed',
+      `class ${classId} has ${String(result.confirmed)} confirmed reservations; capacity cannot go below that`,
+    );
+  }
 
   // 5 — Redis counter reconciliation. Runs *after* the DB commit so
-  //     a Redis failure can never roll back a successful SQL write
-  //     (Requirement 6.7 recomputes "if capacity changed").
+  //     a Redis failure can never roll back a successful SQL write.
+  //     The value is the free seats the transaction left
+  //     (`capacity - confirmed`, after promotions), not the raw
+  //     capacity, which would advertise seats already taken.
+  const updated = result.row;
   if (fields.capacity !== undefined && fields.capacity !== existing.capacity) {
-    await deps.counter.reset(classId, fields.capacity);
+    await deps.counter.reset(classId, Math.max(0, updated.capacity - result.confirmed));
   }
 
   // 6 — return the updated row for the gateway to serialise.

@@ -119,8 +119,14 @@
     "cancelWindowClosed": "L'annulation n'est plus possible moins de 2 heures avant le cours."
   },
   "checkin": {
-    "title": "Check-in",
+    "title": "Pointer à l'accueil",
+    "link": "Mon QR code de pointage",
+    "intro": "Présentez ce code à l'accueil. Il change toutes les 2 minutes et ne sert qu'une fois.",
+    "qrLabel": "QR code de pointage, encore valable {seconds} secondes",
     "qrExpiresIn": "Le QR code expire dans {seconds} s",
+    "loading": "Récupération de votre code…",
+    "offline": "Vous êtes hors ligne. Un nouveau code de pointage nécessite une connexion.",
+    "loadError": "Impossible d'obtenir un code de pointage.",
     "refresh": "Générer un nouveau QR code"
   },
   "workouts": {
@@ -466,8 +472,16 @@
       "manualPlaceholder": "Collez le token QR ici",
       "manualSubmit": "Valider",
       "success": "Bienvenue, {name} !",
+      "successNoName": "Bienvenue ! Check-in validé.",
       "resetIn": "Réinitialisation dans {seconds}s…",
       "noCameraFallback": "Caméra indisponible. Saisissez le token QR manuellement.",
+      "camera": {
+        "starting": "Démarrage de la caméra…",
+        "denied": "L'accès à la caméra a été refusé. Autorisez la caméra pour ce site dans les réglages du navigateur, puis rechargez la page.",
+        "not_found": "Aucune caméra n'a été trouvée sur cet appareil.",
+        "unsupported": "Ce navigateur ne peut pas ouvrir de caméra.",
+        "error": "La caméra n'a pas pu démarrer."
+      },
       "errors": {
         "invalid_signature": "QR code invalide.",
         "token_expired": "QR code expiré. Demandez au membre d'en générer un nouveau.",
@@ -477,6 +491,8 @@
         "malformed": "QR code illisible.",
         "outside_window": "La fenêtre de check-in est fermée pour ce cours.",
         "no_reservation": "Aucune réservation trouvée pour ce membre.",
+        "already_checked_in": "Ce membre est déjà pointé pour ce cours.",
+        "checkin_limit_reached": "Trop de check-ins pour ce membre dans la dernière heure. Réessayez plus tard.",
         "generic": "Échec du check-in. Veuillez réessayer."
       }
     },

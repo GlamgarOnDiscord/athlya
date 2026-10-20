@@ -40,6 +40,7 @@ import {
   type ExportJobRecord,
   type ExportJobStore,
   type ExportProfile,
+  type ExportWorkoutSession,
   type InvoiceRecord,
   type MemberDataSource,
   type UuidFactory,
@@ -808,14 +809,51 @@ describe('neutralizeCsvFormula', () => {
       new TextDecoder().decode(entries.find((e) => e.name === name)!.bytes);
 
     const [header, withCardio, without] = text('workout_sessions.csv').split('\r\n');
-    expect(header?.endsWith('"notes","cardioJson","createdAt"')).toBe(true);
+    expect(header).toContain('"notes","cardioJson","createdAt"');
     expect(withCardio).toContain(
       '"{""machine"":""rower"",""distanceM"":5000,""avgPowerW"":180}","2026-01-10T08:45:00.000Z"',
     );
-    expect(without?.endsWith(',,,"2026-01-10T08:45:00.000Z"')).toBe(true);
+    expect(without).toContain(',,,"2026-01-10T08:45:00.000Z"');
     const sessionsJson = JSON.parse(text('workout_sessions.json')) as WorkoutSession[];
     expect(sessionsJson[0]?.cardio).toEqual(cardio);
     expect(sessionsJson[1]).not.toHaveProperty('cardio');
+  });
+
+  it('exports the import source of a session, and empty cells without one (issue #690)', async () => {
+    const imported: ExportWorkoutSession = {
+      ...SESSION_ROW,
+      source: 'appleHealth',
+      externalId: '5B2D7C1E-3F4A-4B6C-8D9E-0F1A2B3C4D5E',
+    };
+    const entries: ArchiveEntry[] = [];
+    for await (const entry of buildArchiveEntries({
+      profile: PROFILE,
+      consents: [CONSENTS_ROW],
+      reservations: asyncPage<Reservation>([]),
+      sessions: asyncPage<ExportWorkoutSession>([imported, SESSION_ROW]),
+      checkins: asyncPage<CheckinRecord>([]),
+      invoices: asyncPage<InvoiceRecord>([]),
+    })) {
+      entries.push(entry);
+    }
+    const text = (name: string) =>
+      new TextDecoder().decode(entries.find((e) => e.name === name)!.bytes);
+
+    const [header, withSource, without] = text('workout_sessions.csv').split('\r\n');
+    expect(header?.endsWith('"createdAt","source","externalId"')).toBe(true);
+    expect(
+      withSource?.endsWith(
+        '"2026-01-10T08:45:00.000Z","appleHealth","5B2D7C1E-3F4A-4B6C-8D9E-0F1A2B3C4D5E"',
+      ),
+    ).toBe(true);
+    expect(without?.endsWith('"2026-01-10T08:45:00.000Z",,')).toBe(true);
+    const sessionsJson = JSON.parse(text('workout_sessions.json')) as ExportWorkoutSession[];
+    expect(sessionsJson[0]).toMatchObject({
+      source: 'appleHealth',
+      externalId: '5B2D7C1E-3F4A-4B6C-8D9E-0F1A2B3C4D5E',
+    });
+    expect(sessionsJson[1]).not.toHaveProperty('source');
+    expect(sessionsJson[1]).not.toHaveProperty('externalId');
   });
 });
 

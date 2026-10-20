@@ -21,6 +21,7 @@ import { useLocale } from '../lib/i18n/LocaleContext';
 import { createTranslator, type Translator } from '../lib/i18n/t';
 
 import { AthlyaLogo } from './AthlyaLogo';
+import { isCoachRoute } from './RequireAdmin';
 import { SidebarAction, SidebarShell } from './sidebar/Sidebar';
 
 import type { SidebarSection } from './sidebar/nav-model';
@@ -98,6 +99,16 @@ export function studioSections(t: Translator): SidebarSection[] {
   ];
 }
 
+/** A coach only reaches the kiosk, so only its links are kept (groups drop out). */
+export function coachSections(sections: readonly SidebarSection[]): SidebarSection[] {
+  return sections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.kind === 'link' && isCoachRoute(item.href)),
+    }))
+    .filter((section) => section.items.length > 0);
+}
+
 /**
  * Shell of `/dashboard/*`: collapsible sidebar on desktop, drawer on
  * mobile, signed-in admin and sign out at the bottom.
@@ -113,7 +124,11 @@ export function DashboardNav({ children }: { readonly children: ReactNode }): Re
     push('/login');
   }, [logout, push]);
 
-  const sections = useMemo(() => studioSections(t), [t]);
+  const isCoach = user?.role === 'coach';
+  const sections = useMemo(
+    () => (isCoach ? coachSections(studioSections(t)) : studioSections(t)),
+    [t, isCoach],
+  );
 
   return (
     <SidebarShell

@@ -48,6 +48,7 @@ import {
 } from '../helpers/test-app.js';
 
 import type { AuthClaims, JwksKeyResolver } from '../../middleware/auth.js';
+import type { IdempotencyMiddlewareDeps } from '../../middleware/idempotency.js';
 import type { RateLimitOptions } from '../../middleware/rate-limit.js';
 import type { CheckinsDeps, DomainDeps, SessionsDeps } from '../../routes/index.js';
 import type { HonoEnv } from '../../types.js';
@@ -424,10 +425,8 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
   };
 
   if (options.idempotencyDb !== undefined) {
-    (reservations as { idempotency?: unknown }).idempotency = {
-      db: options.idempotencyDb,
-      ttlSec: 60,
-    };
+    const idempotencyDb = options.idempotencyDb as IdempotencyMiddlewareDeps['db'];
+    reservations.idempotencyFor = () => ({ db: idempotencyDb, ttlSec: 60 });
   }
 
   /* --------------------- sessions / checkins / members --------- */
