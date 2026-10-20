@@ -1,8 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-
 import Image from 'next/image';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,16 +19,12 @@ import {
 import { useApiClient } from '../../../lib/api/buildClient';
 import { useAuth } from '../../../lib/auth/AuthContext';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
+import { pluralKey } from '../../../lib/i18n/plural';
 import { createTranslator } from '../../../lib/i18n/t';
 
-interface MemberRow {
-  readonly id: string;
-  readonly email: string;
-  readonly displayName: string;
-  readonly role: 'member' | 'coach' | 'admin';
-  readonly avatarUrl: string | null;
-  readonly createdAt: string;
-}
+import type { StudioMember } from '../../../lib/api/members';
+
+type MemberRow = StudioMember;
 
 interface MembersPage {
   readonly items: ReadonlyArray<MemberRow>;
@@ -109,9 +104,11 @@ export function MembersAdminList(): ReactElement {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>{t('studio.members.title')}</TableHead>
-            <TableHead className="hidden sm:table-cell">Email</TableHead>
-            <TableHead>{t('studio.members.role.member')}</TableHead>
+            <TableHead>{t('studio.members.columns.name')}</TableHead>
+            <TableHead className="hidden sm:table-cell">
+              {t('studio.members.columns.email')}
+            </TableHead>
+            <TableHead>{t('studio.members.columns.role')}</TableHead>
             <TableHead className="hidden md:table-cell">{t('studio.members.joinedAt')}</TableHead>
           </TableRow>
         </TableHeader>
@@ -146,6 +143,14 @@ export function MembersAdminList(): ReactElement {
             </TableRow>
           ) : null}
 
+          {items.length > 0 && filtered.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-muted-foreground">
+                {t('studio.members.noMatch')}
+              </TableCell>
+            </TableRow>
+          ) : null}
+
           {filtered.map((m) => (
             <MemberRowItem key={m.id} member={m} locale={locale} t={t} />
           ))}
@@ -154,7 +159,13 @@ export function MembersAdminList(): ReactElement {
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {t('studio.members.count', { n: items.length })}
+          {t(
+            pluralKey(locale, items.length, {
+              one: 'studio.members.countOne',
+              other: 'studio.members.countOther',
+            }),
+            { count: items.length },
+          )}
         </p>
         {hasMore ? (
           <Button

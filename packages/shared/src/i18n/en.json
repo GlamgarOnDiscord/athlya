@@ -501,7 +501,38 @@
       "programs": {
         "title": "Programs",
         "body": "Author multi-week training programs your members follow."
-      }
+      },
+      "tiles": {
+        "todayClasses": "Classes today",
+        "weekBookings": "Bookings this week",
+        "weekFill": "Fill rate this week",
+        "members": "Members",
+        "noData": "None",
+        "membersCapped": "{count}+",
+        "openPlanning": "Open the planning",
+        "seeMembers": "See members"
+      },
+      "today": {
+        "title": "Today",
+        "empty": "No class today.",
+        "done": "Done",
+        "live": "In progress",
+        "fill": "{booked} / {capacity}",
+        "fillLabel": "{booked} of {capacity} seats booked"
+      },
+      "upcoming": {
+        "title": "Next classes",
+        "empty": "No class planned in the next days."
+      },
+      "activity": {
+        "title": "Recent activity",
+        "empty": "No admin action yet.",
+        "link": "Open the audit log"
+      },
+      "sections": {
+        "title": "Manage the studio"
+      },
+      "loadError": "The overview could not load."
     },
     "forbidden": {
       "title": "Access denied",
@@ -570,7 +601,6 @@
       "title": "Members",
       "subtitle": "Directory of your studio's members.",
       "empty": "No members yet.",
-      "count": "{n} member(s) loaded",
       "joinedAt": "Joined",
       "loadMore": "Load more",
       "search": "Search members…",
@@ -578,7 +608,15 @@
         "member": "Member",
         "coach": "Coach",
         "admin": "Admin"
-      }
+      },
+      "columns": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role"
+      },
+      "countOne": "{count} member loaded",
+      "countOther": "{count} members loaded",
+      "noMatch": "No member matches this search."
     },
     "branding": {
       "title": "Branding",
@@ -638,11 +676,39 @@
       "subtitle": "All admin actions for your studio, newest first.",
       "empty": "No audit events yet.",
       "loadMore": "Load more",
-      "count": "{n} event(s) loaded",
       "actorLabel": "Actor",
       "actionLabel": "Action",
       "targetLabel": "Target",
-      "timestampLabel": "Date"
+      "timestampLabel": "Date",
+      "countOne": "{count} event loaded",
+      "countOther": "{count} events loaded",
+      "system": "System",
+      "filter": {
+        "label": "Action",
+        "all": "All actions",
+        "noMatch": "No event of this type in the loaded events."
+      },
+      "actions": {
+        "userRegistered": "Member signed up",
+        "userDeleted": "Account deleted",
+        "userConsentsUpdated": "Consents updated",
+        "reservationCreated": "Booking created",
+        "reservationCancelledByAdmin": "Booking cancelled by an admin",
+        "rlsViolation": "Access blocked by data isolation",
+        "billingWebhookProcessed": "Payment event processed",
+        "billingWebhookSignatureFailed": "Payment event rejected: invalid signature",
+        "jwtKeyRotationPrep": "Signing key rotation prepared",
+        "dlqEntryReplayed": "Failed job replayed",
+        "dlqEntryDiscarded": "Failed job discarded",
+        "tokenRefreshReuseDetected": "Session token reuse detected"
+      },
+      "targets": {
+        "user": "Member",
+        "reservation": "Booking",
+        "class": "Class",
+        "studio": "Studio",
+        "stripe_webhook": "Payment event"
+      }
     },
     "billing": {
       "title": "Billing",

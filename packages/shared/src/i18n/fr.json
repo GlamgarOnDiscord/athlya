@@ -501,7 +501,38 @@
       "programs": {
         "title": "Programmes",
         "body": "Créez des programmes d'entraînement sur plusieurs semaines que vos membres suivent."
-      }
+      },
+      "tiles": {
+        "todayClasses": "Cours aujourd'hui",
+        "weekBookings": "Réservations cette semaine",
+        "weekFill": "Remplissage de la semaine",
+        "members": "Membres",
+        "noData": "Aucun",
+        "membersCapped": "{count}+",
+        "openPlanning": "Ouvrir le planning",
+        "seeMembers": "Voir les membres"
+      },
+      "today": {
+        "title": "Aujourd'hui",
+        "empty": "Aucun cours aujourd'hui.",
+        "done": "Terminé",
+        "live": "En cours",
+        "fill": "{booked} / {capacity}",
+        "fillLabel": "{booked} places réservées sur {capacity}"
+      },
+      "upcoming": {
+        "title": "Prochains cours",
+        "empty": "Aucun cours prévu dans les prochains jours."
+      },
+      "activity": {
+        "title": "Dernières actions",
+        "empty": "Aucune action admin pour le moment.",
+        "link": "Ouvrir le journal"
+      },
+      "sections": {
+        "title": "Gestion du studio"
+      },
+      "loadError": "La vue d'ensemble n'a pas pu se charger."
     },
     "forbidden": {
       "title": "Accès refusé",
@@ -570,7 +601,6 @@
       "title": "Membres",
       "subtitle": "Annuaire des adhérents de votre studio.",
       "empty": "Aucun membre pour le moment.",
-      "count": "{n} membre(s) chargé(s)",
       "joinedAt": "Inscrit le",
       "loadMore": "Charger plus",
       "search": "Rechercher un membre…",
@@ -578,7 +608,15 @@
         "member": "Membre",
         "coach": "Coach",
         "admin": "Admin"
-      }
+      },
+      "columns": {
+        "name": "Nom",
+        "email": "E-mail",
+        "role": "Rôle"
+      },
+      "countOne": "{count} membre chargé",
+      "countOther": "{count} membres chargés",
+      "noMatch": "Aucun membre ne correspond à cette recherche."
     },
     "branding": {
       "title": "Identité visuelle",
@@ -638,11 +676,39 @@
       "subtitle": "Toutes les actions admin de votre studio, les plus récentes en premier.",
       "empty": "Aucun événement d'audit pour le moment.",
       "loadMore": "Charger plus",
-      "count": "{n} événement(s) chargé(s)",
       "actorLabel": "Acteur",
       "actionLabel": "Action",
       "targetLabel": "Cible",
-      "timestampLabel": "Date"
+      "timestampLabel": "Date",
+      "countOne": "{count} événement chargé",
+      "countOther": "{count} événements chargés",
+      "system": "Système",
+      "filter": {
+        "label": "Action",
+        "all": "Toutes les actions",
+        "noMatch": "Aucun événement de ce type parmi ceux chargés."
+      },
+      "actions": {
+        "userRegistered": "Inscription d'un membre",
+        "userDeleted": "Compte supprimé",
+        "userConsentsUpdated": "Consentements mis à jour",
+        "reservationCreated": "Réservation créée",
+        "reservationCancelledByAdmin": "Réservation annulée par un admin",
+        "rlsViolation": "Accès bloqué par l'isolation des données",
+        "billingWebhookProcessed": "Événement de paiement traité",
+        "billingWebhookSignatureFailed": "Événement de paiement rejeté : signature invalide",
+        "jwtKeyRotationPrep": "Rotation de la clé de signature préparée",
+        "dlqEntryReplayed": "Tâche en échec relancée",
+        "dlqEntryDiscarded": "Tâche en échec abandonnée",
+        "tokenRefreshReuseDetected": "Réutilisation d'un jeton de session détectée"
+      },
+      "targets": {
+        "user": "Membre",
+        "reservation": "Réservation",
+        "class": "Cours",
+        "studio": "Studio",
+        "stripe_webhook": "Événement de paiement"
+      }
     },
     "billing": {
       "title": "Facturation",

@@ -96,3 +96,8 @@
   height: calc(var(--block-height) - 4px);
   min-height: 1.5rem;
 }
+
+/* Dashboard fill meter: booked share of the capacity via a CSSOM var (CSP #75). */
+.fill-meter-bar {
+  width: var(--fill, 0%);
+}
