@@ -16,6 +16,7 @@ import {
   layoutDay,
   listRange,
   resolveView,
+  seatsLeftKey,
   shiftAnchor,
   toDayKey,
   visibleRange,
@@ -234,5 +235,19 @@ describe('hasStarted', () => {
     expect(hasStarted('2026-10-20T09:59:00.000Z', now)).toBe(true);
     expect(hasStarted('2026-10-20T10:00:00.000Z', now)).toBe(true);
     expect(hasStarted('2026-10-20T10:01:00.000Z', now)).toBe(false);
+  });
+});
+
+describe('seatsLeftKey', () => {
+  it('uses the singular for one seat and the plural above it', () => {
+    expect(seatsLeftKey('fr', 1)).toBe('studio.classes.planning.seatLeft');
+    expect(seatsLeftKey('fr', 2)).toBe('studio.classes.planning.seatsLeft');
+    expect(seatsLeftKey('en', 1)).toBe('studio.classes.planning.seatLeft');
+    expect(seatsLeftKey('en', 5)).toBe('studio.classes.planning.seatsLeft');
+  });
+
+  it('follows each locale for zero: singular in French, plural in English', () => {
+    expect(seatsLeftKey('fr', 0)).toBe('studio.classes.planning.seatLeft');
+    expect(seatsLeftKey('en', 0)).toBe('studio.classes.planning.seatsLeft');
   });
 });

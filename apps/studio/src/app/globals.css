@@ -184,3 +184,8 @@
   background-color: var(--athlya-brand-ink);
   color: var(--athlya-brand-white);
 }
+
+/* A scroll box with rows left below its edge fades its last line out (a mask, no colour). */
+.scroll-fade-bottom[data-more='true'] {
+  mask-image: linear-gradient(to bottom, black calc(100% - 2.5rem), transparent);
+}

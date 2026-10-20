@@ -19,6 +19,10 @@ import {
   startOfWeek,
 } from 'date-fns';
 
+import { pluralKey } from '../../../lib/i18n/plural';
+
+import type { Locale, TranslationKeys } from '@athlya/shared/i18n';
+
 export type PlanningView = 'day' | 'week' | 'month';
 
 /** Views offered on a wide screen; below it the planning is a single-day agenda. */
@@ -238,4 +242,12 @@ export function blockDensity(block: DayBlock<unknown>): BlockDensity {
   if (minutes >= FULL_BLOCK_MINUTES) return 'full';
   if (minutes >= MEDIUM_BLOCK_MINUTES) return 'medium';
   return 'compact';
+}
+
+/** Key for the open-seat count on a tile: "1 place" and "3 places", not "1 places". */
+export function seatsLeftKey(locale: Locale, remaining: number): TranslationKeys {
+  return pluralKey(locale, remaining, {
+    one: 'studio.classes.planning.seatLeft',
+    other: 'studio.classes.planning.seatsLeft',
+  });
 }

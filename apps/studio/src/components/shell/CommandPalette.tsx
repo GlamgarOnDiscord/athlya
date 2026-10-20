@@ -13,7 +13,7 @@ import {
   UserIcon,
 } from '@phosphor-icons/react';
 import { addDays, startOfDay } from 'date-fns';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useState, type ReactElement } from 'react';
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { useApiClient } from '../../lib/api/buildClient';
 import { fetchMemberDirectory } from '../../lib/api/members';
 import { useAuth } from '../../lib/auth/AuthContext';
+import { navigateTo } from '../../lib/full-reload';
 
 import { searchCommands, type CommandItem, type CommandKind } from './command-search';
 
@@ -58,6 +59,7 @@ export function CommandPalette({
   const getToken = useCallback(() => accessToken, [accessToken]);
   const client = useApiClient(getToken);
   const router = useRouter();
+  const pathname = usePathname();
   const listId = useId();
 
   const [query, setQuery] = useState('');
@@ -136,7 +138,7 @@ export function CommandPalette({
   const go = (item: CommandItem | undefined): void => {
     if (item === undefined) return;
     close(false);
-    router.push(item.href);
+    navigateTo(item.href, router.push, pathname);
   };
 
   const groupLabel: Record<CommandKind, string> = {

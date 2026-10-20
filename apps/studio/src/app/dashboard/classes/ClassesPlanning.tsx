@@ -16,6 +16,7 @@ import {
   groupByDay,
   hourBounds,
   layoutDay,
+  seatsLeftKey,
   toDayKey,
   type DayBlock,
   type HourBounds,
@@ -53,6 +54,7 @@ interface Formatters {
   readonly weekday: Intl.DateTimeFormat;
   readonly dayLong: Intl.DateTimeFormat;
   readonly slot: Intl.DateTimeFormat;
+  readonly locale: Locale;
 }
 
 function useFormatters(locale: Locale): Formatters {
@@ -68,6 +70,7 @@ function useFormatters(locale: Locale): Formatters {
         hour: '2-digit',
         minute: '2-digit',
       }),
+      locale,
     }),
     [locale],
   );
@@ -160,10 +163,12 @@ function shortWeekday(fmt: Formatters, date: Date): string {
  */
 function StatusPill({
   cls,
+  fmt,
   t,
   compact = false,
 }: {
   readonly cls: ClassWithRemaining;
+  readonly fmt: Formatters;
   readonly t: Translator;
   readonly compact?: boolean;
 }): ReactElement {
@@ -180,7 +185,7 @@ function StatusPill({
       <Icon aria-hidden="true" className="size-3 shrink-0" />
       {full
         ? t('studio.classes.planning.full')
-        : t('studio.classes.planning.seatsLeft', { count: cls.remaining })}
+        : t(seatsLeftKey(fmt.locale, cls.remaining), { count: cls.remaining })}
     </span>
   );
 }
@@ -444,11 +449,11 @@ function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps
             ,{' '}
             {isFull(cls)
               ? t('studio.classes.planning.full')
-              : t('studio.classes.planning.seatsLeft', { count: cls.remaining })}
+              : t(seatsLeftKey(fmt.locale, cls.remaining), { count: cls.remaining })}
           </span>
         ) : (
           <span className="mt-auto">
-            <StatusPill cls={cls} t={t} compact={density === 'medium'} />
+            <StatusPill cls={cls} fmt={fmt} t={t} compact={density === 'medium'} />
           </span>
         )}
       </TileFace>
@@ -659,7 +664,7 @@ function DayAgenda({
                     {fmt.time.format(start)} - {fmt.time.format(end)}
                   </span>
                   <span className="mt-2">
-                    <StatusPill cls={cls} t={t} />
+                    <StatusPill cls={cls} fmt={fmt} t={t} />
                   </span>
                 </TileFace>
                 {onSelectClass === undefined || onDeleteClass === undefined ? null : (

@@ -681,6 +681,7 @@
         "localTime": "Horaires en heure locale ({timeZone}).",
         "previousDay": "Jour précédent",
         "nextDay": "Jour suivant",
+        "seatLeft": "{count} place",
         "seatsLeft": "{count} places",
         "actionsFor": "Actions pour {title}"
       },
@@ -852,7 +853,9 @@
         "reservation": "Réservation",
         "class": "Cours",
         "studio": "Studio",
-        "stripe_webhook": "Événement de paiement"
+        "stripe_webhook": "Événement de paiement",
+        "dlq_entry": "Tâche en échec",
+        "jwt_key": "Clé de signature"
       },
       "export": "Exporter",
       "search": "Filtrer par action, nom ou id",

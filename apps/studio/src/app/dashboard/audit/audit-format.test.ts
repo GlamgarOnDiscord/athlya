@@ -62,6 +62,13 @@ describe('targetTypeLabel', () => {
     expect(targetTypeLabel('reservation', fr)).toBe('Réservation');
     expect(targetTypeLabel('invoice', fr)).toBe('invoice');
   });
+
+  it('labels every target type the API writes', () => {
+    expect(targetTypeLabel('dlq_entry', fr)).toBe('Tâche en échec');
+    expect(targetTypeLabel('jwt_key', fr)).toBe('Clé de signature');
+    expect(targetTypeLabel('stripe_webhook', fr)).toBe('Événement de paiement');
+    expect(targetTypeLabel('user', fr)).toBe('Membre');
+  });
 });
 
 describe('shortId', () => {

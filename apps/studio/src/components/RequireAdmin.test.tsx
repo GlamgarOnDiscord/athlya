@@ -35,12 +35,17 @@ function renderGate(): void {
   );
 }
 
+const assign = vi.fn();
+
 beforeEach(() => {
   push.mockReset();
+  assign.mockReset();
+  vi.stubGlobal('location', { ...window.location, assign });
 });
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 describe('isCoachRoute', () => {
@@ -106,11 +111,20 @@ describe('<RequireAdmin />', () => {
     },
   );
 
-  it('keeps a member out of the kiosk', () => {
+  it('keeps a member out of the kiosk, leaving it with a full page load', () => {
     role = 'member';
     pathname = '/dashboard/checkin';
     renderGate();
     expect(screen.queryByText('dashboard content')).toBeNull();
+    expect(assign).toHaveBeenCalledWith('/forbidden');
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('sends a member from an ordinary page to /forbidden with a client transition', () => {
+    role = 'member';
+    pathname = '/dashboard/members';
+    renderGate();
     expect(push).toHaveBeenCalledWith('/forbidden');
+    expect(assign).not.toHaveBeenCalled();
   });
 });

@@ -185,6 +185,12 @@ describe('<ClassesPlanning /> tiles', () => {
     expect(within(button).getByText('4 left').className).toContain('planning-pill-open');
   });
 
+  it('reads "1 place", not "1 places", on a French tile with one seat left', () => {
+    const last = cls('c3', 'Pilates', '2026-10-21T16:30:00.000Z', 1);
+    const { tile } = renderPlanning({ items: [last], locale: 'fr', t: createTranslator('fr') });
+    expect(within(tile('c3').button).getByText('1 place')).toBeDefined();
+  });
+
   it('quiets a full class and gives it an ink "Full" pill when the tile has room', () => {
     const { tile } = renderPlanning();
     const { button, frame } = tile('c2');

@@ -36,6 +36,8 @@ const TARGET_LABELS: Readonly<Record<string, TranslationKeys>> = {
   class: 'studio.audit.targets.class',
   studio: 'studio.audit.targets.studio',
   stripe_webhook: 'studio.audit.targets.stripe_webhook',
+  dlq_entry: 'studio.audit.targets.dlq_entry',
+  jwt_key: 'studio.audit.targets.jwt_key',
 };
 
 /** Human label for an action slug, or `null` when the slug has none yet. */

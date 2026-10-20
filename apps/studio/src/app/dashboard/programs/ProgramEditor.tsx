@@ -15,12 +15,14 @@
  * The draft is validated with the shared Zod schemas before any
  * request; mutations carry an `Idempotency-Key`.
  */
-import { CircleNotchIcon } from '@phosphor-icons/react';
+import { CircleNotchIcon, TrashIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useId, useRef, useState, type ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+
+import { PageHeader } from '../../../components/shell/PageHeader';
 
 import { newIdempotencyKey } from '../../../lib/idempotency';
 
@@ -60,6 +62,9 @@ export interface ProgramEditorProps {
   /** `committed` is true when the program was saved. */
   readonly onDone: (committed: boolean) => void;
 }
+
+/** Compact remove control: the icon shows, the full sentence names it. */
+const REMOVE_BUTTON = 'text-muted-foreground hover:bg-destructive/10 hover:text-destructive';
 
 const CONTROL =
   'w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive md:text-sm';
@@ -200,25 +205,25 @@ export function ProgramEditor({ mode, client, t, onDone }: ProgramEditorProps): 
     );
   };
 
-  return (
-    <section aria-labelledby={`${idBase}-heading`} className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id={`${idBase}-heading`} className="text-2xl font-semibold">
-          {mode.kind === 'create'
-            ? t('studio.programs.editor.createTitle')
-            : t('studio.programs.editor.editTitle')}
-        </h2>
-        <Button variant="outline" onClick={() => onDone(false)} disabled={pending}>
-          {t('studio.programs.editor.back')}
-        </Button>
-      </div>
+  const title =
+    mode.kind === 'create'
+      ? t('studio.programs.editor.createTitle')
+      : t('studio.programs.editor.editTitle');
 
-      <p className="text-sm text-muted-foreground">
-        {t('studio.programs.editor.help', {
+  return (
+    <section aria-label={title} className="flex min-w-0 flex-col gap-6">
+      <PageHeader
+        title={title}
+        subtitle={t('studio.programs.editor.help', {
           weeks: MAX_PROGRAM_WEEKS,
           exercises: MAX_PROGRAM_EXERCISES,
         })}
-      </p>
+        actions={
+          <Button variant="outline" onClick={() => onDone(false)} disabled={pending}>
+            {t('studio.programs.editor.back')}
+          </Button>
+        }
+      />
 
       {errorCount > 0 || failure !== null ? (
         <div
@@ -305,12 +310,15 @@ export function ProgramEditor({ mode, client, t, onDone }: ProgramEditorProps): 
           const weekNumber = weekIndex + 1;
           const weekPath = `weeks.${String(weekIndex)}`;
           return (
-            <fieldset key={week.key} className="flex flex-col gap-4 rounded-xl border p-4">
+            <fieldset
+              key={week.key}
+              className="flex min-w-0 flex-col gap-4 rounded-xl border p-3 sm:p-4"
+            >
               <legend className="px-1 text-lg font-semibold">
                 {t('studio.programs.editor.week', { n: weekNumber })}
               </legend>
               <div className="flex flex-wrap items-end gap-3">
-                <div className="flex min-w-48 flex-1 flex-col gap-1.5">
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                   <Label htmlFor={fieldId(`${weekPath}.title`)}>
                     {t('studio.programs.editor.fields.weekTitle')}
                   </Label>
@@ -327,11 +335,14 @@ export function ProgramEditor({ mode, client, t, onDone }: ProgramEditorProps): 
                 <Button
                   type="button"
                   variant="ghost"
-                  className="text-destructive hover:text-destructive"
+                  size="icon"
+                  className={REMOVE_BUTTON}
+                  aria-label={t('studio.programs.editor.removeWeek', { n: weekNumber })}
+                  title={t('studio.programs.editor.removeWeek', { n: weekNumber })}
                   disabled={draft.weeks.length === 1}
                   onClick={() => setDraft((d) => removeWeek(d, weekIndex))}
                 >
-                  {t('studio.programs.editor.removeWeek', { n: weekNumber })}
+                  <TrashIcon aria-hidden="true" />
                 </Button>
               </div>
 
@@ -348,12 +359,12 @@ export function ProgramEditor({ mode, client, t, onDone }: ProgramEditorProps): 
                 return (
                   <fieldset
                     key={workout.key}
-                    className="flex flex-col gap-3 rounded-lg border border-dashed p-3"
+                    className="flex min-w-0 flex-col gap-3 rounded-lg border border-dashed p-3"
                   >
                     <legend className="px-1 font-medium">
                       {t('studio.programs.editor.workout', { day: workout.dayNumber })}
                     </legend>
-                    <div className="grid gap-3 sm:grid-cols-[8rem_1fr_auto] sm:items-end">
+                    <div className="grid grid-cols-[1fr_auto] items-end gap-3 sm:grid-cols-[8rem_1fr_auto]">
                       <div className="flex flex-col gap-1.5">
                         <Label htmlFor={fieldId(`${workoutPath}.dayNumber`)}>
                           {t('studio.programs.editor.fields.day')}
@@ -377,7 +388,7 @@ export function ProgramEditor({ mode, client, t, onDone }: ProgramEditorProps): 
                           ))}
                         </select>
                       </div>
-                      <div className="flex flex-col gap-1.5">
+                      <div className="order-last col-span-2 flex flex-col gap-1.5 sm:order-none sm:col-span-1">
                         <Label htmlFor={fieldId(`${workoutPath}.title`)}>
                           {t('studio.programs.editor.fields.workoutTitle')}
                         </Label>
@@ -398,10 +409,13 @@ export function ProgramEditor({ mode, client, t, onDone }: ProgramEditorProps): 
                       <Button
                         type="button"
                         variant="ghost"
-                        className="text-destructive hover:text-destructive"
+                        size="icon"
+                        className={REMOVE_BUTTON}
+                        aria-label={t('studio.programs.editor.removeWorkout', workoutLabel)}
+                        title={t('studio.programs.editor.removeWorkout', workoutLabel)}
                         onClick={() => setDraft((d) => removeWorkout(d, weekIndex, workoutIndex))}
                       >
-                        {t('studio.programs.editor.removeWorkout', workoutLabel)}
+                        <TrashIcon aria-hidden="true" />
                       </Button>
                     </div>
 
@@ -432,9 +446,9 @@ export function ProgramEditor({ mode, client, t, onDone }: ProgramEditorProps): 
                         return (
                           <li
                             key={exercise.key}
-                            className="grid gap-2 rounded-md bg-muted/40 p-2 sm:grid-cols-[2fr_repeat(5,minmax(4.5rem,1fr))_auto] sm:items-end"
+                            className="grid grid-cols-2 items-end gap-2 rounded-md bg-muted/40 p-2 sm:grid-cols-[2fr_repeat(5,minmax(4.5rem,1fr))_auto]"
                           >
-                            <div className="flex flex-col gap-1">
+                            <div className="col-span-2 flex flex-col gap-1 sm:col-span-1">
                               <Label
                                 htmlFor={fieldId(`${exercisePath}.name`)}
                                 className="text-xs text-muted-foreground"
@@ -469,18 +483,19 @@ export function ProgramEditor({ mode, client, t, onDone }: ProgramEditorProps): 
                             <Button
                               type="button"
                               variant="ghost"
-                              size="sm"
-                              className="text-destructive hover:text-destructive"
+                              size="icon"
+                              className={`${REMOVE_BUTTON} justify-self-end`}
                               aria-label={removeLabel}
+                              title={removeLabel}
                               onClick={() =>
                                 setDraft((d) =>
                                   removeExercise(d, weekIndex, workoutIndex, exerciseIndex),
                                 )
                               }
                             >
-                              ✕
+                              <TrashIcon aria-hidden="true" />
                             </Button>
-                            <div className="flex flex-col gap-1 sm:col-span-full">
+                            <div className="col-span-2 flex flex-col gap-1 sm:col-span-full">
                               <Label
                                 htmlFor={fieldId(`${exercisePath}.notes`)}
                                 className="text-xs text-muted-foreground"

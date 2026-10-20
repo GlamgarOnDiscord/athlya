@@ -9,6 +9,7 @@
  * fake client. Status changes are announced through a polite live
  * region.
  */
+import { ArchiveIcon, PencilSimpleIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +32,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
+import { PageHeader } from '../../../components/shell/PageHeader';
 import { useApiClient } from '../../../lib/api/buildClient';
 import { useAuth } from '../../../lib/auth/AuthContext';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
@@ -159,29 +161,36 @@ export function ProgramsAdmin({ client, t, locale }: ProgramsAdminProps): ReactE
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <p role="status" aria-live="polite" className="sr-only">
         {announcement}
       </p>
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={filterId} className="text-muted-foreground">
-            {t('studio.programs.filter.label')}
-          </Label>
-          <select
-            id={filterId}
-            className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as Filter)}
-          >
-            <option value="all">{t('studio.programs.filter.all')}</option>
-            <option value="draft">{t('studio.programs.status.draft')}</option>
-            <option value="published">{t('studio.programs.status.published')}</option>
-            <option value="archived">{t('studio.programs.status.archived')}</option>
-          </select>
-        </div>
-        <Button onClick={() => setEditor({ kind: 'create' })}>{t('studio.programs.create')}</Button>
+      <PageHeader
+        title={t('studio.programs.title')}
+        subtitle={t('studio.programs.subtitle')}
+        actions={
+          <Button onClick={() => setEditor({ kind: 'create' })}>
+            {t('studio.programs.create')}
+          </Button>
+        }
+      />
+
+      <div className="flex flex-col items-start gap-1.5">
+        <Label htmlFor={filterId} className="text-muted-foreground">
+          {t('studio.programs.filter.label')}
+        </Label>
+        <select
+          id={filterId}
+          className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as Filter)}
+        >
+          <option value="all">{t('studio.programs.filter.all')}</option>
+          <option value="draft">{t('studio.programs.status.draft')}</option>
+          <option value="published">{t('studio.programs.status.published')}</option>
+          <option value="archived">{t('studio.programs.status.archived')}</option>
+        </select>
       </div>
 
       {actionError !== null ? (
@@ -234,7 +243,7 @@ export function ProgramsAdmin({ client, t, locale }: ProgramsAdminProps): ReactE
           {list.kind === 'ready'
             ? list.items.map((program) => (
                 <TableRow key={program.id}>
-                  <TableCell className="font-medium">{program.title}</TableCell>
+                  <TableCell className="font-medium whitespace-normal">{program.title}</TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[program.status]}>
                       {t(`studio.programs.status.${program.status}`)}
@@ -250,27 +259,34 @@ export function ProgramsAdmin({ client, t, locale }: ProgramsAdminProps): ReactE
                   </TableCell>
                   <TableCell>
                     {program.status === 'archived' ? null : (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-end gap-2">
                         <Button
                           variant="outline"
                           size="sm"
+                          className="max-sm:w-7 max-sm:px-0"
                           aria-label={t('studio.programs.row.editLabel', { title: program.title })}
                           onClick={() => {
                             void openEditor(program);
                           }}
                         >
-                          {t('studio.programs.row.edit')}
+                          <PencilSimpleIcon aria-hidden="true" className="sm:hidden" />
+                          <span className="sr-only sm:not-sr-only">
+                            {t('studio.programs.row.edit')}
+                          </span>
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-destructive hover:text-destructive"
+                          className="text-destructive hover:text-destructive max-sm:w-7 max-sm:px-0"
                           aria-label={t('studio.programs.row.archiveLabel', {
                             title: program.title,
                           })}
                           onClick={() => setArchiveTarget(program)}
                         >
-                          {t('studio.programs.row.archive')}
+                          <ArchiveIcon aria-hidden="true" className="sm:hidden" />
+                          <span className="sr-only sm:not-sr-only">
+                            {t('studio.programs.row.archive')}
+                          </span>
                         </Button>
                       </div>
                     )}
