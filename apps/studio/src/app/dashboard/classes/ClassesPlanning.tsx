@@ -2,7 +2,7 @@
 
 import { Menu } from '@base-ui/react/menu';
 import { DotsThreeIcon, ProhibitIcon, UsersIcon } from '@phosphor-icons/react';
-import { useCallback, useMemo, type ReactElement } from 'react';
+import { useCallback, useMemo, type ReactElement, type ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -37,9 +37,14 @@ export interface ClassesPlanningProps {
   readonly busy: boolean;
   readonly locale: Locale;
   readonly t: Translator;
-  readonly onSelectClass: (cls: ClassWithRemaining) => void;
-  readonly onDeleteClass: (cls: ClassWithRemaining) => void;
-  readonly onCreateAt: (startsAt: Date) => void;
+  /**
+   * Edit, delete and create handlers. Leave all three out for a read-only
+   * planning (the coach schedule): tiles stop being buttons, the "..." menu
+   * and the empty-slot create targets disappear.
+   */
+  readonly onSelectClass?: (cls: ClassWithRemaining) => void;
+  readonly onDeleteClass?: (cls: ClassWithRemaining) => void;
+  readonly onCreateAt?: (startsAt: Date) => void;
   readonly onShowDay: (day: Date) => void;
 }
 
@@ -104,6 +109,44 @@ function tileClass(cls: ClassWithRemaining): string {
   return isFull(cls)
     ? 'border-border bg-background text-muted-foreground'
     : 'border-border bg-muted text-foreground hover:border-muted-foreground/40';
+}
+
+/**
+ * A class tile's face: a button that opens the class when `onActivate` is
+ * given, plain content in a read-only planning.
+ */
+function TileFace({
+  cls,
+  onActivate,
+  full,
+  className,
+  children,
+}: {
+  readonly cls: ClassWithRemaining;
+  readonly onActivate: ((cls: ClassWithRemaining) => void) | undefined;
+  /** Set on a tile that is its own frame (month cells) for the `[data-full]` styling hook. */
+  readonly full?: boolean;
+  readonly className: string;
+  readonly children: ReactNode;
+}): ReactElement {
+  if (onActivate === undefined) {
+    return (
+      <div data-class-id={cls.id} data-full={full} className={className}>
+        {children}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      data-class-id={cls.id}
+      data-full={full}
+      onClick={() => onActivate(cls)}
+      className={className}
+    >
+      {children}
+    </button>
+  );
 }
 
 /** "Mon 19" without the abbreviation dot some locales add. */
@@ -277,6 +320,8 @@ function WeekGrid({
           {hours.map((hour) => {
             const start = new Date(date);
             start.setHours(hour, 0, 0, 0);
+            const slotClass = 'block h-20 w-full border-t border-border first:border-t-0';
+            if (onCreateAt === undefined) return <div key={hour} className={slotClass} />;
             return (
               <button
                 key={hour}
@@ -285,7 +330,10 @@ function WeekGrid({
                   date: fmt.slot.format(start),
                 })}
                 onClick={() => onCreateAt(start)}
-                className="block h-20 w-full border-t border-border first:border-t-0 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                className={cn(
+                  slotClass,
+                  'hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
+                )}
               />
             );
           })}
@@ -333,8 +381,8 @@ interface WeekBlockProps {
   readonly bounds: HourBounds;
   readonly fmt: Formatters;
   readonly t: Translator;
-  readonly onSelect: (cls: ClassWithRemaining) => void;
-  readonly onDelete: (cls: ClassWithRemaining) => void;
+  readonly onSelect: ((cls: ClassWithRemaining) => void) | undefined;
+  readonly onDelete: ((cls: ClassWithRemaining) => void) | undefined;
 }
 
 function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps): ReactElement {
@@ -343,6 +391,7 @@ function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps
   const start = new Date(cls.startsAt);
   const end = new Date(start.getTime() + cls.durationMin * 60_000);
   const density = blockDensity(block);
+  const editable = onSelect !== undefined && onDelete !== undefined;
 
   const placeBlock = useCallback(
     (node: HTMLDivElement | null) => {
@@ -365,10 +414,9 @@ function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps
         tileClass(cls),
       )}
     >
-      <button
-        type="button"
-        data-class-id={cls.id}
-        onClick={() => onSelect(cls)}
+      <TileFace
+        cls={cls}
+        onActivate={onSelect}
         className={cn(
           'flex size-full flex-col items-start overflow-hidden rounded-[inherit] px-2.5 text-left text-xs leading-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           density === 'full' && 'py-2',
@@ -377,7 +425,9 @@ function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps
         )}
       >
         <span className="sr-only">{fmt.dayLong.format(start)}, </span>
-        <span className={cn('w-full truncate font-medium', density !== 'compact' && 'pr-6')}>
+        <span
+          className={cn('w-full truncate font-medium', density !== 'compact' && editable && 'pr-6')}
+        >
           {cls.title}
         </span>
         {density === 'compact' ? (
@@ -401,8 +451,8 @@ function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps
             <StatusPill cls={cls} t={t} compact={density === 'medium'} />
           </span>
         )}
-      </button>
-      {density === 'compact' ? null : (
+      </TileFace>
+      {density === 'compact' || onSelect === undefined || onDelete === undefined ? null : (
         <TileMenu
           cls={cls}
           t={t}
@@ -460,31 +510,42 @@ function MonthGrid({
                   isToday && 'bg-muted/30',
                 )}
               >
-                <button
-                  type="button"
-                  aria-label={t('studio.classes.planning.createAt', {
-                    date: fmt.dayLong.format(date),
-                  })}
-                  onClick={() => onCreateAt(createStart)}
-                  className="absolute inset-0 flex items-start p-1.5 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                >
-                  <span
-                    className={cn(
-                      'inline-grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-sm tabular-nums',
-                      inMonth ? 'text-foreground' : 'text-muted-foreground',
-                      isToday && 'planning-today font-semibold',
-                    )}
-                  >
-                    {date.getDate()}
-                  </span>
-                </button>
+                {(() => {
+                  const dayNumber = (
+                    <span
+                      className={cn(
+                        'inline-grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-sm tabular-nums',
+                        inMonth ? 'text-foreground' : 'text-muted-foreground',
+                        isToday && 'planning-today font-semibold',
+                      )}
+                    >
+                      {date.getDate()}
+                    </span>
+                  );
+                  if (onCreateAt === undefined) {
+                    return (
+                      <div className="absolute inset-0 flex items-start p-1.5">{dayNumber}</div>
+                    );
+                  }
+                  return (
+                    <button
+                      type="button"
+                      aria-label={t('studio.classes.planning.createAt', {
+                        date: fmt.dayLong.format(date),
+                      })}
+                      onClick={() => onCreateAt(createStart)}
+                      className="absolute inset-0 flex items-start p-1.5 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                    >
+                      {dayNumber}
+                    </button>
+                  );
+                })()}
                 {shown.map((cls) => (
-                  <button
+                  <TileFace
                     key={cls.id}
-                    type="button"
-                    data-class-id={cls.id}
-                    data-full={isFull(cls)}
-                    onClick={() => onSelectClass(cls)}
+                    cls={cls}
+                    onActivate={onSelectClass}
+                    full={isFull(cls)}
                     className={cn(
                       'relative z-10 flex h-6 w-full min-w-0 items-center gap-1.5 rounded-lg border px-2 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                       tileClass(cls),
@@ -501,7 +562,7 @@ function MonthGrid({
                         <span className="sr-only">, {t('studio.classes.planning.full')}</span>
                       </span>
                     ) : null}
-                  </button>
+                  </TileFace>
                 ))}
                 {hidden > 0 ? (
                   <button
@@ -539,6 +600,7 @@ function DayAgenda({
   const dayItems = useMemo(() => groupByDay(items).get(anchorKey) ?? [], [items, anchorKey]);
   const createStart = new Date(anchor);
   createStart.setHours(DEFAULT_CREATE_HOUR, 0, 0, 0);
+  const editable = onSelectClass !== undefined && onDeleteClass !== undefined;
 
   return (
     <div className="flex flex-col">
@@ -583,11 +645,13 @@ function DayAgenda({
                 data-full={isFull(cls)}
                 className={cn('relative rounded-xl border', tileClass(cls))}
               >
-                <button
-                  type="button"
-                  data-class-id={cls.id}
-                  onClick={() => onSelectClass(cls)}
-                  className="flex w-full min-w-0 flex-col items-start gap-0.5 rounded-[inherit] py-2.5 pr-10 pl-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                <TileFace
+                  cls={cls}
+                  onActivate={onSelectClass}
+                  className={cn(
+                    'flex w-full min-w-0 flex-col items-start gap-0.5 rounded-[inherit] py-2.5 pl-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    editable ? 'pr-10' : 'pr-3',
+                  )}
                 >
                   <span className="sr-only">{fmt.dayLong.format(start)}, </span>
                   <span className="w-full truncate font-medium">{cls.title}</span>
@@ -597,8 +661,10 @@ function DayAgenda({
                   <span className="mt-2">
                     <StatusPill cls={cls} t={t} />
                   </span>
-                </button>
-                <TileMenu cls={cls} t={t} onEdit={onSelectClass} onDelete={onDeleteClass} />
+                </TileFace>
+                {onSelectClass === undefined || onDeleteClass === undefined ? null : (
+                  <TileMenu cls={cls} t={t} onEdit={onSelectClass} onDelete={onDeleteClass} />
+                )}
               </div>
             </div>
           );
@@ -606,13 +672,15 @@ function DayAgenda({
         {dayItems.length === 0 ? (
           <p className="px-1 py-2 text-sm text-muted-foreground">{t('studio.classes.empty')}</p>
         ) : null}
-        <button
-          type="button"
-          onClick={() => onCreateAt(createStart)}
-          className="rounded-xl px-3 py-2.5 text-left text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {t('studio.classes.planning.createAt', { date: fmt.dayLong.format(anchor) })}
-        </button>
+        {onCreateAt === undefined ? null : (
+          <button
+            type="button"
+            onClick={() => onCreateAt(createStart)}
+            className="rounded-xl px-3 py-2.5 text-left text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {t('studio.classes.planning.createAt', { date: fmt.dayLong.format(anchor) })}
+          </button>
+        )}
       </div>
     </div>
   );

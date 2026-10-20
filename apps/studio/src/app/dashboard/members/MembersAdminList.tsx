@@ -4,7 +4,9 @@
  * `/dashboard/members` client surface: role tabs, search ("/" focuses it),
  * sortable columns, selection with a bulk bar and a per-row menu. Rows come
  * from `GET /v1/members` (cursor pages of 20); every count and export covers
- * the rows loaded so far, since the endpoint returns no total.
+ * the rows loaded so far, since the endpoint returns no total. A coach
+ * (the API opens the list to that role too) gets the same directory
+ * read only: no CSV export, which stays with administrators.
  */
 import { Menu } from '@base-ui/react/menu';
 import {
@@ -92,6 +94,7 @@ export function MembersAdminList(): ReactElement {
   const [tab, setTab] = useState<RoleTab>('all');
   const [sort, setSort] = useState<MemberSort>('joinedDesc');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const canExport = user?.role === 'admin';
 
   const fetchPage = useCallback(
     async (currentCursor: string | null) => {
@@ -179,18 +182,22 @@ export function MembersAdminList(): ReactElement {
     <div className="flex flex-col gap-6">
       <PageHeader
         title={t('studio.members.title')}
-        subtitle={t('studio.members.subtitle')}
-        actions={
-          <Button
-            variant="outline"
-            size="lg"
-            disabled={rows.length === 0}
-            onClick={() => exportRows(rows, 'membres.csv')}
-          >
-            <DownloadSimpleIcon aria-hidden="true" data-icon="inline-start" />
-            {t('studio.members.exportCsv')}
-          </Button>
-        }
+        subtitle={t(canExport ? 'studio.members.subtitle' : 'studio.members.readOnly')}
+        {...(canExport
+          ? {
+              actions: (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  disabled={rows.length === 0}
+                  onClick={() => exportRows(rows, 'membres.csv')}
+                >
+                  <DownloadSimpleIcon aria-hidden="true" data-icon="inline-start" />
+                  {t('studio.members.exportCsv')}
+                </Button>
+              ),
+            }
+          : {})}
       />
 
       <div
@@ -436,14 +443,16 @@ export function MembersAdminList(): ReactElement {
                 <CopyIcon aria-hidden="true" data-icon="inline-start" />
                 {t('studio.members.bulk.copyEmails')}
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => exportRows(selectedRows, 'membres-selection.csv')}
-              >
-                <DownloadSimpleIcon aria-hidden="true" data-icon="inline-start" />
-                {t('studio.members.bulk.export')}
-              </Button>
+              {canExport ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => exportRows(selectedRows, 'membres-selection.csv')}
+                >
+                  <DownloadSimpleIcon aria-hidden="true" data-icon="inline-start" />
+                  {t('studio.members.bulk.export')}
+                </Button>
+              ) : null}
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
                 {t('studio.members.bulk.clear')}
               </Button>

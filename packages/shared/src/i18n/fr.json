@@ -489,9 +489,9 @@
       "dashboard": "Ouvrir le tableau de bord"
     },
     "login": {
-      "title": "Connexion administrateur",
-      "subtitle": "Réservé aux propriétaires de studio. Les membres se connectent sur l'application principale.",
-      "adminRequired": "Ce compte n'a pas les droits administrateur."
+      "title": "Connexion au studio",
+      "subtitle": "Réservé à l'équipe du studio : administrateurs et coachs. Les membres se connectent sur l'application principale.",
+      "staffRequired": "Ce compte est un compte membre. Connectez-vous sur l'application Athlya pour réserver vos cours."
     },
     "nav": {
       "brand": "Athlya Studio",
@@ -503,7 +503,9 @@
       "audit": "Audit",
       "programs": "Programmes",
       "dashboard": "Tableau de bord",
-      "settings": "Configuration"
+      "settings": "Configuration",
+      "home": "Accueil",
+      "planning": "Mon planning"
     },
     "dashboard": {
       "title": "Tableau de bord",
@@ -735,7 +737,8 @@
       "copyEmail": "Copier l'e-mail",
       "emailCopied": "E-mail copié.",
       "emailsCopied": "E-mails copiés.",
-      "copyFailed": "Le presse-papiers n'est pas disponible."
+      "copyFailed": "Le presse-papiers n'est pas disponible.",
+      "readOnly": "Annuaire des adhérents de votre studio, en lecture seule."
     },
     "branding": {
       "title": "Identité visuelle",
@@ -996,6 +999,35 @@
         "help": "Afficher cette aide",
         "close": "Fermer une fenêtre",
         "escapeKey": "Échap"
+      }
+    },
+    "coach": {
+      "next": {
+        "title": "Prochain cours",
+        "endsIn": "se termine dans {time}",
+        "at": "{day}, {start} - {end}",
+        "empty": "Aucun cours à venir ne vous est attribué."
+      },
+      "today": {
+        "title": "Mes cours aujourd'hui",
+        "empty": "Aucun cours ne vous est attribué aujourd'hui."
+      },
+      "upcoming": {
+        "title": "Mes prochains cours",
+        "empty": "Aucun cours ne vous est attribué dans les 7 prochains jours."
+      },
+      "unassigned": "Les cours vous sont attribués par un administrateur depuis le planning du studio.",
+      "loadError": "Vos cours n'ont pas pu se charger.",
+      "planning": {
+        "title": "Mon planning",
+        "subtitle": "Vos cours, en lecture seule. Un administrateur crée et modifie les cours.",
+        "scopeLabel": "Cours affichés",
+        "scope": {
+          "mine": "Mes cours",
+          "all": "Tout le studio"
+        },
+        "emptyMine": "Aucun cours ne vous est attribué sur cette période.",
+        "emptyAll": "Aucun cours au studio sur cette période."
       }
     }
   },

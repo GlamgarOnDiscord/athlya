@@ -1,15 +1,8 @@
 'use client';
 
-import { CaretLeftIcon, CaretRightIcon, DownloadSimpleIcon } from '@phosphor-icons/react';
+import { DownloadSimpleIcon } from '@phosphor-icons/react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type ReactElement,
-} from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -28,7 +21,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { cn } from '@/lib/utils';
 
 import { useApiClient } from '../../../lib/api/buildClient';
 import { useAuth } from '../../../lib/auth/AuthContext';
@@ -40,8 +32,8 @@ import { FillMeter } from '../overview/parts';
 
 import { ClassesPlanning } from './ClassesPlanning';
 import { ClassFormDialog, type ClassFormMode } from './ClassFormDialog';
+import { useIsWide, useTodayKey } from './planning-clock';
 import {
-  buildWeekDays,
   fromDayKey,
   hasStarted,
   listRange,
@@ -50,57 +42,10 @@ import {
   toDayKey,
   visibleRange,
   WIDE_VIEWS,
-  type PlanningView,
 } from './planning-grid';
+import { PlanningToolbar, type ToolbarView } from './PlanningToolbar';
 
 import type { ClassWithRemaining } from '@athlya/shared/schemas/api';
-
-type AdminView = PlanningView | 'list';
-
-const WIDE_QUERY = '(min-width: 48rem)';
-
-function subscribeToWide(onStoreChange: () => void): () => void {
-  const query = window.matchMedia(WIDE_QUERY);
-  query.addEventListener('change', onStoreChange);
-  return () => query.removeEventListener('change', onStoreChange);
-}
-
-/** Whether the viewport reaches the `md` breakpoint; wide during server rendering. */
-function useIsWide(): boolean {
-  return useSyncExternalStore(
-    subscribeToWide,
-    () => window.matchMedia(WIDE_QUERY).matches,
-    () => true,
-  );
-}
-
-/** Notifies once per local midnight so the today marker follows the date. */
-function subscribeToDay(onStoreChange: () => void): () => void {
-  let timer: number | undefined;
-  const schedule = (): void => {
-    const now = new Date();
-    const nextMidnight = new Date(now);
-    nextMidnight.setHours(24, 0, 0, 0);
-    timer = window.setTimeout(
-      () => {
-        onStoreChange();
-        schedule();
-      },
-      Math.max(1, nextMidnight.getTime() - now.getTime()),
-    );
-  };
-  schedule();
-  return () => window.clearTimeout(timer);
-}
-
-/** Today's local day key, `null` during server rendering and hydration. */
-function useTodayKey(): string | null {
-  return useSyncExternalStore(
-    subscribeToDay,
-    () => toDayKey(new Date()),
-    () => null,
-  );
-}
 
 type Status =
   | { kind: 'loading' }
@@ -121,7 +66,7 @@ export function ClassesAdminList(): ReactElement {
   const createRequested = searchParams.get('new') === '1';
 
   interface AdminListState {
-    view: AdminView;
+    view: ToolbarView;
     anchorKey: string | null;
     status: Status;
     refreshNonce: number;
@@ -148,8 +93,8 @@ export function ClassesAdminList(): ReactElement {
   const anchor = useMemo(() => (anchorKey === null ? null : fromDayKey(anchorKey)), [anchorKey]);
 
   const wide = useIsWide();
-  const view: AdminView = state.view === 'list' ? 'list' : resolveView(state.view, wide);
-  const viewOptions: ReadonlyArray<AdminView> = wide ? [...WIDE_VIEWS, 'list'] : ['day', 'list'];
+  const view: ToolbarView = state.view === 'list' ? 'list' : resolveView(state.view, wide);
+  const viewOptions: ReadonlyArray<ToolbarView> = wide ? [...WIDE_VIEWS, 'list'] : ['day', 'list'];
 
   const range = useMemo(() => {
     if (anchor === null) return null;
@@ -183,27 +128,6 @@ export function ClassesAdminList(): ReactElement {
     };
   }, [client, rangeFrom, rangeTo, state.refreshNonce]);
 
-  const periodLabel = useMemo(() => {
-    if (anchor === null) return null;
-    if (view === 'day') {
-      return new Intl.DateTimeFormat(locale, {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      }).format(anchor);
-    }
-    if (view === 'month' || view === 'list') {
-      return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(anchor);
-    }
-    const days = buildWeekDays(anchor);
-    return new Intl.DateTimeFormat(locale, {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    }).formatRange(days[0] ?? anchor, days[6] ?? anchor);
-  }, [anchor, locale, view]);
-
   const step = useCallback(
     (direction: -1 | 1) => {
       if (anchor === null) return;
@@ -220,21 +144,6 @@ export function ClassesAdminList(): ReactElement {
       anchorKey: toDayKey(day),
     }));
   }, []);
-
-  const previousLabel = t(
-    view === 'day'
-      ? 'studio.classes.planning.previousDay'
-      : view === 'week'
-        ? 'studio.classes.planning.previousWeek'
-        : 'studio.classes.planning.previousMonth',
-  );
-  const nextLabel = t(
-    view === 'day'
-      ? 'studio.classes.planning.nextDay'
-      : view === 'week'
-        ? 'studio.classes.planning.nextWeek'
-        : 'studio.classes.planning.nextMonth',
-  );
 
   const openCreateAt = useCallback((startsAt: Date) => {
     setState((s) => ({
@@ -322,55 +231,23 @@ export function ClassesAdminList(): ReactElement {
 
   return (
     <div className="flex flex-col gap-4" data-reload-key={state.refreshNonce}>
-      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between">
-        {periodLabel === null ? (
-          <Skeleton className="h-7 w-56" />
-        ) : (
-          <h2 aria-live="polite" className="text-lg font-semibold first-letter:uppercase">
-            {periodLabel}
-          </h2>
-        )}
-        <div className="flex flex-col gap-2 md:flex-row md:items-center">
-          <div
-            role="group"
-            aria-label={t('studio.classes.planning.viewLabel')}
-            className="grid auto-cols-fr grid-flow-col rounded-lg border border-border bg-muted p-0.5 md:inline-grid"
-          >
-            {viewOptions.map((option) => (
-              <button
-                key={option}
-                type="button"
-                aria-pressed={view === option}
-                onClick={() => setState((s) => ({ ...s, view: option }))}
-                className={cn(
-                  'h-7 rounded-md px-3 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  view === option &&
-                    'bg-background text-foreground shadow-sm dark:bg-foreground dark:text-background dark:hover:text-background',
-                )}
-              >
-                {t(`studio.classes.planning.views.${option}`)}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setState((s) => ({ ...s, anchorKey: null }))}>
-              {t('studio.classes.planning.today')}
-            </Button>
-            <Button variant="ghost" size="icon" aria-label={previousLabel} onClick={() => step(-1)}>
-              <CaretLeftIcon aria-hidden="true" />
-            </Button>
-            <Button variant="ghost" size="icon" aria-label={nextLabel} onClick={() => step(1)}>
-              <CaretRightIcon aria-hidden="true" />
-            </Button>
-            <Button
-              className="ml-auto md:ml-0"
-              onClick={() => setState((s) => ({ ...s, dialogMode: { kind: 'create' } }))}
-            >
-              {t('studio.classes.create')}
-            </Button>
-          </div>
-        </div>
-      </div>
+      <PlanningToolbar
+        view={view}
+        views={viewOptions}
+        anchor={anchor}
+        locale={locale}
+        t={t}
+        onViewChange={(option) => setState((s) => ({ ...s, view: option }))}
+        onToday={() => setState((s) => ({ ...s, anchorKey: null }))}
+        onStep={step}
+      >
+        <Button
+          className="ml-auto md:ml-0"
+          onClick={() => setState((s) => ({ ...s, dialogMode: { kind: 'create' } }))}
+        >
+          {t('studio.classes.create')}
+        </Button>
+      </PlanningToolbar>
 
       {state.status.kind === 'error' ? (
         <p role="alert" className="text-sm text-destructive">
