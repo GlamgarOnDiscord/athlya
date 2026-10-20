@@ -864,6 +864,25 @@ describe('cancelReservation: releasing a seat hold', () => {
     expect(incrRemaining).not.toHaveBeenCalled();
   });
 
+  it('releases an active hold of a started class without handing its seat on', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation({ status: 'pending' }));
+    // The class started ten minutes ago while the hold was still open.
+    mocks.findClassForUpdate.mockResolvedValueOnce(
+      makeClass({ startsAt: new Date(FROZEN_NOW - 10 * 60 * 1000) }),
+    );
+    mocks.updateReservationStatus.mockResolvedValueOnce(
+      makeReservation({ status: 'cancelled', cancelledAt: new Date(FROZEN_NOW) }),
+    );
+
+    const result = await cancelReservation(input);
+
+    expect(result).toMatchObject({ code: 'ok', promoted: null });
+    expect(mocks.promoteOldestWaitlist).not.toHaveBeenCalled();
+    expect(mocks.insertOutbox).not.toHaveBeenCalled();
+    expect(incrRemaining).not.toHaveBeenCalled();
+  });
+
   it('never asks a confirmed cancellation whether it is a hold', async () => {
     const { input, mocks } = buildInput();
     mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation());

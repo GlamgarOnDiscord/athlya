@@ -569,7 +569,9 @@ export async function cancelReservation(
     // `reservation.cancelled` event. Its seat, when the hold was still
     // active, is handed on like a confirmed one.
     if (reservation.status === 'pending') {
-      const seatFreed = await repo.isHoldActive(tx, reservation.id);
+      const holdActive = await repo.isHoldActive(tx, reservation.id);
+      // A seat of a started class is never handed on (the sweep applies the same rule).
+      const seatFreed = holdActive && classRow.startsAt.getTime() > nowMs;
       const released = await repo.updateReservationStatus(tx, reservation.id, 'cancelled', now);
       const promotion = seatFreed
         ? await promoteInto(repo, tx, reservation.classId, now, newEventId)

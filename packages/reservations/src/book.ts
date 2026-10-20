@@ -634,15 +634,23 @@ export type SettledHold =
  * hold is a live row too, migration 0050): an active hold is confirmed,
  * with its `reservation.created` event, since the member is booking the
  * seat it already holds; an expired one is released so a retry can
- * book. `none` when the caller holds no hold on the class.
+ * book. `none` when the caller holds no hold on the class. Throws
+ * {@link BookingClosedError} when the class closed or changed since.
  */
 export async function settleOwnHold(
   repo: Pick<
     BookingRepo,
-    'withTransaction' | 'findOwnHold' | 'confirmHold' | 'releaseHold' | 'insertOutbox'
+    | 'withTransaction'
+    | 'findOwnHold'
+    | 'confirmHold'
+    | 'releaseHold'
+    | 'insertOutbox'
+    | 'readClassClock'
+    | 'lockClassForBooking'
   >,
   publisher: BookingEventPublisher,
   ids: { readonly classId: string; readonly userId: string; readonly studioId: string },
+  fence: { readonly clock: BookClock | undefined; readonly classVersion: number | undefined },
 ): Promise<SettledHold> {
   return repo.withTransaction(async (tx): Promise<SettledHold> => {
     const hold = await repo.findOwnHold(tx, ids.classId, ids.userId);
@@ -653,6 +661,9 @@ export async function settleOwnHold(
       await repo.releaseHold(tx, hold.id);
       return { outcome: 'released' };
     }
+    // The fence ran in the failed insert transaction: the class may have
+    // started or changed since, so check it again before confirming.
+    await assertClassOpen(repo, tx, ids.classId, fence.clock, fence.classVersion);
     const reservation = await repo.confirmHold(tx, hold.id);
     await repo.insertOutbox(
       tx,
@@ -843,7 +854,20 @@ async function bookClassOnce(
   // released and the booking runs again; otherwise the existing live
   // row is the answer.
   const resolveExisting = async (claimed: number): Promise<BookResult> => {
-    const settled = await settleOwnHold(repo, publisher, { classId, userId, studioId });
+    let settled: SettledHold;
+    try {
+      settled = await settleOwnHold(
+        repo,
+        publisher,
+        { classId, userId, studioId },
+        { clock, classVersion },
+      );
+    } catch (err) {
+      if (err instanceof BookingClosedError) {
+        return { code: err.result };
+      }
+      throw err;
+    }
     if (settled.outcome === 'confirmed') {
       return { code: 'ok', reservation: settled.reservation, remaining: Math.max(0, claimed) };
     }

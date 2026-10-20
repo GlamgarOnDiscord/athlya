@@ -2,7 +2,7 @@
 
 ## Contexte
 
-Le compteur de places `class:{id}:remaining` (Upstash Redis) est le hot-path du booking (`packages/reservations/src/book.ts`, Algorithm 1). PostgreSQL est **la source de vérité** : `capacity - COUNT(confirmed)`. Un crash Worker entre le `DECR` Redis et le `COMMIT` PG, ou un `INCR` compensatoire manqué, fait diverger les deux :
+Le compteur de places `class:{id}:remaining` (Upstash Redis) est le hot-path du booking (`packages/reservations/src/book.ts`, Algorithm 1). PostgreSQL est **la source de vérité** : `capacity - (COUNT(confirmed) + holds actifs)` (holds depuis la migration 0050). Un crash Worker entre le `DECR` Redis et le `COMMIT` PG, ou un `INCR` compensatoire manqué, fait diverger les deux :
 
 | Sens                 | Symptôme                   | Risque                                             |
 | -------------------- | -------------------------- | -------------------------------------------------- |
@@ -13,7 +13,7 @@ Le compteur de places `class:{id}:remaining` (Upstash Redis) est le hot-path du 
 
 - Cron Worker (`worker.scheduled`) → `runScheduledCapacityReconcile` chaque tick (1 min), si `CRON_DB_URL` (BYPASSRLS) **et** `REDIS_URL`/`REDIS_TOKEN` présents.
 - Pour chaque classe **active** (non soft-deleted, `starts_at > now()`) :
-  - `expected = max(0, capacity - confirmed)`
+  - `expected = max(0, capacity - (confirmed + holds actifs))` (migration 0050)
   - clé Redis absente → **seed** (pas une dérive)
   - `redis !== expected` → log `capacity.drift` (`metric: capacity_redis_pg_drift`) + **auto-heal** `reset(expected)`
 - Isolation par classe : un échec Redis/PG sur une classe ne stoppe pas la passe (`healFailures`).

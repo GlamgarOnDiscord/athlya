@@ -930,6 +930,28 @@ describe('bookClass: the member already holds a seat (issue #723)', () => {
     expect(d.findExisting).not.toHaveBeenCalled();
   });
 
+  it('does not confirm an active hold once the class has started', async () => {
+    const d = buildDoubles();
+    d.findClass.mockResolvedValueOnce(FUTURE_CLASS);
+    d.decrRemainingOrInit.mockResolvedValueOnce(4);
+    d.insertReservation.mockRejectedValueOnce(new UniqueViolationError());
+    d.findOwnHold.mockResolvedValueOnce({
+      id: RESERVATION_ID,
+      expiresAt: new Date(FROZEN_NOW + 60_000),
+      now: new Date(FROZEN_NOW),
+    });
+    // Open for the insert attempt, started by the time the hold is settled.
+    d.readClassClock
+      .mockResolvedValueOnce({ startsAt: FUTURE_CLASS.startsAt, now: new Date(FROZEN_NOW) })
+      .mockResolvedValueOnce({ startsAt: new Date(FROZEN_NOW), now: new Date(FROZEN_NOW) });
+
+    const result = await invoke(d.deps);
+
+    expect(result).toEqual({ code: 'class_in_past' });
+    expect(d.confirmHold).not.toHaveBeenCalled();
+    expect(d.insertOutbox).not.toHaveBeenCalled();
+  });
+
   it('releases an expired own hold and books once more', async () => {
     const d = buildDoubles();
     d.findClass.mockResolvedValue(FUTURE_CLASS);
