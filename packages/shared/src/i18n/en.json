@@ -85,6 +85,8 @@
     "displayName": "Display name",
     "avatar": "Profile picture",
     "avatarHint": "PNG, JPEG or WebP. Max size {max} MB.",
+    "avatarChoose": "Choose a photo",
+    "avatarNoFile": "No file chosen",
     "avatarTooLarge": "File too large (max {max} MB).",
     "avatarUploadError": "Upload failed. Please try again.",
     "avatarRemove": "Remove picture",
@@ -99,7 +101,19 @@
   "classes": {
     "list": {
       "title": "Upcoming classes",
-      "empty": "No classes scheduled for this period."
+      "empty": "No classes scheduled for this period.",
+      "dayEmpty": "No classes on this day.",
+      "nextDay": "Show the next day with classes"
+    },
+    "week": {
+      "label": "Choose a day",
+      "today": "Today",
+      "todayLong": "today",
+      "classCountOne": "1 class",
+      "classCount": "{count} classes",
+      "noClass": "no classes",
+      "previous": "Previous week",
+      "next": "Next week"
     },
     "card": {
       "capacity": "Capacity",
@@ -107,7 +121,27 @@
       "book": "Book",
       "booked": "Booked",
       "full": "Full",
-      "joinWaitlist": "Join waitlist"
+      "joinWaitlist": "Join waitlist",
+      "duration": "{minutes} min",
+      "taken": "{taken} of {capacity} taken",
+      "placeLeft": "1 place left",
+      "placesLeft": "{count} places left",
+      "fullWaitlist": "Full, waitlist open",
+      "onWaitlist": "On the waitlist",
+      "waitlistPosition": "Waitlist, position {position}",
+      "manage": "See my bookings"
+    },
+    "upcoming": {
+      "title": "My upcoming bookings",
+      "empty": "No upcoming bookings.",
+      "confirmed": "Confirmed",
+      "waitlist": "Waitlist",
+      "cancel": "Cancel",
+      "cancelLabel": "Cancel the booking “{title}”",
+      "confirmPrompt": "Cancel this class?",
+      "confirmCancel": "Yes, cancel",
+      "keep": "Keep",
+      "cancelClosed": "Cancellation closes 2 h before the class"
     }
   },
   "reservations": {

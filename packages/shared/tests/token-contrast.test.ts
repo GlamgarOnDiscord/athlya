@@ -175,6 +175,14 @@ describe('logo palette (docs/brand/README.md)', () => {
     expect(contrastRatio(brandPalette.white, colors.dark.muted)).toBeGreaterThanOrEqual(3);
   });
 
+  it('member booking marks: capacity fill on its track, selected day of the week strip', () => {
+    expect(contrastRatio(brandPalette.ink, colors.light.muted)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(brandPalette.volt, colors.dark.muted)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(brandPalette.white, brandPalette.ink)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(brandPalette.ink, brandPalette.volt)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(brandPalette.volt, colors.dark.background)).toBeGreaterThanOrEqual(3);
+  });
+
   it('studio dashboard marks: fill meter on its track, live pill', () => {
     for (const mode of MODES) {
       expect(contrastRatio(chartColors[mode].series, colors[mode].muted)).toBeGreaterThanOrEqual(3);

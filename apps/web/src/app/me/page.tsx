@@ -14,13 +14,17 @@
  * RSC serialization boundary in Next.js. This mirrors the pattern
  * already established by `/login` and `/register`.
  *
- * @see Requirements 3.1, 3.2, 3.3, 3.4.
+ * The member's upcoming bookings come first, above the profile forms:
+ * they are what a member returning to the page acts on.
+ *
+ * @see Requirements 3.1, 3.2, 3.3, 3.4, 9.1.
  */
 
 import { RequireAuth } from '../../components/RequireAuth';
 import { getLocale } from '../../lib/i18n/getLocale';
 import { createTranslator } from '../../lib/i18n/t';
 
+import { UpcomingBookings } from './bookings/UpcomingBookings';
 import { ProfileSection } from './ProfileSection';
 
 import type { Metadata } from 'next';
@@ -36,6 +40,7 @@ export default async function MePage(): Promise<ReactElement> {
     <main id="main-content" className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-6 py-12">
       <h1 className="text-3xl font-semibold">{t('profile.title')}</h1>
       <RequireAuth>
+        <UpcomingBookings />
         <ProfileSection />
       </RequireAuth>
     </main>
