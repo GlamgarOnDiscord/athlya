@@ -7,7 +7,7 @@ npm dependencies are not listed here: they come with their own licence files and
 ## Rules
 
 1. Only from the sources allowed in [`docs/design/ui-direction.md`](design/ui-direction.md#allowed-component-sources), and only when the licence is confirmed for that exact component (21st.dev and Aceternity UI are per component).
-2. Keep the upstream licence notice: a header comment in the copied file naming the source, the licence and the upstream URL. For MIT and ISC this notice is a condition of the licence.
+2. Preserve the upstream copyright and permission notices in the copied file: for MIT and ISC they are a condition of the licence. Also add a header comment naming the source, the licence and the upstream URL, as repository metadata.
 3. Replace hard-coded colours, radii and spacing with the shared tokens before merging. A shadcn/ui CLI run may write colour variables into `globals.css`; remove them, the theme comes from `@athlya/shared/theme.css`.
 4. Add a row below in the same PR.
 
