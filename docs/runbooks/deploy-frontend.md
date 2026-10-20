@@ -4,6 +4,10 @@ Issue #422. Both Next.js 16 apps ship as **Cloudflare Workers built by OpenNext*
 (`@opennextjs/cloudflare`), on the same account as the API
 (ADR: `docs/security/deploy-web-adr.md`).
 
+A second target, Vercel, is configured in `apps/{web,studio}/vercel.json` and
+documented in [`deploy-vercel.md`](./deploy-vercel.md) (issue #744); it does not
+change anything below.
+
 ## Architecture
 
 | App           | Worker (staging / production)             | Config                       |
