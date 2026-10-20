@@ -17,6 +17,12 @@
  *     stamped by distinct state transitions (Requirements 9.1, 11.6) and
  *     both may legitimately be null for a long-lived `confirmed`
  *     reservation that is attended but never cancelled — or vice-versa.
+ *   - `hold_expires_at` (migration 0050, issue #723) is deliberately NOT
+ *     declared here. It is set only on `pending` seat holds, which the
+ *     holds adapter reads and writes with explicit SQL. Declaring it would
+ *     add a `holdExpiresAt` key to every `select()` / `returning()` row
+ *     the API sends, and the strict wire `ReservationSchema` already
+ *     shipped in mobile clients rejects unknown keys.
  *
  * Related requirements: 8.1–8.6 (booking), 9.1–9.5 (cancellation with
  * waitlist promotion), 10.1–10.5 (state machine), 11.6 (check-in).
@@ -57,6 +63,14 @@ export const reservations = pgTable(
     uniqueIndex('reservations_class_user_active_unique')
       .on(table.classId, table.userId)
       .where(sql`status IN ('confirmed', 'waitlist')`),
+    /**
+     * Same invariant with seat holds counted (migration 0050): one
+     * live row, `confirmed`, `waitlist` or `pending`, per pair. The
+     * index above is redundant with it and goes in a contract step.
+     */
+    uniqueIndex('reservations_class_user_live_unique')
+      .on(table.classId, table.userId)
+      .where(sql`status NOT IN ('cancelled', 'no_show')`),
     index('reservations_class_status_created_at_idx')
       .on(table.classId, table.status, table.createdAt)
       .where(sql`status = 'waitlist'`),

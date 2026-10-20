@@ -7,7 +7,15 @@
     "retry": "Réessayer",
     "confirm": "Confirmer",
     "back": "Retour",
-    "skipToContent": "Aller au contenu principal"
+    "skipToContent": "Aller au contenu principal",
+    "nav": {
+      "main": "Navigation principale",
+      "collapse": "Réduire la barre latérale",
+      "expand": "Déplier la barre latérale",
+      "openMenu": "Ouvrir le menu",
+      "closeMenu": "Fermer le menu",
+      "menu": "Menu"
+    }
   },
   "auth": {
     "login": {
@@ -77,6 +85,8 @@
     "displayName": "Nom affiché",
     "avatar": "Photo de profil",
     "avatarHint": "PNG, JPEG ou WebP. Taille max {max} Mo.",
+    "avatarChoose": "Choisir une photo",
+    "avatarNoFile": "Aucun fichier choisi",
     "avatarTooLarge": "Fichier trop volumineux (max {max} Mo).",
     "avatarUploadError": "Échec de l'envoi de la photo. Réessayez.",
     "avatarRemove": "Retirer la photo",
@@ -91,7 +101,19 @@
   "classes": {
     "list": {
       "title": "Cours à venir",
-      "empty": "Aucun cours planifié pour cette période."
+      "empty": "Aucun cours planifié pour cette période.",
+      "dayEmpty": "Aucun cours ce jour-là.",
+      "nextDay": "Voir le prochain jour avec des cours"
+    },
+    "week": {
+      "label": "Choisir un jour",
+      "today": "Auj.",
+      "todayLong": "aujourd'hui",
+      "classCountOne": "1 cours",
+      "classCount": "{count} cours",
+      "noClass": "aucun cours",
+      "previous": "Semaine précédente",
+      "next": "Semaine suivante"
     },
     "card": {
       "capacity": "Capacité",
@@ -99,7 +121,27 @@
       "book": "Réserver",
       "booked": "Réservé",
       "full": "Complet",
-      "joinWaitlist": "Rejoindre la liste d'attente"
+      "joinWaitlist": "Rejoindre la liste d'attente",
+      "duration": "{minutes} min",
+      "taken": "{taken} sur {capacity} prises",
+      "placeLeft": "1 place restante",
+      "placesLeft": "{count} places restantes",
+      "fullWaitlist": "Complet, liste d'attente ouverte",
+      "onWaitlist": "Sur liste d'attente",
+      "waitlistPosition": "Liste d'attente, position {position}",
+      "manage": "Voir mes réservations"
+    },
+    "upcoming": {
+      "title": "Mes prochaines réservations",
+      "empty": "Aucune réservation à venir.",
+      "confirmed": "Confirmée",
+      "waitlist": "Liste d'attente",
+      "cancel": "Annuler",
+      "cancelLabel": "Annuler la réservation « {title} »",
+      "confirmPrompt": "Annuler ce cours ?",
+      "confirmCancel": "Oui, annuler",
+      "keep": "Garder",
+      "cancelClosed": "Annulation fermée moins de 2 h avant le cours"
     }
   },
   "reservations": {
@@ -314,7 +356,122 @@
       "login": "Se connecter",
       "classes": "Voir les cours",
       "me": "Mon compte",
-      "logout": "Se déconnecter"
+      "logout": "Se déconnecter",
+      "hero": {
+        "eyebrow": "Open source, multi-tenant, RGPD-first",
+        "titleLine1": "Entraîne-toi.",
+        "titleLine2": "On gère le reste.",
+        "lead": "Réserve tes cours, note tes séances et suis ta progression au même endroit. Le studio publie son planning, Athlya gère les places et la liste d'attente.",
+        "proof": "Code source ouvert sous licence AGPLv3. Tes données restent les tiennes.",
+        "photoAlt": "Deux coureurs en pleine foulée sur une route, l'image est floutée par la vitesse."
+      },
+      "nextClass": {
+        "label": "Prochain cours",
+        "eta": "Dans 2 h 05",
+        "name": "Boxe technique",
+        "meta": "18:30 · Salle 2 · Inès M.",
+        "booked": "Réservé",
+        "spots": "13 / 16"
+      },
+      "how": {
+        "eyebrow": "Comment ça marche",
+        "title": "Un côté membre, un côté studio. La même app.",
+        "members": {
+          "title": "Pour les membres",
+          "step1Title": "Réserver",
+          "step1Body": "Le planning du studio et les places restantes en direct. Cours complet : tu rejoins la liste d'attente et la place te revient si elle se libère.",
+          "step2Title": "S'entraîner",
+          "step2Body": "Ton QR code à l'accueil, puis tes séries notées pendant la séance. Tes entraînements Apple Santé arrivent depuis l'iPhone.",
+          "step3Title": "Progresser",
+          "step3Body": "Volume, 1RM estimé et cardio, calculés à partir de tes vraies séances, avec un coach IA qui répond sur tes données."
+        },
+        "studios": {
+          "title": "Pour les studios",
+          "step1Title": "Publier",
+          "step1Body": "Cours, horaires et capacité dans un planning en semaine, en mois ou en liste. Les membres réservent en ligne.",
+          "step2Title": "Accueillir",
+          "step2Body": "Chaque membre présente son QR code à l'entrée. Le check-in se fait en un scan.",
+          "step3Title": "Faire progresser",
+          "step3Body": "Des programmes sur plusieurs semaines, que tes membres suivent séance après séance."
+        }
+      },
+      "disciplines": {
+        "title": "Un studio, toutes les disciplines.",
+        "combat": "Combat",
+        "strength": "Force",
+        "cardio": "Cardio",
+        "mobility": "Mobilité",
+        "combatAlt": "Un boxeur en garde, les gants devant le visage, à l'entraînement.",
+        "strengthAlt": "Deux mains serrées sur la poignée d'un kettlebell posé au sol.",
+        "cardioAlt": "Un coureur lancé à pleine vitesse, le décor flou derrière lui.",
+        "mobilityAlt": "Une femme allongée sur un reformer de Pilates, les pieds dans les sangles."
+      },
+      "product": {
+        "eyebrow": "Le planning",
+        "title": "Le même planning, des deux côtés du comptoir.",
+        "body": "Le studio publie et ajuste ses cours. Le membre voit les places en direct, réserve ou rejoint la liste d'attente, et annule depuis son compte.",
+        "caption": "Aperçu du planning studio et des réservations d'un membre.",
+        "studioLabel": "Studio · Cours",
+        "viewWeek": "Semaine",
+        "viewMonth": "Mois",
+        "viewList": "Liste",
+        "dayMon": "Lun",
+        "dayTue": "Mar",
+        "dayWed": "Mer",
+        "dayThu": "Jeu",
+        "dayFri": "Ven",
+        "classCross": "Cross training",
+        "classBoxing": "Boxe technique",
+        "classPilates": "Pilates reformer",
+        "classMobility": "Mobilité",
+        "classHiit": "HIIT 45",
+        "classYoga": "Yoga vinyasa",
+        "spotsLeft": "{count} places",
+        "full": "Complet",
+        "memberLabel": "Mes réservations",
+        "booked": "Réservé",
+        "waitlist": "Liste d'attente · 2e",
+        "checkedIn": "Présent"
+      },
+      "features": {
+        "eyebrow": "Fonctionnalités",
+        "title": "Ce qu'Athlya fait déjà.",
+        "waitlistTitle": "Liste d'attente",
+        "waitlistBody": "Une place se libère, la première personne de la liste la récupère.",
+        "checkinTitle": "Check-in par QR code",
+        "checkinBody": "Un code par membre, scanné à l'accueil du studio.",
+        "programsTitle": "Programmes",
+        "programsBody": "Des plans sur plusieurs semaines, séance par séance.",
+        "coachTitle": "Coach IA",
+        "coachBody": "Des réponses sur tes séances, seulement avec ton accord.",
+        "healthTitle": "Import Apple Santé",
+        "healthBody": "Tes entraînements iPhone rejoignent ta progression."
+      },
+      "trust": {
+        "eyebrow": "RGPD-first et open source",
+        "tagline": "Tes séances, tes données. Rien ne part ailleurs sans ton accord.",
+        "exportTitle": "Export complet",
+        "exportBody": "Toutes tes données, avec un lien de téléchargement par e-mail sous 48 heures.",
+        "deletionTitle": "Suppression",
+        "deletionBody": "Ton compte et tes données supprimés sous 30 jours, depuis ton profil.",
+        "trackersTitle": "Aucun traceur",
+        "trackersBody": "Seulement les cookies nécessaires. Aucune mesure d'audience sans ton accord.",
+        "openSourceTitle": "Open source",
+        "openSourceBody": "Code publié sous licence AGPLv3. Les données de chaque studio sont isolées.",
+        "sourceLink": "Voir le code source"
+      },
+      "final": {
+        "titleStart": "Ta prochaine séance",
+        "titleAccent": "commence ici."
+      },
+      "footer": {
+        "rights": "© {year} Athlya",
+        "legal": "Mentions légales",
+        "privacy": "Confidentialité",
+        "cookies": "Cookies",
+        "source": "Code source",
+        "nav": "Liens du pied de page"
+      }
     },
     "notFound": {
       "title": "Page introuvable",
@@ -348,6 +505,10 @@
           "description": "Diagnostic des bugs côté client. Inclut votre user-agent et la trace d'exécution technique. Données hébergées en UE."
         }
       }
+    },
+    "nav": {
+      "classes": "Cours",
+      "progression": "Progression"
     }
   },
   "studio": {
@@ -357,9 +518,9 @@
       "dashboard": "Ouvrir le tableau de bord"
     },
     "login": {
-      "title": "Connexion administrateur",
-      "subtitle": "Réservé aux propriétaires de studio. Les membres se connectent sur l'application principale.",
-      "adminRequired": "Ce compte n'a pas les droits administrateur."
+      "title": "Connexion au studio",
+      "subtitle": "Réservé à l'équipe du studio : administrateurs et coachs. Les membres se connectent sur l'application principale.",
+      "staffRequired": "Ce compte est un compte membre. Connectez-vous sur l'application Athlya pour réserver vos cours."
     },
     "nav": {
       "brand": "Athlya Studio",
@@ -369,22 +530,25 @@
       "billing": "Facturation",
       "checkin": "Check-in",
       "audit": "Audit",
-      "programs": "Programmes"
+      "programs": "Programmes",
+      "dashboard": "Tableau de bord",
+      "settings": "Configuration",
+      "home": "Accueil",
+      "planning": "Mon planning"
     },
     "dashboard": {
       "title": "Tableau de bord",
-      "subtitle": "Gérez les cours, les membres, l'identité visuelle et la facturation de votre studio.",
       "classes": {
         "title": "Cours",
         "body": "Créer, mettre à jour et planifier les sessions de votre studio."
       },
       "members": {
         "title": "Membres",
-        "body": "Lister les adhérents et leurs réservations à venir."
+        "body": "Annuaire des adhérents de votre studio."
       },
       "branding": {
         "title": "Identité visuelle",
-        "body": "Couleur de marque, logo et personnalisation des emails."
+        "body": "Couleur de marque de votre studio."
       },
       "billing": {
         "title": "Facturation",
@@ -401,6 +565,94 @@
       "programs": {
         "title": "Programmes",
         "body": "Créez des programmes d'entraînement sur plusieurs semaines que vos membres suivent."
+      },
+      "tiles": {
+        "todayClasses": "Cours aujourd'hui",
+        "weekBookings": "Réservations cette semaine",
+        "weekFill": "Remplissage de la semaine",
+        "members": "Membres",
+        "noData": "Aucun",
+        "membersCapped": "{count}+",
+        "openPlanning": "Ouvrir le planning",
+        "seeMembers": "Voir les membres",
+        "vsSameDay": "vs {day} dernier",
+        "vsPreviousWeek": "vs semaine précédente",
+        "points": "pts",
+        "thisWeek": "cette semaine"
+      },
+      "today": {
+        "title": "Aujourd'hui",
+        "empty": "Aucun cours aujourd'hui.",
+        "done": "Terminé",
+        "live": "En cours",
+        "fillLabel": "{booked} places réservées sur {capacity}",
+        "columns": {
+          "time": "Horaire",
+          "class": "Cours",
+          "booked": "Inscrits",
+          "status": "État"
+        },
+        "now": "Maintenant {time}",
+        "inTime": "Dans {time}",
+        "countOne": "{count} cours",
+        "countOther": "{count} cours",
+        "totalOne": "{count} inscrit au total",
+        "totalOther": "{count} inscrits au total"
+      },
+      "upcoming": {
+        "title": "Prochains cours",
+        "empty": "Aucun cours prévu dans les prochains jours.",
+        "window": "7 prochains jours",
+        "columns": {
+          "day": "Jour",
+          "time": "Heure",
+          "class": "Cours",
+          "duration": "Durée",
+          "booked": "Inscrits",
+          "left": "Places libres",
+          "fill": "Taux"
+        }
+      },
+      "activity": {
+        "title": "Dernières actions",
+        "empty": "Aucune action admin pour le moment.",
+        "link": "Ouvrir le journal"
+      },
+      "sections": {
+        "title": "Gestion du studio"
+      },
+      "loadError": "La vue d'ensemble n'a pas pu se charger.",
+      "greeting": "Bonjour {name}",
+      "nextIn": "prochain cours dans {time}",
+      "noNext": "aucun cours prévu",
+      "actions": {
+        "openKiosk": "Ouvrir la borne"
+      },
+      "duration": {
+        "minutes": "{m} min",
+        "hours": "{h} h {mm}",
+        "days": "{d} j"
+      },
+      "bookings": {
+        "title": "Réservations par jour",
+        "total": "{count} cette semaine",
+        "empty": "Aucun cours cette semaine pour le moment.",
+        "dayLabel": "{day} : {count} places réservées"
+      },
+      "occupancy": {
+        "title": "Affluence",
+        "window": "{weeks} dernières semaines",
+        "windowLabel": "Période",
+        "weeks": "{weeks} sem.",
+        "caption": "Taux de remplissage par jour et par heure sur les {weeks} dernières semaines",
+        "hour": "{hour} h",
+        "cell": "{day}, {hour} h : {rate} de remplissage sur {classes} cours",
+        "cellEmpty": "{day}, {hour} h : aucun cours",
+        "less": "Moins",
+        "more": "Plus",
+        "peakLegend": "90 % et plus",
+        "insight": "Créneau le plus rempli : le {day} à partir de {hour} h, {rate} de remplissage.",
+        "empty": "Pas encore de cours passé sur cette période : la carte se remplit au fil des séances."
       }
     },
     "forbidden": {
@@ -413,10 +665,6 @@
       "subtitle": "Planifier, modifier et gérer la capacité des sessions.",
       "create": "+ Nouveau cours",
       "empty": "Aucun cours sur cette plage. Créez-en un pour commencer.",
-      "range": {
-        "from": "Du",
-        "to": "Au"
-      },
       "row": {
         "capacity": "{remaining} / {capacity} places",
         "edit": "Modifier",
@@ -442,13 +690,44 @@
       "errors": {
         "generic": "Erreur lors de l'enregistrement.",
         "versionConflict": "Le cours a été modifié entre temps. Liste rafraîchie — réessayez."
+      },
+      "planning": {
+        "viewLabel": "Vue du calendrier",
+        "views": {
+          "day": "Jour",
+          "week": "Semaine",
+          "month": "Mois",
+          "list": "Liste"
+        },
+        "today": "Aujourd'hui",
+        "previousWeek": "Semaine précédente",
+        "nextWeek": "Semaine suivante",
+        "previousMonth": "Mois précédent",
+        "nextMonth": "Mois suivant",
+        "createAt": "Nouveau cours le {date}",
+        "full": "Complet",
+        "more": "+{count} de plus",
+        "localTime": "Horaires en heure locale ({timeZone}).",
+        "previousDay": "Jour précédent",
+        "nextDay": "Jour suivant",
+        "seatLeft": "{count} place",
+        "seatsLeft": "{count} places",
+        "actionsFor": "Actions pour {title}"
+      },
+      "columns": {
+        "date": "Date"
+      },
+      "list": {
+        "export": "Exporter",
+        "summary": "{classes} cours · {seats} places · {booked} réservées",
+        "deleteNote": "Supprimer un cours annule ses réservations.",
+        "remaining": "Places libres"
       }
     },
     "members": {
       "title": "Membres",
       "subtitle": "Annuaire des adhérents de votre studio.",
       "empty": "Aucun membre pour le moment.",
-      "count": "{n} membre(s) chargé(s)",
       "joinedAt": "Inscrit le",
       "loadMore": "Charger plus",
       "search": "Rechercher un membre…",
@@ -456,7 +735,40 @@
         "member": "Membre",
         "coach": "Coach",
         "admin": "Admin"
-      }
+      },
+      "columns": {
+        "name": "Nom",
+        "email": "E-mail",
+        "role": "Rôle",
+        "actions": "Actions"
+      },
+      "countOne": "{count} membre chargé",
+      "countOther": "{count} membres chargés",
+      "noMatch": "Aucun membre ne correspond à cette recherche.",
+      "tabs": {
+        "label": "Filtrer par rôle",
+        "all": "Tous",
+        "member": "Membres",
+        "coach": "Coachs",
+        "admin": "Admins"
+      },
+      "exportCsv": "Exporter CSV",
+      "you": "Vous",
+      "selectAll": "Sélectionner tous les membres affichés",
+      "selectRow": "Sélectionner {name}",
+      "selectedOne": "{count} sélectionné",
+      "selectedOther": "{count} sélectionnés",
+      "bulk": {
+        "copyEmails": "Copier les e-mails",
+        "export": "Exporter la sélection",
+        "clear": "Désélectionner"
+      },
+      "rowMenu": "Actions pour {name}",
+      "copyEmail": "Copier l'e-mail",
+      "emailCopied": "E-mail copié.",
+      "emailsCopied": "E-mails copiés.",
+      "copyFailed": "Le presse-papiers n'est pas disponible.",
+      "readOnly": "Annuaire des adhérents de votre studio, en lecture seule."
     },
     "branding": {
       "title": "Identité visuelle",
@@ -509,6 +821,32 @@
         "already_checked_in": "Ce membre est déjà pointé pour ce cours.",
         "checkin_limit_reached": "Trop de check-ins pour ce membre dans la dernière heure. Réessayez plus tard.",
         "generic": "Échec du check-in. Veuillez réessayer."
+      },
+      "kiosk": {
+        "enter": "Mode borne",
+        "exit": "Quitter le mode borne"
+      },
+      "frameHint": "Centrez le QR code dans le cadre.",
+      "confirmed": "Check-in confirmé",
+      "scanNext": "Scanner le membre suivant",
+      "enterHint": "ou appuyez sur",
+      "enterKey": "Entrée",
+      "scanner": {
+        "title": "Scanner",
+        "camera": "Caméra arrière",
+        "active": "Caméra active"
+      },
+      "manual": {
+        "title": "Saisie manuelle",
+        "hint": "Si la caméra ne lit pas le code"
+      },
+      "passes": {
+        "title": "Passages de cette session",
+        "countOne": "{count} passage",
+        "countOther": "{count} passages",
+        "empty": "Aucun passage depuis l'ouverture de la borne.",
+        "unnamed": "Membre sans nom",
+        "note": "Liste propre à cette borne, effacée au rechargement."
       }
     },
     "audit": {
@@ -516,11 +854,49 @@
       "subtitle": "Toutes les actions admin de votre studio, les plus récentes en premier.",
       "empty": "Aucun événement d'audit pour le moment.",
       "loadMore": "Charger plus",
-      "count": "{n} événement(s) chargé(s)",
       "actorLabel": "Acteur",
       "actionLabel": "Action",
       "targetLabel": "Cible",
-      "timestampLabel": "Date"
+      "timestampLabel": "Date",
+      "countOne": "{count} événement chargé",
+      "countOther": "{count} événements chargés",
+      "system": "Système",
+      "filter": {
+        "noMatch": "Aucun événement de ce type parmi ceux chargés."
+      },
+      "actions": {
+        "userRegistered": "Inscription d'un membre",
+        "userDeleted": "Compte supprimé",
+        "userConsentsUpdated": "Consentements mis à jour",
+        "reservationCancelledByAdmin": "Réservation annulée par un admin",
+        "rlsViolation": "Accès bloqué par l'isolation des données",
+        "billingWebhookProcessed": "Événement de paiement traité",
+        "billingWebhookSignatureFailed": "Événement de paiement rejeté : signature invalide",
+        "jwtKeyRotationPrep": "Rotation de la clé de signature préparée",
+        "dlqEntryReplayed": "Tâche en échec relancée",
+        "dlqEntryDiscarded": "Tâche en échec abandonnée",
+        "tokenRefreshReuseDetected": "Réutilisation d'un jeton de session détectée"
+      },
+      "targets": {
+        "user": "Membre",
+        "reservation": "Réservation",
+        "class": "Cours",
+        "studio": "Studio",
+        "stripe_webhook": "Événement de paiement",
+        "dlq_entry": "Tâche en échec",
+        "jwt_key": "Clé de signature"
+      },
+      "export": "Exporter",
+      "search": "Filtrer par action, nom ou id",
+      "categories": {
+        "label": "Catégorie",
+        "all": "Tout",
+        "reservations": "Réservations",
+        "billing": "Facturation",
+        "accounts": "Comptes",
+        "system": "Système"
+      },
+      "appendOnly": "Journal en ajout seul : aucune entrée ne peut être modifiée."
     },
     "billing": {
       "title": "Facturation",
@@ -625,6 +1001,65 @@
           "archived": "Ce programme est archivé et ne peut plus être modifié.",
           "loadFailed": "Impossible de charger le programme."
         }
+      }
+    },
+    "shell": {
+      "breadcrumb": "Fil d'Ariane",
+      "search": "Rechercher",
+      "newClass": "Nouveau cours",
+      "help": "Aide",
+      "studioBadge": "Studio",
+      "palette": {
+        "title": "Rechercher dans la console",
+        "placeholder": "Rechercher une page, un cours, un membre…",
+        "pages": "Pages",
+        "classes": "Cours",
+        "members": "Membres",
+        "empty": "Aucun résultat.",
+        "loading": "Chargement des cours et des membres…",
+        "hint": "Flèches pour naviguer, Entrée pour ouvrir, Échap pour fermer."
+      },
+      "theme": {
+        "label": "Thème",
+        "light": "Thème clair",
+        "dark": "Thème sombre"
+      },
+      "shortcuts": {
+        "title": "Raccourcis clavier",
+        "palette": "Ouvrir la recherche",
+        "memberSearch": "Chercher un membre (page Membres)",
+        "help": "Afficher cette aide",
+        "close": "Fermer une fenêtre",
+        "escapeKey": "Échap"
+      }
+    },
+    "coach": {
+      "next": {
+        "title": "Prochain cours",
+        "endsIn": "se termine dans {time}",
+        "at": "{day}, {start} - {end}",
+        "empty": "Aucun cours à venir ne vous est attribué."
+      },
+      "today": {
+        "title": "Mes cours aujourd'hui",
+        "empty": "Aucun cours ne vous est attribué aujourd'hui."
+      },
+      "upcoming": {
+        "title": "Mes prochains cours",
+        "empty": "Aucun cours ne vous est attribué dans les 7 prochains jours."
+      },
+      "unassigned": "Les cours vous sont attribués par un administrateur depuis le planning du studio.",
+      "loadError": "Vos cours n'ont pas pu se charger.",
+      "planning": {
+        "title": "Mon planning",
+        "subtitle": "Vos cours, en lecture seule. Un administrateur crée et modifie les cours.",
+        "scopeLabel": "Cours affichés",
+        "scope": {
+          "mine": "Mes cours",
+          "all": "Tout le studio"
+        },
+        "emptyMine": "Aucun cours ne vous est attribué sur cette période.",
+        "emptyAll": "Aucun cours au studio sur cette période."
       }
     }
   },

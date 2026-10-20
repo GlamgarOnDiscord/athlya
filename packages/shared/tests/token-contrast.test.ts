@@ -43,10 +43,13 @@ function over(top: string, alpha: number, bottom: string): string {
   return `#${mixed.join('')}`;
 }
 
-/** Resolves a shadcn/ui bridge source the way `theme.css` does. */
+/**
+ * Resolves a shadcn/ui bridge source the way `theme.css` does: the brand
+ * variables default to the active mode's primary pair.
+ */
 function bridgeColor(source: string, mode: Mode): string {
-  if (source === 'brandPrimary') return colors.light.primary;
-  if (source === 'brandOnPrimary') return colors.light.primaryForeground;
+  if (source === 'brandPrimary') return colors[mode].primary;
+  if (source === 'brandOnPrimary') return colors[mode].primaryForeground;
   return colors[mode][source as Semantic];
 }
 
@@ -81,6 +84,7 @@ function pairsFor(mode: Mode): Pair[] {
     text('foreground', 'muted'),
     text('foreground', 'accent'),
     text('mutedForeground', 'background'),
+    text('mutedForeground', 'card'),
     text('mutedForeground', 'secondary'),
     text('mutedForeground', 'muted'),
     text('primaryForeground', 'primary'),
@@ -93,8 +97,11 @@ function pairsFor(mode: Mode): Pair[] {
       bg: over(c.destructive, tintAlpha, c.background),
       level: 'text',
     },
+    ui('primary', 'background'),
+    ui('primary', 'muted'),
     ui('ring', 'background'),
     ui('ring', 'muted'),
+    ...(mode === 'dark' ? [ui('input', 'background'), ui('input', 'card')] : []),
     ui('destructive', 'background'),
     ui('success', 'background'),
     ui('warning', 'background'),
@@ -119,29 +126,13 @@ interface KnownGap {
 }
 
 const KNOWN_GAPS: readonly KnownGap[] = [
-  ...MODES.map((mode) => ({
-    name: 'input on background (web form field boundary, shadcn border-input)',
-    mode,
-    fg: colors[mode].input,
-    bg: colors[mode].background,
-    level: 'ui' as const,
-    floor: mode === 'light' ? 1.23 : 1.28,
-  })),
-  ...MODES.map((mode) => ({
-    name: 'border on background (mobile TextField boundary)',
-    mode,
-    fg: colors[mode].border,
-    bg: colors[mode].background,
-    level: 'ui' as const,
-    floor: mode === 'light' ? 1.23 : 1.28,
-  })),
   {
-    name: 'primary on background (checked checkbox fill, capacity bar)',
+    name: 'input on background (web, studio and mobile form field boundary)',
     mode: 'light',
-    fg: colors.light.primary,
+    fg: colors.light.input,
     bg: colors.light.background,
     level: 'ui',
-    floor: 2.77,
+    floor: 1.26,
   },
 ];
 
@@ -176,7 +167,66 @@ describe('logo palette (docs/brand/README.md)', () => {
     expect(contrastRatio(brandPalette.volt, colors.dark.background)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('studio planning marks read as text: volt and white pills, today bar, now line', () => {
+    expect(contrastRatio(brandPalette.ink, brandPalette.volt)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(brandPalette.white, brandPalette.ink)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(brandPalette.ink, colors.light.background)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(brandPalette.volt, colors.dark.background)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(brandPalette.white, colors.dark.muted)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('member booking marks: capacity fill on its track, selected day of the week strip', () => {
+    expect(contrastRatio(brandPalette.ink, colors.light.muted)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(brandPalette.volt, colors.dark.muted)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(brandPalette.white, brandPalette.ink)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(brandPalette.ink, brandPalette.volt)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(brandPalette.volt, colors.dark.background)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('studio dashboard marks: fill meter on its track, live pill', () => {
+    for (const mode of MODES) {
+      expect(contrastRatio(chartColors[mode].series, colors[mode].muted)).toBeGreaterThanOrEqual(3);
+    }
+    expect(contrastRatio(brandPalette.ink, brandPalette.volt)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('studio check-in: disabled button, success line, framing guide on the camera', () => {
+    for (const mode of MODES) {
+      expect(
+        contrastRatio(colors[mode].mutedForeground, colors[mode].muted),
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(colors[mode].success, colors[mode].background)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+    expect(contrastRatio(brandPalette.volt, brandPalette.ink)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(brandPalette.white, brandPalette.ink)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('volt on white stays forbidden: below even the 3:1 UI minimum', () => {
     expect(contrastRatio(brandPalette.volt, brandPalette.white)).toBeLessThan(3);
   });
+});
+
+describe('neutral ink surfaces', () => {
+  const NEUTRAL: readonly Semantic[] = [
+    'background',
+    'foreground',
+    'card',
+    'secondary',
+    'muted',
+    'mutedForeground',
+    'accent',
+    'border',
+    'input',
+  ];
+
+  it.each(MODES.flatMap((mode) => NEUTRAL.map((token) => ({ mode, token }))))(
+    '$mode $token carries no hue',
+    ({ mode, token }) => {
+      const hex = colors[mode][token].toLowerCase();
+      expect(hex.slice(1, 3)).toBe(hex.slice(3, 5));
+      expect(hex.slice(3, 5)).toBe(hex.slice(5, 7));
+    },
+  );
 });

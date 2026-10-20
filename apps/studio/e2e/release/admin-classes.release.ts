@@ -125,18 +125,20 @@ test('studio admin: log in → classes table → create → delete @turnstile', 
   const listResponse = page.waitForResponse(isCall('GET', '/v1/classes'));
   await page.goto('/dashboard/classes');
   expect((await listResponse).status(), 'GET /v1/classes').toBe(200);
+  // The page opens on the week planning; the table lives in the List view.
+  await page.getByRole('button', { name: /^(liste|list)$/iu }).click();
   await expect(page.getByRole('columnheader', { name: /^(cours|classes)$/iu })).toBeVisible();
 
-  // Show the day the smoke class lands on.
+  // The list shows one calendar month: step forward to the month the smoke class lands on.
   const day = new Date(Date.now() + LEAD_DAYS * DAY_MS).toISOString().slice(0, 10);
-  const rangeResponse = page.waitForResponse((response) => {
-    if (!isCall('GET', '/v1/classes')(response)) return false;
-    const params = new URL(response.url()).searchParams;
-    return (params.get('from') ?? '').startsWith(day) && (params.get('to') ?? '').startsWith(day);
-  });
-  await page.getByLabel(/^(au|to)$/iu).fill(day);
-  await page.getByLabel(/^(du|from)$/iu).fill(day);
-  expect((await rangeResponse).status(), 'GET /v1/classes (smoke day)').toBe(200);
+  const monthIndex = (iso: string): number =>
+    Number(iso.slice(0, 4)) * 12 + Number(iso.slice(5, 7));
+  const monthsAhead = monthIndex(day) - monthIndex(new Date().toISOString());
+  for (let step = 0; step < monthsAhead; step++) {
+    const stepResponse = page.waitForResponse(isCall('GET', '/v1/classes'));
+    await page.getByRole('button', { name: /^(mois suivant|next month)$/iu }).click();
+    expect((await stepResponse).status(), 'GET /v1/classes (next month)').toBe(200);
+  }
 
   // --------------------------------------------------------------- create
   const title = `${TITLE_PREFIX}${runTag(testInfo.retry)}`;

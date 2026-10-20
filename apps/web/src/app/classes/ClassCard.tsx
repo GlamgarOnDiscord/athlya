@@ -1,13 +1,17 @@
 'use client';
 
+import { CheckCircleIcon, HourglassMediumIcon } from '@phosphor-icons/react';
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, type ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardTitle } from '@/components/ui/card';
+import { AddToCalendar } from '@/components/calendar/AddToCalendar';
 import { cn } from '@/lib/utils';
 
-import { AddToCalendar } from '@/components/calendar/AddToCalendar';
+import { capacityView } from './schedule';
 
+import type { MemberBooking } from '../../lib/api/reservations';
 import type { Translator } from '../../lib/i18n/t';
 import type { Locale } from '@athlya/shared/i18n';
 
@@ -25,143 +29,167 @@ export interface ClassCardProps {
   readonly classInfo: ClassCardInfo;
   readonly t: Translator;
   readonly locale: Locale;
-  readonly onBook: (classId: string) => Promise<void>;
-  readonly booked?: boolean;
-  /**
-   * The booking is a confirmed seat (not a waitlist entry): the card then
-   * offers "Add to calendar". `reservationId` aligns the event UID with
-   * the member's calendar feed when the API returned it.
-   */
-  readonly confirmedBooking?: { readonly reservationId?: string | undefined } | null;
+  /** Called with the class id and the seats left as this card shows them. */
+  readonly onBook: (classId: string, remaining: number) => Promise<void>;
+  /** The member's own place in this class, when they hold one. */
+  readonly booking?: MemberBooking | null;
   readonly disabled?: boolean;
   readonly error?: string | null;
 }
 
+/**
+ * One class of the `/classes` day list: start time and duration first,
+ * then the title, the capacity (text and bar say the same thing: seats
+ * taken out of the capacity) and the action. A held place replaces the
+ * action with its state, in text: booked, or the waitlist position. A
+ * confirmed seat whose booking id is known also offers "Add to calendar",
+ * whose event shares its UID with the member's calendar feed.
+ */
 export function ClassCard({
   classInfo,
   t,
   locale,
   onBook,
-  booked = false,
-  confirmedBooking = null,
+  booking = null,
   disabled = false,
   error = null,
 }: ClassCardProps): ReactElement {
   const { id, title, startsAt, durationMin, capacity, remaining, coachName } = classInfo;
 
-  const isFull = remaining <= 0;
-  const pct = capacity > 0 ? Math.round(((capacity - remaining) / capacity) * 100) : 100;
-  const barColor = pct >= 90 ? 'bg-destructive' : pct >= 60 ? 'bg-amber-500' : 'bg-primary';
-  const fmt = useMemo(
-    () =>
-      new Intl.DateTimeFormat(locale, {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
+  const seats = capacityView(capacity, remaining);
+  const timeFmt = useMemo(
+    () => new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }),
     [locale],
   );
-  const startLabel = fmt.format(new Date(startsAt));
+  const startLabel = timeFmt.format(new Date(startsAt));
+  const titleId = `class-card-${id}-title`;
   const errorSlotId = `class-card-${id}-error`;
   const capacityTrackRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    capacityTrackRef.current?.style.setProperty('--bar-scale', String(pct / 100));
-  }, [pct]);
+    capacityTrackRef.current?.style.setProperty('--bar-scale', String(seats.ratio));
+  }, [seats.ratio]);
 
   const onClick = useCallback(() => {
-    void onBook(id);
-  }, [id, onBook]);
+    void onBook(id, remaining);
+  }, [id, remaining, onBook]);
+
+  const seatsLabel = seats.full
+    ? t('classes.card.fullWaitlist')
+    : seats.remaining === 1
+      ? t('classes.card.placeLeft')
+      : t('classes.card.placesLeft', { count: seats.remaining });
 
   return (
-    <Card aria-labelledby={`class-card-${id}-title`}>
-      <CardHeader>
-        <CardTitle id={`class-card-${id}-title`}>{title}</CardTitle>
-        {coachName !== undefined && coachName !== '' ? (
-          <p className="text-sm text-muted-foreground">{coachName}</p>
-        ) : null}
-      </CardHeader>
-
-      <CardContent className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1">
-          <div className="flex justify-between text-sm">
-            <span>{t('classes.card.remaining')}</span>
-            <span className="font-medium">
-              {remaining} / {capacity}
-            </span>
-          </div>
-          <div ref={capacityTrackRef} className="h-2 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className={cn(
-                'class-card-capacity-bar h-full w-full origin-left rounded-full transition-transform',
-                barColor,
-              )}
-              role="presentation"
-            />
-          </div>
+    <Card aria-labelledby={titleId} className="py-0">
+      <div className="flex gap-4 p-4">
+        <div className="flex w-16 shrink-0 flex-col">
+          <time dateTime={startsAt} className="text-2xl leading-none font-semibold tabular-nums">
+            {startLabel}
+          </time>
+          <span className="mt-1.5 text-sm text-muted-foreground">
+            {t('classes.card.duration', { minutes: durationMin })}
+          </span>
         </div>
 
-        <p className="text-sm text-muted-foreground">
-          <time dateTime={startsAt}>{startLabel}</time>
-        </p>
-      </CardContent>
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="flex flex-col gap-0.5">
+            <CardTitle id={titleId} className="font-semibold">
+              {title}
+            </CardTitle>
+            {coachName !== undefined && coachName !== '' ? (
+              <p className="text-sm text-muted-foreground">{coachName}</p>
+            ) : null}
+          </div>
 
-      <CardFooter className="flex flex-col items-start gap-2">
-        {booked ? (
-          <Button
-            disabled
-            variant="secondary"
-            aria-label={`${t('classes.card.booked')} — ${title}`}
-          >
-            {t('classes.card.booked')}
-          </Button>
-        ) : isFull ? (
-          <Button
-            onClick={onClick}
-            disabled={disabled}
-            variant="outline"
-            aria-label={`${t('classes.card.joinWaitlist')} — ${title}`}
-            aria-describedby={error !== null ? errorSlotId : undefined}
-          >
-            {t('classes.card.joinWaitlist')}
-          </Button>
-        ) : (
-          <Button
-            onClick={onClick}
-            disabled={disabled}
-            aria-label={`${t('classes.card.book')} — ${title}`}
-            aria-describedby={error !== null ? errorSlotId : undefined}
-          >
-            {t('classes.card.book')}
-          </Button>
-        )}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+              <span className={cn(seats.full ? 'font-medium' : null)}>{seatsLabel}</span>
+              <span className="text-muted-foreground tabular-nums">
+                {t('classes.card.taken', { taken: seats.taken, capacity: seats.capacity })}
+              </span>
+            </div>
+            <div
+              ref={capacityTrackRef}
+              className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+            >
+              <div
+                className="class-card-capacity-bar class-capacity-fill h-full w-full origin-left rounded-full transition-transform motion-reduce:transition-none"
+                role="presentation"
+              />
+            </div>
+          </div>
 
-        {booked && confirmedBooking !== null ? (
-          <AddToCalendar
-            event={{
-              classId: id,
-              reservationId: confirmedBooking.reservationId,
-              title,
-              startsAt,
-              durationMin,
-            }}
-            t={t}
-          />
-        ) : null}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {booking !== null ? (
+              <>
+                {booking.kind === 'confirmed' ? (
+                  <p className="flex items-center gap-1.5 font-medium text-success">
+                    <CheckCircleIcon weight="fill" className="size-5" aria-hidden="true" />
+                    {t('classes.card.booked')}
+                  </p>
+                ) : (
+                  <p className="flex items-center gap-1.5 font-medium">
+                    <HourglassMediumIcon className="size-5" aria-hidden="true" />
+                    {booking.position !== undefined
+                      ? t('classes.card.waitlistPosition', { position: booking.position })
+                      : t('classes.card.onWaitlist')}
+                  </p>
+                )}
+                <Link
+                  href="/me"
+                  className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                >
+                  {t('classes.card.manage')}
+                </Link>
+              </>
+            ) : seats.full ? (
+              <Button
+                onClick={onClick}
+                disabled={disabled}
+                variant="outline"
+                aria-label={`${t('classes.card.joinWaitlist')} — ${title}`}
+                aria-describedby={error !== null ? errorSlotId : undefined}
+              >
+                {t('classes.card.joinWaitlist')}
+              </Button>
+            ) : (
+              <Button
+                onClick={onClick}
+                disabled={disabled}
+                aria-label={`${t('classes.card.book')} — ${title}`}
+                aria-describedby={error !== null ? errorSlotId : undefined}
+              >
+                {t('classes.card.book')}
+              </Button>
+            )}
+          </div>
 
-        {error !== null ? (
-          <span
-            id={errorSlotId}
-            role="alert"
-            aria-live="polite"
-            className="text-sm text-destructive"
-          >
-            {error}
-          </span>
-        ) : null}
-      </CardFooter>
+          {booking?.kind === 'confirmed' && booking.reservationId !== undefined ? (
+            <AddToCalendar
+              event={{
+                classId: id,
+                reservationId: booking.reservationId,
+                title,
+                startsAt,
+                durationMin,
+              }}
+              t={t}
+            />
+          ) : null}
+
+          {error !== null ? (
+            <span
+              id={errorSlotId}
+              role="alert"
+              aria-live="polite"
+              className="text-sm text-destructive"
+            >
+              {error}
+            </span>
+          ) : null}
+        </div>
+      </div>
     </Card>
   );
 }

@@ -3,11 +3,13 @@
  *
  * Endpoints and their middleware chains:
  *
- *   | Method | Path  | Chain                                                                 |
- *   |--------|-------|-----------------------------------------------------------------------|
- *   | POST   | /     | jwtAuth → projectUserId → zValidator(BookingRequestSchema) → idempotency → handler |
- *   | DELETE | /:id  | jwtAuth → projectUserId → zValidator(CancelReservationParamsSchema) → idempotency → handler |
- *   | GET    | /me   | jwtAuth → zValidator(query) → handler                                |
+ *   | Method | Path         | Chain                                                                 |
+ *   |--------|--------------|-----------------------------------------------------------------------|
+ *   | POST   | /            | jwtAuth → projectUserId → zValidator(BookingRequestSchema) → idempotency → handler |
+ *   | POST   | /holds       | jwtAuth → projectUserId → zValidator(HoldRequestSchema) → idempotency → handler |
+ *   | POST   | /:id/confirm | jwtAuth → projectUserId → zValidator(ConfirmHoldParamsSchema) → idempotency → handler |
+ *   | DELETE | /:id         | jwtAuth → projectUserId → zValidator(CancelReservationParamsSchema) → idempotency → handler |
+ *   | GET    | /me          | jwtAuth → zValidator(query) → handler                                |
  *
  * Requirements:
  *   • 8.1, 8.2 — `POST /` returns 201 Created for a confirmed seat
@@ -25,9 +27,18 @@
  *   • 9.3      — waitlist FIFO promotion runs in the same
  *                transaction as the cancellation.
  *   • 14.1, 14.2, 20.1 — auth / validation / idempotency.
+ *   • Issue #723: seat holds: `POST /holds` keeps a seat for a bounded
+ *                time, `POST /:id/confirm` books it, `DELETE /:id`
+ *                releases it. `classVersion` in a booking or hold body
+ *                fences on the class version (409 `class_changed`).
  */
 
-import { BookingRequestSchema, CancelReservationParamsSchema } from '@athlya/shared/schemas/api';
+import {
+  BookingRequestSchema,
+  CancelReservationParamsSchema,
+  ConfirmHoldParamsSchema,
+  HoldRequestSchema,
+} from '@athlya/shared/schemas/api';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
@@ -48,7 +59,12 @@ import {
 import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
-import type { BookingRequest, CancelReservationParams } from '@athlya/shared/schemas/api';
+import type {
+  BookingRequest,
+  CancelReservationParams,
+  ConfirmHoldParams,
+  HoldRequest,
+} from '@athlya/shared/schemas/api';
 import type { Context, MiddlewareHandler } from 'hono';
 
 /* ------------------------------------------------------------------ */
@@ -86,6 +102,7 @@ type ListMyReservationsQuery = z.infer<typeof ListMyReservationsQuerySchema>;
  *                             with the existing row's real status and,
  *                             for a waitlist row, its position.
  *   • `class_in_past`       → HTTP 422.
+ *   • `class_changed`       → HTTP 409 (the `classVersion` sent is stale).
  *   • `counter_unavailable` → HTTP 503 (Redis down; client should retry).
  */
 export type BookingOutcome =
@@ -102,8 +119,54 @@ export type BookingOutcome =
       readonly position?: number;
     }
   | { readonly kind: 'class_in_past' }
+  | { readonly kind: 'class_changed' }
   | { readonly kind: 'not_found' }
   | { readonly kind: 'counter_unavailable' };
+
+/** A seat hold as answered on the wire. */
+export interface HoldView {
+  readonly reservationId: string;
+  readonly classId: string;
+  readonly expiresAt: Date;
+}
+
+/**
+ * Outcome for `placeHold` (issue #723):
+ *
+ *   • `held`         → HTTP 201 with the hold.
+ *   • `already_held` → HTTP 200 with the member's active hold (a retry).
+ *   • `conflict`     → HTTP 409, the member already has a confirmed or
+ *                      waitlist row, as for a booking replay.
+ *   • `class_full`   → HTTP 409 Problem `class_full` (nothing held).
+ *   • the other kinds as for a booking.
+ */
+export type HoldOutcome =
+  | { readonly kind: 'held'; readonly hold: HoldView }
+  | { readonly kind: 'already_held'; readonly hold: HoldView }
+  | {
+      readonly kind: 'conflict';
+      readonly status: 'confirmed' | 'waitlist';
+      readonly reservation: unknown;
+      readonly position?: number;
+    }
+  | { readonly kind: 'class_full' }
+  | { readonly kind: 'class_in_past' }
+  | { readonly kind: 'class_changed' }
+  | { readonly kind: 'not_found' }
+  | { readonly kind: 'counter_unavailable' };
+
+/**
+ * Outcome for `confirmHold`: `confirmed` → 201, `already_confirmed` →
+ * 200 (a retry), `hold_expired` / `not_a_hold` → 409, `class_in_past` →
+ * 422 (the class started while the seat was held), `not_found` → 404.
+ */
+export type ConfirmHoldOutcome =
+  | { readonly kind: 'confirmed'; readonly reservation: unknown }
+  | { readonly kind: 'already_confirmed'; readonly reservation: unknown }
+  | { readonly kind: 'hold_expired' }
+  | { readonly kind: 'not_a_hold' }
+  | { readonly kind: 'class_in_past' }
+  | { readonly kind: 'not_found' };
 
 /** Outcome for `cancelReservation`. Mirrors design §6.11. */
 export type CancelOutcome =
@@ -117,6 +180,8 @@ export type CancelOutcome =
 export interface ReservationsDeps {
   bookClass(claims: AuthClaims, input: BookingRequest): Promise<BookingOutcome>;
   cancelReservation(claims: AuthClaims, params: CancelReservationParams): Promise<CancelOutcome>;
+  placeHold(claims: AuthClaims, input: HoldRequest): Promise<HoldOutcome>;
+  confirmHold(claims: AuthClaims, params: ConfirmHoldParams): Promise<ConfirmHoldOutcome>;
   listMyReservations(
     userId: string,
     query: ListMyReservationsQuery,
@@ -154,6 +219,60 @@ function problemBody(
     status as 409 | 422 | 404,
     { 'content-type': 'application/problem+json' },
   );
+}
+
+function counterUnavailable(c: Context<HonoEnv>): Response {
+  return c.body(
+    JSON.stringify({
+      type: 'about:blank',
+      title: 'Service Unavailable',
+      status: 503,
+      code: 'counter_unavailable',
+      detail: 'Seat counter temporarily unavailable — retry in a moment',
+      traceId: c.get('traceId'),
+    }),
+    503,
+    { 'content-type': 'application/problem+json', 'retry-after': '5' },
+  );
+}
+
+function classChanged(c: Context<HonoEnv>): Response {
+  return problemBody(
+    c,
+    409,
+    'Conflict',
+    'class_changed',
+    'the class changed since it was read; refetch it and retry',
+  );
+}
+
+function holdBody(hold: HoldView): { status: 'held'; hold: Record<string, string> } {
+  return {
+    status: 'held',
+    hold: {
+      reservationId: hold.reservationId,
+      classId: hold.classId,
+      expiresAt: hold.expiresAt.toISOString(),
+    },
+  };
+}
+
+/** Push the new remaining-seat count to live listeners, best effort. */
+function notifyRemaining(c: Context<HonoEnv>, deps: ReservationsDeps, classId: string): void {
+  try {
+    c.executionCtx?.waitUntil(
+      (async () => {
+        try {
+          const remaining = await deps.getRemainingSeats(classId);
+          if (remaining !== null) await notifyCapacityChange(c.env, classId, remaining);
+        } catch {
+          // Best-effort capacity notification.
+        }
+      })(),
+    );
+  } catch {
+    // No ExecutionContext in non-Cloudflare environments.
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -260,21 +379,118 @@ export function buildReservationsRouter(deps: ReservationsDeps): Hono<HonoEnv> {
             'class_in_past',
             'class has already started',
           );
+        case 'class_changed':
+          return classChanged(c);
         case 'not_found':
           return problemBody(c, 404, 'Not Found', 'not_found', 'class not found');
         case 'counter_unavailable':
-          return c.body(
-            JSON.stringify({
-              type: 'about:blank',
-              title: 'Service Unavailable',
-              status: 503,
-              code: 'counter_unavailable',
-              detail: 'Seat counter temporarily unavailable — retry in a moment',
-              traceId: c.get('traceId'),
-            }),
-            503,
-            { 'content-type': 'application/problem+json', 'retry-after': '5' },
+          return counterUnavailable(c);
+      }
+    },
+  );
+
+  /* ------------------------------ POST /holds -------------------- */
+  router.post(
+    '/holds',
+    projectUserIdFromClaims(),
+    zValidator('json', HoldRequestSchema),
+    idem,
+    async (c) => {
+      traceOperation(c, 'reservations.hold');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const body = readValidated<HoldRequest>(c, 'json');
+      const outcome = await deps.placeHold(claims, body);
+
+      switch (outcome.kind) {
+        case 'held':
+          notifyRemaining(c, deps, body.classId);
+          return c.json(holdBody(outcome.hold), 201);
+        case 'already_held':
+          return c.json(holdBody(outcome.hold), 200);
+        case 'conflict':
+          return c.json(
+            {
+              status: outcome.status,
+              reservation: outcome.reservation,
+              ...(outcome.position !== undefined ? { position: outcome.position } : {}),
+            },
+            409,
           );
+        case 'class_full':
+          return problemBody(
+            c,
+            409,
+            'Conflict',
+            'class_full',
+            'no seat left to hold; book to join the waitlist',
+          );
+        case 'class_changed':
+          return classChanged(c);
+        case 'class_in_past':
+          return problemBody(
+            c,
+            422,
+            'Unprocessable Entity',
+            'class_in_past',
+            'class has already started',
+          );
+        case 'not_found':
+          return problemBody(c, 404, 'Not Found', 'not_found', 'class not found');
+        case 'counter_unavailable':
+          return counterUnavailable(c);
+      }
+    },
+  );
+
+  /* ------------------------------ POST /:reservationId/confirm --- */
+  router.post(
+    '/:reservationId/confirm',
+    projectUserIdFromClaims(),
+    zValidator('param', ConfirmHoldParamsSchema),
+    idem,
+    async (c) => {
+      traceOperation(c, 'reservations.confirm-hold');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const params = readValidated<ConfirmHoldParams>(c, 'param');
+      const outcome = await deps.confirmHold(claims, params);
+
+      switch (outcome.kind) {
+        case 'confirmed':
+          return c.json({ status: 'confirmed', reservation: outcome.reservation }, 201);
+        case 'already_confirmed':
+          return c.json({ status: 'confirmed', reservation: outcome.reservation }, 200);
+        case 'hold_expired':
+          return problemBody(
+            c,
+            409,
+            'Conflict',
+            'hold_expired',
+            'the hold expired or was released; place a new hold or book',
+          );
+        case 'not_a_hold':
+          return problemBody(
+            c,
+            409,
+            'Conflict',
+            'not_a_hold',
+            'this reservation is not a seat hold',
+          );
+        case 'class_in_past':
+          return problemBody(
+            c,
+            422,
+            'Unprocessable Entity',
+            'class_in_past',
+            'class has already started',
+          );
+        case 'not_found':
+          return problemBody(c, 404, 'Not Found', 'not_found', 'reservation not found');
       }
     },
   );

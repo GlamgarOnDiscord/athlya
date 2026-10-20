@@ -30,39 +30,42 @@
 
   /* Light theme semantic colors */
   --color-light-background: #ffffff;
-  --color-light-foreground: #0f172a;
-  --color-light-primary: #0ea5e9;
-  --color-light-primary-foreground: #0f172a;
-  --color-light-secondary: #f1f5f9;
-  --color-light-muted: #f1f5f9;
-  --color-light-muted-foreground: #475569;
-  --color-light-accent: #e0f2fe;
+  --color-light-foreground: #0a0a0a;
+  --color-light-card: #ffffff;
+  --color-light-primary: #0a0a0a;
+  --color-light-primary-foreground: #ffffff;
+  --color-light-secondary: #f5f5f5;
+  --color-light-muted: #f5f5f5;
+  --color-light-muted-foreground: #525252;
+  --color-light-accent: #f5f5f5;
   --color-light-destructive: #b91c1c;
   --color-light-success: #15803d;
   --color-light-warning: #b45309;
-  --color-light-border: #e2e8f0;
-  --color-light-input: #e2e8f0;
-  --color-light-ring: #0284c7;
+  --color-light-border: #e5e5e5;
+  --color-light-input: #e5e5e5;
+  --color-light-ring: #0a0a0a;
 
   /* Dark theme semantic colors */
-  --color-dark-background: #0b1220;
-  --color-dark-foreground: #f8fafc;
-  --color-dark-primary: #38bdf8;
-  --color-dark-primary-foreground: #0b1220;
-  --color-dark-secondary: #1e293b;
-  --color-dark-muted: #1e293b;
-  --color-dark-muted-foreground: #94a3b8;
-  --color-dark-accent: #0c4a6e;
+  --color-dark-background: #0a0a0a;
+  --color-dark-foreground: #fafafa;
+  --color-dark-card: #141414;
+  --color-dark-primary: #d7ff3a;
+  --color-dark-primary-foreground: #0a0a0a;
+  --color-dark-secondary: #1c1c1c;
+  --color-dark-muted: #1c1c1c;
+  --color-dark-muted-foreground: #a3a3a3;
+  --color-dark-accent: #1c1c1c;
   --color-dark-destructive: #f87171;
   --color-dark-success: #4ade80;
   --color-dark-warning: #fbbf24;
-  --color-dark-border: #1e293b;
-  --color-dark-input: #1e293b;
-  --color-dark-ring: #38bdf8;
+  --color-dark-border: #2c2c2c;
+  --color-dark-input: #636363;
+  --color-dark-ring: #d7ff3a;
 
   /* Active semantic colors (light) */
   --color-background: var(--color-light-background);
   --color-foreground: var(--color-light-foreground);
+  --color-card: var(--color-light-card);
   --color-primary: var(--color-light-primary);
   --color-primary-foreground: var(--color-light-primary-foreground);
   --color-secondary: var(--color-light-secondary);
@@ -79,9 +82,9 @@
   /* shadcn/ui bridge (light) */
   --background: var(--color-light-background);
   --foreground: var(--color-light-foreground);
-  --card: var(--color-light-background);
+  --card: var(--color-light-card);
   --card-foreground: var(--color-light-foreground);
-  --popover: var(--color-light-background);
+  --popover: var(--color-light-card);
   --popover-foreground: var(--color-light-foreground);
   --primary: var(--athlya-brand-primary);
   --primary-foreground: var(--athlya-brand-on-primary);
@@ -108,6 +111,13 @@
   --chart-1: #0a0a0a;
   --chart-2: #d7ff3a;
   --chart-3: #d7ff3a;
+
+  /* Per-tenant brand color (light default), overridden server-side by buildBrandColorCss */
+  --athlya-brand-primary: #0a0a0a;
+  --athlya-brand-primary-rgb: 10, 10, 10;
+  --athlya-brand-on-primary: #ffffff;
+  --athlya-brand-primary-tint: #2f2f2f;
+  --athlya-brand-primary-shade: #090909;
 
   /* Spacing */
   --spacing-xs: 0.25rem;
@@ -146,22 +156,16 @@
   --radius: 0.5rem;
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(15, 23, 42, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.1);
-
-  /* Per-tenant brand color, overridden server-side by buildBrandColorCss */
-  --athlya-brand-primary: #0ea5e9;
-  --athlya-brand-primary-rgb: 14, 165, 233;
-  --athlya-brand-on-primary: #0f172a;
-  --athlya-brand-primary-tint: #32b3ec;
-  --athlya-brand-primary-shade: #0c8cc6;
+  --shadow-sm: 0 1px 2px 0 rgba(10, 10, 10, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(10, 10, 10, 0.1), 0 2px 4px -2px rgba(10, 10, 10, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(10, 10, 10, 0.1), 0 4px 6px -4px rgba(10, 10, 10, 0.1);
 }
 
 :root.dark {
   /* Active semantic colors (dark) */
   --color-background: var(--color-dark-background);
   --color-foreground: var(--color-dark-foreground);
+  --color-card: var(--color-dark-card);
   --color-primary: var(--color-dark-primary);
   --color-primary-foreground: var(--color-dark-primary-foreground);
   --color-secondary: var(--color-dark-secondary);
@@ -178,9 +182,9 @@
   /* shadcn/ui bridge (dark) */
   --background: var(--color-dark-background);
   --foreground: var(--color-dark-foreground);
-  --card: var(--color-dark-background);
+  --card: var(--color-dark-card);
   --card-foreground: var(--color-dark-foreground);
-  --popover: var(--color-dark-background);
+  --popover: var(--color-dark-card);
   --popover-foreground: var(--color-dark-foreground);
   --primary: var(--athlya-brand-primary);
   --primary-foreground: var(--athlya-brand-on-primary);
@@ -205,8 +209,15 @@
 
   /* Progression charts: series, marker fill, hover/focus band (dark) */
   --chart-1: #d7ff3a;
-  --chart-2: #0b1220;
-  --chart-3: #1e293b;
+  --chart-2: #0a0a0a;
+  --chart-3: #1c1c1c;
+
+  /* Per-tenant brand color (dark default), overridden server-side by buildBrandColorCss */
+  --athlya-brand-primary: #d7ff3a;
+  --athlya-brand-primary-rgb: 215, 255, 58;
+  --athlya-brand-on-primary: #0a0a0a;
+  --athlya-brand-primary-tint: #ddff58;
+  --athlya-brand-primary-shade: #b7d931;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -214,6 +225,7 @@
     /* Active semantic colors (dark) */
     --color-background: var(--color-dark-background);
     --color-foreground: var(--color-dark-foreground);
+    --color-card: var(--color-dark-card);
     --color-primary: var(--color-dark-primary);
     --color-primary-foreground: var(--color-dark-primary-foreground);
     --color-secondary: var(--color-dark-secondary);
@@ -230,9 +242,9 @@
     /* shadcn/ui bridge (dark) */
     --background: var(--color-dark-background);
     --foreground: var(--color-dark-foreground);
-    --card: var(--color-dark-background);
+    --card: var(--color-dark-card);
     --card-foreground: var(--color-dark-foreground);
-    --popover: var(--color-dark-background);
+    --popover: var(--color-dark-card);
     --popover-foreground: var(--color-dark-foreground);
     --primary: var(--athlya-brand-primary);
     --primary-foreground: var(--athlya-brand-on-primary);
@@ -257,8 +269,15 @@
 
     /* Progression charts: series, marker fill, hover/focus band (dark) */
     --chart-1: #d7ff3a;
-    --chart-2: #0b1220;
-    --chart-3: #1e293b;
+    --chart-2: #0a0a0a;
+    --chart-3: #1c1c1c;
+
+    /* Per-tenant brand color (dark default), overridden server-side by buildBrandColorCss */
+    --athlya-brand-primary: #d7ff3a;
+    --athlya-brand-primary-rgb: 215, 255, 58;
+    --athlya-brand-on-primary: #0a0a0a;
+    --athlya-brand-primary-tint: #ddff58;
+    --athlya-brand-primary-shade: #b7d931;
   }
 }
 

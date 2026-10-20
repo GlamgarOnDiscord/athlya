@@ -5,15 +5,10 @@
  * The audit flagged the absence of any password-reset flow as a
  * blocker before prod, especially given HIBP fail-closed: a user
  * whose chosen password is breached after the fact would be
- * permanently locked out. This module ships the SERVICE-LAYER
- * core only — the two pure use cases plus their dependency
- * contract. The remaining wiring (email transport via Resend,
- * `password_reset_tokens` migration, gateway routes
- * `POST /v1/auth/password-reset/request` + `/confirm`, UI 3-step
- * flow `/forgot-password` → email link → `/reset-password/[token]`)
- * is documented as the production-side TODO checklist below; each
- * piece composes onto the primitives exported here without further
- * domain logic.
+ * permanently locked out. This module holds the domain core: the
+ * request, delivery and confirm use cases plus their dependency
+ * contract. Storage, transport, routes and UI compose onto it from
+ * the files listed under "Where it is wired".
  *
  * Security envelope
  * -----------------
@@ -42,22 +37,24 @@
  *      a password reset is itself a security-event signal, often
  *      triggered by suspicion of compromise.
  *
- * Production wiring TODOs (out of scope for Vague 34)
- * ---------------------------------------------------
- *   - `packages/db/migrations/0004_password_reset_tokens.sql`
- *     — table `password_reset_tokens(id uuid PK, user_id, token_hash,
- *       requested_at, expires_at, consumed_at)` + index on
- *       `token_hash` + RLS bypass for the auth service role.
- *   - `packages/api/src/adapters/password-reset-repo-drizzle.ts`
- *     — implements {@link PasswordResetRepo} below.
- *   - `packages/auth/src/service.ts` — extend `AuthServiceDeps`
- *     with `passwordResetRepo` + `emailTransport`.
- *   - `packages/api/src/routes/auth.ts` — wire two new routes
- *     `POST /v1/auth/password-reset/request` (rate-limited, 3 req
- *     per email per 24h) and `POST /v1/auth/password-reset/confirm`
- *     (same rate-limit per token).
- *   - `apps/web/src/app/forgot-password/page.tsx` + email template
- *     `apps/web/src/lib/email/password-reset.html`.
+ * Where it is wired
+ * -----------------
+ *   - Storage: `packages/db/src/schema/password_reset_tokens.ts`,
+ *     created by `packages/db/migrations/0005_password_reset_audit_anonymize.sql`,
+ *     then `0029_password_reset_one_active_per_user.sql` and
+ *     `0043_auth_password_reset_outbox.sql`; implemented by
+ *     `packages/api/src/adapters/password-reset-repo-drizzle.ts`.
+ *   - Dependencies and email transport:
+ *     `packages/api/src/adapters/auth-deps.ts` and
+ *     `packages/api/src/adapters/password-reset-delivery-store-redis.ts`.
+ *   - Delivery from the outbox:
+ *     `packages/api/src/events/password-reset-consumer.ts`.
+ *   - Routes: `POST /v1/auth/password-reset/request` and
+ *     `POST /v1/auth/password-reset/confirm` in
+ *     `packages/api/src/routes/auth.ts` (3 requests per email per 24h).
+ *   - Web: `apps/web/src/app/forgot-password/`,
+ *     `apps/web/src/app/reset-password/[token]/` and the proxies in
+ *     `apps/web/src/app/api/auth/password-reset/{request,confirm}/`.
  *
  * @see docs/security/audit-S2-auth.md S2-006
  */

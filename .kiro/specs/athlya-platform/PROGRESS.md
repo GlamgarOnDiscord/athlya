@@ -8,6 +8,13 @@
 
 ---
 
+## Session 2026-10-19/20: Apple Health, cardio charts, UX refresh
+
+- **#691**: Apple Health workout import on iOS (task 18.1), merged; migration `0048_workout_sessions_external_source` (renumbered from 0047). Operator: apply 0048 before deploying the reservations Worker, then a new EAS build.
+- **#705**: cardio progression charts per machine on web and mobile (closes #683), merged.
+- Merged as well: **#708** (Apple Health totals as structured cardio + import source in the RGPD export, migration 0049, detailed below), **#704** (build-time advisories in the mobile tooling), **#707** (shared design tokens and theme). With 18.1 and its follow-up shipped, checkpoints 20 (v0.2) and 25 (v0.3) are ticked: every task under them is done and CI is green on master.
+- In progress: QR check-in end to end (camera permission on the kiosk, fallback decoder, coach access, web entry card). Full UX refresh and the v1.4 scope are tracked in `docs/roadmap/post-1.0.md` § v1.4.
+
 ## Session 2026-10-19 — Apple Health cardio and export of the import source (#690)
 
 - **#690** — follow-up of 18.1. The Apple Health mapper sends the structured `cardio` summary next to `notes` (`durationSec`, `distanceM` converted from the HealthKit unit, `energyKcal`, average/max heart rate; no `machine`), each metric dropped on its own outside `CardioMetricsSchema`, `cardio` omitted when HealthKit reports none of them; old app builds keep working (`cardio` stays optional). Migration `0049_export_session_source.sql` (expand only: function body replaced, owner and grants re-asserted) makes `export_job_rows` add `source` / `externalId` to imported sessions; the members export CSV gains `source` and `externalId` columns (and the smoke script's `CSV_HEADERS` catches up with `cardioJson`). Tests: mapper unit + fast-check, members export, pgTAP (+5 assertions). Operator steps: apply migration 0049 (staging, then production), then deploy the main Worker (export consumer) from `packages/api` (`wrangler deploy --env staging`, then `--env production`); ship the mobile build after.

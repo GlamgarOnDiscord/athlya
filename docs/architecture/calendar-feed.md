@@ -33,7 +33,9 @@ CALENDAR_FEED_SIGNING_KEY` (gateway secret, at least 32 characters).
   a studio mismatch all answer the same 404.
 - **Out of the application logs**: the token travels in the query string. The serve log, the OTel
   span and the Sentry tags record the pathname only. Cloudflare's own request logs still see the
-  full URL.
+  full URL: an accepted trade-off (owner decision, 2026-10-20), since calendar clients subscribe to
+  a plain URL and send no headers. A token copied from a log is read-only, scoped to one member,
+  and dies with a credential bump or a key rotation.
 
 ## Data and tenant isolation
 

@@ -422,6 +422,8 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
       return { items, nextCursor: null };
     }),
     getRemainingSeats: vi.fn(async (_classId: string) => null),
+    placeHold: vi.fn(async () => ({ kind: 'not_found' as const })),
+    confirmHold: vi.fn(async () => ({ kind: 'not_found' as const })),
   };
 
   if (options.idempotencyDb !== undefined) {

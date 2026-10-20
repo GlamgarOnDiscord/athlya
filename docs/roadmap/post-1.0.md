@@ -93,6 +93,27 @@ Mise à jour : sortie v1.0.0.
 
 ---
 
+## v1.4 : expérience studio et membre
+
+**Statut** : maquettes en cours de validation (octobre 2026), aucun code livré hors du check-in QR.
+
+**Déclencheur** : décision produit (Tom, 2026-10-19/20). Athlya reste une plateforme ouverte à tout studio ; un abonnement vendu aux salles pourra venir ensuite et reste séparé des paiements des membres.
+
+**Périmètre**, une issue et une PR par ligne :
+
+- **Design system** : tokens communs web, studio et mobile (PR #707, ouverte), icônes Phosphor partout à la place de Lucide, sidebar repliable avec sous-menus, densité réduite (une action principale par écran). Direction et licences : `docs/design/ui-direction.md`, `docs/third-party-ui.md`.
+- **Check-in QR de bout en bout** : caméra autorisée sur la borne (en-tête `Permissions-Policy`), décodage de repli quand `BarcodeDetector` manque, codes `already_checked_in` et `checkin_limit_reached` affichés, borne ouverte aux coachs, carte d'entrée QR sur le web membre, secrets JWT vérifiés au démarrage du Worker reservations. En cours.
+- **Cours en calendrier** : vue semaine membre avec panneau de réservation, planning studio en grille horaire avec salles, séries récurrentes et conflits.
+- **Intégration calendrier** : flux iCal personnel signé (webcal), « Ajouter à mon agenda » par cours, puis synchronisation Google Agenda et Outlook.
+- **Paiements membres vers studio** : Stripe Connect (onboarding du studio, offres, carnets, abonnements, remboursements), puis Mollie, GoCardless (prélèvement SEPA) et PayPal derrière une interface commune. Lemon Squeezy écarté : il ne reverse pas aux studios. Aucune commission Athlya à ce stade. Touche la facturation : accord explicite de Tom ou Pierre avant chaque merge.
+- **Marque blanche** : logo clair et sombre, couleur avec contrôle de contraste AA, domaine personnalisé (DNS), domaine d'envoi des e-mails (SPF, DKIM), e-mails transactionnels aux couleurs du studio, mention Athlya masquable.
+- **Admin studio** : fiche membre, détail d'un cours avec présents, équipe et rôles (Manager, Accueil), intégrations et webhooks, réglages du studio, factures membres.
+- **Réglages membre** : profil, sécurité et sessions, notifications par événement, préférences, santé et appareils, confidentialité.
+
+**Pré-requis** : validation des maquettes par Tom ; pour les paiements, compte Stripe Connect plateforme et décision sur les frais.
+
+---
+
 ## Hors v1.x (slices opportunistes)
 
 ### N2.13 — R2 avatars

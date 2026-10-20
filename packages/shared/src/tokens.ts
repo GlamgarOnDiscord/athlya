@@ -32,43 +32,50 @@ export const brandPalette = {
  * brand colors without rewriting components. Light and dark variants share
  * the same keys — consumers pick a variant based on the current theme.
  *
- * Default `primary` is the Athlya brand blue `#0EA5E9`. It is a fill,
- * paired with `primaryForeground`; it is never text on `background` in the
- * light theme (2.77:1). Every pair's WCAG level is pinned by
+ * The surfaces are a neutral ink scale with no hue, so the app reads as
+ * the same product as the landing: the dark `background` is the brand
+ * ink, `card` (cards, popovers) sits one step above it, then `muted`.
+ * `primary` is the brand: an ink fill with white text on light, a volt
+ * fill with ink text on dark, so volt never sits on a light surface. The
+ * focus `ring` follows it. `input` is the form field boundary; on dark it
+ * clears 3:1 against `background`, and `border` stays a quieter divider
+ * that still reads against `muted`. Every pair's WCAG level is pinned by
  * `tests/token-contrast.test.ts`.
  */
 export const colors = {
   light: {
     background: '#FFFFFF',
-    foreground: '#0F172A',
-    primary: '#0EA5E9',
-    primaryForeground: '#0F172A',
-    secondary: '#F1F5F9',
-    muted: '#F1F5F9',
-    mutedForeground: '#475569',
-    accent: '#E0F2FE',
+    foreground: brandPalette.ink,
+    card: '#FFFFFF',
+    primary: brandPalette.ink,
+    primaryForeground: brandPalette.white,
+    secondary: '#F5F5F5',
+    muted: '#F5F5F5',
+    mutedForeground: '#525252',
+    accent: '#F5F5F5',
     destructive: '#B91C1C',
     success: '#15803D',
     warning: '#B45309',
-    border: '#E2E8F0',
-    input: '#E2E8F0',
-    ring: '#0284C7',
+    border: '#E5E5E5',
+    input: '#E5E5E5',
+    ring: brandPalette.ink,
   },
   dark: {
-    background: '#0B1220',
-    foreground: '#F8FAFC',
-    primary: '#38BDF8',
-    primaryForeground: '#0B1220',
-    secondary: '#1E293B',
-    muted: '#1E293B',
-    mutedForeground: '#94A3B8',
-    accent: '#0C4A6E',
+    background: brandPalette.ink,
+    foreground: '#FAFAFA',
+    card: '#141414',
+    primary: brandPalette.volt,
+    primaryForeground: brandPalette.ink,
+    secondary: '#1C1C1C',
+    muted: '#1C1C1C',
+    mutedForeground: '#A3A3A3',
+    accent: '#1C1C1C',
     destructive: '#F87171',
     success: '#4ADE80',
     warning: '#FBBF24',
-    border: '#1E293B',
-    input: '#1E293B',
-    ring: '#38BDF8',
+    border: '#2C2C2C',
+    input: '#636363',
+    ring: brandPalette.volt,
   },
 } as const;
 
@@ -157,9 +164,9 @@ export const radii = {
  * should reduce opacity or swap to a subtle highlight on dark surfaces.
  */
 export const shadows = {
-  sm: '0 1px 2px 0 rgba(15, 23, 42, 0.05)',
-  md: '0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(15, 23, 42, 0.1)',
-  lg: '0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.1)',
+  sm: '0 1px 2px 0 rgba(10, 10, 10, 0.05)',
+  md: '0 4px 6px -1px rgba(10, 10, 10, 0.1), 0 2px 4px -2px rgba(10, 10, 10, 0.1)',
+  lg: '0 10px 15px -3px rgba(10, 10, 10, 0.1), 0 4px 6px -4px rgba(10, 10, 10, 0.1)',
 } as const;
 
 /**

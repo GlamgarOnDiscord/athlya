@@ -21,6 +21,87 @@
 
 @import 'shadcn/tailwind.css';
 
+/*
+ * Booking marks in the logo palette: the capacity fill and the selected
+ * day of the week strip are ink on light and volt on dark, and volt
+ * always sits under ink text. Pairs are pinned in
+ * packages/shared/tests/token-contrast.test.ts.
+ */
+.class-capacity-fill {
+  background-color: var(--athlya-brand-ink);
+}
+.week-day-selected {
+  background-color: var(--athlya-brand-ink);
+  color: var(--athlya-brand-white);
+}
+
+:root.dark {
+  .class-capacity-fill {
+    background-color: var(--athlya-brand-volt);
+  }
+  .week-day-selected {
+    background-color: var(--athlya-brand-volt);
+    color: var(--athlya-brand-ink);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    .class-capacity-fill {
+      background-color: var(--athlya-brand-volt);
+    }
+    .week-day-selected {
+      background-color: var(--athlya-brand-volt);
+      color: var(--athlya-brand-ink);
+    }
+  }
+}
+
 .class-card-capacity-bar {
   transform: scaleX(var(--bar-scale, 0));
+}
+
+/*
+ * Landing scope: the public home is always dark, whatever the theme. The
+ * shadcn/ui variables are pointed at the shared dark tokens inside this
+ * class only, so components and Tailwind utilities (`bg-background`,
+ * `text-muted-foreground`, `bg-primary`) read the same neutral ink scale
+ * as the app in dark mode without forcing the rest of the site into dark.
+ * Primary stays the brand volt, never a studio override.
+ */
+@layer components {
+  .landing-dark {
+    color-scheme: dark;
+    --background: var(--color-dark-background);
+    --foreground: var(--color-dark-foreground);
+    --card: var(--color-dark-card);
+    --card-foreground: var(--color-dark-foreground);
+    --popover: var(--color-dark-card);
+    --popover-foreground: var(--color-dark-foreground);
+    --primary: var(--athlya-brand-volt);
+    --primary-foreground: var(--athlya-brand-ink);
+    --secondary: var(--color-dark-secondary);
+    --secondary-foreground: var(--color-dark-foreground);
+    --muted: var(--color-dark-muted);
+    --muted-foreground: var(--color-dark-muted-foreground);
+    --accent: var(--color-dark-accent);
+    --accent-foreground: var(--color-dark-foreground);
+    --border: var(--color-dark-border);
+    --input: var(--color-dark-input);
+    --ring: var(--athlya-brand-volt);
+    --color-border: var(--border);
+    --color-ring: var(--ring);
+    /* Words of the tagline before they are read: 3:1 or more on ink at display size. */
+    --landing-unread: color-mix(in srgb, var(--athlya-brand-white) 45%, var(--athlya-brand-ink));
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  .landing-word {
+    transition: color 600ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  [data-armed] .landing-word:not([data-read]) {
+    color: var(--landing-unread);
+  }
 }

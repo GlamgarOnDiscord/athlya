@@ -26,7 +26,7 @@
 | Tailwind CSS 4 (CSS-first)      | `^4.3.3`  |
 | @base-ui/react (headless UI)    | `^1.9.0`  |
 | shadcn                          | `^4.21.4` |
-| lucide-react                    | `^1.55.0` |
+| @phosphor-icons/react           | `^2.1.10` |
 | next-themes                     | `^0.4.6`  |
 | sonner (toasts)                 | `^2.0.8`  |
 | tailwind-merge                  | `^3.7.0`  |

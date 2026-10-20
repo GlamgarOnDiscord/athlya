@@ -166,6 +166,16 @@ function buildFakeRepo(
     readClassClock: async (_tx: BookingTx, classId: string) =>
       classId === classRow.id ? { startsAt: classRow.startsAt, now: new Date(clock()) } : null,
 
+    lockClassForBooking: async (_tx: BookingTx, classId: string) =>
+      classId === classRow.id
+        ? { startsAt: classRow.startsAt, now: new Date(clock()), version: classRow.version }
+        : null,
+
+    // This suite never places a seat hold.
+    findOwnHold: async () => null,
+    confirmHold: () => Promise.reject(new Error('no seat hold in this suite')),
+    releaseHold: () => Promise.reject(new Error('no seat hold in this suite')),
+
     withTransaction: async <T>(fn: (tx: BookingTx) => Promise<T>): Promise<T> => {
       const tx: FakeTx = { __brand: 'BookingTx', id: state.txCount++ };
       // Snapshot the state so we can roll back on rejection.

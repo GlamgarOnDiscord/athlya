@@ -23,12 +23,14 @@
  */
 
 import { withTenant, withTenantHttp } from '@athlya/db';
+import { isPostgresRaiseException } from '@athlya/db/errors';
 import { classes, outbox, reservations } from '@athlya/db/schema';
 import { and, asc, between, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { noteOutboxWrite } from '../events/outbox-kick.js';
 
 import { withConnectionRetry, withTransactionRetry } from './db-retry.js';
+import { toDateOrNull } from './service-functions.js';
 
 import type { AthlyaDb, AthlyaDbHttp, AthlyaTx, TenantClaims } from '@athlya/db/client';
 import type { ClassRow } from '@athlya/db/schema';
@@ -242,7 +244,12 @@ export function createDrizzleUpdateClassRepo(
           // confirmation: no booking commits between the count below
           // and the UPDATE.
           const [current] = await tx
-            .select({ version: classes.version, capacity: classes.capacity })
+            .select({
+              version: classes.version,
+              capacity: classes.capacity,
+              startsAt: classes.startsAt,
+              dbNow: sql<Date | string>`now()`,
+            })
             .from(classes)
             .where(
               and(
@@ -257,16 +264,35 @@ export function createDrizzleUpdateClassRepo(
             return { outcome: 'version_conflict' };
           }
 
-          let confirmed = await countConfirmed(tx, classId);
+          // The transaction clock, the one `guard_class_schedule()` reads.
+          const nowMs = toDateOrNull(current.dbNow)?.getTime() ?? Date.now();
+          const newStart = columns.startsAt;
+          if (newStart !== undefined && newStart.getTime() !== current.startsAt.getTime()) {
+            if (current.startsAt.getTime() <= nowMs) {
+              return { outcome: 'class_already_started' };
+            }
+            if (newStart.getTime() <= nowMs) {
+              return { outcome: 'starts_at_in_past' };
+            }
+          }
+
+          let confirmed = await countOccupied(tx, classId);
           if (patch.capacity !== undefined && patch.capacity < confirmed) {
             return { outcome: 'capacity_below_confirmed', confirmed };
           }
 
-          const [row] = await tx
-            .update(classes)
-            .set(columns)
-            .where(and(eq(classes.id, classId), eq(classes.version, expectedVersion)))
-            .returning();
+          let row: ClassRow | undefined;
+          try {
+            [row] = await tx
+              .update(classes)
+              .set(columns)
+              .where(and(eq(classes.id, classId), eq(classes.version, expectedVersion)))
+              .returning();
+          } catch (err) {
+            const refused = guardRefusal(err, confirmed);
+            if (refused !== null) return refused;
+            throw err;
+          }
           if (row === undefined) {
             return { outcome: 'version_conflict' };
           }
@@ -281,12 +307,41 @@ export function createDrizzleUpdateClassRepo(
   };
 }
 
-async function countConfirmed(tx: AthlyaTx, classId: string): Promise<number> {
+/**
+ * Occupied seats: confirmed reservations plus unexpired seat holds,
+ * the count `enforce_class_capacity()` and `guard_class_schedule()`
+ * use (migration 0050). `hold_expires_at` is not in the Drizzle table.
+ */
+async function countOccupied(tx: AthlyaTx, classId: string): Promise<number> {
   const [row] = await tx
     .select({ n: sql<number | string>`count(*)` })
     .from(reservations)
-    .where(and(eq(reservations.classId, classId), eq(reservations.status, 'confirmed')));
+    .where(
+      and(
+        eq(reservations.classId, classId),
+        sql`(${reservations.status} = 'confirmed'
+             OR (${reservations.status} = 'pending' AND hold_expires_at > now()))`,
+      ),
+    );
   return Number(row?.n ?? 0);
+}
+
+/**
+ * Map a `guard_class_schedule()` refusal (migration 0050) to the
+ * outcome the service checks above would have given. Reached only if
+ * the trigger and these checks disagree, so it stays a clean 409/422.
+ */
+function guardRefusal(err: unknown, confirmed: number): GuardedClassUpdate | null {
+  if (isPostgresRaiseException(err, 'class_capacity_below_booked')) {
+    return { outcome: 'capacity_below_confirmed', confirmed };
+  }
+  if (isPostgresRaiseException(err, 'class_already_started')) {
+    return { outcome: 'class_already_started' };
+  }
+  if (isPostgresRaiseException(err, 'class_starts_in_past')) {
+    return { outcome: 'starts_at_in_past' };
+  }
+  return null;
 }
 
 /**

@@ -69,6 +69,9 @@ test('admin creates a class → row appears in table (hermetic)', async ({ page 
 
   await page.goto('/dashboard/classes');
 
+  // The page opens on the week planning; the table lives in the List view.
+  await page.getByRole('button', { name: /^(list|liste)$/i }).click();
+
   // Empty state must be visible before creation.
   await expect(page.getByText(/no classes in this range|aucun cours/i)).toBeVisible();
 

@@ -112,6 +112,8 @@ export function buildStubDeps(
     reservations: {
       bookClass: vi.fn(),
       cancelReservation: vi.fn(),
+      placeHold: vi.fn(),
+      confirmHold: vi.fn(),
       listMyReservations: vi.fn(),
       getRemainingSeats: vi.fn(),
       ...overrides.reservations,

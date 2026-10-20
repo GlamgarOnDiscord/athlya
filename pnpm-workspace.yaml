@@ -26,3 +26,7 @@ overrides:
 # class of fix as upstream 1.17.3 (prefetch-hints). Drop once released upstream.
 patchedDependencies:
   '@opennextjs/cloudflare@1.20.10': patches/@opennextjs__cloudflare@1.20.10.patch
+  # sonner appends an unnonced <style> at import time, which the strict CSP
+  # refuses, leaving toasts unstyled. The patch drops that injection; web and
+  # studio import `sonner/dist/styles.css` instead. Recheck on every bump.
+  sonner@2.0.8: patches/sonner@2.0.8.patch

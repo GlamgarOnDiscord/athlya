@@ -1,6 +1,6 @@
 # Third-party UI code
 
-_Ledger of UI source code copied into the repo (components, hooks, animation snippets, illustrations). Last updated: 2026-10-19._
+_Ledger of UI source code and assets copied into the repo (components, hooks, animation snippets, illustrations, photographs). Last updated: 2026-10-20._
 
 npm dependencies are not listed here: they come with their own licence files and are covered by the lockfile. This page is for code or assets **copied into** the tree, where the licence notice would otherwise get lost.
 
@@ -17,6 +17,18 @@ npm dependencies are not listed here: they come with their own licence files and
 | --------- | ---------- | ------- | ---------------- |
 
 The shared theme PR (#706) copies nothing.
+
+### Photographs
+
+The landing page (#729) uses photographs from [Unsplash](https://unsplash.com) under the [Unsplash License](https://unsplash.com/license): free commercial use and modification, no attribution required (credited here anyway). Each was cropped, converted to greyscale, toned and exported as WebP at two widths into `apps/web/public/images/landing/`.
+
+| Files (`apps/web/public/images/landing/`) | Source                                                                                                                               | Photographer          | Licence          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------- | ---------------- |
+| `hero-run-wide-*`, `hero-run-tall-*`      | [Runners in a race with motion blur](https://unsplash.com/photos/runners-in-a-race-with-motion-blur-OpDIYfAb4WQ)                     | Pierre-Antoine Franck | Unsplash License |
+| `discipline-strength-*`                   | [Man standing and holding kettle bell](https://unsplash.com/photos/man-standing-and-holding-kettle-bell-7IB2ifwA21Y)                 | Ivan Pergasi          | Unsplash License |
+| `discipline-cardio-*`                     | [A runner captured in motion](https://unsplash.com/photos/a-runner-is-captured-in-motion-with-a-blurred-background-TVTwrKyM0ik)      | Jorgen Hendriksen     | Unsplash License |
+| `discipline-mobility-*`                   | [A woman doing exercises on a machine](https://unsplash.com/photos/a-woman-is-doing-exercises-on-a-rowing-machine-0xn-8kRWOhE)       | Ahmet Kurt            | Unsplash License |
+| `discipline-combat-*`                     | [Grayscale photo of man wearing boxing gloves](https://unsplash.com/photos/grayscale-photo-of-man-wearing-boxing-gloves-LXDWcn5vWKU) | Metin Ozer            | Unsplash License |
 
 ### Present before this ledger
 
