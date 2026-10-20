@@ -110,6 +110,35 @@
     "cancelled": "Réservation annulée",
     "cancelWindowClosed": "L'annulation n'est plus possible moins de 2 heures avant le cours."
   },
+  "calendar": {
+    "add": {
+      "label": "Ajouter au calendrier",
+      "download": "Fichier .ics",
+      "google": "Google Agenda",
+      "forClass": "pour « {title} »",
+      "newTab": "(nouvel onglet)"
+    },
+    "sync": {
+      "title": "Synchroniser mon agenda",
+      "description": "Abonnez votre agenda à vos réservations : les nouvelles séances et les annulations s'y affichent toutes seules.",
+      "urlLabel": "Adresse d'abonnement",
+      "copy": "Copier l'adresse",
+      "copied": "Adresse copiée.",
+      "copyError": "Copie impossible. Sélectionnez l'adresse et copiez-la vous-même.",
+      "open": "Ouvrir dans mon agenda",
+      "howTo": "Comment s'abonner",
+      "google": "Google Agenda : « Autres agendas », puis « À partir de l'URL », et collez l'adresse.",
+      "apple": "Apple Calendrier : « Fichier », puis « Nouvel abonnement à un calendrier », et collez l'adresse.",
+      "outlook": "Outlook : « Ajouter un calendrier », puis « S'abonner à partir du web », et collez l'adresse.",
+      "refresh": "Votre agenda se met à jour de lui-même, avec un délai qui peut atteindre quelques heures selon le service.",
+      "privacy": "Cette adresse est personnelle : toute personne qui la connaît voit vos réservations. Elle cesse de fonctionner si vous vous déconnectez de tous vos appareils ou changez de mot de passe ; revenez alors ici pour la nouvelle adresse.",
+      "unavailable": "La synchronisation d'agenda n'est pas disponible pour le moment."
+    },
+    "upcoming": {
+      "title": "Mes prochaines séances",
+      "empty": "Aucune séance réservée pour les 30 prochains jours."
+    }
+  },
   "checkin": {
     "title": "Check-in",
     "qrExpiresIn": "Le QR code expire dans {seconds} s",
