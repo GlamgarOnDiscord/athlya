@@ -3,6 +3,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { View } from 'react-native';
 
 import { SignedIn } from '../components/AppSession';
+import { CardioProgressionSection } from '../components/CardioProgressionSection';
 import { ErrorNotice } from '../components/ErrorNotice';
 import { useRuntime } from '../components/RuntimeProvider';
 import { SeriesChart } from '../components/SeriesChart';
@@ -12,6 +13,7 @@ import { Card } from '../components/ui/Card';
 import { ChoiceGroup } from '../components/ui/ChoiceGroup';
 import { ScrollScreen } from '../components/ui/ScrollScreen';
 import { formatNumber, formatUtcDay } from '../features/format';
+import { CardioProgressionController } from '../features/progression/cardio-progression-controller';
 import {
   frequencySeries,
   frequencySummary,
@@ -40,6 +42,7 @@ function Progression() {
   const runtime = useRuntime();
   const { t, locale } = runtime;
   const controller = useMemo(() => new ProgressionController(runtime.api), [runtime]);
+  const cardio = useMemo(() => new CardioProgressionController(runtime.api), [runtime]);
   const state = useSyncExternalStore(controller.subscribe, controller.get);
 
   // Unmounting cancels whichever load is in flight, including a window switch.
@@ -49,6 +52,13 @@ function Progression() {
       controller.cancel();
     };
   }, [controller]);
+
+  useEffect(() => {
+    void cardio.load();
+    return () => {
+      cardio.cancel();
+    };
+  }, [cardio]);
 
   const format: SummaryFormat = useMemo(
     () => ({
@@ -93,6 +103,7 @@ function Progression() {
         value={state.windowDays}
         onChange={(value) => {
           void controller.selectWindow(value);
+          void cardio.selectWindow(value);
         }}
       />
 
@@ -215,6 +226,8 @@ function Progression() {
           )}
         </>
       )}
+
+      <CardioProgressionSection controller={cardio} t={t} locale={locale} format={format} />
     </ScrollScreen>
   );
 }
