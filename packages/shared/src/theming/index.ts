@@ -8,3 +8,4 @@
  * export surface.
  */
 export * from './brand-color.js';
+export * from './theme-css.js';

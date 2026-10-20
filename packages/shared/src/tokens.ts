@@ -13,6 +13,18 @@
  */
 
 /**
+ * The logo palette (`docs/brand/README.md`): ink, volt and white, and
+ * nothing else. The logo itself inherits `currentColor`; these values feed
+ * the chart marks and any surface that carries the brand signature. Volt
+ * is never text on a light surface (1.15:1 on white).
+ */
+export const brandPalette = {
+  ink: '#0A0A0A',
+  volt: '#D7FF3A',
+  white: '#FFFFFF',
+} as const;
+
+/**
  * Semantic color tokens per theme.
  *
  * Tokens are intentionally semantic (e.g. `background`, `primary`) rather than
@@ -20,7 +32,10 @@
  * brand colors without rewriting components. Light and dark variants share
  * the same keys — consumers pick a variant based on the current theme.
  *
- * Default `primary` is the Athlya brand blue `#0EA5E9`.
+ * Default `primary` is the Athlya brand blue `#0EA5E9`. It is a fill,
+ * paired with `primaryForeground`; it is never text on `background` in the
+ * light theme (2.77:1). Every pair's WCAG level is pinned by
+ * `tests/token-contrast.test.ts`.
  */
 export const colors = {
   light: {
@@ -33,11 +48,11 @@ export const colors = {
     mutedForeground: '#475569',
     accent: '#E0F2FE',
     destructive: '#B91C1C',
-    success: '#16A34A',
-    warning: '#D97706',
+    success: '#15803D',
+    warning: '#B45309',
     border: '#E2E8F0',
     input: '#E2E8F0',
-    ring: '#0EA5E9',
+    ring: '#0284C7',
   },
   dark: {
     background: '#0B1220',
@@ -58,8 +73,27 @@ export const colors = {
 } as const;
 
 /**
+ * Progression chart colours per theme: brand ink marks on light, volt
+ * marks on dark (`series`), with the marker fill and the hover/focus band.
+ */
+export const chartColors = {
+  light: {
+    series: brandPalette.ink,
+    marker: brandPalette.volt,
+    band: brandPalette.volt,
+  },
+  dark: {
+    series: brandPalette.volt,
+    marker: colors.dark.background,
+    band: colors.dark.muted,
+  },
+} as const;
+
+/**
  * Spacing scale in `rem` units. Prefer semantic steps (`md`, `lg`) over raw
- * values so visual rhythm stays consistent across platforms.
+ * values so visual rhythm stays consistent across platforms. Every step is
+ * a multiple of `xs`, which is the Tailwind `--spacing` base on the web:
+ * `md` is `p-4`, `lg` is `p-6`.
  */
 export const spacing = {
   xs: '0.25rem',
@@ -124,8 +158,8 @@ export const radii = {
  */
 export const shadows = {
   sm: '0 1px 2px 0 rgba(15, 23, 42, 0.05)',
-  md: '0 4px 6px -1px rgba(15, 23, 42, 0.10), 0 2px 4px -2px rgba(15, 23, 42, 0.10)',
-  lg: '0 10px 15px -3px rgba(15, 23, 42, 0.10), 0 4px 6px -4px rgba(15, 23, 42, 0.10)',
+  md: '0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(15, 23, 42, 0.1)',
+  lg: '0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.1)',
 } as const;
 
 /**
@@ -134,7 +168,9 @@ export const shadows = {
  * subset suffices, so bundlers can tree-shake more aggressively.
  */
 export const tokens = {
+  brandPalette,
   colors,
+  chartColors,
   spacing,
   typography,
   radii,
@@ -142,7 +178,9 @@ export const tokens = {
 } as const;
 
 export type Tokens = typeof tokens;
+export type BrandPalette = typeof brandPalette;
 export type Colors = typeof colors;
+export type ChartColors = typeof chartColors;
 export type ColorTheme = keyof typeof colors;
 export type SemanticColor = keyof (typeof colors)['light'];
 export type Spacing = keyof typeof spacing;

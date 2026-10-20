@@ -8,7 +8,7 @@
  *     prop-drilling,
  *   - renders a minimal footer with the locale switcher.
  *
- * The brand-color CSS comes from `src/styles/tokens.css` (auto-generated
+ * The brand-color CSS comes from `@athlya/shared/theme.css` (generated
  * from `@athlya/shared/tokens`); per-tenant overrides are wired in a
  * follow-up slice as part of Epic 15.2 once the studio resolves the
  * active studio's `brand_color`.
@@ -16,6 +16,8 @@
  * @see Req 25.3, Req 25.4, Req 28.1, Req 28.2.
  */
 import { Toaster } from '@/components/ui/sonner';
+
+import { ThemeProvider } from '../components/ThemeProvider';
 
 import { LocaleSwitcher } from '../components/LocaleSwitcher';
 import { AuthProvider } from '../lib/auth/AuthContext';
@@ -27,6 +29,7 @@ import type { ReactNode } from 'react';
 
 import './globals.css';
 import { Geist } from 'next/font/google';
+import { headers } from 'next/headers';
 
 import { cn } from '@/lib/utils';
 
@@ -54,19 +57,22 @@ export default async function RootLayout({
   readonly children: ReactNode;
 }): Promise<ReactNode> {
   const locale = await getLocale();
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
 
   return (
     <html lang={locale} suppressHydrationWarning className={cn('font-sans', geist.variable)}>
       <body>
-        <LocaleProvider locale={locale}>
-          <AuthProvider>
-            {children}
-            <Toaster richColors position="top-right" />
-            <footer className="mx-auto flex max-w-5xl items-center justify-end px-6 py-4 text-xs text-muted-foreground">
-              <LocaleSwitcher />
-            </footer>
-          </AuthProvider>
-        </LocaleProvider>
+        <ThemeProvider nonce={nonce}>
+          <LocaleProvider locale={locale}>
+            <AuthProvider>
+              {children}
+              <Toaster richColors position="top-right" />
+              <footer className="mx-auto flex max-w-5xl items-center justify-end px-6 py-4 text-xs text-muted-foreground">
+                <LocaleSwitcher />
+              </footer>
+            </AuthProvider>
+          </LocaleProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

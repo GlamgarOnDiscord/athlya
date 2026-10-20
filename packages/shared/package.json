@@ -20,6 +20,7 @@
       "import": "./dist/tokens.js",
       "default": "./src/tokens.ts"
     },
+    "./theme.css": "./src/styles/theme.css",
     "./i18n": {
       "types": "./src/i18n/index.ts",
       "import": "./dist/i18n/index.js",
@@ -117,8 +118,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "build:tokens-css": "node --experimental-strip-types scripts/generate-tokens-css.ts",
-    "check:tokens-css": "node --experimental-strip-types scripts/generate-tokens-css.ts && git diff --exit-code --name-only -- ../../apps/web/src/styles/tokens.css",
+    "build:theme-css": "node --experimental-strip-types scripts/generate-theme-css.ts",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json",
     "test": "vitest run",

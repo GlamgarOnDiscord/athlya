@@ -9,7 +9,8 @@
  *
  * The window is picked with a native radio group and the exercise with
  * a native `<select>`, so both work with the keyboard and assistive
- * technologies without extra ARIA.
+ * technologies without extra ARIA. The same window drives the cardio
+ * section (`<CardioProgressionSection />`), which fetches its own series.
  *
  * Layering mirrors `<ExportPanel />`: optional `client` and `t` props
  * are test seams; production derives both from context.
@@ -28,6 +29,8 @@ import { SeriesChart, type SeriesDatum } from '../../../components/charts/Series
 import { useApiClient } from '../../../lib/api/use-api-client';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator, type Translator } from '../../../lib/i18n/t';
+
+import { CardioProgressionSection } from './CardioProgressionSection';
 
 import type { ApiClient } from '../../../lib/api/client';
 import type { ProgressionResponse } from '@athlya/shared/schemas/api';
@@ -329,6 +332,12 @@ export function ProgressionPanel({
           />
         </div>
       ) : null}
+
+      <CardioProgressionSection
+        windowDays={windowDays}
+        {...(tProp === undefined ? {} : { t: tProp })}
+        {...(clientProp === undefined ? {} : { client: clientProp })}
+      />
     </section>
   );
 }

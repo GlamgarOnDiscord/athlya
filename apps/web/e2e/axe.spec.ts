@@ -4,7 +4,7 @@
  * Runs axe over every member-facing page called out in Task 10.7:
  *  - Public: `/`, `/login`, `/register`
  *  - Authenticated: `/classes`, `/me`, `/me/export`, `/me/delete`,
- *    `/me/progression` (charts rendered) and `/me/coach` (answer
+ *    `/me/progression` (strength and cardio charts rendered) and `/me/coach` (answer
  *    rendered)
  *
  * Authenticated pages are opened through `openAuthenticatedPage`, which
@@ -75,8 +75,9 @@ for (const { path, rendered } of authPages) {
 test('axe: /me/progression (authenticated, charts rendered)', async ({ page }) => {
   const figures = page.getByRole('figure');
   await openAuthenticatedPage(page, '/me/progression', figures.first());
-  // Analyse the rendered charts (marks, data tables), not the loading state.
-  await expect(figures).toHaveCount(3);
+  // Analyse the rendered charts (marks, data tables), not the loading state:
+  // three strength charts, then the cardio distance, power and speed charts.
+  await expect(figures).toHaveCount(6);
   await expectNoViolations(page);
 });
 
