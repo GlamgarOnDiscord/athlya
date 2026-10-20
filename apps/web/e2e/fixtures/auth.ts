@@ -12,7 +12,7 @@
  * Strategy:
  *  1. Stub the boot refresh so the session is restored on load.
  *  2. Stub the member API reads (`/v1/members/me`, `/v1/classes`,
- *     `/v1/me/progression`, `/v1/coach`) so the authenticated pages
+ *     `/v1/me/progression`, `/v1/me/progression/cardio`, `/v1/coach`) so the authenticated pages
  *     render their populated state instead of loading or error markup.
  *  3. Wait for a locator that only exists inside the page's
  *     `<RequireAuth>` subtree and check the URL did not move, so a
@@ -112,6 +112,72 @@ export async function stubMemberApi(page: Page): Promise<void> {
         { weekStart: '2026-09-28', sessions: 1 },
         { weekStart: '2026-10-05', sessions: 1 },
         { weekStart: '2026-10-12', sessions: 0 },
+      ],
+      truncated: false,
+      skippedSessions: 0,
+    }),
+  );
+
+  await page.route('**/v1/me/progression/cardio*', (route) =>
+    fulfillJson(route, {
+      windowDays: 90,
+      from: '2026-07-18T00:00:00.000Z',
+      to: '2026-10-16T00:00:00.000Z',
+      bucket: 'week',
+      totals: { sessions: 2, durationSec: 4500, distanceM: 12500, energyKcal: 500 },
+      machines: [
+        {
+          machine: 'rower',
+          sessionCount: 2,
+          totals: { durationSec: 4500, distanceM: 12500, energyKcal: 500 },
+          series: [
+            {
+              periodStart: '2026-09-28',
+              sessions: 1,
+              durationSec: 2400,
+              distanceM: 6000,
+              energyKcal: 260,
+              avgPowerW: 180,
+              avgHeartRateBpm: 140,
+            },
+            {
+              periodStart: '2026-10-05',
+              sessions: 1,
+              durationSec: 2100,
+              distanceM: 6500,
+              energyKcal: 240,
+              avgPowerW: 190,
+              avgHeartRateBpm: 142,
+            },
+            {
+              periodStart: '2026-10-12',
+              sessions: 0,
+              durationSec: 0,
+              distanceM: 0,
+              energyKcal: 0,
+              avgPowerW: null,
+              avgHeartRateBpm: null,
+            },
+          ],
+          points: [
+            {
+              startedAt: '2026-10-01T07:00:00.000Z',
+              durationSec: 2400,
+              distanceM: 6000,
+              avgPowerW: 180,
+              avgSpeedKmh: 9,
+              avgHeartRateBpm: 140,
+            },
+            {
+              startedAt: '2026-10-08T07:00:00.000Z',
+              durationSec: 2100,
+              distanceM: 6500,
+              avgPowerW: 190,
+              avgSpeedKmh: 11.1,
+              avgHeartRateBpm: 142,
+            },
+          ],
+        },
       ],
       truncated: false,
       skippedSessions: 0,
