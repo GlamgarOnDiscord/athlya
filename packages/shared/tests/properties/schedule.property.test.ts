@@ -149,7 +149,8 @@ describe('expandWeeklySeries', () => {
       let expected = 0;
       for (let d = 0; d <= spanDays; d++) {
         const day = new Date(Date.UTC(wall.year, wall.month - 1, wall.day + d));
-        if (weekdays.includes(((day.getUTCDay() + 6) % 7) + 1)) expected++;
+        const isoDay = (((day.getUTCDay() + 6) % 7) + 1) as IsoWeekday;
+        if (weekdays.includes(isoDay)) expected++;
       }
       if (expected === 0) {
         expect(result).toEqual({ ok: false, reason: 'no_occurrences' });
