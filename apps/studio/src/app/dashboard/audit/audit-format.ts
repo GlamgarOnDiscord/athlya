@@ -20,7 +20,6 @@ const ACTION_LABELS: Readonly<Record<string, TranslationKeys>> = {
   'user.registered': 'studio.audit.actions.userRegistered',
   'user.deleted': 'studio.audit.actions.userDeleted',
   'user.consents.updated': 'studio.audit.actions.userConsentsUpdated',
-  'reservation.created': 'studio.audit.actions.reservationCreated',
   'reservation.cancelled_by_admin': 'studio.audit.actions.reservationCancelledByAdmin',
   'rls.violation': 'studio.audit.actions.rlsViolation',
   'billing.webhook.processed': 'studio.audit.actions.billingWebhookProcessed',

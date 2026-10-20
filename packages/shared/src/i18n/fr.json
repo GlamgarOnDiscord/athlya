@@ -480,11 +480,11 @@
       },
       "members": {
         "title": "Membres",
-        "body": "Lister les adhérents et leurs réservations à venir."
+        "body": "Annuaire des adhérents de votre studio."
       },
       "branding": {
         "title": "Identité visuelle",
-        "body": "Couleur de marque, logo et personnalisation des emails."
+        "body": "Couleur de marque de votre studio."
       },
       "billing": {
         "title": "Facturation",
@@ -692,7 +692,6 @@
         "userRegistered": "Inscription d'un membre",
         "userDeleted": "Compte supprimé",
         "userConsentsUpdated": "Consentements mis à jour",
-        "reservationCreated": "Réservation créée",
         "reservationCancelledByAdmin": "Réservation annulée par un admin",
         "rlsViolation": "Accès bloqué par l'isolation des données",
         "billingWebhookProcessed": "Événement de paiement traité",
