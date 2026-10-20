@@ -93,6 +93,12 @@ Mise à jour : sortie v1.0.0.
 
 ---
 
+## v1.4: paiements membre vers studio
+
+- Architecture proposée (Stripe Connect, direct charges, sans commission Athlya) : [`docs/architecture/member-payments.md`](../architecture/member-payments.md), en attente de validation (#715).
+
+---
+
 ## Hors v1.x (slices opportunistes)
 
 ### N2.13 — R2 avatars
