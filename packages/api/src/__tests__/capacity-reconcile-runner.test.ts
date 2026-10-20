@@ -7,10 +7,10 @@ import type { CapacityHealer } from '@athlya/reservations/reconcile';
 
 function counterStub(
   remaining: number | null,
-): CapacityHealer & { reset: ReturnType<typeof vi.fn> } {
+): CapacityHealer & { compareAndSet: ReturnType<typeof vi.fn> } {
   return {
     getRemaining: vi.fn(async () => remaining),
-    reset: vi.fn(async () => undefined),
+    compareAndSet: vi.fn(async () => true),
   };
 }
 
@@ -34,7 +34,7 @@ describe('runScheduledCapacityReconcile', () => {
     expect(capturedSql).toContain('FROM capacity_reconcile_snapshot()');
     expect(capturedSql).not.toMatch(/\bfrom\s+(classes|reservations)\b/iu);
     expect(result).toMatchObject({ checked: 1, drifted: 1, healed: 1 });
-    expect(counter.reset).toHaveBeenCalledWith('c1', 2);
+    expect(counter.compareAndSet).toHaveBeenCalledWith('c1', 9, 2);
     vi.restoreAllMocks();
   });
 

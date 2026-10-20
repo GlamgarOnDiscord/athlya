@@ -21,11 +21,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_IDEMPOTENCY_TTL_SEC,
+  IDEMPOTENCY_REQUEST_HASH_FIELD,
   idempotencyMiddleware,
+  type IdempotencyInFlightLock,
   type IdempotencyEnv,
   type IdempotencyLogger,
   type IdempotencyMiddlewareDeps,
 } from '../middleware/idempotency.js';
+
+import { readJson } from './helpers/read-json.js';
 
 import type { AthlyaDb } from '@athlya/db/client';
 import type { IdempotencyEntry } from '@athlya/db/idempotency';
@@ -343,6 +347,195 @@ describe('idempotencyMiddleware', () => {
       expect.objectContaining({
         error: expect.objectContaining({ message: 'db unreachable' }) as unknown,
       }),
+    );
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Strict mode: in-flight marker, request hash, fail closed           */
+/* ------------------------------------------------------------------ */
+
+/** In-memory marker with the same NX + token semantics as Redis. */
+function memoryLock(): IdempotencyInFlightLock & { held: Map<string, string> } {
+  const held = new Map<string, string>();
+  return {
+    held,
+    acquire: vi.fn((key: string, token: string) => {
+      if (held.has(key)) return Promise.resolve(false);
+      held.set(key, token);
+      return Promise.resolve(true);
+    }),
+    release: vi.fn((key: string, token: string) => {
+      if (held.get(key) === token) held.delete(key);
+      return Promise.resolve();
+    }),
+  };
+}
+
+function strictDeps(
+  inFlight: IdempotencyInFlightLock = memoryLock(),
+): Partial<IdempotencyMiddlewareDeps> {
+  return { inFlight, bindRequest: true, failClosed: true };
+}
+
+function post(app: ReturnType<typeof buildApp>['app'], key: string, body = '{"classId":"c1"}') {
+  return app.request('/resource', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key, 'content-type': 'application/json' },
+    body,
+  });
+}
+
+describe('idempotencyMiddleware: strict mode', () => {
+  it('stores the request hash with the body and strips it on replay', async () => {
+    const { app, handlerSpy } = buildApp({ deps: strictDeps() });
+
+    const first = await post(app, 'k-strict');
+    expect(first.status).toBe(201);
+    const stored = mocks.store.mock.calls[0]?.[3] as { body: Record<string, unknown> };
+    const hash = stored.body[IDEMPOTENCY_REQUEST_HASH_FIELD];
+    expect(hash).toMatch(/^[0-9a-f]{64}$/u);
+
+    mocks.lookup.mockResolvedValue({ response: stored.body, statusCode: 201 });
+    const replay = await post(app, 'k-strict');
+
+    expect(replay.status).toBe(201);
+    expect(replay.headers.get('idempotent-replayed')).toBe('true');
+    await expect(readJson<Record<string, unknown>>(replay)).resolves.toEqual({ id: 'resv-1' });
+    expect(handlerSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a key reused with a different body with 422 idempotency_key_reused', async () => {
+    const { app, handlerSpy } = buildApp({ deps: strictDeps() });
+    await post(app, 'k-reuse', '{"classId":"c1"}');
+    const stored = mocks.store.mock.calls[0]?.[3] as { body: Record<string, unknown> };
+    mocks.lookup.mockResolvedValue({ response: stored.body, statusCode: 201 });
+
+    const res = await post(app, 'k-reuse', '{"classId":"c2"}');
+
+    expect(res.status).toBe(422);
+    await expect(readJson<{ code: string }>(res)).resolves.toMatchObject({
+      code: 'idempotency_key_reused',
+    });
+    expect(handlerSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('replays an entry stored before the hash existed', async () => {
+    const { app, handlerSpy } = buildApp({ deps: strictDeps() });
+    mocks.lookup.mockResolvedValue({ response: { id: 'legacy' }, statusCode: 201 });
+
+    const res = await post(app, 'k-legacy');
+
+    expect(res.status).toBe(201);
+    await expect(readJson<Record<string, unknown>>(res)).resolves.toEqual({ id: 'legacy' });
+    expect(handlerSpy).not.toHaveBeenCalled();
+  });
+
+  it('answers 409 idempotency_in_progress with Retry-After while a duplicate is in flight', async () => {
+    const lock = memoryLock();
+    lock.held.set(`idem:inflight:${USER_ID}:k-busy`, 'other-request');
+    const { app, handlerSpy } = buildApp({ deps: strictDeps(lock) });
+
+    const res = await post(app, 'k-busy');
+
+    expect(res.status).toBe(409);
+    expect(res.headers.get('retry-after')).toBe('1');
+    await expect(readJson<{ code: string }>(res)).resolves.toMatchObject({
+      code: 'idempotency_in_progress',
+    });
+    expect(handlerSpy).not.toHaveBeenCalled();
+    expect(mocks.store).not.toHaveBeenCalled();
+  });
+
+  it('runs a single handler when two identical requests race', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const handlerSpy = vi.fn();
+    const app = new Hono<IdempotencyEnv>();
+    app.use('*', async (c, next) => {
+      c.set('userId', USER_ID);
+      await next();
+    });
+    app.use(
+      '*',
+      idempotencyMiddleware({ db: {} as AthlyaDb, logger: silentLogger(), ...strictDeps() }),
+    );
+    app.post('/resource', async (c) => {
+      handlerSpy();
+      await gate;
+      return c.json({ id: 'once' }, 201);
+    });
+
+    const first = post(app, 'k-race');
+    const second = await post(app, 'k-race');
+    release();
+    const winner = await first;
+
+    expect(winner.status).toBe(201);
+    expect(second.status).toBe(409);
+    expect(handlerSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('replays instead of re-running when the duplicate finished before the marker was taken', async () => {
+    const { app, handlerSpy } = buildApp({ deps: strictDeps() });
+    mocks.lookup
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ response: { id: 'resv-1' }, statusCode: 201 });
+
+    const res = await post(app, 'k-double-check');
+
+    expect(res.status).toBe(201);
+    expect(handlerSpy).not.toHaveBeenCalled();
+  });
+
+  it('releases the marker after the handler, so a later retry replays', async () => {
+    const lock = memoryLock();
+    const { app } = buildApp({ deps: strictDeps(lock) });
+
+    await post(app, 'k-release');
+
+    expect(lock.held.size).toBe(0);
+    expect(lock.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed with 503 when the lookup store is unreachable', async () => {
+    const { app, handlerSpy } = buildApp({ deps: strictDeps() });
+    mocks.lookup.mockRejectedValueOnce(new Error('db unreachable'));
+
+    const res = await post(app, 'k-down');
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get('retry-after')).toBe('1');
+    await expect(readJson<{ code: string }>(res)).resolves.toMatchObject({
+      code: 'idempotency_unavailable',
+    });
+    expect(handlerSpy).not.toHaveBeenCalled();
+  });
+
+  it('fails closed with 503 when the in-flight marker cannot be taken', async () => {
+    const lock = memoryLock();
+    vi.mocked(lock.acquire).mockRejectedValueOnce(new Error('redis down'));
+    const { app, handlerSpy } = buildApp({ deps: strictDeps(lock) });
+
+    const res = await post(app, 'k-redis-down');
+
+    expect(res.status).toBe(503);
+    expect(handlerSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns the committed response when only the final store write fails', async () => {
+    const logger = silentLogger();
+    const { app } = buildApp({ deps: { ...strictDeps(), logger } });
+    mocks.store.mockRejectedValueOnce(new Error('db blip'));
+
+    const res = await post(app, 'k-store-down');
+
+    expect(res.status).toBe(201);
+    expect(logger.error).toHaveBeenCalledWith(
+      'store failed after the mutation; continuing without cache',
+      expect.objectContaining({ key: 'k-store-down' }),
     );
   });
 });

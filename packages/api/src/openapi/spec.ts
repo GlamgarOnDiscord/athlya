@@ -619,11 +619,19 @@ const bookRoute = createRoute({
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     409: {
-      description: 'Already booked',
+      description:
+        'Already booked (body carries the live `status` and, for a waitlist row, its `position`), ' +
+        'or `idempotency_in_progress` while a request with the same Idempotency-Key runs (`Retry-After`)',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     422: {
-      description: 'Validation error',
+      description:
+        'Validation error, or `idempotency_key_reused` for a key bound to another request',
+      content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
+    },
+    503: {
+      description:
+        '`counter_unavailable` or `idempotency_unavailable`: nothing was written, retry after `Retry-After`',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
   },
@@ -639,7 +647,11 @@ const cancelRoute = createRoute({
     params: CancelReservationParamsSchema,
   },
   responses: {
-    204: { description: 'Reservation cancelled' },
+    204: {
+      description:
+        'Reservation cancelled. A retried cancel of an already cancelled reservation answers ' +
+        '200 with `alreadyCancelled: true`',
+    },
     401: {
       description: 'Not authenticated',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },

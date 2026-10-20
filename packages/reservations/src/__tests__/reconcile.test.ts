@@ -13,12 +13,15 @@ function repoOf(rows: ClassCapacitySnapshot[]): CapacityReconcileRepo {
   return { listActiveClassCapacities: vi.fn().mockResolvedValue(rows) };
 }
 
-function healerOf(remaining: Record<string, number | null>): Omit<CapacityHealer, 'reset'> & {
-  reset: Mock<CapacityHealer['reset']>;
+function healerOf(remaining: Record<string, number | null>): Omit<
+  CapacityHealer,
+  'compareAndSet'
+> & {
+  compareAndSet: Mock<CapacityHealer['compareAndSet']>;
 } {
   return {
     getRemaining: vi.fn(async (id: string) => remaining[id] ?? null),
-    reset: vi.fn(async () => undefined),
+    compareAndSet: vi.fn(async () => true),
   };
 }
 
@@ -32,7 +35,7 @@ describe('reconcileCapacityDrift', () => {
     const report = await reconcileCapacityDrift({ repo, counter });
 
     expect(report).toMatchObject({ checked: 1, drifted: 0, healed: 0, seeded: 0 });
-    expect(counter.reset).not.toHaveBeenCalled();
+    expect(counter.compareAndSet).not.toHaveBeenCalled();
   });
 
   it('seeds a missing Redis key from PG without flagging drift', async () => {
@@ -42,7 +45,7 @@ describe('reconcileCapacityDrift', () => {
     const report = await reconcileCapacityDrift({ repo, counter });
 
     expect(report).toMatchObject({ seeded: 1, drifted: 0 });
-    expect(counter.reset).toHaveBeenCalledWith('c1', 12);
+    expect(counter.compareAndSet).toHaveBeenCalledWith('c1', null, 12);
   });
 
   it('detects oversell drift (Redis too high) and auto-heals to PG truth', async () => {
@@ -60,7 +63,7 @@ describe('reconcileCapacityDrift', () => {
       drift: 7,
       healed: true,
     });
-    expect(counter.reset).toHaveBeenCalledWith('c1', 2);
+    expect(counter.compareAndSet).toHaveBeenCalledWith('c1', 9, 2);
     expect(warn).toHaveBeenCalledWith(
       CAPACITY_DRIFT_LOG_MESSAGE,
       expect.objectContaining({ metric: CAPACITY_DRIFT_METRIC, direction: 'oversell_risk' }),
@@ -75,7 +78,7 @@ describe('reconcileCapacityDrift', () => {
     const report = await reconcileCapacityDrift({ repo, counter });
 
     expect(report.drifts[0]).toMatchObject({ drift: -15, healed: true });
-    expect(counter.reset).toHaveBeenCalledWith('c1', 15);
+    expect(counter.compareAndSet).toHaveBeenCalledWith('c1', 0, 15);
     expect(warn).toHaveBeenCalledWith(
       CAPACITY_DRIFT_LOG_MESSAGE,
       expect.objectContaining({ direction: 'false_full' }),
@@ -90,10 +93,10 @@ describe('reconcileCapacityDrift', () => {
 
     // expected = max(0, 10 - 12) = 0; Redis -2 → drift -2, heal to 0
     expect(report).toMatchObject({ drifted: 1, healed: 1 });
-    expect(counter.reset).toHaveBeenCalledWith('c1', 0);
+    expect(counter.compareAndSet).toHaveBeenCalledWith('c1', -2, 0);
   });
 
-  it('does not reset when autoHeal is false', async () => {
+  it('does not heal when autoHeal is false', async () => {
     const repo = repoOf([{ classId: 'c1', capacity: 20, confirmed: 18 }]);
     const counter = healerOf({ c1: 9 });
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -102,7 +105,7 @@ describe('reconcileCapacityDrift', () => {
 
     expect(report).toMatchObject({ drifted: 1, healed: 0 });
     expect(report.drifts[0]?.healed).toBe(false);
-    expect(counter.reset).not.toHaveBeenCalled();
+    expect(counter.compareAndSet).not.toHaveBeenCalled();
   });
 
   it('isolates per-class failures and keeps sweeping', async () => {
@@ -114,7 +117,7 @@ describe('reconcileCapacityDrift', () => {
       getRemaining: vi.fn(async (id: string) =>
         id === 'bad' ? Promise.reject(new Error('redis down')) : 19,
       ),
-      reset: vi.fn(async () => undefined),
+      compareAndSet: vi.fn(async () => true),
     };
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -123,11 +126,11 @@ describe('reconcileCapacityDrift', () => {
     expect(report).toMatchObject({ checked: 2, healFailures: 1, drifted: 0 });
   });
 
-  it('counts heal failures when reset throws', async () => {
+  it('counts heal failures when the compare-and-set throws', async () => {
     const repo = repoOf([{ classId: 'c1', capacity: 20, confirmed: 18 }]);
     const counter: CapacityHealer = {
       getRemaining: vi.fn(async () => 9),
-      reset: vi.fn(async () => Promise.reject(new Error('reset boom'))),
+      compareAndSet: vi.fn(async () => Promise.reject(new Error('cas boom'))),
     };
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -135,6 +138,19 @@ describe('reconcileCapacityDrift', () => {
     const report = await reconcileCapacityDrift({ repo, counter });
 
     expect(report).toMatchObject({ drifted: 1, healed: 0, healFailures: 1 });
+    expect(report.drifts[0]?.healed).toBe(false);
+  });
+
+  it('skips the heal when a booking moved the counter after the read', async () => {
+    const repo = repoOf([{ classId: 'c1', capacity: 20, confirmed: 18 }]);
+    const counter = healerOf({ c1: 9 });
+    counter.compareAndSet.mockResolvedValueOnce(false);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const report = await reconcileCapacityDrift({ repo, counter });
+
+    expect(report).toMatchObject({ drifted: 1, healed: 0, raced: 1, healFailures: 0 });
     expect(report.drifts[0]?.healed).toBe(false);
   });
 });

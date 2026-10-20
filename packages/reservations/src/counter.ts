@@ -115,6 +115,14 @@ export interface RemainingCounter extends RemainingCounterReader {
   reset(classId: string, capacity: number): Promise<void>;
 
   /**
+   * Atomically overwrite the counter with `value` only when it still
+   * holds `expected` (`null` = key absent). One Lua script, so no DECR
+   * or INCR can land between the comparison and the write. Returns
+   * `false` when the value moved; the caller re-reads on its next pass.
+   */
+  compareAndSet(classId: string, expected: number | null, value: number): Promise<boolean>;
+
+  /**
    * Expose the computed Redis key. Useful for logging, debugging,
    * and for tests that want to inspect the underlying store without
    * re-implementing the prefix convention.
@@ -149,7 +157,21 @@ export interface RedisLike {
   setnx(key: string, value: string | number): Promise<number>;
   incr(key: string): Promise<number>;
   decr(key: string): Promise<number>;
+  /** EVAL: run a Lua script atomically on the server. */
+  eval(script: string, keys: string[], args: string[]): Promise<unknown>;
 }
+
+/**
+ * Compare-and-set. `ARGV[1]` is the value the caller read (`''` for an
+ * absent key), `ARGV[2]` the value to write. Returns 1 on write, 0 when
+ * the key moved in between.
+ */
+export const COMPARE_AND_SET_SCRIPT = `local cur = redis.call('GET', KEYS[1])
+if (cur == false and ARGV[1] == '') or cur == ARGV[1] then
+  redis.call('SET', KEYS[1], ARGV[2])
+  return 1
+end
+return 0`;
 
 /**
  * Parse whatever Upstash returns for `GET` into an integer. The
@@ -239,6 +261,22 @@ export function createRedisRemainingCounter(
         );
       }
       await client.set(key(classId), capacity);
+    },
+
+    async compareAndSet(classId: string, expected: number | null, value: number): Promise<boolean> {
+      if (!Number.isInteger(value) || value < 0) {
+        throw new RangeError(
+          `createRedisRemainingCounter.compareAndSet: value must be a non-negative integer, got ${String(
+            value,
+          )}`,
+        );
+      }
+      const written = await client.eval(
+        COMPARE_AND_SET_SCRIPT,
+        [key(classId)],
+        [expected === null ? '' : String(expected), String(value)],
+      );
+      return Number(written) === 1;
     },
   };
 }

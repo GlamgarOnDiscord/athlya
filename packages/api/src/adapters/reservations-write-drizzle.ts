@@ -39,6 +39,12 @@
  *   • Outbox insert goes through the same transaction as the
  *     reservation write — commit-together or rollback-together
  *     semantics (Req 16.3).
+ *   • Both `withTransaction`s re-run the whole callback, up to three
+ *     attempts with jittered backoff, when Postgres aborts it with
+ *     40001 (serialization failure) or 40P01 (deadlock). Those codes
+ *     mean the attempt rolled back, so nothing is applied twice.
+ *   • Time decisions (`class_in_past`, the 2-hour cancel window) read
+ *     `now()` from the database, not the Worker clock.
  *
  *   • Every read/write runs inside {@link withTenant} so the three
  *     `app.*` session variables are set before RLS policies on
@@ -52,15 +58,16 @@ import { withTenant, type AthlyaDb, type AthlyaTx, type TenantClaims } from '@at
 import { isPostgresRaiseException, isPostgresUniqueViolation } from '@athlya/db/errors';
 import { classes, outbox, reservations } from '@athlya/db/schema';
 import { ClassCapacityExceededError, UniqueViolationError } from '@athlya/reservations';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 
 import { noteOutboxWrite } from '../events/outbox-kick.js';
 
-import { withConnectionRetry } from './db-retry.js';
+import { withConnectionRetry, withTransactionRetry } from './db-retry.js';
 import { toDateOrNull } from './service-functions.js';
 
 import type { ReservationRow } from '@athlya/db/schema';
 import type {
+  BookingClassClock,
   BookingClassRow,
   BookingEventPublisher,
   BookingOutboxEvent,
@@ -122,17 +129,33 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
               capacity: classes.capacity,
               startsAt: classes.startsAt,
               version: classes.version,
+              dbNow: sql<Date | string>`now()`,
             })
             .from(classes)
             .where(and(eq(classes.id, classId), isNull(classes.deletedAt)))
             .limit(1);
-          return rows[0] ?? null;
+          const row = rows[0];
+          if (row === undefined) return null;
+          const { dbNow, ...rest } = row;
+          const now = toDateOrNull(dbNow);
+          return now === null ? rest : { ...rest, dbNow: now };
         }),
       );
     },
 
+    async readClassClock(tx, classId): Promise<BookingClassClock | null> {
+      const rows = await toAthlyaTx(tx)
+        .select({ startsAt: classes.startsAt, now: sql<Date | string>`now()` })
+        .from(classes)
+        .where(and(eq(classes.id, classId), isNull(classes.deletedAt)))
+        .limit(1);
+      const row = rows[0];
+      const now = toDateOrNull(row?.now ?? null);
+      return row === undefined || now === null ? null : { startsAt: row.startsAt, now };
+    },
+
     async withTransaction<T>(fn: (tx: BookingTx) => Promise<T>): Promise<T> {
-      return withTenant(db, claims, async (tx) => fn(toBookingTx(tx)));
+      return withTransactionRetry(() => withTenant(db, claims, async (tx) => fn(toBookingTx(tx))));
     },
 
     async findExistingConfirmedOrWaitlistReservation(
@@ -144,7 +167,13 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
       const rows = await drizzleTx
         .select()
         .from(reservations)
-        .where(and(eq(reservations.classId, classId), eq(reservations.userId, userId)))
+        .where(
+          and(
+            eq(reservations.classId, classId),
+            eq(reservations.userId, userId),
+            inArray(reservations.status, ['confirmed', 'waitlist']),
+          ),
+        )
         .limit(1);
       return rows[0] ?? null;
     },
@@ -185,7 +214,8 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
       // The other waiters are hidden by `reservations_read_own`; the
       // function counts them ahead of the caller's own waitlist row, in
       // promotion order (`created_at`, then `id`).
-      const rows = await toAthlyaTx(tx).execute<{ ahead: number | string | null }>(
+      const rows = await txRows<{ ahead: number | string | null }>(
+        toAthlyaTx(tx),
         sql`SELECT reservation_waitlist_ahead(${classId}::uuid, ${reservation.id}::uuid) AS ahead`,
       );
       return Number(rows[0]?.ahead ?? 0);
@@ -217,7 +247,7 @@ export function createDrizzleBookingRepo(db: AthlyaDb, claims: TenantClaims): Bo
 export function createDrizzleCancelRepo(db: AthlyaDb, claims: TenantClaims): CancelRepo {
   return {
     async withTransaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
-      return withTenant(db, claims, async (tx) => fn(tx));
+      return withTransactionRetry(() => withTenant(db, claims, async (tx) => fn(tx)));
     },
 
     async findReservationForUpdate(tx, reservationId, userId): Promise<ReservationRow | null> {
@@ -232,11 +262,17 @@ export function createDrizzleCancelRepo(db: AthlyaDb, claims: TenantClaims): Can
     },
 
     async findClassForUpdate(tx, classId): Promise<ClassForCancel | null> {
-      const rows = await (tx as AthlyaTx).execute<{ starts_at: Date | string | null }>(
-        sql`SELECT reservation_lock_class_for_cancel(${classId}::uuid) AS starts_at`,
+      const rows = await txRows<{
+        starts_at: Date | string | null;
+        db_now: Date | string | null;
+      }>(
+        tx as AthlyaTx,
+        sql`SELECT reservation_lock_class_for_cancel(${classId}::uuid) AS starts_at, now() AS db_now`,
       );
       const startsAt = toDateOrNull(rows[0]?.starts_at ?? null);
-      return startsAt === null ? null : { startsAt };
+      if (startsAt === null) return null;
+      const now = toDateOrNull(rows[0]?.db_now ?? null);
+      return now === null ? { startsAt } : { startsAt, now };
     },
 
     async updateReservationStatus(tx, reservationId, status, stampedAt): Promise<ReservationRow> {
@@ -267,11 +303,12 @@ export function createDrizzleCancelRepo(db: AthlyaDb, claims: TenantClaims): Can
       // The function holds the class row lock that the capacity
       // trigger also takes, so a concurrent booking cannot fill the
       // seat between its capacity check and the promotion.
-      const rows = await (tx as AthlyaTx).execute<{
+      const rows = await txRows<{
         outcome: string;
         reservation_id: string | null;
         user_id: string | null;
       }>(
+        tx as AthlyaTx,
         sql`SELECT outcome, reservation_id, user_id FROM reservation_promote_oldest_waitlist(${classId}::uuid)`,
       );
       const row = rows[0];
@@ -341,6 +378,12 @@ export function createBookingEventPublisher(): BookingEventPublisher {
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
+
+/** postgres-js resolves `execute` to an array; PGlite and Neon HTTP to `{ rows }`. */
+async function txRows<T>(tx: AthlyaTx, query: SQL): Promise<T[]> {
+  const result: unknown = await tx.execute(query);
+  return Array.isArray(result) ? (result as T[]) : (result as { rows: T[] }).rows;
+}
 
 /**
  * Common outbox insert used by both book and cancel repos. Accepts a

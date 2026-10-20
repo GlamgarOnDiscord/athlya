@@ -25,6 +25,31 @@
  * drop observe the exact same body on every replay, matching the wire
  * contract assumed by the Mobile_App drain loop (Requirement 19.4).
  *
+ * Strict mode (opt-in, used by the reservation routes)
+ * ----------------------------------------------------
+ * Three options harden a route whose duplicate would cost a seat:
+ *
+ *   • `inFlight`: an atomic in-flight marker (`SET NX` with a short
+ *     TTL) taken after a cache miss. A concurrent duplicate that finds
+ *     it held is answered `409 idempotency_in_progress` with
+ *     `Retry-After`, instead of running the mutation a second time
+ *     before the first one stored its response. The lookup is repeated
+ *     once the marker is held, so a request that finished in between
+ *     is replayed, not re-run.
+ *   • `bindRequest`: the stored entry carries a SHA-256 of method,
+ *     path, user and body (under a reserved key stripped on replay).
+ *     A key reused for a different request is refused with
+ *     `422 idempotency_key_reused`. Entries stored before the hash
+ *     existed replay as before.
+ *   • `failClosed`: a lookup or in-flight store that cannot be reached
+ *     answers `503 idempotency_unavailable` (retryable) instead of
+ *     running the mutation unprotected. A store write that fails AFTER
+ *     the mutation committed still returns the real response: the
+ *     mutation cannot be undone, and the domain guards (partial unique
+ *     index, `already_cancelled`) keep a later retry harmless.
+ *
+ * Routes that set none of the three keep the original behaviour below.
+ *
  * Why storage failures are swallowed
  * ----------------------------------
  * The primary response is what the client sees. Losing an idempotency
@@ -37,7 +62,7 @@
 
 import { lookup, store } from '@athlya/db/idempotency';
 
-import type { IdempotencyDb } from '@athlya/db/idempotency';
+import type { IdempotencyDb, IdempotencyEntry } from '@athlya/db/idempotency';
 import type { Context, MiddlewareHandler } from 'hono';
 
 /** Default retention — exactly 24 h, the minimum mandated by Req 20.2. */
@@ -71,7 +96,41 @@ export interface IdempotencyMiddlewareDeps {
   readonly mutationMethods?: ReadonlySet<string>;
   /** Swappable logger for warn/error paths. Defaults to `console`. */
   readonly logger?: IdempotencyLogger;
+  /** Atomic in-flight marker. Unset: concurrent duplicates are not detected. */
+  readonly inFlight?: IdempotencyInFlightLock;
+  /** In-flight marker TTL. Defaults to {@link DEFAULT_IN_FLIGHT_TTL_SEC}. */
+  readonly inFlightTtlSec?: number;
+  /** Bind each key to a hash of method, path, user and body. */
+  readonly bindRequest?: boolean;
+  /** Refuse with 503 instead of running unprotected when the stores are down. */
+  readonly failClosed?: boolean;
 }
+
+/**
+ * Atomic in-flight marker, keyed per `(user, Idempotency-Key)`. The
+ * production adapter is a Redis `SET NX EX` plus a token-checked
+ * delete, so a marker that expired and was re-taken by another request
+ * is never released by the first one.
+ */
+export interface IdempotencyInFlightLock {
+  /** Take the marker; `false` when another request already holds it. */
+  acquire(key: string, token: string, ttlSec: number): Promise<boolean>;
+  /** Drop the marker if `token` still owns it. */
+  release(key: string, token: string): Promise<void>;
+}
+
+/**
+ * In-flight marker lifetime. Long enough to cover a booking (two
+ * transactions and a Redis round trip), short enough that a crashed
+ * isolate does not block the key for long.
+ */
+export const DEFAULT_IN_FLIGHT_TTL_SEC = 30;
+
+/** Seconds a client is told to wait before retrying a 409 in progress or a 503. */
+const RETRY_AFTER_SEC = '1';
+
+/** Reserved field carrying the request hash inside the stored response body. */
+export const IDEMPOTENCY_REQUEST_HASH_FIELD = '__idempotencyRequestHash';
 
 /**
  * Hono environment contract. The auth middleware (task 8.2) is expected
@@ -121,6 +180,9 @@ interface IdempotencyProblem {
  *      configured TTL so the next retry replays verbatim.
  *   7. Storage failures are caught and logged — they never mask the
  *      user-visible response.
+ *   8. Strict mode (`inFlight`, `bindRequest`, `failClosed`) adds the
+ *      in-flight marker, the request hash and the 503 fail-closed
+ *      answers described in the module header.
  */
 export function idempotencyMiddleware(
   deps: IdempotencyMiddlewareDeps,
@@ -177,51 +239,197 @@ export function idempotencyMiddleware(
       return;
     }
 
+    const failClosed = deps.failClosed === true;
+    const fingerprint =
+      deps.bindRequest === true ? await requestFingerprint(c, method, userId) : undefined;
+
     // --- Lookup path (Req 20.1) -------------------------------------
-    let hit = null;
-    try {
-      hit = await lookup(deps.db, key, userId);
-    } catch (err) {
-      // A lookup failure must not mask the mutation — degrade to
-      // "miss" so the handler still runs. The operator learns
-      // about it through the log; repeated entries should trigger
-      // an Axiom alert.
-      logger.error('lookup failed', {
-        key,
-        userId,
-        error: errorToDetail(err),
-      });
+    const first = await safeLookup(deps, key, userId, logger);
+    if (first === 'error' && failClosed) {
+      return unavailable(c);
+    }
+    if (first !== 'error' && first !== null) {
+      return replay(c, first, fingerprint);
     }
 
-    if (hit !== null) {
-      return c.json(hit.response, statusCodeOf(hit.statusCode));
+    // --- In-flight marker (strict mode) -----------------------------
+    let lockToken: string | undefined;
+    const lockKey = `idem:inflight:${userId}:${key}`;
+    if (deps.inFlight !== undefined) {
+      const token = crypto.randomUUID();
+      let acquired: boolean | 'error';
+      try {
+        acquired = await deps.inFlight.acquire(
+          lockKey,
+          token,
+          deps.inFlightTtlSec ?? DEFAULT_IN_FLIGHT_TTL_SEC,
+        );
+      } catch (err) {
+        logger.error('in-flight acquire failed', { key, userId, error: errorToDetail(err) });
+        acquired = 'error';
+      }
+      if (acquired === 'error' && failClosed) {
+        return unavailable(c);
+      }
+      if (acquired === false) {
+        return c.json(
+          {
+            type: 'about:blank',
+            title: 'idempotency_in_progress',
+            status: 409,
+            code: 'idempotency_in_progress',
+            detail: 'A request with this Idempotency-Key is still being processed',
+          },
+          409,
+          { 'retry-after': RETRY_AFTER_SEC },
+        );
+      }
+      if (acquired === true) {
+        lockToken = token;
+        // A duplicate that finished between our first lookup and the
+        // marker stored its response: replay it rather than re-run.
+        const second = await safeLookup(deps, key, userId, logger);
+        if (second === 'error' && failClosed) {
+          await safeRelease(deps.inFlight, lockKey, token, logger);
+          return unavailable(c);
+        }
+        if (second !== 'error' && second !== null) {
+          await safeRelease(deps.inFlight, lockKey, token, logger);
+          return replay(c, second, fingerprint);
+        }
+      }
     }
 
     // --- Execute path ------------------------------------------------
-    await next();
-
-    const status = c.res.status;
-    if (!isCacheableStatus(status)) {
-      return;
-    }
-
-    const body = await readJsonBody(c, logger);
-    if (body === null) {
-      return;
-    }
-
     try {
-      await store(deps.db, key, userId, { body, statusCode: status }, ttlSec);
-    } catch (err) {
-      logger.warn('store failed; continuing without cache', {
-        key,
-        userId,
-        status,
-        error: errorToDetail(err),
-      });
+      await next();
+
+      const status = c.res.status;
+      if (!isCacheableStatus(status)) {
+        return;
+      }
+
+      const body = await readJsonBody(c, logger);
+      if (body === null) {
+        return;
+      }
+
+      const stored =
+        fingerprint === undefined
+          ? body
+          : { ...body, [IDEMPOTENCY_REQUEST_HASH_FIELD]: fingerprint };
+      try {
+        await store(deps.db, key, userId, { body: stored, statusCode: status }, ttlSec);
+      } catch (err) {
+        const detail = { key, userId, status, error: errorToDetail(err) };
+        if (failClosed) {
+          logger.error('store failed after the mutation; continuing without cache', detail);
+        } else {
+          logger.warn('store failed; continuing without cache', detail);
+        }
+      }
+      return;
+    } finally {
+      if (lockToken !== undefined && deps.inFlight !== undefined) {
+        await safeRelease(deps.inFlight, lockKey, lockToken, logger);
+      }
     }
-    return;
   };
+}
+
+/** Lookup that reports a store failure as `'error'` instead of throwing. */
+async function safeLookup(
+  deps: IdempotencyMiddlewareDeps,
+  key: string,
+  userId: string,
+  logger: IdempotencyLogger,
+): Promise<IdempotencyEntry | null | 'error'> {
+  try {
+    return await lookup(deps.db, key, userId);
+  } catch (err) {
+    // Degrades to "miss" unless the route fails closed. Repeated
+    // entries should trigger an Axiom alert.
+    logger.error('lookup failed', { key, userId, error: errorToDetail(err) });
+    return 'error';
+  }
+}
+
+async function safeRelease(
+  lock: IdempotencyInFlightLock,
+  lockKey: string,
+  token: string,
+  logger: IdempotencyLogger,
+): Promise<void> {
+  try {
+    await lock.release(lockKey, token);
+  } catch (err) {
+    // The TTL frees the marker anyway; a failed release only delays
+    // the next duplicate by at most that long.
+    logger.warn('in-flight release failed', { lockKey, error: errorToDetail(err) });
+  }
+}
+
+/**
+ * Replay a stored response with its original status. A request hash
+ * that does not match the stored one means the key was reused for a
+ * different request: refuse instead of answering with someone else's
+ * result.
+ */
+function replay(
+  c: Context<IdempotencyEnv>,
+  hit: IdempotencyEntry,
+  fingerprint: string | undefined,
+): Response {
+  const { [IDEMPOTENCY_REQUEST_HASH_FIELD]: storedHash, ...body } = hit.response;
+  if (fingerprint !== undefined && typeof storedHash === 'string' && storedHash !== fingerprint) {
+    return c.json(
+      {
+        type: 'about:blank',
+        title: 'idempotency_key_reused',
+        status: 422,
+        code: 'idempotency_key_reused',
+        detail: 'This Idempotency-Key was already used for a different request',
+      },
+      422,
+    );
+  }
+  c.header('idempotent-replayed', 'true');
+  return c.json(body, statusCodeOf(hit.statusCode));
+}
+
+function unavailable(c: Context<IdempotencyEnv>): Response {
+  return c.json(
+    {
+      type: 'about:blank',
+      title: 'idempotency_unavailable',
+      status: 503,
+      code: 'idempotency_unavailable',
+      detail: 'Duplicate protection is temporarily unavailable; retry in a moment',
+    },
+    503,
+    { 'retry-after': RETRY_AFTER_SEC },
+  );
+}
+
+/**
+ * SHA-256 over method, path, user and raw body. Hono caches the body
+ * text once a validator parsed it, so this reads the same bytes the
+ * handler validated.
+ */
+async function requestFingerprint(
+  c: Context<IdempotencyEnv>,
+  method: string,
+  userId: string,
+): Promise<string> {
+  let body = '';
+  try {
+    body = await c.req.text();
+  } catch {
+    body = '';
+  }
+  const data = new TextEncoder().encode([method, c.req.path, userId, body].join('\n'));
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', data));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**

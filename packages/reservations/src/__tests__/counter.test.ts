@@ -25,7 +25,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_COUNTER_PREFIX, createRedisRemainingCounter, type RedisLike } from '../counter.js';
+import {
+  COMPARE_AND_SET_SCRIPT,
+  DEFAULT_COUNTER_PREFIX,
+  createRedisRemainingCounter,
+  type RedisLike,
+} from '../counter.js';
 
 /* ------------------------------------------------------------------ */
 /*  FakeRedis                                                          */
@@ -86,6 +91,25 @@ class FakeRedis implements RedisLike {
     if (this.store.has(key)) return 0;
     this.store.set(key, String(value));
     return 1;
+  }
+
+  /**
+   * Interprets {@link COMPARE_AND_SET_SCRIPT} only: the counter sends
+   * no other script, and an unknown one fails loudly.
+   */
+  async eval(script: string, keys: string[], args: string[]): Promise<unknown> {
+    if (script !== COMPARE_AND_SET_SCRIPT) throw new Error('unexpected script');
+    const [key] = keys;
+    const [expected, value] = args;
+    if (key === undefined || expected === undefined || value === undefined) {
+      throw new Error('bad eval arguments');
+    }
+    const current = this.store.get(key);
+    if ((current === undefined && expected === '') || current === expected) {
+      this.store.set(key, value);
+      return 1;
+    }
+    return 0;
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -372,5 +396,44 @@ describe('decrOrInit', () => {
     const redis = new FakeRedis();
     const counter = createRedisRemainingCounter(redis);
     await expect(counter.decrOrInit(CLASS_ID, 0)).resolves.toBe(-1);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  compareAndSet                                                      */
+/* ------------------------------------------------------------------ */
+
+describe('createRedisRemainingCounter: compareAndSet', () => {
+  it('writes when the key still holds the expected value', async () => {
+    const redis = new FakeRedis();
+    const counter = createRedisRemainingCounter(redis);
+    await counter.reset(CLASS_ID, 5);
+
+    await expect(counter.compareAndSet(CLASS_ID, 5, 3)).resolves.toBe(true);
+    await expect(counter.getRemaining(CLASS_ID)).resolves.toBe(3);
+  });
+
+  it('refuses when a DECR moved the value after the read', async () => {
+    const redis = new FakeRedis();
+    const counter = createRedisRemainingCounter(redis);
+    await counter.reset(CLASS_ID, 5);
+    await counter.decr(CLASS_ID);
+
+    await expect(counter.compareAndSet(CLASS_ID, 5, 3)).resolves.toBe(false);
+    await expect(counter.getRemaining(CLASS_ID)).resolves.toBe(4);
+  });
+
+  it('seeds an absent key only while it is still absent', async () => {
+    const redis = new FakeRedis();
+    const counter = createRedisRemainingCounter(redis);
+
+    await expect(counter.compareAndSet(CLASS_ID, null, 7)).resolves.toBe(true);
+    await expect(counter.compareAndSet(CLASS_ID, null, 9)).resolves.toBe(false);
+    await expect(counter.getRemaining(CLASS_ID)).resolves.toBe(7);
+  });
+
+  it('rejects a negative target value', async () => {
+    const counter = createRedisRemainingCounter(new FakeRedis());
+    await expect(counter.compareAndSet(CLASS_ID, null, -1)).rejects.toThrow(RangeError);
   });
 });
