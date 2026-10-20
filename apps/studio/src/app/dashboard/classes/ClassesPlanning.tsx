@@ -109,20 +109,26 @@ function shortWeekday(fmt: Formatters, date: Date): string {
   return fmt.weekday.format(date).replace(/\.$/u, '');
 }
 
-/** Status pill: "Full", or the seats still open. */
+/**
+ * Status pill: "Full", or the seats still open. The compact size fits a
+ * 16px text line, for week tiles too short for the full pill.
+ */
 function StatusPill({
   cls,
   t,
+  compact = false,
 }: {
   readonly cls: ClassWithRemaining;
   readonly t: Translator;
+  readonly compact?: boolean;
 }): ReactElement {
   const full = isFull(cls);
   const Icon = full ? ProhibitIcon : UsersIcon;
   return (
     <span
       className={cn(
-        'inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-2 text-[0.6875rem] leading-none font-medium tabular-nums',
+        'inline-flex shrink-0 items-center gap-1 rounded-full text-[0.6875rem] leading-none font-medium tabular-nums',
+        compact ? 'h-4 px-1.5' : 'h-5 px-2',
         full ? 'planning-pill-full' : 'planning-pill-open',
       )}
     >
@@ -134,23 +140,32 @@ function StatusPill({
   );
 }
 
-/** Edit / delete menu behind a "..." button on roomy tiles. */
+/**
+ * Edit / delete menu behind a "..." button. The compact trigger sits
+ * tighter in the corner so it fits the title line of a 45-minute tile,
+ * and keeps the 24 px minimum pointer target either way.
+ */
 function TileMenu({
   cls,
   t,
   onEdit,
   onDelete,
+  compact = false,
 }: {
   readonly cls: ClassWithRemaining;
   readonly t: Translator;
   readonly onEdit: (cls: ClassWithRemaining) => void;
   readonly onDelete: (cls: ClassWithRemaining) => void;
+  readonly compact?: boolean;
 }): ReactElement {
   return (
     <Menu.Root>
       <Menu.Trigger
         aria-label={t('studio.classes.planning.actionsFor', { title: cls.title })}
-        className="absolute top-1.5 right-1.5 z-10 grid size-6 place-items-center rounded-md hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-foreground/10"
+        className={cn(
+          'absolute z-10 grid place-items-center rounded-md hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-foreground/10',
+          compact ? 'top-0.5 right-0.5 size-6' : 'top-1.5 right-1.5 size-6',
+        )}
       >
         <DotsThreeIcon aria-hidden="true" weight="bold" className="size-4" />
       </Menu.Trigger>
@@ -368,11 +383,13 @@ function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps
         onClick={() => onSelect(cls)}
         className={cn(
           'flex size-full flex-col items-start overflow-hidden rounded-[inherit] px-2.5 text-left text-xs leading-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          density === 'compact' ? 'justify-center' : 'py-2',
+          density === 'full' && 'py-2',
+          density === 'medium' && 'py-0.5',
+          density === 'compact' && 'justify-center',
         )}
       >
         <span className="sr-only">{fmt.dayLong.format(start)}, </span>
-        <span className={cn('w-full truncate font-medium', density === 'full' && 'pr-6')}>
+        <span className={cn('w-full truncate font-medium', density !== 'compact' && 'pr-6')}>
           {cls.title}
         </span>
         {density === 'compact' ? (
@@ -384,22 +401,28 @@ function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps
             {fmt.time.format(start)} - {fmt.time.format(end)}
           </span>
         )}
-        {density === 'full' ? (
-          <span className="mt-auto">
-            <StatusPill cls={cls} t={t} />
-          </span>
-        ) : (
+        {density === 'compact' ? (
           <span className="sr-only">
             ,{' '}
             {isFull(cls)
               ? t('studio.classes.planning.full')
               : t('studio.classes.planning.seatsLeft', { count: cls.remaining })}
           </span>
+        ) : (
+          <span className="mt-auto">
+            <StatusPill cls={cls} t={t} compact={density === 'medium'} />
+          </span>
         )}
       </button>
-      {density === 'full' ? (
-        <TileMenu cls={cls} t={t} onEdit={onSelect} onDelete={onDelete} />
-      ) : null}
+      {density === 'compact' ? null : (
+        <TileMenu
+          cls={cls}
+          t={t}
+          onEdit={onSelect}
+          onDelete={onDelete}
+          compact={density === 'medium'}
+        />
+      )}
     </div>
   );
 }

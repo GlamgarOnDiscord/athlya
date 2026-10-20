@@ -136,7 +136,7 @@ function PublicTopBar(): ReactElement {
               {navLink('/register', t('auth.register.title'))}
             </>
           )}
-          <LocaleSwitcher />
+          <LocaleSwitcher compact />
         </div>
       </nav>
     </header>
