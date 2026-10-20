@@ -125,7 +125,8 @@ describe('deriveBrandColorVariables — tokens', () => {
 describe('buildBrandColorCss', () => {
   it('emits all five --athlya-brand-* custom properties under :root by default', () => {
     const css = buildBrandColorCss('#0EA5E9');
-    expect(css).toContain(':root {');
+    // Outranks the theme's `:root.dark` and `:root:not(.light)` defaults.
+    expect(css.startsWith('html:root, html:root.dark, html:root:not(.light) {')).toBe(true);
     expect(css).toContain('--athlya-brand-primary: #0ea5e9;');
     expect(css).toContain('--athlya-brand-primary-rgb: 14, 165, 233;');
     expect(css).toContain('--athlya-brand-on-primary: #000000;');
