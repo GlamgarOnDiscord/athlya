@@ -319,6 +319,24 @@
       "confirmButton": "Permanently delete"
     }
   },
+  "demo": {
+    "banner": {
+      "badge": "Demo",
+      "text": "Fictional data: nothing is sent to or saved on a server."
+    },
+    "picker": {
+      "title": "Pick a demo profile",
+      "subtitle": "No credentials: each profile opens a fictional session in this tab.",
+      "member": "Member",
+      "memberHint": "Book a class, cancel, manage the profile",
+      "admin": "Administrator",
+      "adminHint": "Dashboard, schedule, members, audit log and check-in",
+      "coach": "Coach",
+      "coachHint": "Today's classes, schedule and members",
+      "signInAs": "Open the demo session of {name}, {role}",
+      "error": "The demo session could not start. Reload the page."
+    }
+  },
   "web": {
     "home": {
       "title": "Athlya",

@@ -41,6 +41,7 @@ import { Toaster } from '@/components/ui/sonner';
 
 import { AppNav } from '../components/AppNav';
 import { CookieBanner } from '../components/CookieBanner';
+import { DemoBanner } from '../components/demo/DemoBanner';
 import { JsonLd } from '../components/JsonLd';
 import { ThemeProvider } from '../components/ThemeProvider';
 import { AuthProvider } from '../lib/auth/AuthContext';
@@ -114,6 +115,7 @@ export default async function RootLayout({
         />
         <ThemeProvider nonce={nonce}>
           <LocaleProvider locale={locale}>
+            {process.env.NEXT_PUBLIC_DEMO_MODE === '1' ? <DemoBanner /> : null}
             <AuthProvider>
               <AppNav>{children}</AppNav>
               <Toaster richColors position="top-right" />
