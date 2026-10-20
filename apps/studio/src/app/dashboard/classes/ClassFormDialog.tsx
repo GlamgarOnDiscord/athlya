@@ -26,7 +26,8 @@ import { newIdempotencyKey } from '../../../lib/idempotency';
 import type { ApiClient } from '../../../lib/api/client';
 
 export type ClassFormMode =
-  { readonly kind: 'create' } | { readonly kind: 'edit'; readonly cls: ClassWithRemaining };
+  | { readonly kind: 'create'; readonly startsAt?: string }
+  | { readonly kind: 'edit'; readonly cls: ClassWithRemaining };
 
 export interface ClassFormDialogProps {
   readonly mode: ClassFormMode;
@@ -70,7 +71,7 @@ function defaultState(mode: ClassFormMode): FormState {
   tomorrow.setHours(9, 0, 0, 0);
   return {
     title: '',
-    startsAt: isoToLocalInput(tomorrow.toISOString()),
+    startsAt: isoToLocalInput(mode.startsAt ?? tomorrow.toISOString()),
     durationMin: '60',
     capacity: '12',
   };

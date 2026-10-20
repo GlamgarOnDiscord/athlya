@@ -125,6 +125,8 @@ test('studio admin: log in → classes table → create → delete @turnstile', 
   const listResponse = page.waitForResponse(isCall('GET', '/v1/classes'));
   await page.goto('/dashboard/classes');
   expect((await listResponse).status(), 'GET /v1/classes').toBe(200);
+  // The page opens on the week planning; the table lives in the List view.
+  await page.getByRole('button', { name: /^(liste|list)$/iu }).click();
   await expect(page.getByRole('columnheader', { name: /^(cours|classes)$/iu })).toBeVisible();
 
   // Show the day the smoke class lands on.

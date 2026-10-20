@@ -176,6 +176,14 @@ describe('logo palette (docs/brand/README.md)', () => {
     expect(contrastRatio(brandPalette.volt, colors.dark.background)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('studio planning marks read as text: volt and white pills, today bar, now line', () => {
+    expect(contrastRatio(brandPalette.ink, brandPalette.volt)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(brandPalette.white, brandPalette.ink)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(brandPalette.ink, colors.light.background)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(brandPalette.volt, colors.dark.background)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(brandPalette.white, colors.dark.muted)).toBeGreaterThanOrEqual(3);
+  });
+
   it('volt on white stays forbidden: below even the 3:1 UI minimum', () => {
     expect(contrastRatio(brandPalette.volt, brandPalette.white)).toBeLessThan(3);
   });
