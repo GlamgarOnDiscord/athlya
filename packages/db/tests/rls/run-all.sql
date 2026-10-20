@@ -42,6 +42,7 @@
 \i tests/rls/service_functions.sql
 \i tests/rls/runtime_rls_gaps.sql
 \i tests/rls/reservation_waitlist_runtime.sql
+\i tests/rls/booking_holds_fencing.sql
 \i tests/rls/checkin_runtime.sql
 \i tests/rls/auth_event_recording.sql
 \i tests/rls/auth_password_reset_outbox.sql

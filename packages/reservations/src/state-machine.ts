@@ -1,7 +1,7 @@
 /**
  * Reservation state-machine guard.
  *
- * Encodes the legal transitions between the four reservation statuses
+ * Encodes the legal transitions between the reservation statuses
  * (`confirmed`, `waitlist`, `cancelled`, `no_show`) exactly as specified
  * in Requirement 10:
  *
@@ -18,6 +18,12 @@
  *     `confirmed` or `waitlist`; both edges are listed in
  *     {@link LEGAL_TRANSITIONS} and therefore accepted here.
  *
+ * Seat holds (issue #723) add the `pending` label with two exits only:
+ * `pending → confirmed` (the hold is confirmed) and `pending →
+ * cancelled` (released, or expired by the sweep). Nothing enters
+ * `pending` by a transition: a hold is created as a new row, and the
+ * capacity trigger refuses to turn any other row back into one.
+ *
  * This module is deliberately pure and has **no** database or event-bus
  * dependency: every mutation helper in the Reservations service is
  * expected to call {@link assertCanTransition} before issuing the
@@ -27,19 +33,20 @@
  */
 
 /**
- * Union of the four labels the reservations table's `status` column can
+ * Union of the labels the reservations table's `status` column can
  * hold. Re-declared locally (rather than imported from
  * `@athlya/shared/schemas/primitives`) so this module stays free of any
- * runtime dependency on Zod; the values are identical to
- * `ReservationStatusSchema` in `@athlya/shared`.
+ * runtime dependency on Zod; the values are those of the database enum:
+ * `ReservationStatusSchema` in `@athlya/shared` plus the internal
+ * `pending` hold label.
  *
  * Related requirements: 10.1.
  */
-export type ReservationStatus = 'confirmed' | 'waitlist' | 'cancelled' | 'no_show';
+export type ReservationStatus = 'confirmed' | 'waitlist' | 'cancelled' | 'no_show' | 'pending';
 
 /**
  * Closed set of non-identity legal edges in the reservation state
- * machine. The four entries correspond one-to-one to the transitions
+ * machine. The first four entries correspond one-to-one to the transitions
  * listed in Requirement 10.1 and in `design.md` §"State machine".
  *
  * Declared as a `readonly` tuple of `readonly` pairs so TypeScript
@@ -52,6 +59,8 @@ export const LEGAL_TRANSITIONS: ReadonlyArray<readonly [ReservationStatus, Reser
   ['confirmed', 'no_show'],
   ['waitlist', 'confirmed'],
   ['waitlist', 'cancelled'],
+  ['pending', 'confirmed'],
+  ['pending', 'cancelled'],
 ] as const;
 
 /**
@@ -63,7 +72,7 @@ export const LEGAL_TRANSITIONS: ReadonlyArray<readonly [ReservationStatus, Reser
  *      `true` here lets the calling API endpoint short-circuit with
  *      HTTP 200 without touching the database.
  *   2. `(from, to)` appears in {@link LEGAL_TRANSITIONS} — one of the
- *      four explicitly allowed edges per Requirement 10.1.
+ *      explicitly allowed edges (Requirement 10.1 plus the two hold exits).
  *
  * Any other pair returns `false`, which callers translate into a
  * 422 `invalid_transition` response (Requirement 10.3). Crucially,

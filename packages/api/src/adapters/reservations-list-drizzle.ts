@@ -35,7 +35,7 @@
 
 import { withTenantHttp } from '@athlya/db';
 import { classes, reservations } from '@athlya/db/schema';
-import { and, asc, eq, gt, gte, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, lte, ne, or, sql } from 'drizzle-orm';
 
 import { withConnectionRetry } from './db-retry.js';
 
@@ -54,12 +54,19 @@ export interface ListMyReservationsQuery {
   readonly limit?: number | undefined;
 }
 
+/** Reservation statuses a client may receive (a seat hold is not one). */
+type WireStatus = 'confirmed' | 'waitlist' | 'cancelled' | 'no_show';
+
+function isWireStatus(status: WireStatus | 'pending'): status is WireStatus {
+  return status !== 'pending';
+}
+
 /** Row shape returned to the route handler — flattened for the client. */
 export interface ReservationListItem {
   readonly id: string;
   readonly classId: string;
   readonly userId: string;
-  readonly status: 'confirmed' | 'waitlist' | 'cancelled' | 'no_show';
+  readonly status: WireStatus;
   readonly createdAt: string;
   readonly cancelledAt: string | null;
   readonly checkedInAt: string | null;
@@ -126,7 +133,10 @@ function decodeCursor(raw: string): ReservationCursor | null {
 
 /**
  * Fetch one page of the authenticated member's reservations,
- * flattened with the owning class metadata.
+ * flattened with the owning class metadata. Seat holds (`pending`,
+ * issue #723) are left out: the strict wire `ReservationSchema` in
+ * shipped clients does not know the status, and a hold is reported by
+ * the hold endpoint itself.
  *
  * Clamps `limit` to `[1, 100]` — the route layer's Zod validator
  * already enforces this, but defensive bounds keep the query safe
@@ -183,6 +193,7 @@ export async function listMyReservations(
         .where(
           and(
             eq(reservations.userId, userId),
+            ne(reservations.status, 'pending'),
             gte(classes.startsAt, from),
             lte(classes.startsAt, to),
             cursorCondition,
@@ -196,11 +207,34 @@ export async function listMyReservations(
   const hasMore = rows.length > limit;
   const pageRows = hasMore ? rows.slice(0, limit) : rows;
 
-  const items: ReservationListItem[] = pageRows.map((row) => ({
+  const items: ReservationListItem[] = pageRows.flatMap((row) =>
+    isWireStatus(row.status) ? [{ ...toItem(row), status: row.status }] : [],
+  );
+
+  const lastRow = pageRows[pageRows.length - 1];
+  const nextCursor =
+    hasMore && lastRow !== undefined
+      ? encodeCursor({ startsAt: lastRow.classStartsAt.toISOString(), id: lastRow.id })
+      : null;
+
+  return { items, nextCursor };
+}
+
+function toItem(row: {
+  readonly id: string;
+  readonly classId: string;
+  readonly userId: string;
+  readonly createdAt: Date;
+  readonly cancelledAt: Date | null;
+  readonly checkedInAt: Date | null;
+  readonly classTitle: string;
+  readonly classStartsAt: Date;
+  readonly classDurationMin: number;
+}): Omit<ReservationListItem, 'status'> {
+  return {
     id: row.id,
     classId: row.classId,
     userId: row.userId,
-    status: row.status,
     createdAt: row.createdAt.toISOString(),
     cancelledAt: row.cancelledAt?.toISOString() ?? null,
     checkedInAt: row.checkedInAt?.toISOString() ?? null,
@@ -210,13 +244,5 @@ export async function listMyReservations(
       startsAt: row.classStartsAt.toISOString(),
       durationMin: row.classDurationMin,
     },
-  }));
-
-  const lastRow = pageRows[pageRows.length - 1];
-  const nextCursor =
-    hasMore && lastRow !== undefined
-      ? encodeCursor({ startsAt: lastRow.classStartsAt.toISOString(), id: lastRow.id })
-      : null;
-
-  return { items, nextCursor };
+  };
 }

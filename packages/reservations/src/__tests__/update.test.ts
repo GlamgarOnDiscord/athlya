@@ -306,6 +306,31 @@ describe('updateClass — capacity change', () => {
     expect(reset).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['class_already_started', 'class_already_started'],
+    ['starts_at_in_past', 'starts_at_in_past'],
+  ] as const)(
+    'maps the %s outcome to a typed error without touching the counter',
+    async (outcome, code) => {
+      const { deps, findById, updateClassOptimistic, reset } = buildDeps();
+
+      findById.mockResolvedValueOnce(BASE_ROW);
+      updateClassOptimistic.mockResolvedValueOnce({ outcome });
+
+      const err = await updateClass(
+        STUDIO_ID,
+        CLASS_ID,
+        { version: 3, startsAt: '2031-01-01T09:00:00.000Z' },
+        'admin',
+        deps,
+      ).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(UpdateClassError);
+      expect((err as UpdateClassError).code).toBe(code);
+      expect(reset).not.toHaveBeenCalled();
+    },
+  );
+
   it('does not reset the counter when the DB UPDATE reports a conflict', async () => {
     const { deps, findById, updateClassOptimistic, reset } = buildDeps();
 

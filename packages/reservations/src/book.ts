@@ -114,6 +114,25 @@ export interface BookingClassClock {
 }
 
 /**
+ * Class row locked inside a booking or hold transaction, with the
+ * `version` the caller fences on (issue #723).
+ */
+export interface BookingClassLock extends BookingClassClock {
+  readonly version: number;
+}
+
+/**
+ * The member's own `pending` seat hold on a class, locked, with the
+ * transaction clock so "still active" is judged like the capacity
+ * trigger judges it.
+ */
+export interface OwnHold {
+  readonly id: string;
+  readonly expiresAt: Date;
+  readonly now: Date;
+}
+
+/**
  * Outbox event envelope as expected by
  * {@link BookingRepo.insertOutbox}. Mirrors the `OutboxEvent` shape
  * declared in `@athlya/db/outbox` — duplicated here so the port
@@ -162,6 +181,25 @@ export class ClassCapacityExceededError extends Error {
   }
 }
 
+/**
+ * Thrown when the capacity trigger refuses to confirm a hold whose
+ * expiry has passed (`hold_expired`, migration 0050).
+ */
+export class HoldExpiredError extends Error {
+  public override readonly name = 'HoldExpiredError';
+  public readonly code: 'HOLD_EXPIRED' = 'HOLD_EXPIRED' as const;
+
+  public constructor(message = 'hold expired') {
+    super(message);
+  }
+}
+
+export function isHoldExpired(err: unknown): boolean {
+  if (err instanceof HoldExpiredError) return true;
+  if (typeof err !== 'object' || err === null) return false;
+  return (err as { code?: unknown }).code === 'HOLD_EXPIRED';
+}
+
 export function isClassCapacityExceeded(err: unknown): boolean {
   if (err instanceof ClassCapacityExceededError) return true;
   if (typeof err !== 'object' || err === null) return false;
@@ -178,7 +216,7 @@ export function isClassCapacityExceeded(err: unknown): boolean {
  * rethrow a thin wrapper that sets the `code` property, without
  * forcing this module's `UniqueViolationError` class on every caller.
  */
-function isUniqueViolation(err: unknown): boolean {
+export function isUniqueViolation(err: unknown): boolean {
   if (err instanceof UniqueViolationError) return true;
   if (typeof err !== 'object' || err === null) return false;
   return (err as { code?: unknown }).code === 'UNIQUE_VIOLATION';
@@ -224,6 +262,31 @@ export interface BookingRepo {
    * delete) between the pre-flight and the transaction.
    */
   readClassClock(tx: BookingTx, classId: string): Promise<BookingClassClock | null>;
+
+  /**
+   * Lock the class row `FOR UPDATE` inside `tx` (the lock the capacity
+   * trigger takes, so no booking commits in between) and return its
+   * start time, `version` and `now()`. `null` when the class is
+   * missing, soft-deleted or of another studio. Used when the caller
+   * fences on `classVersion`, and by every hold.
+   */
+  lockClassForBooking(tx: BookingTx, classId: string): Promise<BookingClassLock | null>;
+
+  /**
+   * The caller's own `pending` hold on `classId`, locked `FOR UPDATE`,
+   * or `null` when there is none.
+   */
+  findOwnHold(tx: BookingTx, classId: string, userId: string): Promise<OwnHold | null>;
+
+  /**
+   * Turn the hold `reservationId` into a `confirmed` reservation and
+   * return the row. Throws {@link HoldExpiredError} when the trigger
+   * finds the hold expired.
+   */
+  confirmHold(tx: BookingTx, reservationId: string): Promise<BookingReservationRow>;
+
+  /** Release the hold `reservationId` (`cancelled`, `cancelled_at = now()`). */
+  releaseHold(tx: BookingTx, reservationId: string): Promise<void>;
 
   /**
    * Run `fn` inside a Postgres transaction. The adapter is
@@ -425,6 +488,13 @@ export interface BookClassInPast {
 export interface BookClassNotFound {
   readonly code: 'class_not_found';
 }
+/**
+ * The caller sent the `classVersion` it saw and the class has been
+ * edited since (time, capacity, …): nothing was booked (issue #723).
+ */
+export interface BookClassChanged {
+  readonly code: 'class_changed';
+}
 export interface BookCounterUnavailable {
   readonly code: 'counter_unavailable';
 }
@@ -445,6 +515,7 @@ export type BookResult =
   | BookAlreadyBooked
   | BookClassInPast
   | BookClassNotFound
+  | BookClassChanged
   | BookCounterUnavailable;
 
 /* ------------------------------------------------------------------ */
@@ -485,6 +556,12 @@ export interface BookClassInput {
    * the signature.
    */
   readonly idempotencyKey?: string;
+  /**
+   * The class `version` the member saw. When set, the booking is
+   * refused with `class_changed` if the class was edited since,
+   * checked under the class row lock. Unset: no fence, as before.
+   */
+  readonly classVersion?: number;
   readonly repo: BookingRepo;
   readonly counter: BookingCounter;
   readonly publisher: BookingEventPublisher;
@@ -507,25 +584,33 @@ export interface BookClassInput {
  * booked (started, or soft-deleted since the pre-flight). Rolls the
  * transaction back; {@link bookClass} turns it into a result code.
  */
-class BookingClosedError extends Error {
+export class BookingClosedError extends Error {
   public override readonly name = 'BookingClosedError';
-  public constructor(public readonly result: 'class_in_past' | 'class_not_found') {
+  public constructor(
+    public readonly result: 'class_in_past' | 'class_not_found' | 'class_changed',
+  ) {
     super(result);
   }
 }
 
 /**
  * Re-check, inside `tx`, that the class still exists and has not
- * started. Uses the injected test clock when there is one, else the
- * transaction's `now()`.
+ * started, and, when the caller fences on `classVersion`, that it was
+ * not edited since: that read locks the class row so the answer holds
+ * until commit. Uses the injected test clock when there is one, else
+ * the transaction's `now()`.
  */
-async function assertClassOpen(
-  repo: BookingRepo,
+export async function assertClassOpen(
+  repo: Pick<BookingRepo, 'readClassClock' | 'lockClassForBooking'>,
   tx: BookingTx,
   classId: string,
   clock: BookClock | undefined,
+  classVersion: number | undefined,
 ): Promise<void> {
-  const times = await repo.readClassClock(tx, classId);
+  const times =
+    classVersion === undefined
+      ? await repo.readClassClock(tx, classId)
+      : await repo.lockClassForBooking(tx, classId);
   if (times === null) {
     throw new BookingClosedError('class_not_found');
   }
@@ -533,6 +618,64 @@ async function assertClassOpen(
   if (times.startsAt.getTime() <= nowMs) {
     throw new BookingClosedError('class_in_past');
   }
+  if (classVersion !== undefined && 'version' in times && times.version !== classVersion) {
+    throw new BookingClosedError('class_changed');
+  }
+}
+
+/** Outcome of {@link settleOwnHold}. */
+export type SettledHold =
+  | { readonly outcome: 'confirmed'; readonly reservation: BookingReservationRow }
+  | { readonly outcome: 'released' }
+  | { readonly outcome: 'none' };
+
+/**
+ * Settle the caller's own hold on a class after a unique violation (a
+ * hold is a live row too, migration 0050): an active hold is confirmed,
+ * with its `reservation.created` event, since the member is booking the
+ * seat it already holds; an expired one is released so a retry can
+ * book. `none` when the caller holds no hold on the class. Throws
+ * {@link BookingClosedError} when the class closed or changed since.
+ */
+export async function settleOwnHold(
+  repo: Pick<
+    BookingRepo,
+    | 'withTransaction'
+    | 'findOwnHold'
+    | 'confirmHold'
+    | 'releaseHold'
+    | 'insertOutbox'
+    | 'readClassClock'
+    | 'lockClassForBooking'
+  >,
+  publisher: BookingEventPublisher,
+  ids: { readonly classId: string; readonly userId: string; readonly studioId: string },
+  fence: { readonly clock: BookClock | undefined; readonly classVersion: number | undefined },
+): Promise<SettledHold> {
+  return repo.withTransaction(async (tx): Promise<SettledHold> => {
+    const hold = await repo.findOwnHold(tx, ids.classId, ids.userId);
+    if (hold === null) {
+      return { outcome: 'none' };
+    }
+    if (hold.expiresAt.getTime() <= hold.now.getTime()) {
+      await repo.releaseHold(tx, hold.id);
+      return { outcome: 'released' };
+    }
+    // The fence ran in the failed insert transaction: the class may have
+    // started or changed since, so check it again before confirming.
+    await assertClassOpen(repo, tx, ids.classId, fence.clock, fence.classVersion);
+    const reservation = await repo.confirmHold(tx, hold.id);
+    await repo.insertOutbox(
+      tx,
+      publisher.buildReservationCreated({
+        reservationId: reservation.id,
+        classId: ids.classId,
+        userId: ids.userId,
+        studioId: ids.studioId,
+      }),
+    );
+    return { outcome: 'confirmed', reservation };
+  });
 }
 
 /**
@@ -563,8 +706,11 @@ async function compensate(
  * with its waitlist position when it is a waitlist row, so the replay
  * answers with the real state instead of assuming `confirmed`.
  */
-async function loadExistingBooking(
-  repo: BookingRepo,
+export async function loadExistingBooking(
+  repo: Pick<
+    BookingRepo,
+    'withTransaction' | 'findExistingConfirmedOrWaitlistReservation' | 'countWaitlistAhead'
+  >,
   classId: string,
   userId: string,
 ): Promise<BookAlreadyBooked> {
@@ -597,25 +743,30 @@ async function loadExistingBooking(
  *   0. Pre-flight: load the class row. Short-circuit with
  *      `class_not_found` on `null` and `class_in_past` on
  *      `startsAt <= now`, where `now` is the database clock read with
- *      the row (or the injected test clock). BOTH checks run BEFORE
- *      any Redis traffic so a malformed or cross-tenant request never
- *      perturbs the counter.
+ *      the row (or the injected test clock), and `class_changed` when
+ *      the caller's `classVersion` is already stale. These checks run
+ *      BEFORE any Redis traffic so a malformed or cross-tenant request
+ *      never perturbs the counter.
  *
  *   1. Redis `DECR` on `class:{classId}:remaining`, seeded from the
  *      capacity when the key is missing. Optimistic pre-filter only.
  *
  *   2. If `DECR >= 0`: the confirmed-booking transaction re-checks the
- *      class against the transaction clock, inserts the `confirmed`
+ *      class against the transaction clock (and, with `classVersion`,
+ *      its version under the class row lock), inserts the `confirmed`
  *      row (the capacity trigger and the partial unique index are the
  *      authoritative guards) and the `reservation.created` outbox row.
  *
  *   3. Capacity trigger refused: compensate the DECR and fall through
  *      to the waitlist branch (Postgres is authoritative).
  *   4. Unique violation: the member already holds a live row.
- *      Compensate and return it as `already_booked`, with its real
- *      status and waitlist position. No second outbox event.
+ *      Compensate. When that row is the member's own active seat hold
+ *      it is confirmed (`ok`, with its `reservation.created` event);
+ *      an expired one is released and the booking runs once more.
+ *      Otherwise return the row as `already_booked`, with its real
+ *      status and waitlist position, and no second outbox event.
  *   5. Class closed inside the transaction: compensate and return
- *      `class_in_past` / `class_not_found`.
+ *      `class_in_past` / `class_not_found` / `class_changed`.
  *   6. Anything else: compensate and rethrow (5xx at the gateway).
  *
  *   7. If `DECR < 0`: compensate (no seat was consumed) and insert a
@@ -626,8 +777,8 @@ async function loadExistingBooking(
  * only leave the counter low, which the reconcile cron heals.
  *
  * **Invariant preserved** (Req 8.3): for every class `c`,
- * `count(reservations WHERE class_id = c AND status = 'confirmed')
- *  <= c.capacity` at every committed instant. The proof rests on the
+ * `count(confirmed) + count(unexpired pending holds) <= c.capacity` at
+ * every committed instant (migration 0050). The proof rests on the
  * capacity trigger alone: it serialises confirmations of one class on
  * the class row lock and counts under that lock. Redis can be wrong in
  * either direction without breaking it.
@@ -637,24 +788,15 @@ async function loadExistingBooking(
  * Combined with the gateway's `Idempotency-Key` layer this gives
  * at-most-once logical booking under arbitrarily aggressive retries.
  */
-async function completeWaitlistBooking(input: {
-  readonly classId: string;
-  readonly userId: string;
-  readonly studioId: string;
-  readonly repo: BookingRepo;
-  readonly publisher: BookingEventPublisher;
-  readonly clock: BookClock | undefined;
-}): Promise<
-  Extract<
-    BookResult,
-    { code: 'waitlisted' | 'already_booked' | 'class_in_past' | 'class_not_found' }
-  >
-> {
-  const { classId, userId, studioId, repo, publisher, clock } = input;
+async function completeWaitlistBooking(
+  input: BookClassInput,
+  resolveExisting: () => Promise<BookResult>,
+): Promise<BookResult> {
+  const { classId, userId, studioId, repo, publisher, clock, classVersion } = input;
 
   try {
     const { reservation: waitlisted, position } = await repo.withTransaction(async (tx) => {
-      await assertClassOpen(repo, tx, classId, clock);
+      await assertClassOpen(repo, tx, classId, clock, classVersion);
       const row = await repo.insertReservation(tx, {
         classId,
         userId,
@@ -682,17 +824,58 @@ async function completeWaitlistBooking(input: {
       return { code: err.result };
     }
     if (isUniqueViolation(err)) {
-      // The member already holds a live row (double tap / retry). The
-      // transaction rolled back, so no second outbox event commits.
-      return loadExistingBooking(repo, classId, userId);
+      // The member already holds a live row (double tap / retry, or a
+      // seat hold). The transaction rolled back, so no second outbox
+      // event commits.
+      return resolveExisting();
     }
     throw err;
   }
 }
 
 export async function bookClass(input: BookClassInput): Promise<BookResult> {
-  const { classId, userId, studioId, repo, counter, publisher, clock } = input;
+  return bookClassOnce(input, true);
+}
+
+/**
+ * One pass of {@link bookClass}. A unique violation caused by the
+ * member's own expired hold releases it and runs one more pass
+ * (`retryAfterRelease`); the second pass never retries again.
+ */
+async function bookClassOnce(
+  input: BookClassInput,
+  retryAfterRelease: boolean,
+): Promise<BookResult> {
+  const { classId, userId, studioId, repo, counter, publisher, clock, classVersion } = input;
   const logger = input.logger ?? consoleBookingLogger;
+
+  // Step 4 (unique violation): settle the member's own hold first.
+  // An active hold becomes the confirmed booking; an expired one is
+  // released and the booking runs again; otherwise the existing live
+  // row is the answer.
+  const resolveExisting = async (claimed: number): Promise<BookResult> => {
+    let settled: SettledHold;
+    try {
+      settled = await settleOwnHold(
+        repo,
+        publisher,
+        { classId, userId, studioId },
+        { clock, classVersion },
+      );
+    } catch (err) {
+      if (err instanceof BookingClosedError) {
+        return { code: err.result };
+      }
+      throw err;
+    }
+    if (settled.outcome === 'confirmed') {
+      return { code: 'ok', reservation: settled.reservation, remaining: Math.max(0, claimed) };
+    }
+    if (settled.outcome === 'released' && retryAfterRelease) {
+      return bookClassOnce(input, false);
+    }
+    return loadExistingBooking(repo, classId, userId);
+  };
 
   // ---- Step 0: pre-flight (cheap, idempotent, no side-effects) ------
   const classRow = await repo.findClass(classId);
@@ -702,6 +885,9 @@ export async function bookClass(input: BookClassInput): Promise<BookResult> {
   const nowMs = clock !== undefined ? clock() : (classRow.dbNow?.getTime() ?? Date.now());
   if (classRow.startsAt.getTime() <= nowMs) {
     return { code: 'class_in_past' };
+  }
+  if (classVersion !== undefined && classRow.version !== classVersion) {
+    return { code: 'class_changed' };
   }
 
   // ---- Step 1: optimistic seat claim --------------------------------
@@ -721,7 +907,7 @@ export async function bookClass(input: BookClassInput): Promise<BookResult> {
     // ---- Step 2: confirmed-booking transaction --------------------
     try {
       const confirmed = await repo.withTransaction(async (tx) => {
-        await assertClassOpen(repo, tx, classId, clock);
+        await assertClassOpen(repo, tx, classId, clock, classVersion);
         const reservation = await repo.insertReservation(tx, {
           classId,
           userId,
@@ -743,11 +929,11 @@ export async function bookClass(input: BookClassInput): Promise<BookResult> {
 
       if (isUniqueViolation(err)) {
         // ---- Step 4: idempotent replay ------------------------
-        return loadExistingBooking(repo, classId, userId);
+        return resolveExisting(remaining);
       }
       if (isClassCapacityExceeded(err)) {
         // ---- Step 3: Postgres says full -----------------------
-        return completeWaitlistBooking({ classId, userId, studioId, repo, publisher, clock });
+        return completeWaitlistBooking(input, () => resolveExisting(0));
       }
       if (err instanceof BookingClosedError) {
         // ---- Step 5: class closed under the tx clock ----------
@@ -761,5 +947,5 @@ export async function bookClass(input: BookClassInput): Promise<BookResult> {
   // ---- Step 7: waitlist branch (DECR < 0, class is full) ----------
   await compensate(counter, logger, classId, 'counter_exhausted');
 
-  return completeWaitlistBooking({ classId, userId, studioId, repo, publisher, clock });
+  return completeWaitlistBooking(input, () => resolveExisting(0));
 }
