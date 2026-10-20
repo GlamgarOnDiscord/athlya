@@ -13,6 +13,7 @@ import { useLocale } from '../lib/i18n/LocaleContext';
 import { createTranslator } from '../lib/i18n/t';
 
 import { AthlyaLogo } from './AthlyaLogo';
+import { LANDING_CONTAINER } from './landing/layout';
 import { LocaleSwitcher } from './LocaleSwitcher';
 import { MemberSidebar } from './MemberSidebar';
 
@@ -42,8 +43,14 @@ export function AppNav({ children }: { readonly children: ReactNode }): ReactEle
   );
 }
 
+/**
+ * The public top bar. On the landing (`/`) it joins the page's dark scope
+ * (`.landing-dark`) and its wider column, so the bar reads as part of the
+ * page whatever the theme.
+ */
 function PublicTopBar(): ReactElement {
   const pathname = usePathname();
+  const isLanding = pathname === '/';
   const locale = useLocale();
   const t = useMemo(() => createTranslator(locale), [locale]);
   const { refresh } = useRouter();
@@ -74,15 +81,25 @@ function PublicTopBar(): ReactElement {
   }
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
+    <header
+      className={cn(
+        'sticky top-0 z-40 w-full border-b border-border',
+        isLanding
+          ? 'landing-dark bg-background'
+          : 'bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60',
+      )}
+    >
       <a
         href="#main-content"
-        className="absolute left-4 top-0 z-50 -translate-y-full rounded-b-md bg-background px-4 py-2 text-sm font-medium text-foreground ring-2 ring-ring transition-transform focus:translate-y-0"
+        className="absolute left-4 top-0 z-50 -translate-y-full rounded-b-md bg-background px-4 py-2 text-sm font-medium text-foreground transition-transform focus:translate-y-0 focus:ring-2 focus:ring-ring"
       >
         {t('common.skipToContent')}
       </a>
       <nav
-        className="mx-auto flex max-w-3xl items-center justify-between px-6 py-3"
+        className={cn(
+          'flex items-center justify-between py-3',
+          isLanding ? LANDING_CONTAINER : 'mx-auto max-w-3xl px-6',
+        )}
         aria-label={t('common.nav.main')}
       >
         <Link href="/" aria-label={t('common.appName')} className="shrink-0 text-foreground">

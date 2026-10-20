@@ -32,43 +32,45 @@ export const brandPalette = {
  * brand colors without rewriting components. Light and dark variants share
  * the same keys — consumers pick a variant based on the current theme.
  *
- * Default `primary` is the Athlya brand blue `#0EA5E9`. It is a fill,
- * paired with `primaryForeground`; it is never text on `background` in the
- * light theme (2.77:1). Every pair's WCAG level is pinned by
+ * `primary` is the brand: an ink fill with white text on light, a volt
+ * fill with ink text on dark, so volt never sits on a light surface. The
+ * focus `ring` follows it. `input` is the form field boundary; on dark it
+ * clears 3:1 against `background`, and `border` stays a quieter divider
+ * that still reads against `muted`. Every pair's WCAG level is pinned by
  * `tests/token-contrast.test.ts`.
  */
 export const colors = {
   light: {
     background: '#FFFFFF',
     foreground: '#0F172A',
-    primary: '#0EA5E9',
-    primaryForeground: '#0F172A',
+    primary: brandPalette.ink,
+    primaryForeground: brandPalette.white,
     secondary: '#F1F5F9',
     muted: '#F1F5F9',
     mutedForeground: '#475569',
-    accent: '#E0F2FE',
+    accent: '#F1F5F9',
     destructive: '#B91C1C',
     success: '#15803D',
     warning: '#B45309',
     border: '#E2E8F0',
     input: '#E2E8F0',
-    ring: '#0284C7',
+    ring: brandPalette.ink,
   },
   dark: {
     background: '#0B1220',
     foreground: '#F8FAFC',
-    primary: '#38BDF8',
-    primaryForeground: '#0B1220',
+    primary: brandPalette.volt,
+    primaryForeground: brandPalette.ink,
     secondary: '#1E293B',
     muted: '#1E293B',
     mutedForeground: '#94A3B8',
-    accent: '#0C4A6E',
+    accent: '#1E293B',
     destructive: '#F87171',
     success: '#4ADE80',
     warning: '#FBBF24',
-    border: '#1E293B',
-    input: '#1E293B',
-    ring: '#38BDF8',
+    border: '#334155',
+    input: '#64748B',
+    ring: brandPalette.volt,
   },
 } as const;
 

@@ -293,7 +293,122 @@
       "login": "Se connecter",
       "classes": "Voir les cours",
       "me": "Mon compte",
-      "logout": "Se déconnecter"
+      "logout": "Se déconnecter",
+      "hero": {
+        "eyebrow": "Open source, multi-tenant, RGPD-first",
+        "titleLine1": "Entraîne-toi.",
+        "titleLine2": "On gère le reste.",
+        "lead": "Réserve tes cours, note tes séances et suis ta progression au même endroit. Le studio publie son planning, Athlya gère les places et la liste d'attente.",
+        "proof": "Code source ouvert sous licence AGPLv3. Tes données restent les tiennes.",
+        "photoAlt": "Deux coureurs en pleine foulée sur une route, l'image est floutée par la vitesse."
+      },
+      "nextClass": {
+        "label": "Prochain cours",
+        "eta": "Dans 2 h 05",
+        "name": "Boxe technique",
+        "meta": "18:30 · Salle 2 · Inès M.",
+        "booked": "Réservé",
+        "spots": "13 / 16"
+      },
+      "how": {
+        "eyebrow": "Comment ça marche",
+        "title": "Un côté membre, un côté studio. La même app.",
+        "members": {
+          "title": "Pour les membres",
+          "step1Title": "Réserver",
+          "step1Body": "Le planning du studio et les places restantes en direct. Cours complet : tu rejoins la liste d'attente et la place te revient si elle se libère.",
+          "step2Title": "S'entraîner",
+          "step2Body": "Ton QR code à l'accueil, puis tes séries notées pendant la séance. Tes entraînements Apple Santé arrivent depuis l'iPhone.",
+          "step3Title": "Progresser",
+          "step3Body": "Volume, 1RM estimé et cardio, calculés à partir de tes vraies séances, avec un coach IA qui répond sur tes données."
+        },
+        "studios": {
+          "title": "Pour les studios",
+          "step1Title": "Publier",
+          "step1Body": "Cours, horaires et capacité dans un planning en semaine, en mois ou en liste. Les membres réservent en ligne.",
+          "step2Title": "Accueillir",
+          "step2Body": "Chaque membre présente son QR code à l'entrée. Le check-in se fait en un scan.",
+          "step3Title": "Faire progresser",
+          "step3Body": "Des programmes sur plusieurs semaines, que tes membres suivent séance après séance."
+        }
+      },
+      "disciplines": {
+        "title": "Un studio, toutes les disciplines.",
+        "combat": "Combat",
+        "strength": "Force",
+        "cardio": "Cardio",
+        "mobility": "Mobilité",
+        "combatAlt": "Un boxeur en garde, les gants devant le visage, à l'entraînement.",
+        "strengthAlt": "Deux mains serrées sur la poignée d'un kettlebell posé au sol.",
+        "cardioAlt": "Un coureur lancé à pleine vitesse, le décor flou derrière lui.",
+        "mobilityAlt": "Une femme allongée sur un reformer de Pilates, les pieds dans les sangles."
+      },
+      "product": {
+        "eyebrow": "Le planning",
+        "title": "Le même planning, des deux côtés du comptoir.",
+        "body": "Le studio publie et ajuste ses cours. Le membre voit les places en direct, réserve ou rejoint la liste d'attente, et annule depuis son compte.",
+        "caption": "Aperçu du planning studio et des réservations d'un membre.",
+        "studioLabel": "Studio · Cours",
+        "viewWeek": "Semaine",
+        "viewMonth": "Mois",
+        "viewList": "Liste",
+        "dayMon": "Lun",
+        "dayTue": "Mar",
+        "dayWed": "Mer",
+        "dayThu": "Jeu",
+        "dayFri": "Ven",
+        "classCross": "Cross training",
+        "classBoxing": "Boxe technique",
+        "classPilates": "Pilates reformer",
+        "classMobility": "Mobilité",
+        "classHiit": "HIIT 45",
+        "classYoga": "Yoga vinyasa",
+        "spotsLeft": "{count} places",
+        "full": "Complet",
+        "memberLabel": "Mes réservations",
+        "booked": "Réservé",
+        "waitlist": "Liste d'attente · 2e",
+        "checkedIn": "Présent"
+      },
+      "features": {
+        "eyebrow": "Fonctionnalités",
+        "title": "Ce qu'Athlya fait déjà.",
+        "waitlistTitle": "Liste d'attente",
+        "waitlistBody": "Une place se libère, la première personne de la liste la récupère.",
+        "checkinTitle": "Check-in par QR code",
+        "checkinBody": "Un code par membre, scanné à l'accueil du studio.",
+        "programsTitle": "Programmes",
+        "programsBody": "Des plans sur plusieurs semaines, séance par séance.",
+        "coachTitle": "Coach IA",
+        "coachBody": "Des réponses sur tes séances, seulement avec ton accord.",
+        "healthTitle": "Import Apple Santé",
+        "healthBody": "Tes entraînements iPhone rejoignent ta progression."
+      },
+      "trust": {
+        "eyebrow": "RGPD-first et open source",
+        "tagline": "Tes séances, tes données. Rien ne part ailleurs sans ton accord.",
+        "exportTitle": "Export complet",
+        "exportBody": "Toutes tes données, avec un lien de téléchargement par e-mail sous 48 heures.",
+        "deletionTitle": "Suppression",
+        "deletionBody": "Ton compte et tes données supprimés sous 30 jours, depuis ton profil.",
+        "trackersTitle": "Aucun traceur",
+        "trackersBody": "Seulement les cookies nécessaires. Aucune mesure d'audience sans ton accord.",
+        "openSourceTitle": "Open source",
+        "openSourceBody": "Code publié sous licence AGPLv3. Les données de chaque studio sont isolées.",
+        "sourceLink": "Voir le code source"
+      },
+      "final": {
+        "titleStart": "Ta prochaine séance",
+        "titleAccent": "commence ici."
+      },
+      "footer": {
+        "rights": "© {year} Athlya",
+        "legal": "Mentions légales",
+        "privacy": "Confidentialité",
+        "cookies": "Cookies",
+        "source": "Code source",
+        "nav": "Liens du pied de page"
+      }
     },
     "notFound": {
       "title": "Page introuvable",
