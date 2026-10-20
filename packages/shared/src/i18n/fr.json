@@ -442,7 +442,7 @@
         "nextMonth": "Mois suivant",
         "createAt": "Nouveau cours le {date}",
         "full": "Complet",
-        "more": "+{count} autres",
+        "more": "+{count} de plus",
         "localTime": "Horaires en heure locale ({timeZone})."
       }
     },

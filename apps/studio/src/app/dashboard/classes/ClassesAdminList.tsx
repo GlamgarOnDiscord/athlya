@@ -55,12 +55,29 @@ type AdminView = PlanningView | 'list';
 
 const VIEWS: ReadonlyArray<AdminView> = ['week', 'month', 'list'];
 
-const subscribeNoop = (): (() => void) => () => undefined;
+/** Notifies once per local midnight so the today marker follows the date. */
+function subscribeToDay(onStoreChange: () => void): () => void {
+  let timer: number | undefined;
+  const schedule = (): void => {
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0);
+    timer = window.setTimeout(
+      () => {
+        onStoreChange();
+        schedule();
+      },
+      Math.max(1, nextMidnight.getTime() - now.getTime()),
+    );
+  };
+  schedule();
+  return () => window.clearTimeout(timer);
+}
 
 /** Today's local day key, `null` during server rendering and hydration. */
 function useTodayKey(): string | null {
   return useSyncExternalStore(
-    subscribeNoop,
+    subscribeToDay,
     () => toDayKey(new Date()),
     () => null,
   );
