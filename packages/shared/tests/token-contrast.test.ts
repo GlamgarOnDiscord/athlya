@@ -84,6 +84,7 @@ function pairsFor(mode: Mode): Pair[] {
     text('foreground', 'muted'),
     text('foreground', 'accent'),
     text('mutedForeground', 'background'),
+    text('mutedForeground', 'card'),
     text('mutedForeground', 'secondary'),
     text('mutedForeground', 'muted'),
     text('primaryForeground', 'primary'),
@@ -100,7 +101,7 @@ function pairsFor(mode: Mode): Pair[] {
     ui('primary', 'muted'),
     ui('ring', 'background'),
     ui('ring', 'muted'),
-    ...(mode === 'dark' ? [ui('input', 'background')] : []),
+    ...(mode === 'dark' ? [ui('input', 'background'), ui('input', 'card')] : []),
     ui('destructive', 'background'),
     ui('success', 'background'),
     ui('warning', 'background'),
@@ -126,21 +127,13 @@ interface KnownGap {
 
 const KNOWN_GAPS: readonly KnownGap[] = [
   {
-    name: 'input on background (web form field boundary, shadcn border-input)',
+    name: 'input on background (web, studio and mobile form field boundary)',
     mode: 'light',
     fg: colors.light.input,
     bg: colors.light.background,
     level: 'ui',
-    floor: 1.23,
+    floor: 1.26,
   },
-  ...MODES.map((mode) => ({
-    name: 'border on background (mobile TextField boundary)',
-    mode,
-    fg: colors[mode].border,
-    bg: colors[mode].background,
-    level: 'ui' as const,
-    floor: mode === 'light' ? 1.23 : 1.81,
-  })),
 ];
 
 describe('token contrast (WCAG 2.2 AA)', () => {
@@ -192,4 +185,27 @@ describe('logo palette (docs/brand/README.md)', () => {
   it('volt on white stays forbidden: below even the 3:1 UI minimum', () => {
     expect(contrastRatio(brandPalette.volt, brandPalette.white)).toBeLessThan(3);
   });
+});
+
+describe('neutral ink surfaces', () => {
+  const NEUTRAL: readonly Semantic[] = [
+    'background',
+    'foreground',
+    'card',
+    'secondary',
+    'muted',
+    'mutedForeground',
+    'accent',
+    'border',
+    'input',
+  ];
+
+  it.each(MODES.flatMap((mode) => NEUTRAL.map((token) => ({ mode, token }))))(
+    '$mode $token carries no hue',
+    ({ mode, token }) => {
+      const hex = colors[mode][token].toLowerCase();
+      expect(hex.slice(1, 3)).toBe(hex.slice(3, 5));
+      expect(hex.slice(3, 5)).toBe(hex.slice(5, 7));
+    },
+  );
 });

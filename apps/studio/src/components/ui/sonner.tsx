@@ -9,6 +9,9 @@ import {
 } from '@phosphor-icons/react';
 import { useTheme } from 'next-themes';
 import { Toaster as Sonner, type ToasterProps } from 'sonner';
+// Static stylesheet: the CSP refuses the `<style>` sonner would inject at
+// runtime, and the patch in `patches/` removes that injection.
+import 'sonner/dist/styles.css';
 
 const Toaster = ({ theme: _ignored, ...props }: ToasterProps) => {
   const { theme: systemTheme } = useTheme();

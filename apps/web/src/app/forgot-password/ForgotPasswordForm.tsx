@@ -113,7 +113,7 @@ export function ForgotPasswordForm({ nonce }: ForgotPasswordFormProps): ReactEle
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+          className="mt-1 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
           placeholder={t('auth.forgotPassword.emailPlaceholder')}
         />
       </label>
@@ -137,7 +137,7 @@ export function ForgotPasswordForm({ nonce }: ForgotPasswordFormProps): ReactEle
       <button
         type="submit"
         disabled={state.kind === 'submitting' || (siteKey !== undefined && turnstileToken === '')}
-        className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+        className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
       >
         {state.kind === 'submitting'
           ? t('auth.forgotPassword.submitting')

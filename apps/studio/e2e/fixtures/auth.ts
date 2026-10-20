@@ -1,3 +1,4 @@
+import type { StudioMeResponse } from '@athlya/shared/schemas/api';
 import type { Page } from '@playwright/test';
 
 const FAKE_TOKEN = 'fake-admin-token';
@@ -9,6 +10,17 @@ const FAKE_USER = {
   studioId: 'studio-1',
   role: 'admin' as const,
 };
+
+/** Brand colour the branding page must show once `/v1/studios/me` loads. */
+export const STUDIO_BRAND_COLOR = '#0F766E';
+
+const STUDIO = {
+  id: '0f000000-0000-4000-8000-000000000001',
+  slug: 'test-studio',
+  name: 'Test Studio',
+  brandColor: STUDIO_BRAND_COLOR,
+  brandLogo: null,
+} satisfies StudioMeResponse;
 
 const PROGRAMS = [
   {
@@ -88,13 +100,7 @@ export async function loginAsAdmin(page: Page): Promise<void> {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        id: 'studio-1',
-        name: 'Test Studio',
-        logoUrl: null,
-        primaryColor: '#000000',
-        locale: 'fr',
-      }),
+      body: JSON.stringify(STUDIO),
     });
   });
 
