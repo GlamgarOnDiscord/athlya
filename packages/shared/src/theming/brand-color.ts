@@ -166,8 +166,17 @@ export function deriveBrandColorVariables(brand: string): BrandColorVariables {
 }
 
 /**
+ * The theme declares per-mode brand defaults under `:root.dark` and
+ * `:root:not(.light)`, which outrank a bare `:root`. A tenant override
+ * at the default selector uses `html:root` variants so it wins in both
+ * modes, whatever order the stylesheets load in.
+ */
+const TENANT_ROOT_SELECTOR = 'html:root, html:root.dark, html:root:not(.light)';
+
+/**
  * Produce a CSS snippet that sets the five brand CSS custom
- * properties under `selector` (default `:root`). Meant to be rendered
+ * properties under `selector` (default `:root`, emitted so it outranks
+ * the theme's light and dark defaults). Meant to be rendered
  * server-side by the web / studio apps inside an inline `<style>`
  * tag.
  *
@@ -183,7 +192,7 @@ export function deriveBrandColorVariables(brand: string): BrandColorVariables {
 export function buildBrandColorCss(brand: string, selector: string = ':root'): string {
   const vars = deriveBrandColorVariables(brand);
   return [
-    `${selector} {`,
+    `${selector === ':root' ? TENANT_ROOT_SELECTOR : selector} {`,
     `  --athlya-brand-primary: ${vars.brandPrimary};`,
     `  --athlya-brand-primary-rgb: ${vars.brandPrimaryRgb};`,
     `  --athlya-brand-on-primary: ${vars.brandOnPrimary};`,

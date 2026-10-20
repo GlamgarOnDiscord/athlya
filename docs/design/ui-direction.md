@@ -1,6 +1,6 @@
 # UI direction for the screen refresh
 
-_Status: agreed direction for the screen PRs that follow the shared theme (#706). Last updated: 2026-10-19._
+_Status: agreed direction for the screen PRs that follow the shared theme (#706). Last updated: 2026-10-20._
 
 This page fixes the patterns before the per-app screen PRs start, so each one answers "what does it look like" the same way. It describes patterns in words only. The reference links at the bottom point to public gallery pages for mood and are **links only**: nothing is scraped, copied or traced from them, and no image, illustration or asset from those sites enters the repo.
 
@@ -9,20 +9,19 @@ This page fixes the patterns before the per-app screen PRs start, so each one an
 - **Tokens only.** Colours, radii, spacing and type come from `@athlya/shared/tokens`, through `@athlya/shared/theme.css` on web and studio and the NativeWind preset (`apps/mobile/theme/preset.ts`) on mobile. No hex value, no Tailwind palette colour (`bg-amber-500`, `text-emerald-400`) in a component: map it to a semantic token (`warning`, `success`) or add a token first.
 - **Light and dark.** next-themes puts `.light` or `.dark` on `<html>`; `system` is the default. Every screen is checked in both. A theme switch control is not shipped yet; it goes in the account menu, not the main navigation.
 - **Contrast is tested.** `packages/shared/tests/token-contrast.test.ts` pins every token pair at WCAG 2.2 AA (4.5:1 text, 3:1 large text and UI). A new pair a screen introduces gets a line there.
-- **Brand.** The logo (`<AthlyaLogo />`, `apps/web/public/images/athlya-logo*.png`) and its palette (ink `#0A0A0A`, volt `#D7FF3A`, white) are unchanged. Volt is never text on a light surface. Chart marks use ink on light and volt on dark (`chartColors`).
+- **Brand.** The logo (`<AthlyaLogo />`, `apps/web/public/images/athlya-logo*.png`) and its palette (ink `#0A0A0A`, volt `#D7FF3A`, white) are unchanged. Volt is never text on a light surface. `primary` and the focus `ring` are ink on light (white text on primary) and volt on dark (ink text on primary). Chart marks use ink on light and volt on dark (`chartColors`).
 - **Keep the contracts.** Every `data-testid` and accessible name stays; E2E and axe suites are the gate. No `style=""` attribute rendered on the server (strict CSP, see `apps/web/src/lib/csp.ts`): dynamic values go through CSS variables set from CSSOM, as `.class-card-capacity-bar` does.
 - **Motion is optional.** Every animation respects `prefers-reduced-motion` and never carries information on its own.
 
 ## Known contrast gaps to close in the screen PRs
 
-The first three are recorded as `KNOWN_GAPS` in the contrast test, with a floor that may not drop; the fourth is a component habit, not a token value:
+The first two are recorded as `KNOWN_GAPS` in the contrast test, with a floor that may not drop; the third is a component habit, not a token value:
 
-| Gap                                               | Where it shows                      | Direction                                                                             |
-| ------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------- |
-| `input` on `background` (1.23:1 light, 1.28 dark) | web/studio form field boundary      | Auth and onboarding PRs: add a field-boundary token at 3:1 and use it for `border-*`. |
-| `border` on `background` (same)                   | mobile `TextField` boundary         | Same token on mobile.                                                                 |
-| `primary` on `background`, light (2.77:1)         | checked checkbox fill, capacity bar | Keep the brand fill; add a 3:1 outline or icon so the state does not rely on fill.    |
-| focus ring drawn at 50% opacity (`ring-ring/50`)  | shadcn/ui components                | Use the ring at full strength; the token itself now passes (4.10:1 light).            |
+| Gap                                                | Where it shows                 | Direction                                                                                 |
+| -------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------- |
+| `input` on `background`, light (1.23:1)            | web/studio form field boundary | Auth and onboarding PRs: add a field-boundary token at 3:1 and use it for `border-*`.     |
+| `border` on `background` (1.23:1 light, 1.81 dark) | mobile `TextField` boundary    | Same token on mobile; dark `input` already clears 3:1 (3.93:1).                           |
+| focus ring drawn at 50% opacity (`ring-ring/50`)   | shadcn/ui components           | Use the ring at full strength; the token itself now passes (19.80:1 light, 16.28:1 dark). |
 
 ## Patterns
 
