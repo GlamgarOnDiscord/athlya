@@ -508,6 +508,22 @@ function buildBookingRepo(db: AthlyaDb, claims: TenantClaims): BookingRepo {
       return row === undefined ? null : { startsAt: row.startsAt, now: new Date() };
     },
 
+    async lockClassForBooking(tx: BookingTx, classId: string) {
+      const rows = await resolveCtx(tx)
+        .select({ startsAt: classes.startsAt, version: classes.version })
+        .from(classes)
+        .where(eq(classes.id, classId));
+      const row = rows[0];
+      return row === undefined
+        ? null
+        : { startsAt: row.startsAt, version: row.version, now: new Date() };
+    },
+
+    // This suite never places a seat hold.
+    findOwnHold: async () => null,
+    confirmHold: () => Promise.reject(new Error('no seat hold in this suite')),
+    releaseHold: () => Promise.reject(new Error('no seat hold in this suite')),
+
     async findExistingConfirmedOrWaitlistReservation(
       tx: BookingTx,
       classId: string,

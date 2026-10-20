@@ -33,11 +33,11 @@
  * crash bug we target) is what the paired Axiom alert (A17, persistent
  * > 5 min) fires on.
  *
- * Waitlist promotion is NOT done here: the cron role (`athlya_cron`)
- * can neither read reservations nor call
- * `reservation_promote_oldest_waitlist`, so promoting from this sweep
- * needs a migration (phase B of issue #713). Waiters are promoted on
- * cancellation and when an admin raises the capacity.
+ * `confirmed` in the snapshot is the occupied seats: confirmed rows
+ * plus unexpired seat holds (migration 0050), since a hold decremented
+ * the counter too. Waitlist promotion and hold expiry are not done
+ * here: the API runner calls `reservation_sweep_holds_and_promote()`
+ * just before this pass (issue #723).
  *
  * The module takes ports only (no Drizzle, no Upstash import) so it is
  * unit-testable with fakes and reusable from the scheduled Worker
@@ -54,7 +54,7 @@ export const CAPACITY_DRIFT_LOG_MESSAGE = 'capacity.drift';
 export interface ClassCapacitySnapshot {
   readonly classId: string;
   readonly capacity: number;
-  /** `COUNT(*)` of reservations in status `confirmed` for the class. */
+  /** Occupied seats: confirmed reservations plus unexpired seat holds. */
   readonly confirmed: number;
 }
 

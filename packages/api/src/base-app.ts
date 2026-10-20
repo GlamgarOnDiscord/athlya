@@ -709,6 +709,8 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   //      Budgets:
   //        - POST   /v1/reservations          — 10/min/user (book)
   //        - DELETE /v1/reservations/:id      — 10/min/user (cancel)
+  //        - POST   /v1/reservations/holds    : same bucket (seat hold)
+  //        - POST   /v1/reservations/:id/confirm : same bucket (hold confirm)
   //        - PATCH  /v1/me                    — 5/min/user
   //        - PATCH  /v1/me/consents           — 5/min/user
   //        - POST   /v1/members/me/export     — 1/24h/user
@@ -806,6 +808,14 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
   app.use(
     '/v1/reservations/:reservationId',
     guardMutationLimiter('DELETE', reservationLimiter) as Parameters<typeof app.use>[1],
+  );
+  app.use(
+    '/v1/reservations/holds',
+    guardMutationLimiter('POST', reservationLimiter) as Parameters<typeof app.use>[1],
+  );
+  app.use(
+    '/v1/reservations/:reservationId/confirm',
+    guardMutationLimiter('POST', reservationLimiter) as Parameters<typeof app.use>[1],
   );
   app.use('/v1/me', guardMutationLimiter('PATCH', profileLimiter) as Parameters<typeof app.use>[1]);
   app.use(

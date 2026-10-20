@@ -38,6 +38,10 @@
       "types": "./src/cancel.ts",
       "default": "./src/cancel.ts"
     },
+    "./hold": {
+      "types": "./src/hold.ts",
+      "default": "./src/hold.ts"
+    },
     "./book": {
       "types": "./src/book.ts",
       "default": "./src/book.ts"
