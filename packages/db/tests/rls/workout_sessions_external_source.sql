@@ -5,11 +5,13 @@
 -- Both columns are nullable with no default (expand only); the partial
 -- unique index allows one session per (user, source, external_id); the
 -- CHECKs refuse an unknown source, half a pair and an out-of-range id;
--- the owner-only policies of 0001 keep the columns private.
+-- the owner-only policies of 0001 keep the columns private. The RGPD
+-- export (`export_job_rows`, 0049) adds `source` and `externalId` to an
+-- imported session only.
 -- =====================================================================
 
 BEGIN;
-SELECT plan(16);
+SELECT plan(21);
 
 SELECT col_is_null('public', 'workout_sessions', 'source',
     'workout_sessions.source is nullable (expand only)');
@@ -129,6 +131,64 @@ SELECT is(
     (SELECT count(*)::int FROM "workout_sessions" WHERE external_id = 'HK-0047-1'),
     0,
     'workout_sessions: a studio admin cannot read imported sessions of members'
+);
+
+-- ---------- RGPD export (0049) ----------
+
+RESET ROLE;
+INSERT INTO "workout_sessions" (id, user_id, started_at, exercises, source, external_id)
+VALUES ('f6900000-0000-4000-8000-000000000001', '11111111-1111-4111-8111-111111111111',
+        '2026-04-05 08:00:00+00', '[]'::jsonb, 'appleHealth', 'HK-0049-1'),
+       ('f6900000-0000-4000-8000-000000000002', '11111111-1111-4111-8111-111111111111',
+        '2026-04-06 08:00:00+00', '[]'::jsonb, NULL, NULL);
+INSERT INTO export_jobs (id, user_id, status, requested_at, started_at)
+VALUES ('f6900000-0000-4000-8000-0000000000e1', '11111111-1111-4111-8111-111111111111',
+        'running', now(), now());
+SET LOCAL ROLE athlya_app;
+SELECT set_config('app.user_id', '', true);
+SELECT set_config('app.studio_id', '', true);
+SELECT set_config('app.role', '', true);
+
+SELECT is(
+    (SELECT data->>'source'
+       FROM export_job_rows('f6900000-0000-4000-8000-0000000000e1', 'workout_sessions', NULL, 500)
+      WHERE data->>'id' = 'f6900000-0000-4000-8000-000000000001'),
+    'appleHealth',
+    'export_job_rows: an imported session exports its source'
+);
+
+SELECT is(
+    (SELECT data->>'externalId'
+       FROM export_job_rows('f6900000-0000-4000-8000-0000000000e1', 'workout_sessions', NULL, 500)
+      WHERE data->>'id' = 'f6900000-0000-4000-8000-000000000001'),
+    'HK-0049-1',
+    'export_job_rows: an imported session exports its external id'
+);
+
+SELECT is(
+    (SELECT data ?| ARRAY['source', 'externalId']
+       FROM export_job_rows('f6900000-0000-4000-8000-0000000000e1', 'workout_sessions', NULL, 500)
+      WHERE data->>'id' = 'f6900000-0000-4000-8000-000000000002'),
+    false,
+    'export_job_rows: a session logged in Athlya keeps the 0046 shape (no source keys)'
+);
+
+SELECT is(
+    (SELECT count(*)::int
+       FROM export_job_rows('f6900000-0000-4000-8000-0000000000e1', 'workout_sessions', NULL, 500)
+      WHERE data->>'externalId' = 'HK-0047-1'),
+    1,
+    'export_job_rows: exports the job user''s import, not another member''s with the same id'
+);
+
+RESET ROLE;
+SELECT ok(
+    (SELECT p.proowner = 'athlya_owner'::regrole
+            AND NOT has_function_privilege('public', p.oid, 'EXECUTE')
+            AND has_function_privilege('athlya_app', p.oid, 'EXECUTE')
+       FROM pg_proc p
+      WHERE p.oid = 'public.export_job_rows(uuid, text, text, integer)'::regprocedure),
+    'export_job_rows: owned by athlya_owner, not executable by PUBLIC, granted to athlya_app'
 );
 
 SELECT * FROM finish();
