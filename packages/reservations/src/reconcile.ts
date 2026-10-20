@@ -20,19 +20,31 @@
  *   1. computes `expected = max(0, capacity - confirmed)` from PG,
  *   2. reads the Redis counter,
  *   3. emits a `capacity_redis_pg_drift` metric on mismatch,
- *   4. (optional, default on) auto-heals by resetting Redis to the PG
- *      truth.
+ *   4. (optional, default on) auto-heals with an atomic compare-and-set
+ *      (one Lua script): Redis is overwritten with the PG truth only if
+ *      it still holds the value read in step 2.
  *
- * Race note: a booking that lands between the PG read and the Redis
- * read produces a transient ±1 drift that self-heals on the next pass.
- * The auto-heal `reset` is therefore *eventually* consistent, not a
- * lock — persistent drift (the crash bug we target) is what the
- * paired Axiom alert (A17, persistent > 5 min) fires on.
+ * Race note: the compare-and-set means a DECR or INCR that lands
+ * between the Redis read and the heal is never overwritten; the heal is
+ * skipped (`raced`) and retried next pass. A booking that commits
+ * between the PG snapshot and the Redis read can still leave a
+ * transient ±1 drift, which the next pass heals. Neither can oversell:
+ * the PG capacity trigger stays authoritative. Persistent drift (the
+ * crash bug we target) is what the paired Axiom alert (A17, persistent
+ * > 5 min) fires on.
+ *
+ * Waitlist promotion is NOT done here: the cron role (`athlya_cron`)
+ * can neither read reservations nor call
+ * `reservation_promote_oldest_waitlist`, so promoting from this sweep
+ * needs a migration (phase B of issue #713). Waiters are promoted on
+ * cancellation and when an admin raises the capacity.
  *
  * The module takes ports only (no Drizzle, no Upstash import) so it is
  * unit-testable with fakes and reusable from the scheduled Worker
  * handler — see `@athlya/api`'s capacity reconcile runner.
  */
+
+import type { CounterReading } from './counter.js';
 
 /** Structured-log message + metric name for drift events (alert A17). */
 export const CAPACITY_DRIFT_METRIC = 'capacity_redis_pg_drift';
@@ -60,12 +72,13 @@ export interface CapacityReconcileRepo {
 
 /**
  * Minimal Redis counter surface the reconciler needs: read the current
- * value and overwrite it with the PG truth. Satisfied structurally by
- * `RemainingCounter` from `./counter.js`.
+ * value (an absent key and a non-integer value told apart) and replace
+ * it with the PG truth only if it did not move. Satisfied structurally
+ * by `RemainingCounter` from `./counter.js`.
  */
 export interface CapacityHealer {
-  getRemaining(classId: string): Promise<number | null>;
-  reset(classId: string, value: number): Promise<void>;
+  inspectRemaining(classId: string): Promise<CounterReading>;
+  compareAndSet(classId: string, expected: CounterReading, value: number): Promise<boolean>;
 }
 
 export interface ReconcileLogger {
@@ -96,10 +109,14 @@ export interface CapacityDriftReport {
   readonly checked: number;
   /** Missing Redis keys seeded from PG (not counted as drift). */
   readonly seeded: number;
+  /** Non-integer Redis values replaced by the PG truth. */
+  readonly repaired: number;
   readonly drifted: number;
   readonly healed: number;
   /** Classes whose reset threw — left for the next pass. */
   readonly healFailures: number;
+  /** Heals skipped because the counter moved after the read. */
+  readonly raced: number;
   readonly drifts: readonly CapacityDriftDetail[];
 }
 
@@ -131,16 +148,18 @@ export async function reconcileCapacityDrift(
   const snapshots = await repo.listActiveClassCapacities();
 
   let seeded = 0;
+  let repaired = 0;
   let drifted = 0;
   let healed = 0;
   let healFailures = 0;
+  let raced = 0;
   const drifts: CapacityDriftDetail[] = [];
 
   for (const snap of snapshots) {
     const expected = Math.max(0, snap.capacity - snap.confirmed);
-    let redisRemaining: number | null;
+    let redisRemaining: CounterReading;
     try {
-      redisRemaining = await counter.getRemaining(snap.classId);
+      redisRemaining = await counter.inspectRemaining(snap.classId);
     } catch (err) {
       healFailures += 1;
       logger.error('capacity reconcile: redis read failed', {
@@ -155,11 +174,38 @@ export async function reconcileCapacityDrift(
     // eviction — it is not a drift incident.
     if (redisRemaining === null) {
       try {
-        await counter.reset(snap.classId, expected);
-        seeded += 1;
+        if (await counter.compareAndSet(snap.classId, null, expected)) {
+          seeded += 1;
+        } else {
+          raced += 1;
+        }
       } catch (err) {
         healFailures += 1;
         logger.error('capacity reconcile: seed failed', {
+          classId: snap.classId,
+          expected,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      continue;
+    }
+
+    // A value DECR cannot use blocks every booking of the class: replace
+    // it while it is still invalid, compared on the raw Redis value.
+    if (redisRemaining === 'invalid') {
+      logger.warn('capacity reconcile: counter holds a non-integer value', {
+        classId: snap.classId,
+        expected,
+      });
+      try {
+        if (await counter.compareAndSet(snap.classId, 'invalid', expected)) {
+          repaired += 1;
+        } else {
+          raced += 1;
+        }
+      } catch (err) {
+        healFailures += 1;
+        logger.error('capacity reconcile: repair failed', {
           classId: snap.classId,
           expected,
           error: err instanceof Error ? err.message : String(err),
@@ -188,9 +234,15 @@ export async function reconcileCapacityDrift(
     let healedThis = false;
     if (autoHeal) {
       try {
-        await counter.reset(snap.classId, expected);
-        healed += 1;
-        healedThis = true;
+        if (await counter.compareAndSet(snap.classId, redisRemaining, expected)) {
+          healed += 1;
+          healedThis = true;
+        } else {
+          raced += 1;
+          logger.info('capacity reconcile: counter moved, heal deferred', {
+            classId: snap.classId,
+          });
+        }
       } catch (err) {
         healFailures += 1;
         logger.error('capacity reconcile: heal reset failed', {
@@ -213,18 +265,22 @@ export async function reconcileCapacityDrift(
   const report: CapacityDriftReport = {
     checked: snapshots.length,
     seeded,
+    repaired,
     drifted,
     healed,
     healFailures,
+    raced,
     drifts,
   };
 
   logger.info('capacity reconcile: sweep complete', {
     checked: report.checked,
     seeded: report.seeded,
+    repaired: report.repaired,
     drifted: report.drifted,
     healed: report.healed,
     healFailures: report.healFailures,
+    raced: report.raced,
   });
 
   return report;

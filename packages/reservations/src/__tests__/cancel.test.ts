@@ -282,28 +282,82 @@ describe('cancelReservation — not_found', () => {
 /*  invalid_transition — Req 10.3                                      */
 /* ------------------------------------------------------------------ */
 
+describe('cancelReservation: already cancelled (retried DELETE)', () => {
+  it('answers already_cancelled with the stored row and writes nothing', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
+    const stored = makeReservation({
+      status: 'cancelled',
+      cancelledAt: new Date(FROZEN_NOW - 60_000),
+    });
+    mocks.findReservationForUpdate.mockResolvedValueOnce(stored);
+
+    const result = await cancelReservation(input);
+
+    expect(result).toEqual({ code: 'already_cancelled', cancelled: stored });
+    // Answered before the window check: a late retry must not turn
+    // into cancellation_window_closed.
+    expect(mocks.findClassForUpdate).not.toHaveBeenCalled();
+    expect(mocks.updateReservationStatus).not.toHaveBeenCalled();
+    expect(mocks.promoteOldestWaitlist).not.toHaveBeenCalled();
+    expect(mocks.insertOutbox).not.toHaveBeenCalled();
+    expect(incrRemaining).not.toHaveBeenCalled();
+  });
+});
+
 describe('cancelReservation — invalid_transition', () => {
-  it('rejects a reservation whose status is already cancelled', async () => {
+  it('rejects a reservation in a terminal state other than cancelled', async () => {
     const { input, mocks, incrRemaining } = buildInput();
 
-    mocks.findReservationForUpdate.mockResolvedValueOnce(
-      makeReservation({
-        status: 'cancelled',
-        cancelledAt: new Date(FROZEN_NOW - 60_000),
-      }),
-    );
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation({ status: 'no_show' }));
     mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
 
     const result = await cancelReservation(input);
 
     expect(result).toEqual({ code: 'invalid_transition' });
-
-    // No UPDATE, no outbox, no counter bump — we never touch the
-    // row once we realise it's already in a terminal state.
     expect(mocks.updateReservationStatus).not.toHaveBeenCalled();
     expect(mocks.promoteOldestWaitlist).not.toHaveBeenCalled();
     expect(mocks.insertOutbox).not.toHaveBeenCalled();
     expect(incrRemaining).not.toHaveBeenCalled();
+  });
+});
+
+describe('cancelReservation: database clock', () => {
+  it('judges the 2-hour window against the transaction clock when no test clock is set', async () => {
+    const { input, mocks } = buildInput();
+    const { clock: _clock, ...withoutClock } = input;
+    void _clock;
+    const startsAt = new Date(FROZEN_NOW + 3 * 60 * 60_000);
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation());
+    // Worker clock would allow it; the database says 1h30 remain.
+    mocks.findClassForUpdate.mockResolvedValueOnce({
+      startsAt,
+      now: new Date(startsAt.getTime() - 90 * 60_000),
+    });
+
+    const result = await cancelReservation(withoutClock);
+
+    expect(result).toEqual({ code: 'cancellation_window_closed' });
+  });
+});
+
+describe('cancelReservation: post-commit counter failure', () => {
+  it('logs a failed INCR and still reports the committed cancellation', async () => {
+    const { input, mocks, incrRemaining } = buildInput();
+    const logger = { error: vi.fn() };
+    mocks.findReservationForUpdate.mockResolvedValueOnce(makeReservation());
+    mocks.findClassForUpdate.mockResolvedValueOnce(makeClass());
+    mocks.updateReservationStatus.mockResolvedValueOnce(
+      makeReservation({ status: 'cancelled', cancelledAt: new Date(FROZEN_NOW) }),
+    );
+    incrRemaining.mockRejectedValueOnce(new Error('redis down'));
+
+    const result = await cancelReservation({ ...input, logger });
+
+    expect(result).toMatchObject({ code: 'ok', promoted: null });
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      'cancel: post-commit INCR failed',
+      expect.objectContaining({ error: 'redis down' }),
+    );
   });
 });
 
