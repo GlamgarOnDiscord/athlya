@@ -21,6 +21,7 @@ import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { pluralKey } from '../../../lib/i18n/plural';
 import { createTranslator, type Translator } from '../../../lib/i18n/t';
 import { useNowMinute } from '../../../lib/use-now-minute';
+import { useTodayKey } from '../classes/planning-clock';
 import { bookedSeats } from '../dashboard-summary';
 import { formatDuration } from '../format-duration';
 import {
@@ -63,8 +64,11 @@ export function CoachHome(): ReactElement {
   );
 
   const [classes, setClasses] = useState<Load>({ kind: 'loading' });
+  // Refetch at local midnight so the agenda window moves with the day.
+  const todayKey = useTodayKey();
 
   useEffect(() => {
+    if (todayKey === null) return;
     let cancelled = false;
     const { from, to } = agendaRange(new Date());
     const query = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
@@ -77,7 +81,7 @@ export function CoachHome(): ReactElement {
     return () => {
       cancelled = true;
     };
-  }, [client]);
+  }, [client, todayKey]);
 
   const agenda = useMemo(
     () =>
