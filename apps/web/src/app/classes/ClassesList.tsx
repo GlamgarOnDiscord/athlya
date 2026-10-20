@@ -293,9 +293,9 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
             setState((s) => {
               const next = new Set(s.bookedClassIds);
               next.add(classId);
-              const confirmed = new Map(s.confirmedBookings);
-              confirmed.set(classId, null);
-              return { ...s, bookedClassIds: next, confirmedBookings: confirmed };
+              // No reservation id on a replay: calendar actions stay hidden
+              // rather than export an event the feed would duplicate.
+              return { ...s, bookedClassIds: next };
             });
           } else if (err.status === 422 && err.problem?.code === 'class_in_past') {
             mutateRemaining(classId, +1);

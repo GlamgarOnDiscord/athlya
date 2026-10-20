@@ -22,9 +22,11 @@ const SUBJECT = {
   credentialsVersion: 3,
 };
 
+/** Flip the second-to-last character: the last one carries ignored padding bits. */
 function flipLastChar(value: string): string {
-  const last = value.at(-1) === 'A' ? 'B' : 'A';
-  return `${value.slice(0, -1)}${last}`;
+  const i = value.length - 2;
+  const replacement = value[i] === 'A' ? 'B' : 'A';
+  return `${value.slice(0, i)}${replacement}${value.slice(i + 1)}`;
 }
 
 describe('calendar feed token', () => {
