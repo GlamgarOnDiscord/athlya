@@ -1,7 +1,7 @@
 /**
  * Webhook endpoints adapter (issue #760). Every statement runs under the
  * caller's claims: the `webhook_endpoints_admin_*` and
- * `webhook_deliveries_admin_read` policies of migration 0053 scope it to
+ * `webhook_deliveries_admin_read` policies of migration 0055 scope it to
  * the admins of the studio. The signing secret is written here and never
  * read back (athlya_app has no SELECT on the column).
  */

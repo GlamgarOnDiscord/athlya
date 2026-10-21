@@ -1,6 +1,6 @@
 # Studio settings and webhooks
 
-Issues #759 and #760, migration `0053_studio_settings_webhooks.sql`.
+Issues #759 and #760, migration `0055_studio_settings_webhooks.sql`.
 
 ## Studio settings
 
@@ -60,9 +60,9 @@ with an application key (open question in the PR).
 
 ## Operator steps
 
-- Apply migration 0053 before deploying the Workers (expand only):
+- Apply migration 0055 before deploying the Workers (expand only):
   `node packages/db/scripts/migrate.mjs`. Rollback:
-  `0053_studio_settings_webhooks.down.sql` (drops endpoints, deliveries
+  `0055_studio_settings_webhooks.down.sql` (drops endpoints, deliveries
   and the settings columns).
 - The gateway Worker must have `CRON_DB_URL` (athlya_cron); without it no
   delivery is sent and the endpoints only accumulate pending rows.

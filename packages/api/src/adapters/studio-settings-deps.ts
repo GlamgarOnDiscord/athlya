@@ -1,8 +1,8 @@
 /**
  * Studio settings adapter (issue #759): reads and writes the settings
- * columns of migration 0053 under the caller's claims. The write goes
+ * columns of migration 0055 under the caller's claims. The write goes
  * through `studios_admin_update_own` (admins of the studio only) and the
- * column-scoped grant of 0053.
+ * column-scoped grant of 0055.
  */
 
 import { withTenantHttp } from '@athlya/db';

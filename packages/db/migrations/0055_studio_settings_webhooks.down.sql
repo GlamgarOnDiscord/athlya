@@ -1,4 +1,4 @@
--- Rollback for 0053_studio_settings_webhooks.sql (issues #759, #760).
+-- Rollback for 0055_studio_settings_webhooks.sql (issues #759, #760).
 -- Webhook endpoints, their secrets and their deliveries are dropped; the
 -- studio settings columns go with their values.
 

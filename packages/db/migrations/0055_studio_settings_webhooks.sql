@@ -1,5 +1,5 @@
 -- =====================================================================
--- 0053: studio settings and signed webhooks (issues #759, #760)
+-- 0055: studio settings and signed webhooks (issues #759, #760)
 --
 -- 1. Studio settings. `studios` gains the time zone (IANA, default
 --    `Europe/Paris`), a postal address and a contact email. They are

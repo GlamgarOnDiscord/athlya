@@ -1,5 +1,5 @@
 /**
- * `webhook_endpoints` and `webhook_deliveries` (migration 0053, issue #760).
+ * `webhook_endpoints` and `webhook_deliveries` (migration 0055, issue #760).
  *
  * An admin registers HTTPS endpoints for event types. A trigger on
  * `outbox` records one delivery per subscribed endpoint; the cron claims

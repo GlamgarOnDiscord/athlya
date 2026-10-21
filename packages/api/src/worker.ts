@@ -154,7 +154,7 @@ const worker = {
     }
 
     // Issue #760: post due webhook deliveries (claimed under a lease by
-    // `webhook_claim_deliveries`, granted to athlya_cron by migration 0053).
+    // `webhook_claim_deliveries`, granted to athlya_cron by migration 0055).
     if (cronExecutor !== null) {
       const webhookTask = runWebhookDeliveries({
         executeSql: cronExecutor,

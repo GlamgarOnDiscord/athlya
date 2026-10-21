@@ -1,5 +1,5 @@
 -- =====================================================================
--- studio_settings_webhooks.sql: migration 0053 under the real runtime
+-- studio_settings_webhooks.sql: migration 0055 under the real runtime
 -- roles (issues #759, #760)
 --
 -- Asserts that:
@@ -24,11 +24,11 @@ SELECT plan(25);
 -- Seed as the migration superuser: two endpoints in studio A (one
 -- disabled), one in studio B.
 INSERT INTO webhook_endpoints (id, studio_id, url, events, secret, enabled) VALUES
-    ('0e530000-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'https://hooks.example.com/a',
+    ('0e550000-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'https://hooks.example.com/a',
      ARRAY['reservation.created', 'reservation.cancelled'], 'whsec_' || repeat('a', 43), true),
-    ('0e530000-0000-4000-8000-000000000002', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'https://hooks.example.com/off',
+    ('0e550000-0000-4000-8000-000000000002', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'https://hooks.example.com/off',
      ARRAY['reservation.created'], 'whsec_' || repeat('b', 43), false),
-    ('0e530000-0000-4000-8000-000000000003', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'https://hooks.example.com/b',
+    ('0e550000-0000-4000-8000-000000000003', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'https://hooks.example.com/b',
      ARRAY['reservation.created'], 'whsec_' || repeat('c', 43), true);
 
 -- ---------- hardening ----------
@@ -61,13 +61,13 @@ SELECT ok(
 -- ---------- outbox trigger ----------
 
 INSERT INTO outbox (event_id, event_type, payload, occurred_at, studio_id) VALUES
-    ('evt-0053-created', 'reservation.created', '{"reservationId":"r1"}'::jsonb, now(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
-    ('evt-0053-promoted', 'reservation.promoted', '{"reservationId":"r2"}'::jsonb, now(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
-    ('evt-0053-unscoped', 'reservation.created', '{"reservationId":"r3"}'::jsonb, now(), NULL);
+    ('evt-0055-created', 'reservation.created', '{"reservationId":"r1"}'::jsonb, now(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+    ('evt-0055-promoted', 'reservation.promoted', '{"reservationId":"r2"}'::jsonb, now(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+    ('evt-0055-unscoped', 'reservation.created', '{"reservationId":"r3"}'::jsonb, now(), NULL);
 
 SELECT results_eq(
     $$ SELECT endpoint_id, event_id FROM webhook_deliveries ORDER BY event_id $$,
-    $$ VALUES ('0e530000-0000-4000-8000-000000000001'::uuid, 'evt-0053-created'::text) $$,
+    $$ VALUES ('0e550000-0000-4000-8000-000000000001'::uuid, 'evt-0055-created'::text) $$,
     'outbox trigger: one delivery for the enabled subscribed endpoint of the studio only'
 );
 
@@ -117,11 +117,11 @@ SELECT throws_ok(
 );
 SELECT isnt_empty(
     $$ UPDATE webhook_endpoints SET enabled = false
-        WHERE id = '0e530000-0000-4000-8000-000000000001' RETURNING id $$,
+        WHERE id = '0e550000-0000-4000-8000-000000000001' RETURNING id $$,
     'webhook_endpoints_admin_update: an admin disables an endpoint of the studio'
 );
 SELECT is_empty(
-    $$ DELETE FROM webhook_endpoints WHERE id = '0e530000-0000-4000-8000-000000000003' RETURNING id $$,
+    $$ DELETE FROM webhook_endpoints WHERE id = '0e550000-0000-4000-8000-000000000003' RETURNING id $$,
     'webhook_endpoints_admin_delete: an admin cannot delete an endpoint of another studio'
 );
 SELECT is((SELECT count(*)::int FROM webhook_deliveries), 1,
@@ -149,17 +149,17 @@ SELECT is((SELECT count(*)::int FROM webhook_deliveries), 0,
 
 RESET ROLE;
 SELECT test_unset_tenant();
-UPDATE webhook_endpoints SET enabled = true WHERE id = '0e530000-0000-4000-8000-000000000001';
+UPDATE webhook_endpoints SET enabled = true WHERE id = '0e550000-0000-4000-8000-000000000001';
 -- athlya_cron reads deliveries through the functions only; this view
 -- (owned by the superuser) lets the test pick the row it records.
 CREATE TEMP VIEW webhook_deliveries_view_for_test AS
-    SELECT id, next_attempt_at, lease_until FROM webhook_deliveries WHERE event_id = 'evt-0053-created';
+    SELECT id, next_attempt_at, lease_until FROM webhook_deliveries WHERE event_id = 'evt-0055-created';
 GRANT SELECT ON webhook_deliveries_view_for_test TO athlya_cron;
 SET LOCAL ROLE athlya_cron;
 
 SELECT results_eq(
     $$ SELECT event_id, url, attempts FROM webhook_claim_deliveries(10) $$,
-    $$ VALUES ('evt-0053-created'::text, 'https://hooks.example.com/a'::text, 1) $$,
+    $$ VALUES ('evt-0055-created'::text, 'https://hooks.example.com/a'::text, 1) $$,
     'webhook_claim_deliveries: the due delivery is claimed with its URL, attempt 1'
 );
 SELECT is_empty(

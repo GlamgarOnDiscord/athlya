@@ -1637,7 +1637,7 @@ export type UpdateStudioSettingsRequest = z.infer<typeof UpdateStudioSettingsReq
 /*  webhooks: /v1/studios/me/webhooks (issue #760)                   */
 /* ------------------------------------------------------------------ */
 
-/** Event types an endpoint may subscribe to (CHECK of migration 0053). */
+/** Event types an endpoint may subscribe to (CHECK of migration 0055). */
 export const WEBHOOK_EVENT_TYPES = [
   'reservation.created',
   'reservation.waitlisted',

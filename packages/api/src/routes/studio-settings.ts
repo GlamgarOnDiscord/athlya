@@ -8,7 +8,7 @@
  *
  * Name, IANA time zone, postal address and contact email. The write runs
  * under the `studios_admin_update_own` policy with the column grant of
- * migration 0053, scoped to `claims.studioId`. Mounted under the studios
+ * migration 0055, scoped to `claims.studioId`. Mounted under the studios
  * prefix so it reaches the same Worker as `/v1/studios/*`.
  */
 
