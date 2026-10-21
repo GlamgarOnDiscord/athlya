@@ -497,7 +497,105 @@
     },
     "nav": {
       "classes": "Classes",
-      "progression": "Progress"
+      "progression": "Progress",
+      "home": "My space"
+    },
+    "settings": {
+      "title": "Settings",
+      "comingSoon": "Coming soon",
+      "sections": {
+        "profile": "Profile",
+        "security": "Security",
+        "notifications": "Notifications",
+        "preferences": "Preferences",
+        "health": "Health and devices",
+        "privacy": "Privacy"
+      },
+      "profile": {
+        "description": "Your name and picture, as your studio sees them."
+      },
+      "security": {
+        "description": "Your password and the devices signed in to your account.",
+        "password": {
+          "title": "Password",
+          "body": "We email you a link to choose a new password. Once it is saved, every session is closed.",
+          "action": "Email me a link"
+        },
+        "sessions": {
+          "title": "Signed-in devices",
+          "body": "The list of signed-in devices and signing out one device at a time are coming soon."
+        },
+        "signOut": {
+          "title": "Sign out of this device",
+          "body": "Closes the session open in this browser."
+        },
+        "signOutAll": {
+          "title": "Sign out everywhere",
+          "body": "Closes every session: this browser, the mobile app and any other device. You will need to sign in again everywhere.",
+          "action": "Sign out everywhere",
+          "confirmTitle": "Sign out of all your devices?",
+          "confirm": "Yes, sign out everywhere",
+          "pending": "Signing out…"
+        }
+      },
+      "notifications": {
+        "description": "The messages you receive about your bookings.",
+        "listLabel": "Messages sent",
+        "alwaysSent": "Always sent",
+        "transactional": "These messages are about your bookings, so they are always sent.",
+        "channels": {
+          "email": "Email",
+          "push": "Mobile app notification"
+        },
+        "events": {
+          "reservationCreated": "Booking confirmed",
+          "reservationReminder": "Reminder one hour before class",
+          "reservationCancelled": "Booking cancelled",
+          "reservationPromoted": "Spot freed up from the waitlist"
+        },
+        "perEvent": {
+          "title": "Choose message by message",
+          "body": "Turning each message on or off on its own is coming soon."
+        },
+        "marketing": {
+          "title": "Marketing messages",
+          "body": "They are only sent if you have agreed to them.",
+          "action": "Manage my consents"
+        }
+      },
+      "preferences": {
+        "description": "The language and look of the app in this browser.",
+        "language": {
+          "title": "Language",
+          "body": "Applies to this browser."
+        },
+        "theme": {
+          "title": "Theme",
+          "body": "System follows the light or dark setting of your device.",
+          "light": "Light",
+          "dark": "Dark",
+          "system": "System"
+        }
+      },
+      "health": {
+        "description": "Workouts that come from other apps and devices.",
+        "appleHealth": {
+          "title": "Apple Health",
+          "body": "You connect it from the Athlya app on iPhone, in Settings. Imported workouts join your progress.",
+          "action": "See my progress"
+        },
+        "status": {
+          "title": "Sync status",
+          "body": "Seeing the Apple Health connection and the date of the last import here is coming soon."
+        },
+        "devices": {
+          "title": "Connected equipment",
+          "body": "Bluetooth machines (bike, rower, treadmill) are coming soon."
+        }
+      },
+      "privacy": {
+        "description": "Your consents and your rights over your data."
+      }
     }
   },
   "studio": {
