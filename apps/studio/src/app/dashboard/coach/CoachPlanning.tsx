@@ -4,7 +4,8 @@
  * `/dashboard/planning`: the coach's schedule. The admin planning grid in
  * read-only mode (no create slot, no edit or delete menu), week or month on
  * a wide screen and a day agenda on a phone, with a switch between the
- * coach's own classes and the whole studio. Classes come from
+ * coach's own classes and the whole studio. The coach's own tiles link to
+ * their roster; the API opens no other class roster to a coach. Classes come from
  * `GET /v1/classes`, which every signed-in user may read.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
@@ -16,6 +17,7 @@ import { useApiClient } from '../../../lib/api/buildClient';
 import { useAuth } from '../../../lib/auth/AuthContext';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
+import { classRosterHref } from '../../../lib/links';
 import { ClassesPlanning } from '../classes/ClassesPlanning';
 import { useIsWide, useTodayKey } from '../classes/planning-clock';
 import {
@@ -164,6 +166,9 @@ export function CoachPlanning(): ReactElement {
             locale={locale}
             t={t}
             onShowDay={showDay}
+            rosterHref={(cls) =>
+              user !== null && cls.coachId === user.id ? classRosterHref(cls.id) : null
+            }
           />
         )}
       </div>

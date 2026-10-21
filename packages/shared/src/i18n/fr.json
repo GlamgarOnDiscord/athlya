@@ -479,7 +479,105 @@
     },
     "nav": {
       "classes": "Cours",
-      "progression": "Progression"
+      "progression": "Progression",
+      "home": "Mon espace"
+    },
+    "settings": {
+      "title": "Réglages",
+      "comingSoon": "Bientôt",
+      "sections": {
+        "profile": "Profil",
+        "security": "Sécurité",
+        "notifications": "Notifications",
+        "preferences": "Préférences",
+        "health": "Santé et appareils",
+        "privacy": "Confidentialité"
+      },
+      "profile": {
+        "description": "Votre nom et votre photo, tels que votre studio les voit."
+      },
+      "security": {
+        "description": "Votre mot de passe et les appareils connectés à votre compte.",
+        "password": {
+          "title": "Mot de passe",
+          "body": "Nous vous envoyons un lien par e-mail pour choisir un nouveau mot de passe. Une fois enregistré, toutes vos sessions sont fermées.",
+          "action": "Recevoir un lien par e-mail"
+        },
+        "sessions": {
+          "title": "Appareils connectés",
+          "body": "La liste des appareils connectés et la déconnexion appareil par appareil arrivent bientôt."
+        },
+        "signOut": {
+          "title": "Se déconnecter de cet appareil",
+          "body": "Ferme la session ouverte dans ce navigateur."
+        },
+        "signOutAll": {
+          "title": "Se déconnecter partout",
+          "body": "Ferme toutes vos sessions : ce navigateur, l'app mobile et tout autre appareil. Vous devrez vous reconnecter partout.",
+          "action": "Se déconnecter partout",
+          "confirmTitle": "Se déconnecter de tous vos appareils ?",
+          "confirm": "Oui, tout déconnecter",
+          "pending": "Déconnexion en cours…"
+        }
+      },
+      "notifications": {
+        "description": "Les messages que vous recevez à propos de vos réservations.",
+        "listLabel": "Messages envoyés",
+        "alwaysSent": "Toujours envoyé",
+        "transactional": "Ces messages concernent directement vos réservations : ils sont toujours envoyés.",
+        "channels": {
+          "email": "E-mail",
+          "push": "Notification sur l'app mobile"
+        },
+        "events": {
+          "reservationCreated": "Réservation confirmée",
+          "reservationReminder": "Rappel une heure avant le cours",
+          "reservationCancelled": "Réservation annulée",
+          "reservationPromoted": "Place obtenue depuis la liste d'attente"
+        },
+        "perEvent": {
+          "title": "Choisir message par message",
+          "body": "Activer ou couper chaque message séparément arrive bientôt."
+        },
+        "marketing": {
+          "title": "Communications marketing",
+          "body": "Elles ne partent que si vous y avez consenti.",
+          "action": "Gérer mes consentements"
+        }
+      },
+      "preferences": {
+        "description": "La langue et l'apparence de l'app dans ce navigateur.",
+        "language": {
+          "title": "Langue",
+          "body": "S'applique à ce navigateur."
+        },
+        "theme": {
+          "title": "Thème",
+          "body": "Système suit le réglage clair ou sombre de votre appareil.",
+          "light": "Clair",
+          "dark": "Sombre",
+          "system": "Système"
+        }
+      },
+      "health": {
+        "description": "Les entraînements qui arrivent d'autres apps et appareils.",
+        "appleHealth": {
+          "title": "Apple Santé",
+          "body": "La connexion se fait depuis l'app Athlya sur iPhone, dans Paramètres. Les entraînements importés rejoignent votre progression.",
+          "action": "Voir ma progression"
+        },
+        "status": {
+          "title": "État de la synchronisation",
+          "body": "L'état de la connexion Apple Santé et la date du dernier import, visibles ici, arrivent bientôt."
+        },
+        "devices": {
+          "title": "Équipements connectés",
+          "body": "Les machines Bluetooth (vélo, rameur, tapis) arrivent bientôt."
+        }
+      },
+      "privacy": {
+        "description": "Vos consentements et vos droits sur vos données."
+      }
     }
   },
   "studio": {
@@ -878,15 +976,14 @@
       "checkoutLoading": "Redirection…",
       "checkoutError": "Souscription impossible.",
       "checkoutNotConfigured": "Stripe n'est pas encore configuré sur cet environnement.",
+      "pricePerMonth": "{price} / mois",
       "plans": {
         "free": {
-          "title": "Free",
-          "price": "€0 / mois",
+          "title": "Gratuit",
           "body": "Jusqu'à 50 membres, fonctionnalités de base."
         },
         "pro": {
           "title": "Pro",
-          "price": "€49 / mois",
           "body": "Membres illimités, branding personnalisé, exports avancés."
         }
       },
@@ -1032,6 +1129,87 @@
         "emptyMine": "Aucun cours ne vous est attribué sur cette période.",
         "emptyAll": "Aucun cours au studio sur cette période."
       }
+    },
+    "roster": {
+      "openRoster": "Inscrits",
+      "openRosterFor": "Ouvrir la liste des inscrits de {title}",
+      "coach": "Coach : {name}",
+      "noCoach": "Aucun coach attribué",
+      "stats": {
+        "booked": "Inscrits",
+        "checkedIn": "Présents",
+        "waitlist": "Liste d'attente"
+      },
+      "confirmed": {
+        "title": "Membres inscrits",
+        "empty": "Personne n'est encore inscrit à ce cours."
+      },
+      "waitlist": {
+        "title": "Liste d'attente",
+        "empty": "Personne n'attend de place."
+      },
+      "columns": {
+        "member": "Membre",
+        "bookedAt": "Inscription",
+        "attendance": "Présence",
+        "position": "Rang"
+      },
+      "checkIn": "Marquer présent",
+      "checkInFor": "Marquer {name} présent",
+      "checkedInAt": "Présent à {time}",
+      "notCheckedIn": "Pas encore pointé",
+      "checkedInToast": "{name} est pointé.",
+      "notConfirmed": "Cette réservation n'est plus confirmée. La liste a été actualisée.",
+      "window": {
+        "before": "Le pointage ouvre à {time}, 30 minutes avant le cours.",
+        "open": "Marquez les membres présents à leur arrivée. Les scans de la borne s'affichent ici aussi.",
+        "closed": "Le pointage est fermé depuis le {date}."
+      },
+      "forbidden": "Ce cours est attribué à un autre coach. Seuls son coach et les admins du studio voient ses inscrits.",
+      "notFound": "Ce cours n'existe pas ou a été supprimé.",
+      "loadError": "La liste des inscrits n'a pas pu se charger."
+    },
+    "memberFile": {
+      "open": "Ouvrir la fiche",
+      "openFor": "Ouvrir la fiche de {name}",
+      "memberSince": "Membre depuis le {date}",
+      "stats": {
+        "checkIns": "Présences",
+        "lastCheckIn": "Dernière présence",
+        "never": "Jamais",
+        "noShows": "Absences",
+        "cancellations": "Annulations"
+      },
+      "upcoming": {
+        "title": "Réservations à venir",
+        "empty": "Aucune réservation à venir."
+      },
+      "past": {
+        "title": "Historique",
+        "empty": "Aucune réservation passée.",
+        "latest": "{count} dernières"
+      },
+      "columns": {
+        "date": "Date",
+        "class": "Cours",
+        "status": "Statut"
+      },
+      "status": {
+        "confirmed": "Inscrit",
+        "waitlist": "Liste d'attente",
+        "cancelled": "Annulé",
+        "no_show": "Absent",
+        "attended": "Présent",
+        "missed": "Non pointé"
+      },
+      "consents": {
+        "title": "Consentements",
+        "granted": "Oui",
+        "refused": "Non"
+      },
+      "forbidden": "Seuls les admins du studio peuvent ouvrir une fiche membre.",
+      "notFound": "Ce membre n'existe pas dans votre studio.",
+      "loadError": "La fiche membre n'a pas pu se charger."
     }
   },
   "mobile": {

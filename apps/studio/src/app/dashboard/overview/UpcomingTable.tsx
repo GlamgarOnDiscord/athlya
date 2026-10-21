@@ -1,7 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { classRosterHref } from '../../../lib/links';
 import { bookedSeats, type OverviewClass } from '../dashboard-summary';
 
 import type { Translator } from '../../../lib/i18n/t';
@@ -82,7 +84,14 @@ export function UpcomingTable({
                 <td className="hidden px-2 py-2 sm:px-4 whitespace-nowrap sm:table-cell">
                   <time dateTime={cls.startsAt}>{time.format(start)}</time>
                 </td>
-                <td className="max-w-48 truncate px-2 py-2 font-medium sm:px-4">{cls.title}</td>
+                <td className="max-w-48 truncate px-2 py-2 sm:px-4">
+                  <Link
+                    href={classRosterHref(cls.id)}
+                    className="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {cls.title}
+                  </Link>
+                </td>
                 <td className="hidden px-2 py-2 sm:px-4 text-right text-muted-foreground md:table-cell">
                   {t('studio.dashboard.duration.minutes', { m: cls.durationMin })}
                 </td>
