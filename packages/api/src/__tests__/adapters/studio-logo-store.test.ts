@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { AvatarInvalidFormatError } from '../../adapters/avatar-upload-store-r2.js';
-import { createStudioLogoStore, studioLogoObjectKey } from '../../adapters/studio-logo-store.js';
+import {
+  createStudioLogoStore,
+  studioLogoObjectKey,
+  trimTrailingSlashes,
+} from '../../adapters/studio-logo-store.js';
 
 import type { R2Bucket } from '@cloudflare/workers-types';
 
@@ -54,5 +58,20 @@ describe('createStudioLogoStore', () => {
     await expect(createStudioLogoStore(undefined, undefined).remove(STUDIO, 'light')).resolves.toBe(
       undefined,
     );
+  });
+});
+
+describe('trimTrailingSlashes', () => {
+  it('drops trailing slashes only', () => {
+    expect(trimTrailingSlashes('https://assets.athlya.test///')).toBe('https://assets.athlya.test');
+    expect(trimTrailingSlashes('https://a.test/x')).toBe('https://a.test/x');
+    expect(trimTrailingSlashes('///')).toBe('');
+  });
+
+  it('stays linear on a long run of slashes', () => {
+    const input = `https://a.test${'/'.repeat(200_000)}x${'/'.repeat(200_000)}`;
+    const started = performance.now();
+    expect(trimTrailingSlashes(input)).toBe(`https://a.test${'/'.repeat(200_000)}x`);
+    expect(performance.now() - started).toBeLessThan(200);
   });
 });

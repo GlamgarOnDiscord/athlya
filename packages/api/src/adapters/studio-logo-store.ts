@@ -48,6 +48,13 @@ export interface StudioLogoStore {
   remove(studioId: string, variant: StudioLogoVariant): Promise<void>;
 }
 
+/** `url` without its trailing slashes, in one linear pass (no regex). */
+export function trimTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 0x2f) end -= 1;
+  return url.slice(0, end);
+}
+
 function toBase64(body: ArrayBuffer): string {
   const bytes = new Uint8Array(body);
   let binary = '';
@@ -65,7 +72,7 @@ export function createStudioLogoStore(
 ): StudioLogoStore {
   const base =
     publicBaseUrl !== undefined && publicBaseUrl !== ''
-      ? publicBaseUrl.replace(/\/+$/u, '')
+      ? trimTrailingSlashes(publicBaseUrl)
       : undefined;
   const r2 = bucket !== undefined && base !== undefined ? { bucket, base } : undefined;
 
