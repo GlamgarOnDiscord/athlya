@@ -90,7 +90,7 @@ par défaut (`RESEND_FROM`), aux couleurs du studio.
 ## Retour arrière
 
 - Désactiver un domaine : `UPDATE studio_domains SET activated_at = NULL
-  WHERE …;` (les e-mails reviennent sur l'expéditeur Athlya au message
+WHERE …;` (les e-mails reviennent sur l'expéditeur Athlya au message
   suivant), puis retirer le custom hostname ou le domaine Resend.
 - Annuler la migration : `0053_white_label.down.sql` (les objets R2 sous
   `studio-logos/` restent dans le bucket).
