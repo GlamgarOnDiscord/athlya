@@ -64,6 +64,7 @@ export function RoomsAdmin(): ReactElement {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [deleting, setDeleting] = useState<Room | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,16 +80,25 @@ export function RoomsAdmin(): ReactElement {
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
 
   const confirmDelete = useCallback(async () => {
-    if (deleting === null) return;
+    if (deleting === null || deletePending) return;
     setDeleteError(null);
+    setDeletePending(true);
     try {
       await client.del(`/v1/classes/rooms/${deleting.id}`);
       setDeleting(null);
       refresh();
-    } catch {
-      setDeleteError(t('studio.rooms.errors.generic'));
+    } catch (err) {
+      // Already gone (another admin, or a second click): the goal is reached.
+      if (problemCodeOf(err) === 'not_found') {
+        setDeleting(null);
+        refresh();
+      } else {
+        setDeleteError(t('studio.rooms.errors.generic'));
+      }
+    } finally {
+      setDeletePending(false);
     }
-  }, [client, deleting, refresh, t]);
+  }, [client, deleting, deletePending, refresh, t]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -199,7 +209,7 @@ export function RoomsAdmin(): ReactElement {
         <Dialog
           open
           onOpenChange={(open) => {
-            if (!open) setDeleting(null);
+            if (!open && !deletePending) setDeleting(null);
           }}
         >
           <DialogContent>
@@ -213,10 +223,17 @@ export function RoomsAdmin(): ReactElement {
               </p>
             ) : null}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDeleting(null)}>
+              <Button variant="outline" disabled={deletePending} onClick={() => setDeleting(null)}>
                 {t('common.cancel')}
               </Button>
-              <Button variant="destructive" onClick={() => void confirmDelete()}>
+              <Button
+                variant="destructive"
+                disabled={deletePending}
+                onClick={() => void confirmDelete()}
+              >
+                {deletePending ? (
+                  <CircleNotchIcon className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                ) : null}
                 {t('studio.rooms.deleteConfirm.confirm')}
               </Button>
             </DialogFooter>
@@ -260,7 +277,10 @@ function RoomDialog({
       const next: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
         const key = issue.path.map(String).join('.');
-        next[key] ??= issue.message;
+        next[key] ??=
+          key === 'capacity'
+            ? t('studio.rooms.errors.capacityInvalid')
+            : t('studio.rooms.errors.nameInvalid');
       }
       setErrors(next);
       return;

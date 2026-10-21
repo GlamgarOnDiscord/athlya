@@ -860,7 +860,9 @@
       },
       "errors": {
         "nameTaken": "A room already has this name.",
-        "generic": "Could not save the room."
+        "generic": "Could not save the room.",
+        "nameInvalid": "Enter a room name of 1 to 80 characters.",
+        "capacityInvalid": "Enter a whole number from 1 to 500, or leave it empty."
       },
       "edit": "Edit",
       "delete": "Delete",

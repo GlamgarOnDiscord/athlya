@@ -336,6 +336,24 @@ describe('series', () => {
     ).toMatchObject({ kind: 'updated' });
   });
 
+  it('a title-only patch over an existing conflict goes through, a move is still checked', async () => {
+    const { seriesId, rows } = await createSeries();
+    await asOwner(`
+      INSERT INTO classes (studio_id, room_id, title, starts_at, duration_min, capacity)
+      VALUES ('${STUDIO}', '${ROOM_A}', 'Spin', '2099-01-13T08:30:00+00', 60, 10);
+    `);
+    const base = { fromClassId: (rows[0]?.id ?? '') as never, version: 0 };
+    const renamed = await createSeriesRepo(db, admin).update(seriesId, {
+      ...base,
+      title: 'Renamed flow',
+      capacity: 10,
+    });
+    expect(renamed.kind).toBe('updated');
+    expect(
+      await createSeriesRepo(db, admin).update(seriesId, { ...base, version: 1, durationMin: 45 }),
+    ).toMatchObject({ kind: 'schedule_conflict', conflicts: [{ title: 'Spin' }] });
+  });
+
   it('deletes this and the later occurrences and cancels their bookings', async () => {
     const { seriesId, rows } = await createSeries();
     const later = rows[3]?.id ?? '';

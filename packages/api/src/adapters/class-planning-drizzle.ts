@@ -54,9 +54,6 @@ import type {
 /** Longest class the schema accepts, in minutes: bounds the overlap lookup. */
 const MAX_DURATION_MIN = 480;
 
-/** Neighbours read for one conflict check; far above a real week of one room. */
-const NEIGHBOUR_LIMIT = 2000;
-
 /* ------------------------------------------------------------------ */
 /*  Conflicts                                                          */
 /* ------------------------------------------------------------------ */
@@ -101,8 +98,7 @@ export async function findClassConflicts(
         ...(ignore.length > 0 ? [notInArray(classes.id, [...ignore])] : []),
       ),
     )
-    .orderBy(asc(classes.startsAt))
-    .limit(NEIGHBOUR_LIMIT);
+    .orderBy(asc(classes.startsAt));
 
   const existing: ScheduledClass[] = rows.map((row) => ({
     ...row,
@@ -304,6 +300,16 @@ async function dbNow(tx: AthlyaTx): Promise<number> {
   return toDateOrNull(rows[0]?.now ?? null)?.getTime() ?? Date.now();
 }
 
+/** Whether `patch` changes when, how long, where or with whom the occurrences run. */
+function movesSeries(patch: UpdateClassSeriesRequest): boolean {
+  return (
+    patch.startTime !== undefined ||
+    patch.durationMin !== undefined ||
+    patch.roomId !== undefined ||
+    patch.coachId !== undefined
+  );
+}
+
 export function createSeriesRepo(db: AthlyaDb, claims: TenantClaims) {
   const studioId = claims.studioId;
 
@@ -432,11 +438,13 @@ export function createSeriesRepo(db: AthlyaDb, claims: TenantClaims) {
               }
             }
 
-            const check = await checkPlacement(tx, studioId, planned, {
-              allowConflicts: patch.allowConflicts === true,
-              ignore: planned.map((p) => p.row.id),
-            });
-            if (check.kind !== 'ok') return check;
+            if (movesSeries(patch)) {
+              const check = await checkPlacement(tx, studioId, planned, {
+                allowConflicts: patch.allowConflicts === true,
+                ignore: planned.map((p) => p.row.id),
+              });
+              if (check.kind !== 'ok') return check;
+            }
 
             const updated: ClassRow[] = [];
             const remaining = new Map<string, number>();

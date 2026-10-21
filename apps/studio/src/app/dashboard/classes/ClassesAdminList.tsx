@@ -253,9 +253,10 @@ export function ClassesAdminList(): ReactElement {
         await client.del(
           `/v1/classes/series/${target.seriesId}?fromClassId=${encodeURIComponent(target.id)}`,
         );
-      } finally {
-        setState((s) => ({ ...s, refreshNonce: s.refreshNonce + 1 }));
+      } catch {
+        // The refetch below shows the real state of the series.
       }
+      setState((s) => ({ ...s, refreshNonce: s.refreshNonce + 1 }));
       return;
     }
     // Optimistic removal: remove immediately from local state, no re-fetch needed.

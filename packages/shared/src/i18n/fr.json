@@ -764,7 +764,7 @@
       },
       "errors": {
         "generic": "Erreur lors de l'enregistrement.",
-        "versionConflict": "Le cours a été modifié entre temps. Liste rafraîchie, réessayez.",
+        "versionConflict": "Le cours a été modifié entre-temps. Liste rafraîchie, réessayez.",
         "roomNotFound": "Cette salle n'existe plus. Choisissez-en une autre."
       },
       "planning": {
@@ -860,7 +860,9 @@
       },
       "errors": {
         "nameTaken": "Une salle porte déjà ce nom.",
-        "generic": "Erreur lors de l'enregistrement de la salle."
+        "generic": "Erreur lors de l'enregistrement de la salle.",
+        "nameInvalid": "Saisissez un nom de salle de 1 à 80 caractères.",
+        "capacityInvalid": "Saisissez un nombre entier de 1 à 500, ou laissez vide."
       },
       "edit": "Modifier",
       "delete": "Supprimer",
@@ -1138,7 +1140,7 @@
         "errorsTitle": "Veuillez corriger les points suivants :",
         "errors": {
           "generic": "Échec de l'enregistrement.",
-          "versionConflict": "Le programme a été modifié entre temps. Rechargez-le et réessayez.",
+          "versionConflict": "Le programme a été modifié entre-temps. Rechargez-le et réessayez.",
           "archived": "Ce programme est archivé et ne peut plus être modifié.",
           "loadFailed": "Impossible de charger le programme."
         }
