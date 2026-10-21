@@ -4,9 +4,10 @@
  * `/dashboard/planning`: the coach's schedule. The admin planning grid in
  * read-only mode (no create slot, no edit or delete menu), week or month on
  * a wide screen and a day agenda on a phone, with a switch between the
- * coach's own classes and the whole studio, and a room filter. Classes
- * come from `GET /v1/classes` and rooms from `GET /v1/classes/rooms`,
- * which every signed-in user may read.
+ * coach's own classes and the whole studio, and a room filter. The coach's
+ * own tiles link to their roster; the API opens no other class roster to a
+ * coach. Classes come from `GET /v1/classes` and rooms from
+ * `GET /v1/classes/rooms`, which every signed-in user may read.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 
@@ -18,6 +19,7 @@ import { fetchRooms, roomNames } from '../../../lib/api/rooms';
 import { useAuth } from '../../../lib/auth/AuthContext';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
+import { classRosterHref } from '../../../lib/links';
 import { inRoom } from '../classes/class-form';
 import { ClassesPlanning } from '../classes/ClassesPlanning';
 import { useIsWide, useTodayKey } from '../classes/planning-clock';
@@ -187,6 +189,9 @@ export function CoachPlanning(): ReactElement {
             t={t}
             roomNames={names}
             onShowDay={showDay}
+            rosterHref={(cls) =>
+              user !== null && cls.coachId === user.id ? classRosterHref(cls.id) : null
+            }
           />
         )}
       </div>

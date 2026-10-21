@@ -159,6 +159,7 @@ export function lazyMembersDeps(resolve: () => MembersDeps): MembersDeps {
     getExportJob: forward('getExportJob'),
     openExportDownload: forward('openExportDownload'),
     listMembersByStudio: forward('listMembersByStudio'),
+    getMemberFile: forward('getMemberFile'),
     getProgression: forward('getProgression'),
     getCardioProgression: forward('getCardioProgression'),
   };
@@ -172,6 +173,8 @@ export function lazyClassesDeps(resolve: () => ClassesDeps): ClassesDeps {
     createClass: forward('createClass'),
     updateClass: forward('updateClass'),
     deleteClass: forward('deleteClass'),
+    getRoster: forward('getRoster'),
+    markAttendance: forward('markAttendance'),
   };
 }
 
@@ -455,6 +458,7 @@ export function defaultMembersDeps(env: AthlyaBindings, cf?: RequestCf): Members
         getExportJob: () => notImplemented('members.getExportJob'),
         openExportDownload: () => notImplemented('members.openExportDownload'),
         listMembersByStudio: () => notImplemented('members.listMembersByStudio'),
+        getMemberFile: () => notImplemented('members.getMemberFile'),
         getProgression: () => notImplemented('members.getProgression'),
         getCardioProgression: () => notImplemented('members.getCardioProgression'),
       };
@@ -491,6 +495,8 @@ export function defaultClassesDeps(env: AthlyaBindings, cf?: RequestCf): Classes
         createClass: () => notImplemented('reservations.createClass'),
         updateClass: () => notImplemented('reservations.updateClass'),
         deleteClass: () => notImplemented('classes.deleteClass'),
+        getRoster: () => notImplemented('classes.getRoster'),
+        markAttendance: () => notImplemented('classes.markAttendance'),
       };
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { DownloadSimpleIcon } from '@phosphor-icons/react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 
@@ -28,6 +29,7 @@ import { useAuth } from '../../../lib/auth/AuthContext';
 import { downloadCsv, toCsv } from '../../../lib/csv';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
+import { classRosterHref } from '../../../lib/links';
 import { useNowMinute } from '../../../lib/use-now-minute';
 import { FillMeter } from '../overview/parts';
 
@@ -327,6 +329,7 @@ export function ClassesAdminList(): ReactElement {
           onDeleteClass={openDelete}
           onCreateAt={openCreateAt}
           onShowDay={showDay}
+          rosterHref={(cls) => classRosterHref(cls.id)}
         />
       )}
 
@@ -537,7 +540,12 @@ function ClassRow({
   return (
     <TableRow>
       <TableCell className="whitespace-normal sm:whitespace-nowrap">
-        <span className="font-medium">{cls.title}</span>
+        <Link
+          href={classRosterHref(cls.id)}
+          className="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {cls.title}
+        </Link>
         <span className="block text-xs text-muted-foreground sm:hidden">
           <time dateTime={cls.startsAt}>{formatted}</time>,{' '}
           <span className="whitespace-nowrap">{seats}</span>

@@ -309,3 +309,34 @@ describe('<ClassesPlanning /> rooms and series (issue #748)', () => {
     expect(within(day('2026-10-20')).queryByText(/Studio 1/)).toBeNull();
   });
 });
+
+describe('<ClassesPlanning /> roster links', () => {
+  it('offers the roster from the menu of an editable tile', async () => {
+    const { tile } = renderPlanning({ rosterHref: (c) => `/dashboard/classes/${c.id}` });
+    fireEvent.click(
+      within(tile('c1').frame).getByRole('button', { name: 'Actions for Boxing technique' }),
+    );
+    const item = await screen.findByRole('menuitem', { name: 'Roster' });
+    expect(item.getAttribute('href')).toBe('/dashboard/classes/c1');
+  });
+
+  it('turns a read-only tile into a link only where a roster is open', () => {
+    const { container } = render(
+      <ClassesPlanning
+        view="week"
+        anchor={fromDayKey('2026-10-20')}
+        todayKey="2026-10-20"
+        items={[BOXING, YOGA]}
+        busy={false}
+        locale="en"
+        t={t}
+        onShowDay={vi.fn()}
+        rosterHref={(c) => (c.id === 'c1' ? `/dashboard/classes/${c.id}` : null)}
+      />,
+    );
+    const mine = container.querySelector('[data-class-id="c1"]');
+    expect(mine?.tagName).toBe('A');
+    expect(mine?.getAttribute('href')).toBe('/dashboard/classes/c1');
+    expect(container.querySelector('[data-class-id="c2"]')?.tagName).toBe('DIV');
+  });
+});

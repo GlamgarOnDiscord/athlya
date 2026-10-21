@@ -26,6 +26,7 @@ import { z } from 'zod';
 
 import { isValidTimeZone, MAX_SERIES_OCCURRENCES } from '../schedule.js';
 
+import { ConsentsSchema } from './consents.js';
 import {
   CARDIO_MACHINES,
   CardioMetricsSchema,
@@ -39,6 +40,8 @@ import {
   HexColorSchema,
   IsoDateTimeSchema,
   ReservationIdSchema,
+  ReservationStatusSchema,
+  RoleSchema,
   SlugSchema,
   StudioIdSchema,
   UserIdSchema,
@@ -262,6 +265,74 @@ export type ExportJobResponse = z.infer<typeof ExportJobResponseSchema>;
 export const MembersPageResponseSchema = PaginatedResponseSchema(UserSchema);
 export type MembersPageResponse = z.infer<typeof MembersPageResponseSchema>;
 
+/** `GET /v1/members/:id` path parameters. */
+export const MemberFileParamsSchema = z
+  .object({
+    id: UuidSchema,
+  })
+  .strict();
+
+export type MemberFileParams = z.infer<typeof MemberFileParamsSchema>;
+
+/** Rows of each reservation list of a member file, newest or soonest first. */
+export const MEMBER_FILE_LIST_LIMIT = 20;
+
+/** One reservation of a member file, with the class it is for. */
+export const MemberFileReservationSchema = z
+  .object({
+    id: UuidSchema,
+    status: ReservationStatusSchema,
+    bookedAt: IsoDateTimeSchema,
+    cancelledAt: IsoDateTimeSchema.nullable(),
+    checkedInAt: IsoDateTimeSchema.nullable(),
+    class: z
+      .object({
+        id: UuidSchema,
+        title: z.string(),
+        startsAt: IsoDateTimeSchema,
+        durationMin: z.number().int().positive(),
+      })
+      .strict(),
+  })
+  .strict();
+
+export type MemberFileReservation = z.infer<typeof MemberFileReservationSchema>;
+
+/**
+ * `GET /v1/members/:id` (studio admin only): the member's profile and
+ * consents, their reservations still to come (confirmed or waitlisted)
+ * and the latest past ones, each list capped at
+ * {@link MEMBER_FILE_LIST_LIMIT}. `stats` counts every reservation of
+ * the member in the studio, not only the rows returned.
+ */
+export const MemberFileResponseSchema = z
+  .object({
+    member: z
+      .object({
+        id: UuidSchema,
+        email: z.email(),
+        displayName: z.string(),
+        avatarUrl: z.url().nullable(),
+        role: RoleSchema,
+        consents: ConsentsSchema,
+        createdAt: IsoDateTimeSchema,
+      })
+      .strict(),
+    upcoming: z.array(MemberFileReservationSchema).max(MEMBER_FILE_LIST_LIMIT),
+    past: z.array(MemberFileReservationSchema).max(MEMBER_FILE_LIST_LIMIT),
+    stats: z
+      .object({
+        checkIns: z.number().int().nonnegative(),
+        lastCheckInAt: IsoDateTimeSchema.nullable(),
+        noShows: z.number().int().nonnegative(),
+        cancellations: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
+
+export type MemberFileResponse = z.infer<typeof MemberFileResponseSchema>;
+
 /* ------------------------------------------------------------------ */
 /*  classes — /v1/classes                                              */
 /* ------------------------------------------------------------------ */
@@ -395,6 +466,79 @@ export const ClassListResponseSchema = z
   .strict();
 
 export type ClassListResponse = z.infer<typeof ClassListResponseSchema>;
+
+/** `GET /v1/classes/:id/roster` path parameters. */
+export const ClassRosterParamsSchema = z
+  .object({
+    id: UuidSchema,
+  })
+  .strict();
+
+export type ClassRosterParams = z.infer<typeof ClassRosterParamsSchema>;
+
+/** `POST /v1/classes/:id/roster/:reservationId/check-in` path parameters. */
+export const RosterCheckInParamsSchema = z
+  .object({
+    id: UuidSchema,
+    reservationId: UuidSchema,
+  })
+  .strict();
+
+export type RosterCheckInParams = z.infer<typeof RosterCheckInParamsSchema>;
+
+/** The person behind a roster row or a class coach: name and avatar, no contact data. */
+export const RosterPersonSchema = z
+  .object({
+    id: UuidSchema,
+    displayName: z.string(),
+    avatarUrl: z.url().nullable(),
+  })
+  .strict();
+
+export type RosterPerson = z.infer<typeof RosterPersonSchema>;
+
+/** One reservation on a class roster. */
+export const ClassRosterEntrySchema = z
+  .object({
+    reservationId: UuidSchema,
+    status: z.enum(['confirmed', 'waitlist']),
+    bookedAt: IsoDateTimeSchema,
+    checkedInAt: IsoDateTimeSchema.nullable(),
+    member: RosterPersonSchema,
+  })
+  .strict();
+
+export type ClassRosterEntry = z.infer<typeof ClassRosterEntrySchema>;
+
+/**
+ * `GET /v1/classes/:id/roster` (studio admin, or the coach of the class):
+ * the confirmed members in booking order, the waitlist in promotion order,
+ * and the window in which staff may mark a confirmed member present.
+ */
+export const ClassRosterResponseSchema = z
+  .object({
+    class: z
+      .object({
+        id: UuidSchema,
+        title: z.string(),
+        startsAt: IsoDateTimeSchema,
+        durationMin: z.number().int().positive(),
+        capacity: z.number().int().positive(),
+        coach: RosterPersonSchema.nullable(),
+      })
+      .strict(),
+    confirmed: z.array(ClassRosterEntrySchema),
+    waitlist: z.array(ClassRosterEntrySchema),
+    attendance: z
+      .object({
+        opensAt: IsoDateTimeSchema,
+        closesAt: IsoDateTimeSchema,
+      })
+      .strict(),
+  })
+  .strict();
+
+export type ClassRosterResponse = z.infer<typeof ClassRosterResponseSchema>;
 
 /* ------------------------------------------------------------------ */
 /*  rooms and series: /v1/classes/rooms, /v1/classes/series           */

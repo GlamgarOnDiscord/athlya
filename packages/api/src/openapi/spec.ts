@@ -33,6 +33,9 @@ import {
   CheckoutRequestSchema,
   CheckoutResponseSchema,
   ClassListResponseSchema,
+  ClassRosterEntrySchema,
+  ClassRosterParamsSchema,
+  ClassRosterResponseSchema,
   ClassSeriesDeleteResponseSchema,
   ClassSeriesResponseSchema,
   ClassSeriesUpdateResponseSchema,
@@ -54,6 +57,8 @@ import {
   LogSessionRequestSchema,
   LoginRequestSchema,
   LogoutRequestSchema,
+  MemberFileParamsSchema,
+  MemberFileResponseSchema,
   MembersPageResponseSchema,
   ProgramDetailSchema,
   ProgramListResponseSchema,
@@ -67,6 +72,7 @@ import {
   ScheduleConflictProblemSchema,
   AuditListResponseSchema,
   RegisterRequestSchema,
+  RosterCheckInParamsSchema,
   SessionResponseSchema,
   StudioMeResponseSchema,
   SubscribeProgramRequestSchema,
@@ -486,6 +492,24 @@ const listMembersRoute = createRoute({
   },
 });
 
+const memberFileRoute = createRoute({
+  method: 'get',
+  path: '/v1/members/{id}',
+  tags: ['members'],
+  summary: 'Member file: profile, consents and reservations (studio admin only)',
+  security: [{ bearerAuth: [] }],
+  request: { params: MemberFileParamsSchema },
+  responses: {
+    200: {
+      description: 'The member file',
+      content: { 'application/json': { schema: MemberFileResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not a studio admin'),
+    404: problemResponse('`member_not_found`: no live member with this id in the studio'),
+  },
+});
+
 /*
  * classes — /v1/classes
  */
@@ -617,6 +641,62 @@ const deleteClassRoute = createRoute({
       description: 'Class not found',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
+  },
+});
+
+const classRosterRoute = createRoute({
+  method: 'get',
+  path: '/v1/classes/{id}/roster',
+  tags: ['classes'],
+  summary: 'Roster of a class: booked members, waitlist and check-ins',
+  description: 'Open to the studio admin and to the coach the class is assigned to.',
+  security: [{ bearerAuth: [] }],
+  request: { params: ClassRosterParamsSchema },
+  responses: {
+    200: {
+      description: 'The class roster',
+      content: { 'application/json': { schema: ClassRosterResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('A member, or `not_class_coach`: a coach of another class'),
+    404: problemResponse('Class not found in the studio'),
+  },
+});
+
+const rosterCheckInRoute = createRoute({
+  method: 'post',
+  path: '/v1/classes/{id}/roster/{reservationId}/check-in',
+  tags: ['classes'],
+  summary: 'Mark a booked member of the class present (admin or coach of the class)',
+  description:
+    'Stamps the same check-in as a kiosk scan. Allowed from 30 minutes before the class ' +
+    'starts until 24 hours after it ends.',
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: RosterCheckInParamsSchema,
+    headers: z.object({
+      'idempotency-key': z.string().min(1).max(255).optional().openapi({
+        description: 'Client-generated key; a retry with the same key replays the first response.',
+      }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'The roster entry, checked in',
+      content: { 'application/json': { schema: ClassRosterEntrySchema } },
+    },
+    400: invalidIdempotencyKeyResponse,
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('A member, or `not_class_coach`: a coach of another class'),
+    404: problemResponse('Class or reservation not found'),
+    422: problemResponse(
+      '`not_confirmed` (waitlisted or cancelled), `already_checked_in` or `outside_window`',
+    ),
+    429: problemResponse(
+      'Rate limited (60 check-ins per minute per operator, shared with `POST /v1/checkins`), or ' +
+        '`checkin_limit_reached`: the member was checked in 5 times this hour',
+    ),
+    503: problemResponse('Rate limiter unavailable (fail-closed, code `dependency_unavailable`)'),
   },
 });
 
@@ -1677,6 +1757,7 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   app.openapi(patchConsentsRoute, stub);
   app.openapi(exportMeRoute, stub);
   app.openapi(listMembersRoute, stub);
+  app.openapi(memberFileRoute, stub);
 
   // classes
   app.openapi(listClassesRoute, stub);
@@ -1690,6 +1771,8 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   app.openapi(createSeriesRoute, stub);
   app.openapi(updateSeriesRoute, stub);
   app.openapi(deleteSeriesRoute, stub);
+  app.openapi(classRosterRoute, stub);
+  app.openapi(rosterCheckInRoute, stub);
 
   // reservations
   app.openapi(bookRoute, stub);
