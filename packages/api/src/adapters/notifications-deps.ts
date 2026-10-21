@@ -10,6 +10,8 @@
  *
  *   - `dedup`       — Upstash Redis `SET key value NX EX ttl`.
  *   - `recipients`  — `notification_recipient` service function (migration 0032).
+ *   - `preferences` : `notification_preferences_of` service function
+ *                     (migration 0054), the channels a member turned off.
  *   - `email`       — Resend transport (`RESEND_API_KEY`). Dev-only
  *                     no-op when the key is absent; staging/production
  *                     throw so the queue retries instead of silently
@@ -32,6 +34,7 @@ import type {
   EmailSender,
   HandleEventDeps,
   Logger,
+  PreferencesRepo,
   PushSender,
   Recipient,
   RecipientRepo,
@@ -89,6 +92,22 @@ export function buildRecipientRepo(db: AthlyaDbAny): RecipientRepo {
         // Locale column is not in users yet; FR is product default.
         locale: 'fr',
       };
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Member preferences                                                 */
+/* ------------------------------------------------------------------ */
+
+export function buildPreferencesRepo(db: AthlyaDbAny): PreferencesRepo {
+  return {
+    async getPreferences(userId): Promise<unknown> {
+      const rows = await queryRows<{ preferences: unknown }>(
+        db,
+        serviceFn.notificationPreferencesOf(userId),
+      );
+      return rows[0]?.preferences ?? null;
     },
   };
 }
@@ -243,6 +262,7 @@ export function buildNotificationsDeps(env: AthlyaBindings): HandleEventDeps {
   return {
     dedup: buildDedupStore(env),
     recipients: buildRecipientRepo(db),
+    preferences: buildPreferencesRepo(db),
     email: buildEmailSender(env, logger),
     push: buildPushSender(logger),
     logger,

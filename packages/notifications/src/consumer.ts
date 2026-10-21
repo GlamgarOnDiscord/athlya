@@ -72,6 +72,7 @@
  */
 
 import { t, type Locale } from '@athlya/shared/i18n';
+import { isNotificationEnabled } from '@athlya/shared/schemas/api';
 
 import type {
   AthlyaEvent,
@@ -196,6 +197,17 @@ export interface RecipientRepo {
   getRecipient(userId: string): Promise<Recipient | null>;
 }
 
+/**
+ * Preference lookup contract (issue #762). Returns the stored
+ * preferences of the recipient (channels turned off per message), or
+ * `null` when there are none; every channel is then on. Production reads
+ * them through the `notification_preferences_of` service function
+ * (migration 0054).
+ */
+export interface PreferencesRepo {
+  getPreferences(userId: string): Promise<unknown>;
+}
+
 /** Arguments accepted by {@link EmailSender.send}. */
 export interface EmailMessage {
   readonly to: string;
@@ -296,6 +308,8 @@ export interface HandleEventDeps {
   readonly email: EmailSender;
   readonly push: PushSender;
   readonly logger: Logger;
+  /** Optional: without it every channel of every message is on. */
+  readonly preferences?: PreferencesRepo;
   /** Optional — defaults to `Date.now`. Tests pin it for determinism. */
   readonly clock?: Clock;
   /**
@@ -352,6 +366,20 @@ const TRANSACTIONAL_KIND: Readonly<Record<HandledEventType, boolean>> = {
   'billing.subscription.failed': true,
 };
 
+/**
+ * Key of each handled event in `MEMBER_NOTIFICATION_CATALOG`, the
+ * namespace member preferences are stored under. The catalog marks
+ * `billingSubscriptionFailed` as mandatory, so no preference ever stops
+ * it.
+ */
+const PREFERENCE_KEY: Readonly<Record<HandledEventType, string>> = {
+  'reservation.created': 'reservationCreated',
+  'reservation.reminder': 'reservationReminder',
+  'reservation.cancelled': 'reservationCancelled',
+  'reservation.promoted': 'reservationPromoted',
+  'billing.subscription.failed': 'billingSubscriptionFailed',
+};
+
 /* ------------------------------------------------------------------ */
 /*  Templates                                                          */
 /* ------------------------------------------------------------------ */
@@ -372,11 +400,11 @@ const TRANSACTIONAL_KIND: Readonly<Record<HandledEventType, boolean>> = {
  * "push-only" behaviour described in the task.
  */
 interface RenderedMessage {
-  readonly emailSubject?: string;
-  readonly emailBody?: string;
-  readonly pushTitle?: string;
-  readonly pushBody?: string;
-  readonly pushData?: Record<string, string>;
+  readonly emailSubject?: string | undefined;
+  readonly emailBody?: string | undefined;
+  readonly pushTitle?: string | undefined;
+  readonly pushBody?: string | undefined;
+  readonly pushData?: Record<string, string> | undefined;
 }
 
 /**
@@ -672,8 +700,36 @@ export async function handleEvent(
       return { status: 'skipped_no_consent' };
     }
 
-    // ---- Step 5: render + dispatch ----------------------------
-    const message = render(handled, recipient.locale);
+    // ---- Step 5: render, member preferences, dispatch ----------
+    //
+    // A channel the member turned off for this message is dropped
+    // from the rendered template (issue #762); mandatory messages are
+    // never affected (`isNotificationEnabled`).
+    const rendered = render(handled, recipient.locale);
+    const stored =
+      deps.preferences === undefined ? null : await deps.preferences.getPreferences(userId);
+    const key = PREFERENCE_KEY[handled.type];
+    const emailOn = isNotificationEnabled(stored, key, 'email');
+    const pushOn = isNotificationEnabled(stored, key, 'push');
+    if (!emailOn || !pushOn) {
+      logger.info('notifications.skipped_preference', {
+        eventId: event.id,
+        type: event.type,
+        userId,
+        email: !emailOn,
+        push: !pushOn,
+      });
+    }
+    const message: RenderedMessage = {
+      ...(emailOn ? { emailSubject: rendered.emailSubject, emailBody: rendered.emailBody } : {}),
+      ...(pushOn
+        ? {
+            pushTitle: rendered.pushTitle,
+            pushBody: rendered.pushBody,
+            pushData: rendered.pushData,
+          }
+        : {}),
+    };
 
     const emailPromise = maybeSendEmail(message, recipient, email);
     const pushPromise = maybeSendPush(message, recipient, push);

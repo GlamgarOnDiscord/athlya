@@ -521,10 +521,17 @@
         }
       },
       "notifications": {
-        "description": "Les messages que vous recevez à propos de vos réservations.",
+        "description": "Choisissez, message par message, comment vous êtes prévenu.",
         "listLabel": "Messages envoyés",
         "alwaysSent": "Toujours envoyé",
-        "transactional": "Ces messages concernent directement vos réservations : ils sont toujours envoyés.",
+        "mandatory": "Message de sécurité ou de paiement, toujours envoyé.",
+        "loading": "Chargement de vos préférences…",
+        "loadError": "Impossible de charger vos préférences.",
+        "retry": "Réessayer",
+        "save": "Enregistrer",
+        "saving": "Enregistrement…",
+        "saved": "Préférences enregistrées.",
+        "saveError": "Enregistrement impossible, réessayez.",
         "channels": {
           "email": "E-mail",
           "push": "Notification sur l'app mobile"
@@ -533,11 +540,9 @@
           "reservationCreated": "Réservation confirmée",
           "reservationReminder": "Rappel une heure avant le cours",
           "reservationCancelled": "Réservation annulée",
-          "reservationPromoted": "Place obtenue depuis la liste d'attente"
-        },
-        "perEvent": {
-          "title": "Choisir message par message",
-          "body": "Activer ou couper chaque message séparément arrive bientôt."
+          "reservationPromoted": "Place obtenue depuis la liste d'attente",
+          "billingSubscriptionFailed": "Échec du paiement de l'abonnement",
+          "passwordReset": "Réinitialisation du mot de passe"
         },
         "marketing": {
           "title": "Communications marketing",

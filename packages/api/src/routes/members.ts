@@ -9,6 +9,8 @@
  *   | PATCH  | /me               | jwtAuth → projectUserId → zValidator(body) → idempotency → handler |
  *   | PUT    | /me/avatar        | jwtAuth → handler (raw binary body)                                |
  *   | PATCH  | /me/consents      | jwtAuth → projectUserId → zValidator(body) → idempotency → handler |
+ *   | GET    | /me/notification-preferences | jwtAuth → handler                                        |
+ *   | PUT    | /me/notification-preferences | jwtAuth → projectUserId → zValidator(body) → idempotency → handler |
  *   | POST   | /me/export        | jwtAuth → projectUserId → idempotency → handler (returns 202)      |
  *   | GET    | /                 | jwtAuth → requireRole('admin','coach') → zValidator(query) → handler |
  *   | GET    | /:id              | jwtAuth → requireRole('admin') → zValidator(param) → handler        |
@@ -34,6 +36,7 @@
 
 import {
   MemberFileParamsSchema,
+  NotificationPreferencesSchema,
   UpdateConsentsRequestSchema,
   UpdateProfileRequestSchema,
 } from '@athlya/shared/schemas/api';
@@ -66,6 +69,7 @@ import type { HonoEnv } from '../types.js';
 import type {
   MemberFileParams,
   MemberFileResponse,
+  NotificationPreferences,
   UpdateConsentsRequest,
   UpdateProfileRequest,
 } from '@athlya/shared/schemas/api';
@@ -171,6 +175,17 @@ export interface MembersDeps extends MeDeps {
     input: UpdateConsentsRequest,
     claims: AuthClaims,
   ): Promise<unknown>;
+  /** Full notification toggles of the member, `null` when the row is gone. */
+  getNotificationPreferences(
+    userId: string,
+    claims: AuthClaims,
+  ): Promise<NotificationPreferences | null>;
+  /** Replace the member's notification toggles, `null` when the row is gone. */
+  updateNotificationPreferences(
+    userId: string,
+    preferences: NotificationPreferences,
+    claims: AuthClaims,
+  ): Promise<NotificationPreferences | null>;
   enqueueExport(userId: string, claims: AuthClaims): Promise<{ jobId: string }>;
   /** Status of one of the caller's export jobs (RLS: own rows only). */
   getExportJob(jobId: string, claims: AuthClaims): Promise<ExportJobView | null>;
@@ -397,6 +412,43 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
       const patch = readValidated<UpdateConsentsRequest>(c, 'json');
       const consents = await deps.updateConsents(claims.userId, patch, claims);
       return c.json(consents as Record<string, unknown>, 200);
+    },
+  );
+
+  /* ------------------------------ GET /me/notification-preferences */
+  router.get('/me/notification-preferences', async (c) => {
+    traceOperation(c, 'members.get-notification-preferences');
+    const claims = c.get('authClaims');
+    if (claims === undefined) {
+      throw new Error('authClaims unexpectedly missing after jwtAuth');
+    }
+    const preferences = await deps.getNotificationPreferences(claims.userId, claims);
+    if (preferences === null) {
+      return membersProblem(c, 404, 'member not found', 'not_found');
+    }
+    return c.json({ preferences }, 200);
+  });
+
+  /* ------------------------------ PUT /me/notification-preferences */
+  // Mandatory messages (payment failure, password reset) are not keys
+  // of the strict schema: trying to turn one off is a 422.
+  router.put(
+    '/me/notification-preferences',
+    projectUserIdFromClaims(),
+    zValidator('json', NotificationPreferencesSchema),
+    ...(idem ? [idempotency(idem)] : []),
+    async (c) => {
+      traceOperation(c, 'members.update-notification-preferences');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const input = readValidated<NotificationPreferences>(c, 'json');
+      const preferences = await deps.updateNotificationPreferences(claims.userId, input, claims);
+      if (preferences === null) {
+        return membersProblem(c, 404, 'member not found', 'not_found');
+      }
+      return c.json({ preferences }, 200);
     },
   );
 

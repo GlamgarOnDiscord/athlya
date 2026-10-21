@@ -246,6 +246,134 @@ export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequestSchema>;
 export const UpdateConsentsRequestSchema = ConsentsInputSchema;
 export type UpdateConsentsRequest = z.infer<typeof UpdateConsentsRequestSchema>;
 
+/* ------------------------------------------------------------------ */
+/*  Notification preferences: /v1/members/me/notification-preferences */
+/* ------------------------------------------------------------------ */
+
+/** Delivery channels of a member notification. */
+export const NOTIFICATION_CHANNELS = ['email', 'push'] as const;
+
+export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
+
+/**
+ * Messages the notifications service sends a member (issue #762), with
+ * their channels. `mandatory` messages always leave: a payment failure
+ * and a password reset are safety messages, never subject to a
+ * preference. Keys match the `notifications.*` template namespace.
+ */
+export const MEMBER_NOTIFICATION_CATALOG = {
+  reservationCreated: { channels: ['email', 'push'], mandatory: false },
+  reservationReminder: { channels: ['push'], mandatory: false },
+  reservationCancelled: { channels: ['email', 'push'], mandatory: false },
+  reservationPromoted: { channels: ['email', 'push'], mandatory: false },
+  billingSubscriptionFailed: { channels: ['email'], mandatory: true },
+  passwordReset: { channels: ['email'], mandatory: true },
+} as const satisfies Record<
+  string,
+  { readonly channels: readonly NotificationChannel[]; readonly mandatory: boolean }
+>;
+
+export type MemberNotification = keyof typeof MEMBER_NOTIFICATION_CATALOG;
+
+/** Messages a member may turn off, channel by channel. */
+export type OptionalMemberNotification = {
+  [K in MemberNotification]: (typeof MEMBER_NOTIFICATION_CATALOG)[K]['mandatory'] extends true
+    ? never
+    : K;
+}[MemberNotification];
+
+const channelToggles = <const C extends readonly NotificationChannel[]>(channels: C) =>
+  z
+    .object(
+      Object.fromEntries(channels.map((c) => [c, z.boolean()])) as {
+        [K in C[number]]: z.ZodBoolean;
+      },
+    )
+    .strict();
+
+/**
+ * Full set of toggles, one boolean per optional message and channel.
+ * `GET` answers with it and `PUT` replaces it. A mandatory message is
+ * an unknown key, so trying to turn one off is a 422.
+ */
+export const NotificationPreferencesSchema = z
+  .object({
+    reservationCreated: channelToggles(MEMBER_NOTIFICATION_CATALOG.reservationCreated.channels),
+    reservationReminder: channelToggles(MEMBER_NOTIFICATION_CATALOG.reservationReminder.channels),
+    reservationCancelled: channelToggles(MEMBER_NOTIFICATION_CATALOG.reservationCancelled.channels),
+    reservationPromoted: channelToggles(MEMBER_NOTIFICATION_CATALOG.reservationPromoted.channels),
+  })
+  .strict();
+
+export type NotificationPreferences = z.infer<typeof NotificationPreferencesSchema>;
+
+/** `GET` / `PUT /v1/members/me/notification-preferences` response. */
+export const NotificationPreferencesResponseSchema = z
+  .object({ preferences: NotificationPreferencesSchema })
+  .strict();
+
+export type NotificationPreferencesResponse = z.infer<typeof NotificationPreferencesResponseSchema>;
+
+/**
+ * Stored form (`users.notification_preferences`, migration 0054): only
+ * the channels turned off, `{ message: { channel: false } }`. Anything
+ * else in the column is ignored on read.
+ */
+export type StoredNotificationPreferences = Partial<
+  Record<OptionalMemberNotification, Partial<Record<NotificationChannel, false>>>
+>;
+
+function isOptional(message: string): message is OptionalMemberNotification {
+  const entry = (MEMBER_NOTIFICATION_CATALOG as Record<string, { mandatory: boolean }>)[message];
+  return entry !== undefined && !entry.mandatory;
+}
+
+/**
+ * Whether `message` may go out on `channel` for a member whose stored
+ * preferences are `stored`. Mandatory messages and unknown messages
+ * always may; so does anything when the column is empty or malformed.
+ */
+export function isNotificationEnabled(
+  stored: unknown,
+  message: string,
+  channel: NotificationChannel,
+): boolean {
+  if (!isOptional(message)) return true;
+  if (typeof stored !== 'object' || stored === null || Array.isArray(stored)) return true;
+  const entry = (stored as Record<string, unknown>)[message];
+  if (typeof entry !== 'object' || entry === null) return true;
+  return (entry as Record<string, unknown>)[channel] !== false;
+}
+
+/** Full toggles for a stored value (missing means on). */
+export function resolveNotificationPreferences(stored: unknown): NotificationPreferences {
+  const toggles = (message: OptionalMemberNotification) =>
+    Object.fromEntries(
+      MEMBER_NOTIFICATION_CATALOG[message].channels.map((c) => [
+        c,
+        isNotificationEnabled(stored, message, c),
+      ]),
+    );
+  return NotificationPreferencesSchema.parse({
+    reservationCreated: toggles('reservationCreated'),
+    reservationReminder: toggles('reservationReminder'),
+    reservationCancelled: toggles('reservationCancelled'),
+    reservationPromoted: toggles('reservationPromoted'),
+  });
+}
+
+/** Stored form of full toggles: only what is off. */
+export function storeNotificationPreferences(
+  preferences: NotificationPreferences,
+): StoredNotificationPreferences {
+  const stored: Record<string, Record<string, false>> = {};
+  for (const [message, channels] of Object.entries(preferences)) {
+    const off = Object.entries(channels as Record<string, boolean>).filter(([, on]) => !on);
+    if (off.length > 0) stored[message] = Object.fromEntries(off.map(([c]) => [c, false]));
+  }
+  return stored;
+}
+
 /**
  * `POST /v1/members/me/export` → 202 with a job id (Requirement 4.1).
  */

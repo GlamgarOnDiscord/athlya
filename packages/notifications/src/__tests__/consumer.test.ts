@@ -511,3 +511,61 @@ describe('handleEvent — unknown recipient', () => {
     }
   });
 });
+
+/* ================================================================== */
+/*  Member preferences (issue #762)                                    */
+/* ================================================================== */
+
+describe('handleEvent: member preferences', () => {
+  it('drops the e-mail the member turned off and keeps the push', async () => {
+    const { sendEmail, sendPush, deps } = buildDeps();
+    const getPreferences = vi.fn().mockResolvedValue({ reservationCreated: { email: false } });
+
+    const result = await handleEvent(createdEvent(), { ...deps, preferences: { getPreferences } });
+
+    expect(getPreferences).toHaveBeenCalledWith(USER_ID);
+    expect(result).toEqual({ status: 'ok', email: false, push: true });
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(sendPush).toHaveBeenCalledOnce();
+  });
+
+  it('drops the push the member turned off and keeps the e-mail', async () => {
+    const { sendEmail, sendPush, deps } = buildDeps();
+    const getPreferences = vi.fn().mockResolvedValue({ reservationCancelled: { push: false } });
+
+    const result = await handleEvent(cancelledEvent(), {
+      ...deps,
+      preferences: { getPreferences },
+    });
+
+    expect(result).toEqual({ status: 'ok', email: true, push: false });
+    expect(sendEmail).toHaveBeenCalledOnce();
+    expect(sendPush).not.toHaveBeenCalled();
+  });
+
+  it('keeps the claim when every channel is off, so a redelivery stays silent', async () => {
+    const { release, sendPush, deps } = buildDeps();
+    const getPreferences = vi.fn().mockResolvedValue({ reservationReminder: { push: false } });
+
+    const result = await handleEvent(reminderEvent(), { ...deps, preferences: { getPreferences } });
+
+    expect(result).toEqual({ status: 'ok', email: false, push: false });
+    expect(sendPush).not.toHaveBeenCalled();
+    expect(release).not.toHaveBeenCalled();
+  });
+
+  it('always sends the mandatory payment failure e-mail', async () => {
+    const { sendEmail, deps } = buildDeps();
+    const getPreferences = vi
+      .fn()
+      .mockResolvedValue({ billingSubscriptionFailed: { email: false } });
+
+    const result = await handleEvent(billingFailedEvent(), {
+      ...deps,
+      preferences: { getPreferences },
+    });
+
+    expect(result).toEqual({ status: 'ok', email: true, push: false });
+    expect(sendEmail).toHaveBeenCalledOnce();
+  });
+});
