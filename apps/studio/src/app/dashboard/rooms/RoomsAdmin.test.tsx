@@ -23,8 +23,10 @@ vi.mock('../../../lib/auth/AuthContext', () => ({
   useAuth: () => ({ accessToken: 'jwt' }),
 }));
 
+const client = { get, post, patch: vi.fn(), del };
+
 vi.mock('../../../lib/api/buildClient', () => ({
-  useApiClient: () => ({ get, post, patch: vi.fn(), del }),
+  useApiClient: () => client,
 }));
 
 const STUDIO_A = {
