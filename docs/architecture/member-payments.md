@@ -32,7 +32,9 @@ Decided by the owner, not open for this review:
 Consequences this document derives from them:
 
 - The studio is the **merchant of record**: its name on the card statement, its refund and
-  dispute liability, its VAT. Athlya is software, not a payment facilitator.
+  dispute liability, its VAT. Athlya intends to act as software, not as a payment facilitator.
+  Direct charges support that position but do not settle Athlya's regulatory status in every
+  country: it is an assumption that counsel must confirm before Phase 5 (live mode).
 - With Stripe pricing the connected accounts directly, Stripe states "No fees for your platform"
   ([Connect pricing](https://stripe.com/connect/pricing)). Processor fees for the studio are on
   [stripe.com/pricing](https://stripe.com/pricing). Both pages may change; this document quotes
@@ -58,8 +60,12 @@ onboarding"); Athlya never asks for an API key from the studio.
 ### Onboarding flow
 
 1. Studio admin clicks **Accept payments** in the studio app. API (`POST /v1/billing/connect/account`,
-   admin only, `Idempotency-Key`) creates the v2 Account with an idempotency key derived from the
-   studio id, so a double click never creates two accounts, and stores `acct_...` (unique per studio).
+   admin only, `Idempotency-Key`) first inserts the `studio_payment_accounts` row (unique
+   `studio_id`, state `creating`, no `acct_...` yet), then creates the v2 Account with an
+   idempotency key derived from the studio id and `metadata.studioId`, and writes `acct_...` back.
+   The local row is the duplicate guard, not the Stripe key: Stripe may prune a key after 24 hours
+   and treat its reuse as a new request. A retry that finds a row still `creating` first looks for
+   an existing Account carrying that `metadata.studioId` and adopts it before creating one.
 2. API creates an Account Link (`POST /v2/core/account_links`, `use_case.type =
 account_onboarding`, `collection_options.fields = eventually_due` for up-front collection) and
    returns its single-use URL. Embedded onboarding (`account_onboarding` component via an Account
@@ -75,19 +81,23 @@ account_onboarding`, `collection_options.fields = eventually_due` for up-front c
 
 ### KYC states and the studio dashboard
 
-| Athlya state      | Derived from                                                        | Studio dashboard shows                                            | Member checkout |
-| ----------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------- |
-| `not_started`     | no row                                                              | "Accept payments" call to action                                  | hidden          |
-| `onboarding`      | Account exists, `currently_due` requirements, capability not active | "Finish setup" (new Account Link)                                 | hidden          |
-| `pending_review`  | nothing due, capability `pending`                                   | "Stripe is verifying your details"                                | hidden          |
-| `active`          | `card_payments` active, nothing `past_due`                          | Live badge, link to the Stripe Dashboard, payouts summary         | shown           |
-| `action_required` | active, but a requirement `currently_due` with a deadline           | Banner with the deadline (Stripe `notification_banner` component) | shown           |
-| `restricted`      | a requirement `past_due` or capability `restricted`/`inactive`      | Blocking banner, "Update details"                                 | hidden          |
-| `disconnected`    | Account closed or platform access removed                           | "Payments disconnected", reconnect option                         | hidden          |
+| Athlya state      | Derived from                                                           | Studio dashboard shows                                            | Member checkout |
+| ----------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------- |
+| `not_started`     | no row                                                                 | "Accept payments" call to action                                  | hidden          |
+| `onboarding`      | Account exists, `currently_due` requirements, capability not active    | "Finish setup" (new Account Link)                                 | hidden          |
+| `pending_review`  | nothing due, capability `pending`                                      | "Stripe is verifying your details"                                | hidden          |
+| `active`          | `card_payments` active, nothing `currently_due` and nothing `past_due` | Live badge, link to the Stripe Dashboard, payouts summary         | shown           |
+| `action_required` | active, but a requirement `currently_due` with a deadline              | Banner with the deadline (Stripe `notification_banner` component) | shown           |
+| `restricted`      | a requirement `past_due` or capability `restricted`/`inactive`         | Blocking banner, "Update details"                                 | hidden          |
+| `disconnected`    | Account closed or platform access removed                              | "Payments disconnected", reconnect option                         | hidden          |
+
+When several rows match, the first of `disconnected`, `restricted`, `action_required`, `active`
+wins, so a deadline-bearing requirement always shows its banner instead of the Live badge. The
+internal `creating` state (step 1 of the onboarding flow) displays as `not_started`.
 
 The `notification_banner` embedded component is mandatory once a studio is active: it surfaces
 new requirements before they disable payments. Payouts, balances and disputes stay in the Stripe
-Dashboard (full access); embedded `payments` / `payouts` components are a later nice to have.
+Dashboard (full access); embedded `payments` / `payouts` components are a later nice-to-have.
 
 ## 4. Charge model
 
@@ -113,16 +123,19 @@ Dashboard (full access); embedded `payments` / `payouts` components are a later 
 Each studio owns its catalog **on its connected account** (Products and Prices created with
 `Stripe-Account`). One Product per offer, several Prices only for variants of the same offer.
 
-| Offer               | Stripe mode                                                  | Athlya entitlement                                                      | Granted on                                                                            |
-| ------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Drop-in (one class) | Checkout `mode=payment`, linked to one class                 | One credit reserved for that class, booking confirmed                   | `checkout.session.completed` with `payment_status=paid`, or `async_payment_succeeded` |
-| Class pack (N)      | Checkout `mode=payment`                                      | N credits in a ledger, optional expiry                                  | same                                                                                  |
-| Membership          | Checkout `mode=subscription` (Billing on the studio account) | Unlimited or N per period while the subscription is `active`/`trialing` | `invoice.paid`; revoked on `customer.subscription.deleted` or unpaid                  |
+| Offer               | Stripe mode                                                  | Athlya entitlement                                                      | Granted on                                                                                                                                                           |
+| ------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drop-in (one class) | Checkout `mode=payment`, linked to one class                 | One credit reserved for that class, booking confirmed                   | `checkout.session.completed` with `payment_status=paid`, or `async_payment_succeeded`                                                                                |
+| Class pack (N)      | Checkout `mode=payment`                                      | N credits in a ledger, optional expiry                                  | same                                                                                                                                                                 |
+| Membership          | Checkout `mode=subscription` (Billing on the studio account) | Unlimited or N per period while the subscription is `active`/`trialing` | `customer.subscription.created/updated` with status `active` or `trialing`; revoked on `unpaid`, `canceled`, `incomplete_expired` or `customer.subscription.deleted` |
 
 - Member self-service (card update, cancel) uses the Stripe **Customer Portal** opened with
   `Stripe-Account`, configured per studio.
 - A member is a Customer **on the studio account**, one per (studio, member). The same person in
   two studios is two Customers on two accounts; nothing is shared across studios.
+- Membership access follows the subscription status, so a trial is provisioned before any
+  payment. `invoice.paid`, `invoice.payment_failed` and `invoice.payment_action_required` record
+  the payment outcome and drive the member notices, not the entitlement itself.
 - Fulfilment is driven by the webhook, never by the success page. A booking that waits for
   payment holds its seat for the Checkout Session lifetime only (`expires_at`), then releases it
   on `checkout.session.expired`.
@@ -147,9 +160,13 @@ Rules, each one reusing what `webhook.ts` and migration `0036` already enforce:
    writes the outbox and the audit row. A failure rolls the claim back so Stripe's retry is
    processed, a replay is a no-op. The three endpoints share the table; a nullable `account_id`
    column (section 9) records which connected account an event came from.
-3. **Tenant from the account, never from metadata alone:** the event's `account` (or the thin
-   event's `related_object.id`) must map to exactly one studio in `studio_payment_accounts`;
-   `metadata.studioId` must match it or the event is acknowledged and audited, never applied.
+3. **Tenant from the account, never from metadata:** the event's top-level `account` (or the thin
+   event's `related_object.id`) must map to exactly one studio in `studio_payment_accounts`, or
+   the event is acknowledged and audited, never applied. `metadata.studioId` is only a cross-check,
+   applied when the event object carries it (objects Athlya created: Checkout Sessions,
+   Subscriptions); objects without it (`account.application.deauthorized` carries an
+   `application`, a refund made in the studio Dashboard has no Athlya metadata) are resolved from
+   the account alone. A mismatch is acknowledged and audited, never applied.
 4. **`livemode` must match the environment.** A production Connect endpoint also receives test
    events; a mismatch is acknowledged and dropped.
 5. **Thin events are fetched, not trusted:** the handler retrieves the current Account
@@ -163,8 +180,11 @@ Rules, each one reusing what `webhook.ts` and migration `0036` already enforce:
 - **Secrets per environment**, set on the billing Worker only (`wrangler.billing.toml`, checked by
   `scripts/verify-secrets.mjs`): the two new webhook secrets, plus a **restricted key** (`rk_...`)
   for Connect calls instead of reusing `STRIPE_SECRET_KEY`, with only Accounts, Account Links,
-  Checkout, Customers, Subscriptions, Refunds and Billing Portal write permissions. Separate Stripe
-  sandboxes for dev, CI and staging; live keys only in production, from the ops vault.
+  Products, Prices, Checkout, Customers, Subscriptions, Refunds and Billing Portal write
+  permissions. The exact permission names, and restricted-key support for the v2 Accounts
+  endpoints, are to confirm in the Stripe Dashboard at Phase 1; if v2 needs the secret key, only
+  account creation uses it. Separate Stripe sandboxes for dev, CI and staging; live keys only in
+  production, from the ops vault.
 - **No per-studio secret with Stripe:** the platform key plus `Stripe-Account` is enough. Providers
   that need per-merchant OAuth tokens (Mollie, GoCardless, PayPal) require envelope-encrypted token
   storage, which is one reason they come later (section 8).
@@ -245,8 +265,17 @@ type NormalisedPaymentEvent = {
   readonly livemode: boolean;
 } & (
   | { kind: 'account.updated' }
+  | { kind: 'account.disconnected' }
   | { kind: 'checkout.paid' | 'checkout.failed' | 'checkout.expired'; checkoutId: string }
   | { kind: 'recurring.updated'; recurringRef: string; status: string; periodEnd: Date | null }
+  | {
+      kind:
+        'recurring.payment_succeeded' | 'recurring.payment_failed' | 'recurring.action_required';
+      recurringRef: string;
+      invoiceRef: string;
+      amount: Money;
+      hostedInvoiceUrl: string | null;
+    }
   | { kind: 'payment.refunded'; paymentRef: string; refunded: Money }
   | { kind: 'dispute.updated'; paymentRef: string; status: 'open' | 'won' | 'lost' }
 );
@@ -278,7 +307,7 @@ column nullable or defaulted, no change to existing tables except one nullable c
 
 | Table                           | Key columns                                                                                                                                                                                 |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `studio_payment_accounts`       | `studio_id` (unique, FK), `provider`, `provider_account_id` (unique), `state`, `due_by`, `livemode`, `source_event_at`, `disconnected_at`                                                   |
+| `studio_payment_accounts`       | `studio_id` (unique, FK), `provider`, `provider_account_id` (unique, null while `creating`), `state`, `due_by`, `livemode`, `source_event_at`, `disconnected_at`                            |
 | `studio_offers`                 | `id`, `studio_id`, `kind` (`drop_in`, `class_pack`, `membership`), `provider_product_id`, `provider_price_id`, `credits`, `validity_days`, `interval`, `amount_minor`, `currency`, `active` |
 | `member_payment_customers`      | `studio_id`, `user_id`, `provider`, `provider_customer_id`; unique (`studio_id`, `user_id`, `provider`)                                                                                     |
 | `member_orders`                 | `id`, `studio_id`, `user_id`, `offer_id`, `class_id` (drop-in), `checkout_id` (unique), `payment_ref`, `amount_minor`, `currency`, `status`, `refunded_minor`, `source_event_at`            |
