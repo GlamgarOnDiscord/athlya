@@ -72,6 +72,14 @@ export async function loginAsAdmin(page: Page): Promise<void> {
     });
   });
 
+  await page.route('**/v1/classes/rooms', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [] }),
+    });
+  });
+
   await page.route('**/v1/programs*', async (route) => {
     const request = route.request();
     // Only the list read is mocked; mutations fall through to the real

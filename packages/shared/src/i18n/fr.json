@@ -152,6 +152,31 @@
     "cancelled": "Réservation annulée",
     "cancelWindowClosed": "L'annulation n'est plus possible moins de 2 heures avant le cours."
   },
+  "calendar": {
+    "add": {
+      "label": "Ajouter au calendrier",
+      "download": "Fichier .ics",
+      "google": "Google Agenda",
+      "forClass": "pour « {title} »",
+      "newTab": "(nouvel onglet)"
+    },
+    "sync": {
+      "title": "Synchroniser mon agenda",
+      "description": "Abonnez votre agenda à vos réservations : les nouvelles séances et les annulations s'y affichent toutes seules.",
+      "urlLabel": "Adresse d'abonnement",
+      "copy": "Copier l'adresse",
+      "copied": "Adresse copiée.",
+      "copyError": "Copie impossible. Sélectionnez l'adresse et copiez-la vous-même.",
+      "open": "Ouvrir dans mon agenda",
+      "howTo": "Comment s'abonner",
+      "google": "Google Agenda : « Autres agendas », puis « À partir de l'URL », et collez l'adresse.",
+      "apple": "Apple Calendrier : « Fichier », puis « Nouvel abonnement à un calendrier », et collez l'adresse.",
+      "outlook": "Outlook : « Ajouter un calendrier », puis « S'abonner à partir du web », et collez l'adresse.",
+      "refresh": "Votre agenda se met à jour de lui-même, avec un délai qui peut atteindre quelques heures selon le service.",
+      "privacy": "Cette adresse est personnelle : toute personne qui la connaît voit vos réservations. Elle cesse de fonctionner si vous vous déconnectez de tous vos appareils ou changez de mot de passe ; revenez alors ici pour la nouvelle adresse.",
+      "unavailable": "La synchronisation d'agenda n'est pas disponible pour le moment."
+    }
+  },
   "checkin": {
     "title": "Pointer à l'accueil",
     "link": "Mon QR code de pointage",
@@ -317,6 +342,24 @@
       "confirmWord": "SUPPRIMER",
       "confirmInstruction": "Tapez {word} pour confirmer",
       "confirmButton": "Supprimer définitivement"
+    }
+  },
+  "demo": {
+    "banner": {
+      "badge": "Démo",
+      "text": "Données fictives : rien n'est envoyé ni enregistré sur un serveur."
+    },
+    "picker": {
+      "title": "Choisir un profil de démo",
+      "subtitle": "Aucun identifiant : chaque profil ouvre une session fictive dans cet onglet.",
+      "member": "Membre",
+      "memberHint": "Réserver un cours, annuler, gérer son profil",
+      "admin": "Administratrice",
+      "adminHint": "Tableau de bord, planning, membres, journal et pointage",
+      "coach": "Coach",
+      "coachHint": "Ses cours du jour, son planning et ses membres",
+      "signInAs": "Ouvrir la session de démo de {name}, {role}",
+      "error": "La session de démo n'a pas pu démarrer. Rechargez la page."
     }
   },
   "web": {
@@ -603,7 +646,8 @@
       "dashboard": "Tableau de bord",
       "settings": "Configuration",
       "home": "Accueil",
-      "planning": "Mon planning"
+      "planning": "Mon planning",
+      "rooms": "Salles"
     },
     "dashboard": {
       "title": "Tableau de bord",
@@ -742,13 +786,18 @@
       "deleteConfirm": {
         "title": "Supprimer ce cours ?",
         "body": "Cette action est irréversible. Les réservations en cours seront annulées.",
-        "confirm": "Supprimer"
+        "confirm": "Supprimer",
+        "seriesBody": "Ce cours fait partie d'une série. Les réservations des cours supprimés seront annulées."
       },
       "fields": {
         "title": "Titre",
         "startsAt": "Date et heure de début",
         "durationMin": "Durée (min)",
-        "capacity": "Capacité"
+        "capacity": "Capacité",
+        "room": "Salle",
+        "coach": "Coach",
+        "noRoom": "Aucune salle",
+        "noCoach": "Aucun coach"
       },
       "dialog": {
         "createTitle": "Nouveau cours",
@@ -758,7 +807,8 @@
       },
       "errors": {
         "generic": "Erreur lors de l'enregistrement.",
-        "versionConflict": "Le cours a été modifié entre temps. Liste rafraîchie — réessayez."
+        "versionConflict": "Le cours a été modifié entre-temps. Liste rafraîchie, réessayez.",
+        "roomNotFound": "Cette salle n'existe plus. Choisissez-en une autre."
       },
       "planning": {
         "viewLabel": "Vue du calendrier",
@@ -781,17 +831,85 @@
         "nextDay": "Jour suivant",
         "seatLeft": "{count} place",
         "seatsLeft": "{count} places",
-        "actionsFor": "Actions pour {title}"
+        "actionsFor": "Actions pour {title}",
+        "roomFilter": "Salle",
+        "allRooms": "Toutes les salles",
+        "roomLabel": "Salle {name}"
       },
       "columns": {
-        "date": "Date"
+        "date": "Date",
+        "room": "Salle"
       },
       "list": {
         "export": "Exporter",
         "summary": "{classes} cours · {seats} places · {booked} réservées",
         "deleteNote": "Supprimer un cours annule ses réservations.",
         "remaining": "Places libres"
+      },
+      "repeat": {
+        "label": "Répéter chaque semaine",
+        "weekdays": "Jours",
+        "end": "Fin de la série",
+        "endCount": "Après un nombre de cours",
+        "endUntil": "À une date",
+        "count": "Nombre de cours",
+        "until": "Dernier jour",
+        "noWeekday": "Choisissez au moins un jour."
+      },
+      "series": {
+        "badge": "Série",
+        "partOf": "Ce cours fait partie d'une série hebdomadaire.",
+        "scopeLegend": "Appliquer à",
+        "scopeOne": "Ce cours uniquement",
+        "scopeFollowing": "Ce cours et les suivants",
+        "created": "{count} cours créés.",
+        "timeOnly": "Pour les cours suivants, seule l'heure de début change, chacun garde son jour."
+      },
+      "conflict": {
+        "title": "Créneau déjà occupé",
+        "body": "La salle ou le coach est déjà pris sur ces cours :",
+        "room": "même salle",
+        "coach": "même coach",
+        "more": "+{count} autres",
+        "confirm": "Planifier quand même"
       }
+    },
+    "rooms": {
+      "title": "Salles",
+      "subtitle": "Les lieux du studio où se tiennent les cours.",
+      "create": "Nouvelle salle",
+      "empty": "Aucune salle pour l'instant. Ajoutez-en une pour la choisir dans le planning.",
+      "columns": {
+        "name": "Nom",
+        "capacity": "Capacité"
+      },
+      "noCapacity": "Non définie",
+      "capacityValue": "{count} places",
+      "fields": {
+        "name": "Nom",
+        "capacity": "Capacité (facultatif)",
+        "capacityHelp": "Proposée par défaut aux cours de cette salle."
+      },
+      "dialog": {
+        "createTitle": "Nouvelle salle",
+        "editTitle": "Modifier la salle",
+        "createSubmit": "Créer",
+        "editSubmit": "Enregistrer"
+      },
+      "deleteConfirm": {
+        "title": "Supprimer cette salle ?",
+        "body": "Les cours à venir dans cette salle n'auront plus de salle. Les cours passés la gardent.",
+        "confirm": "Supprimer"
+      },
+      "errors": {
+        "nameTaken": "Une salle porte déjà ce nom.",
+        "generic": "Erreur lors de l'enregistrement de la salle.",
+        "nameInvalid": "Saisissez un nom de salle de 1 à 80 caractères.",
+        "capacityInvalid": "Saisissez un nombre entier de 1 à 500, ou laissez vide."
+      },
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "actionsFor": "Actions pour {name}"
     },
     "members": {
       "title": "Membres",
@@ -1074,15 +1192,14 @@
       "checkoutLoading": "Redirection…",
       "checkoutError": "Souscription impossible.",
       "checkoutNotConfigured": "Stripe n'est pas encore configuré sur cet environnement.",
+      "pricePerMonth": "{price} / mois",
       "plans": {
         "free": {
-          "title": "Free",
-          "price": "€0 / mois",
+          "title": "Gratuit",
           "body": "Jusqu'à 50 membres, fonctionnalités de base."
         },
         "pro": {
           "title": "Pro",
-          "price": "€49 / mois",
           "body": "Membres illimités, branding personnalisé, exports avancés."
         }
       },
@@ -1164,7 +1281,7 @@
         "errorsTitle": "Veuillez corriger les points suivants :",
         "errors": {
           "generic": "Échec de l'enregistrement.",
-          "versionConflict": "Le programme a été modifié entre temps. Rechargez-le et réessayez.",
+          "versionConflict": "Le programme a été modifié entre-temps. Rechargez-le et réessayez.",
           "archived": "Ce programme est archivé et ne peut plus être modifié.",
           "loadFailed": "Impossible de charger le programme."
         }

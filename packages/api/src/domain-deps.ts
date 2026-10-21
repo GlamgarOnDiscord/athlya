@@ -14,7 +14,9 @@
 import { buildAuditDeps } from './adapters/audit-deps.js';
 import { buildAuthDeps } from './adapters/auth-deps.js';
 import { buildBillingDeps } from './adapters/billing-deps.js';
+import { buildCalendarDeps } from './adapters/calendar-deps.js';
 import { buildCheckinsDeps } from './adapters/checkins-deps.js';
+import { buildClassPlanningDeps } from './adapters/class-planning-deps.js';
 import { buildCoachDeps } from './adapters/coach-deps.js';
 import { buildMembersDeps } from './adapters/members-deps.js';
 import { buildProgramsDeps } from './adapters/programs-deps.js';
@@ -25,7 +27,9 @@ import { buildStudiosDeps } from './adapters/studios-deps.js';
 import type { AuditDeps } from './routes/audit.js';
 import type { AuthDeps } from './routes/auth.js';
 import type { BillingDeps } from './routes/billing.js';
+import type { CalendarDeps } from './routes/calendar.js';
 import type { CheckinsDeps } from './routes/checkins.js';
+import type { ClassPlanningDeps } from './routes/class-planning.js';
 import type { ClassesDeps } from './routes/classes.js';
 import type { CoachDeps } from './routes/coach.js';
 import type { MembersDeps } from './routes/members.js';
@@ -69,6 +73,16 @@ export interface DomainDeps {
    * valid; production and the lazy facade always provide it.
    */
   readonly programs?: ProgramsDeps;
+  /**
+   * Member calendar feed (issue #719), gateway only. Optional so partial
+   * test bundles stay valid; production and the lazy facade provide it.
+   */
+  readonly calendar?: CalendarDeps;
+  /**
+   * Rooms and weekly class series (issue #748). Optional so partial test
+   * bundles stay valid; production and the lazy facade always provide it.
+   */
+  readonly planning?: ClassPlanningDeps;
 }
 
 /* ------------------------------------------------------------------ */
@@ -264,6 +278,32 @@ export function lazyCheckinsDeps(resolve: () => CheckinsDeps): CheckinsDeps {
   };
 }
 
+export function lazyCalendarDeps(resolve: () => CalendarDeps): CalendarDeps {
+  const forward = forwarder(resolve);
+  return {
+    getFeedUrl: forward('getFeedUrl'),
+    getFeed: forward('getFeed'),
+  };
+}
+
+/**
+ * Lazy rooms and series facade. `idempotencyFor` resolves per request,
+ * like {@link lazyProgramsDeps}.
+ */
+export function lazyClassPlanningDeps(resolve: () => ClassPlanningDeps): ClassPlanningDeps {
+  const forward = forwarder(resolve);
+  return {
+    listRooms: forward('listRooms'),
+    createRoom: forward('createRoom'),
+    updateRoom: forward('updateRoom'),
+    deleteRoom: forward('deleteRoom'),
+    createSeries: forward('createSeries'),
+    updateSeries: forward('updateSeries'),
+    deleteSeries: forward('deleteSeries'),
+    idempotencyFor: (claims) => resolve().idempotencyFor?.(claims),
+  };
+}
+
 /** Lazy facade over the full {@link DomainDeps} bundle (monolith gateway). */
 export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
   return {
@@ -295,6 +335,20 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
         throw new Error('buildLazyDomainDeps: checkins dependency is not wired');
       }
       return checkins;
+    }),
+    calendar: lazyCalendarDeps(() => {
+      const calendar = resolve().calendar;
+      if (calendar === undefined) {
+        throw new Error('buildLazyDomainDeps: calendar dependency is not wired');
+      }
+      return calendar;
+    }),
+    planning: lazyClassPlanningDeps(() => {
+      const planning = resolve().planning;
+      if (planning === undefined) {
+        throw new Error('buildLazyDomainDeps: planning dependency is not wired');
+      }
+      return planning;
     }),
   };
 }
@@ -480,6 +534,21 @@ export function defaultClassesDeps(env: AthlyaBindings, cf?: RequestCf): Classes
       };
 }
 
+/** Rooms and series write through the postgres-js handle and seed the Redis seat counters. */
+export function defaultClassPlanningDeps(env: AthlyaBindings): ClassPlanningDeps {
+  return hasReservationsSecrets(env)
+    ? buildClassPlanningDeps(env)
+    : {
+        listRooms: () => notImplemented('planning.listRooms'),
+        createRoom: () => notImplemented('planning.createRoom'),
+        updateRoom: () => notImplemented('planning.updateRoom'),
+        deleteRoom: () => notImplemented('planning.deleteRoom'),
+        createSeries: () => notImplemented('planning.createSeries'),
+        updateSeries: () => notImplemented('planning.updateSeries'),
+        deleteSeries: () => notImplemented('planning.deleteSeries'),
+      };
+}
+
 export function defaultReservationsDeps(env: AthlyaBindings, cf?: RequestCf): ReservationsDeps {
   return hasReservationsSecrets(env)
     ? buildReservationsDeps(env, cf)
@@ -546,6 +615,20 @@ export function defaultCheckinsDeps(env: AthlyaBindings): CheckinsDeps {
 }
 
 /**
+ * The calendar feed reads users, reservations, classes and studios (DB);
+ * without DB_URL it falls back to the stub bundle. A missing signing key
+ * is not fatal: the adapter answers `not_configured` (503).
+ */
+export function defaultCalendarDeps(env: AthlyaBindings, cf?: RequestCf): CalendarDeps {
+  return nonEmpty(env.DB_URL)
+    ? buildCalendarDeps(env, cf)
+    : {
+        getFeedUrl: () => notImplemented('calendar.getFeedUrl'),
+        getFeed: () => notImplemented('calendar.getFeed'),
+      };
+}
+
+/**
  * Billing is always built — the adapter itself returns degraded
  * (`not_configured`) responses when STRIPE secrets are absent.
  */
@@ -587,5 +670,7 @@ export function buildDefaultDeps(env: AthlyaBindings, cf?: RequestCf): DomainDep
     programs: defaultProgramsDeps(env),
     sessions: defaultSessionsDeps(env),
     checkins: defaultCheckinsDeps(env),
+    calendar: defaultCalendarDeps(env, cf),
+    planning: defaultClassPlanningDeps(env),
   };
 }

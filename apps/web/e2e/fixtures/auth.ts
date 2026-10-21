@@ -13,8 +13,8 @@
  *  1. Stub the boot refresh so the session is restored on load.
  *  2. Stub the member API reads (`/v1/members/me`, `/v1/classes`,
  *     `/v1/me/progression`, `/v1/me/progression/cardio`, `/v1/coach`,
- *     `/v1/checkins/token`) so the authenticated pages
- *     render their populated state instead of loading or error markup.
+ *     `/v1/calendar/feed-url`, `/v1/reservations/me`, `/v1/checkins/token`) so
+ *     the authenticated pages render their populated state instead of loading or error markup.
  *  3. Wait for a locator that only exists inside the page's
  *     `<RequireAuth>` subtree and check the URL did not move, so a
  *     silent redirect to `/login` fails the test before axe runs.
@@ -199,6 +199,15 @@ export async function stubMemberApi(page: Page): Promise<void> {
       ],
       truncated: false,
       skippedSessions: 0,
+    }),
+  );
+
+  // Calendar block on `/me` (issue #719): the subscription URL, so the
+  // copy control and the instructions are part of the scan.
+  await page.route('**/v1/calendar/feed-url', (route) =>
+    fulfillJson(route, {
+      httpsUrl: 'https://api.athlya.test/v1/calendar/feed.ics?token=e2e.token',
+      webcalUrl: 'webcal://api.athlya.test/v1/calendar/feed.ics?token=e2e.token',
     }),
   );
 

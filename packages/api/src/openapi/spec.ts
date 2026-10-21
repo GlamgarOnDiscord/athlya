@@ -36,12 +36,18 @@ import {
   ClassRosterEntrySchema,
   ClassRosterParamsSchema,
   ClassRosterResponseSchema,
+  ClassSeriesDeleteResponseSchema,
+  ClassSeriesResponseSchema,
+  ClassSeriesUpdateResponseSchema,
   CoachAskRequestSchema,
   CoachAskResponseSchema,
   CoachStatusResponseSchema,
   ClassWithRemainingSchema,
   CreateClassRequestSchema,
+  CreateClassSeriesRequestSchema,
   CreateProgramRequestSchema,
+  CreateRoomRequestSchema,
+  DeleteClassSeriesQuerySchema,
   ExportJobResponseSchema,
   InvoicesPageSchema,
   ListClassesQuerySchema,
@@ -61,6 +67,9 @@ import {
   ProgressionQuerySchema,
   ProgressionResponseSchema,
   RefreshRequestSchema,
+  RoomListResponseSchema,
+  RoomSchema,
+  ScheduleConflictProblemSchema,
   AuditListResponseSchema,
   RegisterRequestSchema,
   RosterCheckInParamsSchema,
@@ -71,9 +80,11 @@ import {
   TodayWorkoutResponseSchema,
   UnsubscribeProgramResponseSchema,
   UpdateClassRequestSchema,
+  UpdateClassSeriesRequestSchema,
   UpdateConsentsRequestSchema,
   UpdateProfileRequestSchema,
   UpdateProgramRequestSchema,
+  UpdateRoomRequestSchema,
   UpdateStudioRequestSchema,
 } from '@athlya/shared/schemas/api';
 import { UserSchema, WorkoutSessionSchema } from '@athlya/shared/schemas/domain';
@@ -551,8 +562,14 @@ const createClassRoute = createRoute({
       description: 'Insufficient role',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
+    409: {
+      description:
+        '`schedule_conflict`: the room or the coach is taken over an overlapping interval; ' +
+        'resend with `allowConflicts: true` to schedule anyway',
+      content: { 'application/problem+json': { schema: ScheduleConflictProblemSchema } },
+    },
     422: {
-      description: 'Validation error',
+      description: 'Validation error, or `room_not_found` for a room outside the studio',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
   },
@@ -587,12 +604,15 @@ const updateClassRoute = createRoute({
     409: {
       description:
         '`version_conflict` (stale `version`), `capacity_below_confirmed` (capacity under the ' +
-        'confirmed reservations and held seats) or `class_already_started` (the start time of a ' +
-        'class that started cannot change)',
+        'confirmed reservations and held seats), `class_already_started` (the start time of a ' +
+        'class that started cannot change) or `schedule_conflict` (room or coach taken, see ' +
+        '`allowConflicts`)',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     422: {
-      description: 'Validation error, or `starts_at_in_past` for a start time not in the future',
+      description:
+        'Validation error, `starts_at_in_past` for a start time not in the future, or ' +
+        '`room_not_found`',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
   },
@@ -677,6 +697,153 @@ const rosterCheckInRoute = createRoute({
         '`checkin_limit_reached`: the member was checked in 5 times this hour',
     ),
     503: problemResponse('Rate limiter unavailable (fail-closed, code `dependency_unavailable`)'),
+  },
+});
+
+/*
+ * rooms and series: /v1/classes/rooms, /v1/classes/series (issue #748)
+ */
+
+const listRoomsRoute = createRoute({
+  method: 'get',
+  path: '/v1/classes/rooms',
+  tags: ['classes'],
+  summary: 'List the rooms of the studio',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Live rooms, by name',
+      content: { 'application/json': { schema: RoomListResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+  },
+});
+
+const createRoomRoute = createRoute({
+  method: 'post',
+  path: '/v1/classes/rooms',
+  tags: ['classes'],
+  summary: 'Create a room (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: { content: { 'application/json': { schema: CreateRoomRequestSchema } }, required: true },
+  },
+  responses: {
+    201: { description: 'Room created', content: { 'application/json': { schema: RoomSchema } } },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Insufficient role'),
+    409: problemResponse('`room_name_taken`: a live room of the studio has that name'),
+    422: problemResponse('Validation error'),
+  },
+});
+
+const updateRoomRoute = createRoute({
+  method: 'patch',
+  path: '/v1/classes/rooms/{roomId}',
+  tags: ['classes'],
+  summary: 'Rename a room or change its capacity (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ roomId: z.uuid() }),
+    body: { content: { 'application/json': { schema: UpdateRoomRequestSchema } }, required: true },
+  },
+  responses: {
+    200: { description: 'Room updated', content: { 'application/json': { schema: RoomSchema } } },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Insufficient role'),
+    404: problemResponse('Room not found'),
+    409: problemResponse('`room_name_taken`'),
+    422: problemResponse('Validation error'),
+  },
+});
+
+const deleteRoomRoute = createRoute({
+  method: 'delete',
+  path: '/v1/classes/rooms/{roomId}',
+  tags: ['classes'],
+  summary: 'Delete a room and unassign it from upcoming classes (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ roomId: z.uuid() }) },
+  responses: {
+    204: { description: 'Room deleted' },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Insufficient role'),
+    404: problemResponse('Room not found'),
+  },
+});
+
+const createSeriesRoute = createRoute({
+  method: 'post',
+  path: '/v1/classes/series',
+  tags: ['classes'],
+  summary: 'Create a weekly series of classes (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: CreateClassSeriesRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    201: {
+      description: 'Every occurrence, sharing one series id',
+      content: { 'application/json': { schema: ClassSeriesResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Insufficient role'),
+    409: {
+      description: '`schedule_conflict`, see `allowConflicts`',
+      content: { 'application/problem+json': { schema: ScheduleConflictProblemSchema } },
+    },
+    422: problemResponse(
+      'Validation error, `starts_at_in_past`, `no_occurrences`, `too_many_occurrences` or `room_not_found`',
+    ),
+  },
+});
+
+const updateSeriesRoute = createRoute({
+  method: 'patch',
+  path: '/v1/classes/series/{seriesId}',
+  tags: ['classes'],
+  summary: 'Edit an occurrence and every later one (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ seriesId: z.uuid() }),
+    body: {
+      content: { 'application/json': { schema: UpdateClassSeriesRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'The edited occurrences',
+      content: { 'application/json': { schema: ClassSeriesUpdateResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Insufficient role'),
+    404: problemResponse('Class not found in this series'),
+    409: problemResponse(
+      '`version_conflict`, `class_already_started`, `capacity_below_confirmed` or `schedule_conflict`',
+    ),
+    422: problemResponse('Validation error, `starts_at_in_past` or `room_not_found`'),
+  },
+});
+
+const deleteSeriesRoute = createRoute({
+  method: 'delete',
+  path: '/v1/classes/series/{seriesId}',
+  tags: ['classes'],
+  summary: 'Delete an occurrence and every later one (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ seriesId: z.uuid() }), query: DeleteClassSeriesQuerySchema },
+  responses: {
+    200: {
+      description: 'Number of occurrences deleted',
+      content: { 'application/json': { schema: ClassSeriesDeleteResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Insufficient role'),
+    404: problemResponse('Class not found in this series'),
   },
 });
 
@@ -1597,6 +1764,13 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   app.openapi(createClassRoute, stub);
   app.openapi(updateClassRoute, stub);
   app.openapi(deleteClassRoute, stub);
+  app.openapi(listRoomsRoute, stub);
+  app.openapi(createRoomRoute, stub);
+  app.openapi(updateRoomRoute, stub);
+  app.openapi(deleteRoomRoute, stub);
+  app.openapi(createSeriesRoute, stub);
+  app.openapi(updateSeriesRoute, stub);
+  app.openapi(deleteSeriesRoute, stub);
   app.openapi(classRosterRoute, stub);
   app.openapi(rosterCheckInRoute, stub);
 

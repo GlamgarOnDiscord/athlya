@@ -167,4 +167,48 @@ describe('<ClassCard />', () => {
     expect(alert.textContent).toBe(t('errors.bookingFull'));
     expect(alert.getAttribute('aria-live')).toBe('polite');
   });
+
+  it('offers "add to calendar" once the seat is confirmed', () => {
+    render(
+      <ClassCard
+        classInfo={BASE_CLASS}
+        t={t}
+        locale="fr"
+        onBook={vi.fn()}
+        booking={{ kind: 'confirmed', reservationId: 'reservation-1' }}
+      />,
+    );
+
+    expect(screen.getByRole('group', { name: t('calendar.add.label') })).toBeDefined();
+    const ics = screen.getByRole('link', { name: /^Fichier \.ics pour « CrossFit »$/u });
+    expect(ics.getAttribute('download')).toBe('athlya-2025-06-15-class-1.ics');
+  });
+
+  it('does not offer "add to calendar" for a waitlist entry', () => {
+    render(
+      <ClassCard
+        classInfo={BASE_CLASS}
+        t={t}
+        locale="fr"
+        onBook={vi.fn()}
+        booking={{ kind: 'waitlist', position: 2 }}
+      />,
+    );
+
+    expect(screen.queryByRole('group', { name: t('calendar.add.label') })).toBeNull();
+  });
+
+  it('does not offer "add to calendar" without a booking id (idempotent replay)', () => {
+    render(
+      <ClassCard
+        classInfo={BASE_CLASS}
+        t={t}
+        locale="fr"
+        onBook={vi.fn()}
+        booking={{ kind: 'confirmed' }}
+      />,
+    );
+
+    expect(screen.queryByRole('group', { name: t('calendar.add.label') })).toBeNull();
+  });
 });

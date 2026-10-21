@@ -24,6 +24,8 @@
 
 import { z } from 'zod';
 
+import { isValidTimeZone, MAX_SERIES_OCCURRENCES } from '../schedule.js';
+
 import { ConsentsSchema } from './consents.js';
 import {
   CARDIO_MACHINES,
@@ -405,6 +407,9 @@ export const CreateClassRequestSchema = z
     durationMin: z.number().int().min(5).max(480),
     capacity: z.number().int().min(1).max(500),
     coachId: UserIdSchema.optional(),
+    roomId: UuidSchema.optional(),
+    /** Schedule the class even if its room or coach is already taken then (issue #748). */
+    allowConflicts: z.boolean().optional(),
   })
   .strict();
 
@@ -423,7 +428,10 @@ export const UpdateClassRequestSchema = z
     durationMin: z.number().int().min(5).max(480).optional(),
     capacity: z.number().int().min(1).max(500).optional(),
     coachId: UserIdSchema.nullable().optional(),
+    roomId: UuidSchema.nullable().optional(),
     version: z.number().int().nonnegative(),
+    /** Move the class even if its room or coach is already taken then (issue #748). */
+    allowConflicts: z.boolean().optional(),
   })
   .strict()
   .refine(
@@ -433,7 +441,8 @@ export const UpdateClassRequestSchema = z
       v.startsAt !== undefined ||
       v.durationMin !== undefined ||
       v.capacity !== undefined ||
-      v.coachId !== undefined,
+      v.coachId !== undefined ||
+      v.roomId !== undefined,
     { message: 'must patch at least one mutable field' },
   );
 
@@ -530,6 +539,207 @@ export const ClassRosterResponseSchema = z
   .strict();
 
 export type ClassRosterResponse = z.infer<typeof ClassRosterResponseSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  rooms and series: /v1/classes/rooms, /v1/classes/series           */
+/* ------------------------------------------------------------------ */
+
+const RoomNameSchema = z.string().trim().min(1).max(80);
+const RoomCapacitySchema = z.number().int().min(1).max(500);
+
+/** A room of the studio where classes run (issue #748). */
+export const RoomSchema = z
+  .object({
+    id: UuidSchema,
+    studioId: StudioIdSchema,
+    name: RoomNameSchema,
+    capacity: RoomCapacitySchema.nullable(),
+    createdAt: IsoDateTimeSchema,
+  })
+  .strict();
+
+export type Room = z.infer<typeof RoomSchema>;
+
+export const RoomListResponseSchema = z.object({ items: z.array(RoomSchema) }).strict();
+
+export type RoomListResponse = z.infer<typeof RoomListResponseSchema>;
+
+/** `POST /v1/classes/rooms`. `capacity` is a default for the classes booked in the room. */
+export const CreateRoomRequestSchema = z
+  .object({
+    name: RoomNameSchema,
+    capacity: RoomCapacitySchema.nullable().optional(),
+  })
+  .strict();
+
+export type CreateRoomRequest = z.infer<typeof CreateRoomRequestSchema>;
+
+/** `PATCH /v1/classes/rooms/{roomId}`: rename or change the capacity (null clears it). */
+export const UpdateRoomRequestSchema = z
+  .object({
+    name: RoomNameSchema.optional(),
+    capacity: RoomCapacitySchema.nullable().optional(),
+  })
+  .strict()
+  .refine((v) => v.name !== undefined || v.capacity !== undefined, {
+    message: 'must patch at least one mutable field',
+  });
+
+export type UpdateRoomRequest = z.infer<typeof UpdateRoomRequestSchema>;
+
+/** An IANA time zone the runtime knows, such as `Europe/Paris`. */
+export const TimeZoneSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .refine((value) => isValidTimeZone(value), { message: 'must be an IANA time zone' });
+
+/** A local wall-clock time, `HH:MM` (24 h). */
+export const LocalTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/u, 'must be HH:MM');
+
+/**
+ * Weekly repetition: ISO weekdays (1 = Monday ... 7 = Sunday), ended by a
+ * last local date (`until`, inclusive) or a number of occurrences
+ * (`count`), exactly one of the two.
+ */
+export const WeeklyRecurrenceSchema = z
+  .object({
+    weekdays: z
+      .array(z.number().int().min(1).max(7))
+      .min(1)
+      .max(7)
+      .refine((days) => new Set(days).size === days.length, { message: 'weekdays must be unique' }),
+    until: z.iso.date().optional(),
+    count: z.number().int().min(2).max(MAX_SERIES_OCCURRENCES).optional(),
+  })
+  .strict()
+  .refine((v) => (v.until === undefined) !== (v.count === undefined), {
+    message: 'exactly one of until and count is required',
+    path: ['until'],
+  });
+
+export type WeeklyRecurrence = z.infer<typeof WeeklyRecurrenceSchema>;
+
+/**
+ * `POST /v1/classes/series`: the class fields of `POST /v1/classes` plus
+ * the repetition. `startsAt` is the first candidate start; every
+ * occurrence keeps its wall-clock time in `timeZone`.
+ */
+export const CreateClassSeriesRequestSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    description: z.string().trim().max(1000).optional(),
+    startsAt: IsoDateTimeSchema,
+    durationMin: z.number().int().min(5).max(480),
+    capacity: z.number().int().min(1).max(500),
+    coachId: UserIdSchema.optional(),
+    roomId: UuidSchema.optional(),
+    recurrence: WeeklyRecurrenceSchema,
+    timeZone: TimeZoneSchema,
+    allowConflicts: z.boolean().optional(),
+  })
+  .strict();
+
+export type CreateClassSeriesRequest = z.infer<typeof CreateClassSeriesRequestSchema>;
+
+export const ClassSeriesResponseSchema = z
+  .object({
+    seriesId: UuidSchema,
+    items: z.array(ClassSchema),
+  })
+  .strict();
+
+export type ClassSeriesResponse = z.infer<typeof ClassSeriesResponseSchema>;
+
+/**
+ * `PATCH /v1/classes/series/{seriesId}`: edit the occurrence
+ * `fromClassId` and every later one that has not started. `version` is
+ * the anchor's optimistic-lock version. `startTime` (with `timeZone`)
+ * moves each occurrence to that wall-clock time on its own day.
+ */
+export const UpdateClassSeriesRequestSchema = z
+  .object({
+    fromClassId: ClassIdSchema,
+    version: z.number().int().nonnegative(),
+    title: z.string().trim().min(1).max(200).optional(),
+    description: z.string().trim().max(1000).nullable().optional(),
+    durationMin: z.number().int().min(5).max(480).optional(),
+    capacity: z.number().int().min(1).max(500).optional(),
+    coachId: UserIdSchema.nullable().optional(),
+    roomId: UuidSchema.nullable().optional(),
+    startTime: LocalTimeSchema.optional(),
+    timeZone: TimeZoneSchema.optional(),
+    allowConflicts: z.boolean().optional(),
+  })
+  .strict()
+  .refine((v) => (v.startTime === undefined) === (v.timeZone === undefined), {
+    message: 'startTime and timeZone go together',
+    path: ['timeZone'],
+  })
+  .refine(
+    (v) =>
+      v.title !== undefined ||
+      v.description !== undefined ||
+      v.durationMin !== undefined ||
+      v.capacity !== undefined ||
+      v.coachId !== undefined ||
+      v.roomId !== undefined ||
+      v.startTime !== undefined,
+    { message: 'must patch at least one mutable field' },
+  );
+
+export type UpdateClassSeriesRequest = z.infer<typeof UpdateClassSeriesRequestSchema>;
+
+/** `DELETE /v1/classes/series/{seriesId}?fromClassId=`: this occurrence and the later ones. */
+export const DeleteClassSeriesQuerySchema = z.object({ fromClassId: ClassIdSchema }).strict();
+
+export type DeleteClassSeriesQuery = z.infer<typeof DeleteClassSeriesQuerySchema>;
+
+export const ClassSeriesUpdateResponseSchema = z.object({ items: z.array(ClassSchema) }).strict();
+
+export type ClassSeriesUpdateResponse = z.infer<typeof ClassSeriesUpdateResponseSchema>;
+
+export const ClassSeriesDeleteResponseSchema = z
+  .object({ deleted: z.number().int().nonnegative() })
+  .strict();
+
+export type ClassSeriesDeleteResponse = z.infer<typeof ClassSeriesDeleteResponseSchema>;
+
+/**
+ * One clash reported with a 409 `schedule_conflict`: the start of the
+ * class being placed (`occurrenceStartsAt`, one per occurrence of a
+ * series) and the existing class it collides with, by room, coach or both.
+ */
+export const ScheduleConflictSchema = z
+  .object({
+    occurrenceStartsAt: IsoDateTimeSchema,
+    classId: ClassIdSchema,
+    title: z.string(),
+    startsAt: IsoDateTimeSchema,
+    durationMin: z.number().int().positive(),
+    reasons: z.array(z.enum(['room', 'coach'])).min(1),
+  })
+  .strict();
+
+export type ScheduleConflictItem = z.infer<typeof ScheduleConflictSchema>;
+
+/** Most clashes a 409 `schedule_conflict` body lists. */
+export const MAX_REPORTED_CONFLICTS = 20;
+
+/** Problem Details body of a 409 `schedule_conflict`. */
+export const ScheduleConflictProblemSchema = z
+  .object({
+    type: z.string(),
+    title: z.string(),
+    status: z.literal(409),
+    detail: z.string(),
+    code: z.literal('schedule_conflict'),
+    traceId: z.string().optional(),
+    conflicts: z.array(ScheduleConflictSchema).max(MAX_REPORTED_CONFLICTS),
+  })
+  .strict();
+
+export type ScheduleConflictProblem = z.infer<typeof ScheduleConflictProblemSchema>;
 
 /* ------------------------------------------------------------------ */
 /*  reservations — /v1/reservations                                    */

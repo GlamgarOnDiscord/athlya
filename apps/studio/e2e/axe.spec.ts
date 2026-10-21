@@ -10,6 +10,7 @@ const adminPaths = [
   '/dashboard/classes',
   '/dashboard/programs',
   '/dashboard/members',
+  '/dashboard/rooms',
   '/dashboard/branding',
   '/dashboard/billing',
   '/dashboard/checkin',

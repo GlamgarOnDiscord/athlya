@@ -8,6 +8,7 @@
  */
 import { headers } from 'next/headers';
 
+import { DemoRolePicker } from '../../components/demo/DemoRolePicker';
 import { getLocale } from '../../lib/i18n/getLocale';
 import { createTranslator } from '../../lib/i18n/t';
 
@@ -34,7 +35,7 @@ export default async function LoginPage(): Promise<ReactElement> {
       className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 px-6 py-12"
     >
       <h1 className="text-3xl font-semibold">{t('auth.login.title')}</h1>
-      <LoginForm nonce={nonce} />
+      {process.env.NEXT_PUBLIC_DEMO_MODE === '1' ? <DemoRolePicker /> : <LoginForm nonce={nonce} />}
     </main>
   );
 }

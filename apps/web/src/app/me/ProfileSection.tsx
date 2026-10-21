@@ -30,6 +30,7 @@ import { useApiClient } from '../../lib/api/use-api-client';
 import { useLocale } from '../../lib/i18n/LocaleContext';
 import { createTranslator, type Translator } from '../../lib/i18n/t';
 
+import { CalendarSection } from './calendar/CalendarSection';
 import { CoachLink } from './coach/CoachLink';
 import { ConsentsForm } from './ConsentsForm';
 import { MemberProfileGate } from './MemberProfileGate';
@@ -57,6 +58,7 @@ export function ProfileSection({
         <div className="flex flex-col gap-10">
           <ProfileForm profile={profile} client={client} t={t} />
           <ConsentsForm consents={consents} client={client} t={t} />
+          <CalendarSection client={client} t={t} />
           <Separator />
           <nav className="flex flex-col gap-2" aria-label={t('profile.accountActions')}>
             <Link

@@ -33,6 +33,8 @@ export function getPublicApiUrl(): string {
  * @see Requirements 26.1, 26.2 — anti-bot challenge on register/login.
  */
 export function getTurnstileSiteKey(): string | undefined {
+  // A demo build (issue #750) never loads the widget: no form reaches the API.
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === '1') return undefined;
   const raw = process.env['NEXT_PUBLIC_TURNSTILE_SITE_KEY'];
   if (raw === undefined || raw === '') return undefined;
   return raw;

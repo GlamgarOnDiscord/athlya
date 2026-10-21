@@ -92,6 +92,14 @@ describe('verify-secrets lists', () => {
     );
   });
 
+  it('keep the calendar feed key optional and on the gateway only', () => {
+    assert.ok(OPTIONAL.main.includes('CALENDAR_FEED_SIGNING_KEY'));
+    for (const worker of Object.keys(REQUIRED)) {
+      assert.ok(!REQUIRED[worker].includes('CALENDAR_FEED_SIGNING_KEY'));
+      if (worker !== 'main') assert.ok(!OPTIONAL[worker].includes('CALENDAR_FEED_SIGNING_KEY'));
+    }
+  });
+
   it('require the password-reset token key on the gateway (reset email consumer)', () => {
     assert.ok(REQUIRED.main.includes('PASSWORD_RESET_TOKEN_KEY'));
     assert.ok(REQUIRED.main.includes('WEB_APP_URL'));

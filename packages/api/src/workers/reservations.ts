@@ -3,6 +3,7 @@
  *
  * Handles:
  *   • /v1/classes/*      — list, search, create, update, delete, capacity WS
+ *   • /v1/classes/rooms/*, /v1/classes/series/*: rooms and weekly series (issue #748)
  *   • /v1/reservations/* — book, cancel, list
  *   • /v1/members/*      — profile, consents, export
  *   • /v1/me/*           — progression (served from the members deps)
@@ -26,6 +27,7 @@ import {
   assertRequiredSecrets,
   defaultCheckinsDeps,
   defaultClassesDeps,
+  defaultClassPlanningDeps,
   defaultCoachDeps,
   defaultMembersDeps,
   defaultProgramsDeps,
@@ -34,6 +36,7 @@ import {
   defaultStudiosDeps,
   lazyCheckinsDeps,
   lazyClassesDeps,
+  lazyClassPlanningDeps,
   lazyCoachDeps,
   lazyMembersDeps,
   lazyProgramsDeps,
@@ -44,6 +47,7 @@ import {
 import { installDomainScope } from '../domain-scope.js';
 import { buildCapacityRouter } from '../routes/capacity.js';
 import { buildCheckinsRouter } from '../routes/checkins.js';
+import { buildClassSeriesRouter, buildRoomsRouter } from '../routes/class-planning.js';
 import { buildClassesRouter } from '../routes/classes.js';
 import { buildCoachRouter } from '../routes/coach.js';
 import { buildMeRouter } from '../routes/me.js';
@@ -88,11 +92,16 @@ const app = buildBaseApp({
         programs: defaultProgramsDeps(env),
         sessions: defaultSessionsDeps(env),
         checkins: defaultCheckinsDeps(env),
+        planning: defaultClassPlanningDeps(env),
       };
     });
     // Capacity WebSocket mounts first: /v1/classes/:classId/capacity/ws
     // must match before the JWT-guarded classes router shadows it.
     base.route('/v1/classes', buildCapacityRouter());
+    // Rooms and series (issue #748) must match before the classes router's `/:id` routes.
+    const planning = lazyClassPlanningDeps(() => resolve().planning);
+    base.route('/v1/classes/rooms', buildRoomsRouter(planning));
+    base.route('/v1/classes/series', buildClassSeriesRouter(planning));
     base.route('/v1/classes', buildClassesRouter(lazyClassesDeps(() => resolve().classes)));
     base.route(
       '/v1/reservations',

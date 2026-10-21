@@ -76,6 +76,8 @@ function toListClassesRow(row: ClassRow): ListClassesRow {
     capacity: row.capacity,
     version: row.version,
     createdAt: row.createdAt,
+    roomId: row.roomId,
+    seriesId: row.seriesId,
   };
 }
 
@@ -131,6 +133,7 @@ export function createDrizzleCreateClassRepoHttp(
               capacity: input.capacity,
               version: input.version,
               ...(input.coachId !== undefined ? { coachId: input.coachId } : {}),
+              ...(input.roomId !== undefined ? { roomId: input.roomId } : {}),
               ...(input.description !== undefined ? { description: input.description } : {}),
             })
             .returning(),
@@ -236,6 +239,7 @@ export function createDrizzleUpdateClassRepo(
       if (patch.durationMin !== undefined) columns.durationMin = patch.durationMin;
       if (patch.capacity !== undefined) columns.capacity = patch.capacity;
       if (patch.coachId !== undefined) columns.coachId = patch.coachId;
+      if (patch.roomId !== undefined) columns.roomId = patch.roomId;
       if (patch.description !== undefined) columns.description = patch.description;
 
       return withTransactionRetry(() =>
@@ -312,7 +316,7 @@ export function createDrizzleUpdateClassRepo(
  * the count `enforce_class_capacity()` and `guard_class_schedule()`
  * use (migration 0050). `hold_expires_at` is not in the Drizzle table.
  */
-async function countOccupied(tx: AthlyaTx, classId: string): Promise<number> {
+export async function countOccupied(tx: AthlyaTx, classId: string): Promise<number> {
   const [row] = await tx
     .select({ n: sql<number | string>`count(*)` })
     .from(reservations)
@@ -331,7 +335,7 @@ async function countOccupied(tx: AthlyaTx, classId: string): Promise<number> {
  * outcome the service checks above would have given. Reached only if
  * the trigger and these checks disagree, so it stays a clean 409/422.
  */
-function guardRefusal(err: unknown, confirmed: number): GuardedClassUpdate | null {
+export function guardRefusal(err: unknown, confirmed: number): GuardedClassUpdate | null {
   if (isPostgresRaiseException(err, 'class_capacity_below_booked')) {
     return { outcome: 'capacity_below_confirmed', confirmed };
   }
@@ -350,7 +354,11 @@ function guardRefusal(err: unknown, confirmed: number): GuardedClassUpdate | nul
  * leaves a waiter a concurrent cancel is already promoting to that
  * cancel. The capacity trigger still checks every UPDATE.
  */
-async function promoteWaiters(tx: AthlyaTx, classId: string, seats: number): Promise<number> {
+export async function promoteWaiters(
+  tx: AthlyaTx,
+  classId: string,
+  seats: number,
+): Promise<number> {
   const waiters = await tx
     .select({ id: reservations.id, userId: reservations.userId })
     .from(reservations)
