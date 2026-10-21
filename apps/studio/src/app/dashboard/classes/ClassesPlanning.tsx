@@ -2,6 +2,7 @@
 
 import { Menu } from '@base-ui/react/menu';
 import { DotsThreeIcon, ProhibitIcon, UsersIcon } from '@phosphor-icons/react';
+import Link from 'next/link';
 import { useCallback, useMemo, type ReactElement, type ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -47,6 +48,12 @@ export interface ClassesPlanningProps {
   readonly onDeleteClass?: (cls: ClassWithRemaining) => void;
   readonly onCreateAt?: (startsAt: Date) => void;
   readonly onShowDay: (day: Date) => void;
+  /**
+   * The roster page of a class, `null` for a class the viewer may not open.
+   * A read-only tile becomes a link to it; an editable tile keeps opening
+   * the edit dialog and offers the roster in its "..." menu.
+   */
+  readonly rosterHref?: (cls: ClassWithRemaining) => string | null;
 }
 
 interface Formatters {
@@ -116,22 +123,32 @@ function tileClass(cls: ClassWithRemaining): string {
 
 /**
  * A class tile's face: a button that opens the class when `onActivate` is
- * given, plain content in a read-only planning.
+ * given; in a read-only planning, a link to the roster when `href` is set,
+ * plain content otherwise.
  */
 function TileFace({
   cls,
   onActivate,
+  href,
   full,
   className,
   children,
 }: {
   readonly cls: ClassWithRemaining;
   readonly onActivate: ((cls: ClassWithRemaining) => void) | undefined;
+  readonly href: string | null;
   /** Set on a tile that is its own frame (month cells) for the `[data-full]` styling hook. */
   readonly full?: boolean;
   readonly className: string;
   readonly children: ReactNode;
 }): ReactElement {
+  if (onActivate === undefined && href !== null) {
+    return (
+      <Link href={href} data-class-id={cls.id} data-full={full} className={className}>
+        {children}
+      </Link>
+    );
+  }
   if (onActivate === undefined) {
     return (
       <div data-class-id={cls.id} data-full={full} className={className}>
@@ -200,12 +217,14 @@ function TileMenu({
   t,
   onEdit,
   onDelete,
+  rosterHref,
   compact = false,
 }: {
   readonly cls: ClassWithRemaining;
   readonly t: Translator;
   readonly onEdit: (cls: ClassWithRemaining) => void;
   readonly onDelete: (cls: ClassWithRemaining) => void;
+  readonly rosterHref: string | null;
   readonly compact?: boolean;
 }): ReactElement {
   return (
@@ -222,6 +241,15 @@ function TileMenu({
       <Menu.Portal>
         <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
           <Menu.Popup className="min-w-36 rounded-lg border border-border bg-popover p-1 text-sm text-popover-foreground shadow-sm outline-none">
+            {rosterHref === null ? null : (
+              <Menu.LinkItem
+                render={<Link href={rosterHref} />}
+                closeOnClick
+                className="flex h-8 cursor-default items-center rounded-md px-2 outline-none data-highlighted:bg-muted"
+              >
+                {t('studio.roster.openRoster')}
+              </Menu.LinkItem>
+            )}
             <Menu.Item
               onClick={() => onEdit(cls)}
               className="flex h-8 cursor-default items-center rounded-md px-2 outline-none data-highlighted:bg-muted"
@@ -250,6 +278,7 @@ function WeekGrid({
   onSelectClass,
   onDeleteClass,
   onCreateAt,
+  rosterHref,
 }: ClassesPlanningProps): ReactElement {
   const fmt = useFormatters(locale);
   const days = useMemo(() => buildWeekDays(anchor), [anchor]);
@@ -319,6 +348,7 @@ function WeekGrid({
               t={t}
               onSelect={onSelectClass}
               onDelete={onDeleteClass}
+              href={rosterHref?.(block.item) ?? null}
             />
           ))}
           {now !== null && key === nowKey ? <NowLine now={now} bounds={bounds} fmt={fmt} /> : null}
@@ -388,9 +418,18 @@ interface WeekBlockProps {
   readonly t: Translator;
   readonly onSelect: ((cls: ClassWithRemaining) => void) | undefined;
   readonly onDelete: ((cls: ClassWithRemaining) => void) | undefined;
+  readonly href: string | null;
 }
 
-function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps): ReactElement {
+function WeekBlock({
+  block,
+  bounds,
+  fmt,
+  t,
+  onSelect,
+  onDelete,
+  href,
+}: WeekBlockProps): ReactElement {
   const cls = block.item;
   const geometry = blockGeometry(block, bounds);
   const start = new Date(cls.startsAt);
@@ -422,6 +461,7 @@ function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps
       <TileFace
         cls={cls}
         onActivate={onSelect}
+        href={href}
         className={cn(
           'flex size-full flex-col items-start overflow-hidden rounded-[inherit] px-2.5 text-left text-xs leading-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           density === 'full' && 'py-2',
@@ -463,6 +503,7 @@ function WeekBlock({ block, bounds, fmt, t, onSelect, onDelete }: WeekBlockProps
           t={t}
           onEdit={onSelect}
           onDelete={onDelete}
+          rosterHref={href}
           compact={density === 'medium'}
         />
       )}
@@ -479,6 +520,7 @@ function MonthGrid({
   onSelectClass,
   onCreateAt,
   onShowDay,
+  rosterHref,
 }: ClassesPlanningProps): ReactElement {
   const fmt = useFormatters(locale);
   const weeks = useMemo(() => buildMonthGrid(anchor), [anchor]);
@@ -550,6 +592,7 @@ function MonthGrid({
                     key={cls.id}
                     cls={cls}
                     onActivate={onSelectClass}
+                    href={rosterHref?.(cls) ?? null}
                     full={isFull(cls)}
                     className={cn(
                       'relative z-10 flex h-6 w-full min-w-0 items-center gap-1.5 rounded-lg border px-2 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -598,6 +641,7 @@ function DayAgenda({
   onDeleteClass,
   onCreateAt,
   onShowDay,
+  rosterHref,
 }: ClassesPlanningProps): ReactElement {
   const fmt = useFormatters(locale);
   const days = useMemo(() => buildWeekDays(anchor), [anchor]);
@@ -641,6 +685,7 @@ function DayAgenda({
         {dayItems.map((cls) => {
           const start = new Date(cls.startsAt);
           const end = new Date(start.getTime() + cls.durationMin * 60_000);
+          const href = rosterHref?.(cls) ?? null;
           return (
             <div key={cls.id} className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2">
               <span aria-hidden="true" className="pt-3 text-xs text-muted-foreground tabular-nums">
@@ -653,6 +698,7 @@ function DayAgenda({
                 <TileFace
                   cls={cls}
                   onActivate={onSelectClass}
+                  href={href}
                   className={cn(
                     'flex w-full min-w-0 flex-col items-start gap-0.5 rounded-[inherit] py-2.5 pl-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     editable ? 'pr-10' : 'pr-3',
@@ -668,7 +714,13 @@ function DayAgenda({
                   </span>
                 </TileFace>
                 {onSelectClass === undefined || onDeleteClass === undefined ? null : (
-                  <TileMenu cls={cls} t={t} onEdit={onSelectClass} onDelete={onDeleteClass} />
+                  <TileMenu
+                    cls={cls}
+                    t={t}
+                    onEdit={onSelectClass}
+                    onDelete={onDeleteClass}
+                    rosterHref={href}
+                  />
                 )}
               </div>
             </div>
