@@ -9,7 +9,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createDrizzleUserRepo } from '../../adapters/auth-user-repo-drizzle.js';
 import { createDrizzleDeletionRepo } from '../../adapters/cascade-repo-drizzle.js';
-import { buildRecipientRepo } from '../../adapters/notifications-deps.js';
+import {
+  buildBrandingRepo,
+  buildRecipientRepo,
+  senderDisplayName,
+} from '../../adapters/notifications-deps.js';
 import {
   createDrizzlePasswordResetRepo,
   createPasswordResetRequestQueue,
@@ -36,6 +40,7 @@ const migration = [
   '0039_runtime_rls_gaps.sql',
   '0042_training_programs.sql',
   '0043_auth_password_reset_outbox.sql',
+  '0053_white_label.sql',
 ]
   .map((file) => readFileSync(resolve(here, '../../../../db/migrations', file), 'utf8'))
   .join('\n');
@@ -79,8 +84,8 @@ describe('service function contract with migration 0032', () => {
     (m) => m[1],
   );
 
-  it('references the 23 service functions', () => {
-    expect(new Set(used).size).toBe(23);
+  it('references the 24 service functions', () => {
+    expect(new Set(used).size).toBe(24);
   });
 
   const granted = grantedToApp(migration);
@@ -812,6 +817,43 @@ describe('buildRecipientRepo', () => {
       email: null,
       pushTokens: [],
     });
+  });
+});
+
+describe('buildBrandingRepo', () => {
+  it('maps the studio branding of the recipient', async () => {
+    const { db, calls } = fakeDb(() => [
+      {
+        studio_name: 'Studio Alpha',
+        brand_color: '#0EA5E9',
+        brand_logo_light: 'https://assets.athlya.test/l.png',
+        hide_athlya_branding: true,
+        email_domain: 'alpha.example',
+      },
+    ]);
+    await expect(buildBrandingRepo(db).getBranding(userRow.id)).resolves.toEqual({
+      studioName: 'Studio Alpha',
+      brandColor: '#0EA5E9',
+      logoUrl: 'https://assets.athlya.test/l.png',
+      hideAthlyaBranding: true,
+      emailDomain: 'alpha.example',
+    });
+    expect(calls[0]?.sql).toContain('notification_studio_branding(');
+    expect(calls[0]?.params).toEqual([userRow.id]);
+  });
+
+  it('returns null when the studio cannot be resolved', async () => {
+    const { db } = fakeDb(() => []);
+    await expect(buildBrandingRepo(db).getBranding(userRow.id)).resolves.toBeNull();
+  });
+});
+
+describe('senderDisplayName', () => {
+  it('strips what could break out of the From header', () => {
+    expect(senderDisplayName('Studio "Alpha" <x@evil>\r\nBcc: a@b')).toBe(
+      'Studio Alpha x@evil Bcc: a@b',
+    );
+    expect(senderDisplayName('x'.repeat(100))).toHaveLength(64);
   });
 });
 

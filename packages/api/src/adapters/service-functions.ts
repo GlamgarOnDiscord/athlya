@@ -143,6 +143,8 @@ export const serviceFn = {
     sql`SELECT id FROM auth_consume_password_reset(${tokenHash}, ${userId}::uuid, ${passwordHash}) AS id`,
   notificationRecipient: (userId: string) =>
     sql`SELECT * FROM notification_recipient(${userId}::uuid)`,
+  notificationStudioBranding: (userId: string) =>
+    sql`SELECT * FROM notification_studio_branding(${userId}::uuid)`,
   deleteReservations: (userId: string) =>
     sql`SELECT rgpd_delete_reservations(${userId}::uuid) AS n`,
   deleteWorkoutSessions: (userId: string) =>

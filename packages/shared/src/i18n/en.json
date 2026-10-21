@@ -840,24 +840,122 @@
       "readOnly": "Directory of your studio's members, read only."
     },
     "branding": {
-      "title": "Branding",
-      "subtitle": "Brand color and visual customization.",
-      "edit": "Edit",
-      "editComingSoon": "Editor arrives in a future release.",
+      "title": "Visual identity",
+      "subtitle": "Logos, color, Athlya mention and domains of the studio.",
       "save": "Save",
       "saving": "Saving…",
-      "saveSuccess": "Branding updated.",
+      "saveSuccess": "Identity updated.",
       "saveError": "Update failed.",
-      "lowContrastError": "Contrast too low for WCAG 2.2 AA — pick a more saturated color.",
+      "loadError": "The studio identity could not be loaded.",
+      "retry": "Try again",
+      "lowContrastError": "Contrast too low for WCAG 2.2 AA: pick a bolder color.",
       "invalidHexError": "Invalid hex format (#RRGGBB expected).",
+      "logo": {
+        "title": "Logos",
+        "help": "One logo for light backgrounds, one for dark backgrounds. The light logo heads the e-mails.",
+        "light": "Logo on light background",
+        "dark": "Logo on dark background",
+        "alt": "{variant} of {studio}",
+        "empty": "No logo",
+        "choose": "Choose the file: {variant}",
+        "upload": "Upload",
+        "replace": "Replace",
+        "remove": "Remove",
+        "constraints": "PNG, JPEG or WebP, 128 KB at most.",
+        "uploaded": "Logo saved.",
+        "removed": "Logo removed.",
+        "tooLarge": "File too large: 128 KB at most.",
+        "invalidType": "Format not accepted: PNG, JPEG or WebP.",
+        "invalidFormat": "The file content does not match its format."
+      },
       "brandColor": {
         "label": "Primary color",
-        "help": "This color applies to buttons, accents and interactive elements in the member app.",
-        "contrast": "Foreground auto-set to {fg} for WCAG 2.2 AA compliance",
+        "help": "It colors the buttons, the accents of the member app and the header of the e-mails.",
         "fgBlack": "black",
         "fgWhite": "white",
         "sampleButton": "Sample button",
-        "input": "Color (hex #RRGGBB)"
+        "input": "Color (hex #RRGGBB)",
+        "computed": "Computed text",
+        "ratio": "Contrast",
+        "aaPass": "meets AA",
+        "aaFail": "below AA, refused",
+        "onLight": "On light background: {ratio}",
+        "onDark": "On dark background: {ratio}",
+        "use": {
+          "text": "Usable for text.",
+          "graphics": "Icons and borders only, no text.",
+          "fill": "Fill only: no text, no icon."
+        }
+      },
+      "mention": {
+        "title": "Athlya mention",
+        "label": "Hide \"via Athlya\" in the studio's e-mails",
+        "shownHelp": "E-mails end with \"Sent by your studio via Athlya\".",
+        "hiddenHelp": "E-mails end with \"Sent by your studio\"."
+      },
+      "domains": {
+        "title": "Domains",
+        "help": "Serve the member app on your domain and send e-mails from your address.",
+        "loadError": "The domains could not be loaded.",
+        "hostname": "Domain name",
+        "add": "Save the domain",
+        "change": "Change",
+        "remove": "Remove",
+        "checkNow": "Check now",
+        "check": {
+          "ok": "Found",
+          "missing": "Missing",
+          "mismatch": "Different value",
+          "unchecked": "Not checked",
+          "awaiting_value": "Pending"
+        },
+        "checking": "Checking…",
+        "lastChecked": "Last checked: {date}",
+        "neverChecked": "Not checked yet.",
+        "web": {
+          "title": "Member app domain",
+          "help": "A subdomain of yours, for example club.mystudio.com.",
+          "placeholder": "club.mystudio.com",
+          "awaitingActivation": "Records found. The Athlya team now activates the domain and its certificate."
+        },
+        "email": {
+          "title": "E-mail sending domain",
+          "help": "E-mails will come from noreply@ your domain, for example mystudio.com.",
+          "placeholder": "mystudio.com",
+          "awaitingActivation": "Records found. The Athlya team now activates sending from this domain."
+        },
+        "status": {
+          "pending": "Pending",
+          "verified": "Verified",
+          "failed": "Needs a fix",
+          "active": "Active"
+        },
+        "records": {
+          "title": "DNS records to create",
+          "name": "Name",
+          "value": "Value",
+          "priority": "Priority",
+          "optional": "recommended",
+          "awaitingValue": "Value provided by the Athlya team, then checked here.",
+          "copy": "Copy: {field}",
+          "copied": "Copied.",
+          "copyFailed": "Copy failed."
+        },
+        "purpose": {
+          "ownership": "Domain ownership",
+          "routing": "Points to Athlya",
+          "spf": "SPF",
+          "return_path": "Bounces (MX)",
+          "dkim": "DKIM",
+          "dmarc": "DMARC"
+        },
+        "errors": {
+          "invalid": "Invalid domain name, for example club.mystudio.com.",
+          "taken": "This domain is already verified for another studio.",
+          "cooldown": "Checked moments ago: try again in a few seconds.",
+          "lookup": "The DNS lookup failed, try again.",
+          "generic": "Action failed, try again."
+        }
       }
     },
     "checkin": {
@@ -1633,6 +1731,11 @@
         "subject": "Payment failed",
         "body": "Payment for your subscription {subscriptionId} failed: {reason}. Please update your payment details."
       }
+    },
+    "layout": {
+      "footer": "Sent by {studio}.",
+      "footerVia": "Sent by {studio} via Athlya.",
+      "footerAthlya": "Sent by Athlya."
     }
   },
   "coach": {

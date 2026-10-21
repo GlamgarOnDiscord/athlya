@@ -14,6 +14,7 @@
 
 export * from './enums.js';
 export * from './studios.js';
+export * from './studio_domains.js';
 export * from './users.js';
 export * from './classes.js';
 export * from './reservations.js';
