@@ -81,9 +81,13 @@ export function CalendarSection({ client, t }: CalendarSectionProps): ReactEleme
       <p className="text-sm text-muted-foreground">{t('calendar.sync.description')}</p>
 
       {feed.kind === 'loading' ? (
-        <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+        <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+          {t('common.loading')}
+        </p>
       ) : feed.kind === 'unavailable' ? (
-        <p className="text-sm text-muted-foreground">{t('calendar.sync.unavailable')}</p>
+        <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+          {t('calendar.sync.unavailable')}
+        </p>
       ) : (
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
