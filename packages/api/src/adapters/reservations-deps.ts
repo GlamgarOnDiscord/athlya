@@ -9,6 +9,8 @@
  *   - `listClasses`          — `GET /v1/classes` (Req 7.1, 7.2, 7.3).
  *   - `createClass`          — `POST /v1/classes` admin (Req 6.1-6.4).
  *   - `updateClass`          — `PATCH /v1/classes/:id` admin (Req 6.5-6.7).
+ *   - `getRoster` / `markAttendance`: `GET /v1/classes/:id/roster` and its
+ *     manual check-in, admin or coach of the class (issue #746).
  *   - `listMyReservations`   — `GET /v1/reservations/me` (Req 7.4).
  *   - `bookClass`            — `POST /v1/reservations` (Algorithm 1).
  *   - `cancelReservation`    — `DELETE /v1/reservations/:id` (Algorithm 2).
@@ -60,6 +62,7 @@ import {
 } from '@athlya/reservations/hold';
 import { updateClass as svcUpdateClass } from '@athlya/reservations/update';
 
+import { createDrizzleRosterRepo, getRosterWith, markAttendanceWith } from './class-roster.js';
 import {
   createDrizzleCreateClassRepoHttp,
   createDrizzleDeleteClassRepoHttp,
@@ -244,6 +247,16 @@ export function buildClassesDeps(
         if (code === 'starts_at_in_past') return { kind: 'starts_at_in_past' };
         throw err;
       }
+    },
+
+    async getRoster(classId: string, claims: AuthClaims) {
+      const repo = createDrizzleRosterRepo(getOrCreateWriteDb(env), toTenantClaims(claims));
+      return getRosterWith(claims, classId, repo);
+    },
+
+    async markAttendance(classId: string, reservationId: string, claims: AuthClaims) {
+      const repo = createDrizzleRosterRepo(getOrCreateWriteDb(env), toTenantClaims(claims));
+      return markAttendanceWith(claims, classId, reservationId, { repo, now: Date.now });
     },
   };
 }

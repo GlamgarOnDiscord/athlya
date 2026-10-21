@@ -19,10 +19,12 @@
  *     showing for a few hundred ms before the API rejects the page.
  *
  * Coaches are let through on {@link COACH_ROUTES} only: their home, their
- * read-only schedule, the members directory and the check-in kiosk, all
- * backed by endpoints the API opens to the `coach` role
- * (`GET /v1/classes`, `GET /v1/members`, `POST /v1/checkins`). A coach
- * landing anywhere else under `/dashboard` is sent to their home.
+ * read-only schedule, the members directory, the check-in kiosk and the
+ * roster of a class, all backed by endpoints the API opens to the `coach`
+ * role (`GET /v1/classes`, `GET /v1/members`, `POST /v1/checkins`,
+ * `GET /v1/classes/:id/roster` for the classes they coach). A member file
+ * (`/dashboard/members/:id`) stays admin only, like `GET /v1/members/:id`.
+ * A coach landing anywhere else under `/dashboard` is sent to their home.
  *
  * @see Requirements 6.5 (admin-only routes), 14.1 (auth chain).
  */
@@ -48,10 +50,23 @@ export const COACH_ROUTES: readonly string[] = [
   '/dashboard/checkin',
 ];
 
-/** True when `pathname` is one of {@link COACH_ROUTES} or below one (the home only exactly). */
+/** Coach routes matched exactly: the pages below them are admin only. */
+const EXACT_COACH_ROUTES: ReadonlySet<string> = new Set([DASHBOARD_HOME, '/dashboard/members']);
+
+/** A class detail page, `/dashboard/classes/<id>`; the classes list itself is admin only. */
+const CLASS_DETAIL =
+  /^\/dashboard\/classes\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/iu;
+
+/**
+ * True when `pathname` is one of {@link COACH_ROUTES} (the home and the
+ * members directory exactly, the others with their sub-paths) or a class
+ * detail page.
+ */
 export function isCoachRoute(pathname: string): boolean {
+  if (CLASS_DETAIL.test(pathname)) return true;
   return COACH_ROUTES.some(
-    (route) => pathname === route || (route !== DASHBOARD_HOME && pathname.startsWith(`${route}/`)),
+    (route) =>
+      pathname === route || (!EXACT_COACH_ROUTES.has(route) && pathname.startsWith(`${route}/`)),
   );
 }
 
