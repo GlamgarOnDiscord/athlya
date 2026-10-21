@@ -319,6 +319,24 @@
       "confirmButton": "Supprimer définitivement"
     }
   },
+  "demo": {
+    "banner": {
+      "badge": "Démo",
+      "text": "Données fictives : rien n'est envoyé ni enregistré sur un serveur."
+    },
+    "picker": {
+      "title": "Choisir un profil de démo",
+      "subtitle": "Aucun identifiant : chaque profil ouvre une session fictive dans cet onglet.",
+      "member": "Membre",
+      "memberHint": "Réserver un cours, annuler, gérer son profil",
+      "admin": "Administratrice",
+      "adminHint": "Tableau de bord, planning, membres, journal et pointage",
+      "coach": "Coach",
+      "coachHint": "Ses cours du jour, son planning et ses membres",
+      "signInAs": "Ouvrir la session de démo de {name}, {role}",
+      "error": "La session de démo n'a pas pu démarrer. Rechargez la page."
+    }
+  },
   "web": {
     "home": {
       "title": "Athlya",
