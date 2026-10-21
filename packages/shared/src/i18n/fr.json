@@ -1384,7 +1384,7 @@
       "disable": "Mettre en pause",
       "rotate": "Nouveau secret",
       "enabledToast": "Endpoint activé.",
-      "disabledToast": "Endpoint en pause. Les événements sont conservés et envoyés à la réactivation.",
+      "disabledToast": "Endpoint en pause. Les envois en attente partiront à la réactivation, et les nouveaux événements ne sont pas enregistrés pendant la pause.",
       "deletedToast": "Endpoint supprimé.",
       "events": {
         "reservationCreated": "Réservation confirmée",

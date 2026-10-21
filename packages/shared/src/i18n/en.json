@@ -1384,7 +1384,7 @@
       "disable": "Pause",
       "rotate": "New secret",
       "enabledToast": "Endpoint enabled.",
-      "disabledToast": "Endpoint paused. Events are kept and sent when you enable it again.",
+      "disabledToast": "Endpoint paused. Pending deliveries are sent when you enable it again, and new events are not recorded while it is paused.",
       "deletedToast": "Endpoint deleted.",
       "events": {
         "reservationCreated": "Booking confirmed",
