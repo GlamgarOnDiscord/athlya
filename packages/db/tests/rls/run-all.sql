@@ -44,6 +44,7 @@
 \i tests/rls/reservation_waitlist_runtime.sql
 \i tests/rls/booking_holds_fencing.sql
 \i tests/rls/checkin_runtime.sql
+\i tests/rls/class_rooms_series.sql
 \i tests/rls/auth_event_recording.sql
 \i tests/rls/auth_password_reset_outbox.sql
 \i tests/rls/export_runtime.sql

@@ -140,6 +140,13 @@ function toCardInfo(item: ClassWithRemaining): ClassCardInfo {
   };
 }
 
+/** Booking id from the `reservation` of a booking response, when present. */
+function reservationIdOf(reservation: unknown): string | undefined {
+  if (typeof reservation !== 'object' || reservation === null) return undefined;
+  const id = (reservation as { id?: unknown }).id;
+  return typeof id === 'string' ? id : undefined;
+}
+
 export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps): ReactElement {
   const locale = useLocale();
   const t: Translator = useMemo(() => tProp ?? createTranslator(locale), [tProp, locale]);
@@ -310,7 +317,7 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
           message = t('reservations.waitlistPosition', { position: body.position ?? 0 });
           toast.info(message);
         } else {
-          booking = { kind: 'confirmed' };
+          booking = { kind: 'confirmed', reservationId: reservationIdOf(body.reservation) };
           message = t('reservations.confirmed');
           toast.success(message);
         }
@@ -329,6 +336,8 @@ export function ClassesList({ t: tProp, client: clientProp }: ClassesListProps):
             toast.success(message);
             setState((s) => {
               const next = new Map(s.bookings);
+              // No booking id on a replay: calendar actions stay hidden
+              // rather than export an event the feed would duplicate.
               next.set(classId, { kind: 'confirmed' });
               return { ...s, bookings: next, announcement: message };
             });

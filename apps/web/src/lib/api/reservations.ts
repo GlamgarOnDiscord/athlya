@@ -104,7 +104,11 @@ export function canCancel(item: MyReservation, now: Date): boolean {
 
 /** The member's own place in a class, as the classes list shows it. */
 export type MemberBooking =
-  | { readonly kind: 'confirmed' }
+  | {
+      readonly kind: 'confirmed';
+      /** Booking id when known: "Add to calendar" needs it to match the feed's UID. */
+      readonly reservationId?: string | undefined;
+    }
   | { readonly kind: 'waitlist'; readonly position?: number | undefined };
 
 /** `classId → booking` for the active reservations among `items`. */
@@ -113,8 +117,9 @@ export function bookingsByClass(
 ): ReadonlyMap<string, MemberBooking> {
   const map = new Map<string, MemberBooking>();
   for (const item of items) {
-    if (item.status === 'confirmed') map.set(item.classId, { kind: 'confirmed' });
-    else if (item.status === 'waitlist') map.set(item.classId, { kind: 'waitlist' });
+    if (item.status === 'confirmed') {
+      map.set(item.classId, { kind: 'confirmed', reservationId: item.id });
+    } else if (item.status === 'waitlist') map.set(item.classId, { kind: 'waitlist' });
   }
   return map;
 }

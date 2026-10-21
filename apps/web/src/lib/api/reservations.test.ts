@@ -120,7 +120,7 @@ describe('bookingsByClass', () => {
       reservation('2', '2026-10-21T08:00:00.000Z', 'waitlist'),
       reservation('3', '2026-10-21T08:00:00.000Z', 'cancelled'),
     ]);
-    expect(map.get('class-1')).toEqual({ kind: 'confirmed' });
+    expect(map.get('class-1')).toEqual({ kind: 'confirmed', reservationId: '1' });
     expect(map.get('class-2')).toEqual({ kind: 'waitlist' });
     expect(map.has('class-3')).toBe(false);
   });

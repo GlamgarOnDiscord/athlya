@@ -44,9 +44,11 @@
  * PRODUCTION — missing only on production fails the check.
  *              On staging, missing secrets are warned but not fatal.
  * OPTIONAL   — never fatal, warned when missing. Secrets of features
- *              behind a flag that is OFF by default: MISTRAL_API_KEY
- *              (AI coach, `ai-coach` flag) on the Workers serving
- *              /v1/coach (gateway and reservations).
+ *              that stay off without them: MISTRAL_API_KEY (AI coach,
+ *              `ai-coach` flag) on the Workers serving /v1/coach (gateway
+ *              and reservations), and CALENDAR_FEED_SIGNING_KEY (member
+ *              calendar feeds, /v1/calendar/* answers 503 without it) on
+ *              the gateway.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -114,9 +116,9 @@ export const PRODUCTION_REQUIRED = {
   billing: [...OBSERVABILITY, ...CF_ACCESS],
 };
 
-/** Optional secrets: warned when missing, never fatal (flag-gated features). */
+/** Optional secrets: warned when missing, never fatal (features off without them). */
 export const OPTIONAL = {
-  main: ['MISTRAL_API_KEY'],
+  main: ['MISTRAL_API_KEY', 'CALENDAR_FEED_SIGNING_KEY'],
   auth: [],
   reservations: ['MISTRAL_API_KEY'],
   billing: [],
@@ -257,7 +259,7 @@ if (import.meta.main) {
 
     if (missingOptional.length > 0) {
       console.warn(
-        `[verify-secrets] WARN  ${worker} (${env}): optional secret(s) not set (flag-gated features stay unavailable): ${missingOptional.join(', ')}`,
+        `[verify-secrets] WARN  ${worker} (${env}): optional secret(s) not set (their features stay unavailable): ${missingOptional.join(', ')}`,
       );
     }
 

@@ -95,20 +95,21 @@ Mise à jour : sortie v1.0.0.
 
 ## v1.4 : expérience studio et membre
 
-**Statut** : maquettes en cours de validation (octobre 2026), aucun code livré hors du check-in QR.
+**Statut** : en cours (20 octobre 2026). Sur `master` : design system, check-in QR de bout en bout, vue semaine membre, grille de planning studio, refonte de l'admin, espace coach et configuration Vercel de test. En revue : réglages membre, détail de cours et fiche membre, flux calendrier, ADR des paiements.
 
 **Déclencheur** : décision produit (Tom, 2026-10-19/20). Athlya reste une plateforme ouverte à tout studio ; un abonnement vendu aux salles pourra venir ensuite et reste séparé des paiements des membres.
 
 **Périmètre**, une issue et une PR par ligne :
 
-- **Design system** : tokens communs web, studio et mobile (PR #707, ouverte), icônes Phosphor partout à la place de Lucide, sidebar repliable avec sous-menus, densité réduite (une action principale par écran). Direction et licences : `docs/design/ui-direction.md`, `docs/third-party-ui.md`.
-- **Check-in QR de bout en bout** : caméra autorisée sur la borne (en-tête `Permissions-Policy`), décodage de repli quand `BarcodeDetector` manque, codes `already_checked_in` et `checkin_limit_reached` affichés, borne ouverte aux coachs, carte d'entrée QR sur le web membre, secrets JWT vérifiés au démarrage du Worker reservations. En cours.
-- **Cours en calendrier** : vue semaine membre avec panneau de réservation, planning studio en grille horaire avec salles, séries récurrentes et conflits.
-- **Intégration calendrier** : flux iCal personnel signé (webcal), « Ajouter à mon agenda » par cours, puis synchronisation Google Agenda et Outlook.
-- **Paiements membres vers studio** : Stripe Connect (onboarding du studio, offres, carnets, abonnements, remboursements), puis Mollie, GoCardless (prélèvement SEPA) et PayPal derrière une interface commune. Lemon Squeezy écarté : il ne reverse pas aux studios. Aucune commission Athlya à ce stade. Touche la facturation : accord explicite de Tom ou Pierre avant chaque merge.
-- **Marque blanche** : logo clair et sombre, couleur avec contrôle de contraste AA, domaine personnalisé (DNS), domaine d'envoi des e-mails (SPF, DKIM), e-mails transactionnels aux couleurs du studio, mention Athlya masquable.
-- **Admin studio** : fiche membre, détail d'un cours avec présents, équipe et rôles (Manager, Accueil), intégrations et webhooks, réglages du studio, factures membres.
-- **Réglages membre** : profil, sécurité et sessions, notifications par événement, préférences, santé et appareils, confidentialité.
+- **Design system** : livré. Tokens communs web, studio et mobile avec clair et sombre (PR #707), icônes Phosphor et sidebar repliable avec sous-menus (#718), couleur primaire de marque (#728), palette d'encre neutre (#739). Direction et licences : `docs/design/ui-direction.md`, `docs/third-party-ui.md`.
+- **Check-in QR de bout en bout** : livré. Caméra autorisée sur la borne, décodage de repli, codes d'erreur affichés, carte d'entrée QR sur le web membre (#711), mode borne (#737), accès à la borne qui préserve la caméra (#742), borne ouverte aux coachs.
+- **Cours en calendrier** : vue semaine membre avec réservation et annulation (#734), planning studio en grille semaine et mois (#726). Salles, séries récurrentes et conflits en cours, sans PR ouverte.
+- **Intégration calendrier** : flux iCal personnel signé et « Ajouter à mon agenda » en attente de revue (#720). Synchronisation Google Agenda et Outlook ensuite.
+- **Paiements membres vers studio** : ADR en attente de revue (#716) ; Stripe Connect d'abord, puis Mollie, GoCardless (prélèvement SEPA) et PayPal derrière une interface commune. Lemon Squeezy écarté : il ne reverse pas aux studios. Aucune commission Athlya à ce stade. Touche la facturation : accord explicite de Tom ou Pierre avant chaque merge.
+- **Marque blanche** : pas commencé. Logo clair et sombre, couleur avec contrôle de contraste AA, domaine personnalisé (DNS), domaine d'envoi des e-mails (SPF, DKIM), e-mails transactionnels aux couleurs du studio, mention Athlya masquable.
+- **Admin studio** : refonte livrée (tableau de bord, membres, audit #736 ; borne et liste des cours #737) et espace coach (#743). Détail d'un cours avec présents et fiche membre en revue (#751). Restent équipe et rôles (Manager, Accueil), intégrations et webhooks, réglages du studio, factures membres.
+- **Réglages membre** : en revue (#749). Profil, sécurité et sessions, notifications par événement, préférences, santé et appareils, confidentialité.
+- **Déploiements de test** : configuration Vercel du web et du studio livrée (#747). Mode démo en cours, sans PR ouverte.
 
 **Pré-requis** : validation des maquettes par Tom ; pour les paiements, compte Stripe Connect plateforme et décision sur les frais.
 

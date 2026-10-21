@@ -180,6 +180,16 @@ async function applyMigration(client: Sql, sqlText: string, connStr?: string): P
 }
 
 /**
+ * The two `classes` columns of migration 0051 the Drizzle schema selects.
+ * The full migration also creates `rooms` with grants to the runtime roles
+ * this suite does not create, and nothing here reads rooms.
+ */
+const CLASS_ROOM_SERIES_COLUMNS = `
+  ALTER TABLE "classes" ADD COLUMN IF NOT EXISTS "room_id" uuid;
+  ALTER TABLE "classes" ADD COLUMN IF NOT EXISTS "series_id" uuid;
+`;
+
+/**
  * Locates `packages/db/migrations/<name>` relative to this test file so
  * the suite works whether vitest is invoked from the package or the
  * monorepo root.
@@ -540,6 +550,7 @@ beforeAll(async () => {
     await pg.exec(readMigration('0001_rls.sql'));
     await pg.exec(readMigration('0007_classes_fts.sql'));
     await pg.exec(readMigration('0030_users_credentials_version.sql'));
+    await pg.exec(CLASS_ROOM_SERIES_COLUMNS);
     await pg.exec(usersTableStatements(readMigration('0054_notification_preferences.sql')));
 
     // Bootstrap the NOBYPASSRLS tenant role + grant the superuser the
@@ -596,6 +607,7 @@ beforeAll(async () => {
     readMigration('0030_users_credentials_version.sql'),
     rootConnString,
   );
+  await applyMigration(rootClient, CLASS_ROOM_SERIES_COLUMNS, rootConnString);
   await applyMigration(
     rootClient,
     usersTableStatements(readMigration('0054_notification_preferences.sql')),
