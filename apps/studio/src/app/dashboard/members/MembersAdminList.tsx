@@ -6,7 +6,8 @@
  * from `GET /v1/members` (cursor pages of 20); every count and export covers
  * the rows loaded so far, since the endpoint returns no total. A coach
  * (the API opens the list to that role too) gets the same directory
- * read only: no CSV export, which stays with administrators.
+ * read only: no CSV export and no member file, which stay with
+ * administrators (the API has no per-member read for coaches).
  */
 import { Menu } from '@base-ui/react/menu';
 import {
@@ -16,9 +17,10 @@ import {
   CopyIcon,
   DotsThreeIcon,
   DownloadSimpleIcon,
+  IdentificationCardIcon,
   MagnifyingGlassIcon,
 } from '@phosphor-icons/react';
-import Image from 'next/image';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { toast } from 'sonner';
@@ -28,6 +30,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
+import { MemberAvatar } from '../../../components/MemberAvatar';
 import { PageHeader } from '../../../components/shell/PageHeader';
 import { useApiClient } from '../../../lib/api/buildClient';
 import { useAuth } from '../../../lib/auth/AuthContext';
@@ -35,9 +38,9 @@ import { downloadCsv, toCsv } from '../../../lib/csv';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { pluralKey } from '../../../lib/i18n/plural';
 import { createTranslator, type Translator } from '../../../lib/i18n/t';
+import { memberFileHref } from '../../../lib/links';
 
 import {
-  initials,
   ROLE_TABS,
   roleCounts,
   visibleMembers,
@@ -94,7 +97,8 @@ export function MembersAdminList(): ReactElement {
   const [tab, setTab] = useState<RoleTab>('all');
   const [sort, setSort] = useState<MemberSort>('joinedDesc');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const canExport = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
+  const canExport = isAdmin;
 
   const fetchPage = useCallback(
     async (currentCursor: string | null) => {
@@ -387,8 +391,17 @@ export function MembersAdminList(): ReactElement {
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-3">
-                      <Avatar member={m} />
-                      <span className="truncate font-medium">{m.displayName}</span>
+                      <MemberAvatar displayName={m.displayName} avatarUrl={m.avatarUrl} />
+                      {isAdmin ? (
+                        <Link
+                          href={memberFileHref(m.id)}
+                          className="truncate rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {m.displayName}
+                        </Link>
+                      ) : (
+                        <span className="truncate font-medium">{m.displayName}</span>
+                      )}
                       {m.id === user?.id ? (
                         <Badge variant="secondary">{t('studio.members.you')}</Badge>
                       ) : null}
@@ -408,6 +421,7 @@ export function MembersAdminList(): ReactElement {
                   <td className="px-3 py-2.5 text-right">
                     <RowMenu
                       member={m}
+                      fileHref={isAdmin ? memberFileHref(m.id) : null}
                       t={t}
                       onCopy={() => copy(m.email, t('studio.members.emailCopied'))}
                     />
@@ -506,35 +520,15 @@ function SortButton({
   );
 }
 
-function Avatar({ member }: { readonly member: StudioMember }): ReactElement {
-  if (member.avatarUrl !== null && member.avatarUrl !== '') {
-    return (
-      <Image
-        src={member.avatarUrl}
-        alt=""
-        width={32}
-        height={32}
-        unoptimized
-        className="size-8 shrink-0 rounded-full border border-border object-cover"
-      />
-    );
-  }
-  return (
-    <span
-      aria-hidden="true"
-      className="grid size-8 shrink-0 place-items-center rounded-full border border-border bg-muted text-xs font-medium"
-    >
-      {initials(member.displayName)}
-    </span>
-  );
-}
-
 function RowMenu({
   member,
+  fileHref,
   t,
   onCopy,
 }: {
   readonly member: StudioMember;
+  /** The member file, for an admin; coaches have no per-member read. */
+  readonly fileHref: string | null;
   readonly t: Translator;
   readonly onCopy: () => void;
 }): ReactElement {
@@ -549,6 +543,19 @@ function RowMenu({
       <Menu.Portal>
         <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
           <Menu.Popup className="min-w-44 rounded-lg border border-border bg-popover p-1 text-sm text-popover-foreground shadow-sm outline-none">
+            {fileHref === null ? null : (
+              <Menu.LinkItem
+                render={<Link href={fileHref} />}
+                closeOnClick
+                className="flex h-8 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+              >
+                <IdentificationCardIcon
+                  aria-hidden="true"
+                  className="size-4 text-muted-foreground"
+                />
+                {t('studio.memberFile.open')}
+              </Menu.LinkItem>
+            )}
             <Menu.Item
               onClick={onCopy}
               className="flex h-8 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
