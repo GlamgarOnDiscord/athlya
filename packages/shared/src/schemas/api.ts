@@ -1559,3 +1559,187 @@ export const TodayWorkoutResponseSchema = z
   .strict();
 
 export type TodayWorkoutResponse = z.infer<typeof TodayWorkoutResponseSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  studio settings: /v1/studios/me/settings (issue #759)            */
+/* ------------------------------------------------------------------ */
+
+/** Whether `value` names an IANA time zone this runtime knows. */
+export function isIanaTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: value });
+    return value.includes('/') || value === 'UTC';
+  } catch {
+    return false;
+  }
+}
+
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .transform((value) => (value === '' ? null : value))
+    .nullable();
+
+export const StudioSettingsSchema = z
+  .object({
+    name: z.string().min(1).max(120),
+    timezone: z.string(),
+    addressLine: z.string().nullable(),
+    postalCode: z.string().nullable(),
+    city: z.string().nullable(),
+    country: z.string().nullable(),
+    contactEmail: z.string().nullable(),
+  })
+  .strict();
+
+export type StudioSettings = z.infer<typeof StudioSettingsSchema>;
+
+/**
+ * `PATCH /v1/studios/me/settings` (admin). Every field optional, at least
+ * one present; an empty string clears an optional field.
+ */
+export const UpdateStudioSettingsRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    timezone: z
+      .string()
+      .min(1)
+      .max(64)
+      .refine(isIanaTimeZone, { message: 'must be an IANA time zone, e.g. Europe/Paris' })
+      .optional(),
+    addressLine: optionalText(200).optional(),
+    postalCode: optionalText(16).optional(),
+    city: optionalText(100).optional(),
+    country: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^([A-Z]{2})?$/u, 'must be an ISO 3166-1 alpha-2 code')
+      .transform((value) => (value === '' ? null : value))
+      .nullable()
+      .optional(),
+    contactEmail: z
+      .union([z.literal(''), z.email().max(254)])
+      .transform((value) => (value === '' ? null : value.toLowerCase()))
+      .nullable()
+      .optional(),
+  })
+  .strict()
+  .refine((v) => Object.values(v).some((value) => value !== undefined), {
+    message: 'must patch at least one field',
+  });
+
+export type UpdateStudioSettingsRequest = z.infer<typeof UpdateStudioSettingsRequestSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  webhooks: /v1/studios/me/webhooks (issue #760)                   */
+/* ------------------------------------------------------------------ */
+
+/** Event types an endpoint may subscribe to (CHECK of migration 0053). */
+export const WEBHOOK_EVENT_TYPES = [
+  'reservation.created',
+  'reservation.waitlisted',
+  'reservation.cancelled',
+  'reservation.promoted',
+  'auth.user.registered',
+] as const;
+
+export const WebhookEventTypeSchema = z.enum(WEBHOOK_EVENT_TYPES);
+
+export type WebhookEventType = z.infer<typeof WebhookEventTypeSchema>;
+
+/** Host names an endpoint may never point at (SSRF guard). */
+function isPublicHttpsUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') return false;
+  const host = url.hostname.toLowerCase().replace(/\.$/u, '');
+  if (!host.includes('.') || host.startsWith('[')) return false;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/u.test(host)) return false;
+  return !/(^|\.)(localhost|local|internal|intranet|lan|home|corp|test|invalid|example)$/u.test(
+    host,
+  );
+}
+
+export const WebhookUrlSchema = z.string().trim().max(2048).refine(isPublicHttpsUrl, {
+  message: 'must be a public https URL with a host name (no IP address, no local name)',
+});
+
+const WebhookEventListSchema = z
+  .array(WebhookEventTypeSchema)
+  .min(1)
+  .max(WEBHOOK_EVENT_TYPES.length)
+  .transform((events) => [...new Set(events)]);
+
+export const WebhookDeliverySchema = z
+  .object({
+    id: UuidSchema,
+    eventId: z.string(),
+    eventType: z.string(),
+    status: z.enum(['pending', 'delivered', 'failed']),
+    attempts: z.number().int().nonnegative(),
+    lastStatusCode: z.number().int().nullable(),
+    lastError: z.string().nullable(),
+    createdAt: IsoDateTimeSchema,
+    deliveredAt: IsoDateTimeSchema.nullable(),
+    nextAttemptAt: IsoDateTimeSchema.nullable(),
+  })
+  .strict();
+
+export type WebhookDelivery = z.infer<typeof WebhookDeliverySchema>;
+
+export const WebhookEndpointSchema = z
+  .object({
+    id: UuidSchema,
+    url: z.string(),
+    events: z.array(WebhookEventTypeSchema),
+    enabled: z.boolean(),
+    createdAt: IsoDateTimeSchema,
+    updatedAt: IsoDateTimeSchema,
+    recentDeliveries: z.array(WebhookDeliverySchema),
+  })
+  .strict();
+
+export type WebhookEndpoint = z.infer<typeof WebhookEndpointSchema>;
+
+export const WebhookEndpointListSchema = z
+  .object({ items: z.array(WebhookEndpointSchema) })
+  .strict();
+
+export type WebhookEndpointList = z.infer<typeof WebhookEndpointListSchema>;
+
+export const CreateWebhookEndpointRequestSchema = z
+  .object({ url: WebhookUrlSchema, events: WebhookEventListSchema })
+  .strict();
+
+export type CreateWebhookEndpointRequest = z.infer<typeof CreateWebhookEndpointRequestSchema>;
+
+export const UpdateWebhookEndpointRequestSchema = z
+  .object({
+    url: WebhookUrlSchema.optional(),
+    events: WebhookEventListSchema.optional(),
+    enabled: z.boolean().optional(),
+  })
+  .strict()
+  .refine((v) => v.url !== undefined || v.events !== undefined || v.enabled !== undefined, {
+    message: 'must patch at least one of { url, events, enabled }',
+  });
+
+export type UpdateWebhookEndpointRequest = z.infer<typeof UpdateWebhookEndpointRequestSchema>;
+
+export const WebhookEndpointParamsSchema = z.object({ id: UuidSchema }).strict();
+
+export type WebhookEndpointParams = z.infer<typeof WebhookEndpointParamsSchema>;
+
+/** Answer that carries a signing secret: shown at creation and rotation only. */
+export const WebhookSecretResponseSchema = z
+  .object({ endpoint: WebhookEndpointSchema, secret: z.string() })
+  .strict();
+
+export type WebhookSecretResponse = z.infer<typeof WebhookSecretResponseSchema>;

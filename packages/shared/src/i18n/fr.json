@@ -603,7 +603,9 @@
       "dashboard": "Tableau de bord",
       "settings": "Configuration",
       "home": "Accueil",
-      "planning": "Mon planning"
+      "planning": "Mon planning",
+      "studioSettings": "Réglages du studio",
+      "integrations": "Intégrations"
     },
     "dashboard": {
       "title": "Tableau de bord",
@@ -1211,6 +1213,119 @@
       "forbidden": "Seuls les admins du studio peuvent ouvrir une fiche membre.",
       "notFound": "Ce membre n'existe pas dans votre studio.",
       "loadError": "La fiche membre n'a pas pu se charger."
+    },
+    "settings": {
+      "title": "Réglages du studio",
+      "subtitle": "Le nom du studio, son adresse et la façon de le contacter.",
+      "loadError": "Impossible de charger les réglages. Réessayez dans un instant.",
+      "sections": {
+        "general": "Général",
+        "address": "Adresse",
+        "booking": "Règles de réservation"
+      },
+      "booking": {
+        "body": "Les membres peuvent annuler une réservation jusqu'à 2 heures avant le début du cours. Ce délai est le même pour tous les studios pour l'instant."
+      },
+      "fields": {
+        "name": "Nom du studio",
+        "timezone": "Fuseau horaire",
+        "contactEmail": "E-mail de contact",
+        "addressLine": "Adresse",
+        "postalCode": "Code postal",
+        "city": "Ville",
+        "country": "Pays"
+      },
+      "help": {
+        "timezone": "Le fuseau horaire où se trouve le studio.",
+        "contactEmail": "Où les membres peuvent écrire au studio.",
+        "country": "Deux lettres, par exemple FR."
+      },
+      "errors": {
+        "name": "Saisissez un nom de 1 à 120 caractères.",
+        "timezone": "Choisissez un fuseau dans la liste.",
+        "contactEmail": "Saisissez une adresse e-mail valide, ou laissez vide.",
+        "addressLine": "200 caractères au maximum.",
+        "postalCode": "16 caractères au maximum.",
+        "city": "100 caractères au maximum.",
+        "country": "Utilisez le code pays à deux lettres, par exemple FR."
+      },
+      "save": "Enregistrer",
+      "saved": "Réglages enregistrés.",
+      "unchanged": "Rien à enregistrer."
+    },
+    "integrations": {
+      "title": "Intégrations",
+      "subtitle": "Envoyez les événements du studio vers vos outils avec des webhooks signés.",
+      "loadError": "Impossible de charger les endpoints. Réessayez dans un instant.",
+      "empty": {
+        "title": "Aucun endpoint pour le moment",
+        "body": "Ajoutez une URL HTTPS de votre outil et choisissez les événements à recevoir. Chaque envoi est signé avec un secret que vous seul connaissez."
+      },
+      "active": "Actif",
+      "paused": "En pause",
+      "enable": "Activer",
+      "disable": "Mettre en pause",
+      "rotate": "Nouveau secret",
+      "enabledToast": "Endpoint activé.",
+      "disabledToast": "Endpoint en pause. Les événements sont conservés et envoyés à la réactivation.",
+      "deletedToast": "Endpoint supprimé.",
+      "events": {
+        "reservationCreated": "Réservation confirmée",
+        "reservationWaitlisted": "Inscription en liste d'attente",
+        "reservationCancelled": "Réservation annulée",
+        "reservationPromoted": "Place obtenue depuis la liste d'attente",
+        "memberRegistered": "Nouveau membre",
+        "other": "Autre événement"
+      },
+      "deliveries": {
+        "title": "Derniers envois",
+        "empty": "Aucun envoi pour le moment.",
+        "status": {
+          "delivered": "Reçu",
+          "pending": "Nouvel essai prévu",
+          "failed": "Abandonné"
+        },
+        "attempts": {
+          "one": "{count} essai",
+          "other": "{count} essais"
+        },
+        "errors": {
+          "timeout": "Pas de réponse en 10 s",
+          "network": "Injoignable",
+          "url": "URL refusée",
+          "other": "Erreur"
+        }
+      },
+      "signature": {
+        "title": "Vérifier la signature",
+        "body": "Chaque POST porte athlya-signature : l'horodatage t et v1, le HMAC-SHA256 de « t.body » avec votre secret. Recalculez-le sur le corps brut, comparez en temps constant et refusez un horodatage de plus de 5 minutes.",
+        "retries": "Répondez avec un statut 2xx. Sinon l'envoi est retenté après 1 min, 5 min, 30 min, 2 h et 6 h, puis abandonné."
+      },
+      "add": {
+        "open": "Ajouter un endpoint",
+        "title": "Ajouter un endpoint",
+        "body": "Une URL HTTPS publique. Le secret de signature est affiché une seule fois, juste après.",
+        "url": "URL de l'endpoint",
+        "events": "Événements",
+        "submit": "Ajouter",
+        "invalidUrl": "Saisissez une URL https publique avec un nom de domaine, sans adresse IP.",
+        "noEvent": "Choisissez au moins un événement.",
+        "limit": "Un studio peut enregistrer 10 endpoints au maximum."
+      },
+      "delete": {
+        "open": "Supprimer",
+        "title": "Supprimer cet endpoint ?",
+        "body": "Ses envois en attente sont abandonnés. Cette action est définitive.",
+        "confirm": "Supprimer l'endpoint"
+      },
+      "secret": {
+        "title": "Secret de signature",
+        "label": "Secret",
+        "copy": "Copier",
+        "copied": "Copié",
+        "once": "Affiché une seule fois. Enregistrez-le dans votre outil maintenant ; un nouveau secret le remplace en cas de perte.",
+        "done": "Terminé"
+      }
     }
   },
   "mobile": {

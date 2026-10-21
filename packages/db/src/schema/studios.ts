@@ -27,6 +27,15 @@ export const studios = pgTable(
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     brandColor: text('brand_color').notNull().default('#0EA5E9'),
+    /** Settings of migration 0053 (issue #759). `timezone` is an IANA name. */
+    timezone: text('timezone').notNull().default('Europe/Paris'),
+    addressLine: text('address_line'),
+    postalCode: text('postal_code'),
+    city: text('city'),
+    /** ISO 3166-1 alpha-2. */
+    country: text('country'),
+    /** `citext` in the database. */
+    contactEmail: text('contact_email'),
     createdAt: createdAt(),
     deletedAt: deletedAt(),
   },

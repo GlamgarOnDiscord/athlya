@@ -603,7 +603,9 @@
       "dashboard": "Dashboard",
       "settings": "Settings",
       "home": "Home",
-      "planning": "My schedule"
+      "planning": "My schedule",
+      "studioSettings": "Studio settings",
+      "integrations": "Integrations"
     },
     "dashboard": {
       "title": "Dashboard",
@@ -1211,6 +1213,119 @@
       "forbidden": "Only the studio admins can open a member file.",
       "notFound": "This member does not exist in your studio.",
       "loadError": "The member file could not load."
+    },
+    "settings": {
+      "title": "Studio settings",
+      "subtitle": "How the studio is named, where it is and how members reach it.",
+      "loadError": "The settings could not be loaded. Try again in a moment.",
+      "sections": {
+        "general": "General",
+        "address": "Address",
+        "booking": "Booking rules"
+      },
+      "booking": {
+        "body": "Members can cancel a booking up to 2 hours before the class starts. This window is the same for every studio for now."
+      },
+      "fields": {
+        "name": "Studio name",
+        "timezone": "Time zone",
+        "contactEmail": "Contact email",
+        "addressLine": "Street address",
+        "postalCode": "Postal code",
+        "city": "City",
+        "country": "Country"
+      },
+      "help": {
+        "timezone": "The time zone the studio is in.",
+        "contactEmail": "Where members can write to the studio.",
+        "country": "Two letters, e.g. FR."
+      },
+      "errors": {
+        "name": "Enter a name of 1 to 120 characters.",
+        "timezone": "Choose a time zone from the list.",
+        "contactEmail": "Enter a valid email address, or leave it empty.",
+        "addressLine": "200 characters at most.",
+        "postalCode": "16 characters at most.",
+        "city": "100 characters at most.",
+        "country": "Use the two-letter country code, e.g. FR."
+      },
+      "save": "Save",
+      "saved": "Settings saved.",
+      "unchanged": "Nothing to save."
+    },
+    "integrations": {
+      "title": "Integrations",
+      "subtitle": "Send the studio's events to your tools with signed webhooks.",
+      "loadError": "The endpoints could not be loaded. Try again in a moment.",
+      "empty": {
+        "title": "No endpoint yet",
+        "body": "Add an HTTPS URL of your tool and choose the events to receive. Each delivery is signed with a secret only you know."
+      },
+      "active": "Active",
+      "paused": "Paused",
+      "enable": "Enable",
+      "disable": "Pause",
+      "rotate": "New secret",
+      "enabledToast": "Endpoint enabled.",
+      "disabledToast": "Endpoint paused. Events are kept and sent when you enable it again.",
+      "deletedToast": "Endpoint deleted.",
+      "events": {
+        "reservationCreated": "Booking confirmed",
+        "reservationWaitlisted": "Joined the waitlist",
+        "reservationCancelled": "Booking cancelled",
+        "reservationPromoted": "Promoted from the waitlist",
+        "memberRegistered": "New member",
+        "other": "Other event"
+      },
+      "deliveries": {
+        "title": "Last deliveries",
+        "empty": "No delivery yet.",
+        "status": {
+          "delivered": "Delivered",
+          "pending": "Retrying",
+          "failed": "Gave up"
+        },
+        "attempts": {
+          "one": "{count} attempt",
+          "other": "{count} attempts"
+        },
+        "errors": {
+          "timeout": "No answer within 10 s",
+          "network": "Unreachable",
+          "url": "URL refused",
+          "other": "Error"
+        }
+      },
+      "signature": {
+        "title": "Check the signature",
+        "body": "Each POST carries athlya-signature: the timestamp t and v1, the HMAC-SHA256 of \"t.body\" with your secret. Recompute it on the raw body, compare in constant time and refuse a timestamp older than 5 minutes.",
+        "retries": "Answer with a 2xx status. Otherwise the delivery is retried after 1 min, 5 min, 30 min, 2 h and 6 h, then given up."
+      },
+      "add": {
+        "open": "Add an endpoint",
+        "title": "Add an endpoint",
+        "body": "A public HTTPS URL. The signing secret is shown once, right after.",
+        "url": "Endpoint URL",
+        "events": "Events",
+        "submit": "Add",
+        "invalidUrl": "Enter a public https URL with a host name, without an IP address.",
+        "noEvent": "Choose at least one event.",
+        "limit": "A studio can register 10 endpoints at most."
+      },
+      "delete": {
+        "open": "Delete",
+        "title": "Delete this endpoint?",
+        "body": "Its pending deliveries are dropped. This cannot be undone.",
+        "confirm": "Delete the endpoint"
+      },
+      "secret": {
+        "title": "Signing secret",
+        "label": "Secret",
+        "copy": "Copy",
+        "copied": "Copied",
+        "once": "Shown only once. Store it in your tool now; a new secret replaces it if it is lost.",
+        "done": "Done"
+      }
     }
   },
   "mobile": {

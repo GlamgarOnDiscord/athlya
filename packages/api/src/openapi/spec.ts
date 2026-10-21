@@ -18,6 +18,14 @@
  */
 
 import {
+  CreateWebhookEndpointRequestSchema,
+  StudioSettingsSchema,
+  UpdateStudioSettingsRequestSchema,
+  UpdateWebhookEndpointRequestSchema,
+  WebhookEndpointListSchema,
+  WebhookEndpointParamsSchema,
+  WebhookEndpointSchema,
+  WebhookSecretResponseSchema,
   BookingRequestSchema,
   BookingResponseSchema,
   CancelReservationParamsSchema,
@@ -1560,6 +1568,149 @@ const todayWorkoutRoute = createRoute({
  * reached because `/openapi.json` short-circuits before delegating to
  * domain handlers.
  */
+/*
+ * studio settings and webhooks: /v1/studios/me/settings, /v1/studios/me/webhooks (issues #759, #760)
+ */
+
+const getStudioSettingsRoute = createRoute({
+  method: 'get',
+  path: '/v1/studios/me/settings',
+  tags: ['studios'],
+  summary: 'Studio settings: name, time zone, address, contact email (admin)',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'The settings',
+      content: { 'application/json': { schema: StudioSettingsSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not a studio admin'),
+  },
+});
+
+const patchStudioSettingsRoute = createRoute({
+  method: 'patch',
+  path: '/v1/studios/me/settings',
+  tags: ['studios'],
+  summary: 'Update the studio settings; an empty string clears an optional field (admin)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: UpdateStudioSettingsRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'The updated settings',
+      content: { 'application/json': { schema: StudioSettingsSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not a studio admin'),
+    422: problemResponse('Validation error (unknown time zone, invalid email or country)'),
+  },
+});
+
+const listWebhooksRoute = createRoute({
+  method: 'get',
+  path: '/v1/studios/me/webhooks',
+  tags: ['webhooks'],
+  summary: 'Webhook endpoints of the studio with their recent deliveries (admin)',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'The endpoints; never the signing secrets',
+      content: { 'application/json': { schema: WebhookEndpointListSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not a studio admin'),
+  },
+});
+
+const createWebhookRoute = createRoute({
+  method: 'post',
+  path: '/v1/studios/me/webhooks',
+  tags: ['webhooks'],
+  summary: 'Register an endpoint; the signing secret is returned this once (admin)',
+  description:
+    'Each delivery is a POST with `athlya-signature: t=<unix>,v1=<hex HMAC-SHA256(secret, "<t>.<body>")>`, ' +
+    '`athlya-event` and `athlya-delivery` headers. Non-2xx answers are retried after 1 min, 5 min, 30 min, 2 h and 6 h.',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: CreateWebhookEndpointRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    201: {
+      description: 'Endpoint created',
+      content: { 'application/json': { schema: WebhookSecretResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not a studio admin'),
+    409: problemResponse('`webhook_limit_reached`: 10 endpoints per studio'),
+    422: problemResponse('Validation error (not a public https URL, unknown event)'),
+  },
+});
+
+const updateWebhookRoute = createRoute({
+  method: 'patch',
+  path: '/v1/studios/me/webhooks/{id}',
+  tags: ['webhooks'],
+  summary: 'Change the URL or the events of an endpoint, or enable or disable it (admin)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: WebhookEndpointParamsSchema,
+    body: {
+      content: { 'application/json': { schema: UpdateWebhookEndpointRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'The endpoint',
+      content: { 'application/json': { schema: z.object({ endpoint: WebhookEndpointSchema }) } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not a studio admin'),
+    404: problemResponse('`webhook_not_found`'),
+  },
+});
+
+const rotateWebhookSecretRoute = createRoute({
+  method: 'post',
+  path: '/v1/studios/me/webhooks/{id}/rotate-secret',
+  tags: ['webhooks'],
+  summary: 'Replace the signing secret; the new one is returned this once (admin)',
+  security: [{ bearerAuth: [] }],
+  request: { params: WebhookEndpointParamsSchema },
+  responses: {
+    200: {
+      description: 'The endpoint and its new secret',
+      content: { 'application/json': { schema: WebhookSecretResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not a studio admin'),
+    404: problemResponse('`webhook_not_found`'),
+  },
+});
+
+const deleteWebhookRoute = createRoute({
+  method: 'delete',
+  path: '/v1/studios/me/webhooks/{id}',
+  tags: ['webhooks'],
+  summary: 'Delete an endpoint and its deliveries (admin)',
+  security: [{ bearerAuth: [] }],
+  request: { params: WebhookEndpointParamsSchema },
+  responses: {
+    204: { description: 'Deleted' },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not a studio admin'),
+    404: problemResponse('`webhook_not_found`'),
+  },
+});
+
 export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   const app = new OpenAPIHono<HonoEnv>();
 
@@ -1610,6 +1761,15 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   // studios
   app.openapi(getStudioMeRoute, stub);
   app.openapi(patchStudioMeRoute, stub);
+  app.openapi(getStudioSettingsRoute, stub);
+  app.openapi(patchStudioSettingsRoute, stub);
+
+  // webhooks
+  app.openapi(listWebhooksRoute, stub);
+  app.openapi(createWebhookRoute, stub);
+  app.openapi(updateWebhookRoute, stub);
+  app.openapi(rotateWebhookSecretRoute, stub);
+  app.openapi(deleteWebhookRoute, stub);
 
   // sessions
   app.openapi(logSessionRoute, stub);

@@ -4,10 +4,12 @@ import {
   BookOpenIcon,
   CalendarBlankIcon,
   CreditCardIcon,
+  GearSixIcon,
   HouseIcon,
   ListBulletsIcon,
   MagnifyingGlassIcon,
   PaletteIcon,
+  PlugsConnectedIcon,
   PlusIcon,
   QuestionIcon,
   ScanIcon,
@@ -97,6 +99,12 @@ export function studioSections(t: Translator): SidebarSection[] {
           children: [
             {
               kind: 'link',
+              href: '/dashboard/settings',
+              label: t('studio.nav.studioSettings'),
+              icon: GearSixIcon,
+            },
+            {
+              kind: 'link',
               href: '/dashboard/branding',
               label: t('studio.nav.branding'),
               icon: PaletteIcon,
@@ -106,6 +114,12 @@ export function studioSections(t: Translator): SidebarSection[] {
               href: '/dashboard/billing',
               label: t('studio.nav.billing'),
               icon: CreditCardIcon,
+            },
+            {
+              kind: 'link',
+              href: '/dashboard/integrations',
+              label: t('studio.nav.integrations'),
+              icon: PlugsConnectedIcon,
             },
             {
               kind: 'link',
