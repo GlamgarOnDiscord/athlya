@@ -672,7 +672,11 @@ const rosterCheckInRoute = createRoute({
     422: problemResponse(
       '`not_confirmed` (waitlisted or cancelled), `already_checked_in` or `outside_window`',
     ),
-    429: problemResponse('`checkin_limit_reached`: the member was checked in 5 times this hour'),
+    429: problemResponse(
+      'Rate limited (60 check-ins per minute per operator, shared with `POST /v1/checkins`), or ' +
+        '`checkin_limit_reached`: the member was checked in 5 times this hour',
+    ),
+    503: problemResponse('Rate limiter unavailable (fail-closed, code `dependency_unavailable`)'),
   },
 });
 

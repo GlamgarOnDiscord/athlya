@@ -60,6 +60,7 @@ describe('isCoachRoute', () => {
   it('opens a class roster but not a member file', () => {
     expect(isCoachRoute('/dashboard/classes/cccccccc-cccc-4ccc-8ccc-cccccccccc01')).toBe(true);
     expect(isCoachRoute('/dashboard/classes/c1/edit')).toBe(false);
+    expect(isCoachRoute('/dashboard/classes/new')).toBe(false);
     expect(isCoachRoute('/dashboard/members/11111111-1111-4111-8111-111111111111')).toBe(false);
   });
 

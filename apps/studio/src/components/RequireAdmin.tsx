@@ -54,7 +54,8 @@ export const COACH_ROUTES: readonly string[] = [
 const EXACT_COACH_ROUTES: ReadonlySet<string> = new Set([DASHBOARD_HOME, '/dashboard/members']);
 
 /** A class detail page, `/dashboard/classes/<id>`; the classes list itself is admin only. */
-const CLASS_DETAIL = /^\/dashboard\/classes\/[^/]+\/?$/u;
+const CLASS_DETAIL =
+  /^\/dashboard\/classes\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/iu;
 
 /**
  * True when `pathname` is one of {@link COACH_ROUTES} (the home and the
