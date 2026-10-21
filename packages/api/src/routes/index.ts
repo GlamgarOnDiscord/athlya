@@ -45,6 +45,11 @@ import { buildAuthRouter, type AuthDeps } from './auth.js';
 import { buildBillingRouter, type BillingDeps } from './billing.js';
 import { buildCapacityRouter } from './capacity.js';
 import { buildCheckinsRouter, type CheckinsDeps } from './checkins.js';
+import {
+  buildClassSeriesRouter,
+  buildRoomsRouter,
+  type ClassPlanningDeps,
+} from './class-planning.js';
 import { buildClassesRouter, type ClassesDeps } from './classes.js';
 import { buildCoachRouter, type CoachDeps } from './coach.js';
 import { buildMeRouter, type MeDeps } from './me.js';
@@ -66,11 +71,13 @@ export {
   buildCapacityRouter,
   buildCheckinsRouter,
   buildClassesRouter,
+  buildClassSeriesRouter,
   buildCoachRouter,
   buildMeRouter,
   buildMembersRouter,
   buildProgramsRouter,
   buildReservationsRouter,
+  buildRoomsRouter,
   buildSessionsRouter,
   buildStudiosRouter,
   buildTeamRouter,
@@ -83,6 +90,7 @@ export type {
   BillingDeps,
   CheckinsDeps,
   ClassesDeps,
+  ClassPlanningDeps,
   CoachDeps,
   MeDeps,
   MembersDeps,
@@ -116,6 +124,12 @@ export function mountDomainRoutes(app: Hono<HonoEnv>, deps: DomainDeps): Hono<Ho
   // Capacity WebSocket must mount before the authenticated classes router
   // so the public /v1/classes/:classId/capacity/ws path is matched first.
   app.route('/v1/classes', buildCapacityRouter());
+  // Rooms and series (issue #748) sit under /v1/classes and mount before
+  // the classes router, whose `/:id` routes would otherwise see them.
+  if (deps.planning !== undefined) {
+    app.route('/v1/classes/rooms', buildRoomsRouter(deps.planning));
+    app.route('/v1/classes/series', buildClassSeriesRouter(deps.planning));
+  }
   app.route('/v1/classes', buildClassesRouter(deps.classes));
   app.route('/v1/reservations', buildReservationsRouter(deps.reservations));
   if (deps.sessions !== undefined) {

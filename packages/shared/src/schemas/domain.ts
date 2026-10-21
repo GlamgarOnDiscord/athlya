@@ -104,6 +104,10 @@ export const ClassSchema = z
     capacity: z.number().int().min(1).max(500),
     version: z.number().int().nonnegative(),
     createdAt: IsoDateTimeSchema,
+    /** Room the class runs in (issue #748); absent from older payloads. */
+    roomId: UuidSchema.nullable().optional(),
+    /** Weekly series the class belongs to (issue #748); absent from older payloads. */
+    seriesId: UuidSchema.nullable().optional(),
   })
   .strict();
 

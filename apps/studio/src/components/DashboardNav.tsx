@@ -5,6 +5,7 @@ import {
   BookOpenIcon,
   CalendarBlankIcon,
   CreditCardIcon,
+  DoorOpenIcon,
   HouseIcon,
   ListBulletsIcon,
   MagnifyingGlassIcon,
@@ -103,6 +104,12 @@ export function studioSections(t: Translator): SidebarSection[] {
               href: '/dashboard/team',
               label: t('studio.nav.team'),
               icon: UsersThreeIcon,
+            },
+            {
+              kind: 'link',
+              href: '/dashboard/rooms',
+              label: t('studio.nav.rooms'),
+              icon: DoorOpenIcon,
             },
             {
               kind: 'link',

@@ -12,6 +12,7 @@ describe('canOpenRoute', () => {
       '/dashboard/billing',
       '/dashboard/branding',
       '/dashboard/team',
+      '/dashboard/rooms',
       CLASS,
     ]) {
       expect(canOpenRoute('admin', path)).toBe(true);
@@ -45,6 +46,7 @@ describe('canOpenRoute', () => {
       '/dashboard/programs',
       '/dashboard/team',
       '/dashboard/audit',
+      '/dashboard/rooms',
       '/dashboard/billing',
     ]) {
       expect(canOpenRoute('accueil', path)).toBe(false);
@@ -58,6 +60,7 @@ describe('canOpenRoute', () => {
     expect(canOpenRoute('coach', '/dashboard/classes/c1/edit')).toBe(false);
     expect(canOpenRoute('coach', '/dashboard/checkins')).toBe(false);
     expect(canOpenRoute('coach', '/dashboard/planning-admin')).toBe(false);
+    expect(canOpenRoute('coach', '/dashboard/rooms')).toBe(false);
   });
 
   it('opens nothing to a member', () => {

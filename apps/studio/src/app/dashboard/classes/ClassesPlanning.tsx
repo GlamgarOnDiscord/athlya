@@ -1,7 +1,7 @@
 'use client';
 
 import { Menu } from '@base-ui/react/menu';
-import { DotsThreeIcon, ProhibitIcon, UsersIcon } from '@phosphor-icons/react';
+import { DotsThreeIcon, ProhibitIcon, RepeatIcon, UsersIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useCallback, useMemo, type ReactElement, type ReactNode } from 'react';
 
@@ -48,6 +48,8 @@ export interface ClassesPlanningProps {
   readonly onDeleteClass?: (cls: ClassWithRemaining) => void;
   readonly onCreateAt?: (startsAt: Date) => void;
   readonly onShowDay: (day: Date) => void;
+  /** Room id to name (issue #748): tiles name the room their class runs in. */
+  readonly roomNames?: ReadonlyMap<string, string>;
   /**
    * The roster page of a class, `null` for a class the viewer may not open.
    * A read-only tile becomes a link to it; an editable tile keeps opening
@@ -108,6 +110,51 @@ export function ClassesPlanning(props: ClassesPlanningProps): ReactElement {
 
 function isFull(cls: ClassWithRemaining): boolean {
   return cls.remaining <= 0;
+}
+
+/** Name of the class's room, or null when it has none or the room is unknown. */
+function roomOf(
+  cls: ClassWithRemaining,
+  roomNames: ReadonlyMap<string, string> | undefined,
+): string | null {
+  return cls.roomId == null ? null : (roomNames?.get(cls.roomId) ?? null);
+}
+
+/** "09:00 - 10:00", then the room when there is one. */
+function timeAndRoom(fmt: Formatters, start: Date, end: Date, room: string | null): string {
+  const time = `${fmt.time.format(start)} - ${fmt.time.format(end)}`;
+  return room === null ? time : `${time} · ${room}`;
+}
+
+/** ", Room Studio 1" for a screen reader, where the tile has no room to show it. */
+function RoomForReader({
+  room,
+  t,
+}: {
+  readonly room: string | null;
+  readonly t: Translator;
+}): ReactElement | null {
+  if (room === null) return null;
+  return (
+    <span className="sr-only">, {t('studio.classes.planning.roomLabel', { name: room })}</span>
+  );
+}
+
+/** Repeat glyph, with its words for a screen reader, on a class of a series. */
+function SeriesMark({
+  cls,
+  t,
+}: {
+  readonly cls: ClassWithRemaining;
+  readonly t: Translator;
+}): ReactElement | null {
+  if (cls.seriesId == null) return null;
+  return (
+    <>
+      <RepeatIcon aria-hidden="true" className="size-3 shrink-0" />
+      <span className="sr-only">, {t('studio.classes.series.badge')}</span>
+    </>
+  );
 }
 
 /**
@@ -278,6 +325,7 @@ function WeekGrid({
   onSelectClass,
   onDeleteClass,
   onCreateAt,
+  roomNames,
   rosterHref,
 }: ClassesPlanningProps): ReactElement {
   const fmt = useFormatters(locale);
@@ -346,6 +394,7 @@ function WeekGrid({
               bounds={bounds}
               fmt={fmt}
               t={t}
+              room={roomOf(block.item, roomNames)}
               onSelect={onSelectClass}
               onDelete={onDeleteClass}
               href={rosterHref?.(block.item) ?? null}
@@ -416,6 +465,7 @@ interface WeekBlockProps {
   readonly bounds: HourBounds;
   readonly fmt: Formatters;
   readonly t: Translator;
+  readonly room: string | null;
   readonly onSelect: ((cls: ClassWithRemaining) => void) | undefined;
   readonly onDelete: ((cls: ClassWithRemaining) => void) | undefined;
   readonly href: string | null;
@@ -426,6 +476,7 @@ function WeekBlock({
   bounds,
   fmt,
   t,
+  room,
   onSelect,
   onDelete,
   href,
@@ -471,17 +522,26 @@ function WeekBlock({
       >
         <span className="sr-only">{fmt.dayLong.format(start)}, </span>
         <span
-          className={cn('w-full truncate font-medium', density !== 'compact' && editable && 'pr-6')}
+          className={cn(
+            'flex w-full min-w-0 items-center gap-1 font-medium',
+            density !== 'compact' && editable && 'pr-6',
+          )}
         >
-          {cls.title}
+          <span className="truncate">{cls.title}</span>
+          {density === 'compact' ? null : <SeriesMark cls={cls} t={t} />}
         </span>
         {density === 'compact' ? (
-          <span className="sr-only">
-            , {fmt.time.format(start)} - {fmt.time.format(end)}
-          </span>
+          <span className="sr-only">, {timeAndRoom(fmt, start, end, room)}</span>
         ) : (
           <span className="w-full truncate text-muted-foreground tabular-nums">
-            {fmt.time.format(start)} - {fmt.time.format(end)}
+            {room === null ? (
+              timeAndRoom(fmt, start, end, null)
+            ) : (
+              <>
+                {fmt.time.format(start)}
+                <span className="sr-only"> - {fmt.time.format(end)}</span> · {room}
+              </>
+            )}
           </span>
         )}
         {density === 'compact' ? (
@@ -520,6 +580,7 @@ function MonthGrid({
   onSelectClass,
   onCreateAt,
   onShowDay,
+  roomNames,
   rosterHref,
 }: ClassesPlanningProps): ReactElement {
   const fmt = useFormatters(locale);
@@ -603,7 +664,10 @@ function MonthGrid({
                       <span className="sr-only">{fmt.dayLong.format(date)}, </span>
                       {fmt.time.format(new Date(cls.startsAt))}
                     </span>
-                    <span className="min-w-0 flex-1 truncate font-medium">{cls.title}</span>
+                    <span className="min-w-0 flex-1 truncate font-medium">
+                      {cls.title}
+                      <RoomForReader room={roomOf(cls, roomNames)} t={t} />
+                    </span>
                     {isFull(cls) ? (
                       <span className="flex shrink-0 items-center">
                         <ProhibitIcon aria-hidden="true" className="size-3" />
@@ -641,6 +705,7 @@ function DayAgenda({
   onDeleteClass,
   onCreateAt,
   onShowDay,
+  roomNames,
   rosterHref,
 }: ClassesPlanningProps): ReactElement {
   const fmt = useFormatters(locale);
@@ -705,9 +770,12 @@ function DayAgenda({
                   )}
                 >
                   <span className="sr-only">{fmt.dayLong.format(start)}, </span>
-                  <span className="w-full truncate font-medium">{cls.title}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {fmt.time.format(start)} - {fmt.time.format(end)}
+                  <span className="flex w-full min-w-0 items-center gap-1 font-medium">
+                    <span className="truncate">{cls.title}</span>
+                    <SeriesMark cls={cls} t={t} />
+                  </span>
+                  <span className="w-full truncate text-xs text-muted-foreground tabular-nums">
+                    {timeAndRoom(fmt, start, end, roomOf(cls, roomNames))}
                   </span>
                   <span className="mt-2">
                     <StatusPill cls={cls} fmt={fmt} t={t} />

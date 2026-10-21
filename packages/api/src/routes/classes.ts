@@ -22,6 +22,11 @@
  *                which this router renders as HTTP 409 Conflict.
  *   • 14.1, 14.2, 20.1 — auth / validation / idempotency per the
  *                shared middleware chain.
+ *   • Issue #748: `POST /` and `PATCH /:id` answer 409
+ *                `schedule_conflict` when the room or the coach is
+ *                taken over an overlapping interval (unless the body
+ *                sets `allowConflicts`), 422 `room_not_found` for a
+ *                room outside the studio.
  *
  * The roster routes (issue #746) open a class to the studio admin and to
  * the coach the class is assigned to (`classes.coach_id`); any other
@@ -45,6 +50,7 @@ import { studioRateLimit } from '../middleware/studio-rate-limit.js';
 import { zValidator } from '../middleware/validator.js';
 
 import { checkinOperatorLimit } from './checkins.js';
+import { placementProblem, type PlacementRefusal } from './class-planning.js';
 import {
   computeListEtag,
   idempotency,
@@ -96,7 +102,15 @@ export type UpdateClassOutcome =
   | { readonly kind: 'capacity_below_confirmed' }
   | { readonly kind: 'class_already_started' }
   | { readonly kind: 'starts_at_in_past' }
-  | { readonly kind: 'not_found' };
+  | { readonly kind: 'not_found' }
+  | PlacementRefusal;
+
+/**
+ * Result of {@link ClassesDeps.createClass}: the class, or why its room
+ * or time slot was refused (issue #748).
+ */
+export type CreateClassOutcome =
+  { readonly kind: 'created'; readonly class: unknown } | PlacementRefusal;
 
 /**
  * Discriminated result returned by {@link ClassesDeps.deleteClass}.
@@ -132,7 +146,11 @@ export interface ClassesDeps {
     query: SearchClassesQuery,
     claims: AuthClaims,
   ): Promise<{ items: ReadonlyArray<unknown> }>;
-  createClass(studioId: string, input: CreateClassRequest, claims: AuthClaims): Promise<unknown>;
+  createClass(
+    studioId: string,
+    input: CreateClassRequest,
+    claims: AuthClaims,
+  ): Promise<CreateClassOutcome>;
   updateClass(
     studioId: string,
     classId: string,
@@ -362,8 +380,9 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
         throw new Error('authClaims unexpectedly missing after jwtAuth');
       }
       const body = readValidated<CreateClassRequest>(c, 'json');
-      const created = await deps.createClass(claims.studioId, body, claims);
-      return c.json(created as Record<string, unknown>, 201);
+      const outcome = await deps.createClass(claims.studioId, body, claims);
+      if (outcome.kind !== 'created') return placementProblem(c, outcome);
+      return c.json(outcome.class as Record<string, unknown>, 201);
     },
   );
 
@@ -405,6 +424,9 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
           return problem422StartsAtInPast(c);
         case 'not_found':
           return problem404(c, `class ${id} not found`);
+        case 'room_not_found':
+        case 'schedule_conflict':
+          return placementProblem(c, outcome);
       }
     },
   );

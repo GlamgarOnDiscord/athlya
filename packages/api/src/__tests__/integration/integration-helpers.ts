@@ -327,7 +327,7 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
           type: 'class.created',
           payload: { classId, studioId },
         });
-        return cls;
+        return { kind: 'created' as const, class: cls };
       },
     ),
     searchClasses: vi.fn(async () => ({ items: [] })),
