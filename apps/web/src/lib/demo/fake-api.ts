@@ -329,6 +329,9 @@ function routeApi(state: WebDemoState, req: DemoRequest, now: Date): RouteResult
   if (method === 'POST' && path === '/v1/members/me/export') {
     return same(ok({ jobId: demoId('0d', state.sequence) }, 202));
   }
+  if (method === 'POST' && path === '/v1/auth/logout-all') {
+    return { state: { ...state, signedIn: false }, response: NO_CONTENT };
+  }
   if (method === 'DELETE' && path === '/v1/auth/me') {
     return { state: { ...state, signedIn: false }, response: NO_CONTENT };
   }

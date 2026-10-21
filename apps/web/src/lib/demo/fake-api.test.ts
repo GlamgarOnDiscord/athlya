@@ -181,6 +181,27 @@ describe('routeWebDemo', () => {
     expect(second.response).toMatchObject({ status: 429, body: { code: 'coach_quota_exceeded' } });
   });
 
+  it('signs out everywhere like a sign-out, and the BFF sign-out still answers after', () => {
+    const all = routeWebDemo(signedIn(), req('POST', '/v1/auth/logout-all', {}), NOW);
+    expect(all.response.status).toBe(204);
+    expect(all.state.signedIn).toBe(false);
+    expect(routeWebDemo(all.state, req('GET', '/v1/members/me'), NOW).response.status).toBe(401);
+    expect(routeWebDemo(all.state, req('POST', '/api/auth/logout'), NOW).response.status).toBe(204);
+    expect(routeWebDemo(all.state, req('POST', '/api/auth/refresh'), NOW).response.status).toBe(
+      401,
+    );
+  });
+
+  it('answers the privacy settings: export job, then account deletion ends the session', () => {
+    const state = signedIn();
+    const exported = routeWebDemo(state, req('POST', '/v1/members/me/export', {}), NOW);
+    expect(exported.response.status).toBe(202);
+    expect(exported.response.body).toMatchObject({ jobId: expect.any(String) });
+    const deleted = routeWebDemo(state, req('DELETE', '/v1/auth/me'), NOW);
+    expect(deleted.response.status).toBe(204);
+    expect(deleted.state.signedIn).toBe(false);
+  });
+
   it('answers an unknown route with a problem, not a network call', () => {
     const { response } = routeWebDemo(signedIn(), req('GET', '/v1/unknown'), NOW);
     expect(response).toMatchObject({ status: 404, body: { code: 'demo_not_available' } });

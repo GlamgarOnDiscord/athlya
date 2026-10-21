@@ -57,6 +57,9 @@ no match.
 - Mutations (book, cancel, waitlist, profile and consents, class create, edit and
   delete, check-in, branding, programs) update the state, kept in
   `sessionStorage` for the tab. A new tab starts from the seed again.
+- The member settings (`/me/settings/*`) work end to end: "sign out everywhere"
+  (`POST /v1/auth/logout-all`) and account deletion end the demo session like a
+  sign-out, and the data export answers with a fictional job.
 - An endpoint the fake does not know answers `404` with code `demo_not_available`.
   A new page that calls a new endpoint needs a route in `fake-api.ts`.
 

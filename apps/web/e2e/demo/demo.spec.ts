@@ -62,3 +62,26 @@ test('member demo: pick the profile, book and cancel a class', async ({ page }) 
   expect(seen.apiCalls).toEqual([]);
   expect(seen.errors).toEqual([]);
 });
+
+test('member demo: sign out everywhere from the security settings', async ({ page }) => {
+  const seen = watch(page);
+  await page.addLocatorHandler(
+    page.locator('[aria-labelledby="cookie-banner-title"]'),
+    async () => {
+      await page.getByRole('button', { name: 'Tout refuser' }).click();
+    },
+  );
+
+  await page.goto('/login');
+  await page.getByRole('button', { name: /Léa Fontaine/u }).click();
+  await page.waitForURL('**/classes');
+
+  await page.goto('/me/settings/security');
+  await page.getByRole('button', { name: 'Se déconnecter partout', exact: true }).click();
+  await page.getByRole('button', { name: 'Oui, tout déconnecter' }).click();
+  await page.waitForURL('**/login');
+  await expect(page.getByRole('button', { name: /Léa Fontaine/u })).toBeVisible();
+
+  expect(seen.apiCalls).toEqual([]);
+  expect(seen.errors).toEqual([]);
+});
