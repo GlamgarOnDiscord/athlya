@@ -4,17 +4,16 @@ import {
   CalendarBlankIcon,
   ChartLineUpIcon,
   ChatCircleIcon,
-  DownloadSimpleIcon,
+  HouseIcon,
   SignOutIcon,
-  TrashIcon,
   UserCircleIcon,
-  UserIcon,
 } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, type ReactElement, type ReactNode } from 'react';
 
 import { useCoachEnabled } from '../app/me/coach/use-coach-enabled';
+import { SETTINGS_SECTIONS } from '../app/me/settings/sections';
 import { useApiClient } from '../lib/api/use-api-client';
 import { useAuth } from '../lib/auth/AuthContext';
 import { useLocale } from '../lib/i18n/LocaleContext';
@@ -30,6 +29,7 @@ import type { SidebarItem, SidebarSection } from './sidebar/nav-model';
 /** Navigation of the signed-in member area; every link is an existing route. */
 export function memberSections(t: Translator, coachEnabled: boolean): SidebarSection[] {
   const main: SidebarItem[] = [
+    { kind: 'link', href: '/me', label: t('web.nav.home'), icon: HouseIcon, match: 'exact' },
     { kind: 'link', href: '/classes', label: t('web.nav.classes'), icon: CalendarBlankIcon },
     {
       kind: 'link',
@@ -51,27 +51,12 @@ export function memberSections(t: Translator, coachEnabled: boolean): SidebarSec
           id: 'account',
           label: t('web.home.me'),
           icon: UserCircleIcon,
-          children: [
-            {
-              kind: 'link',
-              href: '/me',
-              label: t('profile.title'),
-              icon: UserIcon,
-              match: 'exact',
-            },
-            {
-              kind: 'link',
-              href: '/me/export',
-              label: t('profile.dataExport'),
-              icon: DownloadSimpleIcon,
-            },
-            {
-              kind: 'link',
-              href: '/me/delete',
-              label: t('profile.deleteAccount'),
-              icon: TrashIcon,
-            },
-          ],
+          children: SETTINGS_SECTIONS.map((section) => ({
+            kind: 'link' as const,
+            href: section.href,
+            label: t(section.labelKey),
+            icon: section.icon,
+          })),
         },
       ],
     },

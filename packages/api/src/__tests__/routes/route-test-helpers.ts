@@ -75,11 +75,13 @@ export function buildStubDeps(
     audit?: Partial<DomainDeps['audit']>;
     coach?: Partial<DomainDeps['coach']>;
     programs?: Partial<Required<DomainDeps>['programs']>;
+    planning?: Partial<Required<DomainDeps>['planning']>;
   } = {},
 ): DomainDeps & {
   readonly sessions: Required<DomainDeps>['sessions'];
   readonly checkins: Required<DomainDeps>['checkins'];
   readonly programs: Required<DomainDeps>['programs'];
+  readonly planning: Required<DomainDeps>['planning'];
 } {
   return {
     auth: {
@@ -102,6 +104,7 @@ export function buildStubDeps(
       getExportJob: vi.fn(),
       openExportDownload: vi.fn(),
       listMembersByStudio: vi.fn(),
+      getMemberFile: vi.fn(),
       getProgression: vi.fn(),
       getCardioProgression: vi.fn(),
       ...overrides.members,
@@ -112,6 +115,8 @@ export function buildStubDeps(
       createClass: vi.fn(),
       updateClass: vi.fn(),
       deleteClass: vi.fn(),
+      getRoster: vi.fn(),
+      markAttendance: vi.fn(),
       ...overrides.classes,
     },
     reservations: {
@@ -166,6 +171,16 @@ export function buildStubDeps(
       listMySubscriptions: vi.fn(),
       getToday: vi.fn(),
       ...overrides.programs,
+    },
+    planning: {
+      listRooms: vi.fn(),
+      createRoom: vi.fn(),
+      updateRoom: vi.fn(),
+      deleteRoom: vi.fn(),
+      createSeries: vi.fn(),
+      updateSeries: vi.fn(),
+      deleteSeries: vi.fn(),
+      ...overrides.planning,
     },
   };
 }

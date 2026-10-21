@@ -116,6 +116,9 @@ export interface ClassRow {
   capacity: number;
   version: number;
   createdAt: Date;
+  /** Room and series (migration 0051), carried through when the repo reads them. */
+  roomId?: string | null;
+  seriesId?: string | null;
 }
 
 /**
@@ -331,6 +334,8 @@ export async function listClasses(
     capacity: row.capacity,
     version: row.version,
     createdAt: row.createdAt.toISOString(),
+    ...(row.roomId !== undefined ? { roomId: row.roomId } : {}),
+    ...(row.seriesId !== undefined ? { seriesId: row.seriesId } : {}),
     // `remaining` is clamped at 0 because Redis can transiently
     // hold a negative value between a losing `DECR` and its
     // compensating `INCR` (Algorithm 1). Surfacing a negative

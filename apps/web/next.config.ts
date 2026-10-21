@@ -25,6 +25,8 @@ import path from 'node:path';
 
 import type { NextConfig } from 'next';
 
+import { resolveDemoMode } from './src/lib/demo/guard';
+
 /**
  * Workspace root — silences the Turbopack lockfile inference warning
  * triggered by an unrelated `package-lock.json` living further up the
@@ -32,6 +34,17 @@ import type { NextConfig } from 'next';
  * `apps/web/` when `next build` runs, so we climb two levels.
  */
 const workspaceRoot = path.resolve(process.cwd(), '..', '..');
+
+/**
+ * Demo mode (issue #750): throws for a production build with the flag on.
+ * Re-exported through `env` so `process.env.NEXT_PUBLIC_DEMO_MODE` is
+ * always inlined, `'0'` included, and the demo branches fold away.
+ */
+const demoMode = resolveDemoMode({
+  NEXT_PUBLIC_DEMO_MODE: process.env['NEXT_PUBLIC_DEMO_MODE'],
+  APP_ENV: process.env['APP_ENV'],
+  NEXT_PUBLIC_API_URL: process.env['NEXT_PUBLIC_API_URL'],
+});
 
 const staticSecurityHeaders = [
   {
@@ -99,6 +112,9 @@ const nextConfig: NextConfig = {
   // never useful to legitimate clients and is a free hint for
   // attackers fingerprinting the stack.
   poweredByHeader: false,
+  env: {
+    NEXT_PUBLIC_DEMO_MODE: demoMode ? '1' : '0',
+  },
   // Pin the Turbopack workspace root so CI machines with a stray
   // `package-lock.json` further up the tree don't trigger the "multiple
   // lockfiles" inference warning.

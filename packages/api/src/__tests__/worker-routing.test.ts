@@ -94,6 +94,12 @@ describe('reservations worker', () => {
     expect(s).not.toBe(404);
   });
 
+  it('serves the rooms and series routes under /v1/classes (issue #748)', async () => {
+    expect(await status(reservationsApp, '/v1/classes/rooms')).toBe(401);
+    expect(await status(reservationsApp, '/v1/classes/series', 'POST')).toBe(401);
+    expect(await status(authApp, '/v1/classes/rooms')).toBe(404);
+  });
+
   it('serves /v1/reservations/* (not 404)', async () => {
     const s = await status(reservationsApp, '/v1/reservations');
     expect(s).not.toBe(404);

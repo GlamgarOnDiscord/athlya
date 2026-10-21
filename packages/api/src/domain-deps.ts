@@ -16,6 +16,7 @@ import { buildAuthDeps } from './adapters/auth-deps.js';
 import { buildBillingDeps } from './adapters/billing-deps.js';
 import { buildCalendarDeps } from './adapters/calendar-deps.js';
 import { buildCheckinsDeps } from './adapters/checkins-deps.js';
+import { buildClassPlanningDeps } from './adapters/class-planning-deps.js';
 import { buildCoachDeps } from './adapters/coach-deps.js';
 import { buildMembersDeps } from './adapters/members-deps.js';
 import { buildProgramsDeps } from './adapters/programs-deps.js';
@@ -28,6 +29,7 @@ import type { AuthDeps } from './routes/auth.js';
 import type { BillingDeps } from './routes/billing.js';
 import type { CalendarDeps } from './routes/calendar.js';
 import type { CheckinsDeps } from './routes/checkins.js';
+import type { ClassPlanningDeps } from './routes/class-planning.js';
 import type { ClassesDeps } from './routes/classes.js';
 import type { CoachDeps } from './routes/coach.js';
 import type { MembersDeps } from './routes/members.js';
@@ -76,6 +78,11 @@ export interface DomainDeps {
    * test bundles stay valid; production and the lazy facade provide it.
    */
   readonly calendar?: CalendarDeps;
+  /**
+   * Rooms and weekly class series (issue #748). Optional so partial test
+   * bundles stay valid; production and the lazy facade always provide it.
+   */
+  readonly planning?: ClassPlanningDeps;
 }
 
 /* ------------------------------------------------------------------ */
@@ -159,6 +166,7 @@ export function lazyMembersDeps(resolve: () => MembersDeps): MembersDeps {
     getExportJob: forward('getExportJob'),
     openExportDownload: forward('openExportDownload'),
     listMembersByStudio: forward('listMembersByStudio'),
+    getMemberFile: forward('getMemberFile'),
     getProgression: forward('getProgression'),
     getCardioProgression: forward('getCardioProgression'),
   };
@@ -172,6 +180,8 @@ export function lazyClassesDeps(resolve: () => ClassesDeps): ClassesDeps {
     createClass: forward('createClass'),
     updateClass: forward('updateClass'),
     deleteClass: forward('deleteClass'),
+    getRoster: forward('getRoster'),
+    markAttendance: forward('markAttendance'),
   };
 }
 
@@ -270,6 +280,24 @@ export function lazyCalendarDeps(resolve: () => CalendarDeps): CalendarDeps {
   };
 }
 
+/**
+ * Lazy rooms and series facade. `idempotencyFor` resolves per request,
+ * like {@link lazyProgramsDeps}.
+ */
+export function lazyClassPlanningDeps(resolve: () => ClassPlanningDeps): ClassPlanningDeps {
+  const forward = forwarder(resolve);
+  return {
+    listRooms: forward('listRooms'),
+    createRoom: forward('createRoom'),
+    updateRoom: forward('updateRoom'),
+    deleteRoom: forward('deleteRoom'),
+    createSeries: forward('createSeries'),
+    updateSeries: forward('updateSeries'),
+    deleteSeries: forward('deleteSeries'),
+    idempotencyFor: (claims) => resolve().idempotencyFor?.(claims),
+  };
+}
+
 /** Lazy facade over the full {@link DomainDeps} bundle (monolith gateway). */
 export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
   return {
@@ -308,6 +336,13 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
         throw new Error('buildLazyDomainDeps: calendar dependency is not wired');
       }
       return calendar;
+    }),
+    planning: lazyClassPlanningDeps(() => {
+      const planning = resolve().planning;
+      if (planning === undefined) {
+        throw new Error('buildLazyDomainDeps: planning dependency is not wired');
+      }
+      return planning;
     }),
   };
 }
@@ -445,6 +480,7 @@ export function defaultMembersDeps(env: AthlyaBindings, cf?: RequestCf): Members
         getExportJob: () => notImplemented('members.getExportJob'),
         openExportDownload: () => notImplemented('members.openExportDownload'),
         listMembersByStudio: () => notImplemented('members.listMembersByStudio'),
+        getMemberFile: () => notImplemented('members.getMemberFile'),
         getProgression: () => notImplemented('members.getProgression'),
         getCardioProgression: () => notImplemented('members.getCardioProgression'),
       };
@@ -481,6 +517,23 @@ export function defaultClassesDeps(env: AthlyaBindings, cf?: RequestCf): Classes
         createClass: () => notImplemented('reservations.createClass'),
         updateClass: () => notImplemented('reservations.updateClass'),
         deleteClass: () => notImplemented('classes.deleteClass'),
+        getRoster: () => notImplemented('classes.getRoster'),
+        markAttendance: () => notImplemented('classes.markAttendance'),
+      };
+}
+
+/** Rooms and series write through the postgres-js handle and seed the Redis seat counters. */
+export function defaultClassPlanningDeps(env: AthlyaBindings): ClassPlanningDeps {
+  return hasReservationsSecrets(env)
+    ? buildClassPlanningDeps(env)
+    : {
+        listRooms: () => notImplemented('planning.listRooms'),
+        createRoom: () => notImplemented('planning.createRoom'),
+        updateRoom: () => notImplemented('planning.updateRoom'),
+        deleteRoom: () => notImplemented('planning.deleteRoom'),
+        createSeries: () => notImplemented('planning.createSeries'),
+        updateSeries: () => notImplemented('planning.updateSeries'),
+        deleteSeries: () => notImplemented('planning.deleteSeries'),
       };
 }
 
@@ -606,5 +659,6 @@ export function buildDefaultDeps(env: AthlyaBindings, cf?: RequestCf): DomainDep
     sessions: defaultSessionsDeps(env),
     checkins: defaultCheckinsDeps(env),
     calendar: defaultCalendarDeps(env, cf),
+    planning: defaultClassPlanningDeps(env),
   };
 }

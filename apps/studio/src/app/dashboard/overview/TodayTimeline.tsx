@@ -1,9 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { Fragment, type ReactElement } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { classRosterHref } from '../../../lib/links';
 import { bookedSeats, classTiming, minutesUntil, type OverviewClass } from '../dashboard-summary';
 import { formatDuration } from '../format-duration';
 
@@ -23,7 +25,8 @@ interface TodayTimelineProps {
 /**
  * Today's classes on a time rail: start and end, the class, its fill and
  * its state. A now-line sits between the classes that started and the
- * ones still to come.
+ * ones still to come. Each title opens the class roster: the admin
+ * overview lists the studio's classes, the coach home only the coach's.
  */
 export function TodayTimeline({ classes, next, now, locale, t }: TodayTimelineProps): ReactElement {
   const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
@@ -79,8 +82,13 @@ export function TodayTimeline({ classes, next, now, locale, t }: TodayTimelinePr
                     <time dateTime={end.toISOString()}>{time.format(end)}</time>
                   </span>
                 </span>
-                <span role="cell" className="truncate font-medium">
-                  {cls.title}
+                <span role="cell" className="truncate">
+                  <Link
+                    href={classRosterHref(cls.id)}
+                    className="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {cls.title}
+                  </Link>
                 </span>
                 <span role="cell" className="hidden sm:block">
                   <FillMeter

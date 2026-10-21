@@ -1,6 +1,7 @@
 'use client';
 
 import { DownloadSimpleIcon } from '@phosphor-icons/react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 
@@ -23,13 +24,16 @@ import {
 } from '@/components/ui/table';
 
 import { useApiClient } from '../../../lib/api/buildClient';
+import { fetchRooms, fetchStaff, roomNames } from '../../../lib/api/rooms';
 import { useAuth } from '../../../lib/auth/AuthContext';
 import { downloadCsv, toCsv } from '../../../lib/csv';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
+import { classRosterHref } from '../../../lib/links';
 import { useNowMinute } from '../../../lib/use-now-minute';
 import { FillMeter } from '../overview/parts';
 
+import { inRoom, type SeriesScope } from './class-form';
 import { ClassesPlanning } from './ClassesPlanning';
 import { ClassFormDialog, type ClassFormMode } from './ClassFormDialog';
 import { useIsWide, useTodayKey } from './planning-clock';
@@ -44,8 +48,10 @@ import {
   WIDE_VIEWS,
 } from './planning-grid';
 import { PlanningToolbar, type ToolbarView } from './PlanningToolbar';
+import { RoomFilter } from './RoomFilter';
 
-import type { ClassWithRemaining } from '@athlya/shared/schemas/api';
+import type { StudioMember } from '../../../lib/api/members';
+import type { ClassWithRemaining, Room } from '@athlya/shared/schemas/api';
 
 type Status =
   | { kind: 'loading' }
@@ -72,6 +78,8 @@ export function ClassesAdminList(): ReactElement {
     refreshNonce: number;
     dialogMode: ClassFormMode | null;
     deleteTarget: ClassWithRemaining | null;
+    deleteScope: SeriesScope;
+    roomFilter: string | null;
   }
 
   const [state, setState] = useState<AdminListState>(() => ({
@@ -81,7 +89,29 @@ export function ClassesAdminList(): ReactElement {
     refreshNonce: 0,
     dialogMode: createRequested ? { kind: 'create' } : null,
     deleteTarget: null,
+    deleteScope: 'one',
+    roomFilter: null,
   }));
+  const [rooms, setRooms] = useState<ReadonlyArray<Room>>([]);
+  const [staff, setStaff] = useState<ReadonlyArray<StudioMember>>([]);
+
+  // Rooms and staff feed the pickers, the filter and the tiles; a failure
+  // leaves them empty and the planning still works without names.
+  useEffect(() => {
+    let cancelled = false;
+    void fetchRooms(client).then(
+      (items) => !cancelled && setRooms(items),
+      () => undefined,
+    );
+    void fetchStaff(client).then(
+      (items) => !cancelled && setStaff(items),
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+  const names = useMemo(() => roomNames(rooms), [rooms]);
 
   const refresh = useCallback(() => {
     setState((s) => ({ ...s, refreshNonce: s.refreshNonce + 1 }));
@@ -157,8 +187,13 @@ export function ClassesAdminList(): ReactElement {
   }, []);
 
   const openDelete = useCallback((cls: ClassWithRemaining) => {
-    setState((s) => ({ ...s, deleteTarget: cls }));
+    setState((s) => ({ ...s, deleteTarget: cls, deleteScope: 'one' }));
   }, []);
+
+  const shown = useMemo(
+    () => (state.status.kind === 'ready' ? inRoom(state.status.items, state.roomFilter) : []),
+    [state.status, state.roomFilter],
+  );
 
   const onCloseDialog = useCallback(
     (committed: boolean) => {
@@ -174,7 +209,7 @@ export function ClassesAdminList(): ReactElement {
 
   const listSummary = useMemo(() => {
     if (state.status.kind !== 'ready') return null;
-    const listed = state.status.items;
+    const listed = shown;
     const seatsTotal = listed.reduce((sum, c) => sum + c.capacity, 0);
     const booked = listed.reduce((sum, c) => sum + Math.max(0, c.capacity - c.remaining), 0);
     return t('studio.classes.list.summary', {
@@ -182,7 +217,7 @@ export function ClassesAdminList(): ReactElement {
       seats: seatsTotal,
       booked,
     });
-  }, [state.status, t]);
+  }, [state.status, shown, t]);
 
   const exportList = useCallback(() => {
     if (state.status.kind !== 'ready') return;
@@ -195,21 +230,35 @@ export function ClassesAdminList(): ReactElement {
           t('studio.classes.fields.durationMin'),
           t('studio.classes.fields.capacity'),
           t('studio.classes.list.remaining'),
+          t('studio.classes.columns.room'),
         ],
-        state.status.items.map((c) => [
+        shown.map((c) => [
           c.title,
           c.startsAt,
           String(c.durationMin),
           String(c.capacity),
           String(c.remaining),
+          c.roomId == null ? '' : (names.get(c.roomId) ?? ''),
         ]),
       ),
     );
-  }, [state.status, t]);
+  }, [state.status, shown, names, t]);
 
   const handleDelete = useCallback(async () => {
     const target = state.deleteTarget;
     if (target === null) return;
+    if (target.seriesId != null && state.deleteScope === 'following') {
+      setState((s) => ({ ...s, deleteTarget: null }));
+      try {
+        await client.del(
+          `/v1/classes/series/${target.seriesId}?fromClassId=${encodeURIComponent(target.id)}`,
+        );
+      } catch {
+        // The refetch below shows the real state of the series.
+      }
+      setState((s) => ({ ...s, refreshNonce: s.refreshNonce + 1 }));
+      return;
+    }
     // Optimistic removal: remove immediately from local state, no re-fetch needed.
     setState((s) => ({
       ...s,
@@ -227,7 +276,7 @@ export function ClassesAdminList(): ReactElement {
       // API failed: rollback by re-fetching the real list.
       setState((s) => ({ ...s, refreshNonce: s.refreshNonce + 1 }));
     }
-  }, [client, state.deleteTarget]);
+  }, [client, state.deleteTarget, state.deleteScope]);
 
   return (
     <div className="flex flex-col gap-4" data-reload-key={state.refreshNonce}>
@@ -241,6 +290,12 @@ export function ClassesAdminList(): ReactElement {
         onToday={() => setState((s) => ({ ...s, anchorKey: null }))}
         onStep={step}
       >
+        <RoomFilter
+          rooms={rooms}
+          value={state.roomFilter}
+          t={t}
+          onChange={(roomFilter) => setState((s) => ({ ...s, roomFilter }))}
+        />
         <Button
           className="ml-auto md:ml-0"
           onClick={() => setState((s) => ({ ...s, dialogMode: { kind: 'create' } }))}
@@ -266,14 +321,16 @@ export function ClassesAdminList(): ReactElement {
           view={view}
           anchor={anchor}
           todayKey={todayKey}
-          items={state.status.kind === 'ready' ? state.status.items : []}
+          items={shown}
           busy={state.status.kind === 'loading'}
           locale={locale}
           t={t}
+          roomNames={names}
           onSelectClass={openEdit}
           onDeleteClass={openDelete}
           onCreateAt={openCreateAt}
           onShowDay={showDay}
+          rosterHref={(cls) => classRosterHref(cls.id)}
         />
       )}
 
@@ -303,6 +360,9 @@ export function ClassesAdminList(): ReactElement {
                 <TableHead className="hidden md:table-cell">
                   {t('studio.classes.fields.durationMin')}
                 </TableHead>
+                <TableHead className="hidden lg:table-cell">
+                  {t('studio.classes.columns.room')}
+                </TableHead>
                 <TableHead className="hidden sm:table-cell">
                   {t('studio.classes.fields.capacity')}
                 </TableHead>
@@ -322,6 +382,9 @@ export function ClassesAdminList(): ReactElement {
                       <TableCell className="hidden md:table-cell">
                         <Skeleton className="h-4 w-16" />
                       </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <Skeleton className="h-4 w-20" />
+                      </TableCell>
                       <TableCell className="hidden sm:table-cell">
                         <Skeleton className="h-4 w-20" />
                       </TableCell>
@@ -334,17 +397,18 @@ export function ClassesAdminList(): ReactElement {
 
               {state.status.kind === 'empty' ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     {t('studio.classes.empty')}
                   </TableCell>
                 </TableRow>
               ) : null}
 
               {state.status.kind === 'ready'
-                ? state.status.items.map((cls) => (
+                ? shown.map((cls) => (
                     <ClassRow
                       key={cls.id}
                       cls={cls}
+                      room={cls.roomId == null ? null : (names.get(cls.roomId) ?? null)}
                       started={
                         nowMinute !== null && hasStarted(cls.startsAt, new Date(nowMinute * 60_000))
                       }
@@ -367,6 +431,8 @@ export function ClassesAdminList(): ReactElement {
         <ClassFormDialog
           mode={state.dialogMode}
           client={client}
+          rooms={rooms}
+          staff={staff}
           onClose={onCloseDialog}
           onConflict={() => refresh()}
         />
@@ -384,8 +450,34 @@ export function ClassesAdminList(): ReactElement {
               <DialogTitle>{t('studio.classes.deleteConfirm.title')}</DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              {t('studio.classes.deleteConfirm.body')}
+              {state.deleteTarget.seriesId != null
+                ? t('studio.classes.deleteConfirm.seriesBody')
+                : t('studio.classes.deleteConfirm.body')}
             </p>
+            {state.deleteTarget.seriesId != null ? (
+              <fieldset className="flex flex-col gap-2">
+                <legend className="mb-1 text-sm font-medium">
+                  {t('studio.classes.series.scopeLegend')}
+                </legend>
+                {(['one', 'following'] as const).map((value) => (
+                  <label key={value} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="delete-scope"
+                      value={value}
+                      checked={state.deleteScope === value}
+                      onChange={() => setState((s) => ({ ...s, deleteScope: value }))}
+                      className="size-4 accent-primary"
+                    />
+                    {t(
+                      value === 'one'
+                        ? 'studio.classes.series.scopeOne'
+                        : 'studio.classes.series.scopeFollowing',
+                    )}
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
             <DialogFooter>
               <Button
                 variant="outline"
@@ -411,6 +503,7 @@ export function ClassesAdminList(): ReactElement {
 
 interface ClassRowProps {
   readonly cls: ClassWithRemaining;
+  readonly room: string | null;
   /** A started class cannot be moved: the row offers no edit action. */
   readonly started: boolean;
   readonly locale: 'fr' | 'en';
@@ -419,7 +512,15 @@ interface ClassRowProps {
   readonly onDelete: () => void;
 }
 
-function ClassRow({ cls, started, locale, t, onEdit, onDelete }: ClassRowProps): ReactElement {
+function ClassRow({
+  cls,
+  room,
+  started,
+  locale,
+  t,
+  onEdit,
+  onDelete,
+}: ClassRowProps): ReactElement {
   const fmt = useMemo(
     () =>
       new Intl.DateTimeFormat(locale, {
@@ -440,7 +541,12 @@ function ClassRow({ cls, started, locale, t, onEdit, onDelete }: ClassRowProps):
   return (
     <TableRow>
       <TableCell className="whitespace-normal sm:whitespace-nowrap">
-        <span className="font-medium">{cls.title}</span>
+        <Link
+          href={classRosterHref(cls.id)}
+          className="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {cls.title}
+        </Link>
         <span className="block text-xs text-muted-foreground sm:hidden">
           <time dateTime={cls.startsAt}>{formatted}</time>,{' '}
           <span className="whitespace-nowrap">{seats}</span>
@@ -452,6 +558,7 @@ function ClassRow({ cls, started, locale, t, onEdit, onDelete }: ClassRowProps):
       <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
         {cls.durationMin}&nbsp;min
       </TableCell>
+      <TableCell className="hidden lg:table-cell text-muted-foreground text-sm">{room}</TableCell>
       <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
         <span className="flex items-center gap-3">
           <FillMeter

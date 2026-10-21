@@ -270,3 +270,73 @@ describe('<ClassesPlanning /> read only', () => {
     },
   );
 });
+
+describe('<ClassesPlanning /> rooms and series (issue #748)', () => {
+  const ROOM = '0a510000-0000-4000-8000-000000000001';
+  const roomed: ClassWithRemaining = {
+    ...BOXING,
+    roomId: ROOM,
+    seriesId: '0f510000-0000-4000-8000-000000000001',
+  };
+
+  it.each(['week', 'day'] as const)('names the room and marks the series on a %s tile', (view) => {
+    const { day } = renderPlanning({
+      view,
+      anchor: fromDayKey('2026-10-20'),
+      items: [roomed],
+      roomNames: new Map([[ROOM, 'Studio 1']]),
+    });
+    const cell = within(day('2026-10-20'));
+    expect(cell.getByText(/Studio 1/)).toBeTruthy();
+    expect(cell.getByText(/Series/)).toBeTruthy();
+  });
+
+  it('tells a screen reader the room on a month tile', () => {
+    const { day } = renderPlanning({
+      view: 'month',
+      items: [roomed],
+      roomNames: new Map([[ROOM, 'Studio 1']]),
+    });
+    expect(within(day('2026-10-20')).getByText(/Room Studio 1/)).toBeTruthy();
+  });
+
+  it('shows no room for a class without one or an unknown room', () => {
+    const { day } = renderPlanning({
+      view: 'day',
+      anchor: fromDayKey('2026-10-20'),
+      items: [roomed],
+    });
+    expect(within(day('2026-10-20')).queryByText(/Studio 1/)).toBeNull();
+  });
+});
+
+describe('<ClassesPlanning /> roster links', () => {
+  it('offers the roster from the menu of an editable tile', async () => {
+    const { tile } = renderPlanning({ rosterHref: (c) => `/dashboard/classes/${c.id}` });
+    fireEvent.click(
+      within(tile('c1').frame).getByRole('button', { name: 'Actions for Boxing technique' }),
+    );
+    const item = await screen.findByRole('menuitem', { name: 'Roster' });
+    expect(item.getAttribute('href')).toBe('/dashboard/classes/c1');
+  });
+
+  it('turns a read-only tile into a link only where a roster is open', () => {
+    const { container } = render(
+      <ClassesPlanning
+        view="week"
+        anchor={fromDayKey('2026-10-20')}
+        todayKey="2026-10-20"
+        items={[BOXING, YOGA]}
+        busy={false}
+        locale="en"
+        t={t}
+        onShowDay={vi.fn()}
+        rosterHref={(c) => (c.id === 'c1' ? `/dashboard/classes/${c.id}` : null)}
+      />,
+    );
+    const mine = container.querySelector('[data-class-id="c1"]');
+    expect(mine?.tagName).toBe('A');
+    expect(mine?.getAttribute('href')).toBe('/dashboard/classes/c1');
+    expect(container.querySelector('[data-class-id="c2"]')?.tagName).toBe('DIV');
+  });
+});

@@ -4,8 +4,10 @@
  * `/dashboard/planning`: the coach's schedule. The admin planning grid in
  * read-only mode (no create slot, no edit or delete menu), week or month on
  * a wide screen and a day agenda on a phone, with a switch between the
- * coach's own classes and the whole studio. Classes come from
- * `GET /v1/classes`, which every signed-in user may read.
+ * coach's own classes and the whole studio, and a room filter. The coach's
+ * own tiles link to their roster; the API opens no other class roster to a
+ * coach. Classes come from `GET /v1/classes` and rooms from
+ * `GET /v1/classes/rooms`, which every signed-in user may read.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 
@@ -13,9 +15,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 import { PageHeader } from '../../../components/shell/PageHeader';
 import { useApiClient } from '../../../lib/api/buildClient';
+import { fetchRooms, roomNames } from '../../../lib/api/rooms';
 import { useAuth } from '../../../lib/auth/AuthContext';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
+import { classRosterHref } from '../../../lib/links';
+import { inRoom } from '../classes/class-form';
 import { ClassesPlanning } from '../classes/ClassesPlanning';
 import { useIsWide, useTodayKey } from '../classes/planning-clock';
 import {
@@ -28,10 +33,11 @@ import {
   type PlanningView,
 } from '../classes/planning-grid';
 import { PlanningToolbar, SegmentedControl } from '../classes/PlanningToolbar';
+import { RoomFilter } from '../classes/RoomFilter';
 
 import { scopeClasses, type ClassScope } from './coach-agenda';
 
-import type { ClassWithRemaining } from '@athlya/shared/schemas/api';
+import type { ClassWithRemaining, Room } from '@athlya/shared/schemas/api';
 
 type Result =
   { kind: 'ready'; items: ReadonlyArray<ClassWithRemaining> } | { kind: 'error'; message: string };
@@ -50,6 +56,20 @@ export function CoachPlanning(): ReactElement {
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
   const [scope, setScope] = useState<ClassScope>('mine');
   const [loaded, setLoaded] = useState<{ range: string; result: Result } | null>(null);
+  const [rooms, setRooms] = useState<ReadonlyArray<Room>>([]);
+  const [roomFilter, setRoomFilter] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchRooms(client).then(
+      (items) => !cancelled && setRooms(items),
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+  const names = useMemo(() => roomNames(rooms), [rooms]);
 
   const todayKey = useTodayKey();
   const wide = useIsWide();
@@ -89,8 +109,10 @@ export function CoachPlanning(): ReactElement {
 
   const items = useMemo(
     () =>
-      status.kind === 'ready' && user !== null ? scopeClasses(status.items, scope, user.id) : [],
-    [status, scope, user],
+      status.kind === 'ready' && user !== null
+        ? inRoom(scopeClasses(status.items, scope, user.id), roomFilter)
+        : [],
+    [status, scope, user, roomFilter],
   );
 
   const step = useCallback(
@@ -134,7 +156,9 @@ export function CoachPlanning(): ReactElement {
           onViewChange={setView}
           onToday={() => setAnchorKey(null)}
           onStep={step}
-        />
+        >
+          <RoomFilter rooms={rooms} value={roomFilter} t={t} onChange={setRoomFilter} />
+        </PlanningToolbar>
 
         {status.kind === 'error' ? (
           <p role="alert" className="text-sm text-destructive">
@@ -163,7 +187,11 @@ export function CoachPlanning(): ReactElement {
             busy={status.kind === 'loading'}
             locale={locale}
             t={t}
+            roomNames={names}
             onShowDay={showDay}
+            rosterHref={(cls) =>
+              user !== null && cls.coachId === user.id ? classRosterHref(cls.id) : null
+            }
           />
         )}
       </div>

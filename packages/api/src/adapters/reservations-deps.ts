@@ -9,6 +9,8 @@
  *   - `listClasses`          — `GET /v1/classes` (Req 7.1, 7.2, 7.3).
  *   - `createClass`          — `POST /v1/classes` admin (Req 6.1-6.4).
  *   - `updateClass`          — `PATCH /v1/classes/:id` admin (Req 6.5-6.7).
+ *   - `getRoster` / `markAttendance`: `GET /v1/classes/:id/roster` and its
+ *     manual check-in, admin or coach of the class (issue #746).
  *   - `listMyReservations`   — `GET /v1/reservations/me` (Req 7.4).
  *   - `bookClass`            — `POST /v1/reservations` (Algorithm 1).
  *   - `cancelReservation`    — `DELETE /v1/reservations/:id` (Algorithm 2).
@@ -60,6 +62,8 @@ import {
 } from '@athlya/reservations/hold';
 import { updateClass as svcUpdateClass } from '@athlya/reservations/update';
 
+import { checkPlacementAsTenant } from './class-planning-drizzle.js';
+import { createDrizzleRosterRepo, getRosterWith, markAttendanceWith } from './class-roster.js';
 import {
   createDrizzleCreateClassRepoHttp,
   createDrizzleDeleteClassRepoHttp,
@@ -85,10 +89,14 @@ import {
 import { createTenantIdempotencyDb } from './tenant-idempotency.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
-import type { ClassesDeps, DeleteClassOutcome, UpdateClassOutcome } from '../routes/classes.js';
+import type {
+  ClassesDeps,
+  CreateClassOutcome,
+  DeleteClassOutcome,
+  UpdateClassOutcome,
+} from '../routes/classes.js';
 import type { ReservationsDeps } from '../routes/reservations.js';
 import type { AthlyaBindings } from '../types.js';
-import type { ClassRow } from '@athlya/db/schema';
 import type { ClassListing } from '@athlya/reservations';
 import type { StudioId } from '@athlya/shared/ids';
 import type {
@@ -189,15 +197,32 @@ export function buildClassesDeps(
       studioId: string,
       input: CreateClassRequest,
       claims: AuthClaims,
-    ): Promise<ClassRow> {
+    ): Promise<CreateClassOutcome> {
+      const tenant = toTenantClaims(claims);
+      const placement = await checkPlacementAsTenant(
+        getOrCreateWriteDb(env),
+        tenant,
+        [
+          {
+            startsAt: new Date(input.startsAt),
+            durationMin: input.durationMin,
+            roomId: input.roomId ?? null,
+            coachId: input.coachId ?? null,
+          },
+        ],
+        { allowConflicts: input.allowConflicts === true },
+      );
+      if (placement.kind !== 'ok') return placement;
+
       const db = getOrCreateDbHttp(env.DB_URL);
       const redis = getOrCreateRedisForEnv(env);
-      const classRepo = createDrizzleCreateClassRepoHttp(db, toTenantClaims(claims));
+      const classRepo = createDrizzleCreateClassRepoHttp(db, tenant);
       const counter = createRedisRemainingCounter(redis);
-      return svcCreateClass(studioId as StudioId, input, {
+      const row = await svcCreateClass(studioId as StudioId, input, {
         classRepo,
         counter,
       });
+      return { kind: 'created', class: row };
     },
 
     async deleteClass(
@@ -226,6 +251,27 @@ export function buildClassesDeps(
       );
       const counter = createRedisRemainingCounter(redis);
 
+      // Issue #748: a change of time, length, room or coach is checked
+      // against the rest of the planning before the guarded update runs.
+      if (movesClass(patch)) {
+        const current = await classRepo.findById(studioId, classId);
+        if (current === null) return { kind: 'not_found' };
+        const placement = await checkPlacementAsTenant(
+          getOrCreateWriteDb(env),
+          toTenantClaims(claims),
+          [
+            {
+              startsAt: patch.startsAt !== undefined ? new Date(patch.startsAt) : current.startsAt,
+              durationMin: patch.durationMin ?? current.durationMin,
+              roomId: patch.roomId !== undefined ? patch.roomId : current.roomId,
+              coachId: patch.coachId !== undefined ? patch.coachId : current.coachId,
+            },
+          ],
+          { allowConflicts: patch.allowConflicts === true, ignore: [classId] },
+        );
+        if (placement.kind !== 'ok') return placement;
+      }
+
       try {
         const row = await svcUpdateClass(studioId, classId, patch, 'admin', {
           classRepo,
@@ -245,6 +291,16 @@ export function buildClassesDeps(
         throw err;
       }
     },
+
+    async getRoster(classId: string, claims: AuthClaims) {
+      const repo = createDrizzleRosterRepo(getOrCreateWriteDb(env), toTenantClaims(claims));
+      return getRosterWith(claims, classId, repo);
+    },
+
+    async markAttendance(classId: string, reservationId: string, claims: AuthClaims) {
+      const repo = createDrizzleRosterRepo(getOrCreateWriteDb(env), toTenantClaims(claims));
+      return markAttendanceWith(claims, classId, reservationId, { repo, now: Date.now });
+    },
   };
 }
 
@@ -260,6 +316,16 @@ function toTenantClaims(claims: AuthClaims): TenantClaims {
     studioId: claims.studioId,
     role: claims.role,
   };
+}
+
+/** Whether `patch` changes when, how long, where or with whom the class runs. */
+function movesClass(patch: UpdateClassRequest): boolean {
+  return (
+    patch.startsAt !== undefined ||
+    patch.durationMin !== undefined ||
+    patch.roomId !== undefined ||
+    patch.coachId !== undefined
+  );
 }
 
 function extractUpdateErrorCode(err: unknown): string | null {

@@ -31,6 +31,7 @@ Audit finding **C7** — documenter et durcir les reads coûteux quand Redis est
 | `session-post`             | `POST /v1/sessions`                                     | POST    | 20 user                            | fail-closed     | user         |
 | `checkin-post`             | `POST /v1/checkins` (admin/coach)                       | POST    | 60 operator                        | fail-closed     | user         |
 | `checkin-token`            | `POST /v1/checkins/token`                               | POST    | 10 user                            | fail-closed     | user         |
+| `roster-checkin`           | `POST /v1/classes/:id/roster/:reservationId/check-in`   | POST    | 60 operator (bucket du check-in)   | fail-closed     | user         |
 | `classes-search`           | `GET /v1/classes/search`                                | GET     | 30 IP                              | **fail-closed** | ip (pre-jwt) |
 | `members-list`             | `GET /v1/members` (exact)                               | GET     | 20 IP                              | **fail-closed** | ip (pre-jwt) |
 | `audit-list`               | `GET /v1/audit`                                         | GET     | 30 IP                              | **fail-closed** | ip (pre-jwt) |

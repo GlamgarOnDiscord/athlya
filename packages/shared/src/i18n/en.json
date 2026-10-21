@@ -344,6 +344,24 @@
       "confirmButton": "Permanently delete"
     }
   },
+  "demo": {
+    "banner": {
+      "badge": "Demo",
+      "text": "Fictional data: nothing is sent to or saved on a server."
+    },
+    "picker": {
+      "title": "Pick a demo profile",
+      "subtitle": "No credentials: each profile opens a fictional session in this tab.",
+      "member": "Member",
+      "memberHint": "Book a class, cancel, manage the profile",
+      "admin": "Administrator",
+      "adminHint": "Dashboard, schedule, members, audit log and check-in",
+      "coach": "Coach",
+      "coachHint": "Today's classes, schedule and members",
+      "signInAs": "Open the demo session of {name}, {role}",
+      "error": "The demo session could not start. Reload the page."
+    }
+  },
   "web": {
     "home": {
       "title": "Athlya",
@@ -504,7 +522,105 @@
     },
     "nav": {
       "classes": "Classes",
-      "progression": "Progress"
+      "progression": "Progress",
+      "home": "My space"
+    },
+    "settings": {
+      "title": "Settings",
+      "comingSoon": "Coming soon",
+      "sections": {
+        "profile": "Profile",
+        "security": "Security",
+        "notifications": "Notifications",
+        "preferences": "Preferences",
+        "health": "Health and devices",
+        "privacy": "Privacy"
+      },
+      "profile": {
+        "description": "Your name and picture, as your studio sees them."
+      },
+      "security": {
+        "description": "Your password and the devices signed in to your account.",
+        "password": {
+          "title": "Password",
+          "body": "We email you a link to choose a new password. Once it is saved, every session is closed.",
+          "action": "Email me a link"
+        },
+        "sessions": {
+          "title": "Signed-in devices",
+          "body": "The list of signed-in devices and signing out one device at a time are coming soon."
+        },
+        "signOut": {
+          "title": "Sign out of this device",
+          "body": "Closes the session open in this browser."
+        },
+        "signOutAll": {
+          "title": "Sign out everywhere",
+          "body": "Closes every session: this browser, the mobile app and any other device. You will need to sign in again everywhere.",
+          "action": "Sign out everywhere",
+          "confirmTitle": "Sign out of all your devices?",
+          "confirm": "Yes, sign out everywhere",
+          "pending": "Signing out…"
+        }
+      },
+      "notifications": {
+        "description": "The messages you receive about your bookings.",
+        "listLabel": "Messages sent",
+        "alwaysSent": "Always sent",
+        "transactional": "These messages are about your bookings, so they are always sent.",
+        "channels": {
+          "email": "Email",
+          "push": "Mobile app notification"
+        },
+        "events": {
+          "reservationCreated": "Booking confirmed",
+          "reservationReminder": "Reminder one hour before class",
+          "reservationCancelled": "Booking cancelled",
+          "reservationPromoted": "Spot freed up from the waitlist"
+        },
+        "perEvent": {
+          "title": "Choose message by message",
+          "body": "Turning each message on or off on its own is coming soon."
+        },
+        "marketing": {
+          "title": "Marketing messages",
+          "body": "They are only sent if you have agreed to them.",
+          "action": "Manage my consents"
+        }
+      },
+      "preferences": {
+        "description": "The language and look of the app in this browser.",
+        "language": {
+          "title": "Language",
+          "body": "Applies to this browser."
+        },
+        "theme": {
+          "title": "Theme",
+          "body": "System follows the light or dark setting of your device.",
+          "light": "Light",
+          "dark": "Dark",
+          "system": "System"
+        }
+      },
+      "health": {
+        "description": "Workouts that come from other apps and devices.",
+        "appleHealth": {
+          "title": "Apple Health",
+          "body": "You connect it from the Athlya app on iPhone, in Settings. Imported workouts join your progress.",
+          "action": "See my progress"
+        },
+        "status": {
+          "title": "Sync status",
+          "body": "Seeing the Apple Health connection and the date of the last import here is coming soon."
+        },
+        "devices": {
+          "title": "Connected equipment",
+          "body": "Bluetooth machines (bike, rower, treadmill) are coming soon."
+        }
+      },
+      "privacy": {
+        "description": "Your consents and your rights over your data."
+      }
     }
   },
   "studio": {
@@ -530,7 +646,8 @@
       "dashboard": "Dashboard",
       "settings": "Settings",
       "home": "Home",
-      "planning": "My schedule"
+      "planning": "My schedule",
+      "rooms": "Rooms"
     },
     "dashboard": {
       "title": "Dashboard",
@@ -669,13 +786,18 @@
       "deleteConfirm": {
         "title": "Delete this class?",
         "body": "This action cannot be undone. Existing reservations will be cancelled.",
-        "confirm": "Delete"
+        "confirm": "Delete",
+        "seriesBody": "This class is part of a series. Bookings of the deleted classes will be cancelled."
       },
       "fields": {
         "title": "Title",
         "startsAt": "Start date and time",
         "durationMin": "Duration (min)",
-        "capacity": "Capacity"
+        "capacity": "Capacity",
+        "room": "Room",
+        "coach": "Coach",
+        "noRoom": "No room",
+        "noCoach": "No coach"
       },
       "dialog": {
         "createTitle": "New class",
@@ -685,7 +807,8 @@
       },
       "errors": {
         "generic": "Failed to save.",
-        "versionConflict": "The class was edited meanwhile. List refreshed — please retry."
+        "versionConflict": "The class was edited meanwhile. List refreshed, please retry.",
+        "roomNotFound": "This room no longer exists. Pick another one."
       },
       "planning": {
         "viewLabel": "Calendar view",
@@ -708,17 +831,85 @@
         "nextDay": "Next day",
         "seatLeft": "{count} left",
         "seatsLeft": "{count} left",
-        "actionsFor": "Actions for {title}"
+        "actionsFor": "Actions for {title}",
+        "roomFilter": "Room",
+        "allRooms": "All rooms",
+        "roomLabel": "Room {name}"
       },
       "columns": {
-        "date": "Date"
+        "date": "Date",
+        "room": "Room"
       },
       "list": {
         "export": "Export",
         "summary": "{classes} classes · {seats} seats · {booked} booked",
         "deleteNote": "Deleting a class cancels its bookings.",
         "remaining": "Seats left"
+      },
+      "repeat": {
+        "label": "Repeat every week",
+        "weekdays": "Days",
+        "end": "Series ends",
+        "endCount": "After a number of classes",
+        "endUntil": "On a date",
+        "count": "Number of classes",
+        "until": "Last day",
+        "noWeekday": "Pick at least one day."
+      },
+      "series": {
+        "badge": "Series",
+        "partOf": "This class is part of a weekly series.",
+        "scopeLegend": "Apply to",
+        "scopeOne": "This class only",
+        "scopeFollowing": "This and following classes",
+        "created": "{count} classes created.",
+        "timeOnly": "For the following classes only the start time changes; each keeps its own day."
+      },
+      "conflict": {
+        "title": "Time slot already taken",
+        "body": "The room or the coach is already booked for these classes:",
+        "room": "same room",
+        "coach": "same coach",
+        "more": "+{count} more",
+        "confirm": "Schedule anyway"
       }
+    },
+    "rooms": {
+      "title": "Rooms",
+      "subtitle": "The places in your studio where classes run.",
+      "create": "New room",
+      "empty": "No rooms yet. Add one to pick it in the planning.",
+      "columns": {
+        "name": "Name",
+        "capacity": "Capacity"
+      },
+      "noCapacity": "Not set",
+      "capacityValue": "{count} seats",
+      "fields": {
+        "name": "Name",
+        "capacity": "Capacity (optional)",
+        "capacityHelp": "Offered as the default capacity of classes in this room."
+      },
+      "dialog": {
+        "createTitle": "New room",
+        "editTitle": "Edit room",
+        "createSubmit": "Create",
+        "editSubmit": "Save"
+      },
+      "deleteConfirm": {
+        "title": "Delete this room?",
+        "body": "Upcoming classes in this room will no longer have a room. Past classes keep it.",
+        "confirm": "Delete"
+      },
+      "errors": {
+        "nameTaken": "A room already has this name.",
+        "generic": "Could not save the room.",
+        "nameInvalid": "Enter a room name of 1 to 80 characters.",
+        "capacityInvalid": "Enter a whole number from 1 to 500, or leave it empty."
+      },
+      "edit": "Edit",
+      "delete": "Delete",
+      "actionsFor": "Actions for {name}"
     },
     "members": {
       "title": "Members",
@@ -903,15 +1094,14 @@
       "checkoutLoading": "Redirecting…",
       "checkoutError": "Subscription failed.",
       "checkoutNotConfigured": "Stripe is not yet configured on this environment.",
+      "pricePerMonth": "{price} / month",
       "plans": {
         "free": {
           "title": "Free",
-          "price": "€0 / month",
           "body": "Up to 50 members, core features."
         },
         "pro": {
           "title": "Pro",
-          "price": "€49 / month",
           "body": "Unlimited members, custom branding, advanced exports."
         }
       },
@@ -1057,6 +1247,87 @@
         "emptyMine": "No class is assigned to you in this period.",
         "emptyAll": "No class at the studio in this period."
       }
+    },
+    "roster": {
+      "openRoster": "Roster",
+      "openRosterFor": "Open the roster of {title}",
+      "coach": "Coach: {name}",
+      "noCoach": "No coach assigned",
+      "stats": {
+        "booked": "Booked",
+        "checkedIn": "Checked in",
+        "waitlist": "Waitlist"
+      },
+      "confirmed": {
+        "title": "Booked members",
+        "empty": "Nobody is booked on this class yet."
+      },
+      "waitlist": {
+        "title": "Waitlist",
+        "empty": "Nobody is waiting for a seat."
+      },
+      "columns": {
+        "member": "Member",
+        "bookedAt": "Booked",
+        "attendance": "Attendance",
+        "position": "Position"
+      },
+      "checkIn": "Mark present",
+      "checkInFor": "Mark {name} present",
+      "checkedInAt": "Present at {time}",
+      "notCheckedIn": "Not checked in",
+      "checkedInToast": "{name} is checked in.",
+      "notConfirmed": "This booking is no longer confirmed. The roster was refreshed.",
+      "window": {
+        "before": "Attendance opens at {time}, 30 minutes before the class.",
+        "open": "Mark members present as they arrive. Kiosk scans show up here too.",
+        "closed": "Attendance closed on {date}."
+      },
+      "forbidden": "This class is assigned to another coach. Only its coach and the studio admins see its roster.",
+      "notFound": "This class does not exist or was deleted.",
+      "loadError": "The roster could not load."
+    },
+    "memberFile": {
+      "open": "Open member file",
+      "openFor": "Open the file of {name}",
+      "memberSince": "Member since {date}",
+      "stats": {
+        "checkIns": "Check-ins",
+        "lastCheckIn": "Last check-in",
+        "never": "Never",
+        "noShows": "No-shows",
+        "cancellations": "Cancellations"
+      },
+      "upcoming": {
+        "title": "Upcoming bookings",
+        "empty": "No upcoming booking."
+      },
+      "past": {
+        "title": "History",
+        "empty": "No past booking yet.",
+        "latest": "latest {count}"
+      },
+      "columns": {
+        "date": "Date",
+        "class": "Class",
+        "status": "Status"
+      },
+      "status": {
+        "confirmed": "Booked",
+        "waitlist": "Waitlist",
+        "cancelled": "Cancelled",
+        "no_show": "No-show",
+        "attended": "Present",
+        "missed": "Not checked in"
+      },
+      "consents": {
+        "title": "Consents",
+        "granted": "Yes",
+        "refused": "No"
+      },
+      "forbidden": "Only the studio admins can open a member file.",
+      "notFound": "This member does not exist in your studio.",
+      "loadError": "The member file could not load."
     }
   },
   "mobile": {

@@ -11,6 +11,7 @@
  *   | PATCH  | /me/consents      | jwtAuth → projectUserId → zValidator(body) → idempotency → handler |
  *   | POST   | /me/export        | jwtAuth → projectUserId → idempotency → handler (returns 202)      |
  *   | GET    | /                 | jwtAuth → requireRole('admin','coach') → zValidator(query) → handler |
+ *   | GET    | /:id              | jwtAuth → requireRole('admin') → zValidator(param) → handler        |
  *
  * Requirements:
  *   • 3.1  — `GET /me` returns the authenticated member's profile.
@@ -22,6 +23,9 @@
  *            server-side and appends to the audit log (Req 22.1).
  *   • 3.5  — `GET /` is admin/coach-only and returns a cursor-paginated
  *            list scoped to the caller's studio.
+ *   • `GET /:id` (issue #746) is the studio admin's member file:
+ *            profile, consents, upcoming and past reservations. Coaches
+ *            have no per-member read, so the route is admin only.
  *   • 4.1  — `POST /me/export` returns 202 with a job id; the actual
  *            ZIP assembly is scheduled by QStash (Req 4.2).
  *   • 14.1, 14.2, 20.1 — auth / validation / idempotency per the
@@ -29,6 +33,7 @@
  */
 
 import {
+  MemberFileParamsSchema,
   UpdateConsentsRequestSchema,
   UpdateProfileRequestSchema,
 } from '@athlya/shared/schemas/api';
@@ -58,7 +63,12 @@ import type { MeDeps } from './me.js';
 import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
-import type { UpdateConsentsRequest, UpdateProfileRequest } from '@athlya/shared/schemas/api';
+import type {
+  MemberFileParams,
+  MemberFileResponse,
+  UpdateConsentsRequest,
+  UpdateProfileRequest,
+} from '@athlya/shared/schemas/api';
 import type { Context } from 'hono';
 
 /* ------------------------------------------------------------------ */
@@ -177,6 +187,8 @@ export interface MembersDeps extends MeDeps {
     opts: ListMembersQuery,
     claims: AuthClaims,
   ): Promise<MembersPageView>;
+  /** The member file of a user of the caller's studio, `null` when there is none. */
+  getMemberFile(memberId: string, claims: AuthClaims): Promise<MemberFileResponse | null>;
 
   /** Dependency bundle forwarded to the idempotency middleware. */
   readonly idempotency?: IdempotencyMiddlewareDeps;
@@ -188,7 +200,7 @@ export interface MembersDeps extends MeDeps {
 
 const PROBLEM_JSON = 'application/problem+json';
 
-function exportProblem(
+function membersProblem(
   c: Context<HonoEnv>,
   status: 403 | 404 | 503,
   detail: string,
@@ -415,7 +427,7 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
     const { jobId } = readValidated<{ jobId: string }>(c, 'param');
     const job = await deps.getExportJob(jobId, claims);
     if (job === null) {
-      return exportProblem(c, 404, 'Export job not found', 'export_not_found');
+      return membersProblem(c, 404, 'Export job not found', 'export_not_found');
     }
     return c.json(job as unknown as Record<string, unknown>, 200);
   });
@@ -443,16 +455,16 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
             'cache-control': 'private, no-store',
           });
         case 'invalid_link':
-          return exportProblem(
+          return membersProblem(
             c,
             403,
             'Download link is invalid or expired',
             'export_link_invalid',
           );
         case 'not_found':
-          return exportProblem(c, 404, 'Export archive not found', 'export_not_found');
+          return membersProblem(c, 404, 'Export archive not found', 'export_not_found');
         case 'not_configured':
-          return exportProblem(
+          return membersProblem(
             c,
             503,
             'Export download is not configured for this environment',
@@ -481,6 +493,28 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
       const query = readValidated<ListMembersQuery>(c, 'query');
       const page = await deps.listMembersByStudio(claims.studioId, claims.role, query, claims);
       return c.json(page as unknown as Record<string, unknown>, 200);
+    },
+  );
+
+  /* ------------------------------ GET /:id (admin) --------------- */
+  // Registered after every `/me` route: those paths are matched first, and
+  // the uuid param schema rejects `me` anyway.
+  router.get(
+    '/:id',
+    requireRole('admin'),
+    zValidator('param', MemberFileParamsSchema),
+    async (c) => {
+      traceOperation(c, 'members.file');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const { id } = readValidated<MemberFileParams>(c, 'param');
+      const file = await deps.getMemberFile(id, claims);
+      if (file === null) {
+        return membersProblem(c, 404, `member ${id} not found`, 'member_not_found');
+      }
+      return c.json(file, 200, { 'cache-control': 'private, no-store' });
     },
   );
 

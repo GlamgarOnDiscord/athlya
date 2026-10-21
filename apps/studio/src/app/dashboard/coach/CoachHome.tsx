@@ -8,6 +8,7 @@
  * Nothing is invented: without an assigned class the cards say so.
  */
 import { ScanIcon } from '@phosphor-icons/react';
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 
 import { buttonVariants } from '@/components/ui/button-variants';
@@ -20,6 +21,7 @@ import { useAuth } from '../../../lib/auth/AuthContext';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { pluralKey } from '../../../lib/i18n/plural';
 import { createTranslator, type Translator } from '../../../lib/i18n/t';
+import { classRosterHref } from '../../../lib/links';
 import { useNowMinute } from '../../../lib/use-now-minute';
 import { useTodayKey } from '../classes/planning-clock';
 import { bookedSeats } from '../dashboard-summary';
@@ -250,7 +252,12 @@ function NextClass({
         </p>
       </div>
       <div className="flex min-w-0 flex-col gap-0.5">
-        <p className="truncate text-base font-medium">{cls.title}</p>
+        <Link
+          href={classRosterHref(cls.id)}
+          className="w-fit max-w-full truncate rounded-sm text-base font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {cls.title}
+        </Link>
         <p className="text-sm text-muted-foreground tabular-nums first-letter:uppercase">
           {t('studio.coach.next.at', {
             day,
