@@ -8,7 +8,7 @@
 
 import { withTenant } from '@athlya/db/client';
 import { webhookDeliveries, webhookEndpoints } from '@athlya/db/schema';
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { boolean, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 import { MAX_WEBHOOK_ENDPOINTS } from '../routes/webhooks.js';
@@ -72,7 +72,9 @@ async function recentDeliveries(
 ): Promise<Map<string, WebhookDelivery[]>> {
   const byEndpoint = new Map<string, WebhookDelivery[]>();
   if (endpointIds.length === 0) return byEndpoint;
-  const rows = await tx
+  // Rank inside each endpoint so a busy endpoint cannot crowd the others
+  // out of a single global LIMIT.
+  const ranked = tx
     .select({
       id: webhookDeliveries.id,
       endpointId: webhookDeliveries.endpointId,
@@ -85,14 +87,20 @@ async function recentDeliveries(
       createdAt: webhookDeliveries.createdAt,
       deliveredAt: webhookDeliveries.deliveredAt,
       nextAttemptAt: webhookDeliveries.nextAttemptAt,
+      rank: sql<number>`row_number() OVER (PARTITION BY ${webhookDeliveries.endpointId} ORDER BY ${webhookDeliveries.createdAt} DESC, ${webhookDeliveries.id} DESC)`.as(
+        'rank',
+      ),
     })
     .from(webhookDeliveries)
     .where(inArray(webhookDeliveries.endpointId, [...endpointIds]))
-    .orderBy(desc(webhookDeliveries.createdAt), desc(webhookDeliveries.id))
-    .limit(RECENT_DELIVERIES * endpointIds.length);
+    .as('ranked');
+  const rows = await tx
+    .select()
+    .from(ranked)
+    .where(lte(ranked.rank, RECENT_DELIVERIES))
+    .orderBy(desc(ranked.createdAt), desc(ranked.id));
   for (const row of rows) {
     const list = byEndpoint.get(row.endpointId) ?? [];
-    if (list.length >= RECENT_DELIVERIES) continue;
     const status =
       row.status === 'delivered' || row.status === 'failed' ? row.status : ('pending' as const);
     list.push({

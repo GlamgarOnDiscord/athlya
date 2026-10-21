@@ -16,7 +16,7 @@ import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { drizzle } from 'drizzle-orm/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createWebhooksRepo } from '../../adapters/webhooks-deps.js';
+import { RECENT_DELIVERIES, createWebhooksRepo } from '../../adapters/webhooks-deps.js';
 import { MAX_WEBHOOK_ENDPOINTS, newWebhookSecret } from '../../routes/webhooks.js';
 
 import type { AuthClaims } from '../../middleware/auth.js';
@@ -119,6 +119,46 @@ describe('webhooks adapter under athlya_app', () => {
     expect(await repo.deleteEndpoint(adminB, endpoint.id)).toBe(false);
     expect(await repo.deleteEndpoint(adminA, endpoint.id)).toBe(true);
     expect(await repo.listEndpoints(adminA)).toEqual([]);
+  });
+
+  it('lists the recent deliveries per endpoint, so a busy endpoint does not hide a quiet one', async () => {
+    const repo = createWebhooksRepo(db);
+    const busy = await repo.createEndpoint(adminA, {
+      url: 'https://hooks.example-a.fr/busy',
+      events: ['reservation.created'],
+      secret: newWebhookSecret(),
+    });
+    const quiet = await repo.createEndpoint(adminA, {
+      url: 'https://hooks.example-a.fr/quiet',
+      events: ['reservation.created'],
+      secret: newWebhookSecret(),
+    });
+    if (busy === null || quiet === null) throw new Error('endpoint missing');
+
+    await pglite.exec(`
+      RESET ROLE;
+      INSERT INTO webhook_deliveries
+        (endpoint_id, studio_id, event_id, event_type, payload, occurred_at, created_at)
+      SELECT '${busy.id}', '${STUDIO_A}', 'evt-busy-' || n, 'reservation.created', '{}',
+             now(), now() - n * interval '1 minute'
+        FROM generate_series(1, ${RECENT_DELIVERIES * 2}) AS n;
+      INSERT INTO webhook_deliveries
+        (endpoint_id, studio_id, event_id, event_type, payload, occurred_at, created_at)
+      SELECT '${quiet.id}', '${STUDIO_A}', 'evt-quiet-' || n, 'reservation.created', '{}',
+             now(), now() - interval '1 day' - n * interval '1 minute'
+        FROM generate_series(1, 3) AS n;
+      SET ROLE athlya_app;
+    `);
+
+    const listed = new Map((await repo.listEndpoints(adminA)).map((e) => [e.id, e]));
+    const busyIds = listed.get(busy.id)?.recentDeliveries.map((d) => d.eventId);
+    expect(busyIds).toHaveLength(RECENT_DELIVERIES);
+    expect(busyIds?.[0]).toBe('evt-busy-1');
+    expect(listed.get(quiet.id)?.recentDeliveries.map((d) => d.eventId)).toEqual([
+      'evt-quiet-1',
+      'evt-quiet-2',
+      'evt-quiet-3',
+    ]);
   });
 
   it('stops at the endpoint limit of the studio', async () => {
