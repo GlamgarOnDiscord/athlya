@@ -547,6 +547,22 @@ describe('handleEvent: studio branding', () => {
     expect(sendEmail.mock.calls[0]?.[0].sender).toBeUndefined();
   });
 
+  it('still sends the e-mail with the Athlya identity when the branding read throws', async () => {
+    const { sendEmail, logger, deps } = buildDeps();
+    const getBranding = vi.fn().mockRejectedValue(new Error('db unreachable'));
+
+    const result = await handleEvent(createdEvent(), { ...deps, branding: { getBranding } });
+
+    expect(result).toEqual({ status: 'ok', email: true, push: true });
+    const message = sendEmail.mock.calls[0]?.[0];
+    expect(message?.sender).toBeUndefined();
+    expect(message?.text).not.toContain('Studio Rive Gauche');
+    expect(logger.warn).toHaveBeenCalledWith('notifications.branding_failed', {
+      userId: USER_ID,
+      error: 'db unreachable',
+    });
+  });
+
   it('does not read the branding for a push-only message', async () => {
     const { deps } = buildDeps();
     const getBranding = vi.fn().mockResolvedValue(branding);

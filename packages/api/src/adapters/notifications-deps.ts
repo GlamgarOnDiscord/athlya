@@ -34,6 +34,7 @@ import type {
   BrandingRepo,
   DedupStore,
   EmailBranding,
+  EmailMessage,
   EmailSender,
   HandleEventDeps,
   Logger,
@@ -137,6 +138,24 @@ export function senderDisplayName(name: string): string {
     .slice(0, 64);
 }
 
+/**
+ * Strict hostname check for a studio sending domain: dot-separated
+ * LDH labels of 1 to 63 characters, an alphabetic (or IDNA `xn--`)
+ * top-level label, 253 characters at most. Nothing that could break
+ * out of the `From` address.
+ */
+const SENDING_DOMAIN =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/iu;
+
+/**
+ * `From` header of a message: the studio's `noreply@{domain}` once its
+ * domain is activated and well formed, the default sender otherwise.
+ */
+export function fromHeader(sender: EmailMessage['sender'], fallback: string): string {
+  if (sender === undefined || !SENDING_DOMAIN.test(sender.domain)) return fallback;
+  return `"${senderDisplayName(sender.name)}" <noreply@${sender.domain}>`;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Email sender (Resend)                                              */
 /* ------------------------------------------------------------------ */
@@ -178,10 +197,7 @@ function buildEmailSender(env: AthlyaBindings, logger: Logger): EmailSender {
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          from:
-            message.sender === undefined
-              ? fromAddress
-              : `"${senderDisplayName(message.sender.name)}" <noreply@${message.sender.domain}>`,
+          from: fromHeader(message.sender, fromAddress),
           to: [message.to],
           subject: message.subject,
           html: message.html,

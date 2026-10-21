@@ -12,6 +12,7 @@ import { createDrizzleDeletionRepo } from '../../adapters/cascade-repo-drizzle.j
 import {
   buildBrandingRepo,
   buildRecipientRepo,
+  fromHeader,
   senderDisplayName,
 } from '../../adapters/notifications-deps.js';
 import {
@@ -854,6 +855,39 @@ describe('senderDisplayName', () => {
       'Studio Alpha x@evil Bcc: a@b',
     );
     expect(senderDisplayName('x'.repeat(100))).toHaveLength(64);
+  });
+});
+
+describe('fromHeader', () => {
+  const fallback = 'Athlya <noreply@athlya.app>';
+
+  it('sends from the studio domain when it is a well-formed hostname', () => {
+    expect(fromHeader({ name: 'Studio Alpha', domain: 'mail.studio-alpha.fr' }, fallback)).toBe(
+      '"Studio Alpha" <noreply@mail.studio-alpha.fr>',
+    );
+    expect(fromHeader({ name: 'Studio', domain: 'studio.xn--p1ai' }, fallback)).toBe(
+      '"Studio" <noreply@studio.xn--p1ai>',
+    );
+  });
+
+  it('keeps the default sender without a studio sender', () => {
+    expect(fromHeader(undefined, fallback)).toBe(fallback);
+  });
+
+  it.each([
+    'studio.fr>, attacker@evil.example',
+    'studio.fr\r\nBcc: a@b.example',
+    'localhost',
+    '-studio.fr',
+    'studio-.fr',
+    'studio..fr',
+    'studio.fr.',
+    'studio.123',
+    `${'a'.repeat(64)}.fr`,
+    `${'a.'.repeat(127)}fr`,
+    '',
+  ])('falls back to the default sender for the malformed domain %j', (domain) => {
+    expect(fromHeader({ name: 'Studio', domain }, fallback)).toBe(fallback);
   });
 });
 

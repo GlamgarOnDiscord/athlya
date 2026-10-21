@@ -695,7 +695,7 @@ export async function handleEvent(
     // ---- Step 5: render + dispatch ----------------------------
     const message = render(handled, recipient.locale);
 
-    const emailPromise = maybeSendEmail(message, recipient, email, deps.branding);
+    const emailPromise = maybeSendEmail(message, recipient, email, deps.branding, logger);
     const pushPromise = maybeSendPush(message, recipient, push);
 
     const [emailSent, pushSent] = await Promise.all([emailPromise, pushPromise]);
@@ -761,20 +761,22 @@ function isHandled(type: AthlyaEvent['type']): type is HandledEventType {
  * The body is laid out in the studio's colors and logo
  * (`email-layout.ts`); the branding is read only when an e-mail
  * actually leaves, and the studio's own sender is used once its
- * sending domain is verified and activated.
+ * sending domain is verified and activated. A failing branding lookup
+ * never blocks a transactional e-mail: it is logged and the e-mail
+ * leaves with the Athlya identity.
  */
 async function maybeSendEmail(
   message: RenderedMessage,
   recipient: Recipient,
   email: EmailSender,
   brandingRepo: BrandingRepo | undefined,
+  logger: Logger,
 ): Promise<boolean> {
   const { emailSubject, emailBody } = message;
   if (emailSubject === undefined || emailBody === undefined || recipient.email === null) {
     return false;
   }
-  const branding =
-    brandingRepo === undefined ? null : await brandingRepo.getBranding(recipient.userId);
+  const branding = await readBranding(brandingRepo, recipient.userId, logger);
   const content = { subject: emailSubject, body: emailBody };
   await email.send({
     to: recipient.email,
@@ -786,6 +788,24 @@ async function maybeSendEmail(
       : {}),
   });
   return true;
+}
+
+/** Studio branding for the e-mail, or `null` when absent or unreadable. */
+async function readBranding(
+  brandingRepo: BrandingRepo | undefined,
+  userId: string,
+  logger: Logger,
+): Promise<EmailBranding | null> {
+  if (brandingRepo === undefined) return null;
+  try {
+    return await brandingRepo.getBranding(userId);
+  } catch (err) {
+    logger.warn('notifications.branding_failed', {
+      userId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
 
 /**
