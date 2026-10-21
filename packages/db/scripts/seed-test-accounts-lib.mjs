@@ -22,8 +22,15 @@ export const TEST_ACCOUNTS = Object.freeze([
   { role: 'member', displayName: 'Léa Fontaine', email: 'lea.fontaine@rive-gauche.athlya.test' },
 ]);
 
-/** CGU version the accounts consent under (`CURRENT_CGU_VERSION` of `@athlya/auth`). */
+/**
+ * CGU version the accounts consent under. Mirrors `CURRENT_CGU_VERSION` of
+ * `@athlya/auth`, which `@athlya/db` does not depend on; a unit test keeps
+ * the two equal.
+ */
 export const CONSENTS_VERSION = '2026-01';
+
+/** `APP_ENV` values that may be seeded without `--allow-production`. */
+const NON_PRODUCTION_ENVIRONMENTS = new Set(['development', 'staging']);
 
 /** Shortest password the register route accepts. */
 const MIN_PASSWORD_LENGTH = 12;
@@ -51,9 +58,12 @@ export function parseArgs(argv) {
  * @returns {{ databaseUrl: string, password: string }}
  */
 export function readSeedEnvironment(env, flags) {
-  if ((env.APP_ENV ?? '').trim().toLowerCase() === 'production' && !flags.allowProduction) {
+  // An unset or unknown APP_ENV counts as production: a tunnel to the
+  // production database looks local to the host guard.
+  const appEnv = (env.APP_ENV ?? '').trim().toLowerCase();
+  if (!NON_PRODUCTION_ENVIRONMENTS.has(appEnv) && !flags.allowProduction) {
     throw new Error(
-      'APP_ENV=production: refusing to seed test accounts without --allow-production',
+      `APP_ENV=${appEnv === '' ? '(unset)' : appEnv}: refusing to seed test accounts without --allow-production (set APP_ENV=development or staging)`,
     );
   }
   const databaseUrl = env.DATABASE_URL ?? '';

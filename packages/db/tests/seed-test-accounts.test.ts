@@ -3,6 +3,8 @@
  * the production guard and the environment checks. The script itself is
  * never run here.
  */
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -49,6 +51,12 @@ describe('test account plan', () => {
       updatedAt: '2026-10-21T08:00:00.000Z',
     });
   });
+
+  it('consents under the CGU version the auth service stamps', () => {
+    const service = readFileSync(new URL('../../auth/src/service.ts', import.meta.url), 'utf8');
+    const match = /export const CURRENT_CGU_VERSION = '([^']+)';/u.exec(service);
+    expect(match?.[1]).toBe(CONSENTS_VERSION);
+  });
 });
 
 describe('parseArgs', () => {
@@ -60,7 +68,11 @@ describe('parseArgs', () => {
 });
 
 describe('readSeedEnvironment', () => {
-  const base = { DATABASE_URL: 'postgresql://localhost/athlya', TEST_ACCOUNTS_PASSWORD: PASSWORD };
+  const base = {
+    APP_ENV: 'development',
+    DATABASE_URL: 'postgresql://localhost/athlya',
+    TEST_ACCOUNTS_PASSWORD: PASSWORD,
+  };
 
   it('returns the connection string and the password', () => {
     expect(readSeedEnvironment(base, { allowProduction: false })).toEqual({
@@ -75,12 +87,37 @@ describe('readSeedEnvironment', () => {
     expect(readSeedEnvironment(env, { allowProduction: true }).password).toBe(PASSWORD);
   });
 
+  it.each([undefined, '', '  ', 'prod', 'preview'])('treats APP_ENV=%j as production', (appEnv) => {
+    const env = { ...base, APP_ENV: appEnv };
+    expect(() => readSeedEnvironment(env, { allowProduction: false })).toThrow(
+      /--allow-production/u,
+    );
+    expect(readSeedEnvironment(env, { allowProduction: true }).password).toBe(PASSWORD);
+  });
+
+  it.each(['development', 'staging', ' Staging '])(
+    'seeds APP_ENV=%j without the flag',
+    (appEnv) => {
+      const env = { ...base, APP_ENV: appEnv };
+      expect(readSeedEnvironment(env, { allowProduction: false }).password).toBe(PASSWORD);
+    },
+  );
+
+  it('checks the environment before the connection string', () => {
+    expect(() => readSeedEnvironment({}, { allowProduction: false })).toThrow(
+      /--allow-production/u,
+    );
+  });
+
   it('requires both variables, without echoing their values', () => {
     expect(() =>
       readSeedEnvironment({ ...base, DATABASE_URL: '' }, { allowProduction: false }),
     ).toThrow('DATABASE_URL is required');
     expect(() =>
-      readSeedEnvironment({ DATABASE_URL: base.DATABASE_URL }, { allowProduction: false }),
+      readSeedEnvironment(
+        { APP_ENV: base.APP_ENV, DATABASE_URL: base.DATABASE_URL },
+        { allowProduction: false },
+      ),
     ).toThrow('TEST_ACCOUNTS_PASSWORD is required');
   });
 

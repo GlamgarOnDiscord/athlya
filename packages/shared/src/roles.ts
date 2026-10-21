@@ -52,6 +52,8 @@ export type Capability =
   | 'members.list'
   /** Open a member file. */
   | 'members.file'
+  /** Download the member list as CSV. */
+  | 'members.export'
   /** Read and stamp the roster of any class of the studio. */
   | 'roster.all'
   /** Read and stamp the roster of the classes the caller coaches. */
@@ -77,6 +79,7 @@ const MATRIX: Readonly<Record<Capability, readonly Role[]>> = {
   'programs.readDrafts': ['admin', 'manager', 'coach'],
   'members.list': STAFF_ROLES,
   'members.file': ['admin', 'manager', 'accueil'],
+  'members.export': ['admin', 'manager'],
   'roster.all': ['admin', 'manager', 'accueil'],
   'roster.own': ['coach'],
   'checkin.kiosk': STAFF_ROLES,

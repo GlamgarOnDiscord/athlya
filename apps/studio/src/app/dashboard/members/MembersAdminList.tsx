@@ -4,10 +4,11 @@
  * `/dashboard/members` client surface: role tabs, search ("/" focuses it),
  * sortable columns, selection with a bulk bar and a per-row menu. Rows come
  * from `GET /v1/members` (cursor pages of 20); every count and export covers
- * the rows loaded so far, since the endpoint returns no total. A coach
- * (the API opens the list to that role too) gets the same directory
- * read only: no CSV export and no member file, which stay with
- * administrators (the API has no per-member read for coaches).
+ * the rows loaded so far, since the endpoint returns no total. The CSV
+ * export is built here from those rows (`members.export`: admin and
+ * manager). The front desk opens member files but exports nothing; a coach
+ * gets the directory read only, with no member file either (the API has no
+ * per-member read for coaches).
  */
 import { can } from '@athlya/shared/roles';
 import { Menu } from '@base-ui/react/menu';
@@ -103,7 +104,7 @@ export function MembersAdminList(): ReactElement {
   const [sort, setSort] = useState<MemberSort>('joinedDesc');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const opensFiles = user !== null && can(user.role, 'members.file');
-  const canExport = user !== null && can(user.role, 'members.file');
+  const canExport = user !== null && can(user.role, 'members.export');
 
   const fetchPage = useCallback(
     async (currentCursor: string | null) => {

@@ -14,10 +14,11 @@
  *
  * Usage (from the repository root, as the migration owner role, which
  * bypasses RLS like the other seed scripts):
- *   DATABASE_URL=postgresql://... TEST_ACCOUNTS_PASSWORD=... \
- *     node packages/db/scripts/seed-test-accounts.mjs
- * Refuses to run with APP_ENV=production unless `--allow-production` is
- * passed, and refuses a remote host unless ATHLYA_ALLOW_DANGEROUS_WRITE=1
+ *   APP_ENV=development node packages/db/scripts/seed-test-accounts.mjs
+ * with DATABASE_URL and TEST_ACCOUNTS_PASSWORD exported beforehand.
+ * Refuses to run unless APP_ENV is development or staging (an unset or
+ * unknown value counts as production) or `--allow-production` is passed,
+ * and refuses a remote host unless ATHLYA_ALLOW_DANGEROUS_WRITE=1
  * (`_guard.mjs`). Runbook: docs/runbooks/test-accounts.md.
  */
 

@@ -7,7 +7,7 @@ import { TeamPanel } from './TeamPanel';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 
-export const metadata: Metadata = { title: 'Team' };
+export const metadata: Metadata = { title: 'Équipe' };
 
 export default function TeamPage(): ReactElement {
   return <TeamPanel />;

@@ -21,11 +21,11 @@
  *            `users.avatarUrl` (N2.13). Mode dégradé when bucket absent.
  *   • 3.3  — `PATCH /me/consents` stamps `version` + `updatedAt`
  *            server-side and appends to the audit log (Req 22.1).
- *   • 3.5  — `GET /` is admin/coach-only and returns a cursor-paginated
- *            list scoped to the caller's studio.
- *   • `GET /:id` (issue #746) is the studio admin's member file:
- *            profile, consents, upcoming and past reservations. Coaches
- *            have no per-member read, so the route is admin only.
+ *   • 3.5: `GET /` is open to every studio team role (`members.list`)
+ *            and returns a cursor-paginated list scoped to the caller's studio.
+ *   • `GET /:id` (issue #746) is the member file: profile, consents,
+ *            upcoming and past reservations. Coaches have no per-member
+ *            read: `members.file` is admin, manager and front desk.
  *   • 4.1  — `POST /me/export` returns 202 with a job id; the actual
  *            ZIP assembly is scheduled by QStash (Req 4.2).
  *   • 14.1, 14.2, 20.1 — auth / validation / idempotency per the

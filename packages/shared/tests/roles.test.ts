@@ -16,6 +16,7 @@ const EVERY: readonly Capability[] = [
   'programs.readDrafts',
   'members.list',
   'members.file',
+  'members.export',
   'roster.all',
   'roster.own',
   'checkin.kiosk',
@@ -66,6 +67,12 @@ describe('capability matrix', () => {
     expect(can('owner', 'console.access')).toBe(false);
     expect(can(undefined, 'console.access')).toBe(false);
     expect(can(null, 'console.access')).toBe(false);
+  });
+
+  it('keeps the CSV export of the member list with admins and managers', () => {
+    expect(rolesWith('members.export')).toEqual(['admin', 'manager']);
+    expect(can('accueil', 'members.file')).toBe(true);
+    expect(can('accueil', 'members.export')).toBe(false);
   });
 
   it('lists the holders of a capability', () => {

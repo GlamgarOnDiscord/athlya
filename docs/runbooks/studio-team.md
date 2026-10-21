@@ -14,6 +14,7 @@ enforces it with `requireCapability(...)`, the RLS policies of migration
 | Programs: create, edit, archive     | yes   | yes     | no      | no        |
 | Members directory                   | yes   | yes     | read    | read      |
 | Member file                         | yes   | yes     | read    | no        |
+| Member list: CSV export             | yes   | yes     | no      | no        |
 | Roster and attendance               | all   | all     | all     | own class |
 | Check-in kiosk                      | yes   | yes     | yes     | yes       |
 | Audit log                           | yes   | yes     | no      | no        |

@@ -479,7 +479,7 @@ const listMembersRoute = createRoute({
   method: 'get',
   path: '/v1/members',
   tags: ['members'],
-  summary: 'List studio members (admin / coach only)',
+  summary: 'List studio members (admin, manager, front desk, coach)',
   security: [{ bearerAuth: [] }],
   request: {
     query: z.object({
@@ -516,7 +516,7 @@ const memberFileRoute = createRoute({
       content: { 'application/json': { schema: MemberFileResponseSchema } },
     },
     401: problemResponse('Not authenticated'),
-    403: problemResponse('Not a studio admin'),
+    403: problemResponse('Not an admin, manager or front desk of the studio'),
     404: problemResponse('`member_not_found`: no live member with this id in the studio'),
   },
 });
@@ -552,7 +552,7 @@ const createClassRoute = createRoute({
   method: 'post',
   path: '/v1/classes',
   tags: ['classes'],
-  summary: 'Create a new class (admin only)',
+  summary: 'Create a new class (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -590,7 +590,7 @@ const updateClassRoute = createRoute({
   method: 'patch',
   path: '/v1/classes/{id}',
   tags: ['classes'],
-  summary: 'Update a class (admin only)',
+  summary: 'Update a class (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.uuid() }),
@@ -633,7 +633,7 @@ const deleteClassRoute = createRoute({
   method: 'delete',
   path: '/v1/classes/{id}',
   tags: ['classes'],
-  summary: 'Delete a class (admin only)',
+  summary: 'Delete a class (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.uuid() }),
@@ -660,7 +660,9 @@ const classRosterRoute = createRoute({
   path: '/v1/classes/{id}/roster',
   tags: ['classes'],
   summary: 'Roster of a class: booked members, waitlist and check-ins',
-  description: 'Open to the studio admin and to the coach the class is assigned to.',
+  description:
+    'Open to the admin, manager and front desk of the studio, and to the coach the class is ' +
+    'assigned to.',
   security: [{ bearerAuth: [] }],
   request: { params: ClassRosterParamsSchema },
   responses: {
@@ -678,7 +680,8 @@ const rosterCheckInRoute = createRoute({
   method: 'post',
   path: '/v1/classes/{id}/roster/{reservationId}/check-in',
   tags: ['classes'],
-  summary: 'Mark a booked member of the class present (admin or coach of the class)',
+  summary:
+    'Mark a booked member of the class present (admin, manager, front desk, or coach of the class)',
   description:
     'Stamps the same check-in as a kiosk scan. Allowed from 30 minutes before the class ' +
     'starts until 24 hours after it ends.',
@@ -1395,9 +1398,10 @@ const checkInRoute = createRoute({
   method: 'post',
   path: '/v1/checkins',
   tags: ['checkins'],
-  summary: 'Check a member in from their QR token (kiosk, admin or coach)',
+  summary: 'Check a member in from their QR token (kiosk, any studio team role)',
   description:
-    "The operator's session must be an admin or coach of the studio; the QR token names the " +
+    "The operator's session must be an admin, manager, front desk or coach of the studio; the QR " +
+    'token names the ' +
     'member. The token is verified before any reservation or member read and consumed once.',
   security: [{ bearerAuth: [] }],
   request: {
@@ -1421,7 +1425,7 @@ const checkInRoute = createRoute({
       'Not authenticated, or the QR token was rejected (`code`: `invalid_signature`, ' +
         '`token_expired`, `replay`, `wrong_studio`, `wrong_kind`, `malformed`)',
     ),
-    403: problemResponse('The caller is not an admin or coach'),
+    403: problemResponse('The caller is not on the studio team'),
     422: problemResponse(
       'Valid token but no check-in (`code`: `no_reservation`, `outside_window`, `already_checked_in`), or validation error',
     ),
@@ -1440,7 +1444,7 @@ const listAuditRoute = createRoute({
   method: 'get',
   path: '/v1/audit',
   tags: ['audit'],
-  summary: 'List studio audit log entries (admin only)',
+  summary: 'List studio audit log entries (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     query: z.object({
@@ -1572,7 +1576,7 @@ const createProgramRoute = createRoute({
   method: 'post',
   path: '/v1/programs',
   tags: ['programs'],
-  summary: 'Create a program with its weeks and workouts (admin only)',
+  summary: 'Create a program with its weeks and workouts (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -1612,7 +1616,7 @@ const updateProgramRoute = createRoute({
   method: 'patch',
   path: '/v1/programs/{id}',
   tags: ['programs'],
-  summary: 'Update a program; `weeks` replaces the schedule (admin only)',
+  summary: 'Update a program; `weeks` replaces the schedule (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     params: ProgramIdParamsSchema,
@@ -1638,7 +1642,7 @@ const archiveProgramRoute = createRoute({
   method: 'post',
   path: '/v1/programs/{id}/archive',
   tags: ['programs'],
-  summary: 'Archive a program (admin only, idempotent)',
+  summary: 'Archive a program (admin, manager; idempotent)',
   security: [{ bearerAuth: [] }],
   request: { params: ProgramIdParamsSchema },
   responses: {

@@ -29,10 +29,14 @@ an inbox, so a password is changed by running the script again.
    scripts):
 
    ```sh
-   export DATABASE_URL=...            # migration owner role
-   export TEST_ACCOUNTS_PASSWORD=...  # from the secret manager
-   node packages/db/scripts/seed-test-accounts.mjs
+   # Both values are typed at a silent prompt, never on the command line,
+   # so neither reaches the shell history.
+   read -rs DATABASE_URL && export DATABASE_URL                     # migration owner role
+   read -rs TEST_ACCOUNTS_PASSWORD && export TEST_ACCOUNTS_PASSWORD # from the secret manager
+   APP_ENV=development node packages/db/scripts/seed-test-accounts.mjs
    ```
+
+   `APP_ENV=staging` on the staging database.
 
 The script is idempotent: the studio is matched by slug, each account by
 email. A second run only reports `up to date`. A new password or a role
@@ -42,8 +46,11 @@ another studio stops the run and nothing is written (one transaction).
 
 ## Guards
 
-- `APP_ENV=production` refuses to run unless `--allow-production` is
-  passed. Seeding production needs Tom's or Pierre's agreement first.
+- Only `APP_ENV=development` or `APP_ENV=staging` runs without
+  `--allow-production`. An unset or unknown `APP_ENV` counts as
+  production, since a tunnel to the production database looks local to
+  the host guard. Seeding production needs Tom's or Pierre's agreement
+  first.
 - A non-local host needs `ATHLYA_ALLOW_DANGEROUS_WRITE=1`
   (`packages/db/scripts/_guard.mjs`), as for the other scripts.
 - Neither the password nor the connection string is ever printed.

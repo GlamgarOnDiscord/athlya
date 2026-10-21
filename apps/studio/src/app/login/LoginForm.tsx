@@ -126,10 +126,19 @@ export function LoginForm({ nonce }: LoginFormProps): ReactElement {
             turnstileRef.current?.reset();
             return;
           }
-          // The access token still carries the previous role.
-          role = (await refreshSession())?.role ?? role;
+          // The invitation is spent: a retry signs in without it.
           window.history.replaceState(null, '', window.location.pathname);
           setInvite(null);
+          // The access token still carries the previous role. Without a fresh
+          // session the new role is unknown, and a second sign-in reads it.
+          const refreshed = await refreshSession();
+          if (refreshed === null) {
+            await logout().catch(() => undefined);
+            setForm((s) => ({ ...s, error: t('auth.errors.networkError') }));
+            turnstileRef.current?.reset();
+            return;
+          }
+          role = refreshed.role;
         }
         if (!canUseStudio(role)) {
           // A member is refused, and the session this sign-in just opened is closed
