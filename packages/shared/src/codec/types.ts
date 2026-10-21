@@ -70,6 +70,8 @@ export type ClassWire = Readonly<{
   capacity: number;
   version: number;
   createdAt: string;
+  roomId?: string | null;
+  seriesId?: string | null;
 }>;
 
 export type ReservationWire = Readonly<{

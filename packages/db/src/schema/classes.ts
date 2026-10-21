@@ -43,6 +43,15 @@ export const classes = pgTable(
     startsAt: timestamp('starts_at', { withTimezone: true, mode: 'date' }).notNull(),
     durationMin: integer('duration_min').notNull(),
     capacity: integer('capacity').notNull(),
+    /**
+     * Room the class runs in (migration 0051). Nullable; the composite
+     * FK `classes_room_fk` on `(room_id, studio_id)` keeps it inside the
+     * class's studio and is declared in SQL only (Drizzle cannot express
+     * its `ON DELETE SET NULL (room_id)` column list).
+     */
+    roomId: uuid('room_id'),
+    /** Groups the occurrences of a weekly series (migration 0051). Nullable. */
+    seriesId: uuid('series_id'),
     /** Optimistic-lock counter. Every successful UPDATE bumps this. */
     version: integer('version').notNull().default(0),
     createdAt: createdAt(),
@@ -59,6 +68,16 @@ export const classes = pgTable(
     index('classes_id_studio_idx')
       .on(table.id, table.studioId)
       .where(sql`deleted_at IS NULL`),
+    /** Overlap lookups behind schedule conflict detection (migration 0051). */
+    index('classes_room_starts_at_idx')
+      .on(table.roomId, table.startsAt)
+      .where(sql`room_id IS NOT NULL AND deleted_at IS NULL`),
+    index('classes_coach_starts_at_idx')
+      .on(table.coachId, table.startsAt)
+      .where(sql`coach_id IS NOT NULL AND deleted_at IS NULL`),
+    index('classes_series_starts_at_idx')
+      .on(table.seriesId, table.startsAt)
+      .where(sql`series_id IS NOT NULL AND deleted_at IS NULL`),
   ],
 );
 

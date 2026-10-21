@@ -222,6 +222,8 @@ export const classArb: fc.Arbitrary<Class> = fc.record({
   capacity: fc.integer({ min: 1, max: 500 }),
   version: fc.nat(),
   createdAt: isoDateTimeArb,
+  roomId: fc.option(fc.option(fc.uuid({ version: 4 }), { nil: null }), { nil: undefined }),
+  seriesId: fc.option(fc.option(fc.uuid({ version: 7 }), { nil: null }), { nil: undefined }),
 });
 
 export const reservationArb: fc.Arbitrary<Reservation> = fc.record({
