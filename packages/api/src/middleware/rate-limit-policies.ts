@@ -351,6 +351,17 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
     wiredIn: 'domain-router',
     notes: 'Issue #654 — QR token issuance, rotated every 120 s by the app',
   },
+  {
+    id: 'roster-checkin',
+    route: '/v1/classes/:id/roster/:reservationId/check-in',
+    methods: 'POST',
+    budget: CHECKIN_BUDGET,
+    failPolicy: 'fail-closed',
+    bucket: 'user',
+    wiredIn: 'domain-router',
+    notes:
+      'Issue #746: manual check-in from a class roster (admin or coach of the class), same per-operator bucket as checkin-post',
+  },
 ];
 
 /** Explicit fail-closed rows — tests fail if an id is removed or policy regresses. */
@@ -377,6 +388,7 @@ export const REQUIRED_FAIL_CLOSED_IDS = [
   'admin-stats',
   'checkin-post',
   'checkin-token',
+  'roster-checkin',
 ] as const;
 
 /** Rows that must stay fail-closed (mutations + expensive reads + auth). */

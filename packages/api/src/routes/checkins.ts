@@ -203,6 +203,15 @@ function perUserLimit(
   };
 }
 
+/**
+ * The per-operator check-in limiter (`CHECKIN_BUDGET`). The kiosk scan
+ * and the manual check-in from a class roster share its bucket, so an
+ * operator has one check-in rate whichever way they mark members present.
+ */
+export function checkinOperatorLimit(opts?: RateLimitOptions): MiddlewareHandler<HonoEnv> {
+  return perUserLimit('checkin', CHECKIN_BUDGET, opts);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Factory                                                            */
 /* ------------------------------------------------------------------ */
@@ -241,7 +250,7 @@ export function buildCheckinsRouter(deps: CheckinsDeps): Hono<HonoEnv> {
   router.post(
     '/',
     requireRole('admin', 'coach'),
-    perUserLimit('checkin', CHECKIN_BUDGET, deps.rateLimitOpts),
+    checkinOperatorLimit(deps.rateLimitOpts),
     projectUserIdFromClaims(),
     zValidator('json', CheckInRequestSchema),
     idem,

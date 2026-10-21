@@ -102,6 +102,7 @@ export function buildStubDeps(
       getExportJob: vi.fn(),
       openExportDownload: vi.fn(),
       listMembersByStudio: vi.fn(),
+      getMemberFile: vi.fn(),
       getProgression: vi.fn(),
       getCardioProgression: vi.fn(),
       ...overrides.members,
@@ -112,6 +113,8 @@ export function buildStubDeps(
       createClass: vi.fn(),
       updateClass: vi.fn(),
       deleteClass: vi.fn(),
+      getRoster: vi.fn(),
+      markAttendance: vi.fn(),
       ...overrides.classes,
     },
     reservations: {

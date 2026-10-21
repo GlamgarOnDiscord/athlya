@@ -53,10 +53,12 @@ import { publish } from '../events/publish.js';
 import { createR2AvatarUploadStore } from './avatar-upload-store-r2.js';
 import {
   getOrCreateDbHttpForRegion,
+  getOrCreateWriteDb,
   primeDbHttpForTests,
   resetAllDepsCachesForTests,
 } from './deps-cache.js';
 import { verifyExportDownload } from './export-download.js';
+import { loadMemberFile } from './member-file.js';
 import { createDrizzleAuditLogWriterHttp } from './members-audit-writer-drizzle.js';
 import { createDrizzleConsentsRepoHttp } from './members-consents-repo-drizzle.js';
 import { createDrizzleExportJobStoreHttp } from './members-export-job-store-drizzle.js';
@@ -269,6 +271,10 @@ export function buildMembersDeps(
       if (opts.cursor !== undefined) repoOpts.cursor = opts.cursor;
       if (opts.limit !== undefined) repoOpts.limit = opts.limit;
       return svcListMembersByStudio(studioId, role, repoOpts, { repo });
+    },
+
+    async getMemberFile(memberId, claims) {
+      return loadMemberFile(getOrCreateWriteDb(env), claims, memberId, new Date(now()));
     },
 
     async getProgression(userId, windowDays, claims) {

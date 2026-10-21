@@ -21,6 +21,20 @@ it to work in a deployed environment.
    window, records the `jti` (anti-replay), and stamps the reservation whose
    class starts within ±30 min.
 
+## Manual check-in from a class roster
+
+The class page of the studio app (`/dashboard/classes/<id>`, issue #746)
+lists who is booked, who waits and who is checked in. The studio admin and
+the coach the class is assigned to can mark a confirmed member present:
+`POST /v1/classes/:id/roster/:reservationId/check-in` stamps the same
+`checked_in_at` through `checkin_mark_reservation`, so the 5-per-hour bound
+applies and a kiosk scan of the same member then answers
+`already_checked_in`. It is open from 30 min before the class starts until
+24 h after it ends, and shares the kiosk's per-operator rate limit. Another
+coach of the studio gets 403 `not_class_coach`. The routes are served by
+`athlya-api-reservations` under its existing `/v1/classes/*` pattern: no
+route, secret or migration to add.
+
 ## Operator checklist
 
 - **Signing keys on `athlya-api-reservations`.** `JWT_KID`,

@@ -8,6 +8,8 @@
  *   | GET    | /     | jwtAuth → zValidator(query: ListClassesQuerySchema) → handler            |
  *   | POST   | /     | jwtAuth → requireRole('admin') → projectUserId → zValidator(body) → idempotency → handler |
  *   | PATCH  | /:id  | jwtAuth → requireRole('admin') → projectUserId → zValidator(param + body) → idempotency → handler |
+ *   | GET    | /:id/roster | jwtAuth → requireRole('admin', 'coach') → zValidator(param) → handler |
+ *   | POST   | /:id/roster/:reservationId/check-in | jwtAuth → requireRole('admin', 'coach') → checkinLimit → projectUserId → zValidator(param) → idempotency → handler |
  *
  * Requirements:
  *   • 7.1, 7.3 — range-bounded listing via `ListClassesQuerySchema`
@@ -20,11 +22,18 @@
  *                which this router renders as HTTP 409 Conflict.
  *   • 14.1, 14.2, 20.1 — auth / validation / idempotency per the
  *                shared middleware chain.
+ *
+ * The roster routes (issue #746) open a class to the studio admin and to
+ * the coach the class is assigned to (`classes.coach_id`); any other
+ * coach gets 403 `not_class_coach`. A manual check-in stamps the same
+ * `checked_in_at` as the kiosk scan, through `checkin_mark_reservation`.
  */
 
 import {
+  ClassRosterParamsSchema,
   CreateClassRequestSchema,
   ListClassesQuerySchema,
+  RosterCheckInParamsSchema,
   SearchClassesQuerySchema,
   UpdateClassRequestSchema,
 } from '@athlya/shared/schemas/api';
@@ -35,6 +44,7 @@ import { jwtAuth } from '../middleware/auth.js';
 import { studioRateLimit } from '../middleware/studio-rate-limit.js';
 import { zValidator } from '../middleware/validator.js';
 
+import { checkinOperatorLimit } from './checkins.js';
 import {
   computeListEtag,
   idempotency,
@@ -48,8 +58,12 @@ import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
 import type {
+  ClassRosterEntry,
+  ClassRosterParams,
+  ClassRosterResponse,
   CreateClassRequest,
   ListClassesQuery,
+  RosterCheckInParams,
   SearchClassesQuery,
   UpdateClassRequest,
 } from '@athlya/shared/schemas/api';
@@ -89,6 +103,23 @@ export type UpdateClassOutcome =
  */
 export type DeleteClassOutcome = { readonly kind: 'deleted' } | { readonly kind: 'not_found' };
 
+/** Outcome of {@link ClassesDeps.getRoster}. */
+export type RosterOutcome =
+  | { readonly kind: 'ok'; readonly roster: ClassRosterResponse }
+  | { readonly kind: 'forbidden' }
+  | { readonly kind: 'not_found' };
+
+/** Why a manual check-in from the roster was refused. */
+export type RosterCheckInFailReason =
+  'not_confirmed' | 'already_checked_in' | 'outside_window' | 'checkin_limit_reached';
+
+/** Outcome of {@link ClassesDeps.markAttendance}. */
+export type RosterCheckInOutcome =
+  | { readonly kind: 'checked_in'; readonly entry: ClassRosterEntry }
+  | { readonly kind: 'forbidden' }
+  | { readonly kind: 'not_found' }
+  | { readonly kind: 'fail'; readonly reason: RosterCheckInFailReason };
+
 /** Dependencies injected into {@link buildClassesRouter}. */
 export interface ClassesDeps {
   listClasses(
@@ -109,6 +140,14 @@ export interface ClassesDeps {
     claims: AuthClaims,
   ): Promise<UpdateClassOutcome>;
   deleteClass(studioId: string, classId: string, claims: AuthClaims): Promise<DeleteClassOutcome>;
+  /** Roster of a class of the caller's studio, for its admin or its coach. */
+  getRoster(classId: string, claims: AuthClaims): Promise<RosterOutcome>;
+  /** Mark one confirmed reservation of the class present. */
+  markAttendance(
+    classId: string,
+    reservationId: string,
+    claims: AuthClaims,
+  ): Promise<RosterCheckInOutcome>;
 
   readonly idempotency?: IdempotencyMiddlewareDeps;
 }
@@ -176,6 +215,49 @@ function problem404(c: Context<HonoEnv>, detail: string): Response {
     { 'content-type': 'application/problem+json' },
   );
 }
+
+/** Detail of the 403 a coach gets on a class assigned to someone else. */
+const NOT_CLASS_COACH = 'only the studio admin or the coach of this class can open its roster';
+
+function problemNotClassCoach(c: Context<HonoEnv>): Response {
+  return c.body(
+    JSON.stringify({
+      type: 'about:blank',
+      title: 'forbidden',
+      status: 403,
+      detail: NOT_CLASS_COACH,
+      code: 'not_class_coach',
+      traceId: c.get('traceId'),
+    }),
+    403,
+    { 'content-type': 'application/problem+json' },
+  );
+}
+
+/** Seconds a member waits after `checkin_limit_reached` (the bound is per hour). */
+const MEMBER_LIMIT_RETRY_AFTER_SEC = 3600;
+
+function problemRosterCheckIn(c: Context<HonoEnv>, reason: RosterCheckInFailReason): Response {
+  const status = reason === 'checkin_limit_reached' ? 429 : 422;
+  return c.body(
+    JSON.stringify({
+      type: 'about:blank',
+      title: status === 429 ? 'Too Many Requests' : 'Unprocessable Entity',
+      status,
+      detail: `check-in rejected: ${reason}`,
+      code: reason,
+      traceId: c.get('traceId'),
+    }),
+    status,
+    {
+      'content-type': 'application/problem+json',
+      ...(status === 429 ? { 'retry-after': String(MEMBER_LIMIT_RETRY_AFTER_SEC) } : {}),
+    },
+  );
+}
+
+/** Roster data names members: never stored by the browser or a proxy. */
+const NO_STORE = 'private, no-store';
 
 /* ------------------------------------------------------------------ */
 /*  Factory                                                            */
@@ -323,6 +405,59 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
           return problem422StartsAtInPast(c);
         case 'not_found':
           return problem404(c, `class ${id} not found`);
+      }
+    },
+  );
+
+  /* ------------------------------ GET /:id/roster --------------- */
+  router.get(
+    '/:id/roster',
+    requireRole('admin', 'coach'),
+    zValidator('param', ClassRosterParamsSchema),
+    async (c) => {
+      traceOperation(c, 'classes.roster');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const { id } = readValidated<ClassRosterParams>(c, 'param');
+      const outcome = await deps.getRoster(id, claims);
+      switch (outcome.kind) {
+        case 'ok':
+          return c.json(outcome.roster, 200, { 'cache-control': NO_STORE });
+        case 'forbidden':
+          return problemNotClassCoach(c);
+        case 'not_found':
+          return problem404(c, `class ${id} not found`);
+      }
+    },
+  );
+
+  /* ------------------ POST /:id/roster/:reservationId/check-in --- */
+  router.post(
+    '/:id/roster/:reservationId/check-in',
+    requireRole('admin', 'coach'),
+    checkinOperatorLimit(),
+    projectUserIdFromClaims(),
+    zValidator('param', RosterCheckInParamsSchema),
+    ...(idem ? [idempotency(idem)] : []),
+    async (c) => {
+      traceOperation(c, 'classes.roster-check-in');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const { id, reservationId } = readValidated<RosterCheckInParams>(c, 'param');
+      const outcome = await deps.markAttendance(id, reservationId, claims);
+      switch (outcome.kind) {
+        case 'checked_in':
+          return c.json(outcome.entry, 200, { 'cache-control': NO_STORE });
+        case 'forbidden':
+          return problemNotClassCoach(c);
+        case 'not_found':
+          return problem404(c, `reservation ${reservationId} not found on class ${id}`);
+        case 'fail':
+          return problemRosterCheckIn(c, outcome.reason);
       }
     },
   );

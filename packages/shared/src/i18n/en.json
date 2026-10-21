@@ -1130,6 +1130,87 @@
         "emptyMine": "No class is assigned to you in this period.",
         "emptyAll": "No class at the studio in this period."
       }
+    },
+    "roster": {
+      "openRoster": "Roster",
+      "openRosterFor": "Open the roster of {title}",
+      "coach": "Coach: {name}",
+      "noCoach": "No coach assigned",
+      "stats": {
+        "booked": "Booked",
+        "checkedIn": "Checked in",
+        "waitlist": "Waitlist"
+      },
+      "confirmed": {
+        "title": "Booked members",
+        "empty": "Nobody is booked on this class yet."
+      },
+      "waitlist": {
+        "title": "Waitlist",
+        "empty": "Nobody is waiting for a seat."
+      },
+      "columns": {
+        "member": "Member",
+        "bookedAt": "Booked",
+        "attendance": "Attendance",
+        "position": "Position"
+      },
+      "checkIn": "Mark present",
+      "checkInFor": "Mark {name} present",
+      "checkedInAt": "Present at {time}",
+      "notCheckedIn": "Not checked in",
+      "checkedInToast": "{name} is checked in.",
+      "notConfirmed": "This booking is no longer confirmed. The roster was refreshed.",
+      "window": {
+        "before": "Attendance opens at {time}, 30 minutes before the class.",
+        "open": "Mark members present as they arrive. Kiosk scans show up here too.",
+        "closed": "Attendance closed on {date}."
+      },
+      "forbidden": "This class is assigned to another coach. Only its coach and the studio admins see its roster.",
+      "notFound": "This class does not exist or was deleted.",
+      "loadError": "The roster could not load."
+    },
+    "memberFile": {
+      "open": "Open member file",
+      "openFor": "Open the file of {name}",
+      "memberSince": "Member since {date}",
+      "stats": {
+        "checkIns": "Check-ins",
+        "lastCheckIn": "Last check-in",
+        "never": "Never",
+        "noShows": "No-shows",
+        "cancellations": "Cancellations"
+      },
+      "upcoming": {
+        "title": "Upcoming bookings",
+        "empty": "No upcoming booking."
+      },
+      "past": {
+        "title": "History",
+        "empty": "No past booking yet.",
+        "latest": "latest {count}"
+      },
+      "columns": {
+        "date": "Date",
+        "class": "Class",
+        "status": "Status"
+      },
+      "status": {
+        "confirmed": "Booked",
+        "waitlist": "Waitlist",
+        "cancelled": "Cancelled",
+        "no_show": "No-show",
+        "attended": "Present",
+        "missed": "Not checked in"
+      },
+      "consents": {
+        "title": "Consents",
+        "granted": "Yes",
+        "refused": "No"
+      },
+      "forbidden": "Only the studio admins can open a member file.",
+      "notFound": "This member does not exist in your studio.",
+      "loadError": "The member file could not load."
     }
   },
   "mobile": {
