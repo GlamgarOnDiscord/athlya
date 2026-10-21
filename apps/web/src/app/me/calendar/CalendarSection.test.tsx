@@ -83,7 +83,8 @@ describe('<CalendarSection />', () => {
     const get = routes(async () => Promise.reject(new ApiServerError('not configured', 503)));
     render(<CalendarSection client={clientWith(get)} t={t} />);
 
-    expect((await screen.findByRole('status')).textContent).toBe(t('calendar.sync.unavailable'));
+    const unavailable = await screen.findByText(t('calendar.sync.unavailable'));
+    expect(unavailable.getAttribute('role')).toBe('status');
     expect(screen.queryByLabelText(t('calendar.sync.urlLabel'))).toBeNull();
   });
 });
