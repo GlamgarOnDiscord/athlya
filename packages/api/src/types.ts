@@ -418,8 +418,16 @@ export interface AthlyaBindings {
    * `export_download_not_configured` instead of completing.
    */
   readonly EXPORT_URL_SIGNING_KEY?: string;
-  /** Public origin of this API, used to build export download links. */
+  /** Public origin of this API, used to build export download and calendar feed links. */
   readonly API_PUBLIC_URL?: string;
+  /**
+   * HMAC key (>= 32 chars) signing the members' iCalendar feed tokens
+   * (issue #719, `docs/architecture/calendar-feed.md`). Set with
+   * `wrangler secret put CALENDAR_FEED_SIGNING_KEY --env <env>` on the
+   * gateway only; never committed. Rotating it revokes every feed.
+   * Without it, `/v1/calendar/*` answers 503 `calendar_feed_not_configured`.
+   */
+  readonly CALENDAR_FEED_SIGNING_KEY?: string;
 
   /**
    * Static feature-flag catalogue read by `feature-flags.ts`, as JSON:

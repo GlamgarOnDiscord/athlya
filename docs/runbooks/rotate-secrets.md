@@ -3,17 +3,18 @@
 Rotation procedure for every secret type used by the Athlya API workers.
 Run on the schedule below or immediately on suspected compromise.
 
-| Secret group            | Recommended cycle                  | Emergency                          |
-| ----------------------- | ---------------------------------- | ---------------------------------- |
-| JWT signing keys        | 90 days                            | Immediate on any compromise signal |
-| DB_URL (app)            | 180 days                           | Immediate                          |
-| CRON_DB_URL             | 180 days                           | Immediate                          |
-| MIGRATION_DB_URL        | After each major migration window  | Immediate                          |
-| Redis (REDIS_URL/TOKEN) | 180 days                           | Immediate                          |
-| Stripe keys             | Per Stripe recommendation (annual) | Immediate                          |
-| SENTRY_DSN              | Annual                             | Immediate                          |
-| TURNSTILE_SECRET        | Annual                             | Immediate                          |
-| MISTRAL_API_KEY         | Annual                             | Immediate                          |
+| Secret group              | Recommended cycle                  | Emergency                          |
+| ------------------------- | ---------------------------------- | ---------------------------------- |
+| JWT signing keys          | 90 days                            | Immediate on any compromise signal |
+| DB_URL (app)              | 180 days                           | Immediate                          |
+| CRON_DB_URL               | 180 days                           | Immediate                          |
+| MIGRATION_DB_URL          | After each major migration window  | Immediate                          |
+| Redis (REDIS_URL/TOKEN)   | 180 days                           | Immediate                          |
+| Stripe keys               | Per Stripe recommendation (annual) | Immediate                          |
+| SENTRY_DSN                | Annual                             | Immediate                          |
+| TURNSTILE_SECRET          | Annual                             | Immediate                          |
+| MISTRAL_API_KEY           | Annual                             | Immediate                          |
+| CALENDAR_FEED_SIGNING_KEY | Only on compromise (revokes feeds) | Immediate                          |
 
 ---
 
@@ -217,6 +218,32 @@ done
 
 To switch the coach off without touching the key, set the flag to `false` in
 `FEATURE_FLAGS_JSON` ([`feature-flags.md`](../operations/feature-flags.md)).
+
+---
+
+## CALENDAR_FEED_SIGNING_KEY
+
+HMAC key signing the members' iCalendar subscription URLs (`/v1/calendar/*`, issue #719,
+[`calendar-feed.md`](../architecture/calendar-feed.md)). Set on the gateway only (`wrangler.toml`).
+Optional: `verify-secrets.mjs` only warns when it is missing, and both calendar routes then
+answer 503 `calendar_feed_not_configured`. A leaked key lets anyone forge a feed URL for any
+member whose id and studio id they know, which exposes that member's class titles and times.
+
+**Rotating it revokes every feed at once**: each subscribed calendar stops refreshing (404) until
+the member copies the new URL from `/me`. Do not rotate it on a schedule, only on a suspected leak.
+To revoke one member's feed, bump their `credentials_version` instead (logout from all devices,
+password reset), which leaves the other feeds alone.
+
+```bash
+# 1. Generate a new key (>= 32 chars) and set it on the gateway of each env
+#    (prompted value, never on the command line):
+openssl rand -base64 48
+for env in staging production; do
+  pnpm --filter @athlya/api exec wrangler secret put CALENDAR_FEED_SIGNING_KEY --env $env
+done
+# 2. From a member account: GET /v1/calendar/feed-url, then fetch the returned httpsUrl
+#    (200 text/calendar); an URL issued before the rotation now answers 404.
+```
 
 ---
 

@@ -113,6 +113,16 @@ describe('<UpcomingBookings />', () => {
     ).toHaveLength(1);
   });
 
+  it('offers "add to calendar" on a confirmed booking only', async () => {
+    await renderBookings(client([LATER, SOON]));
+
+    const groups = screen.getAllByRole('group', { name: t('calendar.add.label') });
+    expect(groups).toHaveLength(1);
+    const ics = screen.getByRole('link', { name: /^Fichier \.ics pour « Yoga Vinyasa »$/u });
+    expect(ics.getAttribute('download')).toBe('athlya-2026-10-21-class-r1.ics');
+    expect(decodeURIComponent(ics.getAttribute('href') ?? '')).toContain('UID:reservation-r1@');
+  });
+
   it('cancels after a confirmation, removes the row and announces it', async () => {
     const api = client([LATER]);
     await renderBookings(api);

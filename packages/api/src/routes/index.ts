@@ -43,6 +43,7 @@
 import { buildAuditRouter, type AuditDeps } from './audit.js';
 import { buildAuthRouter, type AuthDeps } from './auth.js';
 import { buildBillingRouter, type BillingDeps } from './billing.js';
+import { buildCalendarRouter, type CalendarDeps } from './calendar.js';
 import { buildCapacityRouter } from './capacity.js';
 import { buildCheckinsRouter, type CheckinsDeps } from './checkins.js';
 import {
@@ -68,6 +69,7 @@ export {
   buildAuditRouter,
   buildAuthRouter,
   buildBillingRouter,
+  buildCalendarRouter,
   buildCapacityRouter,
   buildCheckinsRouter,
   buildClassesRouter,
@@ -88,6 +90,7 @@ export type {
   AuditDeps,
   AuthDeps,
   BillingDeps,
+  CalendarDeps,
   CheckinsDeps,
   ClassesDeps,
   ClassPlanningDeps,
@@ -145,6 +148,9 @@ export function mountDomainRoutes(app: Hono<HonoEnv>, deps: DomainDeps): Hono<Ho
   app.route('/v1/billing', buildBillingRouter(deps.billing));
   if (deps.programs !== undefined) {
     app.route('/v1/programs', buildProgramsRouter(deps.programs));
+  }
+  if (deps.calendar !== undefined) {
+    app.route('/v1/calendar', buildCalendarRouter(deps.calendar));
   }
   return app;
 }

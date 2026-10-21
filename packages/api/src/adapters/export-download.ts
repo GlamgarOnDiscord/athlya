@@ -25,13 +25,15 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
   );
 }
 
-function toBase64Url(bytes: Uint8Array): string {
+/** Unpadded base64url (RFC 4648 §5) of `bytes`. */
+export function toBase64Url(bytes: Uint8Array): string {
   let binary = '';
   for (const b of bytes) binary += String.fromCharCode(b);
   return btoa(binary).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '');
 }
 
-function fromBase64Url(value: string): Uint8Array<ArrayBuffer> | null {
+/** Decode unpadded base64url; `null` when `value` is not valid base64url. */
+export function fromBase64Url(value: string): Uint8Array<ArrayBuffer> | null {
   // A length of 1 mod 4 is never valid base64 and makes `atob` throw.
   if (!/^[A-Za-z0-9_-]*$/u.test(value) || value.length % 4 === 1) return null;
   const padded = value.replace(/-/gu, '+').replace(/_/gu, '/');
