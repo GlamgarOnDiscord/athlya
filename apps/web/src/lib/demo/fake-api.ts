@@ -40,7 +40,11 @@ export const WEB_DEMO_STORAGE_KEY = 'athlya.demo.web';
 /** Opaque, never a JWT: only the fake API reads it. */
 export const DEMO_ACCESS_TOKEN = 'demo-session-member';
 
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+/**
+ * Lower than the real API's 2 MiB: the avatar is saved as a base64 data URL
+ * inside the tab's `sessionStorage` state, whose quota is about 5 MB.
+ */
+const MAX_AVATAR_BYTES = 512 * 1024;
 
 export interface RouteResult {
   readonly state: WebDemoState;

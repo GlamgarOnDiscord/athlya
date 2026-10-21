@@ -26,7 +26,7 @@ export interface DemoModeEnv {
 function isProductionApiUrl(raw: string | undefined): boolean {
   if (raw === undefined || raw === '') return false;
   try {
-    return new URL(raw).hostname.toLowerCase() === PRODUCTION_API_HOST;
+    return new URL(raw.trim()).hostname.toLowerCase().replace(/\.$/u, '') === PRODUCTION_API_HOST;
   } catch {
     return false;
   }
@@ -38,7 +38,7 @@ function isProductionApiUrl(raw: string | undefined): boolean {
  */
 export function resolveDemoMode(env: DemoModeEnv): boolean {
   if (env.NEXT_PUBLIC_DEMO_MODE !== '1') return false;
-  if (env.APP_ENV === 'production') {
+  if (env.APP_ENV?.trim().toLowerCase() === 'production') {
     throw new Error(
       'NEXT_PUBLIC_DEMO_MODE=1 is refused when APP_ENV=production: the demo mode never ships to production.',
     );

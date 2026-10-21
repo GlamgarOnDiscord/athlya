@@ -56,6 +56,23 @@ describe('routeWebDemo', () => {
     expect(logout.state.signedIn).toBe(false);
   });
 
+  it('caps the avatar so the saved demo state stays within sessionStorage', () => {
+    const state = signedIn();
+    const upload = (size: number) =>
+      routeWebDemo(
+        state,
+        req('PUT', '/v1/members/me/avatar', {
+          contentType: 'image/png',
+          bytes: new Uint8Array(size),
+        }),
+        NOW,
+      );
+    expect(upload(512 * 1024 + 1).response.status).toBe(413);
+    const accepted = upload(1024);
+    expect(accepted.response.status).toBe(200);
+    expect(accepted.state.member.avatarUrl).toMatch(/^data:image\/png;base64,/u);
+  });
+
   it('lists classes in the requested range with the remaining seats', () => {
     const state = signedIn();
     const from = NOW.toISOString();

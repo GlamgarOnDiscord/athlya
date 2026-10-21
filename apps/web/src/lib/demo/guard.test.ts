@@ -33,6 +33,23 @@ describe('resolveDemoMode', () => {
     );
   });
 
+  it('refuses APP_ENV=production whatever its case or padding', () => {
+    for (const appEnv of ['Production', 'PRODUCTION', ' production ']) {
+      expect(() => resolveDemoMode({ NEXT_PUBLIC_DEMO_MODE: '1', APP_ENV: appEnv })).toThrow(
+        /APP_ENV=production/u,
+      );
+    }
+  });
+
+  it('refuses the production API origin written with a trailing dot', () => {
+    expect(() =>
+      resolveDemoMode({
+        NEXT_PUBLIC_DEMO_MODE: '1',
+        NEXT_PUBLIC_API_URL: 'https://api.athlya.app./v1',
+      }),
+    ).toThrow(/production API/u);
+  });
+
   it('refuses the production API origin, whatever its path or case', () => {
     for (const url of [
       'https://api.athlya.app',
