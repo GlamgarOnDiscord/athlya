@@ -66,6 +66,7 @@ import { registerErrorHandlers } from './middleware/problem-details.js';
 import {
   ADMIN_STATS_BUDGET,
   AUTH_BUDGET,
+  CALENDAR_FEED_BUDGET,
   EXPENSIVE_READ_BUDGET,
   FORGOT_PASSWORD_BUDGET,
   isAdminStatsGetPath,
@@ -744,6 +745,11 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
     keyPrefix: 'rl:ip:progression-cardio',
     userKeyPrefix: 'rl:user:progression-cardio',
   });
+  const calendarFeedReadLimiter = rateLimit({
+    ...CALENDAR_FEED_BUDGET,
+    keyPrefix: 'rl:ip:calendar',
+    userKeyPrefix: 'rl:user:calendar',
+  });
   const adminStatsReadLimiter = rateLimit(ADMIN_STATS_BUDGET);
 
   // `guardLimiter` — mutations fail-closed, reads fail-open (issue #65).
@@ -854,6 +860,10 @@ export function buildBaseApp(options: BaseAppOptions = {}): Hono<HonoEnv> {
     guardExpensiveReadLimiter(cardioProgressionReadLimiter, 'prefix') as Parameters<
       typeof app.use
     >[1],
+  );
+  app.use(
+    '/v1/calendar/*',
+    guardExpensiveReadLimiter(calendarFeedReadLimiter, 'prefix') as Parameters<typeof app.use>[1],
   );
 
   // 6. Body-size limit — Sprint 1 / Slice 1.2. Cloudflare's free

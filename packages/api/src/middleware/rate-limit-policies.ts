@@ -44,6 +44,17 @@ export const MEMBERS_LIST_BUDGET: RateLimitBudget = {
   windowSec: 60,
 };
 
+/**
+ * Issue #719: member calendar feed. Above the expensive-read budget
+ * because calendar providers poll from shared fetcher IPs; a 429 only
+ * delays a calendar refresh, it never loses data.
+ */
+export const CALENDAR_FEED_BUDGET: RateLimitBudget = {
+  userLimit: 60,
+  ipLimit: 60,
+  windowSec: 60,
+};
+
 export const ADMIN_STATS_BUDGET: RateLimitBudget = {
   userLimit: 10,
   ipLimit: 5,
@@ -311,6 +322,17 @@ export const RATE_LIMIT_COVERAGE: readonly RateLimitCoverageRow[] = [
       'Issue #683 — cardio series over up to a year of sessions; gateway mount pre-jwtAuth → IP bucket under its own rl:ip:progression-cardio namespace',
   },
   {
+    id: 'calendar-feed',
+    route: '/v1/calendar/*',
+    methods: 'GET',
+    budget: CALENDAR_FEED_BUDGET,
+    failPolicy: 'fail-closed',
+    bucket: 'ip',
+    wiredIn: 'worker.ts',
+    notes:
+      'Issue #719: public signed iCalendar feed and its URL; gateway mount pre-jwtAuth, IP bucket under its own rl:ip:calendar namespace',
+  },
+  {
     id: 'admin-stats',
     route: '/admin/{dlq,outbox,jwt}/stats|state',
     methods: 'GET',
@@ -385,6 +407,7 @@ export const REQUIRED_FAIL_CLOSED_IDS = [
   'audit-list',
   'progression-read',
   'progression-cardio-read',
+  'calendar-feed',
   'admin-stats',
   'checkin-post',
   'checkin-token',

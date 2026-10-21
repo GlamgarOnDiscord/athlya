@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, type ReactElement } from 'reac
 
 import { Button } from '@/components/ui/button';
 import { Card, CardTitle } from '@/components/ui/card';
+import { AddToCalendar } from '@/components/calendar/AddToCalendar';
 import { cn } from '@/lib/utils';
 
 import { capacityView } from './schedule';
@@ -40,7 +41,9 @@ export interface ClassCardProps {
  * One class of the `/classes` day list: start time and duration first,
  * then the title, the capacity (text and bar say the same thing: seats
  * taken out of the capacity) and the action. A held place replaces the
- * action with its state, in text: booked, or the waitlist position.
+ * action with its state, in text: booked, or the waitlist position. A
+ * confirmed seat whose booking id is known also offers "Add to calendar",
+ * whose event shares its UID with the member's calendar feed.
  */
 export function ClassCard({
   classInfo,
@@ -161,6 +164,19 @@ export function ClassCard({
               </Button>
             )}
           </div>
+
+          {booking?.kind === 'confirmed' && booking.reservationId !== undefined ? (
+            <AddToCalendar
+              event={{
+                classId: id,
+                reservationId: booking.reservationId,
+                title,
+                startsAt,
+                durationMin,
+              }}
+              t={t}
+            />
+          ) : null}
 
           {error !== null ? (
             <span

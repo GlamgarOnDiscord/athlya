@@ -136,7 +136,9 @@ reservations Worker, for the AI coach behind the `ai-coach` flag (OFF by default
 coach answers 503 `coach_not_configured` once the flag is on. `MISTRAL_BASE_URL` (optional var, `https:` on a `mistral.ai`
 host only, otherwise the coach answers 503 `coach_not_configured`) points the coach at a regional
 Mistral endpoint ([`ai-coach.md`](../compliance/ai-coach.md)). The flag catalogue itself is the
-optional `FEATURE_FLAGS_JSON` var or secret ([`feature-flags.md`](../operations/feature-flags.md)).
+optional `FEATURE_FLAGS_JSON` var or secret ([`feature-flags.md`](../operations/feature-flags.md)). `CALENDAR_FEED_SIGNING_KEY` on the gateway only signs the members' calendar feed URLs; without
+it `/v1/calendar/*` answers 503 `calendar_feed_not_configured`
+([`calendar-feed.md`](../architecture/calendar-feed.md)).
 
 The reservations Worker also serves `/v1/me/*` (`GET /v1/me/progression`,
 issue #639) from the same members deps, through its own

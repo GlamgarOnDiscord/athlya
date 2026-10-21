@@ -20,7 +20,20 @@ import path from 'node:path';
 
 import type { NextConfig } from 'next';
 
+import { resolveDemoMode } from './src/lib/demo/guard';
+
 const workspaceRoot = path.resolve(process.cwd(), '..', '..');
+
+/**
+ * Demo mode (issue #750): throws for a production build with the flag on.
+ * Re-exported through `env` so `process.env.NEXT_PUBLIC_DEMO_MODE` is
+ * always inlined, `'0'` included, and the demo branches fold away.
+ */
+const demoMode = resolveDemoMode({
+  NEXT_PUBLIC_DEMO_MODE: process.env['NEXT_PUBLIC_DEMO_MODE'],
+  APP_ENV: process.env['APP_ENV'],
+  NEXT_PUBLIC_API_URL: process.env['NEXT_PUBLIC_API_URL'],
+});
 
 /**
  * Powerful APIs stay off everywhere. The check-in kiosk is the single
@@ -49,6 +62,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Sprint-3 SP3.1 (S6-004) — drop `X-Powered-By: Next.js`.
   poweredByHeader: false,
+  env: {
+    NEXT_PUBLIC_DEMO_MODE: demoMode ? '1' : '0',
+  },
   turbopack: { root: workspaceRoot },
   transpilePackages: ['@athlya/shared'],
   async headers() {

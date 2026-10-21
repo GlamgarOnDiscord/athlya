@@ -106,10 +106,20 @@
       "import": "./dist/sse.js",
       "default": "./src/sse.ts"
     },
+    "./schedule": {
+      "types": "./src/schedule.ts",
+      "import": "./dist/schedule.js",
+      "default": "./src/schedule.ts"
+    },
     "./coach-stream": {
       "types": "./src/coach-stream.ts",
       "import": "./dist/coach-stream.js",
       "default": "./src/coach-stream.ts"
+    },
+    "./calendar": {
+      "types": "./src/calendar.ts",
+      "import": "./dist/calendar.js",
+      "default": "./src/calendar.ts"
     }
   },
   "files": [

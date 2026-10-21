@@ -28,7 +28,7 @@ import { useAuth } from '../../../lib/auth/AuthContext';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
 
-const PLAN_KEYS: ReadonlyArray<'free' | 'pro'> = ['free', 'pro'];
+import { PLAN_KEYS, formatPlanPrice, planName } from './plan-display';
 
 interface CheckoutResponse {
   readonly checkoutUrl: string;
@@ -92,10 +92,10 @@ export function BillingPlansClient(): ReactElement {
         {PLAN_KEYS.map((key) => (
           <Card key={key}>
             <CardHeader>
-              <CardTitle>{t(`studio.billing.plans.${key}.title`)}</CardTitle>
+              <CardTitle>{planName(key, t)}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-              <p className="text-2xl font-semibold">{t(`studio.billing.plans.${key}.price`)}</p>
+              <p className="text-2xl font-semibold">{formatPlanPrice(key, locale, t)}</p>
               <p className="text-sm text-muted-foreground">
                 {t(`studio.billing.plans.${key}.body`)}
               </p>
@@ -114,7 +114,7 @@ export function BillingPlansClient(): ReactElement {
                 </Button>
               ) : (
                 <Button variant="outline" disabled>
-                  {t(`studio.billing.plans.${key}.title`)}
+                  {planName(key, t)}
                 </Button>
               )}
             </CardFooter>
