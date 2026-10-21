@@ -53,6 +53,7 @@ import { buildProgramsRouter, type ProgramsDeps } from './programs.js';
 import { buildReservationsRouter, type ReservationsDeps } from './reservations.js';
 import { buildSessionsRouter, type SessionsDeps } from './sessions.js';
 import { buildStudiosRouter, type StudiosDeps } from './studios.js';
+import { buildTeamRouter, type TeamDeps } from './team.js';
 
 import type { DomainDeps } from '../domain-deps.js';
 import type { HonoEnv } from '../types.js';
@@ -72,6 +73,7 @@ export {
   buildReservationsRouter,
   buildSessionsRouter,
   buildStudiosRouter,
+  buildTeamRouter,
 };
 export { buildDefaultDeps, buildLazyDomainDeps } from '../domain-deps.js';
 export type { DomainDeps } from '../domain-deps.js';
@@ -88,6 +90,7 @@ export type {
   ReservationsDeps,
   SessionsDeps,
   StudiosDeps,
+  TeamDeps,
 };
 
 /* ------------------------------------------------------------------ */
@@ -120,6 +123,9 @@ export function mountDomainRoutes(app: Hono<HonoEnv>, deps: DomainDeps): Hono<Ho
   }
   if (deps.checkins !== undefined) {
     app.route('/v1/checkins', buildCheckinsRouter(deps.checkins));
+  }
+  if (deps.team !== undefined) {
+    app.route('/v1/studios/me/team', buildTeamRouter(deps.team));
   }
   app.route('/v1/studios', buildStudiosRouter(deps.studios));
   app.route('/v1/billing', buildBillingRouter(deps.billing));

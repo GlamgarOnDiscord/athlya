@@ -10,8 +10,8 @@
  *   | PUT    | /me/avatar        | jwtAuth → handler (raw binary body)                                |
  *   | PATCH  | /me/consents      | jwtAuth → projectUserId → zValidator(body) → idempotency → handler |
  *   | POST   | /me/export        | jwtAuth → projectUserId → idempotency → handler (returns 202)      |
- *   | GET    | /                 | jwtAuth → requireRole('admin','coach') → zValidator(query) → handler |
- *   | GET    | /:id              | jwtAuth → requireRole('admin') → zValidator(param) → handler        |
+ *   | GET    | /                 | jwtAuth → requireCapability('members.list') → zValidator(query) → handler |
+ *   | GET    | /:id              | jwtAuth → requireCapability('members.file') → zValidator(param) → handler |
  *
  * Requirements:
  *   • 3.1  — `GET /me` returns the authenticated member's profile.
@@ -32,6 +32,7 @@
  *            shared middleware chain.
  */
 
+import { isStaffRole } from '@athlya/shared/roles';
 import {
   MemberFileParamsSchema,
   UpdateConsentsRequestSchema,
@@ -56,13 +57,14 @@ import {
   projectUserIdFromClaims,
   readValidated,
   traceOperation,
-  requireRole,
+  requireCapability,
 } from './helpers.js';
 
 import type { MeDeps } from './me.js';
 import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
+import type { StaffRole } from '@athlya/shared/roles';
 import type {
   MemberFileParams,
   MemberFileResponse,
@@ -183,7 +185,7 @@ export interface MembersDeps extends MeDeps {
   ): Promise<ExportDownloadResult>;
   listMembersByStudio(
     studioId: string,
-    requesterRole: 'admin' | 'coach',
+    requesterRole: StaffRole,
     opts: ListMembersQuery,
     claims: AuthClaims,
   ): Promise<MembersPageView>;
@@ -474,10 +476,10 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
     },
   );
 
-  /* ------------------------------ GET / (admin / coach) ---------- */
+  /* ------------------------------ GET / (staff) ------------------ */
   router.get(
     '/',
-    requireRole('admin', 'coach'),
+    requireCapability('members.list'),
     zValidator('query', ListMembersQuerySchema),
     async (c) => {
       traceOperation(c, 'members.list-by-studio');
@@ -485,10 +487,10 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
       if (claims === undefined) {
         throw new Error('authClaims unexpectedly missing after jwtAuth');
       }
-      if (claims.role !== 'admin' && claims.role !== 'coach') {
-        // requireRole already returned 403; this is defense in
+      if (!isStaffRole(claims.role)) {
+        // requireCapability already returned 403; this is defense in
         // depth in case the middleware is rearranged.
-        return problem403(c, 'listing studio members requires admin or coach role');
+        return problem403(c, 'listing studio members requires a staff role');
       }
       const query = readValidated<ListMembersQuery>(c, 'query');
       const page = await deps.listMembersByStudio(claims.studioId, claims.role, query, claims);
@@ -496,12 +498,12 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
     },
   );
 
-  /* ------------------------------ GET /:id (admin) --------------- */
+  /* ------------------------------ GET /:id (members.file) -------- */
   // Registered after every `/me` route: those paths are matched first, and
   // the uuid param schema rejects `me` anyway.
   router.get(
     '/:id',
-    requireRole('admin'),
+    requireCapability('members.file'),
     zValidator('param', MemberFileParamsSchema),
     async (c) => {
       traceOperation(c, 'members.file');

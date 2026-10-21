@@ -289,6 +289,8 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
     }),
     logout: vi.fn(async () => undefined),
     logoutAll: vi.fn(async () => undefined),
+    listSessions: vi.fn(async () => []),
+    revokeSession: vi.fn(async () => false),
     deleteMe: vi.fn(async () => undefined),
     requestPasswordReset: vi.fn(async () => undefined),
     confirmPasswordReset: vi.fn(async () => undefined),

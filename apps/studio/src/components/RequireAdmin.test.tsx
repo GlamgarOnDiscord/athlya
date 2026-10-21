@@ -1,17 +1,19 @@
 /**
- * The dashboard gate: admins see every page; coaches their home, their
- * schedule, the members directory and the kiosk (the API opens
- * `GET /v1/classes`, `GET /v1/members` and `POST /v1/checkins` to them);
- * members none.
+ * The dashboard gate: admins see every page; managers all but billing and
+ * branding; the front desk and coaches their home, the schedule, the
+ * members directory and the kiosk; members none. The page table itself is
+ * covered by `lib/auth/console-routes.test.ts`.
  */
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { isCoachRoute, RequireAdmin } from './RequireAdmin';
+import { RequireAdmin } from './RequireAdmin';
+
+import type { Role } from '@athlya/shared/roles';
 
 const push = vi.fn();
 let pathname = '/dashboard';
-let role: 'admin' | 'coach' | 'member' = 'admin';
+let role: Role = 'admin';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
@@ -46,37 +48,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-});
-
-describe('isCoachRoute', () => {
-  it('matches the coach pages and their sub-paths', () => {
-    expect(isCoachRoute('/dashboard')).toBe(true);
-    expect(isCoachRoute('/dashboard/planning')).toBe(true);
-    expect(isCoachRoute('/dashboard/members')).toBe(true);
-    expect(isCoachRoute('/dashboard/checkin')).toBe(true);
-    expect(isCoachRoute('/dashboard/checkin/')).toBe(true);
-  });
-
-  it('opens a class roster but not a member file', () => {
-    expect(isCoachRoute('/dashboard/classes/cccccccc-cccc-4ccc-8ccc-cccccccccc01')).toBe(true);
-    expect(isCoachRoute('/dashboard/classes/c1/edit')).toBe(false);
-    expect(isCoachRoute('/dashboard/classes/new')).toBe(false);
-    expect(isCoachRoute('/dashboard/members/11111111-1111-4111-8111-111111111111')).toBe(false);
-  });
-
-  it('matches the home exactly, so it never opens the admin pages below it', () => {
-    for (const admin of [
-      '/dashboard/classes',
-      '/dashboard/programs',
-      '/dashboard/branding',
-      '/dashboard/billing',
-      '/dashboard/audit',
-      '/dashboard/checkins',
-      '/dashboard/planning-admin',
-    ]) {
-      expect(isCoachRoute(admin)).toBe(false);
-    }
-  });
 });
 
 describe('<RequireAdmin />', () => {
@@ -117,6 +88,29 @@ describe('<RequireAdmin />', () => {
       expect(push).toHaveBeenCalledWith('/dashboard');
     },
   );
+
+  it.each<[Role, string]>([
+    ['manager', '/dashboard/billing'],
+    ['manager', '/dashboard/branding'],
+    ['accueil', '/dashboard/classes'],
+    ['accueil', '/dashboard/team'],
+  ])('sends a %s from %s to the console home', (who, path) => {
+    role = who;
+    pathname = path;
+    renderGate();
+    expect(screen.queryByText('dashboard content')).toBeNull();
+    expect(push).toHaveBeenCalledWith('/dashboard');
+  });
+
+  it.each<[Role, string]>([
+    ['manager', '/dashboard/team'],
+    ['accueil', '/dashboard/members/11111111-1111-4111-8111-111111111111'],
+  ])('lets a %s open %s', (who, path) => {
+    role = who;
+    pathname = path;
+    renderGate();
+    expect(screen.getByText('dashboard content')).toBeDefined();
+  });
 
   it('keeps a member out of the kiosk, leaving it with a full page load', () => {
     role = 'member';

@@ -30,6 +30,7 @@
  * Related requirements: 21.1 (serialiser per model), 21.2 (deserialiser
  * per model), 21.3 (round-trip equivalence).
  */
+import type { Role } from '../roles.js';
 
 export type ConsentsWire = Readonly<{
   marketing: boolean;
@@ -54,7 +55,7 @@ export type UserWire = Readonly<{
   email: string;
   displayName: string;
   avatarUrl: string | null;
-  role: 'member' | 'coach' | 'admin';
+  role: Role;
   consents: ConsentsWire;
   createdAt: string;
   deletedAt: string | null;

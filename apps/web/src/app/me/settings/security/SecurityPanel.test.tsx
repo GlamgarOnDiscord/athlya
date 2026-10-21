@@ -21,8 +21,37 @@ import type { ApiClient } from '../../../../lib/api/client';
 
 const t = createTranslator('fr');
 
-function fakeClient(post: ApiClient['post']): ApiClient {
-  return { get: vi.fn(), post, patch: vi.fn(), put: vi.fn(), del: vi.fn(), postStream: vi.fn() };
+const SESSIONS = [
+  {
+    id: 'a'.repeat(32),
+    device: { browser: 'chrome', os: 'macos' },
+    createdAt: '2026-10-20T08:00:00.000Z',
+    lastSeenAt: '2026-10-21T08:00:00.000Z',
+    expiresAt: '2026-11-20T08:00:00.000Z',
+    current: true,
+  },
+  {
+    id: 'b'.repeat(32),
+    device: { browser: 'safari', os: 'ios' },
+    createdAt: '2026-10-01T08:00:00.000Z',
+    lastSeenAt: '2026-10-19T08:00:00.000Z',
+    expiresAt: '2026-11-01T08:00:00.000Z',
+    current: false,
+  },
+];
+
+function fakeClient(
+  post: ApiClient['post'],
+  del: ApiClient['del'] = vi.fn().mockResolvedValue(undefined),
+): ApiClient {
+  return {
+    get: vi.fn().mockResolvedValue({ items: SESSIONS }),
+    post,
+    patch: vi.fn(),
+    put: vi.fn(),
+    del,
+    postStream: vi.fn(),
+  };
 }
 
 function renderPanel(client: ApiClient): void {
@@ -61,10 +90,32 @@ describe('<SecurityPanel />', () => {
     ).toHaveProperty('pathname', '/forgot-password');
   });
 
-  it('announces the sessions list as coming, without a control', () => {
+  it('lists the active sessions, this device marked and the others revocable', async () => {
     renderPanel(fakeClient(vi.fn()));
-    expect(screen.getByText(t('web.settings.security.sessions.title'))).toBeDefined();
-    expect(screen.getAllByText(t('web.settings.comingSoon'))).toHaveLength(1);
+    expect(await screen.findByText('Chrome sur macOS')).toBeDefined();
+    expect(screen.getByText('Safari sur iOS')).toBeDefined();
+    expect(screen.getByText(t('web.settings.security.sessions.current'))).toBeDefined();
+    expect(
+      screen.getAllByRole('button', { name: t('web.settings.security.sessions.revoke') }),
+    ).toHaveLength(1);
+    expect(screen.queryByText(t('web.settings.comingSoon'))).toBeNull();
+  });
+
+  it('revokes another session after a confirmation', async () => {
+    const del = vi.fn().mockResolvedValue(undefined);
+    renderPanel(fakeClient(vi.fn(), del));
+    fireEvent.click(
+      await screen.findByRole('button', { name: t('web.settings.security.sessions.revoke') }),
+    );
+    await act(async () => {
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: t('web.settings.security.sessions.revokeConfirm'),
+        }),
+      );
+    });
+    expect(del).toHaveBeenCalledWith(`/v1/auth/sessions/${'b'.repeat(32)}`);
+    expect(await screen.findByText(t('web.settings.security.sessions.revoked'))).toBeDefined();
   });
 
   it('signs out of this device and goes to the login page', async () => {

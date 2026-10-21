@@ -9,6 +9,7 @@
  *   • /v1/coach, /v1/coach/* — AI coach (Epic 21, `ai-coach` flag)
  *   • /v1/studios/*      — studio read/update
  *   • /v1/programs/*     — training programs, subscriptions, daily workout
+ *   • /v1/studios/me/team/*: studio team and invitations (issue #756)
  *   • /v1/sessions, /v1/sessions/* — workout session log and history (issue #652)
  *   • /v1/checkins, /v1/checkins/* — QR check-in token and kiosk scan (issue #654)
  *
@@ -32,6 +33,7 @@ import {
   defaultReservationsDeps,
   defaultSessionsDeps,
   defaultStudiosDeps,
+  defaultTeamDeps,
   lazyCheckinsDeps,
   lazyClassesDeps,
   lazyCoachDeps,
@@ -40,6 +42,7 @@ import {
   lazyReservationsDeps,
   lazySessionsDeps,
   lazyStudiosDeps,
+  lazyTeamDeps,
 } from '../domain-deps.js';
 import { installDomainScope } from '../domain-scope.js';
 import { buildCapacityRouter } from '../routes/capacity.js';
@@ -52,6 +55,7 @@ import { buildProgramsRouter } from '../routes/programs.js';
 import { buildReservationsRouter } from '../routes/reservations.js';
 import { buildSessionsRouter } from '../routes/sessions.js';
 import { buildStudiosRouter } from '../routes/studios.js';
+import { buildTeamRouter } from '../routes/team.js';
 
 export { ClassCapacityDO } from '../durable-objects/class-capacity.js';
 
@@ -88,6 +92,7 @@ const app = buildBaseApp({
         programs: defaultProgramsDeps(env),
         sessions: defaultSessionsDeps(env),
         checkins: defaultCheckinsDeps(env),
+        team: defaultTeamDeps(env),
       };
     });
     // Capacity WebSocket mounts first: /v1/classes/:classId/capacity/ws
@@ -101,6 +106,7 @@ const app = buildBaseApp({
     const members = lazyMembersDeps(() => resolve().members);
     base.route('/v1/members', buildMembersRouter(members));
     base.route('/v1/me', buildMeRouter(members));
+    base.route('/v1/studios/me/team', buildTeamRouter(lazyTeamDeps(() => resolve().team)));
     base.route('/v1/studios', buildStudiosRouter(lazyStudiosDeps(() => resolve().studios)));
     base.route('/v1/coach', buildCoachRouter(lazyCoachDeps(() => resolve().coach)));
     base.route('/v1/programs', buildProgramsRouter(lazyProgramsDeps(() => resolve().programs)));

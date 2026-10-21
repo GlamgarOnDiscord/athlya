@@ -110,6 +110,11 @@
       "types": "./src/coach-stream.ts",
       "import": "./dist/coach-stream.js",
       "default": "./src/coach-stream.ts"
+    },
+    "./roles": {
+      "types": "./src/roles.ts",
+      "import": "./dist/roles.js",
+      "default": "./src/roles.ts"
     }
   },
   "files": [

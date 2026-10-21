@@ -1,5 +1,7 @@
 /**
- * `/login` client form for the studio console (administrators and coaches).
+ * `/login` client form for the studio console (every staff role). Opened
+ * from a team invitation link, it accepts the invitation right after the
+ * sign-in and refreshes the session so the new role applies at once.
  *
  * Minimal copy of `apps/web/src/app/login/LoginForm.tsx` without the
  * Turnstile widget. The studio admin login is gated by the same API
@@ -24,15 +26,19 @@
 
 import { LoginRequestSchema } from '@athlya/shared/schemas/api';
 import { useRouter } from 'next/navigation';
-import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 import { TurnstileWidget, type TurnstileWidgetHandle } from '../../components/TurnstileWidget';
+import { useApiClient } from '../../lib/api/buildClient';
+import { ApiError } from '../../lib/api/client';
 import { useAuth } from '../../lib/auth/AuthContext';
+import { readInviteToken } from '../../lib/auth/invite';
 import { canUseStudio } from '../../lib/auth/studio-access';
+import { getAccessToken } from '../../lib/auth/token-store';
 import { getTurnstileSiteKey } from '../../lib/env';
 import { useLocale } from '../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../lib/i18n/t';
@@ -47,7 +53,14 @@ export function LoginForm({ nonce }: LoginFormProps): ReactElement {
   const { push } = useRouter();
   const locale = useLocale();
   const t = useMemo(() => createTranslator(locale), [locale]);
-  const { login, logout } = useAuth();
+  const { login, logout, refreshSession } = useAuth();
+  const client = useApiClient(getAccessToken);
+  // A team invitation link carries its token in the fragment (issue #756);
+  // read after mount so the server render and the first client render match.
+  const [invite, setInvite] = useState<string | null>(null);
+  useEffect(() => {
+    setInvite(readInviteToken(window.location.hash));
+  }, []);
 
   interface FormState {
     turnstileToken: string;
@@ -96,7 +109,29 @@ export function LoginForm({ nonce }: LoginFormProps): ReactElement {
           password: form.password,
           turnstileToken: consumedToken,
         });
-        if (!canUseStudio(session.user.role)) {
+        let role = session.user.role;
+        if (invite !== null) {
+          try {
+            await client.post('/v1/studios/me/team/invitations/accept', { token: invite });
+          } catch (err) {
+            await logout().catch(() => undefined);
+            setForm((s) => ({
+              ...s,
+              error: t(
+                err instanceof ApiError && err.status === 404
+                  ? 'studio.login.invite.invalid'
+                  : 'auth.errors.networkError',
+              ),
+            }));
+            turnstileRef.current?.reset();
+            return;
+          }
+          // The access token still carries the previous role.
+          role = (await refreshSession())?.role ?? role;
+          window.history.replaceState(null, '', window.location.pathname);
+          setInvite(null);
+        }
+        if (!canUseStudio(role)) {
           // A member is refused, and the session this sign-in just opened is closed
           // (a failed sign-out still clears the local token).
           await logout().catch(() => undefined);
@@ -122,7 +157,7 @@ export function LoginForm({ nonce }: LoginFormProps): ReactElement {
         setForm((s) => ({ ...s, pending: false }));
       }
     },
-    [form, siteKey, login, logout, push, t],
+    [form, siteKey, login, logout, refreshSession, client, invite, push, t],
   );
 
   return (
@@ -134,6 +169,11 @@ export function LoginForm({ nonce }: LoginFormProps): ReactElement {
       aria-busy={form.pending}
       noValidate
     >
+      {invite !== null ? (
+        <p className="rounded-lg border border-border bg-muted p-3 text-sm">
+          {t('studio.login.invite.notice')}
+        </p>
+      ) : null}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="login-email">{t('auth.login.email')}</Label>
         <Input

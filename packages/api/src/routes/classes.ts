@@ -6,10 +6,10 @@
  *   | Method | Path  | Chain                                                                    |
  *   |--------|-------|--------------------------------------------------------------------------|
  *   | GET    | /     | jwtAuth → zValidator(query: ListClassesQuerySchema) → handler            |
- *   | POST   | /     | jwtAuth → requireRole('admin') → projectUserId → zValidator(body) → idempotency → handler |
- *   | PATCH  | /:id  | jwtAuth → requireRole('admin') → projectUserId → zValidator(param + body) → idempotency → handler |
- *   | GET    | /:id/roster | jwtAuth → requireRole('admin', 'coach') → zValidator(param) → handler |
- *   | POST   | /:id/roster/:reservationId/check-in | jwtAuth → requireRole('admin', 'coach') → checkinLimit → projectUserId → zValidator(param) → idempotency → handler |
+ *   | POST   | /     | jwtAuth → requireCapability('classes.write') → projectUserId → zValidator(body) → idempotency → handler |
+ *   | PATCH  | /:id  | jwtAuth → requireCapability('classes.write') → projectUserId → zValidator(param + body) → idempotency → handler |
+ *   | GET    | /:id/roster | jwtAuth → requireCapability('roster.all', 'roster.own') → zValidator(param) → handler |
+ *   | POST   | /:id/roster/:reservationId/check-in | jwtAuth → requireCapability('roster.all', 'roster.own') → checkinLimit → projectUserId → zValidator(param) → idempotency → handler |
  *
  * Requirements:
  *   • 7.1, 7.3 — range-bounded listing via `ListClassesQuerySchema`
@@ -50,7 +50,7 @@ import {
   idempotency,
   projectUserIdFromClaims,
   readValidated,
-  requireRole,
+  requireCapability,
   traceOperation,
 } from './helpers.js';
 
@@ -351,7 +351,7 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
   /* ------------------------------ POST / (admin) ----------------- */
   router.post(
     '/',
-    requireRole('admin'),
+    requireCapability('classes.write'),
     projectUserIdFromClaims(),
     zValidator('json', CreateClassRequestSchema),
     ...(idem ? [idempotency(idem)] : []),
@@ -370,7 +370,7 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
   /* ------------------------------ PATCH /:id (admin) ------------- */
   router.patch(
     '/:id',
-    requireRole('admin'),
+    requireCapability('classes.write'),
     projectUserIdFromClaims(),
     zValidator('param', ClassIdParamSchema),
     zValidator('json', UpdateClassRequestSchema),
@@ -412,7 +412,7 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
   /* ------------------------------ GET /:id/roster --------------- */
   router.get(
     '/:id/roster',
-    requireRole('admin', 'coach'),
+    requireCapability('roster.all', 'roster.own'),
     zValidator('param', ClassRosterParamsSchema),
     async (c) => {
       traceOperation(c, 'classes.roster');
@@ -436,7 +436,7 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
   /* ------------------ POST /:id/roster/:reservationId/check-in --- */
   router.post(
     '/:id/roster/:reservationId/check-in',
-    requireRole('admin', 'coach'),
+    requireCapability('roster.all', 'roster.own'),
     checkinOperatorLimit(),
     projectUserIdFromClaims(),
     zValidator('param', RosterCheckInParamsSchema),
@@ -465,7 +465,7 @@ export function buildClassesRouter(deps: ClassesDeps): Hono<HonoEnv> {
   /* ------------------------------ DELETE /:id (admin) ----------- */
   router.delete(
     '/:id',
-    requireRole('admin'),
+    requireCapability('classes.write'),
     zValidator('param', ClassIdParamSchema),
     async (c) => {
       traceOperation(c, 'classes.delete');

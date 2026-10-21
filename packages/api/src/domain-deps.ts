@@ -21,6 +21,7 @@ import { buildProgramsDeps } from './adapters/programs-deps.js';
 import { buildClassesDeps, buildReservationsDeps } from './adapters/reservations-deps.js';
 import { buildSessionsDeps } from './adapters/sessions-deps.js';
 import { buildStudiosDeps } from './adapters/studios-deps.js';
+import { buildTeamDeps } from './adapters/team-deps.js';
 
 import type { AuditDeps } from './routes/audit.js';
 import type { AuthDeps } from './routes/auth.js';
@@ -33,6 +34,7 @@ import type { ProgramsDeps } from './routes/programs.js';
 import type { ReservationsDeps } from './routes/reservations.js';
 import type { SessionsDeps } from './routes/sessions.js';
 import type { StudiosDeps } from './routes/studios.js';
+import type { TeamDeps } from './routes/team.js';
 import type { AthlyaBindings } from './types.js';
 
 /** Per-request Cloudflare `cf` subset used for EU read-replica routing. */
@@ -69,6 +71,12 @@ export interface DomainDeps {
    * valid; production and the lazy facade always provide it.
    */
   readonly programs?: ProgramsDeps;
+  /**
+   * Studio team (issue #756), mounted under `/v1/studios/me/team`.
+   * Optional so partial test bundles stay valid; production and the
+   * lazy facade always provide it.
+   */
+  readonly team?: TeamDeps;
 }
 
 /* ------------------------------------------------------------------ */
@@ -115,6 +123,8 @@ export function lazyAuthDeps(resolve: () => AuthDeps): AuthDeps {
     refresh: forward('refresh'),
     logout: forward('logout'),
     logoutAll: forward('logoutAll'),
+    listSessions: forward('listSessions'),
+    revokeSession: forward('revokeSession'),
     deleteMe: forward('deleteMe'),
     requestPasswordReset: forward('requestPasswordReset'),
     confirmPasswordReset: forward('confirmPasswordReset'),
@@ -258,6 +268,17 @@ export function lazyCheckinsDeps(resolve: () => CheckinsDeps): CheckinsDeps {
   };
 }
 
+export function lazyTeamDeps(resolve: () => TeamDeps): TeamDeps {
+  const forward = forwarder(resolve);
+  return {
+    listTeam: forward('listTeam'),
+    invite: forward('invite'),
+    revokeInvitation: forward('revokeInvitation'),
+    setMemberRole: forward('setMemberRole'),
+    acceptInvitation: forward('acceptInvitation'),
+  };
+}
+
 /** Lazy facade over the full {@link DomainDeps} bundle (monolith gateway). */
 export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
   return {
@@ -289,6 +310,13 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
         throw new Error('buildLazyDomainDeps: checkins dependency is not wired');
       }
       return checkins;
+    }),
+    team: lazyTeamDeps(() => {
+      const team = resolve().team;
+      if (team === undefined) {
+        throw new Error('buildLazyDomainDeps: team dependency is not wired');
+      }
+      return team;
     }),
   };
 }
@@ -391,6 +419,8 @@ export function defaultAuthDeps(env: AthlyaBindings): AuthDeps {
         refresh: () => notImplemented('auth.refresh'),
         logout: () => notImplemented('auth.logout'),
         logoutAll: () => notImplemented('auth.logoutAll'),
+        listSessions: () => notImplemented('auth.listSessions'),
+        revokeSession: () => notImplemented('auth.revokeSession'),
         deleteMe: () => notImplemented('auth.deleteMe'),
         requestPasswordReset: () => notImplemented('auth.requestPasswordReset'),
         confirmPasswordReset: () => notImplemented('auth.confirmPasswordReset'),
@@ -501,6 +531,19 @@ export function defaultProgramsDeps(env: AthlyaBindings): ProgramsDeps {
       };
 }
 
+/** The team reads and writes PostgreSQL; without DB_URL it falls back to the stub bundle. */
+export function defaultTeamDeps(env: AthlyaBindings): TeamDeps {
+  return nonEmpty(env.DB_URL)
+    ? buildTeamDeps(env)
+    : {
+        listTeam: () => notImplemented('team.listTeam'),
+        invite: () => notImplemented('team.invite'),
+        revokeInvitation: () => notImplemented('team.revokeInvitation'),
+        setMemberRole: () => notImplemented('team.setMemberRole'),
+        acceptInvitation: () => notImplemented('team.acceptInvitation'),
+      };
+}
+
 /**
  * Workout sessions need DB_URL (the write path falls back to it
  * without Hyperdrive); without it they fall back to the stub bundle.
@@ -575,5 +618,6 @@ export function buildDefaultDeps(env: AthlyaBindings, cf?: RequestCf): DomainDep
     programs: defaultProgramsDeps(env),
     sessions: defaultSessionsDeps(env),
     checkins: defaultCheckinsDeps(env),
+    team: defaultTeamDeps(env),
   };
 }

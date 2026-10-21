@@ -9,6 +9,7 @@
  * read only: no CSV export and no member file, which stay with
  * administrators (the API has no per-member read for coaches).
  */
+import { can } from '@athlya/shared/roles';
 import { Menu } from '@base-ui/react/menu';
 import {
   ArrowDownIcon,
@@ -61,6 +62,8 @@ type Status = { kind: 'idle' } | { kind: 'loading' } | { kind: 'error'; message:
 
 const ROLE_VARIANT: Record<StudioMember['role'], 'default' | 'secondary' | 'outline'> = {
   admin: 'default',
+  manager: 'default',
+  accueil: 'secondary',
   coach: 'secondary',
   member: 'outline',
 };
@@ -69,6 +72,8 @@ const TAB_KEY = {
   all: 'studio.members.tabs.all',
   member: 'studio.members.tabs.member',
   coach: 'studio.members.tabs.coach',
+  accueil: 'studio.members.tabs.accueil',
+  manager: 'studio.members.tabs.manager',
   admin: 'studio.members.tabs.admin',
 } as const;
 
@@ -97,8 +102,8 @@ export function MembersAdminList(): ReactElement {
   const [tab, setTab] = useState<RoleTab>('all');
   const [sort, setSort] = useState<MemberSort>('joinedDesc');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const isAdmin = user?.role === 'admin';
-  const canExport = isAdmin;
+  const opensFiles = user !== null && can(user.role, 'members.file');
+  const canExport = user !== null && can(user.role, 'members.file');
 
   const fetchPage = useCallback(
     async (currentCursor: string | null) => {
@@ -392,7 +397,7 @@ export function MembersAdminList(): ReactElement {
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-3">
                       <MemberAvatar displayName={m.displayName} avatarUrl={m.avatarUrl} />
-                      {isAdmin ? (
+                      {opensFiles ? (
                         <Link
                           href={memberFileHref(m.id)}
                           className="truncate rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -421,7 +426,7 @@ export function MembersAdminList(): ReactElement {
                   <td className="px-3 py-2.5 text-right">
                     <RowMenu
                       member={m}
-                      fileHref={isAdmin ? memberFileHref(m.id) : null}
+                      fileHref={opensFiles ? memberFileHref(m.id) : null}
                       t={t}
                       onCopy={() => copy(m.email, t('studio.members.emailCopied'))}
                     />

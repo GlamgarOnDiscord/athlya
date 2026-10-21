@@ -505,7 +505,34 @@
         },
         "sessions": {
           "title": "Signed-in devices",
-          "body": "The list of signed-in devices and signing out one device at a time are coming soon."
+          "body": "The devices signed in to your account. Revoke one you do not recognise.",
+          "current": "This device",
+          "lastSeen": "Last active {date}",
+          "unknownTime": "Active session",
+          "device": "{browser} on {os}",
+          "browser": {
+            "chrome": "Chrome",
+            "edge": "Edge",
+            "firefox": "Firefox",
+            "safari": "Safari",
+            "app": "Athlya app",
+            "other": "Browser"
+          },
+          "os": {
+            "ios": "iOS",
+            "android": "Android",
+            "macos": "macOS",
+            "windows": "Windows",
+            "linux": "Linux",
+            "other": "another device"
+          },
+          "unknownDevice": "Unknown device",
+          "revoke": "Revoke",
+          "revokeTitle": "Revoke this session?",
+          "revokeBody": "The device is signed out the next time it renews its session, within 15 minutes.",
+          "revokeConfirm": "Revoke the session",
+          "revoked": "Session revoked.",
+          "loadError": "Your sessions could not be loaded."
         },
         "signOut": {
           "title": "Sign out of this device",
@@ -588,8 +615,12 @@
     },
     "login": {
       "title": "Studio sign-in",
-      "subtitle": "For the studio team: administrators and coaches. Members sign in on the main app.",
-      "staffRequired": "This is a member account. Sign in on the Athlya app to book your classes."
+      "subtitle": "For the studio team: administrators, managers, front desk and coaches. Members sign in on the main app.",
+      "staffRequired": "This is a member account. Sign in on the Athlya app to book your classes.",
+      "invite": {
+        "notice": "You have been invited to the studio team. Sign in with the account that received the invitation to accept it.",
+        "invalid": "This invitation is no longer valid, or it was sent to another email address. Ask the studio for a new one."
+      }
     },
     "nav": {
       "brand": "Athlya Studio",
@@ -603,7 +634,9 @@
       "dashboard": "Dashboard",
       "settings": "Settings",
       "home": "Home",
-      "planning": "My schedule"
+      "planning": "My schedule",
+      "team": "Team",
+      "studioPlanning": "Planning"
     },
     "dashboard": {
       "title": "Dashboard",
@@ -803,7 +836,9 @@
       "role": {
         "member": "Member",
         "coach": "Coach",
-        "admin": "Admin"
+        "admin": "Admin",
+        "manager": "Manager",
+        "accueil": "Front desk"
       },
       "columns": {
         "name": "Name",
@@ -819,7 +854,9 @@
         "all": "All",
         "member": "Members",
         "coach": "Coaches",
-        "admin": "Admins"
+        "admin": "Admins",
+        "manager": "Managers",
+        "accueil": "Front desk"
       },
       "exportCsv": "Export CSV",
       "you": "You",
@@ -1211,6 +1248,63 @@
       "forbidden": "Only the studio admins can open a member file.",
       "notFound": "This member does not exist in your studio.",
       "loadError": "The member file could not load."
+    },
+    "desk": {
+      "planning": {
+        "title": "Studio planning",
+        "subtitle": "Every class of the studio, read only. Open a class to take its attendance."
+      }
+    },
+    "team": {
+      "title": "Team",
+      "subtitle": "Who works at the studio and what each person can do. Invite someone, change a role or remove a person from the team.",
+      "subtitleReadOnly": "Who works at the studio and what each person can do. Only an administrator changes the team.",
+      "members": {
+        "title": "People"
+      },
+      "invitations": {
+        "title": "Pending invitations",
+        "expires": "Expires on {date}",
+        "revoke": "Revoke"
+      },
+      "loadError": "The team could not be loaded. Try again in a moment.",
+      "you": "(you)",
+      "roleOf": "Role of {name}",
+      "roleChangedToast": "Role of {name}: {role}.",
+      "removedToast": "{name} is no longer on the team.",
+      "revokedToast": "Invitation for {email} revoked.",
+      "errors": {
+        "ownRole": "You cannot change your own role. Ask another administrator."
+      },
+      "roles": {
+        "title": "What each role can do",
+        "admin": "Everything, including billing, branding and the team.",
+        "manager": "Runs the studio day to day: classes, programs, members, attendance and the audit log. No billing, branding or team changes.",
+        "accueil": "The check-in kiosk, the attendance of every class, the members and the planning, read only.",
+        "coach": "Their schedule, the attendance of their own classes, the kiosk and the members directory."
+      },
+      "remove": {
+        "open": "Remove",
+        "title": "Remove {name} from the team?",
+        "body": "The account stays a member account of the studio. It loses access to the studio console.",
+        "confirm": "Remove from the team"
+      },
+      "invite": {
+        "open": "Invite",
+        "title": "Invite to the team",
+        "body": "If this email already has an account at the studio, the role applies at once. Otherwise you get a link to send.",
+        "email": "Email",
+        "role": "Role",
+        "invalidEmail": "Enter a valid email address.",
+        "submit": "Invite",
+        "linkTitle": "Invitation link",
+        "linkBody": "Send this link to {email}. They accept it by signing in with an account created at the studio with this address.",
+        "link": "Link",
+        "copy": "Copy",
+        "copied": "Copied",
+        "linkOnce": "This link is shown only once and expires in 7 days.",
+        "done": "Done"
+      }
     }
   },
   "mobile": {

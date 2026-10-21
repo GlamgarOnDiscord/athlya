@@ -18,6 +18,17 @@
  */
 
 import {
+  AcceptInvitationRequestSchema,
+  AcceptInvitationResponseSchema,
+  ActiveSessionsResponseSchema,
+  InviteTeamMemberRequestSchema,
+  InviteTeamMemberResponseSchema,
+  SessionParamsSchema,
+  TeamInvitationParamsSchema,
+  TeamMemberParamsSchema,
+  TeamMemberSchema,
+  TeamResponseSchema,
+  UpdateTeamMemberRequestSchema,
   BookingRequestSchema,
   BookingResponseSchema,
   CancelReservationParamsSchema,
@@ -485,7 +496,7 @@ const memberFileRoute = createRoute({
   method: 'get',
   path: '/v1/members/{id}',
   tags: ['members'],
-  summary: 'Member file: profile, consents and reservations (studio admin only)',
+  summary: 'Member file: profile, consents and reservations (admin, manager, front desk)',
   security: [{ bearerAuth: [] }],
   request: { params: MemberFileParamsSchema },
   responses: {
@@ -1560,6 +1571,153 @@ const todayWorkoutRoute = createRoute({
  * reached because `/openapi.json` short-circuits before delegating to
  * domain handlers.
  */
+/*
+ * auth sessions: /v1/auth/sessions (issue #757)
+ */
+
+const authSessionsListRoute = createRoute({
+  method: 'get',
+  path: '/v1/auth/sessions',
+  tags: ['auth'],
+  summary: 'Active sessions of the current user, most recently seen first',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "The active sessions; `current` marks the caller's own",
+      content: { 'application/json': { schema: ActiveSessionsResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+  },
+});
+
+const authSessionRevokeRoute = createRoute({
+  method: 'delete',
+  path: '/v1/auth/sessions/{id}',
+  tags: ['auth'],
+  summary: 'Revoke one session of the current user',
+  security: [{ bearerAuth: [] }],
+  request: { params: SessionParamsSchema },
+  responses: {
+    204: { description: 'Session revoked: it can no longer refresh' },
+    401: problemResponse('Not authenticated'),
+    404: problemResponse('`session_not_found`: no active session of the caller with this id'),
+  },
+});
+
+/*
+ * team: /v1/studios/me/team (issue #756)
+ */
+
+const teamListRoute = createRoute({
+  method: 'get',
+  path: '/v1/studios/me/team',
+  tags: ['team'],
+  summary: 'The studio team and its pending invitations (admin, manager)',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Team members and pending invitations',
+      content: { 'application/json': { schema: TeamResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not an admin or a manager'),
+  },
+});
+
+const teamInviteRoute = createRoute({
+  method: 'post',
+  path: '/v1/studios/me/team/invitations',
+  tags: ['team'],
+  summary: 'Invite someone to the team, or give a studio account a team role (admin)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: InviteTeamMemberRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'An account of the studio had this email: its role changed',
+      content: { 'application/json': { schema: InviteTeamMemberResponseSchema } },
+    },
+    201: {
+      description: 'Pending invitation created; the token is returned this once',
+      content: { 'application/json': { schema: InviteTeamMemberResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not an admin'),
+    409: problemResponse('`cannot_change_own_role`'),
+    422: problemResponse('Validation error'),
+  },
+});
+
+const teamRevokeInvitationRoute = createRoute({
+  method: 'delete',
+  path: '/v1/studios/me/team/invitations/{id}',
+  tags: ['team'],
+  summary: 'Revoke a pending invitation (admin)',
+  security: [{ bearerAuth: [] }],
+  request: { params: TeamInvitationParamsSchema },
+  responses: {
+    204: { description: 'Invitation revoked' },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not an admin'),
+    404: problemResponse('`invitation_not_found`'),
+  },
+});
+
+const teamAcceptInvitationRoute = createRoute({
+  method: 'post',
+  path: '/v1/studios/me/team/invitations/accept',
+  tags: ['team'],
+  summary: 'Accept an invitation as the invited account',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: AcceptInvitationRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'The role now held; sign in again to use it',
+      content: { 'application/json': { schema: AcceptInvitationResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    404: problemResponse(
+      '`invitation_not_found`: no pending invitation for this token and account',
+    ),
+    422: problemResponse('Validation error'),
+  },
+});
+
+const teamUpdateMemberRoute = createRoute({
+  method: 'patch',
+  path: '/v1/studios/me/team/members/{id}',
+  tags: ['team'],
+  summary: 'Change the role of a team member; `member` removes them from the team (admin)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: TeamMemberParamsSchema,
+    body: {
+      content: { 'application/json': { schema: UpdateTeamMemberRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'The member with the new role',
+      content: { 'application/json': { schema: z.object({ member: TeamMemberSchema }) } },
+    },
+    204: { description: 'Removed from the team (role `member`)' },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not an admin'),
+    404: problemResponse('`member_not_found`'),
+    409: problemResponse('`cannot_change_own_role`'),
+  },
+});
+
 export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   const app = new OpenAPIHono<HonoEnv>();
 
@@ -1580,6 +1738,8 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   app.openapi(refreshRoute, stub);
   app.openapi(logoutRoute, stub);
   app.openapi(logoutAllRoute, stub);
+  app.openapi(authSessionsListRoute, stub);
+  app.openapi(authSessionRevokeRoute, stub);
   app.openapi(passwordResetRequestRoute, stub);
   app.openapi(passwordResetConfirmRoute, stub);
   app.openapi(deleteAccountRoute, stub);
@@ -1610,6 +1770,13 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   // studios
   app.openapi(getStudioMeRoute, stub);
   app.openapi(patchStudioMeRoute, stub);
+
+  // team
+  app.openapi(teamListRoute, stub);
+  app.openapi(teamInviteRoute, stub);
+  app.openapi(teamAcceptInvitationRoute, stub);
+  app.openapi(teamRevokeInvitationRoute, stub);
+  app.openapi(teamUpdateMemberRoute, stub);
 
   // sessions
   app.openapi(logSessionRoute, stub);
