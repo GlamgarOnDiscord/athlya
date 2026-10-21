@@ -8,6 +8,7 @@
 import { headers } from 'next/headers';
 
 import { AthlyaLogo } from '../../components/AthlyaLogo';
+import { DemoRolePicker } from '../../components/demo/DemoRolePicker';
 import { getLocale } from '../../lib/i18n/getLocale';
 import { createTranslator } from '../../lib/i18n/t';
 
@@ -29,7 +30,7 @@ export default async function LoginPage(): Promise<ReactElement> {
       <AthlyaLogo height={36} className="self-start text-foreground" />
       <h1 className="text-3xl font-semibold">{t('studio.login.title')}</h1>
       <p className="text-sm text-muted-foreground">{t('studio.login.subtitle')}</p>
-      <LoginForm nonce={nonce} />
+      {process.env.NEXT_PUBLIC_DEMO_MODE === '1' ? <DemoRolePicker /> : <LoginForm nonce={nonce} />}
     </main>
   );
 }

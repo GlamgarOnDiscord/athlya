@@ -17,6 +17,7 @@
  */
 import { Toaster } from '@/components/ui/sonner';
 
+import { DemoBanner } from '../components/demo/DemoBanner';
 import { ThemeProvider } from '../components/ThemeProvider';
 
 import { LocaleSwitcher } from '../components/LocaleSwitcher';
@@ -64,6 +65,7 @@ export default async function RootLayout({
       <body>
         <ThemeProvider nonce={nonce}>
           <LocaleProvider locale={locale}>
+            {process.env.NEXT_PUBLIC_DEMO_MODE === '1' ? <DemoBanner /> : null}
             <AuthProvider>
               {children}
               <Toaster richColors position="top-right" />
