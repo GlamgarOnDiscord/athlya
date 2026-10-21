@@ -23,7 +23,7 @@ import { createTranslator } from '../../lib/i18n/t';
 
 import { ProfileForm } from './ProfileForm';
 
-import type { MeProfile } from './ProfileSection';
+import type { MeProfile } from './MemberProfileGate';
 import type { ApiClient } from '../../lib/api/client';
 
 const t = createTranslator('fr');
