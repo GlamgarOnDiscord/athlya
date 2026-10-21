@@ -8,8 +8,9 @@
  * replaced by a note once the class is less than two hours away, the
  * window the API enforces (`cancellation_window_closed`); a refusal that
  * still comes back is shown on the row. Outcomes are read out by a
- * polite live region. With nothing booked, the empty state offers one
- * action: browse the classes.
+ * polite live region. A confirmed row also offers "Add to calendar",
+ * whose event shares its UID with the member's calendar feed. With
+ * nothing booked, the empty state offers one action: browse the classes.
  */
 'use client';
 
@@ -18,6 +19,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement } from 'react';
 import { toast } from 'sonner';
 
+import { AddToCalendar } from '@/components/calendar/AddToCalendar';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -232,6 +234,18 @@ export function UpcomingBookings({
                       {t('classes.upcoming.waitlist')}
                     </p>
                   )}
+                  {item.status === 'confirmed' ? (
+                    <AddToCalendar
+                      event={{
+                        classId: item.classId,
+                        reservationId: item.id,
+                        title: item.class.title,
+                        startsAt: item.class.startsAt,
+                        durationMin: item.class.durationMin,
+                      }}
+                      t={t}
+                    />
+                  ) : null}
                   {error !== undefined ? (
                     <p role="alert" className="text-sm text-destructive">
                       {error}

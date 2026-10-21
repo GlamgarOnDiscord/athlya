@@ -85,3 +85,10 @@ OTEL_EXPORTER_OTLP_HEADERS=
 # Resend API key. When unset, notification handlers log + skip.
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=noreply@athlya.app
+
+# ---- Calendar feed (optional, issue #719) ------------------------------------
+# HMAC key (>= 32 chars) signing the members' iCalendar subscription URLs
+# (/v1/calendar/*). When unset, both calendar routes answer 503
+# `calendar_feed_not_configured`. Generate one locally with
+# `openssl rand -base64 48`; rotating it revokes every feed.
+CALENDAR_FEED_SIGNING_KEY=
