@@ -34,6 +34,15 @@ export const studios = pgTable(
     brandLogoLight: text('brand_logo_light'),
     brandLogoDark: text('brand_logo_dark'),
     hideAthlyaBranding: boolean('hide_athlya_branding').notNull().default(false),
+    /** Settings of migration 0055 (issue #759). `timezone` is an IANA name. */
+    timezone: text('timezone').notNull().default('Europe/Paris'),
+    addressLine: text('address_line'),
+    postalCode: text('postal_code'),
+    city: text('city'),
+    /** ISO 3166-1 alpha-2. */
+    country: text('country'),
+    /** `citext` in the database. */
+    contactEmail: text('contact_email'),
     createdAt: createdAt(),
     deletedAt: deletedAt(),
   },

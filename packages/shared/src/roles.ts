@@ -7,10 +7,11 @@
  * mirror it in SQL (`app_is_manager()`, `app_is_staff()`). A change
  * here without the matching policy change is caught by the pgTAP suite.
  *
- *   - `admin`   owns the studio: everything, including billing, branding
- *               and the team.
+ *   - `admin`   owns the studio: everything, including billing, branding,
+ *               the team, the studio settings and the webhooks.
  *   - `manager` runs the studio day to day: everything an admin does but
- *               billing, branding and changes to the team.
+ *               billing, branding, changes to the team, the studio
+ *               settings and the webhooks.
  *   - `accueil` works the front desk: the check-in kiosk, the attendance
  *               of every class, the members directory and member files
  *               read only, and the planning read only.
@@ -69,7 +70,11 @@ export type Capability =
   /** Plans, checkout and invoices. */
   | 'billing.manage'
   /** Studio name, colour and logo. */
-  | 'branding.manage';
+  | 'branding.manage'
+  /** Studio settings: name, time zone, address and contact email. */
+  | 'settings.manage'
+  /** Webhook endpoints, their signing secrets and deliveries. */
+  | 'webhooks.manage';
 
 const MATRIX: Readonly<Record<Capability, readonly Role[]>> = {
   'console.access': STAFF_ROLES,
@@ -88,6 +93,8 @@ const MATRIX: Readonly<Record<Capability, readonly Role[]>> = {
   'team.manage': ['admin'],
   'billing.manage': ['admin'],
   'branding.manage': ['admin'],
+  'settings.manage': ['admin'],
+  'webhooks.manage': ['admin'],
 };
 
 /** Whether `role` holds `capability`. Unknown roles hold nothing. */

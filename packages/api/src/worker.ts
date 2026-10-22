@@ -42,6 +42,7 @@ import { runScheduledCapacityReconcile } from './maintenance/capacity-reconcile-
 import { logCronDbUrlMissing, shouldRequireCronDbUrl } from './maintenance/cron-db-config.js';
 import { runDbKeepalive } from './maintenance/db-keepalive.js';
 import { runScheduledRgpdMaintenance } from './maintenance/scheduled-runner.js';
+import { runWebhookDeliveries } from './maintenance/webhook-delivery.js';
 import { createSentryClient } from './sentry.js';
 
 import type { DlqBindings } from './events/drain-dlq.js';
@@ -150,6 +151,22 @@ const worker = {
         },
       );
       ctx.waitUntil(keepaliveTask);
+    }
+
+    // Issue #760: post due webhook deliveries (claimed under a lease by
+    // `webhook_claim_deliveries`, granted to athlya_cron by migration 0055).
+    if (cronExecutor !== null) {
+      const webhookTask = runWebhookDeliveries({
+        executeSql: cronExecutor,
+        fetch: (input, init) => fetch(input, init),
+      }).catch((err: unknown) => {
+        console.error('[worker] webhook delivery failed', {
+          cron: event.cron,
+          scheduledTime: event.scheduledTime,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+      ctx.waitUntil(webhookTask);
     }
 
     if (cronExecutor !== null) {

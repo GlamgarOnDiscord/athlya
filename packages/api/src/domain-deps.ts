@@ -22,8 +22,10 @@ import { buildMembersDeps } from './adapters/members-deps.js';
 import { buildProgramsDeps } from './adapters/programs-deps.js';
 import { buildClassesDeps, buildReservationsDeps } from './adapters/reservations-deps.js';
 import { buildSessionsDeps } from './adapters/sessions-deps.js';
+import { buildStudioSettingsDeps } from './adapters/studio-settings-deps.js';
 import { buildStudiosDeps } from './adapters/studios-deps.js';
 import { buildTeamDeps } from './adapters/team-deps.js';
+import { buildWebhooksDeps } from './adapters/webhooks-deps.js';
 
 import type { AuditDeps } from './routes/audit.js';
 import type { AuthDeps } from './routes/auth.js';
@@ -37,8 +39,10 @@ import type { MembersDeps } from './routes/members.js';
 import type { ProgramsDeps } from './routes/programs.js';
 import type { ReservationsDeps } from './routes/reservations.js';
 import type { SessionsDeps } from './routes/sessions.js';
+import type { StudioSettingsDeps } from './routes/studio-settings.js';
 import type { StudiosDeps } from './routes/studios.js';
 import type { TeamDeps } from './routes/team.js';
+import type { WebhooksDeps } from './routes/webhooks.js';
 import type { AthlyaBindings } from './types.js';
 
 /** Per-request Cloudflare `cf` subset used for EU read-replica routing. */
@@ -75,6 +79,13 @@ export interface DomainDeps {
    * valid; production and the lazy facade always provide it.
    */
   readonly programs?: ProgramsDeps;
+  /**
+   * Studio settings (issue #759) and webhook endpoints (issue #760),
+   * mounted under `/v1/studios/me`. Optional so partial test bundles stay
+   * valid; production and the lazy facade always provide them.
+   */
+  readonly studioSettings?: StudioSettingsDeps;
+  readonly webhooks?: WebhooksDeps;
   /**
    * Studio team (issue #756), mounted under `/v1/studios/me/team`.
    * Optional so partial test bundles stay valid; production and the
@@ -290,6 +301,26 @@ export function lazyCheckinsDeps(resolve: () => CheckinsDeps): CheckinsDeps {
   };
 }
 
+export function lazyStudioSettingsDeps(resolve: () => StudioSettingsDeps): StudioSettingsDeps {
+  const forward = forwarder(resolve);
+  return { getSettings: forward('getSettings'), updateSettings: forward('updateSettings') };
+}
+
+export function lazyWebhooksDeps(resolve: () => WebhooksDeps): WebhooksDeps {
+  const forward = forwarder(resolve);
+  return {
+    listEndpoints: forward('listEndpoints'),
+    createEndpoint: forward('createEndpoint'),
+    updateEndpoint: forward('updateEndpoint'),
+    deleteEndpoint: forward('deleteEndpoint'),
+  };
+}
+
+function wired<T>(value: T | undefined, name: string): T {
+  if (value === undefined) throw new Error(`buildLazyDomainDeps: ${name} dependency is not wired`);
+  return value;
+}
+
 export function lazyTeamDeps(resolve: () => TeamDeps): TeamDeps {
   const forward = forwarder(resolve);
   return {
@@ -359,6 +390,8 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
       }
       return checkins;
     }),
+    studioSettings: lazyStudioSettingsDeps(() => wired(resolve().studioSettings, 'studioSettings')),
+    webhooks: lazyWebhooksDeps(() => wired(resolve().webhooks, 'webhooks')),
     team: lazyTeamDeps(() => {
       const team = resolve().team;
       if (team === undefined) {
@@ -617,6 +650,27 @@ export function defaultProgramsDeps(env: AthlyaBindings): ProgramsDeps {
       };
 }
 
+/** Settings and webhooks read and write PostgreSQL; without DB_URL they fall back to stubs. */
+export function defaultStudioSettingsDeps(env: AthlyaBindings): StudioSettingsDeps {
+  return nonEmpty(env.DB_URL)
+    ? buildStudioSettingsDeps(env)
+    : {
+        getSettings: () => notImplemented('studioSettings.getSettings'),
+        updateSettings: () => notImplemented('studioSettings.updateSettings'),
+      };
+}
+
+export function defaultWebhooksDeps(env: AthlyaBindings): WebhooksDeps {
+  return nonEmpty(env.DB_URL)
+    ? buildWebhooksDeps(env)
+    : {
+        listEndpoints: () => notImplemented('webhooks.listEndpoints'),
+        createEndpoint: () => notImplemented('webhooks.createEndpoint'),
+        updateEndpoint: () => notImplemented('webhooks.updateEndpoint'),
+        deleteEndpoint: () => notImplemented('webhooks.deleteEndpoint'),
+      };
+}
+
 /** The team reads and writes PostgreSQL; without DB_URL it falls back to the stub bundle. */
 export function defaultTeamDeps(env: AthlyaBindings): TeamDeps {
   return nonEmpty(env.DB_URL)
@@ -718,6 +772,8 @@ export function buildDefaultDeps(env: AthlyaBindings, cf?: RequestCf): DomainDep
     programs: defaultProgramsDeps(env),
     sessions: defaultSessionsDeps(env),
     checkins: defaultCheckinsDeps(env),
+    studioSettings: defaultStudioSettingsDeps(env),
+    webhooks: defaultWebhooksDeps(env),
     team: defaultTeamDeps(env),
     calendar: defaultCalendarDeps(env, cf),
     planning: defaultClassPlanningDeps(env),
