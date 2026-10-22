@@ -11,6 +11,7 @@ import { createDrizzleUserRepo } from '../../adapters/auth-user-repo-drizzle.js'
 import { createDrizzleDeletionRepo } from '../../adapters/cascade-repo-drizzle.js';
 import {
   buildBrandingRepo,
+  buildPreferencesRepo,
   buildRecipientRepo,
   fromHeader,
   senderDisplayName,
@@ -42,6 +43,7 @@ const migration = [
   '0042_training_programs.sql',
   '0043_auth_password_reset_outbox.sql',
   '0053_white_label.sql',
+  '0054_notification_preferences.sql',
 ]
   .map((file) => readFileSync(resolve(here, '../../../../db/migrations', file), 'utf8'))
   .join('\n');
@@ -85,8 +87,8 @@ describe('service function contract with migration 0032', () => {
     (m) => m[1],
   );
 
-  it('references the 24 service functions', () => {
-    expect(new Set(used).size).toBe(24);
+  it('references the 25 service functions', () => {
+    expect(new Set(used).size).toBe(25);
   });
 
   const granted = grantedToApp(migration);
@@ -818,6 +820,21 @@ describe('buildRecipientRepo', () => {
       email: null,
       pushTokens: [],
     });
+  });
+});
+
+describe('buildPreferencesRepo', () => {
+  it('returns the stored preferences of the recipient', async () => {
+    const stored = { reservationCreated: { email: false } };
+    const { db, calls } = fakeDb(() => [{ preferences: stored }]);
+    await expect(buildPreferencesRepo(db).getPreferences(userRow.id)).resolves.toEqual(stored);
+    expect(calls[0]?.sql).toContain('notification_preferences_of(');
+    expect(calls[0]?.params).toEqual([userRow.id]);
+  });
+
+  it('returns null for an unknown or deleted user', async () => {
+    const { db } = fakeDb(() => [{ preferences: null }]);
+    await expect(buildPreferencesRepo(db).getPreferences(userRow.id)).resolves.toBeNull();
   });
 });
 

@@ -591,10 +591,17 @@
         }
       },
       "notifications": {
-        "description": "The messages you receive about your bookings.",
+        "description": "Choose, message by message, how you are told.",
         "listLabel": "Messages sent",
         "alwaysSent": "Always sent",
-        "transactional": "These messages are about your bookings, so they are always sent.",
+        "mandatory": "Security or payment message, always sent.",
+        "loading": "Loading your preferences…",
+        "loadError": "Your preferences could not be loaded.",
+        "retry": "Try again",
+        "save": "Save",
+        "saving": "Saving…",
+        "saved": "Preferences saved.",
+        "saveError": "Saving failed, try again.",
         "channels": {
           "email": "Email",
           "push": "Mobile app notification"
@@ -603,11 +610,9 @@
           "reservationCreated": "Booking confirmed",
           "reservationReminder": "Reminder one hour before class",
           "reservationCancelled": "Booking cancelled",
-          "reservationPromoted": "Spot freed up from the waitlist"
-        },
-        "perEvent": {
-          "title": "Choose message by message",
-          "body": "Turning each message on or off on its own is coming soon."
+          "reservationPromoted": "Spot freed up from the waitlist",
+          "billingSubscriptionFailed": "Subscription payment failed",
+          "passwordReset": "Password reset"
         },
         "marketing": {
           "title": "Marketing messages",

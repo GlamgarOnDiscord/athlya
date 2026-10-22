@@ -194,6 +194,27 @@ const CLASS_ROOM_SERIES_COLUMNS = `
  * the suite works whether vitest is invoked from the package or the
  * monorepo root.
  */
+/**
+ * The `ALTER TABLE "users"` statements of a migration, without the
+ * functions and grants that need the athlya_* roles this harness does
+ * not create. Keeps the `users` table in step with the Drizzle schema,
+ * whose `select()` names every column.
+ */
+function usersTableStatements(sql: string): string {
+  return sql
+    .split('--> statement-breakpoint')
+    .map((statement) =>
+      statement
+        .split('\n')
+        .filter((line) => !line.trimStart().startsWith('--'))
+        .join('\n')
+        .trim(),
+    )
+    .filter((statement) => statement.startsWith('ALTER TABLE "users"'))
+    .map((statement) => (statement.endsWith(';') ? statement : `${statement};`))
+    .join('\n');
+}
+
 function readMigration(name: string): string {
   const here = fileURLToPath(new URL('.', import.meta.url));
   const file = resolve(here, '..', '..', 'migrations', name);
@@ -530,6 +551,7 @@ beforeAll(async () => {
     await pg.exec(readMigration('0007_classes_fts.sql'));
     await pg.exec(readMigration('0030_users_credentials_version.sql'));
     await pg.exec(CLASS_ROOM_SERIES_COLUMNS);
+    await pg.exec(usersTableStatements(readMigration('0054_notification_preferences.sql')));
 
     // Bootstrap the NOBYPASSRLS tenant role + grant the superuser the
     // right to switch into it via SET LOCAL ROLE inside transactions.
@@ -586,6 +608,11 @@ beforeAll(async () => {
     rootConnString,
   );
   await applyMigration(rootClient, CLASS_ROOM_SERIES_COLUMNS, rootConnString);
+  await applyMigration(
+    rootClient,
+    usersTableStatements(readMigration('0054_notification_preferences.sql')),
+    rootConnString,
+  );
 
   // Create the NOBYPASSRLS tenant role + grants.
   await bootstrapTenantRole(rootClient);

@@ -172,6 +172,8 @@ export function lazyMembersDeps(resolve: () => MembersDeps): MembersDeps {
     updateProfile: forward('updateProfile'),
     uploadAvatar: forward('uploadAvatar'),
     updateConsents: forward('updateConsents'),
+    getNotificationPreferences: forward('getNotificationPreferences'),
+    updateNotificationPreferences: forward('updateNotificationPreferences'),
     enqueueExport: forward('enqueueExport'),
     getExportJob: forward('getExportJob'),
     openExportDownload: forward('openExportDownload'),
@@ -512,6 +514,9 @@ export function defaultMembersDeps(env: AthlyaBindings, cf?: RequestCf): Members
         updateProfile: () => notImplemented('members.updateProfile'),
         uploadAvatar: () => notImplemented('members.uploadAvatar'),
         updateConsents: () => notImplemented('members.updateConsents'),
+        getNotificationPreferences: () => notImplemented('members.getNotificationPreferences'),
+        updateNotificationPreferences: () =>
+          notImplemented('members.updateNotificationPreferences'),
         enqueueExport: () => notImplemented('members.enqueueExport'),
         getExportJob: () => notImplemented('members.getExportJob'),
         openExportDownload: () => notImplemented('members.openExportDownload'),

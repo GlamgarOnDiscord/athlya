@@ -103,6 +103,8 @@ export function buildStubDeps(
       updateProfile: vi.fn(),
       uploadAvatar: vi.fn(),
       updateConsents: vi.fn(),
+      getNotificationPreferences: vi.fn(),
+      updateNotificationPreferences: vi.fn(),
       enqueueExport: vi.fn(),
       getExportJob: vi.fn(),
       openExportDownload: vi.fn(),
