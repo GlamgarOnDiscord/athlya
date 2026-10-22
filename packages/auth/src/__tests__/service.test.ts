@@ -72,6 +72,7 @@ import {
   refresh,
   register,
 } from '../service.js';
+import { describeDevice, listSessions, revokeSession, sessionHandle } from '../sessions.js';
 
 import type { Jwks, SigningKey } from '../jwt.js';
 import type {
@@ -82,6 +83,7 @@ import type {
   UserRepo,
   UserRow,
 } from '../service.js';
+import type { SessionDevice } from '../sessions.js';
 import type { LoginRequest, RegisterRequest } from '@athlya/shared/schemas/api';
 
 // ---------------------------------------------------------------------------
@@ -170,6 +172,7 @@ interface MockedStore extends SessionStore {
   revokeAllForUser: MockedFunction<SessionStore['revokeAllForUser']>;
   revokeFamilyByRootSid: MockedFunction<SessionStore['revokeFamilyByRootSid']>;
   exists: MockedFunction<SessionStore['exists']>;
+  listForUser: MockedFunction<SessionStore['listForUser']>;
 }
 
 function makeStore(): MockedStore {
@@ -188,6 +191,7 @@ function makeStore(): MockedStore {
     revokeAllForUser: vi.fn().mockResolvedValue(undefined),
     revokeFamilyByRootSid: vi.fn().mockResolvedValue(undefined),
     exists: vi.fn().mockResolvedValue(true),
+    listForUser: vi.fn().mockResolvedValue([]),
   };
 }
 
@@ -346,14 +350,14 @@ describe('register', () => {
       slug: 'athlya-studio',
       name: 'Athlya',
     });
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+
     repo.createUser.mockImplementation(
       (input: {
         studioId: string;
         email: string;
         passwordHash: string | null;
         displayName: string;
-        role: 'member' | 'coach' | 'admin';
+        role: UserRow['role'];
       }): Promise<UserRow> =>
         Promise.resolve({
           id: USER_ID,
@@ -381,7 +385,9 @@ describe('register', () => {
     };
     expect(createCall.consents.version).toBe(CURRENT_CGU_VERSION);
 
-    expect(store.create).toHaveBeenCalledWith(USER_ID, SID_1, expect.any(Date));
+    expect(store.create).toHaveBeenCalledWith(USER_ID, SID_1, expect.any(Date), {
+      device: { browser: 'other', os: 'other' },
+    });
 
     expect(publishEvent).toHaveBeenCalledTimes(1);
     const event = publishEvent.mock.calls[0]?.[0] as {
@@ -403,14 +409,14 @@ describe('register', () => {
       slug: 'athlya-studio',
       name: 'Athlya',
     });
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+
     repo.createUser.mockImplementation(
       (input: {
         studioId: string;
         email: string;
         passwordHash: string | null;
         displayName: string;
-        role: 'member' | 'coach' | 'admin';
+        role: UserRow['role'];
       }): Promise<UserRow> =>
         Promise.resolve({
           id: USER_ID,
@@ -501,7 +507,9 @@ describe('login', () => {
     const session = await login(LOGIN_INPUT, deps);
     expect(session.user.id).toBe(USER_ID);
     expect(session.accessToken.split('.').length).toBe(3);
-    expect(store.create).toHaveBeenCalledWith(USER_ID, SID_1, expect.any(Date));
+    expect(store.create).toHaveBeenCalledWith(USER_ID, SID_1, expect.any(Date), {
+      device: { browser: 'other', os: 'other' },
+    });
   });
 
   it('issues tokens with 15-minute access / 30-day refresh TTLs (Req 1.5, 2.1, 2.2)', async () => {
@@ -666,10 +674,12 @@ describe('logout', () => {
 function makeMemoryStore(): SessionStore {
   const live = new Map<string, string>();
   const rootOf = new Map<string, string>();
+  const deviceOf = new Map<string, SessionDevice | null>();
   return {
-    create: (userId, sid) => {
+    create: (userId, sid, _expiresAt, meta) => {
       live.set(sid, userId);
       rootOf.set(sid, sid);
+      deviceOf.set(sid, meta?.device ?? null);
       return Promise.resolve();
     },
     rotate: (oldSid, newSid) => {
@@ -698,6 +708,23 @@ function makeMemoryStore(): SessionStore {
     },
     revokeFamilyByRootSid: () => Promise.resolve(),
     exists: (sid) => Promise.resolve(live.has(sid)),
+    listForUser: (userId) =>
+      Promise.resolve(
+        [...live].flatMap(([sid, owner]) => {
+          if (owner !== userId) return [];
+          const rootSid = rootOf.get(sid) ?? sid;
+          return [
+            {
+              sid,
+              rootSid,
+              device: deviceOf.get(rootSid) ?? null,
+              createdAt: null,
+              lastSeenAt: null,
+              expiresAt: '2099-01-01T00:00:00.000Z',
+            },
+          ];
+        }),
+      ),
   };
 }
 
@@ -752,6 +779,100 @@ describe('logout vs logoutAll across sessions (S2-010)', () => {
       code: 'token_invalid',
     });
     expect(deps.userRepo.bumpCredentialsVersion).toHaveBeenCalledWith(USER_ID);
+  });
+});
+
+describe('active sessions (issue #757)', () => {
+  const CHROME_MAC =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36';
+
+  function accessClaims(token: string): Record<string, unknown> {
+    const payload = token.split('.')[1] ?? '';
+    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<
+      string,
+      unknown
+    >;
+  }
+
+  async function twoSessions() {
+    const storedHash = await hashPassword(LOGIN_INPUT.password);
+    const { deps, repo } = makeDeps({
+      store: makeMemoryStore() as MockedStore,
+      uuids: ['sid-a', 'sid-b', 'sid-a2', 'sid-b2'],
+    });
+    repo.findUserByEmail.mockResolvedValue(makeUserRow({ passwordHash: storedHash }));
+    repo.findUserById.mockResolvedValue(makeUserRow({ passwordHash: storedHash }));
+    const laptop = await login(LOGIN_INPUT, deps, {
+      anomalySignal: { country: undefined, userAgent: CHROME_MAC },
+    });
+    const phone = await login(LOGIN_INPUT, deps);
+    return { deps, laptop, phone };
+  }
+
+  it('stamps the session handle in the access token, and keeps it across a refresh', async () => {
+    const { deps, laptop } = await twoSessions();
+
+    expect(accessClaims(laptop.accessToken)['sh']).toBe(await sessionHandle('sid-a'));
+    const rotated = await refresh(laptop.refreshToken, deps);
+    expect(accessClaims(rotated.accessToken)['sh']).toBe(await sessionHandle('sid-a'));
+  });
+
+  it("lists one entry per session, marks the caller's and records the device", async () => {
+    const { deps, laptop } = await twoSessions();
+    const current = accessClaims(laptop.accessToken)['sh'] as string;
+
+    const sessions = await listSessions(USER_ID, deps.sessionStore, current);
+
+    expect(sessions).toHaveLength(2);
+    expect(sessions.find((s) => s.current)?.device).toEqual({ browser: 'chrome', os: 'macos' });
+    expect(sessions.filter((s) => s.current)).toHaveLength(1);
+    expect(sessions.every((s) => /^[0-9a-f]{32}$/u.test(s.id))).toBe(true);
+  });
+
+  it('revoking a session ends its refresh token and leaves the other one live', async () => {
+    const { deps, laptop, phone } = await twoSessions();
+    const phoneHandle = accessClaims(phone.accessToken)['sh'] as string;
+
+    expect(await revokeSession(USER_ID, phoneHandle, deps.sessionStore)).toBe(true);
+
+    await expect(refresh(phone.refreshToken, deps)).rejects.toMatchObject({
+      code: 'token_invalid',
+    });
+    expect((await refresh(laptop.refreshToken, deps)).user.id).toBe(USER_ID);
+  });
+
+  it('refuses a handle of another user or an unknown one', async () => {
+    const { deps, phone } = await twoSessions();
+    const phoneHandle = accessClaims(phone.accessToken)['sh'] as string;
+
+    expect(await revokeSession('someone-else', phoneHandle, deps.sessionStore)).toBe(false);
+    expect(await revokeSession(USER_ID, '0'.repeat(32), deps.sessionStore)).toBe(false);
+    expect((await refresh(phone.refreshToken, deps)).user.id).toBe(USER_ID);
+  });
+});
+
+describe('describeDevice', () => {
+  it.each<[string | undefined, SessionDevice]>([
+    [
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+      { browser: 'safari', os: 'ios' },
+    ],
+    [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36 Edg/129.0',
+      { browser: 'edge', os: 'windows' },
+    ],
+    [
+      'Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0',
+      { browser: 'firefox', os: 'linux' },
+    ],
+    [
+      'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36',
+      { browser: 'chrome', os: 'android' },
+    ],
+    ['okhttp/4.12.0', { browser: 'app', os: 'other' }],
+    [undefined, { browser: 'other', os: 'other' }],
+  ])('labels %s', (userAgent, expected) => {
+    expect(describeDevice(userAgent)).toEqual(expected);
   });
 });
 
@@ -978,7 +1099,7 @@ describe('loginWithApple / loginWithGoogle', () => {
       }),
     };
     const { deps, repo } = makeDeps({ oauthVerifier: verifier });
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+
     repo.findOrCreateOAuthUser.mockImplementation(() => {
       callLog.push('findOrCreateOAuthUser');
       return Promise.resolve(makeUserRow());

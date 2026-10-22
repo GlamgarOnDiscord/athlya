@@ -32,6 +32,7 @@
  * (Requirement 14.6).
  */
 
+import { can, type Role as SharedRole } from '@athlya/shared/roles';
 import { UpdateClassRequestSchema, type UpdateClassRequest } from '@athlya/shared/schemas/api';
 
 import type { ClassRow } from '@athlya/db/schema';
@@ -40,13 +41,8 @@ import type { ClassRow } from '@athlya/db/schema';
 /*  Domain view types                                                  */
 /* ------------------------------------------------------------------ */
 
-/**
- * Role tag attached to every user row. Duplicated here as a plain
- * union (rather than imported from the Zod schema) so this module
- * stays free of any runtime dependency on Zod at the type level.
- * Mirrors the `Role` type used across the other domain services.
- */
-export type Role = 'member' | 'coach' | 'admin';
+/** Role tag attached to every user row (`@athlya/shared/roles`). */
+export type Role = SharedRole;
 
 /**
  * Patch shape accepted by {@link updateClass}. Exactly mirrors
@@ -256,7 +252,7 @@ export class UpdateClassError extends Error {
  *
  * Control flow, in the exact order required by the task:
  *
- *   1. Role gate — {@link Role} other than `'admin'` is rejected with
+ *   1. Role gate: a {@link Role} without `classes.write` is rejected with
  *      `forbidden` **before** any other work (Requirement 6.5). No
  *      repo call, no schema validation: a member's payload never
  *      influences anything downstream, which limits the blast radius
@@ -301,7 +297,7 @@ export async function updateClass(
 ): Promise<ClassRow> {
   // 1 — role gate, runs before validation so the caller can't force
   //     us to spend CPU parsing a payload they aren't allowed to send.
-  if (requesterRole !== 'admin') {
+  if (!can(requesterRole, 'classes.write')) {
     throw new UpdateClassError('forbidden', `role '${requesterRole}' cannot update classes`);
   }
 

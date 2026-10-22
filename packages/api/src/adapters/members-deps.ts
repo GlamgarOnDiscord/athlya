@@ -51,6 +51,7 @@ import { buildRoutedPublishDeps } from '../events/publish-deps.js';
 import { publish } from '../events/publish.js';
 
 import { createR2AvatarUploadStore } from './avatar-upload-store-r2.js';
+import { createDrizzleCardioProgressionRepoHttp } from './cardio-progression-repo-drizzle.js';
 import {
   getOrCreateDbHttpForRegion,
   getOrCreateWriteDb,
@@ -64,7 +65,6 @@ import { createDrizzleConsentsRepoHttp } from './members-consents-repo-drizzle.j
 import { createDrizzleExportJobStoreHttp } from './members-export-job-store-drizzle.js';
 import { createDrizzleNotificationPreferencesRepoHttp } from './notification-preferences-repo-drizzle.js';
 import { createDrizzleMemberRepoHttp } from './members-repo-drizzle.js';
-import { createDrizzleCardioProgressionRepoHttp } from './cardio-progression-repo-drizzle.js';
 import { createDrizzleProgressionRepoHttp } from './progression-repo-drizzle.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
@@ -72,6 +72,7 @@ import type { MembersDeps } from '../routes/members.js';
 import type { AthlyaBindings } from '../types.js';
 import type { AthlyaDbHttp } from '@athlya/db/client';
 import type { AthlyaEvent } from '@athlya/shared/events';
+import type { StaffRole } from '@athlya/shared/roles';
 import type { UpdateConsentsRequest, UpdateProfileRequest } from '@athlya/shared/schemas/api';
 
 /* ------------------------------------------------------------------ */
@@ -267,7 +268,7 @@ export function buildMembersDeps(
 
     async listMembersByStudio(
       studioId: string,
-      requesterRole: 'admin' | 'coach',
+      requesterRole: StaffRole,
       opts,
       claims: AuthClaims,
     ): Promise<MembersPage> {

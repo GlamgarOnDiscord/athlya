@@ -74,6 +74,8 @@
 import { t, type Locale } from '@athlya/shared/i18n';
 import { isNotificationEnabled } from '@athlya/shared/schemas/api';
 
+import { renderEmailHtml, renderEmailText, type EmailBranding } from './email-layout.js';
+
 import type {
   AthlyaEvent,
   BillingSubscriptionFailedEvent,
@@ -208,12 +210,28 @@ export interface PreferencesRepo {
   getPreferences(userId: string): Promise<unknown>;
 }
 
+/**
+ * Branding lookup contract (issue #761). Returns the identity of the
+ * recipient's studio, or `null` when it cannot be resolved; the e-mail
+ * then keeps the Athlya identity. Production reads it through the
+ * `notification_studio_branding` service function (migration 0053).
+ */
+export interface BrandingRepo {
+  getBranding(userId: string): Promise<EmailBranding | null>;
+}
+
 /** Arguments accepted by {@link EmailSender.send}. */
 export interface EmailMessage {
   readonly to: string;
   readonly subject: string;
   readonly html: string;
   readonly text: string;
+  /**
+   * Studio sender, when its sending domain is verified and activated:
+   * the adapter sends from `noreply@{domain}` under `name`. Absent, the
+   * adapter's default Athlya sender applies.
+   */
+  readonly sender?: { readonly name: string; readonly domain: string };
 }
 
 /**
@@ -310,6 +328,8 @@ export interface HandleEventDeps {
   readonly logger: Logger;
   /** Optional: without it every channel of every message is on. */
   readonly preferences?: PreferencesRepo;
+  /** Optional: without it every e-mail keeps the Athlya identity. */
+  readonly branding?: BrandingRepo;
   /** Optional — defaults to `Date.now`. Tests pin it for determinism. */
   readonly clock?: Clock;
   /**
@@ -731,7 +751,7 @@ export async function handleEvent(
         : {}),
     };
 
-    const emailPromise = maybeSendEmail(message, recipient, email);
+    const emailPromise = maybeSendEmail(message, recipient, email, deps.branding, logger);
     const pushPromise = maybeSendPush(message, recipient, push);
 
     const [emailSent, pushSent] = await Promise.all([emailPromise, pushPromise]);
@@ -793,26 +813,55 @@ function isHandled(type: AthlyaEvent['type']): type is HandledEventType {
  * Run the email leg if both the template carries subject+body and the
  * recipient has an address. Return `true` only when the send was
  * actually attempted and the sender resolved.
+ *
+ * The body is laid out in the studio's colors and logo
+ * (`email-layout.ts`); the branding is read only when an e-mail
+ * actually leaves, and the studio's own sender is used once its
+ * sending domain is verified and activated. A failing branding lookup
+ * never blocks a transactional e-mail: it is logged and the e-mail
+ * leaves with the Athlya identity.
  */
 async function maybeSendEmail(
   message: RenderedMessage,
   recipient: Recipient,
   email: EmailSender,
+  brandingRepo: BrandingRepo | undefined,
+  logger: Logger,
 ): Promise<boolean> {
   const { emailSubject, emailBody } = message;
   if (emailSubject === undefined || emailBody === undefined || recipient.email === null) {
     return false;
   }
+  const branding = await readBranding(brandingRepo, recipient.userId, logger);
+  const content = { subject: emailSubject, body: emailBody };
   await email.send({
     to: recipient.email,
     subject: emailSubject,
-    // The adapter is responsible for escaping — this module
-    // ships plain text as both `text` and a minimally-wrapped
-    // `html`. Resend accepts both and picks per content-type.
-    html: `<p>${escapeHtml(emailBody)}</p>`,
-    text: emailBody,
+    html: renderEmailHtml(content, branding, recipient.locale),
+    text: renderEmailText(content, branding, recipient.locale),
+    ...(branding !== null && branding.emailDomain !== null
+      ? { sender: { name: branding.studioName, domain: branding.emailDomain } }
+      : {}),
   });
   return true;
+}
+
+/** Studio branding for the e-mail, or `null` when absent or unreadable. */
+async function readBranding(
+  brandingRepo: BrandingRepo | undefined,
+  userId: string,
+  logger: Logger,
+): Promise<EmailBranding | null> {
+  if (brandingRepo === undefined) return null;
+  try {
+    return await brandingRepo.getBranding(userId);
+  } catch (err) {
+    logger.warn('notifications.branding_failed', {
+      userId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
 
 /**
@@ -835,20 +884,4 @@ async function maybeSendPush(
     ...(pushData !== undefined ? { data: pushData } : {}),
   });
   return true;
-}
-
-/**
- * Minimal HTML escape for the `<p>…</p>` wrap used above. Covers the
- * five characters OWASP lists as required for a plain text context;
- * full-blown email templating is an adapter-level concern. The
- * templates themselves now come from `@athlya/shared/i18n` under the
- * `notifications.*` namespace (task 19.2 / Req 28.3).
- */
-function escapeHtml(input: string): string {
-  return input
-    .replace(/&/gu, '&amp;')
-    .replace(/</gu, '&lt;')
-    .replace(/>/gu, '&gt;')
-    .replace(/"/gu, '&quot;')
-    .replace(/'/gu, '&#39;');
 }

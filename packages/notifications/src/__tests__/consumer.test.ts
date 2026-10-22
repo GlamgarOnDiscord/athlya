@@ -569,3 +569,69 @@ describe('handleEvent: member preferences', () => {
     expect(sendEmail).toHaveBeenCalledOnce();
   });
 });
+
+/* ================================================================== */
+/*  Studio branding (issue #761)                                       */
+/* ================================================================== */
+
+describe('handleEvent: studio branding', () => {
+  const branding = {
+    studioName: 'Studio Rive Gauche',
+    brandColor: '#0F766E',
+    logoUrl: null,
+    hideAthlyaBranding: true,
+    emailDomain: 'rive-gauche.example',
+  };
+
+  it('lays the e-mail out in the studio colors and sends from its domain', async () => {
+    const { sendEmail, deps } = buildDeps();
+    const getBranding = vi.fn().mockResolvedValue(branding);
+
+    await handleEvent(createdEvent(), { ...deps, branding: { getBranding } });
+
+    expect(getBranding).toHaveBeenCalledWith(USER_ID);
+    const message = sendEmail.mock.calls[0]?.[0];
+    expect(message?.html).toContain('background:#0F766E');
+    expect(message?.text).toContain('Envoyé par Studio Rive Gauche.');
+    expect(message?.sender).toEqual({ name: 'Studio Rive Gauche', domain: 'rive-gauche.example' });
+  });
+
+  it('keeps the Athlya sender until the domain is activated', async () => {
+    const { sendEmail, deps } = buildDeps();
+    const getBranding = vi.fn().mockResolvedValue({ ...branding, emailDomain: null });
+
+    await handleEvent(createdEvent(), { ...deps, branding: { getBranding } });
+
+    expect(sendEmail.mock.calls[0]?.[0].sender).toBeUndefined();
+  });
+
+  it('still sends the e-mail with the Athlya identity when the branding read throws', async () => {
+    const { sendEmail, logger, deps } = buildDeps();
+    const getBranding = vi.fn().mockRejectedValue(new Error('db unreachable'));
+    const warn = vi.fn<Logger['warn']>();
+
+    const result = await handleEvent(createdEvent(), {
+      ...deps,
+      logger: { ...logger, warn },
+      branding: { getBranding },
+    });
+
+    expect(result).toEqual({ status: 'ok', email: true, push: true });
+    const message = sendEmail.mock.calls[0]?.[0];
+    expect(message?.sender).toBeUndefined();
+    expect(message?.text).not.toContain('Studio Rive Gauche');
+    expect(warn).toHaveBeenCalledWith('notifications.branding_failed', {
+      userId: USER_ID,
+      error: 'db unreachable',
+    });
+  });
+
+  it('does not read the branding for a push-only message', async () => {
+    const { deps } = buildDeps();
+    const getBranding = vi.fn().mockResolvedValue(branding);
+
+    await handleEvent(reminderEvent(), { ...deps, branding: { getBranding } });
+
+    expect(getBranding).not.toHaveBeenCalled();
+  });
+});

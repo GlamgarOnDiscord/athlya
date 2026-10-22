@@ -40,6 +40,7 @@ import type {
   MembersExportCompletedEvent,
   MembersExportRequestedEvent,
 } from '@athlya/shared/events';
+import type { Role } from '@athlya/shared/roles';
 import type { Consents } from '@athlya/shared/schemas';
 import type { SessionSourceProvider } from '@athlya/shared/schemas/api';
 import type { AuditLog, Reservation, WorkoutSession } from '@athlya/shared/schemas/domain';
@@ -84,7 +85,7 @@ export interface ExportProfile {
   email: string | null;
   displayName: string;
   avatarUrl: string | null;
-  role: 'member' | 'coach' | 'admin';
+  role: Role;
   createdAt: string;
 }
 

@@ -83,6 +83,8 @@ describe('lazyAuthDeps', () => {
     refresh: vi.fn(),
     logout: vi.fn(),
     logoutAll: vi.fn(),
+    listSessions: vi.fn(),
+    revokeSession: vi.fn(),
     deleteMe: vi.fn(),
     requestPasswordReset: vi.fn(),
     confirmPasswordReset: vi.fn(),

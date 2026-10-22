@@ -24,6 +24,7 @@
 
 import { z } from 'zod';
 
+import { STAFF_ROLES } from '../roles.js';
 import { isValidTimeZone, MAX_SERIES_OCCURRENCES } from '../schedule.js';
 
 import { ConsentsSchema } from './consents.js';
@@ -1444,21 +1445,30 @@ export type CoachStreamEvent = (typeof COACH_STREAM_EVENTS)[number];
 /* ------------------------------------------------------------------ */
 
 /**
- * `GET /v1/studios/me` response — slice B9.1.
+ * A studio logo as the API stores it: an https URL (R2 public object) or,
+ * when no bucket is configured, a `data:image/(png|jpeg|webp);base64,` URL
+ * capped by migration 0053. `null` when the studio has none.
+ */
+export const StudioLogoSchema = z
+  .string()
+  .max(180_000)
+  .regex(/^(https:\/\/\S+|data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2})$/u)
+  .nullable();
+
+/**
+ * `GET /v1/studios/me` response: slice B9.1, white label (issue #761).
  *
  * Returns the caller's tenant root row (resolved from `claims.studioId`)
  * with the columns the front-end needs to drive its theming and admin
  * surfaces:
  *
- *   • `id`, `slug`, `name` — identity / addressing fields.
- *   • `brandColor` — `#RRGGBB` hex pair fed straight into
- *     `buildBrandColorCss(...)` from `@athlya/shared/theming` to retint
- *     the UI without a second round-trip.
- *   • `brandLogo` — optional URL or `null`. The current `studios` table
- *     does not yet carry a column for the logo (Vague 23 keeps the
- *     migration footprint zero); the field is exposed as
- *     nullable + optional so the API can ship `null` until the schema
- *     adds the column.
+ *   • `id`, `slug`, `name`: identity and addressing fields.
+ *   • `brandColor`: `#RRGGBB` hex fed straight into
+ *     `buildBrandColorCss(...)` from `@athlya/shared/theming`.
+ *   • `brandLogoLight` / `brandLogoDark`: logo for light and dark
+ *     surfaces, see {@link StudioLogoSchema}.
+ *   • `hideAthlyaBranding`: drops the "via Athlya" mention of the
+ *     studio's transactional e-mails.
  */
 export const StudioMeResponseSchema = z
   .object({
@@ -1466,38 +1476,140 @@ export const StudioMeResponseSchema = z
     slug: SlugSchema,
     name: z.string().min(1).max(120),
     brandColor: HexColorSchema,
-    brandLogo: z.url().nullable().optional(),
+    brandLogoLight: StudioLogoSchema,
+    brandLogoDark: StudioLogoSchema,
+    hideAthlyaBranding: z.boolean(),
   })
   .strict();
 
 export type StudioMeResponse = z.infer<typeof StudioMeResponseSchema>;
 
 /**
- * `PATCH /v1/studios/me` (admin only) — slice B9.2.
+ * `PATCH /v1/studios/me` (admin only): slice B9.2, issue #761.
  *
- * Whitelists the three editable fields. At least one must be present so
+ * Whitelists the editable scalar fields. At least one must be present so
  * the server does not waste a round-trip on an empty patch. The strict
  * shape ensures no surprise column (e.g. `slug`, `id`) can be patched
- * via this endpoint — those mutations require a dedicated admin path.
+ * via this endpoint. Logos have their own binary upload route
+ * (`PUT /v1/studios/me/logo/{light|dark}`).
  *
  * `brandColor` MUST additionally pass a WCAG 2.2 AA contrast check
- * server-side against either `#FFFFFF` or `#000000` (whichever is the
- * compagnion paired by the theming helper) before the row is updated.
- * That check lives in the route handler — Zod can only enforce the
- * regex shape, not the perceptual contrast.
+ * server-side against the text color the theming helper pairs with it
+ * before the row is updated. That check lives in the route handler:
+ * Zod can only enforce the regex shape, not the perceptual contrast.
  */
 export const UpdateStudioRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
     brandColor: HexColorSchema.optional(),
-    brandLogo: z.url().nullable().optional(),
+    hideAthlyaBranding: z.boolean().optional(),
   })
   .strict()
-  .refine((v) => v.name !== undefined || v.brandColor !== undefined || v.brandLogo !== undefined, {
-    message: 'must patch at least one of { name, brandColor, brandLogo }',
-  });
+  .refine(
+    (v) => v.name !== undefined || v.brandColor !== undefined || v.hideAthlyaBranding !== undefined,
+    { message: 'must patch at least one of { name, brandColor, hideAthlyaBranding }' },
+  );
 
 export type UpdateStudioRequest = z.infer<typeof UpdateStudioRequestSchema>;
+
+/** Logo variants of `PUT|DELETE /v1/studios/me/logo/{variant}`. */
+export const StudioLogoVariantSchema = z.enum(['light', 'dark']);
+
+export type StudioLogoVariant = z.infer<typeof StudioLogoVariantSchema>;
+
+/**
+ * Kinds of custom domain a studio registers (issue #761): `web` serves
+ * the member app on the studio's own hostname, `email` sends the
+ * studio's transactional e-mails from its own domain.
+ */
+export const StudioDomainKindSchema = z.enum(['web', 'email']);
+
+export type StudioDomainKind = z.infer<typeof StudioDomainKindSchema>;
+
+/**
+ * A DNS hostname as typed by an admin: trimmed, lower-cased, no scheme,
+ * no trailing dot, at least two labels, and outside Athlya's own zone.
+ * Mirrors the `studio_domains_hostname_check` constraint of migration
+ * 0053.
+ */
+export const StudioHostnameSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(253)
+  .regex(
+    /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/u,
+    'must be a hostname such as club.example.com',
+  )
+  .refine((host) => host !== 'athlya.app' && !host.endsWith('.athlya.app'), {
+    message: 'must not be an athlya.app hostname',
+  });
+
+/** `PUT /v1/studios/me/domains/{kind}` body. */
+export const SetStudioDomainRequestSchema = z.object({ hostname: StudioHostnameSchema }).strict();
+
+export type SetStudioDomainRequest = z.infer<typeof SetStudioDomainRequestSchema>;
+
+/**
+ * Outcome of the last lookup of one expected record:
+ *   • `ok`: found with the expected value;
+ *   • `missing`: no record of that type at that name;
+ *   • `mismatch`: a record exists with another value;
+ *   • `unchecked`: never looked up yet;
+ *   • `awaiting_value`: the value is issued during provisioning (DKIM)
+ *     and the operator has not entered it yet.
+ */
+export const DnsRecordCheckSchema = z.enum([
+  'ok',
+  'missing',
+  'mismatch',
+  'unchecked',
+  'awaiting_value',
+]);
+
+export type DnsRecordCheck = z.infer<typeof DnsRecordCheckSchema>;
+
+/** One DNS record the studio has to publish, with its last check. */
+export const DnsRecordSchema = z
+  .object({
+    purpose: z.enum(['ownership', 'routing', 'spf', 'return_path', 'dkim', 'dmarc']),
+    type: z.enum(['CNAME', 'TXT', 'MX']),
+    name: z.string().min(1).max(253),
+    value: z.string().max(2048).nullable(),
+    priority: z.number().int().min(0).max(65535).nullable(),
+    required: z.boolean(),
+    check: DnsRecordCheckSchema,
+  })
+  .strict();
+
+export type DnsRecord = z.infer<typeof DnsRecordSchema>;
+
+/**
+ * A registered custom domain. `status` is the DNS verdict (`verified`
+ * once every required record was found); `activatedAt` is set by an
+ * operator once Cloudflare or Resend serves the domain
+ * (`docs/runbooks/white-label-domains.md`).
+ */
+export const StudioDomainSchema = z
+  .object({
+    kind: StudioDomainKindSchema,
+    hostname: z.string().min(1).max(253),
+    status: z.enum(['pending', 'verified', 'failed']),
+    records: z.array(DnsRecordSchema),
+    lastCheckedAt: IsoDateTimeSchema.nullable(),
+    verifiedAt: IsoDateTimeSchema.nullable(),
+    activatedAt: IsoDateTimeSchema.nullable(),
+  })
+  .strict();
+
+export type StudioDomain = z.infer<typeof StudioDomainSchema>;
+
+/** `GET /v1/studios/me/domains` response. */
+export const StudioDomainsResponseSchema = z
+  .object({ items: z.array(StudioDomainSchema).max(2) })
+  .strict();
+
+export type StudioDomainsResponse = z.infer<typeof StudioDomainsResponseSchema>;
 
 /* ------------------------------------------------------------------ */
 /*  billing — /v1/billing/*                                            */
@@ -1897,3 +2009,150 @@ export const TodayWorkoutResponseSchema = z
   .strict();
 
 export type TodayWorkoutResponse = z.infer<typeof TodayWorkoutResponseSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  team: /v1/studios/me/team/* (issue #756)                          */
+/* ------------------------------------------------------------------ */
+
+/** A role an admin may grant from the Team page. */
+export const StaffRoleSchema = z.enum(STAFF_ROLES);
+
+export type StaffRoleValue = z.infer<typeof StaffRoleSchema>;
+
+/** One account of the studio team. */
+export const TeamMemberSchema = z
+  .object({
+    id: UserIdSchema,
+    displayName: z.string(),
+    email: z.string().nullable(),
+    avatarUrl: z.string().nullable(),
+    role: StaffRoleSchema,
+    joinedAt: IsoDateTimeSchema,
+  })
+  .strict();
+
+export type TeamMember = z.infer<typeof TeamMemberSchema>;
+
+/** A pending invitation (never the token). */
+export const TeamInvitationSchema = z
+  .object({
+    id: UuidSchema,
+    email: z.string(),
+    role: StaffRoleSchema,
+    invitedAt: IsoDateTimeSchema,
+    expiresAt: IsoDateTimeSchema,
+  })
+  .strict();
+
+export type TeamInvitation = z.infer<typeof TeamInvitationSchema>;
+
+/** `GET /v1/team`: the team, the caller first, then by name. */
+export const TeamResponseSchema = z
+  .object({
+    members: z.array(TeamMemberSchema),
+    invitations: z.array(TeamInvitationSchema),
+  })
+  .strict();
+
+export type TeamResponse = z.infer<typeof TeamResponseSchema>;
+
+/** `POST /v1/team/invitations` (admin). */
+export const InviteTeamMemberRequestSchema = z
+  .object({
+    email: z
+      .email()
+      .max(254)
+      .transform((value) => value.toLowerCase()),
+    role: StaffRoleSchema,
+  })
+  .strict();
+
+export type InviteTeamMemberRequest = z.infer<typeof InviteTeamMemberRequestSchema>;
+
+/**
+ * Answer to an invitation. An account of the studio with that email gets
+ * the role at once (`role_updated`); otherwise a pending invitation is
+ * created and its token is returned this once, for the admin to share.
+ */
+export const InviteTeamMemberResponseSchema = z.discriminatedUnion('outcome', [
+  z.object({ outcome: z.literal('role_updated'), member: TeamMemberSchema }).strict(),
+  z
+    .object({
+      outcome: z.literal('invited'),
+      invitation: TeamInvitationSchema,
+      token: z.string(),
+    })
+    .strict(),
+]);
+
+export type InviteTeamMemberResponse = z.infer<typeof InviteTeamMemberResponseSchema>;
+
+/** `PATCH /v1/team/members/:id` (admin): `member` takes the account off the team. */
+export const UpdateTeamMemberRequestSchema = z
+  .object({ role: z.enum(['member', ...STAFF_ROLES]) })
+  .strict();
+
+export type UpdateTeamMemberRequest = z.infer<typeof UpdateTeamMemberRequestSchema>;
+
+export const TeamMemberParamsSchema = z.object({ id: UserIdSchema }).strict();
+
+export type TeamMemberParams = z.infer<typeof TeamMemberParamsSchema>;
+
+export const TeamInvitationParamsSchema = z.object({ id: UuidSchema }).strict();
+
+export type TeamInvitationParams = z.infer<typeof TeamInvitationParamsSchema>;
+
+/** Invitation token: 32 random bytes, base64url without padding. */
+export const InvitationTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/u);
+
+/** `POST /v1/team/invitations/accept`, by the invited account. */
+export const AcceptInvitationRequestSchema = z.object({ token: InvitationTokenSchema }).strict();
+
+export type AcceptInvitationRequest = z.infer<typeof AcceptInvitationRequestSchema>;
+
+export const AcceptInvitationResponseSchema = z.object({ role: StaffRoleSchema }).strict();
+
+export type AcceptInvitationResponse = z.infer<typeof AcceptInvitationResponseSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  auth sessions: /v1/auth/sessions (issue #757)                     */
+/* ------------------------------------------------------------------ */
+
+export const SessionDeviceSchema = z
+  .object({
+    browser: z.enum(['chrome', 'edge', 'firefox', 'safari', 'app', 'other']),
+    os: z.enum(['ios', 'android', 'macos', 'windows', 'linux', 'other']),
+  })
+  .strict();
+
+export type SessionDeviceValue = z.infer<typeof SessionDeviceSchema>;
+
+/** Public handle of a session: 32 lowercase hex digits. */
+export const SessionHandleSchema = z.string().regex(/^[0-9a-f]{32}$/u);
+
+/**
+ * One active session. The times are `null` for a session signed in
+ * before they were recorded; `current` marks the caller's own session.
+ */
+export const ActiveSessionSchema = z
+  .object({
+    id: SessionHandleSchema,
+    device: SessionDeviceSchema.nullable(),
+    createdAt: IsoDateTimeSchema.nullable(),
+    lastSeenAt: IsoDateTimeSchema.nullable(),
+    expiresAt: IsoDateTimeSchema,
+    current: z.boolean(),
+  })
+  .strict();
+
+export type ActiveSession = z.infer<typeof ActiveSessionSchema>;
+
+export const ActiveSessionsResponseSchema = z
+  .object({ items: z.array(ActiveSessionSchema) })
+  .strict();
+
+export type ActiveSessionsResponse = z.infer<typeof ActiveSessionsResponseSchema>;
+
+export const SessionParamsSchema = z.object({ id: SessionHandleSchema }).strict();
+
+export type SessionParams = z.infer<typeof SessionParamsSchema>;

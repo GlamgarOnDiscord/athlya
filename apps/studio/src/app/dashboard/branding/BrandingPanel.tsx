@@ -1,10 +1,11 @@
 /**
- * Live branding panel — slice B9.1 + B9.2.
+ * Live branding panel: slice B9.1 + B9.2, white label (issue #761).
  *
  * Client-side wrapper that fetches `GET /v1/studios/me` once on
- * mount and feeds the result into {@link BrandingPreview}. Until the
- * fetch resolves we show a tight Skeleton so the layout doesn't
- * jump.
+ * mount and renders the three editors of the studio identity: logos
+ * (light and dark), brand color with its live contrast reading, and the
+ * Athlya mention of the e-mails. Each editor saves on its own and hands
+ * the updated studio back, so the panel always shows the stored row.
  *
  * Why a client component instead of a Server Component?
  * -----------------------------------------------------
@@ -19,6 +20,8 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useApiClient } from '../../../lib/api/buildClient';
@@ -26,20 +29,16 @@ import { useAuth } from '../../../lib/auth/AuthContext';
 import { useLocale } from '../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../lib/i18n/t';
 
+import { AthlyaMention } from './AthlyaMention';
 import { BrandingPreview } from './BrandingPreview';
+import { LogoEditor } from './LogoEditor';
 
-interface StudioMe {
-  readonly id: string;
-  readonly slug: string;
-  readonly name: string;
-  readonly brandColor: string;
-  readonly brandLogo?: string | null;
-}
-
-const FALLBACK_COLOR = '#0EA5E9';
+import type { StudioMeResponse } from '@athlya/shared/schemas/api';
 
 type Status =
-  { kind: 'loading' } | { kind: 'ready'; color: string } | { kind: 'error'; message: string };
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'ready'; readonly studio: StudioMeResponse }
+  | { readonly kind: 'error' };
 
 export function BrandingPanel(): ReactElement {
   const locale = useLocale();
@@ -50,49 +49,105 @@ export function BrandingPanel(): ReactElement {
   const client = useApiClient(getToken);
 
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    async function run(): Promise<void> {
+    void (async () => {
       try {
-        const studio = await client.get<StudioMe>('/v1/studios/me');
-        if (cancelled) return;
-        setStatus({ kind: 'ready', color: studio.brandColor });
-      } catch (err: unknown) {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : String(err);
-        setStatus({ kind: 'error', message });
+        const studio = await client.get<StudioMeResponse>('/v1/studios/me');
+        if (!cancelled) setStatus({ kind: 'ready', studio });
+      } catch {
+        if (!cancelled) setStatus({ kind: 'error' });
       }
-    }
-    void run();
+    })();
     return () => {
       cancelled = true;
     };
-  }, [client]);
+  }, [client, reload]);
+
+  const onSaved = useCallback((studio: StudioMeResponse) => {
+    setStatus({ kind: 'ready', studio });
+  }, []);
 
   if (status.kind === 'loading') {
     return (
-      <div className="flex flex-wrap items-center gap-4">
-        <Skeleton className="size-12 rounded-full" />
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-3 w-64" />
-        </div>
+      <div className="flex flex-col gap-6" aria-busy="true">
+        <Skeleton className="h-40 w-full rounded-xl" />
+        <Skeleton className="h-40 w-full rounded-xl" />
       </div>
     );
   }
   if (status.kind === 'error') {
-    // Render the editor anyway against the fallback color so the
-    // admin can still issue a PATCH — losing the read shouldn't
-    // wedge the write surface.
     return (
-      <div className="flex flex-col gap-3">
-        <p role="alert" className="text-sm text-destructive">
-          {t('studio.branding.saveError')}: {status.message}
-        </p>
-        <BrandingPreview color={FALLBACK_COLOR} />
+      <div role="alert" className="flex flex-col items-start gap-3 rounded-xl border p-4">
+        <p className="text-sm">{t('studio.branding.loadError')}</p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setStatus({ kind: 'loading' });
+            setReload((n) => n + 1);
+          }}
+        >
+          {t('studio.branding.retry')}
+        </Button>
       </div>
     );
   }
-  return <BrandingPreview color={status.color} />;
+
+  const { studio } = status;
+  return (
+    <div className="flex flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('studio.branding.logo.title')}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">{t('studio.branding.logo.help')}</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <LogoEditor
+              variant="light"
+              value={studio.brandLogoLight}
+              studioName={studio.name}
+              client={client}
+              t={t}
+              onSaved={onSaved}
+            />
+            <LogoEditor
+              variant="dark"
+              value={studio.brandLogoDark}
+              studioName={studio.name}
+              client={client}
+              t={t}
+              onSaved={onSaved}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('studio.branding.brandColor.label')}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">{t('studio.branding.brandColor.help')}</p>
+          <BrandingPreview color={studio.brandColor} client={client} t={t} onSaved={onSaved} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('studio.branding.mention.title')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AthlyaMention
+            hidden={studio.hideAthlyaBranding}
+            client={client}
+            t={t}
+            onSaved={onSaved}
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
 }

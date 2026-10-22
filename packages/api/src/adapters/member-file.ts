@@ -3,7 +3,7 @@
  * consents, their reservations to come and the latest past ones, and the
  * attendance counts.
  *
- * The route is admin only. Every statement runs in one `withTenant`
+ * The route needs `members.file` (admin, manager, front desk). Every statement runs in one `withTenant`
  * transaction with the admin's claims, so `users_read_same_studio` and
  * `reservations_read_admin_same_studio` are what let the rows through;
  * the explicit `studio_id` filters repeat that scope in the query.

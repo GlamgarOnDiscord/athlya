@@ -12,11 +12,15 @@
  *     warrants `citext` (task 2.2 enables the extension).
  *   - `brand_color` defaults to Athlya's brand blue — a studio that never
  *     customises its theme still reads a correct value.
+ *   - `brand_logo_light` / `brand_logo_dark` hold an https URL or a capped
+ *     `data:image/*` URL (migration 0053, CHECK constraints there).
+ *   - `hide_athlya_branding` drops the "via Athlya" footer of the studio's
+ *     transactional e-mails.
  *
  * Related requirements: 6.1 (studio binding), 13.2 (tenant isolation).
  */
 
-import { pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { boolean, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 
 import { createdAt, deletedAt, uuidPrimaryKey } from './_shared.js';
 
@@ -27,6 +31,9 @@ export const studios = pgTable(
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     brandColor: text('brand_color').notNull().default('#0EA5E9'),
+    brandLogoLight: text('brand_logo_light'),
+    brandLogoDark: text('brand_logo_dark'),
+    hideAthlyaBranding: boolean('hide_athlya_branding').notNull().default(false),
     createdAt: createdAt(),
     deletedAt: deletedAt(),
   },

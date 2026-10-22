@@ -45,14 +45,16 @@ import {
   signRefresh,
   verify as verifyJwt,
 } from './jwt.js';
-import { hash as hashPassword, verify as verifyPasswordHash } from './password.js';
-
 import { classifyUserAgent, detectLoginAnomaly, type LoginSignal } from './login-anomaly.js';
+import { hash as hashPassword, verify as verifyPasswordHash } from './password.js';
+import { describeDevice, sessionHandle } from './sessions.js';
 
 import type { Jwks, RefreshClaims, SigningKey } from './jwt.js';
+import type { SessionMeta, StoredSession } from './sessions.js';
 import type { LoginThrottleDecision } from './throttle.js';
 import type { AthlyaEvent } from '@athlya/shared/events';
 import type { UserId } from '@athlya/shared/ids';
+import type { Role } from '@athlya/shared/roles';
 import type { Consents } from '@athlya/shared/schemas';
 import type { LoginRequest, RegisterRequest } from '@athlya/shared/schemas/api';
 
@@ -177,7 +179,7 @@ export interface UserRow {
   readonly studioId: string;
   readonly email: string;
   readonly displayName: string;
-  readonly role: 'member' | 'coach' | 'admin';
+  readonly role: Role;
   readonly passwordHash: string | null;
   readonly deletedAt: Date | null;
   /** Monotonic revocation counter — included in access tokens as `cv`. */
@@ -202,7 +204,7 @@ export interface CreateUserInput {
   readonly email: string;
   readonly passwordHash: string | null;
   readonly displayName: string;
-  readonly role: 'member' | 'coach' | 'admin';
+  readonly role: Role;
   readonly consents: Consents;
 }
 
@@ -360,14 +362,17 @@ export type RotateResult =
  *                                     `rotate` returns
  *                                     `'reuse_detected'`.
  *   - {@link exists}  — reserved for verify-only code paths.
+ *   - {@link listForUser}: every live session of `userId`, one entry
+ *                           per rotation family (issue #757).
  */
 export interface SessionStore {
-  create(userId: string, sid: string, expiresAt: Date): Promise<void>;
+  create(userId: string, sid: string, expiresAt: Date, meta?: SessionMeta): Promise<void>;
   rotate(oldSid: string, newSid: string, newExpiresAt: Date): Promise<RotateResult>;
   revoke(sid: string): Promise<void>;
   revokeAllForUser(userId: string): Promise<void>;
   revokeFamilyByRootSid(rootSid: string): Promise<void>;
   exists(sid: string): Promise<boolean>;
+  listForUser(userId: string): Promise<StoredSession[]>;
 }
 
 /**
@@ -580,7 +585,11 @@ function normaliseEmail(email: string): string {
  * and `refresh` all agree on the exact sequence of writes and the
  * exact claims shape.
  */
-async function mintSession(user: UserRow, deps: AuthServiceDeps): Promise<Session> {
+async function mintSession(
+  user: UserRow,
+  deps: AuthServiceDeps,
+  userAgent?: string,
+): Promise<Session> {
   const sid = newUuid(deps);
   const iat = nowSec(deps);
   const accessExp = iat + accessTtl(deps);
@@ -590,15 +599,18 @@ async function mintSession(user: UserRow, deps: AuthServiceDeps): Promise<Sessio
   // storing never produces a "ghost" refresh token the service will
   // later reject on rotation. The store is the authoritative ledger;
   // the JWT is the opaque proof of possession.
-  await deps.sessionStore.create(user.id, sid, new Date(refreshExp * 1000));
+  await deps.sessionStore.create(user.id, sid, new Date(refreshExp * 1000), {
+    device: describeDevice(userAgent),
+  });
 
   const signingKey = deps.signingKey;
   const issuer = deps.options?.jwtIssuer;
   const audience = deps.options?.jwtAudience;
+  const sh = await sessionHandle(sid);
 
   const [accessToken, refreshToken] = await Promise.all([
     signAccess(
-      { sub: user.id, studio: user.studioId, role: user.role, cv: user.credentialsVersion },
+      { sub: user.id, studio: user.studioId, role: user.role, cv: user.credentialsVersion, sh },
       {
         signingKey,
         ttlSec: accessTtl(deps),
@@ -689,7 +701,11 @@ function buildUserDeletedEvent(
  *   `studio_not_found`, `password_breached`, `email_taken`,
  *   `hibp_unavailable` (only when `deps.hibpFailClosed` is `true`).
  */
-export async function register(input: RegisterRequest, deps: AuthServiceDeps): Promise<Session> {
+export async function register(
+  input: RegisterRequest,
+  deps: AuthServiceDeps,
+  options: { readonly userAgent?: string } = {},
+): Promise<Session> {
   const email = normaliseEmail(input.email);
 
   const studio = await deps.userRepo.findStudioBySlug(input.studioSlug);
@@ -770,7 +786,7 @@ export async function register(input: RegisterRequest, deps: AuthServiceDeps): P
     throw err;
   }
 
-  const session = await mintSession(user, deps);
+  const session = await mintSession(user, deps, options.userAgent);
 
   if (recorded.event !== null) {
     await dispatchRecorded(deps, recorded.event);
@@ -868,7 +884,7 @@ export async function login(
     throw new AuthError('invalid_credentials');
   }
 
-  const session = await mintSession(user, deps);
+  const session = await mintSession(user, deps, options.anomalySignal?.userAgent);
 
   // Sprint 12 / Slice 12.15 (Epic B3.4) — anomaly detection. Best
   // effort: a missing store, a Redis hiccup, or a malformed
@@ -1184,7 +1200,13 @@ export async function refresh(refreshToken: string, deps: AuthServiceDeps): Prom
 
   const [accessToken, newRefreshToken] = await Promise.all([
     signAccess(
-      { sub: user.id, studio: user.studioId, role: user.role, cv: user.credentialsVersion },
+      {
+        sub: user.id,
+        studio: user.studioId,
+        role: user.role,
+        cv: user.credentialsVersion,
+        sh: await sessionHandle(rotateOutcome.rootSid),
+      },
       {
         signingKey,
         ttlSec: accessTtl(deps),

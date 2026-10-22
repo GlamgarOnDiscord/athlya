@@ -35,8 +35,14 @@
  * Storage layout (post-SP2.1)
  * --------------------------------------------------------------------
  *   `auth:sid:<sid>`              JSON `{ userId, expiresAt, rootSid,
- *                                 parentSid }`. TTL aligned on
- *                                 `expiresAt`.
+ *                                 parentSid, device, createdAt,
+ *                                 lastSeenAt }`. TTL aligned on
+ *                                 `expiresAt`. The last three
+ *                                 (issue #757) feed the sessions
+ *                                 list: `device` and `createdAt`
+ *                                 are set at sign-in and carried
+ *                                 by every rotation, `lastSeenAt`
+ *                                 is the time of the last rotation.
  *   `auth:user:<userId>:sids`     SET of currently-live sids. Used
  *                                 by `revokeAllForUser` for the
  *                                 fan-out delete on account deletion.
@@ -74,7 +80,9 @@
  * @see docs/security/audit-S2-auth.md S2-002, S2-004
  */
 
-import type { RotateResult, SessionStore } from '@athlya/auth';
+import { parseDevice } from '@athlya/auth';
+
+import type { RotateResult, SessionDevice, SessionStore, StoredSession } from '@athlya/auth';
 import type { Redis } from '@upstash/redis';
 
 /* ------------------------------------------------------------------ */
@@ -195,6 +203,9 @@ interface SessionPayload {
   readonly expiresAt: string;
   readonly rootSid: string;
   readonly parentSid: string | null;
+  readonly device: SessionDevice | null;
+  readonly createdAt: string | null;
+  readonly lastSeenAt: string | null;
 }
 
 /**
@@ -205,12 +216,16 @@ interface SessionPayload {
  * Returns `null` on any structural problem so callers can fail
  * closed.
  */
-function parsePayload(raw: string, sid: string): SessionPayload | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
+function parsePayload(raw: unknown, sid: string): SessionPayload | null {
+  // The Upstash client deserialises JSON values by default, so a read
+  // can hand back the object rather than the string that was written.
+  let parsed: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
   }
   if (parsed === null || typeof parsed !== 'object') return null;
   const obj = parsed as Record<string, unknown>;
@@ -228,7 +243,20 @@ function parsePayload(raw: string, sid: string): SessionPayload | null {
   const parentSidRaw = obj['parentSid'];
   const parentSid = typeof parentSidRaw === 'string' && parentSidRaw !== '' ? parentSidRaw : null;
 
-  return { userId, expiresAt, rootSid, parentSid };
+  // Issue #757 fields; absent on payloads written before it.
+  return {
+    userId,
+    expiresAt,
+    rootSid,
+    parentSid,
+    device: parseDevice(obj['device']),
+    createdAt: isoOrNull(obj['createdAt']),
+    lastSeenAt: isoOrNull(obj['lastSeenAt']),
+  };
+}
+
+function isoOrNull(value: unknown): string | null {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? value : null;
 }
 
 function serializePayload(payload: SessionPayload): string {
@@ -245,13 +273,17 @@ function serializePayload(payload: SessionPayload): string {
  */
 export function createRedisSessionStore(redis: Redis): SessionStore {
   return {
-    async create(userId, sid, expiresAt) {
+    async create(userId, sid, expiresAt, meta) {
       const ttlSec = ttlFromExpiresAt(expiresAt);
+      const now = new Date().toISOString();
       const payload: SessionPayload = {
         userId,
         expiresAt: expiresAt.toISOString(),
         rootSid: sid,
         parentSid: null,
+        device: meta?.device ?? null,
+        createdAt: now,
+        lastSeenAt: now,
       };
       // Per-sid record + user index. Family seed + sid_to_root
       // pointer are added next so the rotation chain is ready
@@ -297,6 +329,9 @@ export function createRedisSessionStore(redis: Redis): SessionStore {
             expiresAt: newExpiresAt.toISOString(),
             rootSid: peekedPayload.rootSid,
             parentSid: oldSid,
+            device: peekedPayload.device,
+            createdAt: peekedPayload.createdAt,
+            lastSeenAt: new Date().toISOString(),
           };
         }
       }
@@ -313,6 +348,9 @@ export function createRedisSessionStore(redis: Redis): SessionStore {
           expiresAt: newExpiresAt.toISOString(),
           rootSid: newSid,
           parentSid: oldSid,
+          device: null,
+          createdAt: null,
+          lastSeenAt: null,
         };
       }
 
@@ -466,6 +504,35 @@ export function createRedisSessionStore(redis: Redis): SessionStore {
     async exists(sid) {
       const count = await redis.exists(sidKey(sid));
       return count === 1;
+    },
+
+    async listForUser(userId): Promise<StoredSession[]> {
+      // One entry per rotation family. The live-sid index can briefly
+      // hold a sid whose payload expired (its TTL ran out before the
+      // index was cleaned): those read back null and are skipped, as
+      // are payloads naming another user.
+      const sids = await redis.smembers(userSidsKey(userId));
+      if (sids.length === 0) return [];
+      const raws = await redis.mget<unknown[]>(...sids.map((sid) => sidKey(sid)));
+      const byRoot = new Map<string, StoredSession>();
+      sids.forEach((sid, index) => {
+        const raw = raws[index];
+        const payload = raw === null || raw === undefined ? null : parsePayload(raw, sid);
+        if (payload === null || payload.userId !== userId) return;
+        const previous = byRoot.get(payload.rootSid);
+        if (previous !== undefined && (previous.lastSeenAt ?? '') >= (payload.lastSeenAt ?? '')) {
+          return;
+        }
+        byRoot.set(payload.rootSid, {
+          sid,
+          rootSid: payload.rootSid,
+          device: payload.device,
+          createdAt: payload.createdAt,
+          lastSeenAt: payload.lastSeenAt,
+          expiresAt: payload.expiresAt,
+        });
+      });
+      return [...byRoot.values()];
     },
   };
 }
