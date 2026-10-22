@@ -87,8 +87,8 @@ describe('service function contract with migration 0032', () => {
     (m) => m[1],
   );
 
-  it('references the 24 service functions', () => {
-    expect(new Set(used).size).toBe(24);
+  it('references the 25 service functions', () => {
+    expect(new Set(used).size).toBe(25);
   });
 
   const granted = grantedToApp(migration);
