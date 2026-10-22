@@ -55,6 +55,27 @@ another studio stops the run and nothing is written (one transaction).
   (`packages/db/scripts/_guard.mjs`), as for the other scripts.
 - Neither the password nor the connection string is ever printed.
 
+## Demo build
+
+The Vercel demo build (`NEXT_PUBLIC_DEMO_MODE=1`, issue #750) has the same
+five people, with `@example.com` addresses and no database: `/login`
+offers one button per profile and an in-memory fake API answers with the
+profile's role, so each one sees what its capabilities allow (issue #771).
+The demo password is `demo`.
+
+| Role    | Name           | Email                        | App            |
+| ------- | -------------- | ---------------------------- | -------------- |
+| admin   | Camille Durand | `camille.durand@example.com` | studio console |
+| manager | Hugo Lefebvre  | `hugo.lefebvre@example.com`  | studio console |
+| accueil | Sarah Benali   | `sarah.benali@example.com`   | studio console |
+| coach   | Inès Garnier   | `ines.garnier@example.com`   | studio console |
+| member  | Léa Fontaine   | `lea.fontaine@example.com`   | member app     |
+
+A member cannot use the studio console, so the member profile is on the
+member app's `/login`. The profiles live in
+`apps/studio/src/components/demo/DemoRolePicker.tsx`,
+`apps/studio/src/lib/demo/fixtures.ts` and `apps/web/src/lib/demo/`.
+
 ## Remove them
 
 Soft-delete the five accounts from the studio console or with

@@ -355,9 +355,11 @@
       "member": "Membre",
       "memberHint": "Réserver un cours, annuler, gérer son profil",
       "admin": "Administratrice",
-      "adminHint": "Tableau de bord, planning, membres, journal et pointage",
+      "adminHint": "Tout, y compris l'équipe, l'identité et la facturation",
       "coach": "Coach",
       "coachHint": "Ses cours du jour, son planning et ses membres",
+      "managerHint": "Cours, programmes, membres, appel et journal, sans facturation ni identité",
+      "accueilHint": "Borne de check-in, appel de tous les cours, membres et planning en lecture seule",
       "signInAs": "Ouvrir la session de démo de {name}, {role}",
       "error": "La session de démo n'a pas pu démarrer. Rechargez la page."
     }

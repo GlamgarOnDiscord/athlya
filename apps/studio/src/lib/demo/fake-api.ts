@@ -4,8 +4,12 @@
  * {@link StudioDemoState}; `createDemoHandler` wires it to the browser
  * transport (`./transport.ts`) and keeps the state in `sessionStorage`
  * for the tab, so classes, branding and check-ins survive the full
- * reloads of the check-in route.
+ * reloads of the check-in route. Each route checks the capability the
+ * real gateway checks (`@athlya/shared/roles`), so every demo profile sees
+ * exactly what its role may see.
  */
+import { can, isStaffRole, type Capability } from '@athlya/shared/roles';
+
 import {
   NO_CONTENT,
   asRecord,
@@ -85,6 +89,29 @@ function publicUser(u: DemoUser): Record<string, unknown> {
   };
 }
 
+function teamMember(u: DemoUser): Record<string, unknown> {
+  return {
+    id: u.id,
+    displayName: u.displayName,
+    email: u.email,
+    avatarUrl: u.avatarUrl,
+    role: u.role,
+    joinedAt: u.createdAt,
+  };
+}
+
+/** `GET /v1/studios/me/team`: the staff, the caller first, then by name. */
+function team(state: StudioDemoState, caller: DemoUser): Record<string, unknown> {
+  const staff = state.users
+    .filter((u) => isStaffRole(u.role))
+    .sort(
+      (a, b) =>
+        Number(b.id === caller.id) - Number(a.id === caller.id) ||
+        a.displayName.localeCompare(b.displayName),
+    );
+  return { members: staff.map(teamMember), invitations: [] };
+}
+
 function programSummary(p: DemoProgram): Record<string, unknown> {
   return {
     id: p.id,
@@ -126,7 +153,7 @@ function routeAuth(state: StudioDemoState, req: DemoRequest): RouteResult | null
   switch (req.path) {
     case '/api/auth/login': {
       const email = asRecord(req.body)['email'];
-      const user = state.users.find((u) => u.email === email && u.role !== 'member');
+      const user = state.users.find((u) => u.email === email && can(u.role, 'console.access'));
       if (user === undefined) {
         return { state, response: problem(401, 'Unknown demo profile', 'invalid_credentials') };
       }
@@ -328,11 +355,15 @@ function routeApi(
 ): RouteResult {
   const { method, path, query } = req;
   const same = (response: DemoResponse): RouteResult => ({ state, response });
-  const admin = user.role === 'admin';
+  const allowed = (capability: Capability): boolean => can(user.role, capability);
 
   if (path === '/v1/studios/me') {
     if (method === 'GET') return same(ok(state.studio));
-    if (method === 'PATCH') return admin ? patchStudio(state, req.body) : forbidden(state);
+    if (method === 'PATCH')
+      return allowed('branding.manage') ? patchStudio(state, req.body) : forbidden(state);
+  }
+  if (path === '/v1/studios/me/team' && method === 'GET') {
+    return allowed('team.read') ? same(ok(team(state, user))) : forbidden(state);
   }
   if (path === '/v1/classes') {
     if (method === 'GET') {
@@ -342,12 +373,13 @@ function routeApi(
         .map(publicClass);
       return same(ok({ items }));
     }
-    if (method === 'POST') return admin ? createClass(state, req.body, now) : forbidden(state);
+    if (method === 'POST')
+      return allowed('classes.write') ? createClass(state, req.body, now) : forbidden(state);
   }
   const classMatch = /^\/v1\/classes\/([^/]+)$/u.exec(path);
   if (classMatch?.[1] !== undefined) {
     const id = decodeURIComponent(classMatch[1]);
-    if (!admin) return forbidden(state);
+    if (!allowed('classes.write')) return forbidden(state);
     if (method === 'PATCH') return updateClass(state, id, req.body);
     if (method === 'DELETE') {
       return {
@@ -357,34 +389,41 @@ function routeApi(
     }
   }
   if (method === 'GET' && path === '/v1/members') {
+    if (!allowed('members.list')) return forbidden(state);
     return same(ok(page(state.users.map(publicUser), query)));
   }
   if (method === 'GET' && path === '/v1/audit') {
-    if (!admin) return forbidden(state);
+    if (!allowed('audit.read')) return forbidden(state);
     const sorted = [...state.audit].sort(
       (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
     );
     return same(ok(page(sorted, query)));
   }
-  if (method === 'POST' && path === '/v1/checkins') return checkIn(state, req.body, now);
+  if (method === 'POST' && path === '/v1/checkins') {
+    return allowed('checkin.kiosk') ? checkIn(state, req.body, now) : forbidden(state);
+  }
+  const readsDrafts = allowed('programs.readDrafts');
   if (path === '/v1/programs') {
     if (method === 'GET') {
       const status = query.get('status');
       const items = state.programs
+        .filter((p) => readsDrafts || p.status === 'published')
         .filter((p) => (status === null ? p.status !== 'archived' : p.status === status))
         .map(programSummary);
       return same(ok({ items }));
     }
     if (method === 'POST')
-      return admin ? saveProgram(state, null, req.body, now) : forbidden(state);
+      return allowed('programs.write') ? saveProgram(state, null, req.body, now) : forbidden(state);
   }
   const programMatch = /^\/v1\/programs\/([^/]+)(\/archive)?$/u.exec(path);
   if (programMatch?.[1] !== undefined) {
     const id = decodeURIComponent(programMatch[1]);
     const program = state.programs.find((p) => p.id === id);
-    if (program === undefined) return same(problem(404, 'Program not found'));
+    if (program === undefined || (!readsDrafts && program.status !== 'published')) {
+      return same(problem(404, 'Program not found'));
+    }
     if (programMatch[2] !== undefined && method === 'POST') {
-      if (!admin) return forbidden(state);
+      if (!allowed('programs.write')) return forbidden(state);
       const archived: DemoProgram = {
         ...program,
         status: 'archived',
@@ -400,10 +439,11 @@ function routeApi(
       return same(ok({ ...programSummary(program), weeks: program.weeks }));
     }
     if (programMatch[2] === undefined && method === 'PATCH') {
-      return admin ? saveProgram(state, id, req.body, now) : forbidden(state);
+      return allowed('programs.write') ? saveProgram(state, id, req.body, now) : forbidden(state);
     }
   }
   if (method === 'POST' && path === '/v1/billing/checkout') {
+    if (!allowed('billing.manage')) return forbidden(state);
     return same(problem(409, 'Payments are not available in the demo', 'demo_not_available'));
   }
   return same(notFound());
@@ -431,7 +471,7 @@ export function createDemoHandler(
   const now = options.now ?? (() => new Date());
   const delay = options.latencyMs ?? 150;
   let state =
-    loadState<StudioDemoState>(storage, STUDIO_DEMO_STORAGE_KEY, 1) ?? createStudioDemoState(now());
+    loadState<StudioDemoState>(storage, STUDIO_DEMO_STORAGE_KEY, 2) ?? createStudioDemoState(now());
   return async (request) => {
     const req = await toDemoRequest(request);
     await latency(delay);

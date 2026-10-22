@@ -355,9 +355,11 @@
       "member": "Member",
       "memberHint": "Book a class, cancel, manage the profile",
       "admin": "Administrator",
-      "adminHint": "Dashboard, schedule, members, audit log and check-in",
+      "adminHint": "Everything, including the team, branding and billing",
       "coach": "Coach",
       "coachHint": "Today's classes, schedule and members",
+      "managerHint": "Classes, programs, members, attendance and audit log, no billing or branding",
+      "accueilHint": "Check-in kiosk, attendance of every class, members and schedule read only",
       "signInAs": "Open the demo session of {name}, {role}",
       "error": "The demo session could not start. Reload the page."
     }
