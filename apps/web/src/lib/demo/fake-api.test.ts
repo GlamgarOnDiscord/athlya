@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEMO_ACCESS_TOKEN,
+  DEMO_CALENDAR_FEED_ORIGIN,
   WEB_DEMO_STORAGE_KEY,
   createDemoHandler,
   routeWebDemo,
@@ -217,6 +218,26 @@ describe('routeWebDemo', () => {
     const deleted = routeWebDemo(state, req('DELETE', '/v1/auth/me'), NOW);
     expect(deleted.response.status).toBe(204);
     expect(deleted.state.signedIn).toBe(false);
+  });
+
+  it('gives a calendar feed URL on a reserved host that nothing real answers', () => {
+    const state = signedIn();
+    const { response } = routeWebDemo(state, req('GET', '/v1/calendar/feed-url'), NOW);
+    expect(response.status).toBe(200);
+    const body = response.body as { httpsUrl: string; webcalUrl: string };
+    expect(Object.keys(body).sort()).toEqual(['httpsUrl', 'webcalUrl']);
+
+    const https = new URL(body.httpsUrl);
+    expect(https.origin).toBe(DEMO_CALENDAR_FEED_ORIGIN);
+    expect(https.hostname.endsWith('.invalid')).toBe(true);
+    expect(https.pathname).toBe('/v1/calendar/feed.ics');
+    expect(https.searchParams.get('token')).toBe(`demo-${state.member.id}`);
+    expect(body.webcalUrl).toBe(body.httpsUrl.replace(/^https:/u, 'webcal:'));
+
+    const signedOut = createWebDemoState(NOW);
+    expect(routeWebDemo(signedOut, req('GET', '/v1/calendar/feed-url'), NOW).response.status).toBe(
+      401,
+    );
   });
 
   it('answers an unknown route with a problem, not a network call', () => {

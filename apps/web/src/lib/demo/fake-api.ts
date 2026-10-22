@@ -46,6 +46,12 @@ export const DEMO_ACCESS_TOKEN = 'demo-session-member';
  */
 const MAX_AVATAR_BYTES = 512 * 1024;
 
+/**
+ * Host of the demo calendar feed. `.invalid` is reserved (RFC 2606), so a
+ * calendar app given the demo URL can never subscribe to anything real.
+ */
+export const DEMO_CALENDAR_FEED_ORIGIN = 'https://calendar.athlya-demo.invalid';
+
 export interface RouteResult {
   readonly state: WebDemoState;
   readonly response: DemoResponse;
@@ -119,6 +125,14 @@ function nextUtcMidnight(now: Date): string {
   const d = new Date(now);
   d.setUTCHours(24, 0, 0, 0);
   return d.toISOString();
+}
+
+/** Body of `GET /v1/calendar/feed-url`, shaped like the API's `CalendarFeedUrlResponse`. */
+function calendarFeedUrl(state: WebDemoState): DemoResponse {
+  const url = new URL('/v1/calendar/feed.ics', DEMO_CALENDAR_FEED_ORIGIN);
+  url.searchParams.set('token', `demo-${state.member.id}`);
+  const httpsUrl = url.toString();
+  return ok({ httpsUrl, webcalUrl: httpsUrl.replace(/^https:/u, 'webcal:') });
 }
 
 function routeAuth(state: WebDemoState, req: DemoRequest): RouteResult | null {
@@ -361,6 +375,7 @@ function routeApi(state: WebDemoState, req: DemoRequest, now: Date): RouteResult
     );
   }
   if (method === 'POST' && path === '/v1/coach/ask') return askCoach(state, req.body, now);
+  if (method === 'GET' && path === '/v1/calendar/feed-url') return same(calendarFeedUrl(state));
   if (method === 'GET' && path === '/v1/me/progression') {
     return same(ok(demoProgression(now, windowOf(query))));
   }
