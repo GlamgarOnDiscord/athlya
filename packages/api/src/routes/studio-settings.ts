@@ -1,10 +1,10 @@
 /**
  * `/v1/studios/me/settings`: the studio's settings (issue #759).
  *
- *   | Method | Path | Chain                                                      |
- *   |--------|------|------------------------------------------------------------|
- *   | GET    | /    | jwtAuth → requireRole('admin') → handler                   |
- *   | PATCH  | /    | jwtAuth → requireRole('admin') → zValidator(body) → handler |
+ *   | Method | Path | Chain                                                                       |
+ *   |--------|------|-----------------------------------------------------------------------------|
+ *   | GET    | /    | jwtAuth → requireCapability('settings.manage') → handler                    |
+ *   | PATCH  | /    | jwtAuth → requireCapability('settings.manage') → zValidator(body) → handler |
  *
  * Name, IANA time zone, postal address and contact email. The write runs
  * under the `studios_admin_update_own` policy with the column grant of
@@ -19,7 +19,7 @@ import { jwtAuth } from '../middleware/auth.js';
 import { studioRateLimit } from '../middleware/studio-rate-limit.js';
 import { zValidator } from '../middleware/validator.js';
 
-import { readValidated, requireRole, traceOperation } from './helpers.js';
+import { readValidated, requireCapability, traceOperation } from './helpers.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
 import type { HonoEnv } from '../types.js';
@@ -60,7 +60,7 @@ export function buildStudioSettingsRouter(deps: StudioSettingsDeps): Hono<HonoEn
   router.use('*', jwtAuth());
   router.use('*', studioRateLimit() as Parameters<typeof router.use>[1]);
 
-  router.get('/', requireRole('admin'), async (c) => {
+  router.get('/', requireCapability('settings.manage'), async (c) => {
     traceOperation(c, 'studios.settings.get');
     const settings = await deps.getSettings(claimsOf(c));
     if (settings === null) return notFound(c);
@@ -69,7 +69,7 @@ export function buildStudioSettingsRouter(deps: StudioSettingsDeps): Hono<HonoEn
 
   router.patch(
     '/',
-    requireRole('admin'),
+    requireCapability('settings.manage'),
     zValidator('json', UpdateStudioSettingsRequestSchema),
     async (c) => {
       traceOperation(c, 'studios.settings.update');

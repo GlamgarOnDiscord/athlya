@@ -25,6 +25,8 @@ const EVERY: readonly Capability[] = [
   'team.manage',
   'billing.manage',
   'branding.manage',
+  'settings.manage',
+  'webhooks.manage',
 ];
 
 function capabilitiesOf(role: Role): Capability[] {
@@ -36,9 +38,15 @@ describe('capability matrix', () => {
     expect(capabilitiesOf('admin')).toEqual(EVERY.filter((c) => c !== 'roster.own'));
   });
 
-  it('gives a manager what an admin has, but billing, branding and team changes', () => {
+  it('gives a manager what an admin has, but billing, branding, team changes, settings and webhooks', () => {
     const adminOnly = EVERY.filter((c) => can('admin', c) && !can('manager', c));
-    expect(adminOnly).toEqual(['team.manage', 'billing.manage', 'branding.manage']);
+    expect(adminOnly).toEqual([
+      'team.manage',
+      'billing.manage',
+      'branding.manage',
+      'settings.manage',
+      'webhooks.manage',
+    ]);
   });
 
   it('gives the front desk the kiosk, every roster, members and the planning, read only', () => {
@@ -77,6 +85,8 @@ describe('capability matrix', () => {
 
   it('lists the holders of a capability', () => {
     expect(rolesWith('team.manage')).toEqual(['admin']);
+    expect(rolesWith('settings.manage')).toEqual(['admin']);
+    expect(rolesWith('webhooks.manage')).toEqual(['admin']);
     expect(rolesWith('console.access')).toEqual(STAFF_ROLES);
   });
 });

@@ -100,7 +100,7 @@ function webhooksDeps(overrides: Partial<WebhooksDeps> = {}): WebhooksDeps {
 
 async function call(
   deps: { studioSettings?: StudioSettingsDeps; webhooks?: WebhooksDeps },
-  role: 'admin' | 'coach' | 'member',
+  role: 'admin' | 'manager' | 'accueil' | 'coach' | 'member',
   method: string,
   path: string,
   body?: unknown,
@@ -122,14 +122,22 @@ async function call(
 }
 
 describe('/v1/studios/me/settings', () => {
-  it('serves the settings to an admin and refuses a coach', async () => {
+  it('serves the settings to an admin only', async () => {
     const studioSettings = settingsDeps();
     const ok = await call({ studioSettings }, 'admin', 'GET', '/v1/studios/me/settings');
     expect(ok.status).toBe(200);
     expect(await readJson(ok)).toEqual(SETTINGS);
 
-    const refused = await call({ studioSettings }, 'coach', 'GET', '/v1/studios/me/settings');
-    expect(refused.status).toBe(403);
+    for (const role of ['manager', 'accueil', 'coach'] as const) {
+      const refused = await call({ studioSettings }, role, 'GET', '/v1/studios/me/settings');
+      expect(refused.status).toBe(403);
+      const patch = await call({ studioSettings }, role, 'PATCH', '/v1/studios/me/settings', {
+        city: 'Lyon',
+      });
+      expect(patch.status).toBe(403);
+    }
+    expect(studioSettings.getSettings).toHaveBeenCalledTimes(1);
+    expect(studioSettings.updateSettings).not.toHaveBeenCalled();
   });
 
   it('normalises the patch: empty strings clear, the country is upper-cased', async () => {
@@ -238,12 +246,15 @@ describe('/v1/studios/me/webhooks', () => {
     });
   });
 
-  it('lists the endpoints without any secret, and refuses a coach', async () => {
+  it('lists the endpoints without any secret, to an admin only', async () => {
     const webhooks = webhooksDeps();
     const res = await call({ webhooks }, 'admin', 'GET', '/v1/studios/me/webhooks');
     expect(res.status).toBe(200);
     expect(JSON.stringify(await readJson(res))).not.toContain('whsec_');
-    expect((await call({ webhooks }, 'coach', 'GET', '/v1/studios/me/webhooks')).status).toBe(403);
+    for (const role of ['manager', 'accueil', 'coach'] as const) {
+      expect((await call({ webhooks }, role, 'GET', '/v1/studios/me/webhooks')).status).toBe(403);
+    }
+    expect(webhooks.listEndpoints).toHaveBeenCalledTimes(1);
   });
 
   it('generates distinct secrets', () => {

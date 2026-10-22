@@ -13,13 +13,15 @@ describe('canOpenRoute', () => {
       '/dashboard/branding',
       '/dashboard/team',
       '/dashboard/rooms',
+      '/dashboard/settings',
+      '/dashboard/integrations',
       CLASS,
     ]) {
       expect(canOpenRoute('admin', path)).toBe(true);
     }
   });
 
-  it('keeps a manager out of billing and branding only', () => {
+  it('keeps a manager out of billing, branding, settings and integrations only', () => {
     expect(canOpenRoute('manager', '/dashboard/classes')).toBe(true);
     expect(canOpenRoute('manager', '/dashboard/programs')).toBe(true);
     expect(canOpenRoute('manager', '/dashboard/team')).toBe(true);
@@ -27,6 +29,8 @@ describe('canOpenRoute', () => {
     expect(canOpenRoute('manager', MEMBER_FILE)).toBe(true);
     expect(canOpenRoute('manager', '/dashboard/billing')).toBe(false);
     expect(canOpenRoute('manager', '/dashboard/branding')).toBe(false);
+    expect(canOpenRoute('manager', '/dashboard/settings')).toBe(false);
+    expect(canOpenRoute('manager', '/dashboard/integrations')).toBe(false);
     expect(canOpenRoute('manager', '/dashboard/planning')).toBe(false);
   });
 
@@ -48,6 +52,8 @@ describe('canOpenRoute', () => {
       '/dashboard/audit',
       '/dashboard/rooms',
       '/dashboard/billing',
+      '/dashboard/settings',
+      '/dashboard/integrations',
     ]) {
       expect(canOpenRoute('accueil', path)).toBe(false);
     }

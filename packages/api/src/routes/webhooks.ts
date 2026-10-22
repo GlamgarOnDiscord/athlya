@@ -1,13 +1,13 @@
 /**
  * `/v1/studios/me/webhooks`: the studio's webhook endpoints (issue #760).
  *
- *   | Method | Path               | Chain                                                       |
- *   |--------|--------------------|-------------------------------------------------------------|
- *   | GET    | /                  | jwtAuth → requireRole('admin') → handler                    |
- *   | POST   | /                  | jwtAuth → requireRole('admin') → zValidator(body) → handler |
- *   | PATCH  | /:id               | jwtAuth → requireRole('admin') → zValidator ×2 → handler    |
- *   | POST   | /:id/rotate-secret | jwtAuth → requireRole('admin') → zValidator → handler       |
- *   | DELETE | /:id               | jwtAuth → requireRole('admin') → zValidator → handler       |
+ *   | Method | Path               | Chain                                                                       |
+ *   |--------|--------------------|-----------------------------------------------------------------------------|
+ *   | GET    | /                  | jwtAuth → requireCapability('webhooks.manage') → handler                    |
+ *   | POST   | /                  | jwtAuth → requireCapability('webhooks.manage') → zValidator(body) → handler |
+ *   | PATCH  | /:id               | jwtAuth → requireCapability('webhooks.manage') → zValidator ×2 → handler    |
+ *   | POST   | /:id/rotate-secret | jwtAuth → requireCapability('webhooks.manage') → zValidator → handler       |
+ *   | DELETE | /:id               | jwtAuth → requireCapability('webhooks.manage') → zValidator → handler       |
  *
  * The signing secret (`whsec_` + 32 random bytes, base64url) is generated
  * here and returned once, by the creation and the rotation; nothing reads
@@ -26,7 +26,7 @@ import { jwtAuth } from '../middleware/auth.js';
 import { studioRateLimit } from '../middleware/studio-rate-limit.js';
 import { zValidator } from '../middleware/validator.js';
 
-import { readValidated, requireRole, traceOperation } from './helpers.js';
+import { readValidated, requireCapability, traceOperation } from './helpers.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
 import type { HonoEnv } from '../types.js';
@@ -89,7 +89,7 @@ export function buildWebhooksRouter(deps: WebhooksDeps): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', jwtAuth());
   router.use('*', studioRateLimit() as Parameters<typeof router.use>[1]);
-  router.use('*', requireRole('admin'));
+  router.use('*', requireCapability('webhooks.manage'));
 
   router.get('/', async (c) => {
     traceOperation(c, 'webhooks.list');

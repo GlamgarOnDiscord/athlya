@@ -39,6 +39,8 @@ export function canOpenRoute(role: Role, pathname: string): boolean {
   if (under(path, '/dashboard/audit')) return can(role, 'audit.read');
   if (under(path, '/dashboard/branding')) return can(role, 'branding.manage');
   if (under(path, '/dashboard/billing')) return can(role, 'billing.manage');
+  if (under(path, '/dashboard/settings')) return can(role, 'settings.manage');
+  if (under(path, '/dashboard/integrations')) return can(role, 'webhooks.manage');
   // A page this table does not know stays with the studio owner.
   return role === 'admin';
 }
