@@ -2,11 +2,18 @@
  * One-click sign-in of a demo build (issue #750), shown on `/login` in
  * place of the credentials form: no password, no Turnstile, no refresh
  * cookie. The login goes through `useAuth().login`, which the demo
- * transport answers from the fake API.
+ * transport answers from the fake API. One profile per staff role; the
+ * member profile lives in the member app, since a member cannot use the
+ * console.
  */
 'use client';
 
-import { ChalkboardTeacherIcon, ShieldCheckIcon } from '@phosphor-icons/react';
+import {
+  BriefcaseIcon,
+  ChalkboardTeacherIcon,
+  IdentificationBadgeIcon,
+  ShieldCheckIcon,
+} from '@phosphor-icons/react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState, type ReactElement } from 'react';
 
@@ -14,33 +21,64 @@ import { useAuth } from '../../lib/auth/AuthContext';
 import { useLocale } from '../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../lib/i18n/t';
 
-const DEMO_PROFILES = [
+import type { TranslationKeys } from '@athlya/shared/i18n';
+import type { StaffRole } from '@athlya/shared/roles';
+import type { Icon } from '@phosphor-icons/react';
+
+interface DemoProfile {
+  readonly key: StaffRole;
+  readonly name: string;
+  readonly email: string;
+  readonly Icon: Icon;
+  readonly label: TranslationKeys;
+  readonly hint: TranslationKeys;
+}
+
+const DEMO_PROFILES: readonly DemoProfile[] = [
   {
     key: 'admin',
     name: 'Camille Durand',
     email: 'camille.durand@example.com',
     Icon: ShieldCheckIcon,
+    label: 'demo.picker.admin',
+    hint: 'demo.picker.adminHint',
+  },
+  {
+    key: 'manager',
+    name: 'Hugo Lefebvre',
+    email: 'hugo.lefebvre@example.com',
+    Icon: BriefcaseIcon,
+    label: 'studio.members.role.manager',
+    hint: 'demo.picker.managerHint',
+  },
+  {
+    key: 'accueil',
+    name: 'Sarah Benali',
+    email: 'sarah.benali@example.com',
+    Icon: IdentificationBadgeIcon,
+    label: 'studio.members.role.accueil',
+    hint: 'demo.picker.accueilHint',
   },
   {
     key: 'coach',
     name: 'Inès Garnier',
     email: 'ines.garnier@example.com',
     Icon: ChalkboardTeacherIcon,
+    label: 'demo.picker.coach',
+    hint: 'demo.picker.coachHint',
   },
-] as const;
-
-type ProfileKey = (typeof DEMO_PROFILES)[number]['key'];
+];
 
 export function DemoRolePicker(): ReactElement | null {
   const locale = useLocale();
   const t = useMemo(() => createTranslator(locale), [locale]);
   const { login } = useAuth();
   const { push } = useRouter();
-  const [pending, setPending] = useState<ProfileKey | null>(null);
+  const [pending, setPending] = useState<StaffRole | null>(null);
   const [failed, setFailed] = useState(false);
   if (process.env.NEXT_PUBLIC_DEMO_MODE !== '1') return null;
 
-  async function signIn(key: ProfileKey, email: string): Promise<void> {
+  async function signIn(key: StaffRole, email: string): Promise<void> {
     setPending(key);
     setFailed(false);
     try {
@@ -61,8 +99,8 @@ export function DemoRolePicker(): ReactElement | null {
         <p className="text-sm text-muted-foreground">{t('demo.picker.subtitle')}</p>
       </div>
       <ul className="flex flex-col gap-3">
-        {DEMO_PROFILES.map(({ key, name, email, Icon }) => {
-          const role = t(key === 'admin' ? 'demo.picker.admin' : 'demo.picker.coach');
+        {DEMO_PROFILES.map(({ key, name, email, Icon: ProfileIcon, label, hint }) => {
+          const role = t(label);
           return (
             <li key={key}>
               <button
@@ -75,15 +113,13 @@ export function DemoRolePicker(): ReactElement | null {
                 className="flex w-full items-center gap-3 rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60"
               >
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
-                  <Icon size={20} aria-hidden="true" />
+                  <ProfileIcon size={20} aria-hidden="true" />
                 </span>
                 <span className="flex flex-col">
                   <span className="text-sm font-medium">
                     {name} · {role}
                   </span>
-                  <span className="text-xs text-muted-foreground">
-                    {t(key === 'admin' ? 'demo.picker.adminHint' : 'demo.picker.coachHint')}
-                  </span>
+                  <span className="text-xs text-muted-foreground">{t(hint)}</span>
                 </span>
               </button>
             </li>

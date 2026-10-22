@@ -57,6 +57,17 @@ describe('routeWebDemo', () => {
     expect(logout.state.signedIn).toBe(false);
   });
 
+  it('signs the member profile of the picker in as Léa Fontaine, a member', () => {
+    const login = routeWebDemo(
+      createWebDemoState(NOW),
+      req('POST', '/api/auth/login', { email: 'lea.fontaine@example.com', password: 'demo' }),
+      NOW,
+    );
+    expect(login.response.body).toMatchObject({
+      user: { email: 'lea.fontaine@example.com', displayName: 'Léa Fontaine', role: 'member' },
+    });
+  });
+
   it('caps the avatar so the saved demo state stays within sessionStorage', () => {
     const state = signedIn();
     const upload = (size: number) =>

@@ -1,17 +1,16 @@
 /**
  * Fictional data of the studio demo (issue #750): "Studio Rive Gauche",
- * its admin Camille Durand, its coaches Inès Garnier and Chloé Vasseur,
- * eleven members, a schedule from twelve weeks back to five weeks ahead
+ * its admin Camille Durand, its manager Hugo Lefebvre, its front desk
+ * Sarah Benali, its coaches Inès Garnier and Chloé Vasseur, nine members, a schedule from twelve weeks back to five weeks ahead
  * with full classes, programs and an audit trail. Every date is computed
  * from `now` so the demo always shows the current week.
  *
  * Loaded only by `./fake-api.ts`, itself loaded only in a demo build.
  */
+import type { Role } from '@athlya/shared/roles';
 import type { Consents } from '@athlya/shared/schemas';
 
 export const DEMO_STUDIO_ID = '0f000000-0000-4000-8000-000000000001';
-
-export type DemoRole = 'member' | 'coach' | 'admin';
 
 export interface DemoUser {
   readonly id: string;
@@ -19,7 +18,7 @@ export interface DemoUser {
   readonly email: string;
   readonly displayName: string;
   readonly avatarUrl: string | null;
-  readonly role: DemoRole;
+  readonly role: Role;
   readonly consents: Consents;
   readonly createdAt: string;
   readonly deletedAt: null;
@@ -99,7 +98,7 @@ export interface DemoCheckin {
 }
 
 export interface StudioDemoState {
-  readonly schema: 1;
+  readonly schema: 2;
   readonly sessionUserId: string | null;
   readonly studio: DemoStudio;
   readonly users: readonly DemoUser[];
@@ -115,9 +114,9 @@ export function demoId(prefix: string, n: number): string {
   return `${prefix.padEnd(8, '0')}-0000-4000-8000-${String(n).padStart(12, '0')}`;
 }
 
-const PEOPLE: readonly (readonly [string, DemoRole])[] = [
+const PEOPLE: readonly (readonly [string, Role])[] = [
   ['Camille Durand', 'admin'],
-  ['Hugo Lefèvre', 'member'],
+  ['Hugo Lefebvre', 'manager'],
   ['Inès Garnier', 'coach'],
   ['Lucas Bertin', 'member'],
   ['Manon Chevalier', 'member'],
@@ -126,7 +125,7 @@ const PEOPLE: readonly (readonly [string, DemoRole])[] = [
   ['Théo Marchand', 'member'],
   ['Léa Fontaine', 'member'],
   ['Julien Moreau', 'member'],
-  ['Sarah Benali', 'member'],
+  ['Sarah Benali', 'accueil'],
   ['Maxime Perrot', 'member'],
   ['Emma Lacroix', 'member'],
   ['Yanis Ferrand', 'member'],
@@ -162,7 +161,9 @@ function buildUsers(): DemoUser[] {
 }
 
 export const DEMO_ADMIN_ID = demoId('0a', 1);
+export const DEMO_MANAGER_ID = demoId('0a', 2);
 export const DEMO_COACH_ID = demoId('0a', 3);
+export const DEMO_ACCUEIL_ID = demoId('0a', 11);
 const SECOND_COACH_ID = demoId('0a', 7);
 
 const TITLES = [
@@ -356,7 +357,7 @@ function buildPrograms(): DemoProgram[] {
 export function createStudioDemoState(now: Date): StudioDemoState {
   const users = buildUsers();
   return {
-    schema: 1,
+    schema: 2,
     sessionUserId: null,
     studio: {
       id: DEMO_STUDIO_ID,
