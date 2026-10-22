@@ -9,9 +9,11 @@
  *   | PATCH  | /me               | jwtAuth → projectUserId → zValidator(body) → idempotency → handler |
  *   | PUT    | /me/avatar        | jwtAuth → handler (raw binary body)                                |
  *   | PATCH  | /me/consents      | jwtAuth → projectUserId → zValidator(body) → idempotency → handler |
+ *   | GET    | /me/notification-preferences | jwtAuth → handler                                        |
+ *   | PUT    | /me/notification-preferences | jwtAuth → projectUserId → zValidator(body) → idempotency → handler |
  *   | POST   | /me/export        | jwtAuth → projectUserId → idempotency → handler (returns 202)      |
- *   | GET    | /                 | jwtAuth → requireRole('admin','coach') → zValidator(query) → handler |
- *   | GET    | /:id              | jwtAuth → requireRole('admin') → zValidator(param) → handler        |
+ *   | GET    | /                 | jwtAuth → requireCapability('members.list') → zValidator(query) → handler |
+ *   | GET    | /:id              | jwtAuth → requireCapability('members.file') → zValidator(param) → handler |
  *
  * Requirements:
  *   • 3.1  — `GET /me` returns the authenticated member's profile.
@@ -21,19 +23,21 @@
  *            `users.avatarUrl` (N2.13). Mode dégradé when bucket absent.
  *   • 3.3  — `PATCH /me/consents` stamps `version` + `updatedAt`
  *            server-side and appends to the audit log (Req 22.1).
- *   • 3.5  — `GET /` is admin/coach-only and returns a cursor-paginated
- *            list scoped to the caller's studio.
- *   • `GET /:id` (issue #746) is the studio admin's member file:
- *            profile, consents, upcoming and past reservations. Coaches
- *            have no per-member read, so the route is admin only.
+ *   • 3.5: `GET /` is open to every studio team role (`members.list`)
+ *            and returns a cursor-paginated list scoped to the caller's studio.
+ *   • `GET /:id` (issue #746) is the member file: profile, consents,
+ *            upcoming and past reservations. Coaches have no per-member
+ *            read: `members.file` is admin, manager and front desk.
  *   • 4.1  — `POST /me/export` returns 202 with a job id; the actual
  *            ZIP assembly is scheduled by QStash (Req 4.2).
  *   • 14.1, 14.2, 20.1 — auth / validation / idempotency per the
  *            shared middleware chain.
  */
 
+import { isStaffRole } from '@athlya/shared/roles';
 import {
   MemberFileParamsSchema,
+  NotificationPreferencesSchema,
   UpdateConsentsRequestSchema,
   UpdateProfileRequestSchema,
 } from '@athlya/shared/schemas/api';
@@ -56,16 +60,18 @@ import {
   projectUserIdFromClaims,
   readValidated,
   traceOperation,
-  requireRole,
+  requireCapability,
 } from './helpers.js';
 
 import type { MeDeps } from './me.js';
 import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
+import type { StaffRole } from '@athlya/shared/roles';
 import type {
   MemberFileParams,
   MemberFileResponse,
+  NotificationPreferences,
   UpdateConsentsRequest,
   UpdateProfileRequest,
 } from '@athlya/shared/schemas/api';
@@ -171,6 +177,17 @@ export interface MembersDeps extends MeDeps {
     input: UpdateConsentsRequest,
     claims: AuthClaims,
   ): Promise<unknown>;
+  /** Full notification toggles of the member, `null` when the row is gone. */
+  getNotificationPreferences(
+    userId: string,
+    claims: AuthClaims,
+  ): Promise<NotificationPreferences | null>;
+  /** Replace the member's notification toggles, `null` when the row is gone. */
+  updateNotificationPreferences(
+    userId: string,
+    preferences: NotificationPreferences,
+    claims: AuthClaims,
+  ): Promise<NotificationPreferences | null>;
   enqueueExport(userId: string, claims: AuthClaims): Promise<{ jobId: string }>;
   /** Status of one of the caller's export jobs (RLS: own rows only). */
   getExportJob(jobId: string, claims: AuthClaims): Promise<ExportJobView | null>;
@@ -183,7 +200,7 @@ export interface MembersDeps extends MeDeps {
   ): Promise<ExportDownloadResult>;
   listMembersByStudio(
     studioId: string,
-    requesterRole: 'admin' | 'coach',
+    requesterRole: StaffRole,
     opts: ListMembersQuery,
     claims: AuthClaims,
   ): Promise<MembersPageView>;
@@ -400,6 +417,43 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
     },
   );
 
+  /* ------------------------------ GET /me/notification-preferences */
+  router.get('/me/notification-preferences', async (c) => {
+    traceOperation(c, 'members.get-notification-preferences');
+    const claims = c.get('authClaims');
+    if (claims === undefined) {
+      throw new Error('authClaims unexpectedly missing after jwtAuth');
+    }
+    const preferences = await deps.getNotificationPreferences(claims.userId, claims);
+    if (preferences === null) {
+      return membersProblem(c, 404, 'member not found', 'not_found');
+    }
+    return c.json({ preferences }, 200);
+  });
+
+  /* ------------------------------ PUT /me/notification-preferences */
+  // Mandatory messages (payment failure, password reset) are not keys
+  // of the strict schema: trying to turn one off is a 422.
+  router.put(
+    '/me/notification-preferences',
+    projectUserIdFromClaims(),
+    zValidator('json', NotificationPreferencesSchema),
+    ...(idem ? [idempotency(idem)] : []),
+    async (c) => {
+      traceOperation(c, 'members.update-notification-preferences');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const input = readValidated<NotificationPreferences>(c, 'json');
+      const preferences = await deps.updateNotificationPreferences(claims.userId, input, claims);
+      if (preferences === null) {
+        return membersProblem(c, 404, 'member not found', 'not_found');
+      }
+      return c.json({ preferences }, 200);
+    },
+  );
+
   /* ------------------------------ POST /me/export ---------------- */
   router.post(
     '/me/export',
@@ -474,10 +528,10 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
     },
   );
 
-  /* ------------------------------ GET / (admin / coach) ---------- */
+  /* ------------------------------ GET / (staff) ------------------ */
   router.get(
     '/',
-    requireRole('admin', 'coach'),
+    requireCapability('members.list'),
     zValidator('query', ListMembersQuerySchema),
     async (c) => {
       traceOperation(c, 'members.list-by-studio');
@@ -485,10 +539,10 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
       if (claims === undefined) {
         throw new Error('authClaims unexpectedly missing after jwtAuth');
       }
-      if (claims.role !== 'admin' && claims.role !== 'coach') {
-        // requireRole already returned 403; this is defense in
+      if (!isStaffRole(claims.role)) {
+        // requireCapability already returned 403; this is defense in
         // depth in case the middleware is rearranged.
-        return problem403(c, 'listing studio members requires admin or coach role');
+        return problem403(c, 'listing studio members requires a staff role');
       }
       const query = readValidated<ListMembersQuery>(c, 'query');
       const page = await deps.listMembersByStudio(claims.studioId, claims.role, query, claims);
@@ -496,12 +550,12 @@ export function buildMembersRouter(deps: MembersDeps): Hono<HonoEnv> {
     },
   );
 
-  /* ------------------------------ GET /:id (admin) --------------- */
+  /* ------------------------------ GET /:id (members.file) -------- */
   // Registered after every `/me` route: those paths are matched first, and
   // the uuid param schema rejects `me` anyway.
   router.get(
     '/:id',
-    requireRole('admin'),
+    requireCapability('members.file'),
     zValidator('param', MemberFileParamsSchema),
     async (c) => {
       traceOperation(c, 'members.file');

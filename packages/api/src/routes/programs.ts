@@ -7,9 +7,9 @@
  *   | GET    | /today                  | any   | jwtAuth → zValidator(query) → handler                       |
  *   | GET    | /subscriptions/me       | any   | jwtAuth → handler                                           |
  *   | GET    | /:id                    | any   | jwtAuth → zValidator(param) → handler                       |
- *   | POST   | /                       | admin | jwtAuth → requireRole → projectUserId → zValidator → idem   |
- *   | PATCH  | /:id                    | admin | jwtAuth → requireRole → projectUserId → zValidator ×2 → idem|
- *   | POST   | /:id/archive            | admin | jwtAuth → requireRole → projectUserId → zValidator → idem   |
+ *   | POST   | /                       | admin, manager | jwtAuth → requireCapability → projectUserId → zValidator → idem   |
+ *   | PATCH  | /:id                    | admin, manager | jwtAuth → requireCapability → projectUserId → zValidator ×2 → idem|
+ *   | POST   | /:id/archive            | admin, manager | jwtAuth → requireCapability → projectUserId → zValidator → idem   |
  *   | POST   | /:id/subscription       | any   | jwtAuth → projectUserId → zValidator ×2 → idem              |
  *   | DELETE | /:id/subscription (200) | any   | jwtAuth → projectUserId → zValidator → idem                 |
  *
@@ -45,7 +45,7 @@ import {
   problem403,
   projectUserIdFromClaims,
   readValidated,
-  requireRole,
+  requireCapability,
   traceOperation,
 } from './helpers.js';
 
@@ -216,7 +216,7 @@ export function buildProgramsRouter(deps: ProgramsDeps): Hono<HonoEnv> {
   /* ------------------------------ POST / (admin) ----------------- */
   router.post(
     '/',
-    requireRole('admin'),
+    requireCapability('programs.write'),
     projectUserIdFromClaims(),
     zValidator('json', CreateProgramRequestSchema),
     idem,
@@ -232,7 +232,7 @@ export function buildProgramsRouter(deps: ProgramsDeps): Hono<HonoEnv> {
   /* ------------------------------ PATCH /:id (admin) ------------- */
   router.patch(
     '/:id',
-    requireRole('admin'),
+    requireCapability('programs.write'),
     projectUserIdFromClaims(),
     zValidator('param', ProgramIdParamSchema),
     zValidator('json', UpdateProgramRequestSchema),
@@ -265,7 +265,7 @@ export function buildProgramsRouter(deps: ProgramsDeps): Hono<HonoEnv> {
   /* ------------------------------ POST /:id/archive (admin) ------ */
   router.post(
     '/:id/archive',
-    requireRole('admin'),
+    requireCapability('programs.write'),
     projectUserIdFromClaims(),
     zValidator('param', ProgramIdParamSchema),
     idem,

@@ -6,7 +6,7 @@
  *   | Method | Path   | Chain                                                                                         |
  *   |--------|--------|-----------------------------------------------------------------------------------------------|
  *   | POST   | /token | jwtAuth → studioRateLimit → tokenRateLimit → handler                                          |
- *   | POST   | /      | jwtAuth → studioRateLimit → requireRole(admin, coach) → checkinRateLimit → zValidator → idempotency → handler |
+ *   | POST   | /      | jwtAuth → studioRateLimit → requireCapability('checkin.kiosk') → checkinRateLimit → zValidator → idempotency → handler |
  *
  * Requirements:
  *   • 11.1 — `POST /token` issues the member's `QR_Checkin_Token`
@@ -47,7 +47,7 @@ import {
   idempotency,
   projectUserIdFromClaims,
   readValidated,
-  requireRole,
+  requireCapability,
   traceOperation,
 } from './helpers.js';
 
@@ -249,7 +249,7 @@ export function buildCheckinsRouter(deps: CheckinsDeps): Hono<HonoEnv> {
   /* ------------------------------ POST / ------------------------- */
   router.post(
     '/',
-    requireRole('admin', 'coach'),
+    requireCapability('checkin.kiosk'),
     checkinOperatorLimit(deps.rateLimitOpts),
     projectUserIdFromClaims(),
     zValidator('json', CheckInRequestSchema),

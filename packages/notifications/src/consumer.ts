@@ -72,6 +72,9 @@
  */
 
 import { t, type Locale } from '@athlya/shared/i18n';
+import { isNotificationEnabled } from '@athlya/shared/schemas/api';
+
+import { renderEmailHtml, renderEmailText, type EmailBranding } from './email-layout.js';
 
 import type {
   AthlyaEvent,
@@ -196,12 +199,39 @@ export interface RecipientRepo {
   getRecipient(userId: string): Promise<Recipient | null>;
 }
 
+/**
+ * Preference lookup contract (issue #762). Returns the stored
+ * preferences of the recipient (channels turned off per message), or
+ * `null` when there are none; every channel is then on. Production reads
+ * them through the `notification_preferences_of` service function
+ * (migration 0054).
+ */
+export interface PreferencesRepo {
+  getPreferences(userId: string): Promise<unknown>;
+}
+
+/**
+ * Branding lookup contract (issue #761). Returns the identity of the
+ * recipient's studio, or `null` when it cannot be resolved; the e-mail
+ * then keeps the Athlya identity. Production reads it through the
+ * `notification_studio_branding` service function (migration 0053).
+ */
+export interface BrandingRepo {
+  getBranding(userId: string): Promise<EmailBranding | null>;
+}
+
 /** Arguments accepted by {@link EmailSender.send}. */
 export interface EmailMessage {
   readonly to: string;
   readonly subject: string;
   readonly html: string;
   readonly text: string;
+  /**
+   * Studio sender, when its sending domain is verified and activated:
+   * the adapter sends from `noreply@{domain}` under `name`. Absent, the
+   * adapter's default Athlya sender applies.
+   */
+  readonly sender?: { readonly name: string; readonly domain: string };
 }
 
 /**
@@ -296,6 +326,10 @@ export interface HandleEventDeps {
   readonly email: EmailSender;
   readonly push: PushSender;
   readonly logger: Logger;
+  /** Optional: without it every channel of every message is on. */
+  readonly preferences?: PreferencesRepo;
+  /** Optional: without it every e-mail keeps the Athlya identity. */
+  readonly branding?: BrandingRepo;
   /** Optional — defaults to `Date.now`. Tests pin it for determinism. */
   readonly clock?: Clock;
   /**
@@ -352,6 +386,20 @@ const TRANSACTIONAL_KIND: Readonly<Record<HandledEventType, boolean>> = {
   'billing.subscription.failed': true,
 };
 
+/**
+ * Key of each handled event in `MEMBER_NOTIFICATION_CATALOG`, the
+ * namespace member preferences are stored under. The catalog marks
+ * `billingSubscriptionFailed` as mandatory, so no preference ever stops
+ * it.
+ */
+const PREFERENCE_KEY: Readonly<Record<HandledEventType, string>> = {
+  'reservation.created': 'reservationCreated',
+  'reservation.reminder': 'reservationReminder',
+  'reservation.cancelled': 'reservationCancelled',
+  'reservation.promoted': 'reservationPromoted',
+  'billing.subscription.failed': 'billingSubscriptionFailed',
+};
+
 /* ------------------------------------------------------------------ */
 /*  Templates                                                          */
 /* ------------------------------------------------------------------ */
@@ -372,11 +420,11 @@ const TRANSACTIONAL_KIND: Readonly<Record<HandledEventType, boolean>> = {
  * "push-only" behaviour described in the task.
  */
 interface RenderedMessage {
-  readonly emailSubject?: string;
-  readonly emailBody?: string;
-  readonly pushTitle?: string;
-  readonly pushBody?: string;
-  readonly pushData?: Record<string, string>;
+  readonly emailSubject?: string | undefined;
+  readonly emailBody?: string | undefined;
+  readonly pushTitle?: string | undefined;
+  readonly pushBody?: string | undefined;
+  readonly pushData?: Record<string, string> | undefined;
 }
 
 /**
@@ -672,10 +720,38 @@ export async function handleEvent(
       return { status: 'skipped_no_consent' };
     }
 
-    // ---- Step 5: render + dispatch ----------------------------
-    const message = render(handled, recipient.locale);
+    // ---- Step 5: render, member preferences, dispatch ----------
+    //
+    // A channel the member turned off for this message is dropped
+    // from the rendered template (issue #762); mandatory messages are
+    // never affected (`isNotificationEnabled`).
+    const rendered = render(handled, recipient.locale);
+    const stored =
+      deps.preferences === undefined ? null : await deps.preferences.getPreferences(userId);
+    const key = PREFERENCE_KEY[handled.type];
+    const emailOn = isNotificationEnabled(stored, key, 'email');
+    const pushOn = isNotificationEnabled(stored, key, 'push');
+    if (!emailOn || !pushOn) {
+      logger.info('notifications.skipped_preference', {
+        eventId: event.id,
+        type: event.type,
+        userId,
+        email: !emailOn,
+        push: !pushOn,
+      });
+    }
+    const message: RenderedMessage = {
+      ...(emailOn ? { emailSubject: rendered.emailSubject, emailBody: rendered.emailBody } : {}),
+      ...(pushOn
+        ? {
+            pushTitle: rendered.pushTitle,
+            pushBody: rendered.pushBody,
+            pushData: rendered.pushData,
+          }
+        : {}),
+    };
 
-    const emailPromise = maybeSendEmail(message, recipient, email);
+    const emailPromise = maybeSendEmail(message, recipient, email, deps.branding, logger);
     const pushPromise = maybeSendPush(message, recipient, push);
 
     const [emailSent, pushSent] = await Promise.all([emailPromise, pushPromise]);
@@ -737,26 +813,55 @@ function isHandled(type: AthlyaEvent['type']): type is HandledEventType {
  * Run the email leg if both the template carries subject+body and the
  * recipient has an address. Return `true` only when the send was
  * actually attempted and the sender resolved.
+ *
+ * The body is laid out in the studio's colors and logo
+ * (`email-layout.ts`); the branding is read only when an e-mail
+ * actually leaves, and the studio's own sender is used once its
+ * sending domain is verified and activated. A failing branding lookup
+ * never blocks a transactional e-mail: it is logged and the e-mail
+ * leaves with the Athlya identity.
  */
 async function maybeSendEmail(
   message: RenderedMessage,
   recipient: Recipient,
   email: EmailSender,
+  brandingRepo: BrandingRepo | undefined,
+  logger: Logger,
 ): Promise<boolean> {
   const { emailSubject, emailBody } = message;
   if (emailSubject === undefined || emailBody === undefined || recipient.email === null) {
     return false;
   }
+  const branding = await readBranding(brandingRepo, recipient.userId, logger);
+  const content = { subject: emailSubject, body: emailBody };
   await email.send({
     to: recipient.email,
     subject: emailSubject,
-    // The adapter is responsible for escaping — this module
-    // ships plain text as both `text` and a minimally-wrapped
-    // `html`. Resend accepts both and picks per content-type.
-    html: `<p>${escapeHtml(emailBody)}</p>`,
-    text: emailBody,
+    html: renderEmailHtml(content, branding, recipient.locale),
+    text: renderEmailText(content, branding, recipient.locale),
+    ...(branding !== null && branding.emailDomain !== null
+      ? { sender: { name: branding.studioName, domain: branding.emailDomain } }
+      : {}),
   });
   return true;
+}
+
+/** Studio branding for the e-mail, or `null` when absent or unreadable. */
+async function readBranding(
+  brandingRepo: BrandingRepo | undefined,
+  userId: string,
+  logger: Logger,
+): Promise<EmailBranding | null> {
+  if (brandingRepo === undefined) return null;
+  try {
+    return await brandingRepo.getBranding(userId);
+  } catch (err) {
+    logger.warn('notifications.branding_failed', {
+      userId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
 
 /**
@@ -779,20 +884,4 @@ async function maybeSendPush(
     ...(pushData !== undefined ? { data: pushData } : {}),
   });
   return true;
-}
-
-/**
- * Minimal HTML escape for the `<p>…</p>` wrap used above. Covers the
- * five characters OWASP lists as required for a plain text context;
- * full-blown email templating is an adapter-level concern. The
- * templates themselves now come from `@athlya/shared/i18n` under the
- * `notifications.*` namespace (task 19.2 / Req 28.3).
- */
-function escapeHtml(input: string): string {
-  return input
-    .replace(/&/gu, '&amp;')
-    .replace(/</gu, '&lt;')
-    .replace(/>/gu, '&gt;')
-    .replace(/"/gu, '&quot;')
-    .replace(/'/gu, '&#39;');
 }

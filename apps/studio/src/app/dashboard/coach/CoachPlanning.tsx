@@ -4,11 +4,13 @@
  * `/dashboard/planning`: the coach's schedule. The admin planning grid in
  * read-only mode (no create slot, no edit or delete menu), week or month on
  * a wide screen and a day agenda on a phone, with a switch between the
- * coach's own classes and the whole studio, and a room filter. The coach's
- * own tiles link to their roster; the API opens no other class roster to a
- * coach. Classes come from `GET /v1/classes` and rooms from
- * `GET /v1/classes/rooms`, which every signed-in user may read.
+ * coach's own classes and the whole studio, and a room filter. The front
+ * desk reads the whole studio, every tile linking to its roster (issue
+ * #756). The coach's own tiles link to their roster; the API opens no other
+ * class roster to a coach. Classes come from `GET /v1/classes` and rooms
+ * from `GET /v1/classes/rooms`, which every signed-in user may read.
  */
+import { can } from '@athlya/shared/roles';
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
@@ -54,7 +56,11 @@ export function CoachPlanning(): ReactElement {
 
   const [view, setView] = useState<PlanningView>('week');
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
-  const [scope, setScope] = useState<ClassScope>('mine');
+  // The front desk reads every class and every roster; a coach switches
+  // between their classes and the studio, with their own rosters only.
+  const followsEveryClass = user !== null && can(user.role, 'roster.all');
+  const [chosenScope, setScope] = useState<ClassScope>('mine');
+  const scope: ClassScope = followsEveryClass ? 'all' : chosenScope;
   const [loaded, setLoaded] = useState<{ range: string; result: Result } | null>(null);
   const [rooms, setRooms] = useState<ReadonlyArray<Room>>([]);
   const [roomFilter, setRoomFilter] = useState<string | null>(null);
@@ -131,18 +137,22 @@ export function CoachPlanning(): ReactElement {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title={t('studio.coach.planning.title')}
-        subtitle={t('studio.coach.planning.subtitle')}
+        title={t(followsEveryClass ? 'studio.desk.planning.title' : 'studio.coach.planning.title')}
+        subtitle={t(
+          followsEveryClass ? 'studio.desk.planning.subtitle' : 'studio.coach.planning.subtitle',
+        )}
         actions={
-          <SegmentedControl
-            label={t('studio.coach.planning.scopeLabel')}
-            options={SCOPES.map((value) => ({
-              value,
-              label: t(`studio.coach.planning.scope.${value}`),
-            }))}
-            value={scope}
-            onChange={setScope}
-          />
+          followsEveryClass ? null : (
+            <SegmentedControl
+              label={t('studio.coach.planning.scopeLabel')}
+              options={SCOPES.map((value) => ({
+                value,
+                label: t(`studio.coach.planning.scope.${value}`),
+              }))}
+              value={scope}
+              onChange={setScope}
+            />
+          )
         }
       />
 
@@ -190,7 +200,9 @@ export function CoachPlanning(): ReactElement {
             roomNames={names}
             onShowDay={showDay}
             rosterHref={(cls) =>
-              user !== null && cls.coachId === user.id ? classRosterHref(cls.id) : null
+              followsEveryClass || (user !== null && cls.coachId === user.id)
+                ? classRosterHref(cls.id)
+                : null
             }
           />
         )}

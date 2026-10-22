@@ -53,6 +53,7 @@ export async function mintAuthJwt(
     sub: claims.userId ?? TEST_USER_ID,
     studio: claims.studioId ?? TEST_STUDIO_ID,
     role: claims.role ?? 'member',
+    ...(claims.sessionHandle !== undefined ? { sh: claims.sessionHandle } : {}),
   });
 }
 
@@ -90,6 +91,8 @@ export function buildStubDeps(
       refresh: vi.fn(),
       logout: vi.fn(),
       logoutAll: vi.fn(),
+      listSessions: vi.fn(),
+      revokeSession: vi.fn(),
       deleteMe: vi.fn(),
       requestPasswordReset: vi.fn(),
       confirmPasswordReset: vi.fn(),
@@ -100,6 +103,8 @@ export function buildStubDeps(
       updateProfile: vi.fn(),
       uploadAvatar: vi.fn(),
       updateConsents: vi.fn(),
+      getNotificationPreferences: vi.fn(),
+      updateNotificationPreferences: vi.fn(),
       enqueueExport: vi.fn(),
       getExportJob: vi.fn(),
       openExportDownload: vi.fn(),
@@ -141,6 +146,12 @@ export function buildStubDeps(
     studios: {
       getStudio: vi.fn(),
       updateStudio: vi.fn(),
+      uploadLogo: vi.fn(),
+      removeLogo: vi.fn(),
+      listDomains: vi.fn(),
+      setDomain: vi.fn(),
+      removeDomain: vi.fn(),
+      checkDomain: vi.fn(),
       ...overrides.studios,
     },
     billing: {

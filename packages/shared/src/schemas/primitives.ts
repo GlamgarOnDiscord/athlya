@@ -18,6 +18,7 @@
 import { z } from 'zod';
 
 import { UUID_REGEX } from '../ids.js';
+import { ROLES } from '../roles.js';
 
 import type { ClassId, ReservationId, StudioId, UserId } from '../ids.js';
 
@@ -49,7 +50,7 @@ export const SlugSchema = z
  * RBAC role. Strict enum so anything outside the closed set is rejected at
  * the API boundary rather than leaking into RLS session variables.
  */
-export const RoleSchema = z.enum(['member', 'coach', 'admin']);
+export const RoleSchema = z.enum(ROLES);
 
 /**
  * `#RRGGBB` hex color (6 hex digits, leading hash, optional case). Used by

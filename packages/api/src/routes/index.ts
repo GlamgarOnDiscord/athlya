@@ -60,6 +60,7 @@ import { buildReservationsRouter, type ReservationsDeps } from './reservations.j
 import { buildSessionsRouter, type SessionsDeps } from './sessions.js';
 import { buildStudioSettingsRouter, type StudioSettingsDeps } from './studio-settings.js';
 import { buildStudiosRouter, type StudiosDeps } from './studios.js';
+import { buildTeamRouter, type TeamDeps } from './team.js';
 import { buildWebhooksRouter, type WebhooksDeps } from './webhooks.js';
 
 import type { DomainDeps } from '../domain-deps.js';
@@ -84,6 +85,7 @@ export {
   buildSessionsRouter,
   buildStudioSettingsRouter,
   buildStudiosRouter,
+  buildTeamRouter,
   buildWebhooksRouter,
 };
 export { buildDefaultDeps, buildLazyDomainDeps } from '../domain-deps.js';
@@ -104,6 +106,7 @@ export type {
   SessionsDeps,
   StudioSettingsDeps,
   StudiosDeps,
+  TeamDeps,
   WebhooksDeps,
 };
 
@@ -149,6 +152,9 @@ export function mountDomainRoutes(app: Hono<HonoEnv>, deps: DomainDeps): Hono<Ho
   }
   if (deps.webhooks !== undefined) {
     app.route('/v1/studios/me/webhooks', buildWebhooksRouter(deps.webhooks));
+  }
+  if (deps.team !== undefined) {
+    app.route('/v1/studios/me/team', buildTeamRouter(deps.team));
   }
   app.route('/v1/studios', buildStudiosRouter(deps.studios));
   app.route('/v1/billing', buildBillingRouter(deps.billing));

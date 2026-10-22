@@ -12,6 +12,8 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DnsLookupError } from '../../adapters/doh-resolver.js';
+import { StudioDomainTakenError } from '../../adapters/studio-domains-repo-drizzle.js';
 import { __resetJwksCacheForTests, jwtAuth } from '../../middleware/auth.js';
 import { mountDomainRoutes } from '../../routes/index.js';
 import { buildApp } from '../../worker.js';
@@ -28,8 +30,12 @@ import {
   type TestKeypair,
 } from './route-test-helpers.js';
 
+import { StudioDomainCheckCooldownError } from '../../white-label/dns-records.js';
+import { readJson } from '../helpers/read-json.js';
+
 import type { JwksKeyResolver } from '../../middleware/auth.js';
 import type { DomainDeps } from '../../routes/index.js';
+import type { StudioDomain } from '@athlya/shared/schemas/api';
 
 /* ------------------------------------------------------------------ */
 /*  jose mock â€” redirect createRemoteJWKSet to a local resolver.      */
@@ -150,7 +156,9 @@ describe('GET /v1/studios/me â€” authenticated', () => {
       slug: 'athlya-paris',
       name: 'Athlya Paris',
       brandColor: '#0EA5E9',
-      brandLogo: null,
+      brandLogoLight: null,
+      brandLogoDark: null,
+      hideAthlyaBranding: false,
     };
     const deps = buildStubDeps({
       studios: {
@@ -282,7 +290,9 @@ describe('PATCH /v1/studios/me â€” admin only', () => {
       slug: 'athlya-paris',
       name: 'Athlya Paris',
       brandColor: '#a0a0a0',
-      brandLogo: null,
+      brandLogoLight: null,
+      brandLogoDark: null,
+      hideAthlyaBranding: false,
     };
     const deps = buildStubDeps({
       studios: {
@@ -323,7 +333,9 @@ describe('PATCH /v1/studios/me â€” admin only', () => {
       slug: 'athlya-paris',
       name: 'Athlya Paris',
       brandColor: '#0EA5E9',
-      brandLogo: null,
+      brandLogoLight: null,
+      brandLogoDark: null,
+      hideAthlyaBranding: false,
     };
     const deps = buildStubDeps({
       studios: {
@@ -363,6 +375,256 @@ describe('PATCH /v1/studios/me â€” admin only', () => {
       { name: 'Athlya Paris', brandColor: '#0EA5E9' },
       expect.objectContaining({ studioId: TEST_STUDIO_ID, role: 'admin' }),
     );
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  White label: logos and custom domains (issue #761)                 */
+/* ------------------------------------------------------------------ */
+
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+const STUDIO_VIEW = {
+  id: TEST_STUDIO_ID,
+  slug: 'athlya-paris',
+  name: 'Athlya Paris',
+  brandColor: '#0EA5E9',
+  brandLogoLight: 'data:image/png;base64,iVBORw0KGgo=',
+  brandLogoDark: null,
+  hideAthlyaBranding: true,
+};
+
+const DOMAIN_VIEW: StudioDomain = {
+  kind: 'web',
+  hostname: 'club.example.com',
+  status: 'pending',
+  records: [],
+  lastCheckedAt: null,
+  verifiedAt: null,
+  activatedAt: null,
+};
+
+async function tokenFor(role: 'admin' | 'member') {
+  return signTestJwt(kp.privateKey, { sub: TEST_USER_ID, studio: TEST_STUDIO_ID, role });
+}
+
+describe('PATCH /v1/studios/me: Athlya mention', () => {
+  it('forwards hideAthlyaBranding', async () => {
+    const deps = buildStubDeps({ studios: { updateStudio: vi.fn(async () => STUDIO_VIEW) } });
+    const res = await buildAuthedApp(deps).request(
+      '/v1/studios/me',
+      {
+        method: 'PATCH',
+        headers: {
+          authorization: `Bearer ${await tokenFor('admin')}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ hideAthlyaBranding: true }),
+      },
+      buildMockEnv(),
+    );
+    expect(res.status).toBe(200);
+    expect(deps.studios.updateStudio).toHaveBeenCalledWith(
+      TEST_STUDIO_ID,
+      { hideAthlyaBranding: true },
+      expect.objectContaining({ role: 'admin' }),
+    );
+  });
+
+  it('refuses the former brandLogo field (logos have their own route)', async () => {
+    const deps = buildStubDeps();
+    const res = await buildAuthedApp(deps).request(
+      '/v1/studios/me',
+      {
+        method: 'PATCH',
+        headers: {
+          authorization: `Bearer ${await tokenFor('admin')}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ brandLogo: 'https://evil.example/logo.png' }),
+      },
+      buildMockEnv(),
+    );
+    expect(res.status).toBe(422);
+    expect(deps.studios.updateStudio).not.toHaveBeenCalled();
+  });
+});
+
+describe('PUT /v1/studios/me/logo/:variant', () => {
+  async function upload(
+    deps: ReturnType<typeof buildStubDeps>,
+    init: {
+      variant?: string;
+      type?: string;
+      body?: Uint8Array;
+      length?: string | null;
+      role?: 'admin' | 'member';
+    },
+  ) {
+    const body = init.body ?? PNG;
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${await tokenFor(init.role ?? 'admin')}`,
+      'content-type': init.type ?? 'image/png',
+    };
+    if (init.length !== null) headers['content-length'] = init.length ?? String(body.byteLength);
+    return buildAuthedApp(deps).request(
+      `/v1/studios/me/logo/${init.variant ?? 'light'}`,
+      { method: 'PUT', headers, body: body as unknown as BodyInit },
+      buildMockEnv(),
+    );
+  }
+
+  it('stores the logo and returns the studio', async () => {
+    const deps = buildStubDeps({ studios: { uploadLogo: vi.fn(async () => STUDIO_VIEW) } });
+    const res = await upload(deps, { variant: 'dark' });
+    expect(res.status).toBe(200);
+    expect(await readJson<typeof STUDIO_VIEW>(res)).toEqual(STUDIO_VIEW);
+    expect(deps.studios.uploadLogo).toHaveBeenCalledWith(
+      'dark',
+      'image/png',
+      expect.any(ArrayBuffer),
+      expect.objectContaining({ studioId: TEST_STUDIO_ID }),
+    );
+  });
+
+  it('is admin only', async () => {
+    const deps = buildStubDeps();
+    expect((await upload(deps, { role: 'member' })).status).toBe(403);
+    expect(deps.studios.uploadLogo).not.toHaveBeenCalled();
+  });
+
+  it('refuses an unknown variant, an SVG, a missing length and a large file', async () => {
+    const deps = buildStubDeps();
+    expect((await upload(deps, { variant: 'blue' })).status).toBe(422);
+    const svg = await upload(deps, { type: 'image/svg+xml' });
+    expect(svg.status).toBe(415);
+    expect((await readJson<{ code: string }>(svg)).code).toBe('unsupported_media_type');
+    expect((await upload(deps, { length: null })).status).toBe(411);
+    const large = await upload(deps, { length: String(129 * 1024) });
+    expect(large.status).toBe(413);
+    expect((await readJson<{ code: string }>(large)).code).toBe('logo_too_large');
+    expect(deps.studios.uploadLogo).not.toHaveBeenCalled();
+  });
+
+  it('maps a content mismatch to 422 logo_invalid_format', async () => {
+    const { AvatarInvalidFormatError } = await import('../../adapters/avatar-upload-store-r2.js');
+    const deps = buildStubDeps({
+      studios: {
+        uploadLogo: vi.fn(async () => {
+          throw new AvatarInvalidFormatError();
+        }),
+      },
+    });
+    const res = await upload(deps, { type: 'image/jpeg' });
+    expect(res.status).toBe(422);
+    expect((await readJson<{ code: string }>(res)).code).toBe('logo_invalid_format');
+  });
+
+  it('DELETE removes the logo', async () => {
+    const deps = buildStubDeps({ studios: { removeLogo: vi.fn(async () => STUDIO_VIEW) } });
+    const res = await buildAuthedApp(deps).request(
+      '/v1/studios/me/logo/light',
+      { method: 'DELETE', headers: { authorization: `Bearer ${await tokenFor('admin')}` } },
+      buildMockEnv(),
+    );
+    expect(res.status).toBe(200);
+    expect(deps.studios.removeLogo).toHaveBeenCalledWith('light', expect.anything());
+  });
+});
+
+describe('/v1/studios/me/domains', () => {
+  async function call(
+    deps: ReturnType<typeof buildStubDeps>,
+    method: string,
+    path: string,
+    body?: unknown,
+    role: 'admin' | 'member' = 'admin',
+  ) {
+    return buildAuthedApp(deps).request(
+      `/v1/studios/me/domains${path}`,
+      {
+        method,
+        headers: {
+          authorization: `Bearer ${await tokenFor(role)}`,
+          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+        },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      },
+      buildMockEnv(),
+    );
+  }
+
+  it('lists the domains of an admin studio and hides them from members', async () => {
+    const deps = buildStubDeps({ studios: { listDomains: vi.fn(async () => [DOMAIN_VIEW]) } });
+    const res = await call(deps, 'GET', '');
+    expect(res.status).toBe(200);
+    expect(await readJson<{ items: unknown[] }>(res)).toEqual({ items: [DOMAIN_VIEW] });
+    expect((await call(deps, 'GET', '', undefined, 'member')).status).toBe(403);
+  });
+
+  it('registers a lower-cased hostname', async () => {
+    const deps = buildStubDeps({ studios: { setDomain: vi.fn(async () => DOMAIN_VIEW) } });
+    const res = await call(deps, 'PUT', '/web', { hostname: ' Club.Example.com ' });
+    expect(res.status).toBe(200);
+    expect(deps.studios.setDomain).toHaveBeenCalledWith(
+      'web',
+      'club.example.com',
+      expect.objectContaining({ studioId: TEST_STUDIO_ID }),
+    );
+  });
+
+  it('refuses a URL, a bare name and an athlya.app hostname', async () => {
+    const deps = buildStubDeps();
+    for (const hostname of ['https://club.example.com', 'localhost', 'x.athlya.app']) {
+      expect((await call(deps, 'PUT', '/web', { hostname })).status).toBe(422);
+    }
+    expect((await call(deps, 'PUT', '/ftp', { hostname: 'example.com' })).status).toBe(422);
+    expect(deps.studios.setDomain).not.toHaveBeenCalled();
+  });
+
+  it('DELETE answers 204, or 404 when there was no domain', async () => {
+    const deps = buildStubDeps({
+      studios: { removeDomain: vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false) },
+    });
+    expect((await call(deps, 'DELETE', '/email')).status).toBe(204);
+    expect((await call(deps, 'DELETE', '/email')).status).toBe(404);
+  });
+
+  it('check returns the checked domain', async () => {
+    const deps = buildStubDeps({
+      studios: {
+        checkDomain: vi.fn(async (): Promise<StudioDomain> => ({
+          ...DOMAIN_VIEW,
+          status: 'verified',
+        })),
+      },
+    });
+    const res = await call(deps, 'POST', '/web/check');
+    expect(res.status).toBe(200);
+    expect((await readJson<{ status: string }>(res)).status).toBe('verified');
+  });
+
+  it.each([
+    [new StudioDomainCheckCooldownError(7), 429, 'domain_check_cooldown'],
+    [new DnsLookupError('boom'), 502, 'dns_lookup_failed'],
+    [new StudioDomainTakenError('taken'), 409, 'domain_taken'],
+  ])('maps %s to %i', async (error, status, code) => {
+    const deps = buildStubDeps({
+      studios: {
+        checkDomain: vi.fn(async () => {
+          throw error;
+        }),
+      },
+    });
+    const res = await call(deps, 'POST', '/web/check');
+    expect(res.status).toBe(status);
+    expect((await readJson<{ code: string }>(res)).code).toBe(code);
+    if (status === 429) expect(res.headers.get('retry-after')).toBe('7');
+  });
+
+  it('check answers 404 without a domain', async () => {
+    const deps = buildStubDeps({ studios: { checkDomain: vi.fn(async () => null) } });
+    expect((await call(deps, 'POST', '/email/check')).status).toBe(404);
   });
 });
 

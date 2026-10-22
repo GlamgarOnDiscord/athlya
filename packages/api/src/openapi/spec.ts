@@ -18,6 +18,17 @@
  */
 
 import {
+  AcceptInvitationRequestSchema,
+  AcceptInvitationResponseSchema,
+  ActiveSessionsResponseSchema,
+  InviteTeamMemberRequestSchema,
+  InviteTeamMemberResponseSchema,
+  SessionParamsSchema,
+  TeamInvitationParamsSchema,
+  TeamMemberParamsSchema,
+  TeamMemberSchema,
+  TeamResponseSchema,
+  UpdateTeamMemberRequestSchema,
   CreateWebhookEndpointRequestSchema,
   StudioSettingsSchema,
   UpdateStudioSettingsRequestSchema,
@@ -476,7 +487,7 @@ const listMembersRoute = createRoute({
   method: 'get',
   path: '/v1/members',
   tags: ['members'],
-  summary: 'List studio members (admin / coach only)',
+  summary: 'List studio members (admin, manager, front desk, coach)',
   security: [{ bearerAuth: [] }],
   request: {
     query: z.object({
@@ -504,7 +515,7 @@ const memberFileRoute = createRoute({
   method: 'get',
   path: '/v1/members/{id}',
   tags: ['members'],
-  summary: 'Member file: profile, consents and reservations (studio admin only)',
+  summary: 'Member file: profile, consents and reservations (admin, manager, front desk)',
   security: [{ bearerAuth: [] }],
   request: { params: MemberFileParamsSchema },
   responses: {
@@ -513,7 +524,7 @@ const memberFileRoute = createRoute({
       content: { 'application/json': { schema: MemberFileResponseSchema } },
     },
     401: problemResponse('Not authenticated'),
-    403: problemResponse('Not a studio admin'),
+    403: problemResponse('Not an admin, manager or front desk of the studio'),
     404: problemResponse('`member_not_found`: no live member with this id in the studio'),
   },
 });
@@ -549,7 +560,7 @@ const createClassRoute = createRoute({
   method: 'post',
   path: '/v1/classes',
   tags: ['classes'],
-  summary: 'Create a new class (admin only)',
+  summary: 'Create a new class (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -587,7 +598,7 @@ const updateClassRoute = createRoute({
   method: 'patch',
   path: '/v1/classes/{id}',
   tags: ['classes'],
-  summary: 'Update a class (admin only)',
+  summary: 'Update a class (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.uuid() }),
@@ -630,7 +641,7 @@ const deleteClassRoute = createRoute({
   method: 'delete',
   path: '/v1/classes/{id}',
   tags: ['classes'],
-  summary: 'Delete a class (admin only)',
+  summary: 'Delete a class (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.uuid() }),
@@ -657,7 +668,9 @@ const classRosterRoute = createRoute({
   path: '/v1/classes/{id}/roster',
   tags: ['classes'],
   summary: 'Roster of a class: booked members, waitlist and check-ins',
-  description: 'Open to the studio admin and to the coach the class is assigned to.',
+  description:
+    'Open to the admin, manager and front desk of the studio, and to the coach the class is ' +
+    'assigned to.',
   security: [{ bearerAuth: [] }],
   request: { params: ClassRosterParamsSchema },
   responses: {
@@ -675,7 +688,8 @@ const rosterCheckInRoute = createRoute({
   method: 'post',
   path: '/v1/classes/{id}/roster/{reservationId}/check-in',
   tags: ['classes'],
-  summary: 'Mark a booked member of the class present (admin or coach of the class)',
+  summary:
+    'Mark a booked member of the class present (admin, manager, front desk, or coach of the class)',
   description:
     'Stamps the same check-in as a kiosk scan. Allowed from 30 minutes before the class ' +
     'starts until 24 hours after it ends.',
@@ -1392,9 +1406,10 @@ const checkInRoute = createRoute({
   method: 'post',
   path: '/v1/checkins',
   tags: ['checkins'],
-  summary: 'Check a member in from their QR token (kiosk, admin or coach)',
+  summary: 'Check a member in from their QR token (kiosk, any studio team role)',
   description:
-    "The operator's session must be an admin or coach of the studio; the QR token names the " +
+    "The operator's session must be an admin, manager, front desk or coach of the studio; the QR " +
+    'token names the ' +
     'member. The token is verified before any reservation or member read and consumed once.',
   security: [{ bearerAuth: [] }],
   request: {
@@ -1418,7 +1433,7 @@ const checkInRoute = createRoute({
       'Not authenticated, or the QR token was rejected (`code`: `invalid_signature`, ' +
         '`token_expired`, `replay`, `wrong_studio`, `wrong_kind`, `malformed`)',
     ),
-    403: problemResponse('The caller is not an admin or coach'),
+    403: problemResponse('The caller is not on the studio team'),
     422: problemResponse(
       'Valid token but no check-in (`code`: `no_reservation`, `outside_window`, `already_checked_in`), or validation error',
     ),
@@ -1437,7 +1452,7 @@ const listAuditRoute = createRoute({
   method: 'get',
   path: '/v1/audit',
   tags: ['audit'],
-  summary: 'List studio audit log entries (admin only)',
+  summary: 'List studio audit log entries (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     query: z.object({
@@ -1569,7 +1584,7 @@ const createProgramRoute = createRoute({
   method: 'post',
   path: '/v1/programs',
   tags: ['programs'],
-  summary: 'Create a program with its weeks and workouts (admin only)',
+  summary: 'Create a program with its weeks and workouts (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -1609,7 +1624,7 @@ const updateProgramRoute = createRoute({
   method: 'patch',
   path: '/v1/programs/{id}',
   tags: ['programs'],
-  summary: 'Update a program; `weeks` replaces the schedule (admin only)',
+  summary: 'Update a program; `weeks` replaces the schedule (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     params: ProgramIdParamsSchema,
@@ -1635,7 +1650,7 @@ const archiveProgramRoute = createRoute({
   method: 'post',
   path: '/v1/programs/{id}/archive',
   tags: ['programs'],
-  summary: 'Archive a program (admin only, idempotent)',
+  summary: 'Archive a program (admin, manager; idempotent)',
   security: [{ bearerAuth: [] }],
   request: { params: ProgramIdParamsSchema },
   responses: {
@@ -1878,6 +1893,153 @@ const deleteWebhookRoute = createRoute({
   },
 });
 
+/*
+ * auth sessions: /v1/auth/sessions (issue #757)
+ */
+
+const authSessionsListRoute = createRoute({
+  method: 'get',
+  path: '/v1/auth/sessions',
+  tags: ['auth'],
+  summary: 'Active sessions of the current user, most recently seen first',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "The active sessions; `current` marks the caller's own",
+      content: { 'application/json': { schema: ActiveSessionsResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+  },
+});
+
+const authSessionRevokeRoute = createRoute({
+  method: 'delete',
+  path: '/v1/auth/sessions/{id}',
+  tags: ['auth'],
+  summary: 'Revoke one session of the current user',
+  security: [{ bearerAuth: [] }],
+  request: { params: SessionParamsSchema },
+  responses: {
+    204: { description: 'Session revoked: it can no longer refresh' },
+    401: problemResponse('Not authenticated'),
+    404: problemResponse('`session_not_found`: no active session of the caller with this id'),
+  },
+});
+
+/*
+ * team: /v1/studios/me/team (issue #756)
+ */
+
+const teamListRoute = createRoute({
+  method: 'get',
+  path: '/v1/studios/me/team',
+  tags: ['team'],
+  summary: 'The studio team and its pending invitations (admin, manager)',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Team members and pending invitations',
+      content: { 'application/json': { schema: TeamResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not an admin or a manager'),
+  },
+});
+
+const teamInviteRoute = createRoute({
+  method: 'post',
+  path: '/v1/studios/me/team/invitations',
+  tags: ['team'],
+  summary: 'Invite someone to the team, or give a studio account a team role (admin)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: InviteTeamMemberRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'An account of the studio had this email: its role changed',
+      content: { 'application/json': { schema: InviteTeamMemberResponseSchema } },
+    },
+    201: {
+      description: 'Pending invitation created; the token is returned this once',
+      content: { 'application/json': { schema: InviteTeamMemberResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not an admin'),
+    409: problemResponse('`cannot_change_own_role`'),
+    422: problemResponse('Validation error'),
+  },
+});
+
+const teamRevokeInvitationRoute = createRoute({
+  method: 'delete',
+  path: '/v1/studios/me/team/invitations/{id}',
+  tags: ['team'],
+  summary: 'Revoke a pending invitation (admin)',
+  security: [{ bearerAuth: [] }],
+  request: { params: TeamInvitationParamsSchema },
+  responses: {
+    204: { description: 'Invitation revoked' },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not an admin'),
+    404: problemResponse('`invitation_not_found`'),
+  },
+});
+
+const teamAcceptInvitationRoute = createRoute({
+  method: 'post',
+  path: '/v1/studios/me/team/invitations/accept',
+  tags: ['team'],
+  summary: 'Accept an invitation as the invited account',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: AcceptInvitationRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'The role now held; sign in again to use it',
+      content: { 'application/json': { schema: AcceptInvitationResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    404: problemResponse(
+      '`invitation_not_found`: no pending invitation for this token and account',
+    ),
+    422: problemResponse('Validation error'),
+  },
+});
+
+const teamUpdateMemberRoute = createRoute({
+  method: 'patch',
+  path: '/v1/studios/me/team/members/{id}',
+  tags: ['team'],
+  summary: 'Change the role of a team member; `member` removes them from the team (admin)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: TeamMemberParamsSchema,
+    body: {
+      content: { 'application/json': { schema: UpdateTeamMemberRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'The member with the new role',
+      content: { 'application/json': { schema: z.object({ member: TeamMemberSchema }) } },
+    },
+    204: { description: 'Removed from the team (role `member`)' },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not an admin'),
+    404: problemResponse('`member_not_found`'),
+    409: problemResponse('`cannot_change_own_role`'),
+  },
+});
+
 export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   const app = new OpenAPIHono<HonoEnv>();
 
@@ -1898,6 +2060,8 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   app.openapi(refreshRoute, stub);
   app.openapi(logoutRoute, stub);
   app.openapi(logoutAllRoute, stub);
+  app.openapi(authSessionsListRoute, stub);
+  app.openapi(authSessionRevokeRoute, stub);
   app.openapi(passwordResetRequestRoute, stub);
   app.openapi(passwordResetConfirmRoute, stub);
   app.openapi(deleteAccountRoute, stub);
@@ -1944,6 +2108,13 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   app.openapi(updateWebhookRoute, stub);
   app.openapi(rotateWebhookSecretRoute, stub);
   app.openapi(deleteWebhookRoute, stub);
+
+  // team
+  app.openapi(teamListRoute, stub);
+  app.openapi(teamInviteRoute, stub);
+  app.openapi(teamAcceptInvitationRoute, stub);
+  app.openapi(teamRevokeInvitationRoute, stub);
+  app.openapi(teamUpdateMemberRoute, stub);
 
   // sessions
   app.openapi(logSessionRoute, stub);

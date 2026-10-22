@@ -25,6 +25,9 @@ const row = {
   slug: 'studio-a',
   name: 'Studio Alpha',
   brandColor: '#0EA5E9',
+  brandLogoLight: null,
+  brandLogoDark: 'https://assets.athlya.test/studio-logos/a/dark?v=1',
+  hideAthlyaBranding: false,
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
   deletedAt: null,
 };
@@ -94,7 +97,9 @@ describe('createDrizzleStudioRepoHttp', () => {
       slug: 'studio-a',
       name: 'Studio Alpha',
       brandColor: '#0EA5E9',
-      brandLogo: null,
+      brandLogoLight: null,
+      brandLogoDark: 'https://assets.athlya.test/studio-logos/a/dark?v=1',
+      hideAthlyaBranding: false,
     });
     expect(batches).toHaveLength(1);
     expect(batches[0]?.kinds).toEqual(['execute', 'execute', 'execute', 'select']);
@@ -102,20 +107,32 @@ describe('createDrizzleStudioRepoHttp', () => {
   });
 
   it('updates the editable columns inside a tenant batch', async () => {
-    const { db, batches } = fakeHttpDb([{ ...row, name: 'Renamed', brandColor: '#1D4ED8' }]);
+    const { db, batches } = fakeHttpDb([
+      { ...row, name: 'Renamed', brandColor: '#1D4ED8', hideAthlyaBranding: true },
+    ]);
     const updated = await createDrizzleStudioRepoHttp(db, claims).updateById(STUDIO_ID, {
       name: 'Renamed',
       brandColor: '#1D4ED8',
-      brandLogo: 'ignored',
+      brandLogoLight: 'data:image/png;base64,iVBORw0KGgo=',
+      hideAthlyaBranding: true,
     });
-    expect(updated).toMatchObject({ name: 'Renamed', brandColor: '#1D4ED8', brandLogo: null });
+    expect(updated).toMatchObject({
+      name: 'Renamed',
+      brandColor: '#1D4ED8',
+      hideAthlyaBranding: true,
+    });
     expect(batches[0]?.kinds).toEqual(['execute', 'execute', 'execute', 'update']);
-    expect(batches[0]?.set).toEqual({ name: 'Renamed', brandColor: '#1D4ED8' });
+    expect(batches[0]?.set).toEqual({
+      name: 'Renamed',
+      brandColor: '#1D4ED8',
+      brandLogoLight: 'data:image/png;base64,iVBORw0KGgo=',
+      hideAthlyaBranding: true,
+    });
   });
 
   it('falls back to a scoped read when nothing editable changed', async () => {
     const { db, batches } = fakeHttpDb([row]);
-    await createDrizzleStudioRepoHttp(db, claims).updateById(STUDIO_ID, { brandLogo: null });
+    await createDrizzleStudioRepoHttp(db, claims).updateById(STUDIO_ID, {});
     expect(batches[0]?.kinds).toEqual(['execute', 'execute', 'execute', 'select']);
   });
 

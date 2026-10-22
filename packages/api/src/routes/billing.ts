@@ -5,8 +5,8 @@
  *
  *   | Method | Path       | Chain                                                       |
  *   |--------|------------|-------------------------------------------------------------|
- *   | POST   | /checkout  | jwtAuth → requireRole('admin') → projectUserId → zValidator(body) → idem → handler |
- *   | GET    | /invoices  | jwtAuth → requireRole('admin') → zValidator(query) → handler |
+ *   | POST   | /checkout  | jwtAuth → requireCapability('billing.manage') → projectUserId → zValidator(body) → idem → handler |
+ *   | GET    | /invoices  | jwtAuth → requireCapability('billing.manage') → zValidator(query) → handler |
  *   | POST   | /webhook   | (no auth) → raw-body → handler                              |
  *
  * Posture (issue #122)
@@ -49,7 +49,7 @@ import {
   projectUserIdFromClaims,
   readValidated,
   traceOperation,
-  requireRole,
+  requireCapability,
 } from './helpers.js';
 
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
@@ -190,7 +190,7 @@ export function buildBillingRouter(deps: BillingDeps): Hono<HonoEnv> {
   router.post(
     '/checkout',
     jwtAuth(),
-    requireRole('admin'),
+    requireCapability('billing.manage'),
     projectUserIdFromClaims(),
     zValidator('json', CheckoutRequestSchema),
     ...(idem ? [idempotency(idem)] : []),
@@ -227,7 +227,7 @@ export function buildBillingRouter(deps: BillingDeps): Hono<HonoEnv> {
   router.get(
     '/invoices',
     jwtAuth(),
-    requireRole('admin'),
+    requireCapability('billing.manage'),
     zValidator('query', ListInvoicesQuerySchema),
     async (c) => {
       traceOperation(c, 'billing.list-invoices');

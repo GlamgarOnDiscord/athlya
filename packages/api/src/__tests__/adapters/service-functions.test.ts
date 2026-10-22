@@ -9,7 +9,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createDrizzleUserRepo } from '../../adapters/auth-user-repo-drizzle.js';
 import { createDrizzleDeletionRepo } from '../../adapters/cascade-repo-drizzle.js';
-import { buildRecipientRepo } from '../../adapters/notifications-deps.js';
+import {
+  buildBrandingRepo,
+  buildPreferencesRepo,
+  buildRecipientRepo,
+  fromHeader,
+  senderDisplayName,
+} from '../../adapters/notifications-deps.js';
 import {
   createDrizzlePasswordResetRepo,
   createPasswordResetRequestQueue,
@@ -36,6 +42,8 @@ const migration = [
   '0039_runtime_rls_gaps.sql',
   '0042_training_programs.sql',
   '0043_auth_password_reset_outbox.sql',
+  '0053_white_label.sql',
+  '0054_notification_preferences.sql',
 ]
   .map((file) => readFileSync(resolve(here, '../../../../db/migrations', file), 'utf8'))
   .join('\n');
@@ -79,8 +87,8 @@ describe('service function contract with migration 0032', () => {
     (m) => m[1],
   );
 
-  it('references the 23 service functions', () => {
-    expect(new Set(used).size).toBe(23);
+  it('references the 25 service functions', () => {
+    expect(new Set(used).size).toBe(25);
   });
 
   const granted = grantedToApp(migration);
@@ -812,6 +820,91 @@ describe('buildRecipientRepo', () => {
       email: null,
       pushTokens: [],
     });
+  });
+});
+
+describe('buildPreferencesRepo', () => {
+  it('returns the stored preferences of the recipient', async () => {
+    const stored = { reservationCreated: { email: false } };
+    const { db, calls } = fakeDb(() => [{ preferences: stored }]);
+    await expect(buildPreferencesRepo(db).getPreferences(userRow.id)).resolves.toEqual(stored);
+    expect(calls[0]?.sql).toContain('notification_preferences_of(');
+    expect(calls[0]?.params).toEqual([userRow.id]);
+  });
+
+  it('returns null for an unknown or deleted user', async () => {
+    const { db } = fakeDb(() => [{ preferences: null }]);
+    await expect(buildPreferencesRepo(db).getPreferences(userRow.id)).resolves.toBeNull();
+  });
+});
+
+describe('buildBrandingRepo', () => {
+  it('maps the studio branding of the recipient', async () => {
+    const { db, calls } = fakeDb(() => [
+      {
+        studio_name: 'Studio Alpha',
+        brand_color: '#0EA5E9',
+        brand_logo_light: 'https://assets.athlya.test/l.png',
+        hide_athlya_branding: true,
+        email_domain: 'alpha.example',
+      },
+    ]);
+    await expect(buildBrandingRepo(db).getBranding(userRow.id)).resolves.toEqual({
+      studioName: 'Studio Alpha',
+      brandColor: '#0EA5E9',
+      logoUrl: 'https://assets.athlya.test/l.png',
+      hideAthlyaBranding: true,
+      emailDomain: 'alpha.example',
+    });
+    expect(calls[0]?.sql).toContain('notification_studio_branding(');
+    expect(calls[0]?.params).toEqual([userRow.id]);
+  });
+
+  it('returns null when the studio cannot be resolved', async () => {
+    const { db } = fakeDb(() => []);
+    await expect(buildBrandingRepo(db).getBranding(userRow.id)).resolves.toBeNull();
+  });
+});
+
+describe('senderDisplayName', () => {
+  it('strips what could break out of the From header', () => {
+    expect(senderDisplayName('Studio "Alpha" <x@evil>\r\nBcc: a@b')).toBe(
+      'Studio Alpha x@evil Bcc: a@b',
+    );
+    expect(senderDisplayName('x'.repeat(100))).toHaveLength(64);
+  });
+});
+
+describe('fromHeader', () => {
+  const fallback = 'Athlya <noreply@athlya.app>';
+
+  it('sends from the studio domain when it is a well-formed hostname', () => {
+    expect(fromHeader({ name: 'Studio Alpha', domain: 'mail.studio-alpha.fr' }, fallback)).toBe(
+      '"Studio Alpha" <noreply@mail.studio-alpha.fr>',
+    );
+    expect(fromHeader({ name: 'Studio', domain: 'studio.xn--p1ai' }, fallback)).toBe(
+      '"Studio" <noreply@studio.xn--p1ai>',
+    );
+  });
+
+  it('keeps the default sender without a studio sender', () => {
+    expect(fromHeader(undefined, fallback)).toBe(fallback);
+  });
+
+  it.each([
+    'studio.fr>, attacker@evil.example',
+    'studio.fr\r\nBcc: a@b.example',
+    'localhost',
+    '-studio.fr',
+    'studio-.fr',
+    'studio..fr',
+    'studio.fr.',
+    'studio.123',
+    `${'a'.repeat(64)}.fr`,
+    `${'a.'.repeat(127)}fr`,
+    '',
+  ])('falls back to the default sender for the malformed domain %j', (domain) => {
+    expect(fromHeader({ name: 'Studio', domain }, fallback)).toBe(fallback);
   });
 });
 

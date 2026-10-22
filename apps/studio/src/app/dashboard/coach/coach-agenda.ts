@@ -58,12 +58,16 @@ function byStart<T extends OverviewClass>(items: ReadonlyArray<T>): T[] {
   return [...items].sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
 }
 
+/**
+ * The day of `coachId`, or of the whole studio when `coachId` is `null`
+ * (the front desk, who follows every class).
+ */
 export function coachAgenda<T extends AssignedClass>(
   items: ReadonlyArray<T>,
-  coachId: string,
+  coachId: string | null,
   now: Date,
 ): CoachAgenda<T> {
-  const mine = byStart(classesOf(items, coachId));
+  const mine = byStart(coachId === null ? [...items] : classesOf(items, coachId));
   const tomorrow = addDays(startOfDay(now), 1);
   const horizon = addDays(startOfDay(now), AGENDA_DAYS);
   const live = mine.find((c) => classTiming(c, now) === 'live');

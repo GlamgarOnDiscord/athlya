@@ -59,11 +59,13 @@
  * the JWT.
  */
 
+import { ROLES } from '@athlya/shared/roles';
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
 
 import { createLogger } from '../logging.js';
 
 import type { AthlyaBindings } from '../types.js';
+import type { Role } from '@athlya/shared/roles';
 import type { FlattenedJWSInput, JWSHeaderParameters, JWTPayload } from 'jose';
 
 /* ------------------------------------------------------------------ */
@@ -79,8 +81,11 @@ const ALLOWED_ALGORITHMS = ['RS256'] as const;
 /** Case-insensitive match for `Bearer <token>`; the capture group is the token. */
 const BEARER_RE = /^\s*Bearer\s+([A-Za-z0-9._~+/=-]+)\s*$/u;
 
+/** Shape of the `sh` claim: the hex handle minted by `@athlya/auth`. */
+const SESSION_HANDLE_RE = /^[0-9a-f]{32}$/u;
+
 /** Closed set of roles accepted in the `role` claim. */
-const VALID_ROLES = new Set<AuthClaims['role']>(['member', 'admin', 'coach']);
+const VALID_ROLES: ReadonlySet<string> = new Set<AuthClaims['role']>(ROLES);
 
 /* ------------------------------------------------------------------ */
 /*  Public types                                                       */
@@ -90,15 +95,20 @@ const VALID_ROLES = new Set<AuthClaims['role']>(['member', 'admin', 'coach']);
  * Verified claims written onto the Hono context as `authClaims`.
  *
  * `userId` is the `sub` claim, `studioId` is the `studio` claim and
- * `role` is the closed union `'member' | 'admin' | 'coach'`. Any JWT
- * whose `role` is not one of these three values is rejected with a
- * generic `invalid_token` to avoid leaking the closed set to
- * attackers.
+ * `role` is one of the closed set {@link ROLES} of `@athlya/shared/roles`.
+ * Any JWT whose `role` is outside it is rejected with a generic
+ * `invalid_token` to avoid leaking the closed set to attackers.
  */
 export interface AuthClaims {
   userId: string;
   studioId: string;
-  role: 'member' | 'admin' | 'coach';
+  role: Role;
+  /**
+   * Public handle of the refresh-token session the access token was
+   * minted for (`sh` claim, issue #757). Lets the sessions list mark
+   * "this device". Absent on tokens issued before the claim existed.
+   */
+  sessionHandle?: string;
   /**
    * credentials_version at sign time — used for revocation checks (issue
    * #520). Absent on tokens issued before this claim was added; the
@@ -275,11 +285,12 @@ function extractClaims(payload: JWTPayload): AuthClaims | null {
   const studio = payload['studio'];
   const role = payload['role'];
   const cv = payload['cv'];
+  const sh = payload['sh'];
 
   if (typeof sub !== 'string' || sub.length === 0) return null;
   if (typeof studio !== 'string' || studio.length === 0) return null;
   if (typeof role !== 'string') return null;
-  if (!VALID_ROLES.has(role as AuthClaims['role'])) return null;
+  if (!VALID_ROLES.has(role)) return null;
 
   const validCv = typeof cv === 'number' && Number.isInteger(cv) && cv >= 1 ? cv : undefined;
   return {
@@ -289,6 +300,7 @@ function extractClaims(payload: JWTPayload): AuthClaims | null {
     // `cv` is absent on tokens issued before issue #520. Accept them during
     // the rollout window; the revocation check is skipped when undefined.
     ...(validCv !== undefined ? { credentialsVersion: validCv } : {}),
+    ...(typeof sh === 'string' && SESSION_HANDLE_RE.test(sh) ? { sessionHandle: sh } : {}),
   };
 }
 

@@ -8,6 +8,7 @@
  * same reservation column as the kiosk. Admins reach each member's file
  * from a name; coaches have no per-member read.
  */
+import { can } from '@athlya/shared/roles';
 import { ArrowLeftIcon, CheckIcon, ScanIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
@@ -75,7 +76,8 @@ export function ClassRoster({ classId }: { readonly classId: string }): ReactEle
   const getToken = useCallback(() => accessToken, [accessToken]);
   const client = useApiClient(getToken);
   const nowMinute = useNowMinute();
-  const isAdmin = user?.role === 'admin';
+  const isPlanner = user !== null && can(user.role, 'classes.write');
+  const opensFiles = user !== null && can(user.role, 'members.file');
 
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
@@ -127,14 +129,20 @@ export function ClassRoster({ classId }: { readonly classId: string }): ReactEle
     [client, classId, reload, t],
   );
 
-  const backHref = isAdmin ? '/dashboard/classes' : '/dashboard/planning';
+  const backHref = isPlanner ? '/dashboard/classes' : '/dashboard/planning';
   const back = (
     <Link
       href={backHref}
       className="inline-flex w-fit items-center gap-1.5 rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <ArrowLeftIcon aria-hidden="true" className="size-4" />
-      {t(isAdmin ? 'studio.nav.classes' : 'studio.nav.planning')}
+      {t(
+        isPlanner
+          ? 'studio.nav.classes'
+          : user?.role === 'coach'
+            ? 'studio.nav.planning'
+            : 'studio.nav.studioPlanning',
+      )}
     </Link>
   );
 
@@ -213,7 +221,7 @@ export function ClassRoster({ classId }: { readonly classId: string }): ReactEle
               <RosterRow
                 key={entry.reservationId}
                 entry={entry}
-                linkToFile={isAdmin}
+                linkToFile={opensFiles}
                 locale={locale}
                 t={t}
                 aside={
@@ -251,7 +259,7 @@ export function ClassRoster({ classId }: { readonly classId: string }): ReactEle
                 key={entry.reservationId}
                 entry={entry}
                 position={index + 1}
-                linkToFile={isAdmin}
+                linkToFile={opensFiles}
                 locale={locale}
                 t={t}
                 aside={null}

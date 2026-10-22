@@ -51,6 +51,8 @@ import {
   login as svcLogin,
   refresh as svcRefresh,
   logout as svcLogout,
+  listSessions as svcListSessions,
+  revokeSession as svcRevokeSession,
   deleteMe as svcDeleteMe,
   requestReset as svcRequestReset,
   confirmReset as svcConfirmReset,
@@ -382,9 +384,13 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
   const now = () => Math.floor(Date.now() / 1000);
 
   return {
-    async register(input) {
+    async register(input, ctx) {
       const state = await getAuthState(env);
-      const session = await svcRegister(input, state.serviceDeps);
+      const session = await svcRegister(
+        input,
+        state.serviceDeps,
+        ctx?.userAgent !== undefined ? { userAgent: ctx.userAgent } : {},
+      );
       return toAuthSession(session, now);
     },
     async login(input, ctx) {
@@ -443,6 +449,14 @@ export function buildAuthDeps(env: AthlyaBindings): AuthDeps {
       // `logout` revokes only the presented session.
       const state = await getAuthState(env);
       await state.sessionStore.revokeAllForUser(userId);
+    },
+    async listSessions(userId, currentHandle) {
+      const state = await getAuthState(env);
+      return svcListSessions(userId, state.sessionStore, currentHandle);
+    },
+    async revokeSession(userId, sessionId) {
+      const state = await getAuthState(env);
+      return svcRevokeSession(userId, sessionId, state.sessionStore);
     },
     async deleteMe(userId) {
       const state = await getAuthState(env);

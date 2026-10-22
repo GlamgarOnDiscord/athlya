@@ -8,12 +8,26 @@ import { matchesQuery } from '../../../lib/search-text';
 import type { StudioMember } from '../../../lib/api/members';
 
 export type RoleTab = 'all' | StudioMember['role'];
-export const ROLE_TABS: ReadonlyArray<RoleTab> = ['all', 'member', 'coach', 'admin'];
+export const ROLE_TABS: ReadonlyArray<RoleTab> = [
+  'all',
+  'member',
+  'coach',
+  'accueil',
+  'manager',
+  'admin',
+];
 
 export type MemberSort = 'name' | 'joinedDesc' | 'joinedAsc';
 
 export function roleCounts(items: ReadonlyArray<StudioMember>): Record<RoleTab, number> {
-  const counts: Record<RoleTab, number> = { all: items.length, member: 0, coach: 0, admin: 0 };
+  const counts: Record<RoleTab, number> = {
+    all: items.length,
+    member: 0,
+    coach: 0,
+    accueil: 0,
+    manager: 0,
+    admin: 0,
+  };
   for (const m of items) counts[m.role] += 1;
   return counts;
 }
