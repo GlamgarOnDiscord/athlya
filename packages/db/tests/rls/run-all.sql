@@ -54,4 +54,5 @@
 \i tests/rls/users_email_nullable.sql
 \i tests/rls/training_programs.sql
 \i tests/rls/constraints.sql
+\i tests/rls/team_roles.sql
 \i tests/rls/white_label.sql

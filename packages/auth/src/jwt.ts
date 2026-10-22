@@ -40,6 +40,7 @@
 
 import { SignJWT, createLocalJWKSet, exportJWK, importPKCS8, importSPKI, jwtVerify } from 'jose';
 
+import type { Role } from '@athlya/shared/roles';
 import type { CryptoKey, JSONWebKeySet, JWK, JWTPayload, JWTVerifyOptions } from 'jose';
 
 /**
@@ -76,12 +77,16 @@ export const DEFAULT_ROTATION_GRACE_SEC = 24 * 60 * 60;
  * - `role` — user role within the studio (`member`, `coach`, `admin`).
  * - `cv` — credentials_version at sign time; jwtAuth rejects mutation
  *   requests when the stored version has since advanced (issue #520).
+ * - `sh`: public handle of the session the token was minted for
+ *   (`sessionHandle` in `./sessions.ts`, issue #757). Optional so tokens
+ *   minted outside a session (tests, scripts) stay valid.
  */
 export interface AccessClaims extends JWTPayload {
   readonly sub: string;
   readonly studio: string;
-  readonly role: 'member' | 'coach' | 'admin';
+  readonly role: Role;
   readonly cv: number;
+  readonly sh?: string;
 }
 
 /**

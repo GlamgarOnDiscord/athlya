@@ -35,12 +35,14 @@ import {
 
 import { getAccessToken, setAccessToken, subscribeToAccessToken } from './token-store';
 
+import type { Role } from '@athlya/shared/roles';
+
 interface AuthUser {
   readonly id: string;
   readonly email: string;
   readonly displayName: string;
   readonly studioId: string;
-  readonly role: 'member' | 'coach' | 'admin';
+  readonly role: Role;
 }
 
 interface LoginCredentials {
@@ -71,6 +73,13 @@ export interface AuthContextValue {
   readonly bootResolved: boolean;
   readonly login: (credentials: LoginCredentials) => Promise<LoginResponse>;
   readonly logout: () => Promise<void>;
+  /**
+   * Trade the refresh cookie for a new access token and user, after a
+   * change the current token does not carry yet (an accepted team
+   * invitation, issue #756). Resolves the new user, or `null` when the
+   * refresh failed (the session is then left as it was).
+   */
+  readonly refreshSession: () => Promise<AuthUser | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -166,6 +175,27 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
     return payload;
   }, []);
 
+  const refreshSession = useCallback(async (): Promise<AuthUser | null> => {
+    try {
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+      });
+      if (!response.ok) return null;
+      const payload = (await response.json()) as {
+        readonly accessToken: string;
+        readonly user?: AuthUser;
+      };
+      setAccessToken(payload.accessToken);
+      const user = payload.user ?? null;
+      setBootState((s) => ({ ...s, user }));
+      return user;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const logout = useCallback(async (): Promise<void> => {
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
     const token = getAccessToken();
@@ -189,8 +219,9 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
       bootResolved: bootState.resolved,
       login,
       logout,
+      refreshSession,
     }),
-    [accessToken, bootState, login, logout],
+    [accessToken, bootState, login, logout, refreshSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

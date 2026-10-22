@@ -48,7 +48,7 @@ import type { PostgresJsDatabase, PostgresJsTransaction } from 'drizzle-orm/post
 import type { Options, PostgresType, Sql } from 'postgres';
 
 /** Union of the RBAC roles accepted by the `app.role` session variable. */
-export type TenantRole = 'member' | 'coach' | 'admin';
+export type TenantRole = 'member' | 'coach' | 'admin' | 'manager' | 'accueil';
 
 /**
  * JWT-derived claims required to open a tenant-scoped transaction.
@@ -147,7 +147,13 @@ export class InvalidClaimsError extends DbError {
  */
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const VALID_ROLES: ReadonlySet<TenantRole> = new Set(['member', 'coach', 'admin']);
+const VALID_ROLES: ReadonlySet<TenantRole> = new Set([
+  'member',
+  'coach',
+  'admin',
+  'manager',
+  'accueil',
+]);
 
 /**
  * Rejects malformed claims before they reach the database.
@@ -164,7 +170,7 @@ function validateClaims(claims: TenantClaims): TenantClaims {
     throw new InvalidClaimsError('studioId', 'must be a UUID v1–8');
   }
   if (!VALID_ROLES.has(claims.role)) {
-    throw new InvalidClaimsError('role', `must be one of 'member' | 'coach' | 'admin'`);
+    throw new InvalidClaimsError('role', `must be one of ${[...VALID_ROLES].join(' | ')}`);
   }
   return claims;
 }
@@ -338,7 +344,7 @@ export async function withTenantHttp<TResult>(
     db.execute(sql`select set_config('app.role', ${safe.role}, true)`),
     query,
   ] as const);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+
   return result as TResult;
 }
 

@@ -1,6 +1,8 @@
 /**
  * The studio sign-in lets administrators and coaches in and refuses a
  * member with a clear message, closing the session the sign-in opened.
+ * Opened from a team invitation, it accepts it and takes the new role from
+ * the refreshed session.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,13 +16,20 @@ const t = createTranslator('en');
 const push = vi.fn();
 const login = vi.fn();
 const logout = vi.fn();
+const refreshSession = vi.fn();
+const post = vi.fn();
+const INVITE = 'a'.repeat(43);
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
 }));
 
 vi.mock('../../lib/auth/AuthContext', () => ({
-  useAuth: () => ({ login, logout }),
+  useAuth: () => ({ login, logout, refreshSession }),
+}));
+
+vi.mock('../../lib/api/buildClient', () => ({
+  useApiClient: () => ({ post }),
 }));
 
 function session(role: 'admin' | 'coach' | 'member') {
@@ -51,10 +60,13 @@ beforeEach(() => {
   login.mockReset();
   logout.mockReset();
   logout.mockResolvedValue(undefined);
+  refreshSession.mockReset();
+  post.mockReset();
 });
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, '', '/');
 });
 
 describe('<LoginForm /> role gate', () => {
@@ -80,5 +92,33 @@ describe('<LoginForm /> role gate', () => {
     signIn();
     expect((await screen.findByRole('alert')).textContent).toBe(t('studio.login.staffRequired'));
     expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe('<LoginForm /> team invitation', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', `/login#invite=${INVITE}`);
+    login.mockResolvedValue(session('member'));
+    post.mockResolvedValue({ role: 'coach' });
+  });
+
+  it('opens the dashboard with the role of the refreshed session', async () => {
+    refreshSession.mockResolvedValue({ ...session('coach').user });
+    signIn();
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/dashboard'));
+    expect(post).toHaveBeenCalledWith('/v1/studios/me/team/invitations/accept', {
+      token: INVITE,
+    });
+    expect(logout).not.toHaveBeenCalled();
+  });
+
+  it('reports a network error, not a member account, when the refresh fails', async () => {
+    refreshSession.mockResolvedValue(null);
+    signIn();
+    expect((await screen.findByRole('alert')).textContent).toBe(t('auth.errors.networkError'));
+    expect(post).toHaveBeenCalledOnce();
+    expect(logout).toHaveBeenCalledOnce();
+    expect(push).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('');
   });
 });

@@ -24,6 +24,7 @@
 
 import { z } from 'zod';
 
+import { STAFF_ROLES } from '../roles.js';
 import { isValidTimeZone, MAX_SERIES_OCCURRENCES } from '../schedule.js';
 
 import { ConsentsSchema } from './consents.js';
@@ -1880,3 +1881,150 @@ export const TodayWorkoutResponseSchema = z
   .strict();
 
 export type TodayWorkoutResponse = z.infer<typeof TodayWorkoutResponseSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  team: /v1/studios/me/team/* (issue #756)                          */
+/* ------------------------------------------------------------------ */
+
+/** A role an admin may grant from the Team page. */
+export const StaffRoleSchema = z.enum(STAFF_ROLES);
+
+export type StaffRoleValue = z.infer<typeof StaffRoleSchema>;
+
+/** One account of the studio team. */
+export const TeamMemberSchema = z
+  .object({
+    id: UserIdSchema,
+    displayName: z.string(),
+    email: z.string().nullable(),
+    avatarUrl: z.string().nullable(),
+    role: StaffRoleSchema,
+    joinedAt: IsoDateTimeSchema,
+  })
+  .strict();
+
+export type TeamMember = z.infer<typeof TeamMemberSchema>;
+
+/** A pending invitation (never the token). */
+export const TeamInvitationSchema = z
+  .object({
+    id: UuidSchema,
+    email: z.string(),
+    role: StaffRoleSchema,
+    invitedAt: IsoDateTimeSchema,
+    expiresAt: IsoDateTimeSchema,
+  })
+  .strict();
+
+export type TeamInvitation = z.infer<typeof TeamInvitationSchema>;
+
+/** `GET /v1/team`: the team, the caller first, then by name. */
+export const TeamResponseSchema = z
+  .object({
+    members: z.array(TeamMemberSchema),
+    invitations: z.array(TeamInvitationSchema),
+  })
+  .strict();
+
+export type TeamResponse = z.infer<typeof TeamResponseSchema>;
+
+/** `POST /v1/team/invitations` (admin). */
+export const InviteTeamMemberRequestSchema = z
+  .object({
+    email: z
+      .email()
+      .max(254)
+      .transform((value) => value.toLowerCase()),
+    role: StaffRoleSchema,
+  })
+  .strict();
+
+export type InviteTeamMemberRequest = z.infer<typeof InviteTeamMemberRequestSchema>;
+
+/**
+ * Answer to an invitation. An account of the studio with that email gets
+ * the role at once (`role_updated`); otherwise a pending invitation is
+ * created and its token is returned this once, for the admin to share.
+ */
+export const InviteTeamMemberResponseSchema = z.discriminatedUnion('outcome', [
+  z.object({ outcome: z.literal('role_updated'), member: TeamMemberSchema }).strict(),
+  z
+    .object({
+      outcome: z.literal('invited'),
+      invitation: TeamInvitationSchema,
+      token: z.string(),
+    })
+    .strict(),
+]);
+
+export type InviteTeamMemberResponse = z.infer<typeof InviteTeamMemberResponseSchema>;
+
+/** `PATCH /v1/team/members/:id` (admin): `member` takes the account off the team. */
+export const UpdateTeamMemberRequestSchema = z
+  .object({ role: z.enum(['member', ...STAFF_ROLES]) })
+  .strict();
+
+export type UpdateTeamMemberRequest = z.infer<typeof UpdateTeamMemberRequestSchema>;
+
+export const TeamMemberParamsSchema = z.object({ id: UserIdSchema }).strict();
+
+export type TeamMemberParams = z.infer<typeof TeamMemberParamsSchema>;
+
+export const TeamInvitationParamsSchema = z.object({ id: UuidSchema }).strict();
+
+export type TeamInvitationParams = z.infer<typeof TeamInvitationParamsSchema>;
+
+/** Invitation token: 32 random bytes, base64url without padding. */
+export const InvitationTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/u);
+
+/** `POST /v1/team/invitations/accept`, by the invited account. */
+export const AcceptInvitationRequestSchema = z.object({ token: InvitationTokenSchema }).strict();
+
+export type AcceptInvitationRequest = z.infer<typeof AcceptInvitationRequestSchema>;
+
+export const AcceptInvitationResponseSchema = z.object({ role: StaffRoleSchema }).strict();
+
+export type AcceptInvitationResponse = z.infer<typeof AcceptInvitationResponseSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  auth sessions: /v1/auth/sessions (issue #757)                     */
+/* ------------------------------------------------------------------ */
+
+export const SessionDeviceSchema = z
+  .object({
+    browser: z.enum(['chrome', 'edge', 'firefox', 'safari', 'app', 'other']),
+    os: z.enum(['ios', 'android', 'macos', 'windows', 'linux', 'other']),
+  })
+  .strict();
+
+export type SessionDeviceValue = z.infer<typeof SessionDeviceSchema>;
+
+/** Public handle of a session: 32 lowercase hex digits. */
+export const SessionHandleSchema = z.string().regex(/^[0-9a-f]{32}$/u);
+
+/**
+ * One active session. The times are `null` for a session signed in
+ * before they were recorded; `current` marks the caller's own session.
+ */
+export const ActiveSessionSchema = z
+  .object({
+    id: SessionHandleSchema,
+    device: SessionDeviceSchema.nullable(),
+    createdAt: IsoDateTimeSchema.nullable(),
+    lastSeenAt: IsoDateTimeSchema.nullable(),
+    expiresAt: IsoDateTimeSchema,
+    current: z.boolean(),
+  })
+  .strict();
+
+export type ActiveSession = z.infer<typeof ActiveSessionSchema>;
+
+export const ActiveSessionsResponseSchema = z
+  .object({ items: z.array(ActiveSessionSchema) })
+  .strict();
+
+export type ActiveSessionsResponse = z.infer<typeof ActiveSessionsResponseSchema>;
+
+export const SessionParamsSchema = z.object({ id: SessionHandleSchema }).strict();
+
+export type SessionParams = z.infer<typeof SessionParamsSchema>;

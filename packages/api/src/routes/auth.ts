@@ -12,6 +12,8 @@
  *   | POST   | /refresh                | zValidator(RefreshRequestSchema) → handler (NOT idempotent — rotation is single-use) |
  *   | POST   | /logout                 | jwtAuth → handler (optional `{ refreshToken }` body)               |
  *   | POST   | /logout-all             | jwtAuth → handler                                                  |
+ *   | GET    | /sessions               | jwtAuth → handler (issue #757)                                     |
+ *   | DELETE | /sessions/:id           | jwtAuth → zValidator(param) → handler (issue #757)                 |
  *   | DELETE | /me                     | jwtAuth → projectUserIdFromClaims → idempotency → handler          |
  *
  * Requirements:
@@ -50,6 +52,7 @@ import {
   LogoutRequestSchema,
   RefreshRequestSchema,
   RegisterRequestSchema,
+  SessionParamsSchema,
 } from '@athlya/shared/schemas/api';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -60,8 +63,6 @@ import { deviceAttestation } from '../middleware/device-attestation.js';
 import { turnstile } from '../middleware/turnstile.js';
 import { ValidationError, zValidator } from '../middleware/validator.js';
 
-import { turnstileChallengeHandler } from './turnstile-challenge.js';
-
 import {
   idempotency,
   projectUserIdFromClaims,
@@ -69,11 +70,18 @@ import {
   deriveClientIp,
   traceOperation,
 } from './helpers.js';
+import { turnstileChallengeHandler } from './turnstile-challenge.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { HonoEnv } from '../types.js';
-import type { LoginRequest, RefreshRequest, RegisterRequest } from '@athlya/shared/schemas/api';
+import type {
+  ActiveSession,
+  LoginRequest,
+  RefreshRequest,
+  RegisterRequest,
+  SessionParams,
+} from '@athlya/shared/schemas/api';
 import type { MiddlewareHandler } from 'hono';
 
 /* ------------------------------------------------------------------ */
@@ -136,7 +144,8 @@ export interface LoginContext {
  * domain types directly.
  */
 export interface AuthDeps {
-  register(input: RegisterRequest): Promise<AuthSession>;
+  /** `ctx.userAgent` labels the new session's device (issue #757). */
+  register(input: RegisterRequest, ctx?: { readonly userAgent?: string }): Promise<AuthSession>;
   login(input: LoginRequest, ctx: LoginContext): Promise<AuthSession>;
   refresh(input: RefreshRequest): Promise<AuthSession>;
   /**
@@ -148,6 +157,13 @@ export interface AuthDeps {
   logout(userId: string, refreshToken?: string): Promise<void>;
   /** Sprint-4 SP4.1 (S2-010) — kick out every active session. */
   logoutAll(userId: string): Promise<void>;
+  /**
+   * Live sessions of `userId` (issue #757). `currentHandle` is the `sh`
+   * claim of the caller's access token, used to mark "this device".
+   */
+  listSessions(userId: string, currentHandle: string | undefined): Promise<ActiveSession[]>;
+  /** Revoke one session of `userId`; `false` when it has no such live session. */
+  revokeSession(userId: string, sessionId: string): Promise<boolean>;
   deleteMe(userId: string): Promise<void>;
   /**
    * Sprint-7 SP7.4 (Vague 35, finalises S2-006) — start the
@@ -238,7 +254,8 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
     async (c) => {
       traceOperation(c, 'auth.register');
       const body = readValidated<RegisterRequest>(c, 'json');
-      const session = await deps.register(body);
+      const userAgent = c.req.header('user-agent');
+      const session = await deps.register(body, userAgent !== undefined ? { userAgent } : {});
       return c.json(session, 201);
     },
   );
@@ -334,6 +351,45 @@ export function buildAuthRouter(deps: AuthDeps): Hono<HonoEnv> {
       throw new Error('authClaims unexpectedly missing after jwtAuth');
     }
     await deps.logoutAll(claims.userId);
+    return c.body(null, 204);
+  });
+
+  /* ------------------------------ sessions --------------------- */
+  // Issue #757: the member's active sessions and revoking one. The
+  // verified access token names whose sessions are read; a session id
+  // of another user answers 404 like an unknown one.
+  router.get('/sessions', jwtAuth(), async (c) => {
+    traceOperation(c, 'auth.sessions.list');
+    const claims = c.get('authClaims');
+    if (claims === undefined) {
+      throw new Error('authClaims unexpectedly missing after jwtAuth');
+    }
+    const items = await deps.listSessions(claims.userId, claims.sessionHandle);
+    return c.json({ items }, 200, { 'cache-control': 'private, no-store' });
+  });
+
+  router.delete('/sessions/:id', jwtAuth(), zValidator('param', SessionParamsSchema), async (c) => {
+    traceOperation(c, 'auth.sessions.revoke');
+    const claims = c.get('authClaims');
+    if (claims === undefined) {
+      throw new Error('authClaims unexpectedly missing after jwtAuth');
+    }
+    const { id } = readValidated<SessionParams>(c, 'param');
+    const revoked = await deps.revokeSession(claims.userId, id);
+    if (!revoked) {
+      return c.body(
+        JSON.stringify({
+          type: 'about:blank',
+          title: 'Not Found',
+          status: 404,
+          detail: 'no active session with this id',
+          code: 'session_not_found',
+          traceId: c.get('traceId'),
+        }),
+        404,
+        { 'content-type': 'application/problem+json' },
+      );
+    }
     return c.body(null, 204);
   });
 

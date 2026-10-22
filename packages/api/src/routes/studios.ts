@@ -3,21 +3,22 @@
  *
  * Endpoints and their middleware chains:
  *
- *   | Method | Path                       | Chain                                                       |
- *   |--------|----------------------------|-------------------------------------------------------------|
- *   | GET    | /me                        | jwtAuth → handler                                           |
- *   | PATCH  | /me                        | jwtAuth → admin → projectUserId → zValidator(body) → idem → handler |
- *   | PUT    | /me/logo/:variant          | jwtAuth → admin → zValidator(param) → handler (raw binary)  |
- *   | DELETE | /me/logo/:variant          | jwtAuth → admin → zValidator(param) → handler               |
- *   | GET    | /me/domains                | jwtAuth → admin → handler                                   |
- *   | PUT    | /me/domains/:kind          | jwtAuth → admin → zValidator(param, body) → handler         |
- *   | DELETE | /me/domains/:kind          | jwtAuth → admin → zValidator(param) → handler               |
- *   | POST   | /me/domains/:kind/check    | jwtAuth → admin → zValidator(param) → handler               |
+ *   | Method | Path                       | Chain                                                                              |
+ *   |--------|----------------------------|------------------------------------------------------------------------------------|
+ *   | GET    | /me                        | jwtAuth → handler                                                                  |
+ *   | PATCH  | /me                        | jwtAuth → requireCapability('branding.manage') → projectUserId → zValidator(body) → idem → handler |
+ *   | PUT    | /me/logo/:variant          | jwtAuth → requireCapability('branding.manage') → zValidator(param) → handler (raw binary)          |
+ *   | DELETE | /me/logo/:variant          | jwtAuth → requireCapability('branding.manage') → zValidator(param) → handler                       |
+ *   | GET    | /me/domains                | jwtAuth → requireCapability('branding.manage') → handler                                           |
+ *   | PUT    | /me/domains/:kind          | jwtAuth → requireCapability('branding.manage') → zValidator(param, body) → handler                 |
+ *   | DELETE | /me/domains/:kind          | jwtAuth → requireCapability('branding.manage') → zValidator(param) → handler                       |
+ *   | POST   | /me/domains/:kind/check    | jwtAuth → requireCapability('branding.manage') → zValidator(param) → handler                       |
  *
  * `GET /me` is open to every authenticated role (member / coach /
  * admin): the front-end uses it to retrieve the brand color, logos,
  * slug and display name without inferring them from the JWT. Every
- * other route edits the tenant's branding surface and is admin-only.
+ * other route edits the tenant's branding surface and needs
+ * `branding.manage` (admin only).
  *
  * Validation on `PATCH /me`:
  *   1. Zod whitelists `name` / `brandColor` / `hideAthlyaBranding` and
@@ -63,7 +64,7 @@ import {
   projectUserIdFromClaims,
   readValidated,
   traceOperation,
-  requireRole,
+  requireCapability,
 } from './helpers.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
@@ -257,7 +258,7 @@ export function buildStudiosRouter(deps: StudiosDeps): Hono<HonoEnv> {
   /* ------------------------------ PATCH /me (admin) -------------- */
   router.patch(
     '/me',
-    requireRole('admin'),
+    requireCapability('branding.manage'),
     projectUserIdFromClaims(),
     zValidator('json', UpdateStudioRequestSchema),
     ...(idem ? [idempotency(idem)] : []),
@@ -298,7 +299,7 @@ export function buildStudiosRouter(deps: StudiosDeps): Hono<HonoEnv> {
   /* ------------------------------ PUT /me/logo/:variant ---------- */
   router.put(
     '/me/logo/:variant',
-    requireRole('admin'),
+    requireCapability('branding.manage'),
     zValidator('param', LogoParamSchema),
     async (c) => {
       traceOperation(c, 'studios.upload-logo');
@@ -359,7 +360,7 @@ export function buildStudiosRouter(deps: StudiosDeps): Hono<HonoEnv> {
   /* ------------------------------ DELETE /me/logo/:variant ------- */
   router.delete(
     '/me/logo/:variant',
-    requireRole('admin'),
+    requireCapability('branding.manage'),
     zValidator('param', LogoParamSchema),
     async (c) => {
       traceOperation(c, 'studios.remove-logo');
@@ -372,7 +373,7 @@ export function buildStudiosRouter(deps: StudiosDeps): Hono<HonoEnv> {
   );
 
   /* ------------------------------ GET /me/domains ---------------- */
-  router.get('/me/domains', requireRole('admin'), async (c) => {
+  router.get('/me/domains', requireCapability('branding.manage'), async (c) => {
     traceOperation(c, 'studios.list-domains');
     const items = await deps.listDomains(requireClaims(c));
     return c.json({ items }, 200);
@@ -381,7 +382,7 @@ export function buildStudiosRouter(deps: StudiosDeps): Hono<HonoEnv> {
   /* ------------------------------ PUT /me/domains/:kind ---------- */
   router.put(
     '/me/domains/:kind',
-    requireRole('admin'),
+    requireCapability('branding.manage'),
     zValidator('param', DomainParamSchema),
     zValidator('json', SetStudioDomainRequestSchema),
     async (c) => {
@@ -397,7 +398,7 @@ export function buildStudiosRouter(deps: StudiosDeps): Hono<HonoEnv> {
   /* ------------------------------ DELETE /me/domains/:kind ------- */
   router.delete(
     '/me/domains/:kind',
-    requireRole('admin'),
+    requireCapability('branding.manage'),
     zValidator('param', DomainParamSchema),
     async (c) => {
       traceOperation(c, 'studios.remove-domain');
@@ -412,7 +413,7 @@ export function buildStudiosRouter(deps: StudiosDeps): Hono<HonoEnv> {
   /* ------------------------------ POST /me/domains/:kind/check --- */
   router.post(
     '/me/domains/:kind/check',
-    requireRole('admin'),
+    requireCapability('branding.manage'),
     zValidator('param', DomainParamSchema),
     async (c) => {
       traceOperation(c, 'studios.check-domain');

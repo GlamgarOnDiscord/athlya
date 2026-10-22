@@ -14,3 +14,4 @@ export * from './schemas/index.js';
 export * from './codec/index.js';
 export * from './events.js';
 export * from './theming/index.js';
+export * from './roles.js';
