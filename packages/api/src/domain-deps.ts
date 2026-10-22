@@ -213,6 +213,12 @@ export function lazyStudiosDeps(resolve: () => StudiosDeps): StudiosDeps {
   return {
     getStudio: forward('getStudio'),
     updateStudio: forward('updateStudio'),
+    uploadLogo: forward('uploadLogo'),
+    removeLogo: forward('removeLogo'),
+    listDomains: forward('listDomains'),
+    setDomain: forward('setDomain'),
+    removeDomain: forward('removeDomain'),
+    checkDomain: forward('checkDomain'),
   };
 }
 
@@ -522,6 +528,12 @@ export function defaultStudiosDeps(env: AthlyaBindings): StudiosDeps {
     : {
         getStudio: () => notImplemented('studios.getStudio'),
         updateStudio: () => notImplemented('studios.updateStudio'),
+        uploadLogo: () => notImplemented('studios.uploadLogo'),
+        removeLogo: () => notImplemented('studios.removeLogo'),
+        listDomains: () => notImplemented('studios.listDomains'),
+        setDomain: () => notImplemented('studios.setDomain'),
+        removeDomain: () => notImplemented('studios.removeDomain'),
+        checkDomain: () => notImplemented('studios.checkDomain'),
       };
 }
 

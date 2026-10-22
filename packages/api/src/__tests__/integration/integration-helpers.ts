@@ -542,7 +542,9 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
         slug: seed.slug,
         name: seed.name,
         brandColor: seed.brandColor,
-        brandLogo: null,
+        brandLogoLight: null,
+        brandLogoDark: null,
+        hideAthlyaBranding: false,
       };
     }),
     updateStudio: vi.fn(async (studioId: string, patch) => {
@@ -554,9 +556,17 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
         slug: 'athlya-paris',
         name: patch.name ?? 'Athlya Paris',
         brandColor: patch.brandColor ?? '#0EA5E9',
-        brandLogo: patch.brandLogo ?? null,
+        brandLogoLight: null,
+        brandLogoDark: null,
+        hideAthlyaBranding: patch.hideAthlyaBranding ?? false,
       };
     }),
+    uploadLogo: vi.fn(),
+    removeLogo: vi.fn(),
+    listDomains: vi.fn(async () => []),
+    setDomain: vi.fn(),
+    removeDomain: vi.fn(async () => false),
+    checkDomain: vi.fn(async () => null),
   };
 
   /* --------------------- billing --------------------- */

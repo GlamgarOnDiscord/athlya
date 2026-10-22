@@ -10,6 +10,9 @@
  *
  *   - `dedup`       — Upstash Redis `SET key value NX EX ttl`.
  *   - `recipients`  — `notification_recipient` service function (migration 0032).
+ *   - `branding`   : `notification_studio_branding` service function
+ *                     (migration 0053): colors, logo, Athlya mention and
+ *                     the studio's activated sending domain.
  *   - `email`       — Resend transport (`RESEND_API_KEY`). Dev-only
  *                     no-op when the key is absent; staging/production
  *                     throw so the queue retries instead of silently
@@ -28,7 +31,10 @@ import { queryRows, serviceFn } from './service-functions.js';
 import type { AthlyaBindings } from '../types.js';
 import type { AthlyaDbAny } from '@athlya/db/client';
 import type {
+  BrandingRepo,
   DedupStore,
+  EmailBranding,
+  EmailMessage,
   EmailSender,
   HandleEventDeps,
   Logger,
@@ -94,6 +100,63 @@ export function buildRecipientRepo(db: AthlyaDbAny): RecipientRepo {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Studio branding                                                    */
+/* ------------------------------------------------------------------ */
+
+export function buildBrandingRepo(db: AthlyaDbAny): BrandingRepo {
+  return {
+    async getBranding(userId): Promise<EmailBranding | null> {
+      const rows = await queryRows<{
+        studio_name: string;
+        brand_color: string;
+        brand_logo_light: string | null;
+        hide_athlya_branding: boolean;
+        email_domain: string | null;
+      }>(db, serviceFn.notificationStudioBranding(userId));
+      const row = rows[0];
+      if (row === undefined) return null;
+      return {
+        studioName: row.studio_name,
+        brandColor: row.brand_color,
+        logoUrl: row.brand_logo_light,
+        hideAthlyaBranding: row.hide_athlya_branding,
+        emailDomain: row.email_domain,
+      };
+    },
+  };
+}
+
+/**
+ * Display name for a `From` header: no quotes, angle brackets,
+ * backslashes or line breaks (header injection), bounded length.
+ */
+export function senderDisplayName(name: string): string {
+  return name
+    .replace(/["<>\\\r\n]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, 64);
+}
+
+/**
+ * Strict hostname check for a studio sending domain: dot-separated
+ * LDH labels of 1 to 63 characters, an alphabetic (or IDNA `xn--`)
+ * top-level label, 253 characters at most. Nothing that could break
+ * out of the `From` address.
+ */
+const SENDING_DOMAIN =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/iu;
+
+/**
+ * `From` header of a message: the studio's `noreply@{domain}` once its
+ * domain is activated and well formed, the default sender otherwise.
+ */
+export function fromHeader(sender: EmailMessage['sender'], fallback: string): string {
+  if (sender === undefined || !SENDING_DOMAIN.test(sender.domain)) return fallback;
+  return `"${senderDisplayName(sender.name)}" <noreply@${sender.domain}>`;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Email sender (Resend)                                              */
 /* ------------------------------------------------------------------ */
 
@@ -134,7 +197,7 @@ function buildEmailSender(env: AthlyaBindings, logger: Logger): EmailSender {
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          from: fromAddress,
+          from: fromHeader(message.sender, fromAddress),
           to: [message.to],
           subject: message.subject,
           html: message.html,
@@ -243,6 +306,7 @@ export function buildNotificationsDeps(env: AthlyaBindings): HandleEventDeps {
   return {
     dedup: buildDedupStore(env),
     recipients: buildRecipientRepo(db),
+    branding: buildBrandingRepo(db),
     email: buildEmailSender(env, logger),
     push: buildPushSender(logger),
     logger,

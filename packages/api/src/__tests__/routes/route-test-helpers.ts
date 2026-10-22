@@ -144,6 +144,12 @@ export function buildStubDeps(
     studios: {
       getStudio: vi.fn(),
       updateStudio: vi.fn(),
+      uploadLogo: vi.fn(),
+      removeLogo: vi.fn(),
+      listDomains: vi.fn(),
+      setDomain: vi.fn(),
+      removeDomain: vi.fn(),
+      checkDomain: vi.fn(),
       ...overrides.studios,
     },
     billing: {

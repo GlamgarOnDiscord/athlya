@@ -50,6 +50,8 @@ export interface ApiClient {
   get<T>(path: string, init?: RequestInit): Promise<T>;
   post<T>(path: string, body: unknown, init?: RequestInit): Promise<T>;
   patch<T>(path: string, body: unknown, init?: RequestInit): Promise<T>;
+  /** `PUT`; a `Blob` body is sent as is, under its own type (file upload). */
+  put<T>(path: string, body: unknown, init?: RequestInit): Promise<T>;
   del<T>(path: string, init?: RequestInit): Promise<T>;
 }
 
@@ -60,7 +62,7 @@ export interface CreateApiClientOptions {
   readonly fetchImpl?: typeof fetch;
 }
 
-type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
 async function tryParseProblem(response: Response): Promise<ProblemDetails | undefined> {
   const contentType = response.headers.get('content-type') ?? '';
@@ -111,14 +113,15 @@ export function createApiClient(opts: CreateApiClientOptions): ApiClient {
   ): Promise<T> {
     const url = buildUrl(opts.baseUrl, path);
     const headers = new Headers(init?.headers);
+    const isFile = body instanceof Blob;
     if (body !== undefined && !headers.has('Content-Type')) {
-      headers.set('Content-Type', 'application/json');
+      headers.set('Content-Type', isFile ? body.type : 'application/json');
     }
     const baseInit: RequestInit = {
       ...init,
       method,
       headers,
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(isFile ? { body } : body !== undefined ? { body: JSON.stringify(body) } : {}),
     };
 
     let response = await executeRaw(url, baseInit);
@@ -171,6 +174,8 @@ export function createApiClient(opts: CreateApiClientOptions): ApiClient {
       request<T>('POST', path, body, init),
     patch: <T>(path: string, body: unknown, init?: RequestInit) =>
       request<T>('PATCH', path, body, init),
+    put: <T>(path: string, body: unknown, init?: RequestInit) =>
+      request<T>('PUT', path, body, init),
     del: <T>(path: string, init?: RequestInit) => request<T>('DELETE', path, undefined, init),
   };
 }
