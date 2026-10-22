@@ -5,7 +5,7 @@
  *
  *   | Method | Path | Chain                                               |
  *   |--------|------|-----------------------------------------------------|
- *   | GET    | /    | jwtAuth → requireRole('admin') → zValidator(query) → handler |
+ *   | GET    | /    | jwtAuth → requireCapability('audit.read') → zValidator(query) → handler |
  *
  * Cursor-based pagination keyed by `audit_log.id` (BIGSERIAL, newest
  * first). Clients pass `cursor=<last-seen-id>` to fetch the next page
@@ -23,7 +23,7 @@ import { jwtAuth } from '../middleware/auth.js';
 import { studioRateLimit } from '../middleware/studio-rate-limit.js';
 import { zValidator } from '../middleware/validator.js';
 
-import { readValidated, requireRole, traceOperation } from './helpers.js';
+import { readValidated, requireCapability, traceOperation } from './helpers.js';
 
 import type { HonoEnv } from '../types.js';
 
@@ -72,18 +72,23 @@ export function buildAuditRouter(deps: AuditDeps): Hono<HonoEnv> {
   router.use('*', jwtAuth());
   router.use('*', studioRateLimit() as Parameters<typeof router.use>[1]);
 
-  router.get('/', requireRole('admin'), zValidator('query', ListAuditQuerySchema), async (c) => {
-    traceOperation(c, 'audit.list');
-    const claims = c.get('authClaims');
-    if (claims === undefined) {
-      throw new Error('authClaims unexpectedly missing after jwtAuth');
-    }
-    const query = readValidated<ListAuditQuery>(c, 'query');
-    const opts: { cursor?: string; limit: number } = { limit: query.limit ?? 20 };
-    if (query.cursor !== undefined) opts.cursor = query.cursor;
-    const page = await deps.listAuditLog(claims.studioId, opts);
-    return c.json(page, 200);
-  });
+  router.get(
+    '/',
+    requireCapability('audit.read'),
+    zValidator('query', ListAuditQuerySchema),
+    async (c) => {
+      traceOperation(c, 'audit.list');
+      const claims = c.get('authClaims');
+      if (claims === undefined) {
+        throw new Error('authClaims unexpectedly missing after jwtAuth');
+      }
+      const query = readValidated<ListAuditQuery>(c, 'query');
+      const opts: { cursor?: string; limit: number } = { limit: query.limit ?? 20 };
+      if (query.cursor !== undefined) opts.cursor = query.cursor;
+      const page = await deps.listAuditLog(claims.studioId, opts);
+      return c.json(page, 200);
+    },
+  );
 
   return router;
 }

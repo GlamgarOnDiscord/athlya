@@ -144,6 +144,12 @@ class FakeUpstashRedis {
     return Array.from(this.sets.get(key) ?? []);
   }
 
+  /** Mirrors Upstash's default JSON deserialisation of each value. */
+  async mget<T = unknown>(...keys: string[]): Promise<T> {
+    const values = await Promise.all(keys.map((key) => this.get<string>(key)));
+    return values.map((value) => (value === null ? null : JSON.parse(value))) as unknown as T;
+  }
+
   async exists(...keys: string[]): Promise<number> {
     let count = 0;
     const now = this.now();
@@ -634,5 +640,85 @@ describe('createRedisSessionStore — per-session logout (S2-010)', () => {
     expect(await store.exists('sid-phone')).toBe(false);
     expect(await store.exists('sid-laptop')).toBe(false);
     expect(await store.exists('sid-other')).toBe(true);
+  });
+});
+
+describe('listForUser (issue #757)', () => {
+  it('lists one entry per live session with its device, sign-in and last-seen times', async () => {
+    const fake = new FakeUpstashRedis();
+    const store = createRedisSessionStore(asRedis(fake));
+    await store.create(USER_A, 'sid-phone', inOneHour(), {
+      device: { browser: 'safari', os: 'ios' },
+    });
+    await store.create(USER_A, 'sid-laptop', inOneHour());
+    await store.create(USER_B, 'sid-other', inOneHour());
+
+    const sessions = await store.listForUser(USER_A);
+
+    expect(sessions.map((s) => s.rootSid).sort()).toEqual(['sid-laptop', 'sid-phone']);
+    const phone = sessions.find((s) => s.rootSid === 'sid-phone');
+    expect(phone?.device).toEqual({ browser: 'safari', os: 'ios' });
+    expect(phone?.createdAt).not.toBeNull();
+    expect(phone?.lastSeenAt).toBe(phone?.createdAt);
+    expect(sessions.find((s) => s.rootSid === 'sid-laptop')?.device).toBeNull();
+  });
+
+  it('carries the device and sign-in time across a rotation and moves last-seen forward', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-01T08:00:00.000Z'));
+      const fake = new FakeUpstashRedis();
+      const store = createRedisSessionStore(asRedis(fake));
+      await store.create(USER_A, 'sid-1', new Date('2026-10-30T08:00:00.000Z'), {
+        device: { browser: 'chrome', os: 'windows' },
+      });
+      vi.setSystemTime(new Date('2026-10-02T09:30:00.000Z'));
+      await store.rotate('sid-1', 'sid-2', new Date('2026-10-31T09:30:00.000Z'));
+
+      const [session] = await store.listForUser(USER_A);
+
+      expect(session).toEqual({
+        sid: 'sid-2',
+        rootSid: 'sid-1',
+        device: { browser: 'chrome', os: 'windows' },
+        createdAt: '2026-10-01T08:00:00.000Z',
+        lastSeenAt: '2026-10-02T09:30:00.000Z',
+        expiresAt: '2026-10-31T09:30:00.000Z',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reads payloads written before the session fields existed', async () => {
+    const fake = new FakeUpstashRedis();
+    await fake.set(
+      'auth:sid:legacy',
+      JSON.stringify({ userId: USER_A, expiresAt: inOneHour().toISOString() }),
+    );
+    await fake.sadd(`auth:user:${USER_A}:sids`, 'legacy');
+    const store = createRedisSessionStore(asRedis(fake));
+
+    expect(await store.listForUser(USER_A)).toEqual([
+      expect.objectContaining({
+        sid: 'legacy',
+        rootSid: 'legacy',
+        device: null,
+        createdAt: null,
+        lastSeenAt: null,
+      }),
+    ]);
+  });
+
+  it('skips revoked sessions and an index entry whose payload expired', async () => {
+    const fake = new FakeUpstashRedis();
+    const store = createRedisSessionStore(asRedis(fake));
+    await store.create(USER_A, 'sid-phone', inOneHour());
+    await store.create(USER_A, 'sid-laptop', inOneHour());
+    await fake.sadd(`auth:user:${USER_A}:sids`, 'sid-gone');
+
+    await store.revoke('sid-phone');
+
+    expect((await store.listForUser(USER_A)).map((s) => s.sid)).toEqual(['sid-laptop']);
   });
 });

@@ -15,12 +15,15 @@
  *     the context by `zValidator`.
  */
 
+import { can, rolesWith } from '@athlya/shared/roles';
+
 import { idempotencyMiddleware as rawIdempotencyMiddleware } from '../middleware/idempotency.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
 import type { IdempotencyMiddlewareDeps } from '../middleware/idempotency.js';
 import type { ValidationTarget } from '../middleware/validator.js';
 import type { HonoEnv } from '../types.js';
+import type { Capability } from '@athlya/shared/roles';
 import type { Context, MiddlewareHandler } from 'hono';
 
 /** Problem Details content-type per RFC 9457. */
@@ -109,6 +112,26 @@ export function requireRole(
     const claims = c.get('authClaims');
     if (claims === undefined || !set.has(claims.role)) {
       return problem403(c, `this endpoint requires one of: ${[...set].join(', ')}`);
+    }
+    await next();
+    return;
+  };
+}
+
+/**
+ * Middleware that rejects authenticated requests whose role holds none
+ * of `capabilities` in the studio capability matrix
+ * (`@athlya/shared/roles`, issue #756), with the same 403 envelope as
+ * {@link requireRole}. Mounts AFTER `jwtAuth`.
+ */
+export function requireCapability(
+  ...capabilities: readonly [Capability, ...Capability[]]
+): MiddlewareHandler<HonoEnv> {
+  const roles = [...new Set(capabilities.flatMap((cap) => rolesWith(cap)))];
+  return async (c, next) => {
+    const claims = c.get('authClaims');
+    if (claims === undefined || !capabilities.some((cap) => can(claims.role, cap))) {
+      return problem403(c, `this endpoint requires one of: ${roles.join(', ')}`);
     }
     await next();
     return;

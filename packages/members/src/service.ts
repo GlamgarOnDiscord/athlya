@@ -26,6 +26,7 @@
  * (Requirement 14.6).
  */
 
+import { can, type Role as SharedRole } from '@athlya/shared/roles';
 import { UpdateProfileRequestSchema, type UpdateProfileRequest } from '@athlya/shared/schemas/api';
 
 import type { Consents } from '@athlya/shared/schemas';
@@ -39,7 +40,7 @@ import type { Consents } from '@athlya/shared/schemas';
  * (rather than imported from the Zod schema) so this module stays free
  * of any runtime dependency on Zod at the type level.
  */
-export type Role = 'member' | 'coach' | 'admin';
+export type Role = SharedRole;
 
 /**
  * "Safe" projection of a user row returned by the members API: all the
@@ -296,7 +297,7 @@ export async function listMembersByStudio(
   opts: ListMembersOptions,
   deps: MembersServiceDeps,
 ): Promise<MembersPage> {
-  if (requesterRole !== 'admin' && requesterRole !== 'coach') {
+  if (!can(requesterRole, 'members.list')) {
     throw new MembersError('forbidden', `role '${requesterRole}' cannot list studio members`);
   }
   const limit = clampLimit(opts.limit);

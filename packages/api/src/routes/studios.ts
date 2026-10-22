@@ -6,7 +6,7 @@
  *   | Method | Path | Chain                                                                       |
  *   |--------|------|-----------------------------------------------------------------------------|
  *   | GET    | /me  | jwtAuth → handler                                                           |
- *   | PATCH  | /me  | jwtAuth → requireRole('admin') → projectUserId → zValidator(body) → idem → handler |
+ *   | PATCH  | /me  | jwtAuth → requireCapability('branding.manage') → projectUserId → zValidator(body) → idem → handler |
  *
  * `GET /me` is open to every authenticated role (member / coach /
  * admin) — the front-end uses it to retrieve the brand color, slug
@@ -40,7 +40,7 @@ import {
   projectUserIdFromClaims,
   readValidated,
   traceOperation,
-  requireRole,
+  requireCapability,
 } from './helpers.js';
 
 import type { AuthClaims } from '../middleware/auth.js';
@@ -178,7 +178,7 @@ export function buildStudiosRouter(deps: StudiosDeps): Hono<HonoEnv> {
   /* ------------------------------ PATCH /me (admin) -------------- */
   router.patch(
     '/me',
-    requireRole('admin'),
+    requireCapability('branding.manage'),
     projectUserIdFromClaims(),
     zValidator('json', UpdateStudioRequestSchema),
     ...(idem ? [idempotency(idem)] : []),

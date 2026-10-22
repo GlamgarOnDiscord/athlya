@@ -95,6 +95,7 @@ function makeSessionStore() {
     revokeAllForUser: vi.fn().mockResolvedValue(undefined),
     revokeFamilyByRootSid: vi.fn(),
     exists: vi.fn(),
+    listForUser: vi.fn().mockResolvedValue([]),
   } satisfies SessionStore;
 }
 

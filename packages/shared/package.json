@@ -116,6 +116,11 @@
       "import": "./dist/coach-stream.js",
       "default": "./src/coach-stream.ts"
     },
+    "./roles": {
+      "types": "./src/roles.ts",
+      "import": "./dist/roles.js",
+      "default": "./src/roles.ts"
+    },
     "./calendar": {
       "types": "./src/calendar.ts",
       "import": "./dist/calendar.js",

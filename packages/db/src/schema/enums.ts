@@ -17,8 +17,9 @@ import type { Reservation, User } from '@athlya/shared/schemas/domain';
 /**
  * Roles used by RBAC and the `app.role` RLS session variable.
  * Matches `RoleSchema` in `@athlya/shared/schemas/primitives`.
+ * `manager` and `accueil` were appended by migration 0052 (issue #756).
  */
-export const userRoleEnum = pgEnum('user_role', ['member', 'coach', 'admin']);
+export const userRoleEnum = pgEnum('user_role', ['member', 'coach', 'admin', 'manager', 'accueil']);
 
 /**
  * Reservation state-machine labels. Transitions between labels are
@@ -95,8 +96,9 @@ export const programStatusEnum = pgEnum('program_status', ['draft', 'published',
  * above, these type checks fail to compile and the build breaks. They
  * have zero runtime cost.
  */
-type _RoleAligned = User['role'] extends 'member' | 'coach' | 'admin'
-  ? 'member' | 'coach' | 'admin' extends User['role']
+type DbRole = 'member' | 'coach' | 'admin' | 'manager' | 'accueil';
+type _RoleAligned = User['role'] extends DbRole
+  ? DbRole extends User['role']
     ? true
     : false
   : false;

@@ -20,6 +20,7 @@ import { useLocale } from '../../../../lib/i18n/LocaleContext';
 import { createTranslator } from '../../../../lib/i18n/t';
 import { SettingsList, SettingsRow } from '../settings-ui';
 
+import { ActiveSessions } from './ActiveSessions';
 import { signOutEverywhere } from './sign-out-everywhere';
 
 import type { ApiClient } from '../../../../lib/api/client';
@@ -64,7 +65,6 @@ export function SecurityPanel({
   }, [client, logout, push]);
 
   const busy = pending !== 'none';
-  const comingSoon = t('web.settings.comingSoon');
 
   return (
     <div className="flex flex-col gap-6">
@@ -77,12 +77,9 @@ export function SecurityPanel({
             {t('web.settings.security.password.action')}
           </Link>
         </SettingsRow>
-        <SettingsRow
-          title={t('web.settings.security.sessions.title')}
-          description={t('web.settings.security.sessions.body')}
-          comingSoon={comingSoon}
-        />
       </SettingsList>
+
+      <ActiveSessions client={client} locale={locale} t={t} />
 
       <SettingsList>
         <SettingsRow

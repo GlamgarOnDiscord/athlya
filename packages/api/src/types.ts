@@ -21,6 +21,7 @@
  */
 
 import type { StructuredLogger } from './logging.js';
+import type { AuthClaims } from './middleware/auth.js';
 import type { TraceSpan } from './middleware/otel.js';
 import type { DurableObjectNamespace, Queue, R2Bucket } from '@cloudflare/workers-types';
 
@@ -614,11 +615,7 @@ export interface AthlyaVariables {
    *   - `role`    ← `role` (closed union, rejected at verify time if
    *                        any other value sneaks into the token)
    */
-  authClaims?: {
-    userId: string;
-    studioId: string;
-    role: 'member' | 'admin' | 'coach';
-  };
+  authClaims?: AuthClaims;
 
   /**
    * Per-request OpenTelemetry span (task 8.6). Populated by the

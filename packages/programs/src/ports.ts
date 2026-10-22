@@ -8,6 +8,7 @@
  * `@athlya/shared/schemas/api`, so the adapter maps rows once.
  */
 
+import type { Role } from '@athlya/shared/roles';
 import type {
   ProgramDetail,
   ProgramStatus,
@@ -20,7 +21,7 @@ import type {
 export interface ProgramViewer {
   readonly userId: string;
   readonly studioId: string;
-  readonly role: 'member' | 'coach' | 'admin';
+  readonly role: Role;
 }
 
 export interface ProgramListFilter {

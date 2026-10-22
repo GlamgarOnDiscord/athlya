@@ -19,6 +19,7 @@
 import { withTenant } from '@athlya/db/client';
 import { classes, reservations, users } from '@athlya/db/schema';
 import { CHECKIN_WINDOW_HALF_MS } from '@athlya/reservations/checkin';
+import { can } from '@athlya/shared/roles';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
@@ -73,10 +74,13 @@ export function attendanceWindow(
   };
 }
 
-/** The studio admin, or the coach the class is assigned to. */
+/**
+ * Staff who hold `roster.all` (admin, manager, front desk), or the coach
+ * the class is assigned to (`roster.own`).
+ */
 export function canManageRoster(claims: AuthClaims, cls: Pick<RosterClass, 'coachId'>): boolean {
-  if (claims.role === 'admin') return true;
-  return claims.role === 'coach' && cls.coachId !== null && cls.coachId === claims.userId;
+  if (can(claims.role, 'roster.all')) return true;
+  return can(claims.role, 'roster.own') && cls.coachId !== null && cls.coachId === claims.userId;
 }
 
 function toEntry(row: RosterRow): ClassRosterEntry | null {

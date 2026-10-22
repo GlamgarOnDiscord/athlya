@@ -548,7 +548,34 @@
         },
         "sessions": {
           "title": "Appareils connectés",
-          "body": "La liste des appareils connectés et la déconnexion appareil par appareil arrivent bientôt."
+          "body": "Les appareils connectés à votre compte. Révoquez celui que vous ne reconnaissez pas.",
+          "current": "Cet appareil",
+          "lastSeen": "Dernière activité : {date}",
+          "unknownTime": "Session active",
+          "device": "{browser} sur {os}",
+          "browser": {
+            "chrome": "Chrome",
+            "edge": "Edge",
+            "firefox": "Firefox",
+            "safari": "Safari",
+            "app": "App Athlya",
+            "other": "Navigateur"
+          },
+          "os": {
+            "ios": "iOS",
+            "android": "Android",
+            "macos": "macOS",
+            "windows": "Windows",
+            "linux": "Linux",
+            "other": "un autre appareil"
+          },
+          "unknownDevice": "Appareil inconnu",
+          "revoke": "Révoquer",
+          "revokeTitle": "Révoquer cette session ?",
+          "revokeBody": "L'appareil est déconnecté au prochain renouvellement de sa session, dans les 15 minutes.",
+          "revokeConfirm": "Révoquer la session",
+          "revoked": "Session révoquée.",
+          "loadError": "Impossible de charger vos sessions."
         },
         "signOut": {
           "title": "Se déconnecter de cet appareil",
@@ -631,8 +658,12 @@
     },
     "login": {
       "title": "Connexion au studio",
-      "subtitle": "Réservé à l'équipe du studio : administrateurs et coachs. Les membres se connectent sur l'application principale.",
-      "staffRequired": "Ce compte est un compte membre. Connectez-vous sur l'application Athlya pour réserver vos cours."
+      "subtitle": "Réservé à l'équipe du studio : administrateurs, managers, accueil et coachs. Les membres se connectent sur l'application principale.",
+      "staffRequired": "Ce compte est un compte membre. Connectez-vous sur l'application Athlya pour réserver vos cours.",
+      "invite": {
+        "notice": "Vous êtes invité dans l'équipe du studio. Connectez-vous avec le compte qui a reçu l'invitation pour l'accepter.",
+        "invalid": "Cette invitation n'est plus valable, ou elle a été envoyée à une autre adresse e-mail. Demandez-en une nouvelle au studio."
+      }
     },
     "nav": {
       "brand": "Athlya Studio",
@@ -647,6 +678,8 @@
       "settings": "Configuration",
       "home": "Accueil",
       "planning": "Mon planning",
+      "team": "Équipe",
+      "studioPlanning": "Planning",
       "rooms": "Salles"
     },
     "dashboard": {
@@ -921,7 +954,9 @@
       "role": {
         "member": "Membre",
         "coach": "Coach",
-        "admin": "Admin"
+        "admin": "Admin",
+        "manager": "Manager",
+        "accueil": "Accueil"
       },
       "columns": {
         "name": "Nom",
@@ -937,7 +972,9 @@
         "all": "Tous",
         "member": "Membres",
         "coach": "Coachs",
-        "admin": "Admins"
+        "admin": "Admins",
+        "manager": "Managers",
+        "accueil": "Accueil"
       },
       "exportCsv": "Exporter CSV",
       "you": "Vous",
@@ -1328,6 +1365,63 @@
       "forbidden": "Seuls les admins du studio peuvent ouvrir une fiche membre.",
       "notFound": "Ce membre n'existe pas dans votre studio.",
       "loadError": "La fiche membre n'a pas pu se charger."
+    },
+    "desk": {
+      "planning": {
+        "title": "Planning du studio",
+        "subtitle": "Tous les cours du studio, en lecture seule. Ouvrez un cours pour faire l'appel."
+      }
+    },
+    "team": {
+      "title": "Équipe",
+      "subtitle": "Qui travaille au studio et ce que chacun peut faire. Invitez quelqu'un, changez un rôle ou retirez une personne de l'équipe.",
+      "subtitleReadOnly": "Qui travaille au studio et ce que chacun peut faire. Seul un administrateur modifie l'équipe.",
+      "members": {
+        "title": "Personnes"
+      },
+      "invitations": {
+        "title": "Invitations en attente",
+        "expires": "Expire le {date}",
+        "revoke": "Révoquer"
+      },
+      "loadError": "Impossible de charger l'équipe. Réessayez dans un instant.",
+      "you": "(vous)",
+      "roleOf": "Rôle de {name}",
+      "roleChangedToast": "Rôle de {name} : {role}.",
+      "removedToast": "{name} ne fait plus partie de l'équipe.",
+      "revokedToast": "Invitation pour {email} révoquée.",
+      "errors": {
+        "ownRole": "Vous ne pouvez pas changer votre propre rôle. Demandez à un autre administrateur."
+      },
+      "roles": {
+        "title": "Ce que chaque rôle peut faire",
+        "admin": "Tout, y compris la facturation, l'identité et l'équipe.",
+        "manager": "Gère le studio au quotidien : cours, programmes, membres, appel et journal d'audit. Pas de facturation, d'identité ni de changement d'équipe.",
+        "accueil": "La borne de check-in, l'appel de tous les cours, les membres et le planning en lecture seule.",
+        "coach": "Son planning, l'appel de ses propres cours, la borne et l'annuaire des membres."
+      },
+      "remove": {
+        "open": "Retirer",
+        "title": "Retirer {name} de l'équipe ?",
+        "body": "Le compte reste un compte membre du studio. Il perd l'accès à la console du studio.",
+        "confirm": "Retirer de l'équipe"
+      },
+      "invite": {
+        "open": "Inviter",
+        "title": "Inviter dans l'équipe",
+        "body": "Si cette adresse a déjà un compte au studio, le rôle s'applique tout de suite. Sinon, vous obtenez un lien à transmettre.",
+        "email": "E-mail",
+        "role": "Rôle",
+        "invalidEmail": "Saisissez une adresse e-mail valide.",
+        "submit": "Inviter",
+        "linkTitle": "Lien d'invitation",
+        "linkBody": "Envoyez ce lien à {email}. La personne l’accepte en se connectant avec un compte créé au studio avec cette adresse.",
+        "link": "Lien",
+        "copy": "Copier",
+        "copied": "Copié",
+        "linkOnce": "Ce lien n'est affiché qu'une fois et expire dans 7 jours.",
+        "done": "Terminé"
+      }
     }
   },
   "mobile": {
