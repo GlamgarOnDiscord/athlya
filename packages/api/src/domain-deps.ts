@@ -14,18 +14,23 @@
 import { buildAuditDeps } from './adapters/audit-deps.js';
 import { buildAuthDeps } from './adapters/auth-deps.js';
 import { buildBillingDeps } from './adapters/billing-deps.js';
+import { buildCalendarDeps } from './adapters/calendar-deps.js';
 import { buildCheckinsDeps } from './adapters/checkins-deps.js';
+import { buildClassPlanningDeps } from './adapters/class-planning-deps.js';
 import { buildCoachDeps } from './adapters/coach-deps.js';
 import { buildMembersDeps } from './adapters/members-deps.js';
 import { buildProgramsDeps } from './adapters/programs-deps.js';
 import { buildClassesDeps, buildReservationsDeps } from './adapters/reservations-deps.js';
 import { buildSessionsDeps } from './adapters/sessions-deps.js';
 import { buildStudiosDeps } from './adapters/studios-deps.js';
+import { buildTeamDeps } from './adapters/team-deps.js';
 
 import type { AuditDeps } from './routes/audit.js';
 import type { AuthDeps } from './routes/auth.js';
 import type { BillingDeps } from './routes/billing.js';
+import type { CalendarDeps } from './routes/calendar.js';
 import type { CheckinsDeps } from './routes/checkins.js';
+import type { ClassPlanningDeps } from './routes/class-planning.js';
 import type { ClassesDeps } from './routes/classes.js';
 import type { CoachDeps } from './routes/coach.js';
 import type { MembersDeps } from './routes/members.js';
@@ -33,6 +38,7 @@ import type { ProgramsDeps } from './routes/programs.js';
 import type { ReservationsDeps } from './routes/reservations.js';
 import type { SessionsDeps } from './routes/sessions.js';
 import type { StudiosDeps } from './routes/studios.js';
+import type { TeamDeps } from './routes/team.js';
 import type { AthlyaBindings } from './types.js';
 
 /** Per-request Cloudflare `cf` subset used for EU read-replica routing. */
@@ -69,6 +75,22 @@ export interface DomainDeps {
    * valid; production and the lazy facade always provide it.
    */
   readonly programs?: ProgramsDeps;
+  /**
+   * Studio team (issue #756), mounted under `/v1/studios/me/team`.
+   * Optional so partial test bundles stay valid; production and the
+   * lazy facade always provide it.
+   */
+  readonly team?: TeamDeps;
+  /**
+   * Member calendar feed (issue #719), gateway only. Optional so partial
+   * test bundles stay valid; production and the lazy facade provide it.
+   */
+  readonly calendar?: CalendarDeps;
+  /**
+   * Rooms and weekly class series (issue #748). Optional so partial test
+   * bundles stay valid; production and the lazy facade always provide it.
+   */
+  readonly planning?: ClassPlanningDeps;
 }
 
 /* ------------------------------------------------------------------ */
@@ -115,6 +137,8 @@ export function lazyAuthDeps(resolve: () => AuthDeps): AuthDeps {
     refresh: forward('refresh'),
     logout: forward('logout'),
     logoutAll: forward('logoutAll'),
+    listSessions: forward('listSessions'),
+    revokeSession: forward('revokeSession'),
     deleteMe: forward('deleteMe'),
     requestPasswordReset: forward('requestPasswordReset'),
     confirmPasswordReset: forward('confirmPasswordReset'),
@@ -148,6 +172,8 @@ export function lazyMembersDeps(resolve: () => MembersDeps): MembersDeps {
     updateProfile: forward('updateProfile'),
     uploadAvatar: forward('uploadAvatar'),
     updateConsents: forward('updateConsents'),
+    getNotificationPreferences: forward('getNotificationPreferences'),
+    updateNotificationPreferences: forward('updateNotificationPreferences'),
     enqueueExport: forward('enqueueExport'),
     getExportJob: forward('getExportJob'),
     openExportDownload: forward('openExportDownload'),
@@ -189,6 +215,12 @@ export function lazyStudiosDeps(resolve: () => StudiosDeps): StudiosDeps {
   return {
     getStudio: forward('getStudio'),
     updateStudio: forward('updateStudio'),
+    uploadLogo: forward('uploadLogo'),
+    removeLogo: forward('removeLogo'),
+    listDomains: forward('listDomains'),
+    setDomain: forward('setDomain'),
+    removeDomain: forward('removeDomain'),
+    checkDomain: forward('checkDomain'),
   };
 }
 
@@ -258,6 +290,43 @@ export function lazyCheckinsDeps(resolve: () => CheckinsDeps): CheckinsDeps {
   };
 }
 
+export function lazyTeamDeps(resolve: () => TeamDeps): TeamDeps {
+  const forward = forwarder(resolve);
+  return {
+    listTeam: forward('listTeam'),
+    invite: forward('invite'),
+    revokeInvitation: forward('revokeInvitation'),
+    setMemberRole: forward('setMemberRole'),
+    acceptInvitation: forward('acceptInvitation'),
+  };
+}
+
+export function lazyCalendarDeps(resolve: () => CalendarDeps): CalendarDeps {
+  const forward = forwarder(resolve);
+  return {
+    getFeedUrl: forward('getFeedUrl'),
+    getFeed: forward('getFeed'),
+  };
+}
+
+/**
+ * Lazy rooms and series facade. `idempotencyFor` resolves per request,
+ * like {@link lazyProgramsDeps}.
+ */
+export function lazyClassPlanningDeps(resolve: () => ClassPlanningDeps): ClassPlanningDeps {
+  const forward = forwarder(resolve);
+  return {
+    listRooms: forward('listRooms'),
+    createRoom: forward('createRoom'),
+    updateRoom: forward('updateRoom'),
+    deleteRoom: forward('deleteRoom'),
+    createSeries: forward('createSeries'),
+    updateSeries: forward('updateSeries'),
+    deleteSeries: forward('deleteSeries'),
+    idempotencyFor: (claims) => resolve().idempotencyFor?.(claims),
+  };
+}
+
 /** Lazy facade over the full {@link DomainDeps} bundle (monolith gateway). */
 export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
   return {
@@ -289,6 +358,27 @@ export function buildLazyDomainDeps(resolve: () => DomainDeps): DomainDeps {
         throw new Error('buildLazyDomainDeps: checkins dependency is not wired');
       }
       return checkins;
+    }),
+    team: lazyTeamDeps(() => {
+      const team = resolve().team;
+      if (team === undefined) {
+        throw new Error('buildLazyDomainDeps: team dependency is not wired');
+      }
+      return team;
+    }),
+    calendar: lazyCalendarDeps(() => {
+      const calendar = resolve().calendar;
+      if (calendar === undefined) {
+        throw new Error('buildLazyDomainDeps: calendar dependency is not wired');
+      }
+      return calendar;
+    }),
+    planning: lazyClassPlanningDeps(() => {
+      const planning = resolve().planning;
+      if (planning === undefined) {
+        throw new Error('buildLazyDomainDeps: planning dependency is not wired');
+      }
+      return planning;
     }),
   };
 }
@@ -391,6 +481,8 @@ export function defaultAuthDeps(env: AthlyaBindings): AuthDeps {
         refresh: () => notImplemented('auth.refresh'),
         logout: () => notImplemented('auth.logout'),
         logoutAll: () => notImplemented('auth.logoutAll'),
+        listSessions: () => notImplemented('auth.listSessions'),
+        revokeSession: () => notImplemented('auth.revokeSession'),
         deleteMe: () => notImplemented('auth.deleteMe'),
         requestPasswordReset: () => notImplemented('auth.requestPasswordReset'),
         confirmPasswordReset: () => notImplemented('auth.confirmPasswordReset'),
@@ -422,6 +514,9 @@ export function defaultMembersDeps(env: AthlyaBindings, cf?: RequestCf): Members
         updateProfile: () => notImplemented('members.updateProfile'),
         uploadAvatar: () => notImplemented('members.uploadAvatar'),
         updateConsents: () => notImplemented('members.updateConsents'),
+        getNotificationPreferences: () => notImplemented('members.getNotificationPreferences'),
+        updateNotificationPreferences: () =>
+          notImplemented('members.updateNotificationPreferences'),
         enqueueExport: () => notImplemented('members.enqueueExport'),
         getExportJob: () => notImplemented('members.getExportJob'),
         openExportDownload: () => notImplemented('members.openExportDownload'),
@@ -438,6 +533,12 @@ export function defaultStudiosDeps(env: AthlyaBindings): StudiosDeps {
     : {
         getStudio: () => notImplemented('studios.getStudio'),
         updateStudio: () => notImplemented('studios.updateStudio'),
+        uploadLogo: () => notImplemented('studios.uploadLogo'),
+        removeLogo: () => notImplemented('studios.removeLogo'),
+        listDomains: () => notImplemented('studios.listDomains'),
+        setDomain: () => notImplemented('studios.setDomain'),
+        removeDomain: () => notImplemented('studios.removeDomain'),
+        checkDomain: () => notImplemented('studios.checkDomain'),
       };
 }
 
@@ -465,6 +566,21 @@ export function defaultClassesDeps(env: AthlyaBindings, cf?: RequestCf): Classes
         deleteClass: () => notImplemented('classes.deleteClass'),
         getRoster: () => notImplemented('classes.getRoster'),
         markAttendance: () => notImplemented('classes.markAttendance'),
+      };
+}
+
+/** Rooms and series write through the postgres-js handle and seed the Redis seat counters. */
+export function defaultClassPlanningDeps(env: AthlyaBindings): ClassPlanningDeps {
+  return hasReservationsSecrets(env)
+    ? buildClassPlanningDeps(env)
+    : {
+        listRooms: () => notImplemented('planning.listRooms'),
+        createRoom: () => notImplemented('planning.createRoom'),
+        updateRoom: () => notImplemented('planning.updateRoom'),
+        deleteRoom: () => notImplemented('planning.deleteRoom'),
+        createSeries: () => notImplemented('planning.createSeries'),
+        updateSeries: () => notImplemented('planning.updateSeries'),
+        deleteSeries: () => notImplemented('planning.deleteSeries'),
       };
 }
 
@@ -501,6 +617,19 @@ export function defaultProgramsDeps(env: AthlyaBindings): ProgramsDeps {
       };
 }
 
+/** The team reads and writes PostgreSQL; without DB_URL it falls back to the stub bundle. */
+export function defaultTeamDeps(env: AthlyaBindings): TeamDeps {
+  return nonEmpty(env.DB_URL)
+    ? buildTeamDeps(env)
+    : {
+        listTeam: () => notImplemented('team.listTeam'),
+        invite: () => notImplemented('team.invite'),
+        revokeInvitation: () => notImplemented('team.revokeInvitation'),
+        setMemberRole: () => notImplemented('team.setMemberRole'),
+        acceptInvitation: () => notImplemented('team.acceptInvitation'),
+      };
+}
+
 /**
  * Workout sessions need DB_URL (the write path falls back to it
  * without Hyperdrive); without it they fall back to the stub bundle.
@@ -531,6 +660,20 @@ export function defaultCheckinsDeps(env: AthlyaBindings): CheckinsDeps {
     issueToken: () => notImplemented('checkins.issueToken'),
     checkIn: () => notImplemented('checkins.checkIn'),
   };
+}
+
+/**
+ * The calendar feed reads users, reservations, classes and studios (DB);
+ * without DB_URL it falls back to the stub bundle. A missing signing key
+ * is not fatal: the adapter answers `not_configured` (503).
+ */
+export function defaultCalendarDeps(env: AthlyaBindings, cf?: RequestCf): CalendarDeps {
+  return nonEmpty(env.DB_URL)
+    ? buildCalendarDeps(env, cf)
+    : {
+        getFeedUrl: () => notImplemented('calendar.getFeedUrl'),
+        getFeed: () => notImplemented('calendar.getFeed'),
+      };
 }
 
 /**
@@ -575,5 +718,8 @@ export function buildDefaultDeps(env: AthlyaBindings, cf?: RequestCf): DomainDep
     programs: defaultProgramsDeps(env),
     sessions: defaultSessionsDeps(env),
     checkins: defaultCheckinsDeps(env),
+    team: defaultTeamDeps(env),
+    calendar: defaultCalendarDeps(env, cf),
+    planning: defaultClassPlanningDeps(env),
   };
 }

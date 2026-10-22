@@ -1,9 +1,11 @@
 'use client';
 
+import { can, type Role } from '@athlya/shared/roles';
 import {
   BookOpenIcon,
   CalendarBlankIcon,
   CreditCardIcon,
+  DoorOpenIcon,
   HouseIcon,
   ListBulletsIcon,
   MagnifyingGlassIcon,
@@ -15,6 +17,7 @@ import {
   SlidersHorizontalIcon,
   SquaresFourIcon,
   UsersIcon,
+  UsersThreeIcon,
 } from '@phosphor-icons/react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -30,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 import { initials } from '../app/dashboard/members/members-view';
 import { useAuth } from '../lib/auth/AuthContext';
+import { canOpenRoute, readsPlanningOnly } from '../lib/auth/console-routes';
 import { navigateTo } from '../lib/full-reload';
 import { useLocale } from '../lib/i18n/LocaleContext';
 import { createTranslator, type Translator } from '../lib/i18n/t';
@@ -97,6 +101,18 @@ export function studioSections(t: Translator): SidebarSection[] {
           children: [
             {
               kind: 'link',
+              href: '/dashboard/team',
+              label: t('studio.nav.team'),
+              icon: UsersThreeIcon,
+            },
+            {
+              kind: 'link',
+              href: '/dashboard/rooms',
+              label: t('studio.nav.rooms'),
+              icon: DoorOpenIcon,
+            },
+            {
+              kind: 'link',
               href: '/dashboard/branding',
               label: t('studio.nav.branding'),
               icon: PaletteIcon,
@@ -120,22 +136,18 @@ export function studioSections(t: Translator): SidebarSection[] {
   ];
 }
 
-/** Admin links a coach shares as they are: the members directory and the kiosk. */
-const SHARED_WITH_COACH: ReadonlySet<string> = new Set([
-  '/dashboard/members',
-  '/dashboard/checkin',
-]);
-
 /**
- * Navigation of a coach: their home, their read-only schedule, then the
- * admin links they share (taken from {@link studioSections} so both stay in
- * step). Every href is one of the `COACH_ROUTES` of `<RequireAdmin>`.
+ * Navigation of a role that reads the planning without editing it (coach,
+ * front desk): their home, the read-only schedule, then the links of
+ * {@link studioSections} the role may open (members, kiosk), so both stay
+ * in step.
  */
-export function coachSections(t: Translator): SidebarSection[] {
+function frontLineSections(role: Role, t: Translator): SidebarSection[] {
   const shared = studioSections(t)
     .flatMap((section) => section.items)
     .filter(
-      (item): item is SidebarLink => item.kind === 'link' && SHARED_WITH_COACH.has(item.href),
+      (item): item is SidebarLink =>
+        item.kind === 'link' && item.href !== '/dashboard' && canOpenRoute(role, item.href),
     );
   return [
     {
@@ -151,13 +163,29 @@ export function coachSections(t: Translator): SidebarSection[] {
         {
           kind: 'link',
           href: '/dashboard/planning',
-          label: t('studio.nav.planning'),
+          label: t(role === 'coach' ? 'studio.nav.planning' : 'studio.nav.studioPlanning'),
           icon: CalendarBlankIcon,
         },
         ...shared,
       ],
     },
   ];
+}
+
+/**
+ * The navigation of `role`: every link is a page `<RequireAdmin>` opens to
+ * it (`canOpenRoute`), and a group left empty is dropped.
+ */
+export function sectionsFor(role: Role, t: Translator): SidebarSection[] {
+  if (readsPlanningOnly(role)) return frontLineSections(role, t);
+  return studioSections(t).flatMap((section): SidebarSection[] => {
+    const items = section.items.flatMap((item): SidebarSection['items'][number][] => {
+      if (item.kind === 'link') return canOpenRoute(role, item.href) ? [item] : [];
+      const children = item.children.filter((child) => canOpenRoute(role, child.href));
+      return children.length === 0 ? [] : [{ ...item, children }];
+    });
+    return items.length === 0 ? [] : [{ ...section, items }];
+  });
 }
 
 /** Label of the navigation link that owns `pathname`: the longest matching href. */
@@ -215,8 +243,8 @@ function DashboardShell({ children }: { readonly children: ReactNode }): ReactEl
     navigateTo('/login', push, pathname);
   }, [logout, push, pathname]);
 
-  const isCoach = user?.role === 'coach';
-  const sections = useMemo(() => (isCoach ? coachSections(t) : studioSections(t)), [t, isCoach]);
+  const role: Role = user?.role ?? 'member';
+  const sections = useMemo(() => sectionsFor(role, t), [t, role]);
   const pages = useMemo<CommandItem[]>(
     () =>
       flattenLinks(sections).map((link) => ({
@@ -244,7 +272,7 @@ function DashboardShell({ children }: { readonly children: ReactNode }): ReactEl
 
   const openPalette = (): void => setPaletteOpen(true);
   const studioName = studio?.name ?? null;
-  const canCreate = !isCoach;
+  const canCreate = can(role, 'classes.write');
 
   return (
     <SidebarShell
@@ -375,7 +403,7 @@ function DashboardShell({ children }: { readonly children: ReactNode }): ReactEl
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         pages={pages}
-        classesHref={isCoach ? '/dashboard/planning' : '/dashboard/classes'}
+        classesHref={readsPlanningOnly(role) ? '/dashboard/planning' : '/dashboard/classes'}
         locale={locale}
         t={t}
       />

@@ -24,7 +24,14 @@ const ITEMS = [
 
 describe('roleCounts', () => {
   it('counts the loaded rows per role', () => {
-    expect(roleCounts(ITEMS)).toEqual({ all: 4, member: 2, coach: 1, admin: 1 });
+    expect(roleCounts(ITEMS)).toEqual({
+      all: 4,
+      member: 2,
+      coach: 1,
+      accueil: 0,
+      manager: 0,
+      admin: 1,
+    });
   });
 });
 

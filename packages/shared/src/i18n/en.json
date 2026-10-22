@@ -152,6 +152,31 @@
     "cancelled": "Reservation cancelled",
     "cancelWindowClosed": "Cancellation is not possible less than 2 hours before the class."
   },
+  "calendar": {
+    "add": {
+      "label": "Add to calendar",
+      "download": ".ics file",
+      "google": "Google Calendar",
+      "forClass": "for “{title}”",
+      "newTab": "(opens in a new tab)"
+    },
+    "sync": {
+      "title": "Sync my calendar",
+      "description": "Subscribe your calendar to your bookings: new classes and cancellations show up on their own.",
+      "urlLabel": "Subscription address",
+      "copy": "Copy address",
+      "copied": "Address copied.",
+      "copyError": "Could not copy. Select the address and copy it yourself.",
+      "open": "Open in my calendar app",
+      "howTo": "How to subscribe",
+      "google": "Google Calendar: “Other calendars”, then “From URL”, and paste the address.",
+      "apple": "Apple Calendar: “File”, then “New Calendar Subscription”, and paste the address.",
+      "outlook": "Outlook: “Add calendar”, then “Subscribe from web”, and paste the address.",
+      "refresh": "Your calendar updates by itself, with a delay of up to a few hours depending on the service.",
+      "privacy": "This address is personal: anyone who has it can see your bookings. It stops working if you sign out of all your devices or change your password; come back here for the new address.",
+      "unavailable": "Calendar sync is not available right now."
+    }
+  },
   "checkin": {
     "title": "Check in at the front desk",
     "link": "My check-in QR code",
@@ -317,6 +342,24 @@
       "confirmWord": "DELETE",
       "confirmInstruction": "Type {word} to confirm",
       "confirmButton": "Permanently delete"
+    }
+  },
+  "demo": {
+    "banner": {
+      "badge": "Demo",
+      "text": "Fictional data: nothing is sent to or saved on a server."
+    },
+    "picker": {
+      "title": "Pick a demo profile",
+      "subtitle": "No credentials: each profile opens a fictional session in this tab.",
+      "member": "Member",
+      "memberHint": "Book a class, cancel, manage the profile",
+      "admin": "Administrator",
+      "adminHint": "Dashboard, schedule, members, audit log and check-in",
+      "coach": "Coach",
+      "coachHint": "Today's classes, schedule and members",
+      "signInAs": "Open the demo session of {name}, {role}",
+      "error": "The demo session could not start. Reload the page."
     }
   },
   "web": {
@@ -505,7 +548,34 @@
         },
         "sessions": {
           "title": "Signed-in devices",
-          "body": "The list of signed-in devices and signing out one device at a time are coming soon."
+          "body": "The devices signed in to your account. Revoke one you do not recognise.",
+          "current": "This device",
+          "lastSeen": "Last active {date}",
+          "unknownTime": "Active session",
+          "device": "{browser} on {os}",
+          "browser": {
+            "chrome": "Chrome",
+            "edge": "Edge",
+            "firefox": "Firefox",
+            "safari": "Safari",
+            "app": "Athlya app",
+            "other": "Browser"
+          },
+          "os": {
+            "ios": "iOS",
+            "android": "Android",
+            "macos": "macOS",
+            "windows": "Windows",
+            "linux": "Linux",
+            "other": "another device"
+          },
+          "unknownDevice": "Unknown device",
+          "revoke": "Revoke",
+          "revokeTitle": "Revoke this session?",
+          "revokeBody": "The device is signed out the next time it renews its session, within 15 minutes.",
+          "revokeConfirm": "Revoke the session",
+          "revoked": "Session revoked.",
+          "loadError": "Your sessions could not be loaded."
         },
         "signOut": {
           "title": "Sign out of this device",
@@ -521,10 +591,17 @@
         }
       },
       "notifications": {
-        "description": "The messages you receive about your bookings.",
+        "description": "Choose, message by message, how you are told.",
         "listLabel": "Messages sent",
         "alwaysSent": "Always sent",
-        "transactional": "These messages are about your bookings, so they are always sent.",
+        "mandatory": "Security or payment message, always sent.",
+        "loading": "Loading your preferences…",
+        "loadError": "Your preferences could not be loaded.",
+        "retry": "Try again",
+        "save": "Save",
+        "saving": "Saving…",
+        "saved": "Preferences saved.",
+        "saveError": "Saving failed, try again.",
         "channels": {
           "email": "Email",
           "push": "Mobile app notification"
@@ -533,11 +610,9 @@
           "reservationCreated": "Booking confirmed",
           "reservationReminder": "Reminder one hour before class",
           "reservationCancelled": "Booking cancelled",
-          "reservationPromoted": "Spot freed up from the waitlist"
-        },
-        "perEvent": {
-          "title": "Choose message by message",
-          "body": "Turning each message on or off on its own is coming soon."
+          "reservationPromoted": "Spot freed up from the waitlist",
+          "billingSubscriptionFailed": "Subscription payment failed",
+          "passwordReset": "Password reset"
         },
         "marketing": {
           "title": "Marketing messages",
@@ -588,8 +663,12 @@
     },
     "login": {
       "title": "Studio sign-in",
-      "subtitle": "For the studio team: administrators and coaches. Members sign in on the main app.",
-      "staffRequired": "This is a member account. Sign in on the Athlya app to book your classes."
+      "subtitle": "For the studio team: administrators, managers, front desk and coaches. Members sign in on the main app.",
+      "staffRequired": "This is a member account. Sign in on the Athlya app to book your classes.",
+      "invite": {
+        "notice": "You have been invited to the studio team. Sign in with the account that received the invitation to accept it.",
+        "invalid": "This invitation is no longer valid, or it was sent to another email address. Ask the studio for a new one."
+      }
     },
     "nav": {
       "brand": "Athlya Studio",
@@ -603,7 +682,10 @@
       "dashboard": "Dashboard",
       "settings": "Settings",
       "home": "Home",
-      "planning": "My schedule"
+      "planning": "My schedule",
+      "team": "Team",
+      "studioPlanning": "Planning",
+      "rooms": "Rooms"
     },
     "dashboard": {
       "title": "Dashboard",
@@ -742,13 +824,18 @@
       "deleteConfirm": {
         "title": "Delete this class?",
         "body": "This action cannot be undone. Existing reservations will be cancelled.",
-        "confirm": "Delete"
+        "confirm": "Delete",
+        "seriesBody": "This class is part of a series. Bookings of the deleted classes will be cancelled."
       },
       "fields": {
         "title": "Title",
         "startsAt": "Start date and time",
         "durationMin": "Duration (min)",
-        "capacity": "Capacity"
+        "capacity": "Capacity",
+        "room": "Room",
+        "coach": "Coach",
+        "noRoom": "No room",
+        "noCoach": "No coach"
       },
       "dialog": {
         "createTitle": "New class",
@@ -758,7 +845,8 @@
       },
       "errors": {
         "generic": "Failed to save.",
-        "versionConflict": "The class was edited meanwhile. List refreshed — please retry."
+        "versionConflict": "The class was edited meanwhile. List refreshed, please retry.",
+        "roomNotFound": "This room no longer exists. Pick another one."
       },
       "planning": {
         "viewLabel": "Calendar view",
@@ -781,17 +869,85 @@
         "nextDay": "Next day",
         "seatLeft": "{count} left",
         "seatsLeft": "{count} left",
-        "actionsFor": "Actions for {title}"
+        "actionsFor": "Actions for {title}",
+        "roomFilter": "Room",
+        "allRooms": "All rooms",
+        "roomLabel": "Room {name}"
       },
       "columns": {
-        "date": "Date"
+        "date": "Date",
+        "room": "Room"
       },
       "list": {
         "export": "Export",
         "summary": "{classes} classes · {seats} seats · {booked} booked",
         "deleteNote": "Deleting a class cancels its bookings.",
         "remaining": "Seats left"
+      },
+      "repeat": {
+        "label": "Repeat every week",
+        "weekdays": "Days",
+        "end": "Series ends",
+        "endCount": "After a number of classes",
+        "endUntil": "On a date",
+        "count": "Number of classes",
+        "until": "Last day",
+        "noWeekday": "Pick at least one day."
+      },
+      "series": {
+        "badge": "Series",
+        "partOf": "This class is part of a weekly series.",
+        "scopeLegend": "Apply to",
+        "scopeOne": "This class only",
+        "scopeFollowing": "This and following classes",
+        "created": "{count} classes created.",
+        "timeOnly": "For the following classes only the start time changes; each keeps its own day."
+      },
+      "conflict": {
+        "title": "Time slot already taken",
+        "body": "The room or the coach is already booked for these classes:",
+        "room": "same room",
+        "coach": "same coach",
+        "more": "+{count} more",
+        "confirm": "Schedule anyway"
       }
+    },
+    "rooms": {
+      "title": "Rooms",
+      "subtitle": "The places in your studio where classes run.",
+      "create": "New room",
+      "empty": "No rooms yet. Add one to pick it in the planning.",
+      "columns": {
+        "name": "Name",
+        "capacity": "Capacity"
+      },
+      "noCapacity": "Not set",
+      "capacityValue": "{count} seats",
+      "fields": {
+        "name": "Name",
+        "capacity": "Capacity (optional)",
+        "capacityHelp": "Offered as the default capacity of classes in this room."
+      },
+      "dialog": {
+        "createTitle": "New room",
+        "editTitle": "Edit room",
+        "createSubmit": "Create",
+        "editSubmit": "Save"
+      },
+      "deleteConfirm": {
+        "title": "Delete this room?",
+        "body": "Upcoming classes in this room will no longer have a room. Past classes keep it.",
+        "confirm": "Delete"
+      },
+      "errors": {
+        "nameTaken": "A room already has this name.",
+        "generic": "Could not save the room.",
+        "nameInvalid": "Enter a room name of 1 to 80 characters.",
+        "capacityInvalid": "Enter a whole number from 1 to 500, or leave it empty."
+      },
+      "edit": "Edit",
+      "delete": "Delete",
+      "actionsFor": "Actions for {name}"
     },
     "members": {
       "title": "Members",
@@ -803,7 +959,9 @@
       "role": {
         "member": "Member",
         "coach": "Coach",
-        "admin": "Admin"
+        "admin": "Admin",
+        "manager": "Manager",
+        "accueil": "Front desk"
       },
       "columns": {
         "name": "Name",
@@ -819,7 +977,9 @@
         "all": "All",
         "member": "Members",
         "coach": "Coaches",
-        "admin": "Admins"
+        "admin": "Admins",
+        "manager": "Managers",
+        "accueil": "Front desk"
       },
       "exportCsv": "Export CSV",
       "you": "You",
@@ -840,24 +1000,122 @@
       "readOnly": "Directory of your studio's members, read only."
     },
     "branding": {
-      "title": "Branding",
-      "subtitle": "Brand color and visual customization.",
-      "edit": "Edit",
-      "editComingSoon": "Editor arrives in a future release.",
+      "title": "Visual identity",
+      "subtitle": "Logos, color, Athlya mention and domains of the studio.",
       "save": "Save",
       "saving": "Saving…",
-      "saveSuccess": "Branding updated.",
+      "saveSuccess": "Identity updated.",
       "saveError": "Update failed.",
-      "lowContrastError": "Contrast too low for WCAG 2.2 AA — pick a more saturated color.",
+      "loadError": "The studio identity could not be loaded.",
+      "retry": "Try again",
+      "lowContrastError": "Contrast too low for WCAG 2.2 AA: pick a bolder color.",
       "invalidHexError": "Invalid hex format (#RRGGBB expected).",
+      "logo": {
+        "title": "Logos",
+        "help": "One logo for light backgrounds, one for dark backgrounds. The light logo heads the e-mails.",
+        "light": "Logo on light background",
+        "dark": "Logo on dark background",
+        "alt": "{variant} of {studio}",
+        "empty": "No logo",
+        "choose": "Choose the file: {variant}",
+        "upload": "Upload",
+        "replace": "Replace",
+        "remove": "Remove",
+        "constraints": "PNG, JPEG or WebP, 128 KB at most.",
+        "uploaded": "Logo saved.",
+        "removed": "Logo removed.",
+        "tooLarge": "File too large: 128 KB at most.",
+        "invalidType": "Format not accepted: PNG, JPEG or WebP.",
+        "invalidFormat": "The file content does not match its format."
+      },
       "brandColor": {
         "label": "Primary color",
-        "help": "This color applies to buttons, accents and interactive elements in the member app.",
-        "contrast": "Foreground auto-set to {fg} for WCAG 2.2 AA compliance",
+        "help": "It colors the buttons, the accents of the member app and the header of the e-mails.",
         "fgBlack": "black",
         "fgWhite": "white",
         "sampleButton": "Sample button",
-        "input": "Color (hex #RRGGBB)"
+        "input": "Color (hex #RRGGBB)",
+        "computed": "Computed text",
+        "ratio": "Contrast",
+        "aaPass": "meets AA",
+        "aaFail": "below AA, refused",
+        "onLight": "On light background: {ratio}",
+        "onDark": "On dark background: {ratio}",
+        "use": {
+          "text": "Usable for text.",
+          "graphics": "Icons and borders only, no text.",
+          "fill": "Fill only: no text, no icon."
+        }
+      },
+      "mention": {
+        "title": "Athlya mention",
+        "label": "Hide \"via Athlya\" in the studio's e-mails",
+        "shownHelp": "E-mails end with \"Sent by your studio via Athlya\".",
+        "hiddenHelp": "E-mails end with \"Sent by your studio\"."
+      },
+      "domains": {
+        "title": "Domains",
+        "help": "Serve the member app on your domain and send e-mails from your address.",
+        "loadError": "The domains could not be loaded.",
+        "hostname": "Domain name",
+        "add": "Save the domain",
+        "change": "Change",
+        "remove": "Remove",
+        "checkNow": "Check now",
+        "check": {
+          "ok": "Found",
+          "missing": "Missing",
+          "mismatch": "Different value",
+          "unchecked": "Not checked",
+          "awaiting_value": "Pending"
+        },
+        "checking": "Checking…",
+        "lastChecked": "Last checked: {date}",
+        "neverChecked": "Not checked yet.",
+        "web": {
+          "title": "Member app domain",
+          "help": "A subdomain of yours, for example club.mystudio.com.",
+          "placeholder": "club.mystudio.com",
+          "awaitingActivation": "Records found. The Athlya team now activates the domain and its certificate."
+        },
+        "email": {
+          "title": "E-mail sending domain",
+          "help": "E-mails will come from noreply@ your domain, for example mystudio.com.",
+          "placeholder": "mystudio.com",
+          "awaitingActivation": "Records found. The Athlya team now activates sending from this domain."
+        },
+        "status": {
+          "pending": "Pending",
+          "verified": "Verified",
+          "failed": "Needs a fix",
+          "active": "Active"
+        },
+        "records": {
+          "title": "DNS records to create",
+          "name": "Name",
+          "value": "Value",
+          "priority": "Priority",
+          "optional": "recommended",
+          "awaitingValue": "Value provided by the Athlya team, then checked here.",
+          "copy": "Copy: {field}",
+          "copied": "Copied.",
+          "copyFailed": "Copy failed."
+        },
+        "purpose": {
+          "ownership": "Domain ownership",
+          "routing": "Points to Athlya",
+          "spf": "SPF",
+          "return_path": "Bounces (MX)",
+          "dkim": "DKIM",
+          "dmarc": "DMARC"
+        },
+        "errors": {
+          "invalid": "Invalid domain name, for example club.mystudio.com.",
+          "taken": "This domain is already verified for another studio.",
+          "cooldown": "Checked moments ago: try again in a few seconds.",
+          "lookup": "The DNS lookup failed, try again.",
+          "generic": "Action failed, try again."
+        }
       }
     },
     "checkin": {
@@ -1210,6 +1468,63 @@
       "forbidden": "Only the studio admins can open a member file.",
       "notFound": "This member does not exist in your studio.",
       "loadError": "The member file could not load."
+    },
+    "desk": {
+      "planning": {
+        "title": "Studio planning",
+        "subtitle": "Every class of the studio, read only. Open a class to take its attendance."
+      }
+    },
+    "team": {
+      "title": "Team",
+      "subtitle": "Who works at the studio and what each person can do. Invite someone, change a role or remove a person from the team.",
+      "subtitleReadOnly": "Who works at the studio and what each person can do. Only an administrator changes the team.",
+      "members": {
+        "title": "People"
+      },
+      "invitations": {
+        "title": "Pending invitations",
+        "expires": "Expires on {date}",
+        "revoke": "Revoke"
+      },
+      "loadError": "The team could not be loaded. Try again in a moment.",
+      "you": "(you)",
+      "roleOf": "Role of {name}",
+      "roleChangedToast": "Role of {name}: {role}.",
+      "removedToast": "{name} is no longer on the team.",
+      "revokedToast": "Invitation for {email} revoked.",
+      "errors": {
+        "ownRole": "You cannot change your own role. Ask another administrator."
+      },
+      "roles": {
+        "title": "What each role can do",
+        "admin": "Everything, including billing, branding and the team.",
+        "manager": "Runs the studio day to day: classes, programs, members, attendance and the audit log. No billing, branding or team changes.",
+        "accueil": "The check-in kiosk, the attendance of every class, the members and the planning, read only.",
+        "coach": "Their schedule, the attendance of their own classes, the kiosk and the members directory."
+      },
+      "remove": {
+        "open": "Remove",
+        "title": "Remove {name} from the team?",
+        "body": "The account stays a member account of the studio. It loses access to the studio console.",
+        "confirm": "Remove from the team"
+      },
+      "invite": {
+        "open": "Invite",
+        "title": "Invite to the team",
+        "body": "If this email already has an account at the studio, the role applies at once. Otherwise you get a link to send.",
+        "email": "Email",
+        "role": "Role",
+        "invalidEmail": "Enter a valid email address.",
+        "submit": "Invite",
+        "linkTitle": "Invitation link",
+        "linkBody": "Send this link to {email}. They accept it by signing in with an account created at the studio with this address.",
+        "link": "Link",
+        "copy": "Copy",
+        "copied": "Copied",
+        "linkOnce": "This link is shown only once and expires in 7 days.",
+        "done": "Done"
+      }
     }
   },
   "mobile": {
@@ -1632,6 +1947,11 @@
         "subject": "Payment failed",
         "body": "Payment for your subscription {subscriptionId} failed: {reason}. Please update your payment details."
       }
+    },
+    "layout": {
+      "footer": "Sent by {studio}.",
+      "footerVia": "Sent by {studio} via Athlya.",
+      "footerAthlya": "Sent by Athlya."
     }
   },
   "coach": {

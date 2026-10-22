@@ -22,6 +22,7 @@ import { sql, type SQL } from 'drizzle-orm';
 import { withConnectionRetry } from './db-retry.js';
 
 import type { AthlyaDbAny } from '@athlya/db/client';
+import type { Role } from '@athlya/shared/roles';
 
 /**
  * Row shape returned by the `auth_*` user functions (snake_case, as in SQL).
@@ -35,7 +36,7 @@ export interface ServiceUserRow {
   readonly studio_id: string;
   readonly email: string | null;
   readonly display_name: string;
-  readonly role: 'member' | 'coach' | 'admin';
+  readonly role: Role;
   readonly password_hash: string | null;
   readonly deleted_at: Date | string | null;
   readonly credentials_version: number;
@@ -143,6 +144,10 @@ export const serviceFn = {
     sql`SELECT id FROM auth_consume_password_reset(${tokenHash}, ${userId}::uuid, ${passwordHash}) AS id`,
   notificationRecipient: (userId: string) =>
     sql`SELECT * FROM notification_recipient(${userId}::uuid)`,
+  notificationPreferencesOf: (userId: string) =>
+    sql`SELECT notification_preferences_of(${userId}::uuid) AS preferences`,
+  notificationStudioBranding: (userId: string) =>
+    sql`SELECT * FROM notification_studio_branding(${userId}::uuid)`,
   deleteReservations: (userId: string) =>
     sql`SELECT rgpd_delete_reservations(${userId}::uuid) AS n`,
   deleteWorkoutSessions: (userId: string) =>

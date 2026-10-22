@@ -3,12 +3,14 @@
  *
  * Handles:
  *   • /v1/classes/*      — list, search, create, update, delete, capacity WS
+ *   • /v1/classes/rooms/*, /v1/classes/series/*: rooms and weekly series (issue #748)
  *   • /v1/reservations/* — book, cancel, list
  *   • /v1/members/*      — profile, consents, export
  *   • /v1/me/*           — progression (served from the members deps)
  *   • /v1/coach, /v1/coach/* — AI coach (Epic 21, `ai-coach` flag)
  *   • /v1/studios/*      — studio read/update
  *   • /v1/programs/*     — training programs, subscriptions, daily workout
+ *   • /v1/studios/me/team/*: studio team and invitations (issue #756)
  *   • /v1/sessions, /v1/sessions/* — workout session log and history (issue #652)
  *   • /v1/checkins, /v1/checkins/* — QR check-in token and kiosk scan (issue #654)
  *
@@ -26,24 +28,29 @@ import {
   assertRequiredSecrets,
   defaultCheckinsDeps,
   defaultClassesDeps,
+  defaultClassPlanningDeps,
   defaultCoachDeps,
   defaultMembersDeps,
   defaultProgramsDeps,
   defaultReservationsDeps,
   defaultSessionsDeps,
   defaultStudiosDeps,
+  defaultTeamDeps,
   lazyCheckinsDeps,
   lazyClassesDeps,
+  lazyClassPlanningDeps,
   lazyCoachDeps,
   lazyMembersDeps,
   lazyProgramsDeps,
   lazyReservationsDeps,
   lazySessionsDeps,
   lazyStudiosDeps,
+  lazyTeamDeps,
 } from '../domain-deps.js';
 import { installDomainScope } from '../domain-scope.js';
 import { buildCapacityRouter } from '../routes/capacity.js';
 import { buildCheckinsRouter } from '../routes/checkins.js';
+import { buildClassSeriesRouter, buildRoomsRouter } from '../routes/class-planning.js';
 import { buildClassesRouter } from '../routes/classes.js';
 import { buildCoachRouter } from '../routes/coach.js';
 import { buildMeRouter } from '../routes/me.js';
@@ -52,6 +59,7 @@ import { buildProgramsRouter } from '../routes/programs.js';
 import { buildReservationsRouter } from '../routes/reservations.js';
 import { buildSessionsRouter } from '../routes/sessions.js';
 import { buildStudiosRouter } from '../routes/studios.js';
+import { buildTeamRouter } from '../routes/team.js';
 
 export { ClassCapacityDO } from '../durable-objects/class-capacity.js';
 
@@ -88,11 +96,17 @@ const app = buildBaseApp({
         programs: defaultProgramsDeps(env),
         sessions: defaultSessionsDeps(env),
         checkins: defaultCheckinsDeps(env),
+        team: defaultTeamDeps(env),
+        planning: defaultClassPlanningDeps(env),
       };
     });
     // Capacity WebSocket mounts first: /v1/classes/:classId/capacity/ws
     // must match before the JWT-guarded classes router shadows it.
     base.route('/v1/classes', buildCapacityRouter());
+    // Rooms and series (issue #748) must match before the classes router's `/:id` routes.
+    const planning = lazyClassPlanningDeps(() => resolve().planning);
+    base.route('/v1/classes/rooms', buildRoomsRouter(planning));
+    base.route('/v1/classes/series', buildClassSeriesRouter(planning));
     base.route('/v1/classes', buildClassesRouter(lazyClassesDeps(() => resolve().classes)));
     base.route(
       '/v1/reservations',
@@ -101,6 +115,7 @@ const app = buildBaseApp({
     const members = lazyMembersDeps(() => resolve().members);
     base.route('/v1/members', buildMembersRouter(members));
     base.route('/v1/me', buildMeRouter(members));
+    base.route('/v1/studios/me/team', buildTeamRouter(lazyTeamDeps(() => resolve().team)));
     base.route('/v1/studios', buildStudiosRouter(lazyStudiosDeps(() => resolve().studios)));
     base.route('/v1/coach', buildCoachRouter(lazyCoachDeps(() => resolve().coach)));
     base.route('/v1/programs', buildProgramsRouter(lazyProgramsDeps(() => resolve().programs)));

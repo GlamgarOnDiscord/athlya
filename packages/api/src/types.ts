@@ -21,6 +21,7 @@
  */
 
 import type { StructuredLogger } from './logging.js';
+import type { AuthClaims } from './middleware/auth.js';
 import type { TraceSpan } from './middleware/otel.js';
 import type { DurableObjectNamespace, Queue, R2Bucket } from '@cloudflare/workers-types';
 
@@ -417,8 +418,16 @@ export interface AthlyaBindings {
    * `export_download_not_configured` instead of completing.
    */
   readonly EXPORT_URL_SIGNING_KEY?: string;
-  /** Public origin of this API, used to build export download links. */
+  /** Public origin of this API, used to build export download and calendar feed links. */
   readonly API_PUBLIC_URL?: string;
+  /**
+   * HMAC key (>= 32 chars) signing the members' iCalendar feed tokens
+   * (issue #719, `docs/architecture/calendar-feed.md`). Set with
+   * `wrangler secret put CALENDAR_FEED_SIGNING_KEY --env <env>` on the
+   * gateway only; never committed. Rotating it revokes every feed.
+   * Without it, `/v1/calendar/*` answers 503 `calendar_feed_not_configured`.
+   */
+  readonly CALENDAR_FEED_SIGNING_KEY?: string;
 
   /**
    * Static feature-flag catalogue read by `feature-flags.ts`, as JSON:
@@ -606,11 +615,7 @@ export interface AthlyaVariables {
    *   - `role`    ← `role` (closed union, rejected at verify time if
    *                        any other value sneaks into the token)
    */
-  authClaims?: {
-    userId: string;
-    studioId: string;
-    role: 'member' | 'admin' | 'coach';
-  };
+  authClaims?: AuthClaims;
 
   /**
    * Per-request OpenTelemetry span (task 8.6). Populated by the

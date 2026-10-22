@@ -33,13 +33,15 @@ import {
 
 import { getAccessToken, setAccessToken, subscribeToAccessToken } from './token-store';
 
+import type { Role } from '@athlya/shared/roles';
+
 /** Minimal shape consumed by the web app. Extended in future tasks. */
 interface AuthUser {
   readonly id: string;
   readonly email: string;
   readonly displayName: string;
   readonly studioId: string;
-  readonly role: 'member' | 'coach' | 'admin';
+  readonly role: Role;
 }
 
 export interface LoginCredentials {

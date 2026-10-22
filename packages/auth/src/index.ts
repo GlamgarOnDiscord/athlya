@@ -46,3 +46,4 @@ export * from './replay-redis.js';
 export * from './throttle.js';
 export * from './service.js';
 export * from './forgot-password.js';
+export * from './sessions.js';

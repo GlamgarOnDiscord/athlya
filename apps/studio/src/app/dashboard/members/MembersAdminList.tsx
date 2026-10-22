@@ -4,11 +4,13 @@
  * `/dashboard/members` client surface: role tabs, search ("/" focuses it),
  * sortable columns, selection with a bulk bar and a per-row menu. Rows come
  * from `GET /v1/members` (cursor pages of 20); every count and export covers
- * the rows loaded so far, since the endpoint returns no total. A coach
- * (the API opens the list to that role too) gets the same directory
- * read only: no CSV export and no member file, which stay with
- * administrators (the API has no per-member read for coaches).
+ * the rows loaded so far, since the endpoint returns no total. The CSV
+ * export is built here from those rows (`members.export`: admin and
+ * manager). The front desk opens member files but exports nothing; a coach
+ * gets the directory read only, with no member file either (the API has no
+ * per-member read for coaches).
  */
+import { can } from '@athlya/shared/roles';
 import { Menu } from '@base-ui/react/menu';
 import {
   ArrowDownIcon,
@@ -61,6 +63,8 @@ type Status = { kind: 'idle' } | { kind: 'loading' } | { kind: 'error'; message:
 
 const ROLE_VARIANT: Record<StudioMember['role'], 'default' | 'secondary' | 'outline'> = {
   admin: 'default',
+  manager: 'default',
+  accueil: 'secondary',
   coach: 'secondary',
   member: 'outline',
 };
@@ -69,6 +73,8 @@ const TAB_KEY = {
   all: 'studio.members.tabs.all',
   member: 'studio.members.tabs.member',
   coach: 'studio.members.tabs.coach',
+  accueil: 'studio.members.tabs.accueil',
+  manager: 'studio.members.tabs.manager',
   admin: 'studio.members.tabs.admin',
 } as const;
 
@@ -97,8 +103,8 @@ export function MembersAdminList(): ReactElement {
   const [tab, setTab] = useState<RoleTab>('all');
   const [sort, setSort] = useState<MemberSort>('joinedDesc');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const isAdmin = user?.role === 'admin';
-  const canExport = isAdmin;
+  const opensFiles = user !== null && can(user.role, 'members.file');
+  const canExport = user !== null && can(user.role, 'members.export');
 
   const fetchPage = useCallback(
     async (currentCursor: string | null) => {
@@ -392,7 +398,7 @@ export function MembersAdminList(): ReactElement {
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-3">
                       <MemberAvatar displayName={m.displayName} avatarUrl={m.avatarUrl} />
-                      {isAdmin ? (
+                      {opensFiles ? (
                         <Link
                           href={memberFileHref(m.id)}
                           className="truncate rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -421,7 +427,7 @@ export function MembersAdminList(): ReactElement {
                   <td className="px-3 py-2.5 text-right">
                     <RowMenu
                       member={m}
-                      fileHref={isAdmin ? memberFileHref(m.id) : null}
+                      fileHref={opensFiles ? memberFileHref(m.id) : null}
                       t={t}
                       onCopy={() => copy(m.email, t('studio.members.emailCopied'))}
                     />

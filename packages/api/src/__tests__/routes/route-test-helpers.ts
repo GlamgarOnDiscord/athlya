@@ -53,6 +53,7 @@ export async function mintAuthJwt(
     sub: claims.userId ?? TEST_USER_ID,
     studio: claims.studioId ?? TEST_STUDIO_ID,
     role: claims.role ?? 'member',
+    ...(claims.sessionHandle !== undefined ? { sh: claims.sessionHandle } : {}),
   });
 }
 
@@ -75,11 +76,13 @@ export function buildStubDeps(
     audit?: Partial<DomainDeps['audit']>;
     coach?: Partial<DomainDeps['coach']>;
     programs?: Partial<Required<DomainDeps>['programs']>;
+    planning?: Partial<Required<DomainDeps>['planning']>;
   } = {},
 ): DomainDeps & {
   readonly sessions: Required<DomainDeps>['sessions'];
   readonly checkins: Required<DomainDeps>['checkins'];
   readonly programs: Required<DomainDeps>['programs'];
+  readonly planning: Required<DomainDeps>['planning'];
 } {
   return {
     auth: {
@@ -88,6 +91,8 @@ export function buildStubDeps(
       refresh: vi.fn(),
       logout: vi.fn(),
       logoutAll: vi.fn(),
+      listSessions: vi.fn(),
+      revokeSession: vi.fn(),
       deleteMe: vi.fn(),
       requestPasswordReset: vi.fn(),
       confirmPasswordReset: vi.fn(),
@@ -98,6 +103,8 @@ export function buildStubDeps(
       updateProfile: vi.fn(),
       uploadAvatar: vi.fn(),
       updateConsents: vi.fn(),
+      getNotificationPreferences: vi.fn(),
+      updateNotificationPreferences: vi.fn(),
       enqueueExport: vi.fn(),
       getExportJob: vi.fn(),
       openExportDownload: vi.fn(),
@@ -139,6 +146,12 @@ export function buildStubDeps(
     studios: {
       getStudio: vi.fn(),
       updateStudio: vi.fn(),
+      uploadLogo: vi.fn(),
+      removeLogo: vi.fn(),
+      listDomains: vi.fn(),
+      setDomain: vi.fn(),
+      removeDomain: vi.fn(),
+      checkDomain: vi.fn(),
       ...overrides.studios,
     },
     billing: {
@@ -169,6 +182,16 @@ export function buildStubDeps(
       listMySubscriptions: vi.fn(),
       getToday: vi.fn(),
       ...overrides.programs,
+    },
+    planning: {
+      listRooms: vi.fn(),
+      createRoom: vi.fn(),
+      updateRoom: vi.fn(),
+      deleteRoom: vi.fn(),
+      createSeries: vi.fn(),
+      updateSeries: vi.fn(),
+      deleteSeries: vi.fn(),
+      ...overrides.planning,
     },
   };
 }

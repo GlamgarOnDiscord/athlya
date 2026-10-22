@@ -6,6 +6,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["APP_ENV", "NEXT_PUBLIC_DEMO_MODE"],
       "inputs": [
         "$TURBO_DEFAULT$",
         ".env*",

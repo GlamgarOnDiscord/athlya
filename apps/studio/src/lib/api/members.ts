@@ -8,12 +8,13 @@
  * caller shows the count as a lower bound.
  */
 import type { ApiClient } from './client';
+import type { Role } from '@athlya/shared/roles';
 
 export interface StudioMember {
   readonly id: string;
   readonly email: string;
   readonly displayName: string;
-  readonly role: 'member' | 'coach' | 'admin';
+  readonly role: Role;
   readonly avatarUrl: string | null;
   readonly createdAt: string;
 }

@@ -120,6 +120,7 @@ export interface CreateClassRepoInput {
   readonly durationMin: number;
   readonly capacity: number;
   readonly coachId?: UserId;
+  readonly roomId?: string;
   readonly version: 0;
 }
 
@@ -256,6 +257,7 @@ export async function createClass(
     capacity: parsed.capacity,
     version: 0,
     ...(parsed.coachId !== undefined ? { coachId: parsed.coachId } : {}),
+    ...(parsed.roomId !== undefined ? { roomId: parsed.roomId } : {}),
     ...(parsed.description !== undefined ? { description: parsed.description } : {}),
   };
   const row = await deps.classRepo.createClass(repoInput);

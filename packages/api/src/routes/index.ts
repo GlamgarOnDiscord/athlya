@@ -43,8 +43,14 @@
 import { buildAuditRouter, type AuditDeps } from './audit.js';
 import { buildAuthRouter, type AuthDeps } from './auth.js';
 import { buildBillingRouter, type BillingDeps } from './billing.js';
+import { buildCalendarRouter, type CalendarDeps } from './calendar.js';
 import { buildCapacityRouter } from './capacity.js';
 import { buildCheckinsRouter, type CheckinsDeps } from './checkins.js';
+import {
+  buildClassSeriesRouter,
+  buildRoomsRouter,
+  type ClassPlanningDeps,
+} from './class-planning.js';
 import { buildClassesRouter, type ClassesDeps } from './classes.js';
 import { buildCoachRouter, type CoachDeps } from './coach.js';
 import { buildMeRouter, type MeDeps } from './me.js';
@@ -53,6 +59,7 @@ import { buildProgramsRouter, type ProgramsDeps } from './programs.js';
 import { buildReservationsRouter, type ReservationsDeps } from './reservations.js';
 import { buildSessionsRouter, type SessionsDeps } from './sessions.js';
 import { buildStudiosRouter, type StudiosDeps } from './studios.js';
+import { buildTeamRouter, type TeamDeps } from './team.js';
 
 import type { DomainDeps } from '../domain-deps.js';
 import type { HonoEnv } from '../types.js';
@@ -62,16 +69,20 @@ export {
   buildAuditRouter,
   buildAuthRouter,
   buildBillingRouter,
+  buildCalendarRouter,
   buildCapacityRouter,
   buildCheckinsRouter,
   buildClassesRouter,
+  buildClassSeriesRouter,
   buildCoachRouter,
   buildMeRouter,
   buildMembersRouter,
   buildProgramsRouter,
   buildReservationsRouter,
+  buildRoomsRouter,
   buildSessionsRouter,
   buildStudiosRouter,
+  buildTeamRouter,
 };
 export { buildDefaultDeps, buildLazyDomainDeps } from '../domain-deps.js';
 export type { DomainDeps } from '../domain-deps.js';
@@ -79,8 +90,10 @@ export type {
   AuditDeps,
   AuthDeps,
   BillingDeps,
+  CalendarDeps,
   CheckinsDeps,
   ClassesDeps,
+  ClassPlanningDeps,
   CoachDeps,
   MeDeps,
   MembersDeps,
@@ -88,6 +101,7 @@ export type {
   ReservationsDeps,
   SessionsDeps,
   StudiosDeps,
+  TeamDeps,
 };
 
 /* ------------------------------------------------------------------ */
@@ -113,6 +127,12 @@ export function mountDomainRoutes(app: Hono<HonoEnv>, deps: DomainDeps): Hono<Ho
   // Capacity WebSocket must mount before the authenticated classes router
   // so the public /v1/classes/:classId/capacity/ws path is matched first.
   app.route('/v1/classes', buildCapacityRouter());
+  // Rooms and series (issue #748) sit under /v1/classes and mount before
+  // the classes router, whose `/:id` routes would otherwise see them.
+  if (deps.planning !== undefined) {
+    app.route('/v1/classes/rooms', buildRoomsRouter(deps.planning));
+    app.route('/v1/classes/series', buildClassSeriesRouter(deps.planning));
+  }
   app.route('/v1/classes', buildClassesRouter(deps.classes));
   app.route('/v1/reservations', buildReservationsRouter(deps.reservations));
   if (deps.sessions !== undefined) {
@@ -121,10 +141,16 @@ export function mountDomainRoutes(app: Hono<HonoEnv>, deps: DomainDeps): Hono<Ho
   if (deps.checkins !== undefined) {
     app.route('/v1/checkins', buildCheckinsRouter(deps.checkins));
   }
+  if (deps.team !== undefined) {
+    app.route('/v1/studios/me/team', buildTeamRouter(deps.team));
+  }
   app.route('/v1/studios', buildStudiosRouter(deps.studios));
   app.route('/v1/billing', buildBillingRouter(deps.billing));
   if (deps.programs !== undefined) {
     app.route('/v1/programs', buildProgramsRouter(deps.programs));
+  }
+  if (deps.calendar !== undefined) {
+    app.route('/v1/calendar', buildCalendarRouter(deps.calendar));
   }
   return app;
 }

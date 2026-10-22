@@ -1,13 +1,13 @@
 /**
- * Client-side admin gate.
+ * Client-side console gate.
  *
  * Wraps every page below `/dashboard`. Redirects to `/login` when no
- * token is present, and to `/forbidden` when the user is signed in
- * but lacks the `admin` role. The server-side gate is the
- * authoritative one (`requireRole('admin')` in the API gateway, which
- * returns 403 with a Problem Details body); this client gate is
- * purely a UX shortcut so non-admins see a friendly screen instead
- * of a flash of admin UI followed by a flood of 403s.
+ * token is present, and away from a page the signed-in role may not
+ * open. The server-side gate is the authoritative one
+ * (`requireCapability(...)` in the API gateway, which returns 403 with
+ * a Problem Details body); this client gate is purely a UX shortcut so
+ * a role sees a friendly screen instead of a flash of UI followed by a
+ * flood of 403s.
  *
  * Why two gates?
  *   - Server gate is enforced on every API call, period — defence in
@@ -18,57 +18,26 @@
  *     accidental navigation, and avoids the FOUC of admin UI
  *     showing for a few hundred ms before the API rejects the page.
  *
- * Coaches are let through on {@link COACH_ROUTES} only: their home, their
- * read-only schedule, the members directory, the check-in kiosk and the
- * roster of a class, all backed by endpoints the API opens to the `coach`
- * role (`GET /v1/classes`, `GET /v1/members`, `POST /v1/checkins`,
- * `GET /v1/classes/:id/roster` for the classes they coach). A member file
- * (`/dashboard/members/:id`) stays admin only, like `GET /v1/members/:id`.
- * A coach landing anywhere else under `/dashboard` is sent to their home.
+ * Each role is let through on the pages {@link canOpenRoute} opens to it,
+ * from the capability matrix of `@athlya/shared/roles` (issue #756): a
+ * manager everywhere but billing and branding, the front desk on the
+ * kiosk, the planning, the members and their files and the class
+ * rosters, a coach on their home, their schedule, the members directory,
+ * the kiosk and the roster of the classes they coach. A staff role
+ * landing on another page is sent to the console home; a member to
+ * `/forbidden`.
  *
  * @see Requirements 6.5 (admin-only routes), 14.1 (auth chain).
  */
 'use client';
 
+import { can } from '@athlya/shared/roles';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactElement, type ReactNode } from 'react';
 
 import { useAuth } from '../lib/auth/AuthContext';
+import { CONSOLE_HOME, canOpenRoute } from '../lib/auth/console-routes';
 import { navigateTo } from '../lib/full-reload';
-
-/** The console landing: the coach home for a coach. Matched exactly, never as a prefix. */
-const DASHBOARD_HOME = '/dashboard';
-
-/**
- * Dashboard routes a coach may open, home first (where a coach is sent
- * from any other route). Every other route is admin-only.
- */
-export const COACH_ROUTES: readonly string[] = [
-  DASHBOARD_HOME,
-  '/dashboard/planning',
-  '/dashboard/members',
-  '/dashboard/checkin',
-];
-
-/** Coach routes matched exactly: the pages below them are admin only. */
-const EXACT_COACH_ROUTES: ReadonlySet<string> = new Set([DASHBOARD_HOME, '/dashboard/members']);
-
-/** A class detail page, `/dashboard/classes/<id>`; the classes list itself is admin only. */
-const CLASS_DETAIL =
-  /^\/dashboard\/classes\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/iu;
-
-/**
- * True when `pathname` is one of {@link COACH_ROUTES} (the home and the
- * members directory exactly, the others with their sub-paths) or a class
- * detail page.
- */
-export function isCoachRoute(pathname: string): boolean {
-  if (CLASS_DETAIL.test(pathname)) return true;
-  return COACH_ROUTES.some(
-    (route) =>
-      pathname === route || (!EXACT_COACH_ROUTES.has(route) && pathname.startsWith(`${route}/`)),
-  );
-}
 
 export interface RequireAdminProps {
   readonly children: ReactNode;
@@ -77,9 +46,9 @@ export interface RequireAdminProps {
 export function RequireAdmin({ children }: RequireAdminProps): ReactElement | null {
   const { push } = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, isAdmin, user, bootResolved } = useAuth();
-  const isCoach = user?.role === 'coach';
-  const allowed = isAdmin || (isCoach && isCoachRoute(pathname));
+  const { isAuthenticated, user, bootResolved } = useAuth();
+  const isStaff = user !== null && can(user.role, 'console.access');
+  const allowed = user !== null && canOpenRoute(user.role, pathname);
 
   useEffect(() => {
     // Wait for the boot silent-refresh to resolve before
@@ -98,9 +67,9 @@ export function RequireAdmin({ children }: RequireAdminProps): ReactElement | nu
     // — guard against premature redirect to `/forbidden` during
     // that tick.
     if (user !== null && !allowed) {
-      navigateTo(isCoach ? (COACH_ROUTES[0] ?? '/forbidden') : '/forbidden', push, pathname);
+      navigateTo(isStaff ? CONSOLE_HOME : '/forbidden', push, pathname);
     }
-  }, [bootResolved, isAuthenticated, allowed, isCoach, user, push, pathname]);
+  }, [bootResolved, isAuthenticated, allowed, isStaff, user, push, pathname]);
 
   if (!bootResolved) return null;
   if (!isAuthenticated) return null;

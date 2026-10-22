@@ -18,6 +18,17 @@
  */
 
 import {
+  AcceptInvitationRequestSchema,
+  AcceptInvitationResponseSchema,
+  ActiveSessionsResponseSchema,
+  InviteTeamMemberRequestSchema,
+  InviteTeamMemberResponseSchema,
+  SessionParamsSchema,
+  TeamInvitationParamsSchema,
+  TeamMemberParamsSchema,
+  TeamMemberSchema,
+  TeamResponseSchema,
+  UpdateTeamMemberRequestSchema,
   BookingRequestSchema,
   BookingResponseSchema,
   CancelReservationParamsSchema,
@@ -36,12 +47,18 @@ import {
   ClassRosterEntrySchema,
   ClassRosterParamsSchema,
   ClassRosterResponseSchema,
+  ClassSeriesDeleteResponseSchema,
+  ClassSeriesResponseSchema,
+  ClassSeriesUpdateResponseSchema,
   CoachAskRequestSchema,
   CoachAskResponseSchema,
   CoachStatusResponseSchema,
   ClassWithRemainingSchema,
   CreateClassRequestSchema,
+  CreateClassSeriesRequestSchema,
   CreateProgramRequestSchema,
+  CreateRoomRequestSchema,
+  DeleteClassSeriesQuerySchema,
   ExportJobResponseSchema,
   InvoicesPageSchema,
   ListClassesQuerySchema,
@@ -61,6 +78,9 @@ import {
   ProgressionQuerySchema,
   ProgressionResponseSchema,
   RefreshRequestSchema,
+  RoomListResponseSchema,
+  RoomSchema,
+  ScheduleConflictProblemSchema,
   AuditListResponseSchema,
   RegisterRequestSchema,
   RosterCheckInParamsSchema,
@@ -71,9 +91,11 @@ import {
   TodayWorkoutResponseSchema,
   UnsubscribeProgramResponseSchema,
   UpdateClassRequestSchema,
+  UpdateClassSeriesRequestSchema,
   UpdateConsentsRequestSchema,
   UpdateProfileRequestSchema,
   UpdateProgramRequestSchema,
+  UpdateRoomRequestSchema,
   UpdateStudioRequestSchema,
 } from '@athlya/shared/schemas/api';
 import { UserSchema, WorkoutSessionSchema } from '@athlya/shared/schemas/domain';
@@ -457,7 +479,7 @@ const listMembersRoute = createRoute({
   method: 'get',
   path: '/v1/members',
   tags: ['members'],
-  summary: 'List studio members (admin / coach only)',
+  summary: 'List studio members (admin, manager, front desk, coach)',
   security: [{ bearerAuth: [] }],
   request: {
     query: z.object({
@@ -485,7 +507,7 @@ const memberFileRoute = createRoute({
   method: 'get',
   path: '/v1/members/{id}',
   tags: ['members'],
-  summary: 'Member file: profile, consents and reservations (studio admin only)',
+  summary: 'Member file: profile, consents and reservations (admin, manager, front desk)',
   security: [{ bearerAuth: [] }],
   request: { params: MemberFileParamsSchema },
   responses: {
@@ -494,7 +516,7 @@ const memberFileRoute = createRoute({
       content: { 'application/json': { schema: MemberFileResponseSchema } },
     },
     401: problemResponse('Not authenticated'),
-    403: problemResponse('Not a studio admin'),
+    403: problemResponse('Not an admin, manager or front desk of the studio'),
     404: problemResponse('`member_not_found`: no live member with this id in the studio'),
   },
 });
@@ -530,7 +552,7 @@ const createClassRoute = createRoute({
   method: 'post',
   path: '/v1/classes',
   tags: ['classes'],
-  summary: 'Create a new class (admin only)',
+  summary: 'Create a new class (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -551,8 +573,14 @@ const createClassRoute = createRoute({
       description: 'Insufficient role',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
+    409: {
+      description:
+        '`schedule_conflict`: the room or the coach is taken over an overlapping interval; ' +
+        'resend with `allowConflicts: true` to schedule anyway',
+      content: { 'application/problem+json': { schema: ScheduleConflictProblemSchema } },
+    },
     422: {
-      description: 'Validation error',
+      description: 'Validation error, or `room_not_found` for a room outside the studio',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
   },
@@ -562,7 +590,7 @@ const updateClassRoute = createRoute({
   method: 'patch',
   path: '/v1/classes/{id}',
   tags: ['classes'],
-  summary: 'Update a class (admin only)',
+  summary: 'Update a class (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.uuid() }),
@@ -587,12 +615,15 @@ const updateClassRoute = createRoute({
     409: {
       description:
         '`version_conflict` (stale `version`), `capacity_below_confirmed` (capacity under the ' +
-        'confirmed reservations and held seats) or `class_already_started` (the start time of a ' +
-        'class that started cannot change)',
+        'confirmed reservations and held seats), `class_already_started` (the start time of a ' +
+        'class that started cannot change) or `schedule_conflict` (room or coach taken, see ' +
+        '`allowConflicts`)',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
     422: {
-      description: 'Validation error, or `starts_at_in_past` for a start time not in the future',
+      description:
+        'Validation error, `starts_at_in_past` for a start time not in the future, or ' +
+        '`room_not_found`',
       content: { 'application/problem+json': { schema: ProblemDetailsSchema } },
     },
   },
@@ -602,7 +633,7 @@ const deleteClassRoute = createRoute({
   method: 'delete',
   path: '/v1/classes/{id}',
   tags: ['classes'],
-  summary: 'Delete a class (admin only)',
+  summary: 'Delete a class (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.uuid() }),
@@ -629,7 +660,9 @@ const classRosterRoute = createRoute({
   path: '/v1/classes/{id}/roster',
   tags: ['classes'],
   summary: 'Roster of a class: booked members, waitlist and check-ins',
-  description: 'Open to the studio admin and to the coach the class is assigned to.',
+  description:
+    'Open to the admin, manager and front desk of the studio, and to the coach the class is ' +
+    'assigned to.',
   security: [{ bearerAuth: [] }],
   request: { params: ClassRosterParamsSchema },
   responses: {
@@ -647,7 +680,8 @@ const rosterCheckInRoute = createRoute({
   method: 'post',
   path: '/v1/classes/{id}/roster/{reservationId}/check-in',
   tags: ['classes'],
-  summary: 'Mark a booked member of the class present (admin or coach of the class)',
+  summary:
+    'Mark a booked member of the class present (admin, manager, front desk, or coach of the class)',
   description:
     'Stamps the same check-in as a kiosk scan. Allowed from 30 minutes before the class ' +
     'starts until 24 hours after it ends.',
@@ -677,6 +711,153 @@ const rosterCheckInRoute = createRoute({
         '`checkin_limit_reached`: the member was checked in 5 times this hour',
     ),
     503: problemResponse('Rate limiter unavailable (fail-closed, code `dependency_unavailable`)'),
+  },
+});
+
+/*
+ * rooms and series: /v1/classes/rooms, /v1/classes/series (issue #748)
+ */
+
+const listRoomsRoute = createRoute({
+  method: 'get',
+  path: '/v1/classes/rooms',
+  tags: ['classes'],
+  summary: 'List the rooms of the studio',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Live rooms, by name',
+      content: { 'application/json': { schema: RoomListResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+  },
+});
+
+const createRoomRoute = createRoute({
+  method: 'post',
+  path: '/v1/classes/rooms',
+  tags: ['classes'],
+  summary: 'Create a room (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: { content: { 'application/json': { schema: CreateRoomRequestSchema } }, required: true },
+  },
+  responses: {
+    201: { description: 'Room created', content: { 'application/json': { schema: RoomSchema } } },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Insufficient role'),
+    409: problemResponse('`room_name_taken`: a live room of the studio has that name'),
+    422: problemResponse('Validation error'),
+  },
+});
+
+const updateRoomRoute = createRoute({
+  method: 'patch',
+  path: '/v1/classes/rooms/{roomId}',
+  tags: ['classes'],
+  summary: 'Rename a room or change its capacity (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ roomId: z.uuid() }),
+    body: { content: { 'application/json': { schema: UpdateRoomRequestSchema } }, required: true },
+  },
+  responses: {
+    200: { description: 'Room updated', content: { 'application/json': { schema: RoomSchema } } },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Insufficient role'),
+    404: problemResponse('Room not found'),
+    409: problemResponse('`room_name_taken`'),
+    422: problemResponse('Validation error'),
+  },
+});
+
+const deleteRoomRoute = createRoute({
+  method: 'delete',
+  path: '/v1/classes/rooms/{roomId}',
+  tags: ['classes'],
+  summary: 'Delete a room and unassign it from upcoming classes (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ roomId: z.uuid() }) },
+  responses: {
+    204: { description: 'Room deleted' },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Insufficient role'),
+    404: problemResponse('Room not found'),
+  },
+});
+
+const createSeriesRoute = createRoute({
+  method: 'post',
+  path: '/v1/classes/series',
+  tags: ['classes'],
+  summary: 'Create a weekly series of classes (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: CreateClassSeriesRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    201: {
+      description: 'Every occurrence, sharing one series id',
+      content: { 'application/json': { schema: ClassSeriesResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Insufficient role'),
+    409: {
+      description: '`schedule_conflict`, see `allowConflicts`',
+      content: { 'application/problem+json': { schema: ScheduleConflictProblemSchema } },
+    },
+    422: problemResponse(
+      'Validation error, `starts_at_in_past`, `no_occurrences`, `too_many_occurrences` or `room_not_found`',
+    ),
+  },
+});
+
+const updateSeriesRoute = createRoute({
+  method: 'patch',
+  path: '/v1/classes/series/{seriesId}',
+  tags: ['classes'],
+  summary: 'Edit an occurrence and every later one (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ seriesId: z.uuid() }),
+    body: {
+      content: { 'application/json': { schema: UpdateClassSeriesRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'The edited occurrences',
+      content: { 'application/json': { schema: ClassSeriesUpdateResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Insufficient role'),
+    404: problemResponse('Class not found in this series'),
+    409: problemResponse(
+      '`version_conflict`, `class_already_started`, `capacity_below_confirmed` or `schedule_conflict`',
+    ),
+    422: problemResponse('Validation error, `starts_at_in_past` or `room_not_found`'),
+  },
+});
+
+const deleteSeriesRoute = createRoute({
+  method: 'delete',
+  path: '/v1/classes/series/{seriesId}',
+  tags: ['classes'],
+  summary: 'Delete an occurrence and every later one (admin only)',
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ seriesId: z.uuid() }), query: DeleteClassSeriesQuerySchema },
+  responses: {
+    200: {
+      description: 'Number of occurrences deleted',
+      content: { 'application/json': { schema: ClassSeriesDeleteResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Insufficient role'),
+    404: problemResponse('Class not found in this series'),
   },
 });
 
@@ -1217,9 +1398,10 @@ const checkInRoute = createRoute({
   method: 'post',
   path: '/v1/checkins',
   tags: ['checkins'],
-  summary: 'Check a member in from their QR token (kiosk, admin or coach)',
+  summary: 'Check a member in from their QR token (kiosk, any studio team role)',
   description:
-    "The operator's session must be an admin or coach of the studio; the QR token names the " +
+    "The operator's session must be an admin, manager, front desk or coach of the studio; the QR " +
+    'token names the ' +
     'member. The token is verified before any reservation or member read and consumed once.',
   security: [{ bearerAuth: [] }],
   request: {
@@ -1243,7 +1425,7 @@ const checkInRoute = createRoute({
       'Not authenticated, or the QR token was rejected (`code`: `invalid_signature`, ' +
         '`token_expired`, `replay`, `wrong_studio`, `wrong_kind`, `malformed`)',
     ),
-    403: problemResponse('The caller is not an admin or coach'),
+    403: problemResponse('The caller is not on the studio team'),
     422: problemResponse(
       'Valid token but no check-in (`code`: `no_reservation`, `outside_window`, `already_checked_in`), or validation error',
     ),
@@ -1262,7 +1444,7 @@ const listAuditRoute = createRoute({
   method: 'get',
   path: '/v1/audit',
   tags: ['audit'],
-  summary: 'List studio audit log entries (admin only)',
+  summary: 'List studio audit log entries (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     query: z.object({
@@ -1394,7 +1576,7 @@ const createProgramRoute = createRoute({
   method: 'post',
   path: '/v1/programs',
   tags: ['programs'],
-  summary: 'Create a program with its weeks and workouts (admin only)',
+  summary: 'Create a program with its weeks and workouts (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -1434,7 +1616,7 @@ const updateProgramRoute = createRoute({
   method: 'patch',
   path: '/v1/programs/{id}',
   tags: ['programs'],
-  summary: 'Update a program; `weeks` replaces the schedule (admin only)',
+  summary: 'Update a program; `weeks` replaces the schedule (admin, manager)',
   security: [{ bearerAuth: [] }],
   request: {
     params: ProgramIdParamsSchema,
@@ -1460,7 +1642,7 @@ const archiveProgramRoute = createRoute({
   method: 'post',
   path: '/v1/programs/{id}/archive',
   tags: ['programs'],
-  summary: 'Archive a program (admin only, idempotent)',
+  summary: 'Archive a program (admin, manager; idempotent)',
   security: [{ bearerAuth: [] }],
   request: { params: ProgramIdParamsSchema },
   responses: {
@@ -1560,6 +1742,153 @@ const todayWorkoutRoute = createRoute({
  * reached because `/openapi.json` short-circuits before delegating to
  * domain handlers.
  */
+/*
+ * auth sessions: /v1/auth/sessions (issue #757)
+ */
+
+const authSessionsListRoute = createRoute({
+  method: 'get',
+  path: '/v1/auth/sessions',
+  tags: ['auth'],
+  summary: 'Active sessions of the current user, most recently seen first',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "The active sessions; `current` marks the caller's own",
+      content: { 'application/json': { schema: ActiveSessionsResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+  },
+});
+
+const authSessionRevokeRoute = createRoute({
+  method: 'delete',
+  path: '/v1/auth/sessions/{id}',
+  tags: ['auth'],
+  summary: 'Revoke one session of the current user',
+  security: [{ bearerAuth: [] }],
+  request: { params: SessionParamsSchema },
+  responses: {
+    204: { description: 'Session revoked: it can no longer refresh' },
+    401: problemResponse('Not authenticated'),
+    404: problemResponse('`session_not_found`: no active session of the caller with this id'),
+  },
+});
+
+/*
+ * team: /v1/studios/me/team (issue #756)
+ */
+
+const teamListRoute = createRoute({
+  method: 'get',
+  path: '/v1/studios/me/team',
+  tags: ['team'],
+  summary: 'The studio team and its pending invitations (admin, manager)',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Team members and pending invitations',
+      content: { 'application/json': { schema: TeamResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not an admin or a manager'),
+  },
+});
+
+const teamInviteRoute = createRoute({
+  method: 'post',
+  path: '/v1/studios/me/team/invitations',
+  tags: ['team'],
+  summary: 'Invite someone to the team, or give a studio account a team role (admin)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: InviteTeamMemberRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'An account of the studio had this email: its role changed',
+      content: { 'application/json': { schema: InviteTeamMemberResponseSchema } },
+    },
+    201: {
+      description: 'Pending invitation created; the token is returned this once',
+      content: { 'application/json': { schema: InviteTeamMemberResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not an admin'),
+    409: problemResponse('`cannot_change_own_role`'),
+    422: problemResponse('Validation error'),
+  },
+});
+
+const teamRevokeInvitationRoute = createRoute({
+  method: 'delete',
+  path: '/v1/studios/me/team/invitations/{id}',
+  tags: ['team'],
+  summary: 'Revoke a pending invitation (admin)',
+  security: [{ bearerAuth: [] }],
+  request: { params: TeamInvitationParamsSchema },
+  responses: {
+    204: { description: 'Invitation revoked' },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not an admin'),
+    404: problemResponse('`invitation_not_found`'),
+  },
+});
+
+const teamAcceptInvitationRoute = createRoute({
+  method: 'post',
+  path: '/v1/studios/me/team/invitations/accept',
+  tags: ['team'],
+  summary: 'Accept an invitation as the invited account',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: AcceptInvitationRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'The role now held; sign in again to use it',
+      content: { 'application/json': { schema: AcceptInvitationResponseSchema } },
+    },
+    401: problemResponse('Not authenticated'),
+    404: problemResponse(
+      '`invitation_not_found`: no pending invitation for this token and account',
+    ),
+    422: problemResponse('Validation error'),
+  },
+});
+
+const teamUpdateMemberRoute = createRoute({
+  method: 'patch',
+  path: '/v1/studios/me/team/members/{id}',
+  tags: ['team'],
+  summary: 'Change the role of a team member; `member` removes them from the team (admin)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: TeamMemberParamsSchema,
+    body: {
+      content: { 'application/json': { schema: UpdateTeamMemberRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'The member with the new role',
+      content: { 'application/json': { schema: z.object({ member: TeamMemberSchema }) } },
+    },
+    204: { description: 'Removed from the team (role `member`)' },
+    401: problemResponse('Not authenticated'),
+    403: problemResponse('Not an admin'),
+    404: problemResponse('`member_not_found`'),
+    409: problemResponse('`cannot_change_own_role`'),
+  },
+});
+
 export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   const app = new OpenAPIHono<HonoEnv>();
 
@@ -1580,6 +1909,8 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   app.openapi(refreshRoute, stub);
   app.openapi(logoutRoute, stub);
   app.openapi(logoutAllRoute, stub);
+  app.openapi(authSessionsListRoute, stub);
+  app.openapi(authSessionRevokeRoute, stub);
   app.openapi(passwordResetRequestRoute, stub);
   app.openapi(passwordResetConfirmRoute, stub);
   app.openapi(deleteAccountRoute, stub);
@@ -1597,6 +1928,13 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   app.openapi(createClassRoute, stub);
   app.openapi(updateClassRoute, stub);
   app.openapi(deleteClassRoute, stub);
+  app.openapi(listRoomsRoute, stub);
+  app.openapi(createRoomRoute, stub);
+  app.openapi(updateRoomRoute, stub);
+  app.openapi(deleteRoomRoute, stub);
+  app.openapi(createSeriesRoute, stub);
+  app.openapi(updateSeriesRoute, stub);
+  app.openapi(deleteSeriesRoute, stub);
   app.openapi(classRosterRoute, stub);
   app.openapi(rosterCheckInRoute, stub);
 
@@ -1610,6 +1948,13 @@ export function buildSpecApp(): OpenAPIHono<HonoEnv> {
   // studios
   app.openapi(getStudioMeRoute, stub);
   app.openapi(patchStudioMeRoute, stub);
+
+  // team
+  app.openapi(teamListRoute, stub);
+  app.openapi(teamInviteRoute, stub);
+  app.openapi(teamAcceptInvitationRoute, stub);
+  app.openapi(teamRevokeInvitationRoute, stub);
+  app.openapi(teamUpdateMemberRoute, stub);
 
   // sessions
   app.openapi(logSessionRoute, stub);

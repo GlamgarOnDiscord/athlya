@@ -3,10 +3,12 @@
 /**
  * `/dashboard` for a coach: the class running now or the next one with a
  * countdown, the coach's classes of the day and of the coming week, and
- * the way to the check-in kiosk. Classes come from `GET /v1/classes`
+ * the way to the check-in kiosk. The front desk gets the same home over
+ * every class of the studio (issue #756). Classes come from `GET /v1/classes`
  * (open to any signed-in user) and are kept when `coachId` is the coach.
  * Nothing is invented: without an assigned class the cards say so.
  */
+import { can } from '@athlya/shared/roles';
 import { ScanIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
@@ -66,6 +68,8 @@ export function CoachHome(): ReactElement {
   );
 
   const [classes, setClasses] = useState<Load>({ kind: 'loading' });
+  // The front desk follows every class of the studio, a coach their own.
+  const followsEveryClass = user !== null && can(user.role, 'roster.all');
   // Refetch at local midnight so the agenda window moves with the day.
   const todayKey = useTodayKey();
 
@@ -88,14 +92,15 @@ export function CoachHome(): ReactElement {
   const agenda = useMemo(
     () =>
       now !== null && user !== null && classes.kind === 'ready'
-        ? coachAgenda(classes.items, user.id, now)
+        ? coachAgenda(classes.items, followsEveryClass ? null : user.id, now)
         : null,
-    [classes, now, user],
+    [classes, now, user, followsEveryClass],
   );
 
   const firstName = user?.displayName.trim().split(/\s+/u)[0] ?? '';
   const failed = classes.kind === 'error';
   const nothingAssigned =
+    !followsEveryClass &&
     agenda !== null &&
     agenda.focus.kind === 'none' &&
     agenda.today.length === 0 &&
@@ -163,7 +168,12 @@ export function CoachHome(): ReactElement {
                     { count: agenda.today.length },
                   )
             }
-            action={<CardLink href={PLANNING_HREF} label={t('studio.nav.planning')} />}
+            action={
+              <CardLink
+                href={PLANNING_HREF}
+                label={t(followsEveryClass ? 'studio.nav.studioPlanning' : 'studio.nav.planning')}
+              />
+            }
           />
           {failed ? (
             <CardMessage text={t('studio.coach.loadError')} />

@@ -14,6 +14,8 @@
  * checked here as well as by the router and by RLS (defence in depth).
  */
 
+import { can } from '@athlya/shared/roles';
+
 import { daysBetween, resolveTodayItem, utcDate } from './schedule.js';
 
 import type {
@@ -52,11 +54,11 @@ function today(deps: ProgramsServiceDeps): string {
 }
 
 function isAdmin(viewer: ProgramViewer): boolean {
-  return viewer.role === 'admin';
+  return can(viewer.role, 'programs.write');
 }
 
 function isStaff(viewer: ProgramViewer): boolean {
-  return viewer.role === 'admin' || viewer.role === 'coach';
+  return can(viewer.role, 'programs.readDrafts');
 }
 
 /* ------------------------------------------------------------------ */

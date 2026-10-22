@@ -1,7 +1,7 @@
 /**
- * `/me/settings/notifications`: the booking messages a member receives
- * and their channels. Read-only: every one is transactional and the API
- * has no per-event preference yet, which the page says.
+ * `/me/settings/notifications`: the messages a member receives, with a
+ * toggle per message and channel (issue #762). Mandatory messages stay
+ * locked; marketing lives under the consents of the privacy section.
  */
 import Link from 'next/link';
 
@@ -14,7 +14,7 @@ import { createTranslator } from '../../../../lib/i18n/t';
 import { SETTINGS_PATHS } from '../routes';
 import { SettingsHeader, SettingsList, SettingsRow } from '../settings-ui';
 
-import { channelKeys, MEMBER_NOTIFICATIONS } from './catalogue';
+import { NotificationPreferencesPanel } from './NotificationPreferencesPanel';
 
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
@@ -34,30 +34,8 @@ export default async function NotificationsSettingsPage(): Promise<ReactElement>
       />
       <RequireAuth>
         <div className="flex flex-col gap-6">
-          <p className="text-sm text-muted-foreground">
-            {t('web.settings.notifications.transactional')}
-          </p>
-          <SettingsList label={t('web.settings.notifications.listLabel')}>
-            {MEMBER_NOTIFICATIONS.map((notification) => (
-              <SettingsRow
-                key={notification.event}
-                title={t(notification.labelKey)}
-                description={channelKeys(notification)
-                  .map((key) => t(key))
-                  .join(', ')}
-              >
-                <span className="text-sm text-muted-foreground">
-                  {t('web.settings.notifications.alwaysSent')}
-                </span>
-              </SettingsRow>
-            ))}
-          </SettingsList>
+          <NotificationPreferencesPanel />
           <SettingsList>
-            <SettingsRow
-              title={t('web.settings.notifications.perEvent.title')}
-              description={t('web.settings.notifications.perEvent.body')}
-              comingSoon={t('web.settings.comingSoon')}
-            />
             <SettingsRow
               title={t('web.settings.notifications.marketing.title')}
               description={t('web.settings.notifications.marketing.body')}

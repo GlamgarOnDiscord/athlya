@@ -1,6 +1,7 @@
 /**
  * `/me/settings/security`: password change through the reset-by-email
- * flow, sign out of this device and sign out everywhere
+ * flow, the active sessions with revocation one by one
+ * (`/v1/auth/sessions`), sign out of this device and sign out everywhere
  * (`POST /v1/auth/logout-all`).
  */
 import { RequireAuth } from '../../../../components/RequireAuth';

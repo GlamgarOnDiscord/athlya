@@ -14,7 +14,9 @@
 
 export * from './enums.js';
 export * from './studios.js';
+export * from './studio_domains.js';
 export * from './users.js';
+export * from './rooms.js';
 export * from './classes.js';
 export * from './reservations.js';
 export * from './workout_sessions.js';
@@ -26,3 +28,4 @@ export * from './export_jobs.js';
 export * from './password_reset_tokens.js';
 export * from './stripe_webhook_events.js';
 export * from './programs.js';
+export * from './studio_invitations.js';

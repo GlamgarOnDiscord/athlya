@@ -289,6 +289,8 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
     }),
     logout: vi.fn(async () => undefined),
     logoutAll: vi.fn(async () => undefined),
+    listSessions: vi.fn(async () => []),
+    revokeSession: vi.fn(async () => false),
     deleteMe: vi.fn(async () => undefined),
     requestPasswordReset: vi.fn(async () => undefined),
     confirmPasswordReset: vi.fn(async () => undefined),
@@ -325,7 +327,7 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
           type: 'class.created',
           payload: { classId, studioId },
         });
-        return cls;
+        return { kind: 'created' as const, class: cls };
       },
     ),
     searchClasses: vi.fn(async () => ({ items: [] })),
@@ -478,6 +480,8 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
     updateProfile: vi.fn(async () => ({})),
     uploadAvatar: vi.fn(async () => ({ avatarUrl: 'https://avatars.athlya.app/test.jpg' })),
     updateConsents: vi.fn(async () => ({})),
+    getNotificationPreferences: vi.fn(async () => null),
+    updateNotificationPreferences: vi.fn(async () => null),
     enqueueExport: vi.fn(async () => ({ jobId: makeUuid(9999) })),
     getExportJob: vi.fn(async () => null),
     openExportDownload: vi.fn(async () => ({ kind: 'not_found' as const })),
@@ -540,7 +544,9 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
         slug: seed.slug,
         name: seed.name,
         brandColor: seed.brandColor,
-        brandLogo: null,
+        brandLogoLight: null,
+        brandLogoDark: null,
+        hideAthlyaBranding: false,
       };
     }),
     updateStudio: vi.fn(async (studioId: string, patch) => {
@@ -552,9 +558,17 @@ export function buildIntegrationDeps(options: IntegrationDepsOptions): DomainDep
         slug: 'athlya-paris',
         name: patch.name ?? 'Athlya Paris',
         brandColor: patch.brandColor ?? '#0EA5E9',
-        brandLogo: patch.brandLogo ?? null,
+        brandLogoLight: null,
+        brandLogoDark: null,
+        hideAthlyaBranding: patch.hideAthlyaBranding ?? false,
       };
     }),
+    uploadLogo: vi.fn(),
+    removeLogo: vi.fn(),
+    listDomains: vi.fn(async () => []),
+    setDomain: vi.fn(),
+    removeDomain: vi.fn(async () => false),
+    checkDomain: vi.fn(async () => null),
   };
 
   /* --------------------- billing --------------------- */
