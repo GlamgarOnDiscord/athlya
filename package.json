@@ -44,6 +44,6 @@
   },
   "prettier": "@athlya/prettier-config",
   "dependencies": {
-    "postcss": "^8.5.30"
+    "postcss": "^8.5.31"
   }
 }

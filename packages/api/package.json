@@ -127,7 +127,7 @@
     "generate:types": "openapi-typescript http://localhost:8787/openapi.json -o src/openapi/api-types.ts"
   },
   "dependencies": {
-    "@ai-sdk/mistral": "^4.0.66",
+    "@ai-sdk/mistral": "^4.0.71",
     "@athlya/ai-coach": "workspace:*",
     "@athlya/auth": "workspace:*",
     "@athlya/billing": "workspace:*",
@@ -142,7 +142,7 @@
     "@upstash/redis": "^1.39.0",
     "drizzle-orm": "^0.45.4",
     "fflate": "^0.8.3",
-    "jose": "^6.2.12",
+    "jose": "^6.2.13",
     "zod": "^4.6.7"
   },
   "peerDependencies": {
