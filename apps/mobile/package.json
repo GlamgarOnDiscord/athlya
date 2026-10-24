@@ -52,7 +52,7 @@
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",
     "@athlya/tsconfig": "workspace:*",
-    "@babel/plugin-transform-react-jsx": "^7.29.7",
+    "@babel/plugin-transform-react-jsx": "^8.0.1",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "babel-preset-expo": "~58.0.17",
