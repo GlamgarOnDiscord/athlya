@@ -73,7 +73,7 @@
   "dependencies": {
     "@athlya/db": "workspace:*",
     "@athlya/shared": "workspace:*",
-    "@upstash/redis": "^1.39.0"
+    "@upstash/redis": "^1.40.0"
   },
   "devDependencies": {
     "@athlya/eslint-config": "workspace:*",
