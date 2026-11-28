@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { STUDIO_DEMO_STORAGE_KEY, createDemoHandler, routeStudioDemo } from './fake-api';
 import {
+  DEMO_ACCUEIL_ID,
   DEMO_ADMIN_ID,
   DEMO_COACH_ID,
+  DEMO_MANAGER_ID,
   createStudioDemoState,
   type StudioDemoState,
 } from './fixtures';
@@ -21,37 +23,74 @@ function as(userId: string): StudioDemoState {
 }
 
 describe('routeStudioDemo', () => {
-  it('opens an admin or coach session from the demo profile email, never a member one', () => {
+  it.each([
+    ['camille.durand@example.com', 'Camille Durand', 'admin'],
+    ['hugo.lefebvre@example.com', 'Hugo Lefebvre', 'manager'],
+    ['sarah.benali@example.com', 'Sarah Benali', 'accueil'],
+    ['ines.garnier@example.com', 'Inès Garnier', 'coach'],
+  ])('opens the %s session with its role', (email, displayName, role) => {
     const fresh = createStudioDemoState(NOW);
     expect(routeStudioDemo(fresh, req('GET', '/v1/studios/me'), NOW).response.status).toBe(401);
 
-    const admin = routeStudioDemo(
-      fresh,
-      req('POST', '/api/auth/login', { email: 'camille.durand@example.com' }),
-      NOW,
-    );
-    expect(admin.response.body).toMatchObject({
-      user: { displayName: 'Camille Durand', role: 'admin' },
-    });
+    const login = routeStudioDemo(fresh, req('POST', '/api/auth/login', { email }), NOW);
+    expect(login.response.body).toMatchObject({ user: { email, displayName, role } });
 
-    const coach = routeStudioDemo(
-      fresh,
-      req('POST', '/api/auth/login', { email: 'ines.garnier@example.com' }),
-      NOW,
-    );
-    expect(coach.response.body).toMatchObject({
-      user: { displayName: 'Inès Garnier', role: 'coach' },
-    });
+    const refresh = routeStudioDemo(login.state, req('POST', '/api/auth/refresh'), NOW);
+    expect(refresh.response.body).toMatchObject({ user: { email, role } });
+  });
 
+  it('refuses a member profile, who uses the member app', () => {
     const member = routeStudioDemo(
-      fresh,
-      req('POST', '/api/auth/login', { email: 'hugo.lefevre@example.com' }),
+      createStudioDemoState(NOW),
+      req('POST', '/api/auth/login', { email: 'lea.fontaine@example.com' }),
       NOW,
     );
     expect(member.response.status).toBe(401);
+    expect(member.state.sessionUserId).toBeNull();
+  });
 
-    const refresh = routeStudioDemo(coach.state, req('POST', '/api/auth/refresh'), NOW);
-    expect(refresh.response.body).toMatchObject({ user: { role: 'coach' } });
+  it('answers each route like the gateway, from the capability matrix', () => {
+    const startsAt = new Date(NOW.getTime() + 86_400_000).toISOString();
+    const status = (userId: string, method: string, path: string, body?: unknown): number =>
+      routeStudioDemo(as(userId), req(method, path, body), NOW).response.status;
+
+    expect(status(DEMO_MANAGER_ID, 'POST', '/v1/classes', { title: 'X', startsAt })).toBe(201);
+    expect(status(DEMO_MANAGER_ID, 'GET', '/v1/audit')).toBe(200);
+    expect(status(DEMO_MANAGER_ID, 'PATCH', '/v1/studios/me', { name: 'Y' })).toBe(403);
+    expect(status(DEMO_MANAGER_ID, 'POST', '/v1/billing/checkout')).toBe(403);
+
+    expect(status(DEMO_ACCUEIL_ID, 'POST', '/v1/classes', { title: 'X', startsAt })).toBe(403);
+    expect(status(DEMO_ACCUEIL_ID, 'GET', '/v1/audit')).toBe(403);
+    expect(status(DEMO_ACCUEIL_ID, 'GET', '/v1/members')).toBe(200);
+    expect(status(DEMO_ACCUEIL_ID, 'POST', '/v1/checkins', { qrToken: 'abc' })).toBe(200);
+    expect(status(DEMO_ACCUEIL_ID, 'GET', '/v1/studios/me/team')).toBe(403);
+
+    expect(status(DEMO_ADMIN_ID, 'POST', '/v1/billing/checkout')).toBe(409);
+  });
+
+  it('lists the team for an admin or a manager, the caller first', () => {
+    const body = routeStudioDemo(as(DEMO_MANAGER_ID), req('GET', '/v1/studios/me/team'), NOW)
+      .response.body as { members: { displayName: string; role: string }[]; invitations: [] };
+    expect(body.members.map((m) => m.displayName)).toEqual([
+      'Hugo Lefebvre',
+      'Camille Durand',
+      'Chloé Vasseur',
+      'Inès Garnier',
+      'Sarah Benali',
+    ]);
+    expect(body.invitations).toEqual([]);
+  });
+
+  it('shows draft programs to the roles that read them, published ones to the front desk', () => {
+    const statuses = (userId: string): string[] =>
+      (
+        routeStudioDemo(as(userId), req('GET', '/v1/programs'), NOW).response.body as {
+          items: { status: string }[];
+        }
+      ).items.map((p) => p.status);
+    expect(statuses(DEMO_COACH_ID)).toContain('draft');
+    expect(statuses(DEMO_ACCUEIL_ID)).not.toContain('draft');
+    expect(statuses(DEMO_ACCUEIL_ID).length).toBeGreaterThan(0);
   });
 
   it('serves the studio, the members and the audit trail', () => {
@@ -70,7 +109,7 @@ describe('routeStudioDemo', () => {
     expect([...times].sort((a, b) => b - a)).toEqual(times);
   });
 
-  it('keeps the audit trail and class writes to the admin', () => {
+  it('keeps the audit trail and class writes from a coach', () => {
     const state = as(DEMO_COACH_ID);
     expect(routeStudioDemo(state, req('GET', '/v1/audit'), NOW).response.status).toBe(403);
     expect(
@@ -131,7 +170,7 @@ describe('routeStudioDemo', () => {
     );
     expect(first.response.body).toMatchObject({
       success: true,
-      member: { displayName: 'Hugo Lefèvre' },
+      member: { displayName: 'Lucas Bertin' },
     });
     const replay = routeStudioDemo(
       first.state,
@@ -140,7 +179,7 @@ describe('routeStudioDemo', () => {
     );
     expect(replay.response).toMatchObject({ status: 409, body: { code: 'replay' } });
     const next = routeStudioDemo(first.state, req('POST', '/v1/checkins', { qrToken: 'def' }), NOW);
-    expect(next.response.body).toMatchObject({ member: { displayName: 'Lucas Bertin' } });
+    expect(next.response.body).toMatchObject({ member: { displayName: 'Manon Chevalier' } });
   });
 
   it('updates the branding', () => {

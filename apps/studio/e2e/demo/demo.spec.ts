@@ -1,8 +1,8 @@
 /**
  * Smoke test of a demo build (issue #750): the admin signs in from the
  * role picker, sees the dashboard and checks a member in by hand, then the
- * coach lands on the coach home, with no request to the API and no
- * console error. Skipped unless the runner has `NEXT_PUBLIC_DEMO_MODE=1`
+ * manager lands on the studio overview and the front desk and the coach on
+ * the day home, with no request to the API and no console error. Skipped unless the runner has `NEXT_PUBLIC_DEMO_MODE=1`
  * (see `e2e/demo.config.ts`).
  */
 import { expect, test, type Page } from '@playwright/test';
@@ -48,19 +48,25 @@ test('admin demo: dashboard, members, audit and a manual check-in', async ({ pag
   await page.goto('/dashboard/checkin');
   await page.getByLabel('Token QR').fill('demo-token');
   await page.getByRole('button', { name: 'Valider' }).click();
-  await expect(page.getByText(/Bienvenue, Hugo Lefèvre/u)).toBeVisible();
+  await expect(page.getByText(/Bienvenue, Lucas Bertin/u)).toBeVisible();
 
   expect(seen.apiCalls).toEqual([]);
   expect(seen.errors).toEqual([]);
 });
 
-test('coach demo: the coach home lists the classes of the day', async ({ page }) => {
-  const seen = watch(page);
-  await page.goto('/login');
-  await page.getByRole('button', { name: /Inès Garnier/u }).click();
-  await page.waitForURL('**/dashboard');
-  await expect(page.getByRole('heading', { name: 'Bonjour Inès' })).toBeVisible();
+for (const [role, name, firstName] of [
+  ['manager', 'Hugo Lefebvre', 'Hugo'],
+  ['front desk', 'Sarah Benali', 'Sarah'],
+  ['coach', 'Inès Garnier', 'Inès'],
+] as const) {
+  test(`${role} demo: the landing page greets ${firstName}`, async ({ page }) => {
+    const seen = watch(page);
+    await page.goto('/login');
+    await page.getByRole('button', { name: new RegExp(name, 'u') }).click();
+    await page.waitForURL('**/dashboard');
+    await expect(page.getByRole('heading', { name: `Bonjour ${firstName}` })).toBeVisible();
 
-  expect(seen.apiCalls).toEqual([]);
-  expect(seen.errors).toEqual([]);
-});
+    expect(seen.apiCalls).toEqual([]);
+    expect(seen.errors).toEqual([]);
+  });
+}
