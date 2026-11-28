@@ -28,6 +28,16 @@
   color: var(--brand-fg, var(--color-brand-on-primary));
 }
 
+/* Logo previews sit on the surface each logo is made for, in both themes. */
+.brand-logo-surface-light {
+  background-color: var(--athlya-brand-white);
+  color: var(--athlya-brand-ink);
+}
+.brand-logo-surface-dark {
+  background-color: var(--athlya-brand-ink);
+  color: var(--athlya-brand-white);
+}
+
 /*
  * Planning marks in the logo palette. Volt is the one accent and always
  * sits under ink text: seats still open, and the current time on dark.

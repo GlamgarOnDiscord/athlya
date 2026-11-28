@@ -54,6 +54,7 @@ import { userRoleEnum } from './enums.js';
 import { studios } from './studios.js';
 
 import type { Consents } from '@athlya/shared/schemas';
+import type { StoredNotificationPreferences } from '@athlya/shared/schemas/api';
 
 export const users = pgTable(
   'users',
@@ -73,6 +74,14 @@ export const users = pgTable(
      * `ConsentsSchema.parse` to prevent shape drift.
      */
     consents: jsonb('consents').$type<Consents>().notNull(),
+    /**
+     * Channels the member turned off, per message (migration 0054,
+     * issue #762). NULL means everything on. Written through
+     * `NotificationPreferencesSchema`, read with `isNotificationEnabled`.
+     */
+    notificationPreferences: jsonb(
+      'notification_preferences',
+    ).$type<StoredNotificationPreferences>(),
     passwordHash: text('password_hash'),
     /**
      * Monotonic counter incremented on every security-critical event:

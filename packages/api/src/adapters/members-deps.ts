@@ -63,6 +63,7 @@ import { loadMemberFile } from './member-file.js';
 import { createDrizzleAuditLogWriterHttp } from './members-audit-writer-drizzle.js';
 import { createDrizzleConsentsRepoHttp } from './members-consents-repo-drizzle.js';
 import { createDrizzleExportJobStoreHttp } from './members-export-job-store-drizzle.js';
+import { createDrizzleNotificationPreferencesRepoHttp } from './notification-preferences-repo-drizzle.js';
 import { createDrizzleMemberRepoHttp } from './members-repo-drizzle.js';
 import { createDrizzleProgressionRepoHttp } from './progression-repo-drizzle.js';
 
@@ -193,6 +194,16 @@ export function buildMembersDeps(
         audit,
         now,
       });
+    },
+
+    async getNotificationPreferences(userId, claims) {
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
+      return createDrizzleNotificationPreferencesRepoHttp(db, claims).get(userId);
+    },
+
+    async updateNotificationPreferences(userId, preferences, claims) {
+      const db = getOrCreateDbHttpForRegion(env, cf?.continent);
+      return createDrizzleNotificationPreferencesRepoHttp(db, claims).replace(userId, preferences);
     },
 
     async enqueueExport(userId: string, claims: AuthClaims): Promise<{ jobId: string }> {

@@ -33,3 +33,4 @@ export {
   type ScheduleReservationReminderArgs,
   type ScheduleResult,
 } from './scheduler.js';
+export type { EmailBranding } from './email-layout.js';

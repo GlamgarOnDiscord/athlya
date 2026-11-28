@@ -95,6 +95,8 @@ export function buildStubDeps(
       updateProfile: vi.fn(),
       uploadAvatar: vi.fn(),
       updateConsents: vi.fn(),
+      getNotificationPreferences: vi.fn(),
+      updateNotificationPreferences: vi.fn(),
       enqueueExport: vi.fn(),
       getExportJob: vi.fn(),
       openExportDownload: vi.fn(),
@@ -136,6 +138,12 @@ export function buildStubDeps(
     studios: {
       getStudio: vi.fn(),
       updateStudio: vi.fn(),
+      uploadLogo: vi.fn(),
+      removeLogo: vi.fn(),
+      listDomains: vi.fn(),
+      setDomain: vi.fn(),
+      removeDomain: vi.fn(),
+      checkDomain: vi.fn(),
       ...overrides.studios,
     },
     billing: {

@@ -16,7 +16,7 @@ function member(n: number): StudioMember {
 }
 
 function clientFor(get: ApiClient['get']): ApiClient {
-  return { get, post: vi.fn(), patch: vi.fn(), del: vi.fn() };
+  return { get, post: vi.fn(), patch: vi.fn(), put: vi.fn(), del: vi.fn() };
 }
 
 describe('fetchMemberDirectory', () => {

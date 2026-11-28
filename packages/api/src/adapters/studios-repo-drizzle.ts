@@ -5,13 +5,10 @@
  *
  *   • `getById(id)` — soft-delete-aware lookup; returns `null` when the
  *     studio row does not exist or is already tomb-stoned.
- *   • `updateById(id, patch)` — partial PATCH whitelisted to the three
- *     editable columns (`name`, `brandColor`, optional `brandLogo`).
- *     The `brandLogo` column is **not yet present** in the `studios`
- *     schema — `updateById` accepts the field in the patch but silently
- *     ignores it until a dedicated migration ships. The contract still
- *     surfaces it in the returned row as `null` so clients can rely on
- *     a stable shape.
+ *   • `updateById(id, patch)`: partial update whitelisted to the
+ *     editable columns: `name`, `brandColor`, the two logos and the
+ *     Athlya mention flag (migration 0053 grants `athlya_app` UPDATE on
+ *     exactly these columns).
  *
  * Lives in `packages/api` (not `@athlya/db`) because it is the wiring
  * layer between the framework-free Drizzle schema and the Hono router.
@@ -47,15 +44,18 @@ export interface StudioView {
   readonly slug: string;
   readonly name: string;
   readonly brandColor: string;
-  /** Always `null` until the `brand_logo` column ships. */
-  readonly brandLogo: string | null;
+  readonly brandLogoLight: string | null;
+  readonly brandLogoDark: string | null;
+  readonly hideAthlyaBranding: boolean;
 }
 
 /** Patch shape accepted by {@link StudioRepo.updateById}. */
 export interface StudioPatch {
   readonly name?: string;
   readonly brandColor?: string;
-  readonly brandLogo?: string | null;
+  readonly brandLogoLight?: string | null;
+  readonly brandLogoDark?: string | null;
+  readonly hideAthlyaBranding?: boolean;
 }
 
 /** Read / write contract consumed by the studios router and tests. */
@@ -95,11 +95,11 @@ export function createDrizzleStudioRepoHttp(db: AthlyaDbHttp, claims: TenantClai
       if (patch.brandColor !== undefined) {
         set.brandColor = patch.brandColor;
       }
-      // `brandLogo` is intentionally NOT mapped onto a column
-      // until the schema adds `brand_logo`. We accept the patch
-      // field at the API boundary so older clients do not break,
-      // and the response always reports `brandLogo: null` until
-      // the column lands.
+      if (patch.brandLogoLight !== undefined) set.brandLogoLight = patch.brandLogoLight;
+      if (patch.brandLogoDark !== undefined) set.brandLogoDark = patch.brandLogoDark;
+      if (patch.hideAthlyaBranding !== undefined) {
+        set.hideAthlyaBranding = patch.hideAthlyaBranding;
+      }
       if (Object.keys(set).length === 0) {
         // No actionable column changed — fall back to a read so
         // the response still echoes the current row. Avoids an
@@ -131,7 +131,8 @@ function toStudioView(row: typeof studios.$inferSelect): StudioView {
     slug: row.slug,
     name: row.name,
     brandColor: row.brandColor,
-    // `brand_logo` not yet in the schema — see file-level comment.
-    brandLogo: null,
+    brandLogoLight: row.brandLogoLight,
+    brandLogoDark: row.brandLogoDark,
+    hideAthlyaBranding: row.hideAthlyaBranding,
   };
 }

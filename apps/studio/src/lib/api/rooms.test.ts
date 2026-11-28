@@ -19,7 +19,7 @@ describe('rooms', () => {
       createdAt: '2026-10-01T08:00:00.000Z',
     };
     const get = vi.fn().mockResolvedValue({ items: [room] });
-    const client: ApiClient = { get, post: vi.fn(), patch: vi.fn(), del: vi.fn() };
+    const client: ApiClient = { get, post: vi.fn(), put: vi.fn(), patch: vi.fn(), del: vi.fn() };
     const rooms = await fetchRooms(client);
     expect(get).toHaveBeenCalledWith('/v1/classes/rooms');
     expect(roomNames(rooms).get('r1')).toBe('Studio 1');

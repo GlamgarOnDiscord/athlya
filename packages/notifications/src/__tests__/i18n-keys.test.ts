@@ -62,6 +62,10 @@ const NOTIFICATION_KEYS: readonly TranslationKeys[] = [
 
   'notifications.billingSubscriptionFailed.email.subject',
   'notifications.billingSubscriptionFailed.email.body',
+
+  'notifications.layout.footer',
+  'notifications.layout.footerVia',
+  'notifications.layout.footerAthlya',
 ] as const;
 
 /** Walk a dotted key against a JSON bundle; mirror of the helper. */

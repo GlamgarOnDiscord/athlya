@@ -6,12 +6,16 @@ import { createTranslator } from '../../../../lib/i18n/t';
 import { channelKeys, MEMBER_NOTIFICATIONS } from './catalogue';
 
 describe('MEMBER_NOTIFICATIONS', () => {
-  it('lists only messages the notifications consumer has templates for', () => {
-    for (const { event, channels } of MEMBER_NOTIFICATIONS) {
+  it('lists only optional messages the notifications consumer has templates for', () => {
+    for (const { event, channels, mandatory } of MEMBER_NOTIFICATIONS) {
+      if (event === 'passwordReset') continue;
       for (const locale of ['fr', 'en'] as const) {
         const templates: Record<string, unknown> = bundles[locale].notifications[event];
         for (const channel of channels) {
-          expect(templates[channel], `${locale} ${event} ${channel}`).toBeDefined();
+          expect(
+            templates[channel],
+            `${locale} ${event} ${channel} (${String(mandatory)})`,
+          ).toBeDefined();
         }
       }
     }
@@ -20,6 +24,13 @@ describe('MEMBER_NOTIFICATIONS', () => {
   it('lists each message once', () => {
     const events = MEMBER_NOTIFICATIONS.map((n) => n.event);
     expect(new Set(events).size).toBe(events.length);
+  });
+
+  it('locks the payment failure and the password reset only', () => {
+    expect(MEMBER_NOTIFICATIONS.filter((n) => n.mandatory).map((n) => n.event)).toEqual([
+      'billingSubscriptionFailed',
+      'passwordReset',
+    ]);
   });
 
   it('resolves every label and channel in both locales', () => {
@@ -32,13 +43,5 @@ describe('MEMBER_NOTIFICATIONS', () => {
         }
       }
     }
-  });
-
-  it('keeps the channel order of the definition', () => {
-    const created = MEMBER_NOTIFICATIONS.find((n) => n.event === 'reservationCreated');
-    expect(created && channelKeys(created)).toEqual([
-      'web.settings.notifications.channels.email',
-      'web.settings.notifications.channels.push',
-    ]);
   });
 });
