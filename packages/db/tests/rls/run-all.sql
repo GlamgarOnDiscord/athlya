@@ -57,3 +57,4 @@
 \i tests/rls/team_roles.sql
 \i tests/rls/white_label.sql
 \i tests/rls/notification_preferences.sql
+\i tests/rls/studio_settings_webhooks.sql

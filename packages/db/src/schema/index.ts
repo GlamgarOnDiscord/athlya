@@ -28,4 +28,5 @@ export * from './export_jobs.js';
 export * from './password_reset_tokens.js';
 export * from './stripe_webhook_events.js';
 export * from './programs.js';
+export * from './webhooks.js';
 export * from './studio_invitations.js';
